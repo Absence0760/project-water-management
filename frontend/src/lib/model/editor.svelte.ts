@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { newNetworkNode, OFFTAKE_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { newNetworkNode, OFFTAKE_DEFAULTS, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
 import { validateModel, type ModelIssue } from './validate';
@@ -37,6 +37,30 @@ export function newTransfer(fromNodeId: string, toNodeId: string): Transfer {
 		// From the source's dam; the Transfers tab switches it to a river off-take (engine ≥ 1.14.0).
 		...OFFTAKE_DEFAULTS
 	};
+}
+
+/**
+ * Whether a transfer is as + Add transfer made it, whatever its ends and priority: no rate in any
+ * month, no daily cap or minimum storage, switched on, from the source's dam with no off-take
+ * field set. Removing such a rule asks nothing (nothing typed goes with it).
+ */
+export function transferIsBlank(t: Transfer): boolean {
+	const d: Record<string, unknown> = { ...OFFTAKE_DEFAULTS, dailyCapM3: null, minStoragePct: 0, enabled: true };
+	const rec = t as unknown as Record<string, unknown>;
+	return transferRatesM3s(t).every((r) => !(r > 0)) && Object.keys(d).every((k) => (rec[k] ?? d[k]) === d[k]);
+}
+
+/**
+ * `<base> <n>` for a new node, from `from` up to the first number no node's
+ * name has (case and spaces aside, as the save's duplicate check compares
+ * them): after a removal, `Unit ${nodes.length}` could already be taken, and
+ * the save would refuse the new node at once.
+ */
+export function nextFreeName(base: string, nodes: readonly { name: string }[], from: number): string {
+	const taken = new Set(nodes.map((n) => n.name.trim().toLowerCase()));
+	let i = Math.max(1, from);
+	while (taken.has(`${base} ${i}`.toLowerCase())) i++;
+	return `${base} ${i}`;
 }
 
 export class ModelEditor {
@@ -92,7 +116,7 @@ export class ModelEditor {
 		const outlet = nodes.find((n) => n.downstreamNodeId === null);
 		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
 		const node = newNode(sort, nodes.length === 0 ? null : (outlet?.id ?? nodes[0]!.id));
-		node.name = nodes.length === 0 ? 'Outflow gauge' : `Unit ${nodes.length}`;
+		node.name = nodes.length === 0 ? 'Outflow gauge' : nextFreeName('Unit', nodes, nodes.length);
 		nodes.push(node);
 		return node;
 	}
@@ -110,7 +134,7 @@ export class ModelEditor {
 		node.userDemandM3Day = new Array(12).fill(0);
 		node.userReturnPct = 0;
 		node.userPriority = 'senior';
-		node.name = `Other user ${nodes.filter((n) => n.kind === 'user').length + 1}`;
+		node.name = nextFreeName('Other user', nodes, nodes.filter((n) => n.kind === 'user').length + 1);
 		nodes.push(node);
 		return node;
 	}
@@ -245,8 +269,9 @@ export class ModelEditor {
 	}
 
 	// --- transfers ------------------------------------------------------
+	/** A new rule between the first two hydrological units (a gauge or an other water user can't take part). */
 	addTransfer() {
-		const [a, b] = this.model.nodes;
+		const [a, b] = this.model.nodes.filter((n) => n.kind === 'farm');
 		const t = newTransfer(a?.id ?? '', b?.id ?? a?.id ?? '');
 		// Served after the rules already there, as a new rule was before priorities (Q18).
 		if (this.model.transfers.length) t.priority = Math.max(...this.model.transfers.map((x) => x.priority)) + 1;

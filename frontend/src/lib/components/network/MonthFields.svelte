@@ -11,7 +11,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { fillFromFirst, withMonth } from './monthFields';
+	import { fillFromFirst, fillMessage, withMonth } from './monthFields';
 
 	let {
 		values,
@@ -49,13 +49,19 @@
 
 	const uid = $props.id();
 	const capId = `mf-${uid}`;
+	/** The polite line after the fill button: eleven values changed at once, so it says so. */
+	let filled = $state('');
+	function fill() {
+		onchange(fillFromFirst(values, blank));
+		filled = fillMessage(values, blank, scale, caption);
+	}
 </script>
 
 <div class="mf" role="group" aria-labelledby={capId} data-testid={testid}>
 	<div class="head">
 		<span class="cap"><span id={capId}>{caption}</span>{#if help}<HelpTip key={help} />{/if}</span>
 		{#if fillLabel && !readonly}
-			<button type="button" class="btn btn-sm" onclick={() => onchange(fillFromFirst(values, blank))}>{fillLabel}</button>
+			<button type="button" class="btn btn-sm" onclick={fill}>{fillLabel}</button>
 		{/if}
 	</div>
 	<div class="cells">
@@ -74,6 +80,7 @@
 			</div>
 		{/each}
 	</div>
+	<p class="visually-hidden" aria-live="polite">{filled}</p>
 </div>
 
 <style>

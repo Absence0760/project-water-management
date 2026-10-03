@@ -14,10 +14,12 @@ import {
 	notesButtonLabel,
 	scenarioAudiences,
 	settingTarget,
+	SETTING_NOTE_GROUPS,
 	targetQuery,
 	targetTitle,
 	type NoteTarget
 } from './notes';
+import { SETTINGS_SECTIONS } from '$lib/components/settings/sections';
 
 const farm: NoteTarget = { kind: 'node', nodeId: 'n1', name: 'Farm A', isFarm: true };
 const gauge: NoteTarget = { kind: 'node', nodeId: 'g1', name: 'Weir', isFarm: false };
@@ -80,6 +82,12 @@ describe('labels', () => {
 		expect(noteHref({ target: 'run', nodeId: null, runId: 'r/1', settingKey: null })).toBe('?tab=runs&run=r%2F1#res-notes');
 		expect(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: 'ewr' })).toBe('?tab=settings#set-ewr');
 		expect(noteHref({ target: 'project', nodeId: null, runId: null, settingKey: null })).toBeNull();
+	});
+	it('links every settings group to a Settings section that exists', () => {
+		const ids = new Set<string>(SETTINGS_SECTIONS.map((x) => x.id));
+		for (const key of Object.keys(SETTING_NOTE_GROUPS)) {
+			expect(ids, key).toContain(noteHref({ target: 'setting', nodeId: null, runId: null, settingKey: key })!.split('#')[1]);
+		}
 	});
 });
 

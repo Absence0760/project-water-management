@@ -101,9 +101,14 @@ test('a staged vegetable needs a planting date; its season comes from Table 4.7'
 	await expect(d).toContainText('Table 4.7: Autumn transplant 160');
 	await expect(d.getByRole('region', { name: 'Orchard: changes' })).toHaveCount(0);
 	await expect(d.getByRole('button', { name: 'Apply 0 crops' })).toBeDisabled();
+	// It says why, tied to the month it needs.
+	const why = 'Pick a planting month: until then Onions has no factors to load into Orchard.';
+	await expect(d.getByTestId('planting-month-why')).toHaveText(why);
+	await expect(d.getByLabel('Orchard planting month')).toHaveAccessibleDescription(why);
 
 	// 1 May for 160 days: May 0.25 … to 7 Oct (7 days × 0.50 ÷ 31 = 0.113); Nov–Apr 0.
 	await d.getByLabel('Orchard planting month').selectOption({ label: 'May' });
+	await expect(d.getByTestId('planting-month-why')).toHaveCount(0);
 	const next = d.getByRole('region', { name: 'Orchard: changes' }).getByRole('row', { name: /^New/ });
 	await expect(next).toContainText('0.11');
 	await d.getByRole('button', { name: 'Apply 1 crop' }).click();
@@ -164,8 +169,45 @@ test('the pan coefficient starts at the source’s default, says why, and a type
 	await expect(kp).toHaveValue('1');
 	// The button goes, so focus returns to the input; the why line describes it.
 	await expect(kp).toBeFocused();
-	await expect(kp).toHaveAccessibleDescription(/^Default 1: these factors already multiply A-pan/);
+	await expect(kp).toHaveAccessibleDescription(/^Default 1: these factors already multiply A-pan.* 0\.1 to 1\.5$/);
 	await expect(d.getByRole('button', { name: /^Use the default/ })).toHaveCount(0);
+});
+
+test('a Kp out of range says the range', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Crop library Kp range');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await openLoad(page);
+	const d = dialog(page);
+	const kp = d.getByLabel('Pan coefficient Kp');
+	// The range is on screen beside the field and in its description, before anything is typed.
+	await expect(d.locator('#lcf-kp-range')).toHaveText('0.1 to 1.5');
+	await expect(kp).toHaveAccessibleDescription(/0\.1 to 1\.5$/);
+	await kp.fill('2');
+	await kp.press('Tab');
+	await expect(kp).toHaveAttribute('aria-invalid', 'true');
+	await expect(kp).toHaveAccessibleDescription(/0\.1 to 1\.5/);
+});
+
+test('Load crop factors opens from the Crops header and from a crop’s sheet', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Crop library header');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.getByRole('button', { name: 'Load crop factors…' }).click();
+	await expect(dialog(page)).toBeVisible();
+	await expect(dialog(page).getByLabel('Load factors for Orchard from')).toBeVisible();
+	await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+	await expect(dialog(page)).toHaveCount(0);
+
+	// From the sheet: the dialog opens over it, and closing it leaves the sheet open.
+	await page.getByRole('button', { name: 'Edit Orchard' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Edit Orchard' });
+	await sheet.getByRole('button', { name: 'Load crop factors…' }).click();
+	await expect(dialog(page)).toBeVisible();
+	await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+	await expect(dialog(page)).toBeHidden();
+	await expect(sheet).toBeVisible();
+	await expectNoViolations(page);
 });
 
 test('from a node-based workbook: FAO-56 Kc, so Kp starts at 0.75 with why, and the reader’s warnings listed', async ({ page, owner }) => {

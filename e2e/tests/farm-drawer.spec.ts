@@ -27,7 +27,8 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	const card = page.getByTestId('node-card');
 	await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await card.getByRole('link', { name: '20.00 ha, 1 crop' }).click();
-	await expect(page).toHaveURL(/\?tab=network&farm=/);
+	// The pick is in the URL (node=), and the drawer opens over it.
+	await expect(page).toHaveURL(/\?tab=network&node=[^&]+&farm=/);
 	const d = drawer(page, 'Upper farm');
 	await expect(d).toBeVisible();
 	await expect(d.getByLabel('Orchard on Upper farm, ha')).toHaveValue('20');
@@ -43,7 +44,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	// Done keeps the edit (unsaved), closes the drawer and drops it from the URL; Crops & demand shows it.
 	await d.getByRole('button', { name: 'Done' }).click();
 	await expect(d).toHaveCount(0);
-	await expect(page).toHaveURL(/\?tab=network$/);
+	await expect(page).toHaveURL(/\?tab=network&node=[^&]+$/);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toBeVisible();
 	const nav = page.getByRole('navigation', { name: 'Project sections' });
 	await nav.getByRole('link', { name: 'Crops & demand' }).click();
@@ -62,7 +63,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	expect(await savedArea(page, project.id, 'Upper farm')).toBe(350_000);
 	await page.keyboard.press('Escape');
 	await expect(again).toHaveCount(0);
-	await expect(page).toHaveURL(/\?tab=network$/);
+	await expect(page).toHaveURL(/\?tab=network&node=[^&]+$/);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 });
 
@@ -131,4 +132,55 @@ test.describe('phone', () => {
 		await expect(d.getByTestId('cropland-catchment').getByRole('link')).toBeVisible();
 		await expectNoViolations(page);
 	});
+});
+
+test('clearing an area sets it to 0: the field reads 0, the total follows, and the save stores nothing planted', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Farm drawer clear');
+	const upperId = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	await page.goto(`/projects/${project.id}?tab=crops&farm=${upperId}`);
+	const d = drawer(page, 'Upper farm');
+	const area = d.getByLabel('Orchard on Upper farm, ha');
+	await expect(area).toHaveValue('20');
+
+	// Deleting the value is a change (the model drops the area), never an empty field over a value the model keeps.
+	await area.fill('');
+	await area.press('Tab');
+	await expect(area).toHaveValue('0');
+	await expect(area).not.toHaveAttribute('aria-invalid', 'true');
+	await expect(d.getByTestId('farm-total')).toHaveText('0.00 ha');
+	await expect(d).toContainText('Unsaved changes to the model');
+	await expect(d).toContainText('Nothing planted, so this hydrological unit draws no irrigation water.');
+	await d.getByRole('button', { name: 'Save changes' }).click();
+	await expect(d).toContainText('No unsaved changes');
+	expect(await savedArea(page, project.id, 'Upper farm')).toBe(0);
+});
+
+test('with 30 crops, the unit’s planted crops come first, largest first, and stay put while an area is typed', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Farm drawer many crops');
+	const m = project.model;
+	const upper = m.nodes.find((n) => n.name === 'Upper farm')!;
+	// 29 more crops (invented names), none planted on Upper farm but the last two.
+	const extra = Array.from({ length: 29 }, (_, i) => ({ id: crypto.randomUUID(), name: `Crop ${String(i + 1).padStart(2, '0')}`, cropFactor: new Array(12).fill(0.5) }));
+	m.crops.push(...extra);
+	m.cropAreas.push({ nodeId: upper.id as string, cropId: extra[28]!.id, areaM2: 50_000 }, { nodeId: upper.id as string, cropId: extra[27]!.id, areaM2: 300_000 });
+	await putModel(page.request, project.id, m);
+
+	await page.goto(`/projects/${project.id}?tab=crops&farm=${upper.id}`);
+	const d = drawer(page, 'Upper farm');
+	const names = d.locator('tbody th[scope="row"]');
+	await expect(names).toHaveCount(30);
+	// Crop 28 (30 ha), Orchard (20 ha), Crop 29 (5 ha), then the unplanted ones in the model's order.
+	await expect(names.nth(0)).toContainText('Crop 28');
+	await expect(names.nth(1)).toContainText('Orchard');
+	await expect(names.nth(2)).toContainText('Crop 29');
+	await expect(names.nth(3)).toContainText('Crop 01');
+
+	// Typing a big area into an unplanted crop doesn't move its row under the cursor.
+	const c05 = d.getByLabel('Crop 05 on Upper farm, ha');
+	await c05.fill('90');
+	await c05.press('Tab');
+	await expect(names.nth(7)).toContainText('Crop 05');
+	await expect(d.getByTestId('farm-total')).toHaveText('145.00 ha');
 });

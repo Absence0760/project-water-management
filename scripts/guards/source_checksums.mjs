@@ -20,7 +20,7 @@
 // Tests: node --test scripts/guards/source_checksums.test.mjs
 
 import { createHash } from 'node:crypto';
-import { appendFileSync, createReadStream, existsSync, readFileSync, renameSync } from 'node:fs';
+import { appendFileSync, createReadStream, readFileSync, renameSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,6 +54,15 @@ export function sha256File(path) {
 	});
 }
 
+function readManifest(manifest) {
+	try {
+		return readFileSync(manifest, 'utf8');
+	} catch (e) {
+		if (e.code === 'ENOENT') return '';
+		throw e;
+	}
+}
+
 /**
  * Check `file` against the manifest entry for `name`: { status, expected,
  * actual }, status 'ok' (it matches), 'recorded' (first use: appended to the
@@ -61,11 +70,12 @@ export function sha256File(path) {
  */
 export async function checkSource(file, name = basename(file), manifest = DEFAULT_MANIFEST) {
 	if (!NAME.test(name)) throw new Error(`source name must be a plain file name, got ${JSON.stringify(name)}`);
-	const entries = existsSync(manifest) ? parseManifest(readFileSync(manifest, 'utf8')) : new Map();
+	// Read the manifest once (no exists-then-read): a missing one is empty.
+	const text = readManifest(manifest);
+	const entries = parseManifest(text);
 	const actual = await sha256File(file);
 	const expected = entries.get(name);
 	if (expected === undefined) {
-		const text = existsSync(manifest) ? readFileSync(manifest, 'utf8') : '';
 		appendFileSync(manifest, `${text === '' || text.endsWith('\n') ? '' : '\n'}${actual}  ${name}\n`);
 		return { status: 'recorded', expected: undefined, actual };
 	}

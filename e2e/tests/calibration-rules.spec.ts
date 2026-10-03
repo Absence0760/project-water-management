@@ -4,6 +4,7 @@
 // fit is the server's too, saved with a record of how the rules chose it.
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { anySaveBar, saveSettings } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 
 test('the saved rules pick the fit on the server: a rule change needs saving first, and the kept fit is applied with its rules', async ({ page, owner }) => {
@@ -24,8 +25,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	await rules.getByLabel('After a kept fit is applied, run the model and the uncertainty ensemble around it').uncheck();
 	await expect(auto.getByTestId('auto-rules-unsaved')).toBeVisible();
 	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await expect(rules.getByTestId('rules-status')).toContainText('Revision 2');
 	await expect(auto.getByTestId('auto-rules')).toContainText('seed 1, 1 start per fit, 50 model runs per optimisation');
 
@@ -44,8 +44,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	// Keep by the split-sample test instead: saved first, then run again.
 	await rules.getByLabel('on the held-out test').selectOption({ label: 'split-sample test (other half)' });
 	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await expect(auto.getByTestId('auto-rules')).toContainText('Revision 3');
 	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ })).toBeVisible();
@@ -62,7 +61,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	await applyButton.click();
 	await expect(auto.getByTestId('auto-applied')).toContainText(', with a run');
 	// Saved by the server: nothing unsaved in the form.
-	await expect(page.getByText('Unsaved settings')).toBeHidden();
+	await expect(anySaveBar(page)).toHaveCount(0);
 
 	await page.reload();
 	const prov = page.getByRole('region', { name: /^Fit record of these parameters/ });
@@ -81,8 +80,7 @@ test('a sign-off is a typed signature the server dates, and a viewer can read th
 	await expect(sign).toBeDisabled();
 	await rules.getByLabel('Your name, as a signature').fill('A. Hydrologist');
 	await sign.click();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	// Signing off changes no rule: the revision stays; the date is the server's.
 	const today = new Date().toISOString().slice(0, 10);
 	await expect(rules.getByTestId('rules-status')).toHaveText(new RegExp(`Signed off\\s*Revision 1 · signed off by A\\. Hydrologist on ${today}`));
@@ -95,4 +93,33 @@ test('a sign-off is a typed signature the server dates, and a viewer can read th
 	await expect(seen.getByLabel('on the held-out test')).toBeDisabled();
 	await expect(seen.getByTestId('rules-sign-off')).toHaveCount(0);
 	await expect(viewer.page.getByRole('region', { name: /^Automated calibration/ }).getByRole('button', { name: 'Run the calibration rules' })).toHaveCount(0);
+});
+
+test('the flagged-days rule: its checkbox sits beside its words, and off and on again keeps the share typed', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Calibration rules share');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const rules = page.getByTestId('calibration-rules');
+	const leaveOut = rules.getByRole('checkbox', { name: 'Leave out a water year by its flagged days' });
+	// Not stretched across its field: the box is box-sized and its words start right after it.
+	const box = (await leaveOut.boundingBox())!;
+	// The words are the label's own text node (no element of their own), so measure them with a range.
+	const wordsX = await rules.locator('label.check').filter({ has: page.getByRole('checkbox', { name: 'Leave out a water year by its flagged days' }) }).evaluate((label) => {
+		const text = [...label.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.includes('Leave out a water year by its flagged days'))!;
+		const range = document.createRange();
+		range.selectNodeContents(text);
+		return [...range.getClientRects()].find((r) => r.width > 0)!.x;
+	});
+	expect(box.width).toBeLessThanOrEqual(24);
+	expect(wordsX - (box.x + box.width)).toBeLessThan(12);
+
+	if (!(await leaveOut.isChecked())) await leaveOut.check();
+	const share = rules.getByLabel(/^When more than this share of its observed days are flagged/);
+	await share.fill('35');
+	await share.blur();
+	await leaveOut.uncheck();
+	await expect(share).toHaveCount(0);
+	await leaveOut.check();
+	await expect(share).toHaveValue('35');
 });

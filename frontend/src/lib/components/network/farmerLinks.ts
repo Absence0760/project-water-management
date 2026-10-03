@@ -19,23 +19,49 @@ export function linkedNote(count: number): string | null {
 	return `${n(count, 'farmer is', 'farmers are')} linked to this hydrological unit (Overview → Farmers). Deleting it, or making it a gauge or water user, unlinks them when you save.`;
 }
 
+/** "1 crop area", "2 crop areas": a count with its noun. */
+const count = (c: number, one: string, many = `${one}s`) => `${c} ${c === 1 ? one : many}`;
+
 /**
  * The confirmation before removing a node, or null when nothing else goes with
- * it. `farmers` is null when the farmer list couldn't be loaded: a farm then
- * always asks, so an owner is never left unwarned.
+ * it. The dialog's title asks the question ("Remove “Farm A”?"), so this is
+ * only what goes with the node: the parts it has (a zero isn't listed), the
+ * nodes draining into it, which move to where it drained, and its farmers.
+ * `farmers` is null when the farmer list couldn't be loaded: a farm then
+ * always asks, so an owner is never left unwarned. `upstream` counts the nodes
+ * that drain into it, `into` names where they will drain (null: the removed
+ * node is the outlet, so they become outlets).
  */
-export function removeMessage(o: { name: string; isFarm: boolean; areas: number; transfers: number; cover: number; boreholes?: number; demandObjects?: number; farmers: number | null }): string | null {
+export function removeMessage(o: {
+	isFarm: boolean;
+	areas: number;
+	transfers: number;
+	cover: number;
+	boreholes?: number;
+	demandObjects?: number;
+	farmers: number | null;
+	upstream?: number;
+	into?: string | null;
+}): string | null {
 	const unknownFarmers = o.isFarm && o.farmers === null;
 	const farmers = o.farmers ?? 0;
-	const boreholes = o.boreholes ?? 0;
-	const objects = o.demandObjects ?? 0;
-	if (!o.areas && !o.transfers && !o.cover && !boreholes && !objects && !farmers && !unknownFarmers) return null;
-	const parts = [`${o.areas} crop area(s)`, `${o.transfers} transfer(s)`];
-	if (o.cover) parts.push(`${o.cover} land-cover patch(es)`);
-	if (boreholes) parts.push(`${boreholes} borehole(s)`);
-	if (objects) parts.push(`${objects} demand object(s)`);
-	let text = `Remove "${o.name}"? Its ${parts.slice(0, -1).join(', ')} and ${parts.at(-1)} are removed too; nodes draining into it are re-routed downstream.`;
-	if (farmers) text += ` ${n(farmers, 'farmer linked to it loses', 'farmers linked to it lose')} access when you save.`;
-	else if (unknownFarmers) text += ' Any farmers linked to it lose access when you save.';
-	return text;
+	const upstream = o.upstream ?? 0;
+	const parts = [
+		o.areas && count(o.areas, 'crop area'),
+		o.transfers && count(o.transfers, 'transfer'),
+		o.cover && count(o.cover, 'land-cover patch', 'land-cover patches'),
+		o.boreholes && count(o.boreholes, 'borehole'),
+		o.demandObjects && count(o.demandObjects, 'demand object')
+	].filter((p): p is string => !!p);
+	if (!parts.length && !upstream && !farmers && !unknownFarmers) return null;
+	const sentences: string[] = [];
+	if (parts.length) sentences.push(`Its ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]} ${parts.length === 1 && /^1 /.test(parts[0]!) ? 'goes' : 'go'} with it.`);
+	if (upstream) {
+		const nodes = upstream === 1 ? 'The node that drains into it' : `The ${upstream} nodes that drain into it`;
+		sentences.push(o.into ? `${nodes} will drain into “${o.into}”.` : `${nodes} will have nowhere to drain: make one of them the outflow gauge.`);
+	}
+	if (farmers) sentences.push(`${n(farmers, 'farmer linked to it loses', 'farmers linked to it lose')} access when you save.`);
+	else if (unknownFarmers) sentences.push('Any farmers linked to it lose access when you save.');
+	sentences.push('Until you save, Discard brings it back.');
+	return sentences.join(' ');
 }

@@ -135,7 +135,7 @@ const FONTS_TGZ = 'basemaps-assets-028c18f713baecad011301ff7a69acc39bcc2ae7.tar.
 test('tiles-dev.sh fonts stops on a tampered fonts archive before unpacking it', () => {
 	const r = run('tiles-dev.sh', ['fonts'], 'tampered', `${sha('the real fonts')}  ${FONTS_TGZ}\n`);
 	assert.equal(r.status, 1, r.stderr);
-	assert.match(r.stderr, new RegExp(`${FONTS_TGZ.replace(/\./g, '\\.')}: SHA-256 MISMATCH`));
+	assert.ok(r.stderr.includes(`${FONTS_TGZ}: SHA-256 MISMATCH`), r.stderr);
 	assert.doesNotMatch(r.stderr, /tar reached/);
 	assert.ok(existsSync(join(r.cache, 'water-management-tiles', `${FONTS_TGZ}.mismatch`)));
 });

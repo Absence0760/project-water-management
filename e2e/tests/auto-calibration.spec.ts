@@ -3,6 +3,7 @@
 // result to the form and save it. A fit never saves anything by itself.
 import { addMember, putSeries, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { anySaveBar, saveSettings, settingsBar } from '../support/settings.ts';
 import { ungroup } from '../support/format.ts';
 
 test('fitting GR4J fills the form, and only Save stores it', async ({ page, owner }) => {
@@ -53,10 +54,9 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 	await expect(x1).not.toHaveValue('350');
 	expect(ungroup(await x1.inputValue())).toBeCloseTo(ungroup(fitted!), -1);
 	// Applied, not saved.
-	await expect(page.getByText('Unsaved settings')).toBeVisible();
+	await expect(settingsBar(page)).toBeVisible();
 	const applied = await x1.inputValue();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(x1).toHaveValue(applied);
 });
@@ -91,7 +91,7 @@ test('a fit can be cancelled, leaving the form untouched', async ({ page, owner 
 	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeEnabled();
 	await expect(fit.getByRole('progressbar')).toHaveCount(0);
 	await expect(page.getByLabel(/^Production store capacity X1/)).toHaveValue('350');
-	await expect(page.getByText('Unsaved settings')).toBeHidden();
+	await expect(anySaveBar(page)).toHaveCount(0);
 });
 
 test('a viewer can fit but not apply', async ({ page, owner, signIn }) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { NEW_FARM_IRRIGATION } from '@water-management/engine';
-import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, hasDam, hasDamDevelopment, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
+import { NEW_FARM_IRRIGATION, newNetworkNode } from '@water-management/engine';
+import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, GROUPS, hasDam, hasDamDevelopment, hiLoHint, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -134,6 +134,57 @@ describe('River to dam in m³/s', () => {
 		expect(fieldUnused(divert, { pctUpstreamToDam: 0.99 })).toBeNull();
 		expect(fieldUnused(divert, { pctUpstreamToDam: 0 })).toBeNull();
 		expect(fieldUnused(NODE_FIELDS.find((f) => f.key === 'damCapacityM3')!, { pctUpstreamToDam: 1 })).toBeNull();
+	});
+});
+
+describe('fieldUnused in the one-node form (a flow-share method given)', () => {
+	const f = (key: string) => NODE_FIELDS.find((x) => x.key === key)!;
+	const noDam = { pctUpstreamToDam: 0, damCapacityM3: 0 };
+	const dam = { pctUpstreamToDam: 0, damCapacityM3: 50_000 };
+
+	it("marks a dam's own fields unused with no dam, except the capacity that makes one", () => {
+		expect(fieldUnused(f('damMinPct'), noDam, 'area')).toBe('Not used: no dam (capacity 0). Enter a capacity to use it.');
+		expect(fieldUnused(f('damOutletCapacityM3Day'), noDam, 'area')).toMatch(/^Not used: no dam/);
+		expect(fieldUnused(f('damCapacityM3'), noDam, 'area')).toBeNull();
+		expect(fieldUnused(f('damMinPct'), dam, 'area')).toBeNull();
+		// A sub-1 m³ placeholder is still a dam to the engine, so its fields stay live.
+		expect(fieldUnused(f('damMinPct'), { pctUpstreamToDam: 0, damCapacityM3: 0.5 }, 'area')).toBeNull();
+		// Routing to the dam still matters without one: it irrigates straight from the river (noDamSupplyHint).
+		expect(fieldUnused(f('pctRunoffToDam'), noDam, 'area')).toBeNull();
+	});
+
+	it('marks the high/low MAP areas and the manual share unused unless their method is chosen', () => {
+		expect(fieldUnused(f('areaHiKm2'), dam, 'area')).toMatch(/high\/low MAP split/);
+		expect(fieldUnused(f('areaLoKm2'), dam, 'manual')).toMatch(/high\/low MAP split/);
+		expect(fieldUnused(f('areaHiKm2'), dam, 'hiLo')).toBeNull();
+		expect(fieldUnused(f('flowShareManual'), dam, 'hiLo')).toMatch(/isn’t Manual/);
+		expect(fieldUnused(f('flowShareManual'), dam, 'manual')).toBeNull();
+		expect(fieldUnused(f('areaKm2'), dam, 'manual')).toBeNull();
+	});
+
+	it('leaves the node table (no method) editable throughout', () => {
+		expect(fieldUnused(f('damMinPct'), noDam)).toBeNull();
+		expect(fieldUnused(f('flowShareManual'), noDam)).toBeNull();
+	});
+});
+
+describe('hiLoHint', () => {
+	const node = (areaKm2: number, areaHiKm2: number, areaLoKm2: number) => ({ ...newNetworkNode('u', 1, null), kind: 'farm' as const, areaKm2, areaHiKm2, areaLoKm2 });
+	it('says when High-MAP + Low-MAP is more than 1 % off the area, as the run would', () => {
+		expect(hiLoHint(node(10, 5, 4))).toBe('High-MAP + Low-MAP = 9.00 km², but the area is 10.00 km²: they should add up to it.');
+		expect(hiLoHint(node(10, 5, 5))).toBeNull();
+		expect(hiLoHint(node(10, 5, 4.95))).toBeNull();
+		expect(hiLoHint(node(0, 0, 0))).toBeNull();
+	});
+});
+
+describe('the combined boreholes', () => {
+	it('are named apart from the individual boreholes, so no two fields share a label', () => {
+		expect(GROUPS.groundwater).toBe('Combined boreholes (one capacity)');
+		const labels = NODE_FIELDS.filter((x) => x.group === 'groundwater').map((x) => x.label);
+		expect(labels).toContain('Combined borehole capacity');
+		expect(labels).toContain('Combined stream depletion');
+		expect(labels).not.toContain('Stream depletion');
 	});
 });
 

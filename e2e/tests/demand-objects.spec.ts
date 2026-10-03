@@ -6,6 +6,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 import { ungroup } from '../support/format.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -28,6 +29,8 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	await group.getByLabel('Demand of Town in Oct, m³/day').fill('400');
 	await group.getByRole('button', { name: 'Use October’s demand for every month' }).click();
 	await expect(group.getByLabel('Demand of Town in Sep, m³/day')).toHaveValue('400');
+	// Eleven values changed at once: a polite line says so.
+	await expect(group.getByText('Copied October’s 400 to every month of Demand, m³/day, per month.')).toBeAttached();
 	await expect(group.getByTestId(/^demand-object-mean-/)).toHaveText('400 m³/day on average.');
 	// Per unit, the months are a profile (× the daily use, 1 by default) with no fill button; back to m³/day, the demand is kept.
 	await group.getByLabel('Demand given as').selectOption('perUnit');
@@ -88,4 +91,36 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	expect(perPerson).toBeCloseTo((supplied * 1000) / 2000, -1);
 	// The floor columns stack rather than widen the table: it fits its panel without scrolling sideways.
 	expect(await table.evaluate((t) => t.parentElement!.scrollWidth <= t.parentElement!.clientWidth)).toBe(true);
+});
+
+test('each demand object is titled by its name, and removing one with a demand asks and moves the focus on', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Demand objects titles');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	const group = sheet.getByRole('group', { name: 'Demand objects', exact: true });
+	await group.getByRole('button', { name: '+ Add demand' }).click();
+	await group.getByRole('button', { name: '+ Add demand' }).click();
+	const names = group.getByLabel('Name', { exact: true });
+	await names.nth(0).fill('');
+	await names.nth(1).fill('Town B');
+	// A group per object, named by it, so its fields read as its own; a blank name still names its months.
+	await expect(group.getByRole('group', { name: 'Demand object 2: Town B' }).getByLabel('Category')).toBeVisible();
+	await expect(group.getByRole('group', { name: 'Demand object 1', exact: true })).toBeVisible();
+	await expect(group.getByLabel('Demand of demand 1 in Oct, m³/day')).toBeVisible();
+	await expect(group.getByRole('group', { name: 'Demand object 2: Town B' }).getByLabel('Modelled')).toHaveAccessibleDescription('Untick to keep it on record without running it.');
+
+	// Town B with a demand asks first; Cancel keeps it; the focus then goes to the next object's name.
+	await group.getByLabel('Demand of Town B in Oct, m³/day').fill('120');
+	await group.getByRole('button', { name: 'Remove Town B' }).click();
+	await answerConfirm(page, false, 'Its monthly demand goes with it.');
+	await expect(names).toHaveCount(2);
+	// The blank one first: it holds nothing, so it goes at once, and Town B's name takes the focus.
+	await group.getByRole('button', { name: 'Remove demand object 1' }).click();
+	await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	await expect(names).toHaveCount(1);
+	await expect(names.first()).toBeFocused();
+	await group.getByRole('button', { name: 'Remove Town B' }).click();
+	await answerConfirm(page, true, 'Remove “Town B”?');
+	await expect(group.getByRole('button', { name: '+ Add demand' })).toBeFocused();
 });

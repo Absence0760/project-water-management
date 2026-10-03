@@ -9,6 +9,7 @@ import { plantEmailToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { fact, membersPanel, openProject } from '../support/project.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const region = (page: Page, name: string) => page.getByRole('region', { name, exact: true });
@@ -106,6 +107,7 @@ test('the Summary links here and Back returns; details save from the page’s sa
 	await expect(detailsBar(page).getByRole('button', { name: 'Save changes' })).toBeDisabled();
 	// Discard puts the saved name back.
 	await detailsBar(page).getByRole('button', { name: 'Discard' }).click();
+	await answerConfirm(page, true, 'Your unsaved changes to the project details will be lost.');
 	await expect(name).toHaveValue('Project renamed');
 	await expect(detailsBar(page)).toHaveCount(0);
 

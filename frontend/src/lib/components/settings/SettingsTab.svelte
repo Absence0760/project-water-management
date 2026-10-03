@@ -15,14 +15,12 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
-	// Preview the unsaved settings against the last run (issue #284): its own chunk, fetched when first wanted.
-	const loadUnsavedPreview = () => import('$lib/components/preview/UnsavedPreviewDialog.svelte');
 	// Evaporation from the map (issue #326 B-evap): its own chunk, for the same reason as the panels above; it loads its proposal on mount.
 	const loadEvaporationProposal = () => import('./EvaporationProposal.svelte');
 </script>
 
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { withParam } from '$lib/workspace/overlays';
 	import { holdAnchor } from '$lib/help/anchor';
@@ -50,8 +48,6 @@
 		QM_WET_DAY_MM_MAX,
 		QM_WET_DAY_MM_MIN,
 		panCoefficientOutOfRange,
-		type ChirpsQuantileMap,
-		type CalibrationParams,
 		type CalibrationReport,
 		type FitRecord,
 		type FlowShareMethod,
@@ -70,8 +66,7 @@
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import { api, type Project, type RunMeta } from '$lib/api';
-	import type { UnsavedEdits } from '$lib/preview/overlay';
+	import { api, type Project } from '$lib/api';
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -84,10 +79,9 @@
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { dataQualityError } from './dataQuality';
 	import DataQualitySection from './DataQualitySection.svelte';
-	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
-	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
-	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
-	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
+	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '$lib/components/autorun/autoRun';
+	import { outcomesError } from '$lib/components/outcomes/outcomeSettings';
+	import { outlookError } from '$lib/components/outlook/settings';
 	import { CHIRPS_BIAS_OPTIONS, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -98,35 +92,39 @@
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
-	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withPeKind, type EditablePe } from './peInput';
+	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 	import { AREAL_METHOD_OPTIONS, arealRainFormError, flatFactor, storedArealRain, withArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
 	// These panels render on every visit of the tab, so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
 	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
-	// reports save through their own APIs, never through Save settings (docs/ui.md § Data feeds,
+	// reports save through their own APIs, never through the save bar (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
 	import PanCoefficientHelper from './PanCoefficientHelper.svelte';
 	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
+	import type { SettingsDraft } from './settingsDraft.svelte';
 
 	let {
 		project,
 		editor,
+		draft,
 		seriesKinds = null,
 		gaugeRecords = null,
 		chirpsSource,
 		observedOrigins,
 		apanSeries,
 		readonly,
-		onProjectChange,
-		runs = null
+		onProjectChange
 	}: {
 		project: Project;
 		editor?: ModelEditor;
-		/** The project's runs, newest first (null while they load): the Preview starts from the last one. */
-		runs?: RunMeta[] | null;
+		/**
+		 * The unsaved settings, held by the workspace page (settingsDraft.svelte.ts): its save bar saves,
+		 * discards and previews them with the model's edits, so this form has no save bar of its own.
+		 */
+		draft: SettingsDraft;
 		/** Kinds of the project's input series, to limit the calibration flow choices. */
 		seriesKinds?: string[] | null;
 		/** The flow records attached to gauges inside the network (084_gauge_records), for the calibration site's choices; null = not known. */
@@ -141,45 +139,15 @@
 		onProjectChange: (p: Project) => void;
 	} = $props();
 
-	// Mutable view of the settings (the engine's Monthly type is a readonly tuple).
-	type Editable = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3PerDay' | 'panCoefficient' | 'calibration' | 'pe' | 'lakeEvapFactorMonthly'> & {
-		apanMm: number[];
-		/** Monthly lake factors (WP-3.5); null = lakeEvapFactor in every month. */
-		lakeEvapFactorMonthly?: number[] | null;
-		ewrPragmaticM3PerDay: number[];
-		panCoefficient: number[];
-		calibration: CalibrationParams & Record<string, unknown>;
-		/** Absent on settings saved before engine 0.31.0: pan coefficient × A-pan. */
-		pe?: EditablePe;
-		/** When the project re-runs itself after new data (WP-2.11); defaults filled in for an older API. */
-		autoRun: AutoRunSettings;
-		/** How the outcome matrix reads a sweep (issue #53 R4); defaults filled in for an older API. */
-		outcomes: OutcomeSettings;
-		/** How a seasonal outlook is set up (issue #53 R5); defaults filled in for an older API. */
-		outlook: OutlookSettings;
-	};
-	const clone = (v: ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings }): Editable => {
-		const c = JSON.parse(JSON.stringify(v)) as Editable;
-		c.autoRun = resolveAutoRun(v);
-		c.outcomes = resolveOutcomes(v);
-		c.outlook = resolveOutlook(v);
-		return c;
-	};
-
-	let s = $state<Editable>(clone(untrack(() => project.settings)));
-	let saved = $state(JSON.stringify(clone(untrack(() => project.settings))));
-	let saving = $state(false);
-	let error = $state<string | null>(null);
-	let justSaved = $state(false);
-	// X2 (groundwater exchange) is fixed at 0 unless the user opts in.
-	let x2Open = $state(untrack(() => project.settings.gr4j?.x2 !== 0));
-	// The preset picker itself is never saved — it only fills panCoefficient, then resets.
+	// The form edits the page's draft in place (settings/settingsDraft.svelte.ts), so a tab change keeps it.
+	const s = $derived(draft.s);
+	// The preset pickers themselves are never saved: each only fills its row and source note, then resets.
 	let panPreset = $state('');
-	// Likewise the lake-factor preset picker (engine ≥ 1.49.0): it fills lakeEvapFactorMonthly and its source note, then resets.
+	// The lake-factor preset picker (engine ≥ 1.49.0) fills lakeEvapFactorMonthly and its source note.
 	let lakePreset = $state('');
 	let lakePresetError = $state<string | null>(null);
 
-	const dirty = $derived(JSON.stringify(s) !== saved);
+	const dirty = $derived(draft.dirty);
 	const cal = $derived(s.calibration);
 	const hiLoSum = $derived((s.hiLoSplit.hi || 0) + (s.hiLoSplit.lo || 0));
 	const dateError = $derived(
@@ -187,32 +155,28 @@
 			? 'Simulation start must be before the end.'
 			: null
 	);
-	let calWindowError = $state<string | null>(null);
-	let exclusionsError = $state<string | null>(null);
-	let zeroRainError = $state<string | null>(null);
-	let fitPeriodError = $state<string | null>(null);
-	let rainSourceError = $state<string | null>(null);
 	// GR4J's PE input (issue #39).
 	const pe = $derived(peOf(s));
 	const peError = $derived(peFormError(pe));
 	const peAnnual = $derived(annualGr4jPeMm(s));
 	const peSourceBad = $derived(pe.kind === 'monthly' && (!pe.source.trim() || pe.source.length > PE_SOURCE_MAX));
-	// A monthly row the form had before switching to pan, so switching back brings it back (unsaved).
-	let lastMonthlyPe = $state<EditablePe | null>(null);
 	// The areal rainfall correction on GR4J's rain (engine ≥ 1.13.0, §2.4g); the one switched off is kept until saved.
 	const areal = $derived((s.arealRain ?? null) as unknown as EditableArealRain | null);
 	const arealError = $derived(arealRainFormError(areal));
 	const arealFlat = $derived(areal ? flatFactor(areal) : null);
-	let lastAreal = $state<EditableArealRain | null>(null);
 	function setArealOn(on: boolean) {
-		if (!on && areal) lastAreal = $state.snapshot(areal) as EditableArealRain;
-		s.arealRain = storedArealRain(withArealRain(on, lastAreal));
+		if (!on && areal) draft.lastAreal = $state.snapshot(areal) as EditableArealRain;
+		s.arealRain = storedArealRain(withArealRain(on, draft.lastAreal));
 	}
 	// The CHIRPS gap map (engine ≥ 1.53.0, CR-23); the threshold it was switched off with is kept until saved.
-	let lastGapMap = $state<ChirpsQuantileMap | null>(null);
 	function setGapMapOn(on: boolean) {
-		if (!on && s.chirpsQuantileMap) lastGapMap = { ...s.chirpsQuantileMap };
-		s.chirpsQuantileMap = withChirpsQuantileMap(on, lastGapMap);
+		if (!on && s.chirpsQuantileMap) draft.lastGapMap = { ...s.chirpsQuantileMap };
+		s.chirpsQuantileMap = withChirpsQuantileMap(on, draft.lastGapMap);
+	}
+	// Monthly lake factors (WP-3.5): the twelve switched off come back when it is ticked again, until saved.
+	function setLakeMonthlyOn(on: boolean) {
+		if (!on && s.lakeEvapFactorMonthly) draft.lastLakeMonthly = [...s.lakeEvapFactorMonthly];
+		s.lakeEvapFactorMonthly = withLakeMonthly(on, s.lakeEvapFactor, draft.lastLakeMonthly);
 	}
 	const reportError = $derived(
 		s.reportStart && s.reportEnd && s.reportStart > s.reportEnd ? 'The reporting window must start before it ends.' : null
@@ -221,39 +185,36 @@
 	const autoError = $derived(autoRunError(s.autoRun));
 	const outError = $derived(outcomesError(s.outcomes));
 	const outlookErr = $derived(outlookError(s.outlook));
-	let wr2012Error = $state<string | null>(null);
-	let qualityFlagsErr = $state<string | null>(null);
-	let rulesErr = $state<string | null>(null);
-	let reserveError = $state<string | null>(null);
-	let evidenceErr = $state<string | null>(null);
-	let restrictErr = $state<string | null>(null);
-	const blocked = $derived(
-		!!evidenceErr || !!restrictErr || !!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
-	);
-	// What blocks Save, by group, so the save bar can link to each one.
+	// The child sections report their problems into the draft (bind:error), so they outlive the tab.
+	const errs = $derived(draft.errors);
+	// What blocks Save, by group, so the save bar can link to each one. Reported to the page's draft,
+	// whose save bar lists them; they keep while another tab is shown (the settings can't change there).
 	const blockers = $derived(
 		saveBlockers([
-			{ id: 'set-record', message: calWindowError },
-			{ id: 'set-record', message: exclusionsError },
-			{ id: 'set-record', message: qualityFlagsErr },
-			{ id: 'set-fit', message: rulesErr },
-			{ id: 'set-rain', message: fitPeriodError },
-			{ id: 'set-rain', message: zeroRainError },
-			{ id: 'set-rain', message: rainSourceError },
+			{ id: 'set-record', message: errs.calWindow },
+			{ id: 'set-record', message: errs.exclusions },
+			{ id: 'set-record', message: errs.qualityFlags },
+			{ id: 'set-fit', message: errs.rules },
+			{ id: 'set-rain', message: errs.fitPeriod },
+			{ id: 'set-rain', message: errs.zeroRain },
+			{ id: 'set-rain', message: errs.rainSource },
 			{ id: 'set-flow', message: peError },
 			{ id: 'set-flow', message: arealError },
-			{ id: 'set-wr2012', message: wr2012Error },
+			{ id: 'set-wr2012', message: errs.wr2012 },
 			{ id: 'set-ewr', message: reportError },
-			{ id: 'set-reserve', message: reserveError },
-			{ id: 'set-restrict', message: restrictErr },
+			{ id: 'set-reserve', message: errs.reserve },
+			{ id: 'set-restrict', message: errs.restrict },
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError },
 			{ id: 'set-outcomes', message: outError },
 			{ id: 'set-outlook', message: outlookErr },
-			{ id: 'set-evidence', message: evidenceErr },
+			{ id: 'set-evidence', message: errs.evidence },
 			{ id: 'set-auto', message: autoError }
 		])
 	);
+	$effect(() => {
+		draft.blockers = blockers;
+	});
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
@@ -268,7 +229,7 @@
 	const x2 = GR4J_FIELDS.find((f) => f.key === 'x2')!;
 
 	function setX2Open(open: boolean) {
-		x2Open = open;
+		draft.x2Open = open;
 		if (!open) s.gr4j.x2 = 0;
 	}
 
@@ -308,77 +269,30 @@
 
 	/** Choose where GR4J's PE comes from; a monthly row switched away from is remembered until saved or discarded. */
 	function setPeKind(kind: EditablePe['kind']) {
-		if (pe.kind === 'monthly') lastMonthlyPe = $state.snapshot(pe) as EditablePe;
-		s.pe = withPeKind(s, kind, lastMonthlyPe);
+		if (pe.kind === 'monthly') draft.lastMonthlyPe = $state.snapshot(pe) as EditablePe;
+		s.pe = withPeKind(s, kind, draft.lastMonthlyPe);
+	}
+
+	// The rules as saved: the server runs automated calibration only on these (issue #153).
+	const savedRules = $derived(draft.saved.calibrationRules);
+	// The declared uncertainty rule as saved (issue #71): switching it off withdraws this one.
+	const savedEvidenceRule = $derived(draft.saved.evidenceUncertaintyRule);
+
+	/**
+	 * The server saved an automated fit or a proposal (issue #153): take the project's settings as they now
+	 * are. A rebase, not a load: an edit typed while it was applied stays unsaved, but a setting the apply
+	 * changed shows the applied value. The page's onProjectChange then finds nothing more to rebase.
+	 */
+	async function reloadAfterApply() {
+		const p = await api.projects.get(project.id);
+		draft.rebase(p.settings, 'saved');
+		onProjectChange(p);
 	}
 
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
-	// The rules as saved: the server runs automated calibration only on these (issue #153).
-	const savedRules = $derived((JSON.parse(saved) as ProjectSettings).calibrationRules);
-	// The declared uncertainty rule as saved (issue #71): switching it off withdraws this one.
-	const savedEvidenceRule = $derived((JSON.parse(saved) as ProjectSettings).evidenceUncertaintyRule);
-
-	/** The server saved an automated fit (issue #153): take the project's settings as they now are. */
-	async function reloadAfterApply() {
-		const p = await api.projects.get(project.id);
-		onProjectChange(p);
-		s = clone(p.settings);
-		saved = JSON.stringify(clone(p.settings));
-		x2Open = s.gr4j.x2 !== 0;
-	}
-
 	function applyFit(report: CalibrationReport, record: FitRecord) {
-		s = { ...applyReport(s, report), fitRecord: record };
-		if (report.model === 'gr4j' && s.gr4j.x2 !== 0) x2Open = true;
-	}
-
-	function discard() {
-		s = clone(JSON.parse(saved));
-		x2Open = s.gr4j.x2 !== 0;
-		lastMonthlyPe = null;
-		lastAreal = null;
-		error = null;
-		reason = '';
-	}
-
-	/** The optional "why" of the save, kept with the change in the History tab. */
-	let reason = $state('');
-
-	// Preview (issue #284): the unsaved settings, and any unsaved model edits that have no problems, on the last run.
-	let previewOpen = $state(false);
-	let previewMounted = $state(false);
-	const previewModel = $derived(!!editor?.dirty && editor.issues.length === 0);
-	function previewEdits(): UnsavedEdits {
-		return {
-			settings: { saved: JSON.parse(saved), draft: $state.snapshot(s) as unknown as NonNullable<UnsavedEdits['settings']>['draft'] },
-			...(editor && previewModel ? { model: { saved: editor.savedModel(), draft: editor.snapshot() } } : {})
-		};
-	}
-	function openPreview() {
-		previewMounted = true;
-		previewOpen = true;
-	}
-
-	async function save(e: SubmitEvent) {
-		e.preventDefault();
-		if (blocked) return;
-		saving = true;
-		error = null;
-		justSaved = false;
-		try {
-			const why = reason.trim();
-			const p = await api.projects.update(project.id, { settings: $state.snapshot(s) as unknown as ProjectSettings, ...(why ? { reason: why } : {}) });
-			reason = '';
-			onProjectChange(p);
-			s = clone(p.settings);
-			saved = JSON.stringify(clone(p.settings));
-			x2Open = s.gr4j.x2 !== 0;
-				justSaved = true;
-		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
-		} finally {
-			saving = false;
-		}
+		draft.s = { ...applyReport(s, report), fitRecord: record };
+		if (report.model === 'gr4j' && draft.s.gr4j.x2 !== 0) draft.x2Open = true;
 	}
 
 	const METHODS: { value: FlowShareMethod; label: string; help: string }[] = [
@@ -429,16 +343,6 @@
 		!hasPotentialEvaporation({ apanMm: s.apanMm, panCoefficient: s.panCoefficient, pe: s.pe as PeInput | undefined }, apanSource?.daily ?? false)
 	);
 
-	// The in-page menu (SectionNav) and the save bar both stick, so in-page jumps
-	// and focus scrolling keep clear of them (WCAG 2.4.11) while this tab is shown.
-	let actionsHeight = $state(0);
-	$effect(() => {
-		const root = document.documentElement;
-		root.style.scrollPaddingBottom = actionsHeight ? `${actionsHeight + 12}px` : '';
-		return () => {
-			root.style.scrollPaddingBottom = '';
-		};
-	});
 	const navLabel = (id: string) => SETTINGS_SECTIONS.find((sec) => sec.id === id)?.label ?? id;
 	// A link that stands for several panels ("Automation & access") takes the group's name and shows a problem on any of them.
 	const navGroups = $derived(
@@ -486,8 +390,9 @@
      links are evenly spaced instead (common/SectionNav, issue #162). -->
 <SectionNav groups={navGroups} label="Settings sections" />
 
-<form onsubmit={save} novalidate>
-	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+<!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
+     inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
+<div class="settings-form">
 
 	<!-- Demand ------------------------------------------------------------------>
 	<section class="panel" id="set-demand" aria-labelledby="dem-h">
@@ -533,7 +438,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<th scope="row" class="sticky">Dam evaporation factor <span class="u">× A-pan</span> <HelpTip key="settings.lakeEvapFactorMonthly" /></th>
+							<th scope="row" class="sticky">Dam evaporation factor <span class="u">× A-pan</span> <HelpTip key="settings.lakeEvapFactorMonthly" label="About the monthly dam evaporation factors" /></th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
 								<td><NumberInput label="Dam evaporation factor, {m}, × A-pan" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactorMonthly[i]} /></td>
 							{/each}
@@ -557,7 +462,7 @@
 				<FieldHistoryLine field="settings:effectiveRainStoreMm" />
 			</div>
 			<div class="field">
-				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" /></span>
+				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" label="About the evaporation factor of the dam" /></span>
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
 				<span class="hint" id="st-lef-h">Open-water evaporation from the hydrological units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
 				<FieldHistoryLine field="settings:lakeEvapFactor" />
@@ -566,14 +471,14 @@
 						type="checkbox"
 						disabled={readonly}
 						checked={!!s.lakeEvapFactorMonthly}
-						onchange={(e) => (s.lakeEvapFactorMonthly = e.currentTarget.checked ? new Array(12).fill(s.lakeEvapFactor) : null)}
+						onchange={(e) => setLakeMonthlyOn(e.currentTarget.checked)}
 					/>
-					Vary it by month <HelpTip key="settings.lakeEvapFactorMonthly" />
+					Vary it by month <HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
 				</label>
 			</div>
 		</div>
 		<div class="field lake-preset">
-			<span class="lbl"><label for="st-lake-preset">Dam evaporation preset</label><HelpTip key="settings.lakeEvapFactorSource" /></span>
+			<span class="lbl"><label for="st-lake-preset">Dam evaporation preset</label><HelpTip key="settings.lakeEvapFactorSource" label="About the dam evaporation presets" /></span>
 			<select id="st-lake-preset" disabled={readonly} value={lakePreset} onchange={(e) => {
 					applyLakePreset(e.currentTarget.value);
 					// Back to "Fill from a preset…" (lakePreset stays '', so the binding alone wouldn't reset it).
@@ -588,7 +493,7 @@
 			{#if lakePresetError}<span class="err" role="status" data-testid="lake-preset-error">{lakePresetError}</span>{/if}
 		</div>
 		<div class="field lake-source">
-			<span class="lbl"><label for="st-lake-source">Dam evaporation factor source</label><HelpTip key="settings.lakeEvapFactorSource" /></span>
+			<span class="lbl"><label for="st-lake-source">Dam evaporation factor source</label><HelpTip key="settings.lakeEvapFactorSource" label="About where the dam evaporation factors come from" /></span>
 			<input
 				id="st-lake-source"
 				readonly={readonly}
@@ -665,7 +570,7 @@
 		<div class="fields">
 			{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
 				<div class="field">
-					<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" /></span>
+					<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" label="About GR4J, for {p.label}" /></span>
 					<!-- A fit writes nine decimals; three show (display only, as the fit record does). -->
 					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} decimals={3} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
 					<span class="hint" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
@@ -688,10 +593,10 @@
 		<fieldset class="plain x2">
 			<legend>Groundwater exchange (X2)</legend>
 			<label class="check">
-				<input type="checkbox" disabled={readonly} checked={x2Open} onchange={(e) => setX2Open(e.currentTarget.checked)} />
+				<input type="checkbox" disabled={readonly} checked={draft.x2Open} onchange={(e) => setX2Open(e.currentTarget.checked)} />
 				Let the catchment gain or lose groundwater
 			</label>
-			{#if x2Open}
+			{#if draft.x2Open}
 				<div class="field">
 					<label for="gr4j-x2">{x2.label} <span class="u">({x2.unit})</span></label>
 					<NumberInput id="gr4j-x2" min={x2.min} max={x2.max} step={x2.step} disabled={readonly} bind:value={s.gr4j.x2} aria-describedby="gr4j-x2-h" />
@@ -703,7 +608,8 @@
 		<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.13.0): GR4J's rain only;
 		     irrigation demand's effective rain and rain on the dams keep the recorded rain. -->
 		<fieldset class="plain areal" data-testid="areal-rain">
-			<legend>Areal rainfall correction <HelpTip key="settings.arealRain" /></legend>
+			<!-- Each sub-group of a long panel is an h3 (in its legend), so heading navigation reaches it. -->
+			<legend><h3 class="sub">Areal rainfall correction <HelpTip key="settings.arealRain" /></h3></legend>
 			<label class="check">
 				<input type="checkbox" disabled={readonly} checked={!!areal} onchange={(e) => setArealOn(e.currentTarget.checked)} />
 				Scale the rain GR4J runs on to the catchment’s areal rain
@@ -787,13 +693,13 @@
 						value={areal.source}
 						placeholder="e.g. catchment MAP 560 mm (reference) ÷ CHIRPS mean 2001–2024"
 						aria-invalid={(!!arealError && !areal.source.trim()) || undefined}
-						aria-describedby="st-areal-source-h"
+						aria-describedby={arealError ? 'st-areal-source-h st-areal-err' : 'st-areal-source-h'}
 						oninput={(e) => {
 							if (s.arealRain) s.arealRain = storedArealRain({ ...areal, source: e.currentTarget.value });
 						}}
 					/>
 					<span class="hint" id="st-areal-source-h">Required: the MAP or gauges and their reference, and the years compared. A fit records the factors, so changing them marks it “Forcing changed since fit”.</span>
-					{#if arealError}<span class="err" role="status">{arealError}</span>{/if}
+					{#if arealError}<span class="err" id="st-areal-err">{arealError}</span>{/if}
 				</div>
 				<FieldHistoryLine field="settings:arealRain" />
 			{/if}
@@ -801,7 +707,7 @@
 		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
 		     demand and dam evaporation read the A-pan row whichever is chosen. -->
 		<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">
-			<legend>GR4J potential evaporation <HelpTip key="settings.pe" /></legend>
+			<legend><h3 class="sub">GR4J potential evaporation <HelpTip key="settings.pe" /></h3></legend>
 			{#each PE_KIND_OPTIONS as o (o.value)}
 				<label class="check">
 					<input type="radio" name="st-pe-kind" value={o.value} checked={pe.kind === o.value} disabled={readonly} onchange={() => setPeKind(o.value)} />
@@ -834,7 +740,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<th scope="row" class="sticky">Monthly PE <span class="u">mm</span> <HelpTip key="settings.pe" /></th>
+							<th scope="row" class="sticky">Monthly PE <span class="u">mm</span> <HelpTip key="settings.pe" label="About the monthly PE row" /></th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
 								<td>
 									<NumberInput
@@ -864,13 +770,13 @@
 					placeholder="e.g. station FAO-56 ET₀ × 1.0, 2015–2020"
 					aria-invalid={peSourceBad || undefined}
 					class:invalid={peSourceBad}
-					aria-describedby="st-pe-source-h"
+					aria-describedby={peError ? 'st-pe-source-h st-pe-err' : 'st-pe-source-h'}
 					oninput={(e) => {
 						if (s.pe?.kind === 'monthly') s.pe.source = e.currentTarget.value;
 					}}
 				/>
 				<span class="hint" id="st-pe-source-h">Required: where the values come from, e.g. the station, the method, any factor applied and the years.</span>
-				{#if peError}<span class="err" role="status">{peError}</span>{/if}
+				{#if peError}<span class="err" id="st-pe-err">{peError}</span>{/if}
 			</div>
 		{:else}
 			<div class="field pan-preset">
@@ -904,7 +810,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" /></th>
+							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" label="About the monthly pan coefficients" /></th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
 								<td><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
 							{/each}
@@ -914,7 +820,7 @@
 			</div>
 			<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
 			<div class="field pan-source">
-				<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" /></span>
+				<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" label="About where the pan coefficient comes from" /></span>
 				<input
 					id="st-pan-source"
 					readonly={readonly}
@@ -947,6 +853,7 @@
 			<span class="muted small">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge</span>
 			<NotesDrawer projectId={project.id} target={settingTarget('rain')} />
 		</div>
+		<h3 class="sub first">CHIRPS bias correction and quantile map</h3>
 		<div class="fields">
 			<div class="field">
 				<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
@@ -999,13 +906,13 @@
 		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
 		<ChirpsFitPeriodSection
 			bind:value={s.chirpsFitPeriod}
-			bind:error={fitPeriodError}
+			bind:error={draft.errors.fitPeriod}
 			{readonly}
 			inactive={s.chirpsBiasCorrection !== 'monthly'}
 			propose={() => proposeFitRanges(project.id, s.zeroRainRuns, s.dataQuality)}
 		/>
-		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
-		<RainSourceSection bind:value={s.rainSource} bind:error={rainSourceError} {readonly} />
+		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
+		<RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
 	</section>
 
 	<section class="panel" id="set-record" aria-labelledby="rec-h">
@@ -1019,28 +926,32 @@
 			bind:end={s.calibrationEnd}
 			bind:flowKind={s.calibrationFlowKind}
 			bind:siteNodeId={s.calibrationSiteNodeId}
-			bind:error={calWindowError}
+			bind:error={draft.errors.calWindow}
 			{readonly}
 			availableKinds={seriesKinds}
 			sites={calSites}
 		/>
-		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
+		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
 		<Lazy load={loadQualityFlags}>
-			{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={qualityFlagsErr} {readonly} {seriesKinds} />{/snippet}
+			{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={draft.errors.qualityFlags} {readonly} {seriesKinds} />{/snippet}
 		</Lazy>
 		<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
 		{#if s.flowGapFill}
 			<!-- Its own chunk (issue #66): the Settings tab chunk sits at its size ceiling. -->
 			<Lazy load={loadFlowGapFill}>
-				{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} {readonly} {seriesKinds} />{/snippet}
+				{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} bind:last={draft.kept.flowGapFill} {readonly} {seriesKinds} />{/snippet}
 			</Lazy>
 		{/if}
 	</section>
 
-	<div class="panel" id="set-fit">
+	<section class="panel" id="set-fit" aria-labelledby="fit-h">
+		<div class="panel-head">
+			<h2 id="fit-h">Fit the parameters</h2>
+			<span class="muted small">Fit automatically, the fit record of the parameters above, and automated calibration under declared rules</span>
+		</div>
 		<FitPanel
 			projectId={project.id}
-			{x2Open}
+			x2Open={draft.x2Open}
 			settings={() => $state.snapshot(s) as unknown as ProjectSettings}
 			model={() => (editor?.dirty ? editor.snapshot() : undefined)}
 			hasObserved={hasRecord}
@@ -1064,7 +975,7 @@
 		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
 		{#if s.calibrationRules}
 			<Lazy load={loadCalibrationRules}>
-				{#snippet children(CalibrationRulesFields)}<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={rulesErr} {readonly} />{/snippet}
+				{#snippet children(CalibrationRulesFields)}<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={draft.errors.rules} bind:lastShare={draft.kept.flaggedShare} {readonly} />{/snippet}
 			</Lazy>
 			<Lazy load={loadAutoFit}>
 				{#snippet children(AutoFitPanel)}
@@ -1081,13 +992,15 @@
 				{/snippet}
 			</Lazy>
 		{/if}
-	</div>
+	</section>
 
 
 	<div id="set-wr2012">
 		<Wr2012Section
 			bind:value={s.wr2012}
-			bind:error={wr2012Error}
+			bind:error={draft.errors.wr2012}
+			bind:last={draft.kept.wr2012}
+			bind:lastBand={draft.kept.wr2012Band}
 			{readonly}
 			projectId={project.id}
 			modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
@@ -1178,33 +1091,50 @@
 			<div class="form-row">
 				<div class="field">
 					<label for="st-rep-start">From</label>
-					<input id="st-rep-start" type="date" readonly={readonly} value={s.reportStart ?? ''} onchange={(e) => (s.reportStart = e.currentTarget.value || null)} />
+					<input
+						id="st-rep-start"
+						type="date"
+						readonly={readonly}
+						value={s.reportStart ?? ''}
+						onchange={(e) => (s.reportStart = e.currentTarget.value || null)}
+						aria-invalid={reportError ? 'true' : undefined}
+						aria-describedby={reportError ? 'st-rep-err' : undefined}
+					/>
 				</div>
 				<div class="field">
 					<label for="st-rep-end">To</label>
-					<input id="st-rep-end" type="date" readonly={readonly} value={s.reportEnd ?? ''} onchange={(e) => (s.reportEnd = e.currentTarget.value || null)} />
+					<input
+						id="st-rep-end"
+						type="date"
+						readonly={readonly}
+						value={s.reportEnd ?? ''}
+						onchange={(e) => (s.reportEnd = e.currentTarget.value || null)}
+						aria-invalid={reportError ? 'true' : undefined}
+						aria-describedby={reportError ? 'st-rep-err' : undefined}
+					/>
 				</div>
 			</div>
 			<span class="hint">
 				Period the curtailment targets and the assurance of supply on Hydrological units average over, e.g. the last dry season. Leave blank for the whole run.
 			</span>
-			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
-			<div class="field">
-				<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
-				<NumberInput
-					id="st-aat"
-					min={1}
-					max={100}
-					scale={100}
-					disabled={readonly}
-					value={s.assuranceAnnualThreshold ?? 0.9}
-					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
-					aria-describedby="st-aat-h"
-				/>
-				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
-				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
-			</div>
+			{#if reportError}<p class="err" id="st-rep-err">{reportError}</p>{/if}
 		</fieldset>
+		<!-- Its own field, after the window: screen readers announced it as part of the window's group. -->
+		<div class="field assurance">
+			<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
+			<NumberInput
+				id="st-aat"
+				min={1}
+				max={100}
+				scale={100}
+				disabled={readonly}
+				value={s.assuranceAnnualThreshold ?? 0.9}
+				onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
+				aria-describedby="st-aat-h"
+			/>
+			<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+			<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
+		</div>
 		<fieldset class="plain" data-testid="settings-allocations">
 			<legend>Registered volumes <HelpTip key="settings.allocationMode" /></legend>
 			<div class="form-row">
@@ -1249,11 +1179,12 @@
 	<div id="set-reserve">
 		<EwrRulesSection
 			bind:value={s.ewrRules}
-			bind:error={reserveError}
+			bind:error={draft.errors.reserve}
 			bind:chargeSource={s.ewrChargeSource}
 			bind:lowFlowMeasure={s.lowFlowMeasure}
 			{readonly}
 			nodes={editor?.model.nodes ?? []}
+			projectId={project.id}
 		/>
 	</div>
 
@@ -1262,10 +1193,11 @@
 		<div class="panel-head">
 			<h2 id="restrict-h">Drought restrictions <HelpTip key="settings.droughtRestriction" /></h2>
 			<span class="muted small">Cut demand by level when the farm dams fall below a share of their capacity</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('restrict')} />
 		</div>
 		<Lazy load={loadDroughtRestriction}>
 			{#snippet children(DroughtRestrictionFields)}
-				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={restrictErr} {readonly} nodes={editor?.model.nodes ?? []} projectId={project.id} />
+				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={draft.errors.restrict} {readonly} nodes={editor?.model.nodes ?? []} projectId={project.id} />
 			{/snippet}
 		</Lazy>
 		<FieldHistoryLine field="settings:droughtRestriction" />
@@ -1286,6 +1218,8 @@
 					readonly={readonly}
 					value={s.simulationStart ?? ''}
 					onchange={(e) => (s.simulationStart = e.currentTarget.value || null)}
+					aria-invalid={dateError ? 'true' : undefined}
+					aria-describedby={dateError ? 'st-period-err' : undefined}
 				/>
 			</div>
 			<div class="field">
@@ -1296,6 +1230,8 @@
 					readonly={readonly}
 					value={s.simulationEnd ?? ''}
 					onchange={(e) => (s.simulationEnd = e.currentTarget.value || null)}
+					aria-invalid={dateError ? 'true' : undefined}
+					aria-describedby={dateError ? 'st-period-err' : undefined}
 				/>
 			</div>
 		</div>
@@ -1304,7 +1240,7 @@
 			and the run says so. Set a window to focus a run on a drought or a calibration period, or to reach past the
 			rain record.
 		</p>
-		{#if dateError}<p class="err" role="alert">{dateError}</p>{/if}
+		{#if dateError}<p class="err" id="st-period-err">{dateError}</p>{/if}
 	</section>
 
 	<!-- Data quality (DataQualitySection: gauge vs logger, outliers, flat stretches, zero-rain runs, low vs CHIRPS) -->
@@ -1323,10 +1259,11 @@
 		<div class="panel-head">
 			<h2 id="evid-h">Evidence <HelpTip key="settings.evidenceUncertaintyRule" /></h2>
 			<span class="muted small">The uncertainty rule an evidence report’s bands must follow, declared before any band is seen</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('evidence')} />
 		</div>
 		<Lazy load={loadEvidenceRule}>
 			{#snippet children(EvidenceRuleFields)}
-				<EvidenceRuleFields bind:value={s.evidenceUncertaintyRule} bind:error={evidenceErr} saved={savedEvidenceRule} {readonly} />
+				<EvidenceRuleFields bind:value={s.evidenceUncertaintyRule} bind:error={draft.errors.evidence} bind:last={draft.kept.evidence} saved={savedEvidenceRule} {readonly} />
 			{/snippet}
 		</Lazy>
 	</section>
@@ -1366,58 +1303,12 @@
 		{#if autoError}<p class="err" role="alert">{autoError}</p>{/if}
 	</section>
 
-	{#if !readonly}
-		<div class="actions" bind:clientHeight={actionsHeight}>
-			<!-- What blocks Save, each linking to the group where it is fixed. -->
-			<div class="blockers" role="status">
-				{#if dirty && blockers.length}
-					<span class="err">{blockers.length} {blockers.length === 1 ? 'group has a problem' : 'groups have problems'} to fix before saving:</span>
-					<ul>
-						{#each blockers as b (b.id)}
-							<li><a href="#{b.id}" aria-label="{b.label}: {b.message}">{b.label}</a></li>
-						{/each}
-					</ul>
-				{/if}
-			</div>
-			{#if justSaved && !dirty}<span class="muted" role="status">Settings saved.</span>{/if}
-			{#if dirty}<span class="unsaved">Unsaved settings</span>{/if}
-			{#if dirty}
-				<label class="reason">
-					<span class="visually-hidden">Reason for this change (optional)</span>
-					<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={saving} />
-				</label>
-			{/if}
-			<!-- The model's save bar hides its own Preview on this tab: this one takes the model's edits too. -->
-			{#if dirty || previewModel}
-				<button type="button" class="btn" disabled={saving || (dirty && blocked)} onclick={openPreview}>Preview</button>
-			{/if}
-			<button type="button" class="btn" disabled={!dirty || saving} onclick={discard}>Discard</button>
-			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || blocked}>
-				{saving ? 'Saving…' : 'Save settings'}
-			</button>
-		</div>
-	{/if}
-</form>
+</div>
 
-{#if previewMounted}
-	<Lazy load={loadUnsavedPreview}>
-		{#snippet children(UnsavedPreviewDialog)}
-			<UnsavedPreviewDialog
-				bind:open={previewOpen}
-				projectId={project.id}
-				{runs}
-				what={dirty && previewModel ? 'settings and model edits' : dirty ? 'settings' : 'model edits'}
-				edits={previewEdits}
-				left={editor?.dirty && !previewModel ? ['your unsaved model edits, which have problems to fix first'] : []}
-			/>
-		{/snippet}
-	</Lazy>
-{/if}
-
-<!-- Outside the form: feeds, keys and schedules save themselves, never through Save settings. -->
+<!-- After the form: feeds, keys and schedules save themselves, never through the save bar. -->
 {#if !readonly}
 	<p class="muted small after-form">
-		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with Save settings.
+		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with the save bar’s Save changes.
 	</p>
 {/if}
 <!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
@@ -1448,8 +1339,8 @@
 		font-size: 0.8rem;
 		max-width: 75ch;
 	}
-	/* Fit automatically opens its own panel: no separator above its heading. */
-	#set-fit > :global(.fit:first-child) {
+	/* Fit automatically comes first in its panel: no separator between the panel's heading and its own. */
+	#set-fit > .panel-head + :global(.fit) {
 		border-top: 0;
 		padding-top: 0;
 		margin-top: 0;
@@ -1510,6 +1401,21 @@
 		width: 13rem;
 		white-space: normal;
 	}
+	/* A narrow panel (a phone): the row label takes a narrow column and wraps, its unit on a line of its own,
+	   so about four months show beside it instead of two. A container query on the scroll box: the app
+	   frame's width isn't the viewport's. */
+	.table-wrap {
+		container: monthly / inline-size;
+	}
+	@container monthly (max-width: 30rem) {
+		.monthly th.sticky {
+			width: 6.5rem;
+			min-width: 6.5rem;
+		}
+		.monthly th.sticky .u {
+			display: block;
+		}
+	}
 	.derived td,
 	.derived th {
 		color: var(--text-muted);
@@ -1568,6 +1474,10 @@
 		display: grid;
 		gap: 0.25rem;
 	}
+	.assurance {
+		margin-top: 0.5rem;
+		max-width: 75ch;
+	}
 	.x2 {
 		display: grid;
 		gap: 0.35rem;
@@ -1621,65 +1531,20 @@
 	th :global(.helptip) {
 		margin-left: 0.15rem;
 	}
+	.sub {
+		margin: 1rem 0 0.35rem;
+	}
+	.sub.first {
+		margin-top: 0.25rem;
+	}
+	legend .sub {
+		margin: 0;
+	}
 	.err {
 		color: var(--danger);
 		font-size: 0.8rem;
 	}
 	input.invalid {
 		border-color: var(--danger);
-	}
-	/* Sticks above the model save bar when that is showing (--dock-h). */
-	.actions {
-		position: sticky;
-		bottom: var(--dock-h, 0px);
-		z-index: 20;
-		display: flex;
-		justify-content: flex-end;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.6rem;
-		padding: 0.75rem 0;
-		background: var(--bg);
-		border-top: 1px solid var(--border);
-	}
-	.actions .reason {
-		flex: 0 1 22rem;
-		min-width: 12rem;
-	}
-	.actions .reason input {
-		width: 100%;
-	}
-	/* In-page menu (as on Runs & results, but a bar: the monthly input rows need the full width). */
-	.blockers {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.2rem 0.6rem;
-		margin-right: auto;
-		min-width: 0;
-	}
-	.blockers ul {
-		list-style: none;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.2rem 0.6rem;
-		margin: 0;
-		padding: 0;
-	}
-	.blockers a {
-		font-size: 0.85rem;
-		font-weight: 500;
-		display: inline-flex;
-		align-items: center;
-		min-height: 24px;
-	}
-	.unsaved {
-		color: var(--warning);
-		font-weight: 500;
-	}
-	@media (max-width: 640px) {
-		.actions .btn {
-			min-height: 44px;
-		}
 	}
 </style>

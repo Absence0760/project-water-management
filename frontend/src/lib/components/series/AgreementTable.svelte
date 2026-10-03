@@ -1,11 +1,14 @@
 <script lang="ts">
 	// Gauge vs logger: the two observed flow records compared per water year
 	// (engine observedAgreement). Flagged years are marked in text, not only
-	// by colour.
+	// by colour. On the Data page (`fold`) the table flows with the page: the
+	// flagged years and the latest few, the rest behind "Show all N water
+	// years". Elsewhere (Runs) it scrolls in a box, a focusable named region.
 	import { OBSERVED_FLOW_LABEL, waterYearLabel, type ObservedAgreement } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
+	import { agreementFold } from './agreementFold';
 
-	let { agreement, headingLevel = 3 }: { agreement: ObservedAgreement; headingLevel?: 2 | 3 } = $props();
+	let { agreement, headingLevel = 3, fold = false }: { agreement: ObservedAgreement; headingLevel?: 2 | 3; fold?: boolean } = $props();
 
 	const uid = $props.id();
 	const nameA = $derived(cap(OBSERVED_FLOW_LABEL[agreement.a]));
@@ -15,6 +18,8 @@
 		return s.charAt(0).toUpperCase() + s.slice(1);
 	}
 	const ratio = (r: number | null) => (r === null ? '–' : `${fmtNum(r * 100, 0)}%`);
+	let open = $state(false);
+	const folded = $derived(fold ? agreementFold(agreement.years, open) : { shown: agreement.years, hidden: 0 });
 </script>
 
 <div class="agreement">
@@ -22,7 +27,7 @@
 	<p class="muted small">
 		Two instruments on the same river should roughly agree. A year where one reads a small fraction of the other usually means a
 		problem at one instrument (damaged or silted weir, rating change, bypass, zero-filled gaps). Calibrate against the record you
-		trust — <a href="?tab=settings">choose the calibration flow series</a>.
+		trust — <a href="?tab=settings#set-record">choose the calibration flow series</a>.
 	</p>
 	<p class="verdict" class:bad={flagged.length > 0}>
 		{#if flagged.length}
@@ -37,8 +42,15 @@
 		</span>
 	</p>
 	{#if agreement.years.length}
-		<div class="table-wrap scroll">
-			<table class="data compact" aria-labelledby="{uid}-h">
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div
+			class="table-wrap"
+			class:scroll={!fold}
+			tabindex={fold ? undefined : 0}
+			role={fold ? undefined : 'region'}
+			aria-label={fold ? undefined : 'Gauge vs logger agreement by water year'}
+		>
+			<table class="data compact" id="{uid}-t" aria-labelledby="{uid}-h">
 				<thead>
 					<tr>
 						<th scope="col">Water year</th>
@@ -50,7 +62,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each agreement.years as y (y.waterYear)}
+					{#each folded.shown as y (y.waterYear)}
 						<tr class:flag={y.flagged}>
 							<th scope="row">{waterYearLabel(y.waterYear)}</th>
 							<td class="num">{fmtNum(y.days)}</td>
@@ -63,6 +75,11 @@
 				</tbody>
 			</table>
 		</div>
+		{#if fold && (open || folded.hidden)}
+			<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="{uid}-t" onclick={() => (open = !open)}>
+				{open ? 'Show only the flagged and latest years' : `Show all ${agreement.years.length} water years`}
+			</button>
+		{/if}
 	{/if}
 </div>
 
@@ -85,6 +102,13 @@
 	.scroll {
 		max-height: 320px;
 		overflow-y: auto;
+	}
+	/* On the Data page the table grows with the page, not inside the global table cap. */
+	.table-wrap:not(.scroll) {
+		max-height: none;
+	}
+	.more {
+		margin-top: 0.5rem;
 	}
 	.badge {
 		text-transform: none;

@@ -16,22 +16,28 @@
 	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { fmtNum } from '$lib/format/number';
-	import { confirmWords, damProposalRows, fmtDamArea, type DamProposalRow } from './damProposals';
+	import { confirmWords, damProposalRows, fmtDamArea, searchedFrom, type DamProposalRow } from './damProposals';
 	import { fmtVolume } from './dams';
 
 	let {
+		id,
 		projectId,
 		units,
 		initial,
+		follow = null,
 		readonly,
 		dirty,
 		onModelChanged
 	}: {
+		/** The panel's anchor (a card's Proposals link scrolls to it). */
+		id?: string;
 		projectId: string;
 		/** The hydrological units to choose from, dams first; never empty (DamsTab draws the panel only when there is one). */
 		units: { id: string; name: string }[];
 		/** The unit shown first (the page's picked dam). */
 		initial: string | null;
+		/** The page's picked dam (`dam=`): the box moves to it whenever it changes, so a card click and a fresh load of the same URL agree. */
+		follow?: string | null;
 		readonly: boolean;
 		/** Unsaved model changes: Use waits until they are saved or discarded (it saves straight to the model). */
 		dirty: boolean;
@@ -42,6 +48,13 @@
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 	let unitId = $state(untrack(() => initial ?? units[0]?.id ?? ''));
+	// Follow the picked dam; Dam of still picks any unit until the page's pick changes again.
+	$effect(() => {
+		const f = follow;
+		untrack(() => {
+			if (f && f !== unitId && units.some((u) => u.id === f)) unitId = f;
+		});
+	});
 	let data = $state.raw<DamProposals | null>(null);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -106,6 +119,7 @@
 
 <ProposalPanel
 	bind:this={frame}
+	{id}
 	testid="dam-proposals"
 	prefix="dam-proposals"
 	variant="page"
@@ -139,8 +153,7 @@
 				</p>
 			{:else}
 				<p class="small">
-					Searched from {data.dam.name ? `“${data.dam.name}”` : 'the dam on the map'} ({data.dam.geometryType === 'Point' ? 'a point' : 'its polygon’s centre'},
-					{fmtNum(data.dam.point[1], 4)}, {fmtNum(data.dam.point[0], 4)}) · <a href={mapNodeHref(data.nodeId)}>Show on map</a>
+					{searchedFrom(data.dam)} · <a href={mapNodeHref(data.nodeId)}>Show on map</a>
 				</p>
 				{#if !data.datasets.length}
 					<ProposalNoDataset testid="dam-proposals-no-register" what="register of dams" consequence="no capacity is proposed" command="pnpm import:dam-register" />

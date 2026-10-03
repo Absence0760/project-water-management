@@ -5,14 +5,17 @@
 	`propose` (optional) fills the list from the double-mass breaks for the
 	hydrologist to check; nothing is saved until Save. `error` is set while the
 	list is invalid, so the parent form can block saving. Switching away from
-	the list and back keeps it for the session.
+	the list and back keeps it for the session. Proposing over listed ranges
+	asks first. A problem sits beside the range's field it is fixed in, which
+	names it (aria-describedby); a blank reason is marked once it has been left.
 -->
 <script lang="ts">
 	import { waterYearLabel, type ChirpsFitPeriod, type ChirpsFitRange } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, type ChirpsFitChoice } from './rain';
-	import type { FitRangeProposal } from './fitRangeProposal';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesProblem, type ChirpsFitChoice } from './rain';
+	import { proposedNote, type FitRangeProposal } from './fitRangeProposal';
 
 	let {
 		value = $bindable(),
@@ -39,9 +42,21 @@
 		try {
 			const r = await propose();
 			if ('ranges' in r) {
+				// Hand-written ranges and their reasons would be replaced: ask first, naming how many.
+				const listed = Array.isArray(value) ? value.filter((x) => x.reason.trim()).length : 0;
+				if (
+					listed &&
+					!(await confirmDialog({
+						title: 'Replace the listed ranges?',
+						message: `${listed === 1 ? 'The one range you listed, with its reason,' : `The ${listed} ranges you listed, with their reasons,`} will be replaced by ${r.ranges.length === 1 ? 'one proposed range' : `${r.ranges.length} proposed ranges`}.`,
+						confirmLabel: 'Replace the ranges'
+					}))
+				)
+					return;
 				if (Array.isArray(value)) kept = value;
 				value = r.ranges;
-				proposeNote = `Proposed ${r.ranges.length} ranges from the double-mass breaks. Check each against the station history and the CHIRPS version, and rewrite its reason, before saving.`;
+				touched = {};
+				proposeNote = proposedNote(r.ranges.length);
 			} else proposeNote = r.reason;
 		} catch {
 			proposeNote = 'Could not load the rain series to propose ranges. Try again.';
@@ -57,9 +72,16 @@
 	/** The last list, so switching to another choice and back doesn't lose it. */
 	let kept: ChirpsFitRange[] = [];
 
+	const problem = $derived(Array.isArray(value) ? chirpsFitRangesProblem(value) : null);
 	$effect(() => {
-		error = Array.isArray(value) ? chirpsFitRangesError(value) : null;
+		error = problem?.message ?? null;
 	});
+	// A blank reason is marked once its field has been left, not the moment a range is added.
+	let touched = $state<Record<number, boolean>>({});
+	/** The problem's message when it is on this range's field (a reason: once left). */
+	const on = (i: number, field: 'from' | 'to' | 'reason') =>
+		problem && problem.index === i && problem.field === field && (field !== 'reason' || touched[i]) ? problem.message : null;
+	const errId = (i: number) => `${uid}-e${i}`;
 
 	/** Last complete water year. */
 	function lastWaterYear(): number {
@@ -81,6 +103,7 @@
 	}
 	function remove(i: number) {
 		value = ranges.filter((_, j) => j !== i);
+		touched = {};
 	}
 	function set(i: number, patch: Partial<ChirpsFitRange>) {
 		value = ranges.map((r, j) => (j === i ? { ...r, ...patch } : r));
@@ -88,6 +111,7 @@
 </script>
 
 <div class="fit-period" data-testid="chirps-fit-period">
+	<h3 class="title">CHIRPS fit period</h3>
 	<div class="field mode">
 		<span class="lbl"><label for="{uid}-mode">CHIRPS fit period</label><HelpTip key="settings.chirpsFitPeriod" /></span>
 		<select
@@ -118,12 +142,32 @@
 					<li class="row">
 						<div class="field year">
 							<label for="{uid}-f{i}">From water year <span class="u">(starts Oct)</span></label>
-							<NumberInput id="{uid}-f{i}" min={1800} max={2200} step={1} disabled={readonly} value={r.fromWaterYear} onchange={(v) => v !== null && set(i, { fromWaterYear: v })} aria-describedby="{uid}-f{i}-h" />
+							<NumberInput
+								id="{uid}-f{i}"
+								min={1800}
+								max={2200}
+								step={1}
+								disabled={readonly}
+								value={r.fromWaterYear}
+								onchange={(v) => v !== null && set(i, { fromWaterYear: v })}
+								aria-invalid={on(i, 'from') ? 'true' : undefined}
+								aria-describedby={on(i, 'from') ? `${uid}-f${i}-h ${errId(i)}` : `${uid}-f${i}-h`}
+							/>
 							<span class="hint" id="{uid}-f{i}-h">WY {waterYearLabel(r.fromWaterYear)}</span>
 						</div>
 						<div class="field year">
 							<label for="{uid}-t{i}">To water year</label>
-							<NumberInput id="{uid}-t{i}" min={1800} max={2200} step={1} disabled={readonly} value={r.toWaterYear} onchange={(v) => v !== null && set(i, { toWaterYear: v })} aria-describedby="{uid}-t{i}-h" />
+							<NumberInput
+								id="{uid}-t{i}"
+								min={1800}
+								max={2200}
+								step={1}
+								disabled={readonly}
+								value={r.toWaterYear}
+								onchange={(v) => v !== null && set(i, { toWaterYear: v })}
+								aria-invalid={on(i, 'to') ? 'true' : undefined}
+								aria-describedby={on(i, 'to') ? `${uid}-t${i}-h ${errId(i)}` : `${uid}-t${i}-h`}
+							/>
 							<span class="hint" id="{uid}-t{i}-h">WY {waterYearLabel(r.toWaterYear)}</span>
 						</div>
 						<div class="field reason">
@@ -134,21 +178,25 @@
 								readonly={readonly}
 								placeholder="e.g. new rain-gauge network from 2005; CHIRPS v2 → v3"
 								value={r.reason}
-								aria-invalid={!r.reason.trim() || undefined}
-								class:invalid={!r.reason.trim()}
+								aria-invalid={on(i, 'reason') ? 'true' : undefined}
+								aria-describedby={on(i, 'reason') ? errId(i) : undefined}
+								class:invalid={!!on(i, 'reason')}
 								oninput={(e) => set(i, { reason: e.currentTarget.value })}
+								onblur={() => (touched[i] = true)}
 							/>
 						</div>
 						{#if !readonly && ranges.length > 1}
 							<button type="button" class="btn btn-icon" aria-label="Remove fit range {i + 1}" title="Remove" onclick={() => remove(i)}>✕</button>
 						{/if}
+						{#if on(i, 'from') || on(i, 'to') || on(i, 'reason')}<p class="err row-err" id={errId(i)}>{problem!.message}.</p>{/if}
 					</li>
 				{/each}
 			</ol>
 			{#if !readonly}
 				<div class="add"><button type="button" class="btn btn-sm" onclick={add}>Add a range</button></div>
 			{/if}
-			{#if error}<p class="err" role="alert">{error}.</p>{/if}
+			<!-- A problem with no one range (none listed, an overlap). -->
+			{#if problem && problem.index === null}<p class="err">{problem.message}.</p>{/if}
 		</fieldset>
 	{/if}
 </div>
@@ -230,9 +278,17 @@
 		justify-items: start;
 		max-width: 75ch;
 	}
+	.title {
+		font-size: 0.95rem;
+		margin: 0.5rem 0 0;
+	}
 	.err {
 		color: var(--danger);
 		font-size: 0.8rem;
+	}
+	.row-err {
+		flex-basis: 100%;
+		margin: 0;
 	}
 	input.invalid {
 		border-color: var(--danger);

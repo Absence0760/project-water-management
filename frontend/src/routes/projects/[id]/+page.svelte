@@ -46,8 +46,14 @@
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { prefetch } from '$lib/components/common/lazy';
 	import { provideUnsaved } from '$lib/components/common/chunkFailed';
-	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { guardUnsaved, listAnd } from '$lib/nav/unsaved';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { provideInvalidFields } from '$lib/components/common/invalidFields.svelte';
+	import type { PageDraft } from '$lib/components/model/pageDraft';
+	import { issueHref } from '$lib/model/validate';
 	import { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
+	import { SettingsDraft } from '$lib/components/settings/settingsDraft.svelte';
+	import type { UnsavedEdits } from '$lib/preview/overlay';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import SaveBar from '$lib/components/model/SaveBar.svelte';
 	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
@@ -129,7 +135,6 @@
 	const shownIds = $derived(
 		visibleTabs(project?.role, { showModelInputs, hidden: hiddenChoice(session.user?.preferences?.hiddenTabs) }, TAB_IDS)
 	);
-	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
 	// "Changed 3× · last by …" under the model inputs (docs/ui.md § Field history): for those whose role sees
 	// History, whether or not they keep it in their sidebar (it is hidden by default, DEFAULT_HIDDEN_TABS, and
 	// the line's link still opens it); fetched once a line asks for it, and again after a save or a restore.
@@ -137,10 +142,6 @@
 	const fieldHistory = $derived(canSeeHistory && projectId ? new FieldHistoryStore(projectId) : null);
 	setFieldHistory(() => fieldHistory);
 	const LABEL = TAB_LABELS;
-	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
-	// flattened in the order shown, for the arrow keys.
-	const sections = $derived(navSections(stripIds));
-	const strip = $derived(sections.flatMap((s) => s.tabs));
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
@@ -148,20 +149,89 @@
 	// The project details being edited on the Project page (issue #162 item 12):
 	// held here, so they survive a tab change and share the model's save bar.
 	const details = new ProjectDetailsDraft();
+	// The Settings & calibration form's unsaved settings: held here for the same reasons, so a tab
+	// change keeps them and the one save bar saves them (settings/settingsDraft.svelte.ts).
+	const settings = new SettingsDraft();
+	// The number fields on this page holding text they can't take (common/invalidFields): this page's
+	// own registry, which a scenario's override mode (with its own) keeps out of the save bar.
+	const invalidFields = provideInvalidFields();
+	// A model tab with problems in unsaved edits stays in the strip though hidden, so its link and dot can be reached.
+	const problemTabs = $derived(hasRole(project?.role, 'editor') && editor.dirty ? MODEL_TABS.filter((id) => editor.issues.some((x) => x.area === id)) : []);
+	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS, problemTabs));
+	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
+	// flattened in the order shown, for the arrow keys.
+	const sections = $derived(navSections(stripIds));
+	const strip = $derived(sections.flatMap((s) => s.tabs));
 	// A tab or dialog whose chunk fails to download offers a reload; with
 	// unsaved edits it warns first (the reload still meets the browser's
 	// own prompt, lib/nav/leaveGuard.ts).
-	provideUnsaved(() => editor.dirty || details.dirty);
-	// Leaving the project (not just changing tab) with either unsaved asks first, in
-	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps both.
+	provideUnsaved(() => editor.dirty || details.dirty || settings.dirty || invalidFields.count > 0);
+	// Leaving the project (not just changing tab) with any of them unsaved asks first, in
+	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps them all.
 	guardUnsaved({ dirty: () => editor.dirty, what: 'model edits' });
 	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
+	guardUnsaved({ dirty: () => settings.dirty, what: 'settings' });
+	// A number field holding text it can't take (common/invalidFields) is gone with its page or its
+	// tab (the field unmounts), so any change of page or of the URL's query asks; a #fragment doesn't.
+	guardUnsaved({
+		dirty: () => invalidFields.count > 0,
+		what: 'numbers that need fixing',
+		leaves: (from, to) => from.pathname !== to.pathname || from.search !== to.search
+	});
+	// The save bar's other drafts besides the model (components/model/pageDraft.ts): the project
+	// details and the settings, each an adapter here and a step in saveAll.
+	const detailsDraft: PageDraft = {
+		what: 'the project details',
+		region: 'Unsaved project details',
+		get dirty() {
+			return details.dirty;
+		},
+		get saving() {
+			return details.saving;
+		},
+		get saveError() {
+			return details.saveError;
+		},
+		get problems() {
+			return details.problems.map((message) => ({ message, href: '?tab=project' }));
+		},
+		revert: () => details.revert()
+	};
+	const settingsDraft: PageDraft = {
+		what: 'the settings',
+		region: 'Unsaved settings',
+		takesReason: true,
+		previewable: true,
+		get dirty() {
+			return settings.dirty;
+		},
+		get saving() {
+			return settings.saving;
+		},
+		get saveError() {
+			return settings.saveError;
+		},
+		// Each group with a problem, linked to its panel: on the Settings tab in place, from elsewhere through it.
+		get problems() {
+			return settings.blockers.map((b) => ({ message: `${b.label}: ${b.message}`, href: `${tab === 'settings' ? '' : '?tab=settings'}#${b.id}` }));
+		},
+		revert: () => settings.revert()
+	};
+	const pageDrafts: PageDraft[] = [detailsDraft, settingsDraft];
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
 	// A daily A-pan series: runs use it before the monthly means, which the Crops demand preview shows (issue #173).
 	const apanDaily = $derived(series?.some((x) => x.kind === 'evap_apan_mm' && !x.siteNodeId) ?? false);
 	let runs = $state<RunMeta[] | null>(null);
 	let saveBarHeight = $state(0);
+	// In-page jumps and focus scrolling keep clear of the save bar while it shows (WCAG 2.4.11).
+	$effect(() => {
+		const root = document.documentElement;
+		root.style.scrollPaddingBottom = saveBarHeight ? `${saveBarHeight + 12}px` : '';
+		return () => {
+			root.style.scrollPaddingBottom = '';
+		};
+	});
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
 	let saveReason = $state('');
 
@@ -196,10 +266,23 @@
 		const t = rerunQueuedText(project?.rerunQueuedFor);
 		return `${t[0]!.toUpperCase()}${t.slice(1)}.`;
 	});
-	// The model edits' Preview (issue #284): fetched the first time it's wanted, then kept, with its worker.
-	// Not on Settings, whose own Preview takes the model's edits with the form's.
+	// The save bar's Preview of the unsaved model and settings edits (issue #284): fetched the first time
+	// it's wanted, then kept, with its worker. Edits with problems are left out, and the dialog says so.
 	let previewOpen = $state(false);
 	let previewMounted = $state(false);
+	const previewModel = $derived(editor.dirty && editor.issues.length === 0);
+	const previewSettings = $derived(settings.dirty && settings.blockers.length === 0);
+	const previewWhat = $derived(listAnd([...(previewSettings ? ['settings'] : []), ...(previewModel ? ['model edits'] : [])]) || 'edits');
+	const previewLeft = $derived([
+		...(editor.dirty && !previewModel ? ['your unsaved model edits, which have problems to fix first'] : []),
+		...(settings.dirty && !previewSettings ? ['your unsaved settings, which have problems to fix first'] : [])
+	]);
+	function previewEdits(): UnsavedEdits {
+		return {
+			...(previewSettings ? { settings: { saved: settings.saved, draft: settings.snapshot() } as unknown as NonNullable<UnsavedEdits['settings']> } : {}),
+			...(previewModel ? { model: { saved: editor.savedModel(), draft: editor.snapshot() } } : {})
+		};
+	}
 	function openPreview() {
 		previewMounted = true;
 		previewOpen = true;
@@ -228,7 +311,8 @@
 			void goto(withoutParam(page.url, 'add'), { replaceState: true, noScroll: true, keepFocus: true });
 		});
 	});
-	const hasFiles = (e: DragEvent) => canEdit && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+	const carriesFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+	const hasFiles = (e: DragEvent) => canEdit && carriesFiles(e);
 	function onDragEnter(e: DragEvent) {
 		if (!hasFiles(e)) return;
 		e.preventDefault();
@@ -236,6 +320,12 @@
 		dragDepth++;
 	}
 	function onDragOver(e: DragEvent) {
+		// A viewer's file is refused here too, so the browser doesn't open it in place of the page.
+		if (!canEdit && carriesFiles(e)) {
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+			return;
+		}
 		if (!hasFiles(e)) return;
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
@@ -245,6 +335,11 @@
 		dragDepth = Math.max(0, dragDepth - 1);
 	}
 	function onDrop(e: DragEvent) {
+		if (!canEdit && carriesFiles(e)) {
+			e.preventDefault();
+			banner = { text: 'View only: ask an editor to add data.', added: 0 };
+			return;
+		}
 		if (!hasFiles(e)) return;
 		e.preventDefault();
 		dragDepth = 0;
@@ -268,7 +363,7 @@
 	// The header's Run model and the new-data line's Re-run model both start a
 	// run here and open it in Runs.
 	/** The new-data re-run (labelled with the data's end), or the header's Run model (no label). */
-	const rerun = () => startRun(`Data to ${fresh?.latest ?? today}`);
+	const rerun = () => runModel(`Data to ${fresh?.latest ?? today}`);
 	async function startRun(label?: string) {
 		rerunning = true;
 		rerunError = null;
@@ -320,6 +415,7 @@
 			project = p;
 			editor.load(m);
 			details.load(p);
+			settings.load(p.settings);
 			series = sl;
 			setRuns(rl);
 		} catch (e) {
@@ -410,9 +506,12 @@
 		details.saving = true;
 		details.saveError = null;
 		try {
+			const sent = details.typed();
 			const p = await api.projects.update(projectId, details.patch());
 			project = p;
-			details.load(p);
+			// Not a load: a field edited while the save was in flight stays unsaved.
+			details.afterSave(sent, p);
+			settings.rebase(p.settings);
 			fieldHistory?.refresh();
 			return true;
 		} catch (e) {
@@ -422,10 +521,85 @@
 			details.saving = false;
 		}
 	}
-	/** The save bar's Save changes: the project details, then the model, whichever are unsaved. */
-	async function saveAll() {
-		if (details.dirty && !(await saveDetails())) return;
+	/**
+	 * The settings (the Settings & calibration form), through the same bar, with the bar's reason (which the
+	 * model's save then takes too, and clears); true once saved.
+	 */
+	async function saveSettings(): Promise<boolean> {
+		if (settings.blockers.length || settings.saving) return false;
+		settings.saving = true;
+		settings.saveError = null;
+		try {
+			const why = saveReason.trim();
+			const sent = settings.snapshot();
+			const p = await api.projects.update(projectId, { settings: sent, ...(why ? { reason: why } : {}) });
+			project = p;
+			details.rebase(p);
+			// Not a load: edits typed while the save was in flight stay unsaved (settingsDraft afterSave).
+			settings.afterSave(sent, p.settings);
+			fieldHistory?.refresh();
+			return true;
+		} catch (e) {
+			settings.saveError = e instanceof Error ? e.message : String(e);
+			return false;
+		} finally {
+			settings.saving = false;
+		}
+	}
+	/** The save bar's Save changes: the project details, the settings, then the model, whichever are unsaved; true once all are saved. */
+	async function saveAll(): Promise<boolean> {
+		if (details.dirty && !(await saveDetails())) return false;
+		if (settings.dirty && !(await saveSettings())) return false;
 		if (editor.dirty) await saveModel();
+		else saveReason = '';
+		return !editor.dirty && !editor.saveError;
+	}
+
+	// --- Run model with unsaved edits (a run uses the saved model) -------------
+	const unsavedWhat = $derived(
+		listAnd([
+			...(editor.dirty ? ['model edits'] : []),
+			...(details.dirty ? ['project details'] : []),
+			...(settings.dirty ? ['settings'] : []),
+			...(invalidFields.count ? ['numbers that need fixing'] : [])
+		])
+	);
+	const unsaved = $derived(editor.dirty || details.dirty || settings.dirty || invalidFields.count > 0);
+	/** What blocks saving the unsaved edits, each with where it is fixed. */
+	const saveProblems = $derived([
+		...(editor.dirty ? editor.issues.map((i) => ({ message: i.message, href: issueHref(i) })) : []),
+		...pageDrafts.filter((d) => d.dirty).flatMap((d) => d.problems),
+		...invalidFields.fields.map((f) => ({ message: f.label ? `${f.label}: ${f.message}` : f.message, href: `#${f.id}` }))
+	]);
+	/**
+	 * The header's Run model. A run uses the saved model, so with unsaved edits it asks to save them
+	 * first and runs once they are saved; while problems block that save it says so and offers the
+	 * first problem instead of running the saved model behind the person's back.
+	 */
+	async function runModel(label?: string) {
+		if (unsaved) {
+			const n = saveProblems.length;
+			if (n) {
+				const show = await confirmDialog({
+					title: 'Fix the problems before running',
+					message: `A run uses the saved model, and your unsaved ${unsavedWhat} can’t be saved yet: ${n === 1 ? 'one problem needs' : `${n} problems need`} fixing first (${saveProblems[0]!.message}${n > 1 ? ' …' : ''}).`,
+					confirmLabel: 'Show the problem',
+					cancelLabel: 'Close'
+				});
+				const href = saveProblems[0]!.href;
+				// A number field on this page: focus it; anything else is another page or sheet.
+				if (show && href.startsWith('#')) document.getElementById(href.slice(1))?.focus();
+				else if (show) await goto(href, { noScroll: true });
+				return;
+			}
+			const ok = await confirmDialog({
+				title: 'Save your changes and run?',
+				message: `A run uses the saved model. Your unsaved ${unsavedWhat} aren’t in it yet: save them, then run.`,
+				confirmLabel: 'Save and run'
+			});
+			if (!ok || !(await saveAll())) return;
+		}
+		await startRun(label);
 	}
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
@@ -470,6 +644,7 @@
 	function onProjectChange(p: Project) {
 		project = p;
 		details.rebase(p);
+		settings.rebase(p.settings);
 		fieldHistory?.refresh();
 	}
 
@@ -478,6 +653,7 @@
 		const [p, m] = await Promise.all([api.projects.get(projectId), api.model.get(projectId)]);
 		project = p;
 		details.rebase(p);
+		settings.rebase(p.settings);
 		editor.load(m);
 		fieldHistory?.refresh();
 	}
@@ -583,7 +759,7 @@
 
 <!-- The section header's parts (SectionHeader): the page's own around the tab's (headerSlot). -->
 {#snippet unsavedBadge()}
-	{#if (editor.dirty || details.dirty) && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
+	{#if unsaved && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
 {/snippet}
 {#snippet pageContext()}{contextText}{/snippet}
 {#snippet headerStatus()}
@@ -641,15 +817,16 @@
 			type="button"
 			class="btn btn-primary"
 			disabled={rerunning || runNeeds.length > 0}
-			aria-describedby={runNeeds.length ? 'run-needs' : undefined}
-			onclick={() => startRun()}>{rerunning ? 'Running model…' : 'Run model'}</button
+			aria-describedby={runNeeds.length ? 'run-needs' : unsaved ? 'run-unsaved' : undefined}
+			onclick={() => runModel()}>{rerunning ? 'Running model…' : 'Run model'}</button
 		>
-		{#if runNeeds.length}<span class="visually-hidden" id="run-needs">A run needs {runNeeds.join(' and ')} first.</span>{/if}
+		{#if runNeeds.length}<span class="visually-hidden" id="run-needs">A run needs {runNeeds.join(' and ')} first.</span>
+		{:else if unsaved}<span class="visually-hidden" id="run-unsaved">A run uses the saved model: your unsaved {unsavedWhat} are saved first.</span>{/if}
 	{/if}
 {/snippet}
 <!-- The notices: one slim line under the header, not full-width banners. -->
 {#snippet headerNotices()}
-	{@const behind = !banner && behindRun.length > 0 && tab !== 'runs' && tab !== 'series'}
+	{@const behind = !banner && behindRun.length > 0 && tab !== 'runs'}
 	{#if !canEdit || banner || behind || rerunError}
 		<div class="notice-line" data-testid="notice-line">
 			{#if !canEdit}
@@ -741,7 +918,7 @@
 				{#if tab === 'overview'}
 					<OverviewTab {project} {editor} {series} {runs} {canEdit} visibleTabs={roleIds} />
 				{:else if tab === 'network'}
-					<IssueList issues={editor.issues} area="network" />
+					<IssueList issues={editor.issues} area="network" links />
 					<Lazy load={LOAD.network}>
 						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} onsave={saveModel} bind:reason={saveReason} />{/snippet}
 					</Lazy>
@@ -750,12 +927,12 @@
 						{#snippet children(MapTab)}<MapTab {projectId} {editor} {canEdit} {runs} role={project!.role} projectName={project!.name} onModelChanged={reloadInputs} />{/snippet}
 					</Lazy>
 				{:else if tab === 'crops'}
-					<IssueList issues={editor.issues} area="crops" />
+					<IssueList issues={editor.issues} area="crops" links />
 					<Lazy load={LOAD.crops}>
 						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} {apanDaily} />{/snippet}
 					</Lazy>
 				{:else if tab === 'transfers'}
-					<IssueList issues={editor.issues} area="transfers" />
+					<IssueList issues={editor.issues} area="transfers" links />
 					<Lazy load={LOAD.transfers}>
 						{#snippet children(TransfersTab)}<TransfersTab {editor} readonly={!canEdit} page />{/snippet}
 					</Lazy>
@@ -765,6 +942,7 @@
 							<SettingsTab
 								project={project!}
 								{editor}
+								draft={settings}
 								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
 								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
@@ -772,7 +950,6 @@
 								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
 								readonly={!canEdit}
 								{onProjectChange}
-								{runs}
 							/>
 						{/snippet}
 					</Lazy>
@@ -783,7 +960,6 @@
 								{projectId}
 								readonly={!canEdit}
 								initial={series}
-								{runs}
 								settings={project!.settings}
 								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
@@ -905,11 +1081,11 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<SaveBar {editor} {details} onsave={saveAll} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} onpreview={tab === 'settings' ? null : openPreview} />
+			<SaveBar {editor} drafts={pageDrafts} onsave={saveAll} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} onpreview={openPreview} />
 			{#if previewMounted}
 				<Lazy load={loadUnsavedPreview}>
 					{#snippet children(UnsavedPreviewDialog)}
-						<UnsavedPreviewDialog bind:open={previewOpen} {projectId} {runs} what="model edits" edits={() => ({ model: { saved: editor.savedModel(), draft: editor.snapshot() } })} />
+						<UnsavedPreviewDialog bind:open={previewOpen} {projectId} {runs} what={previewWhat} edits={previewEdits} left={previewLeft} />
 					{/snippet}
 				</Lazy>
 			{/if}

@@ -1,5 +1,5 @@
-// The Transfers page (?tab=transfers, issue #17 option A): the section header carries the count, Show on the map
-// and + Add transfer; under it one card per rule (a head line with its number, From → To, an On/Off switch and
+// The Transfers page (?tab=transfers, issue #17 option A): the section header carries the count, Show on the Network
+// and + Add transfer; under it one card per rule (a head line with its number, From → To, an Enabled switch and
 // Remove; its rates, limits and source in groups), the list growing with its rules while the page scrolls (never a
 // scroll box inside it). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
@@ -22,7 +22,7 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 	await expect(header(page).getByTestId('section-context')).toHaveText('1 transfer rule · 1 active');
-	await expect(header(page).getByRole('link', { name: 'Show on the map', exact: true })).toHaveAttribute('href', '?tab=network');
+	await expect(header(page).getByRole('link', { name: 'Show on the Network', exact: true })).toHaveAttribute('href', '?tab=network');
 	await expect(header(page).getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
 	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toBeVisible();
 	// The add button lives in the header only on the page.
@@ -38,7 +38,7 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 
 	// + Add transfer adds a rule after the others and puts the cursor in its From.
 	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await expect(page.getByLabel('Source of transfer 2', { exact: true })).toBeFocused();
+	await expect(page.getByLabel('From, transfer 2', { exact: true })).toBeFocused();
 	await expect(header(page).getByTestId('section-context')).toHaveText('2 transfer rules · 2 active');
 	// Each month has its own rate (engine 1.14.0): October at 0.02 m³/s, the rest blank (off).
 	await page.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).fill('0.02');
@@ -46,19 +46,19 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	// Tab moves on to the next month's field.
 	await expect(page.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toBeFocused();
 	await expect(page.getByRole('group', { name: /^Max rate of transfer 2 by month/ })).toContainText('Oct, up to 0.02 m³/s');
-	// Switching the first rule off says so in its heading, beside the switch and in the header's count.
-	await page.getByLabel('transfer 1 enabled', { exact: true }).uncheck();
+	// Switching the first rule off says so in its heading and in the header's count; the switch's word is its label.
+	await page.getByLabel('Enabled, transfer 1', { exact: true }).uncheck();
 	await expect(header(page).getByTestId('section-context')).toHaveText('2 transfer rules · 1 active');
 	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1 off', exact: true })).toBeVisible();
-	await expect(ruleCard(page, 1).locator('.switch')).toHaveText('Off');
-	await expect(ruleCard(page, 2).locator('.switch')).toHaveText('On');
+	await expect(ruleCard(page, 1).locator('.switch')).toHaveText('Enabled');
+	await expect(ruleCard(page, 2).getByLabel('Enabled, transfer 2', { exact: true })).toBeChecked();
 
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
 	await expect(page.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true })).toHaveValue('0.02');
 	await expect(page.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toHaveValue('');
-	await expect(page.getByLabel('transfer 1 enabled', { exact: true })).not.toBeChecked();
+	await expect(page.getByLabel('Enabled, transfer 1', { exact: true })).not.toBeChecked();
 });
 
 test('each month has its own rate: a workbook rule shows its rate in its months, an edit changes that month only', async ({ page, owner }) => {
@@ -99,34 +99,34 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	const project = await createProject(page.request, 'Transfers off-take');
 	await putModel(page.request, project.id, sampleModel());
 	await openTransfers(page, project.id);
-	const takes = page.getByLabel('Where transfer 1 takes its water', { exact: true });
+	const takes = page.getByLabel('Takes from, transfer 1', { exact: true });
 	await expect(takes).toHaveValue('dam');
-	await expect(page.getByLabel('Minimum source storage for transfer 1, %', { exact: true })).toBeVisible();
+	await expect(page.getByLabel('Min source storage of transfer 1, %', { exact: true })).toBeVisible();
 	await takes.selectOption('river');
 	// The dam's minimum gives way to the off-take's own fields.
-	await expect(page.getByLabel('Minimum source storage for transfer 1, %', { exact: true })).toHaveCount(0);
+	await expect(page.getByLabel('Min source storage of transfer 1, %', { exact: true })).toHaveCount(0);
 	await page.getByLabel('Hands-off flow for transfer 1, m³/day', { exact: true }).fill('250');
-	await page.getByLabel('Conveyance losses of transfer 1, %', { exact: true }).fill('10');
+	await page.getByLabel('Losses on the way of transfer 1, %', { exact: true }).fill('10');
 	// Canal seepage back to the river (engine 1.42.0): where it rejoins shows once a share is set, the source by default.
-	const rejoins = page.getByLabel('Where the seepage of transfer 1 rejoins the river', { exact: true });
+	const rejoins = page.getByLabel('Rejoins the river below, transfer 1', { exact: true });
 	await expect(rejoins).toHaveCount(0);
-	await page.getByLabel('Share of the losses of transfer 1 seeping back to the river, %', { exact: true }).fill('40');
+	await page.getByLabel('Losses seeping back of transfer 1, %', { exact: true }).fill('40');
 	await expect(rejoins).toHaveValue('');
-	await page.getByLabel('How much transfer 1 takes', { exact: true }).selectOption('capacity');
-	await page.getByLabel('transfer 1 leaves the EWR in the river', { exact: true }).check();
+	await page.getByLabel('Takes, transfer 1', { exact: true }).selectOption('capacity');
+	await page.getByLabel('Leaves the EWR in the river, transfer 1', { exact: true }).check();
 	// The page has taken the save in (the bar goes once the editor holds what the server returned), so the
 	// reload leaves a saved page, not one still mid-save behind its unsaved-changes guard.
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
-	await expect(page.getByLabel('Where transfer 1 takes its water', { exact: true })).toHaveValue('river');
+	await expect(page.getByLabel('Takes from, transfer 1', { exact: true })).toHaveValue('river');
 	await expect(page.getByLabel('Hands-off flow for transfer 1, m³/day', { exact: true })).toHaveValue('250');
-	await expect(page.getByLabel('Conveyance losses of transfer 1, %', { exact: true })).toHaveValue('10');
-	await expect(page.getByLabel('Share of the losses of transfer 1 seeping back to the river, %', { exact: true })).toHaveValue('40');
-	await expect(page.getByLabel('Where the seepage of transfer 1 rejoins the river', { exact: true })).toHaveValue('');
-	await expect(page.getByLabel('How much transfer 1 takes', { exact: true })).toHaveValue('capacity');
-	await expect(page.getByLabel('transfer 1 leaves the EWR in the river', { exact: true })).toBeChecked();
-	await expect(page.getByLabel('transfer 1 tops up the destination’s dam', { exact: true })).not.toBeChecked();
+	await expect(page.getByLabel('Losses on the way of transfer 1, %', { exact: true })).toHaveValue('10');
+	await expect(page.getByLabel('Losses seeping back of transfer 1, %', { exact: true })).toHaveValue('40');
+	await expect(page.getByLabel('Rejoins the river below, transfer 1', { exact: true })).toHaveValue('');
+	await expect(page.getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('capacity');
+	await expect(page.getByLabel('Leaves the EWR in the river, transfer 1', { exact: true })).toBeChecked();
+	await expect(page.getByLabel('Tops up the destination’s dam, transfer 1', { exact: true })).not.toBeChecked();
 	await expectNoSidewaysScroll(page);
 });
 
@@ -143,7 +143,7 @@ for (const [width, height] of [
 		const project = await seedManyTransfers(page.request, 'Transfers big');
 		await page.setViewportSize({ width, height });
 		await openTransfers(page, project.id);
-		await expect(page.getByLabel('Source of transfer 30', { exact: true })).toBeAttached();
+		await expect(page.getByLabel('From, transfer 30', { exact: true })).toBeAttached();
 		await expect(header(page).getByTestId('section-context')).toHaveText('30 transfer rules · 25 active');
 		// One scroll: the list holds all thirty cards (nothing scrolls inside it) and the page is what scrolls.
 		const box = await rulesListBox(page);
@@ -191,15 +191,23 @@ test('a viewer sees every rule, with nothing to change', async ({ page, owner, s
 	await v.setViewportSize({ width: 1440, height: 960 });
 	await v.goto(`/projects/${project.id}?tab=transfers`);
 	await expect(v.getByRole('heading', { level: 1, name: 'Transfers' })).toBeVisible();
-	await expect(v.getByLabel('Source of transfer 1', { exact: true })).toBeDisabled();
-	await expect(v.getByLabel('transfer 1 enabled', { exact: true })).toBeDisabled();
+	await expect(v.getByLabel('From, transfer 1', { exact: true })).toBeDisabled();
+	await expect(v.getByLabel('Enabled, transfer 1', { exact: true })).toBeDisabled();
 	await expect(v.getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: /^Remove transfer/ })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: 'All', exact: true })).toHaveCount(0);
-	await expect(header(v).getByRole('link', { name: 'Show on the map', exact: true })).toBeVisible();
+	await expect(header(v).getByRole('link', { name: 'Show on the Network', exact: true })).toBeVisible();
 	await expect(v.getByLabel('Max rate of transfer 1 in Nov, m³/s', { exact: true })).toHaveValue('0.01');
 	// Read-only rather than disabled, as MonthRates draws them for a viewer: still readable and focusable.
 	await expect(v.getByLabel('Max rate of transfer 1 in Nov, m³/s', { exact: true })).toHaveAttribute('readonly', '');
+
+	// A catchment with too few units to have any: the viewer is told so, not asked to add units.
+	const lone = await createProject(page.request, 'Transfers viewer one unit');
+	await putModel(page.request, lone.id, { ...sampleModel(), nodes: sampleModel().nodes.slice(0, 2), cropAreas: [], transfers: [] });
+	await addMember(page.request, lone.id, viewer.user.email, 'viewer');
+	await v.goto(`/projects/${lone.id}?tab=transfers`);
+	await expect(rulesCard(v)).toHaveText('This catchment has fewer than two hydrological units, so it has no transfers.');
+	await expect(rulesCard(v).getByRole('link')).toHaveCount(0);
 });
 
 test('empty states: no rules yet offers Add transfer; fewer than two hydrological units points to the Network', async ({ page, owner }) => {
@@ -212,14 +220,16 @@ test('empty states: no rules yet offers Add transfer; fewer than two hydrologica
 	await openTransfers(page, project.id);
 	await expect(header(page).getByTestId('section-context')).toHaveText('No transfer rules yet');
 	await expect(page.getByText('No transfer rules.', { exact: true })).toBeVisible();
-	await expect(header(page).getByRole('link', { name: 'Show on the map' })).toHaveCount(0);
+	await expect(header(page).getByRole('link', { name: 'Show on the Network' })).toHaveCount(0);
 	// The empty card's button adds the first rule, as the header's does.
 	await rulesCard(page).getByRole('button', { name: 'Add transfer', exact: true }).click();
-	await expect(page.getByLabel('Source of transfer 1', { exact: true })).toBeFocused();
+	await expect(page.getByLabel('From, transfer 1', { exact: true })).toBeFocused();
 
+	// The outflow gauge and one unit: two nodes, but a gauge can't take part, so no rule is possible.
 	const lone = await createProject(page.request, 'Transfers one unit');
-	await putModel(page.request, lone.id, { ...sampleModel(), nodes: sampleModel().nodes.slice(0, 1), cropAreas: [], transfers: [] });
+	await putModel(page.request, lone.id, { ...sampleModel(), nodes: sampleModel().nodes.slice(0, 2), cropAreas: [], transfers: [] });
 	await openTransfers(page, lone.id);
+	await expect(rulesCard(page)).toContainText('Transfers need at least two hydrological units');
 	await expect(rulesCard(page).getByRole('link', { name: 'Network tab' })).toHaveAttribute('href', '?tab=network');
 	await expect(page.getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 });
@@ -231,10 +241,10 @@ test('the Transfers grid on the Network keeps its own Add transfer', async ({ pa
 	await putModel(page.request, project.id, sampleModel());
 	await page.goto(`/projects/${project.id}?tab=network&grid=transfers`);
 	const grid = page.getByRole('dialog', { name: 'Transfers' });
-	await expect(grid.getByLabel('transfer 1 enabled', { exact: true })).toBeChecked();
+	await expect(grid.getByLabel('Enabled, transfer 1', { exact: true })).toBeChecked();
 	await expect(grid.getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
 	await grid.getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await expect(grid.getByLabel('Source of transfer 2', { exact: true })).toBeFocused();
+	await expect(grid.getByLabel('From, transfer 2', { exact: true })).toBeFocused();
 });
 
 test.describe('no accessibility violations', () => {
@@ -252,7 +262,7 @@ test.describe('no accessibility violations', () => {
 			model.transfers.push({ ...model.transfers[0]!, id: crypto.randomUUID(), priority: 2, source: 'river', handsOffM3Day: 100, lossPct: 0.1, sizing: 'capacity' });
 			await putModel(page.request, project.id, model);
 			await openTransfers(page, project.id);
-			await expect(page.getByLabel('Source of transfer 2', { exact: true })).toBeVisible();
+			await expect(page.getByLabel('From, transfer 2', { exact: true })).toBeVisible();
 			if (label === 'phone') {
 				// Each rule a card; the page scrolls, not a box inside it, and nothing is wider than the screen.
 				await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
@@ -298,9 +308,9 @@ test('each rule is a card: its groups side by side and top-aligned, its rates wh
 	// switch and Remove, all left of the month fields (a head line across the top made each card ~50 px taller).
 	const card = ruleCard(page, 2);
 	const title = (await card.getByRole('heading', { level: 3 }).boundingBox())!;
-	const from = (await card.getByLabel('Source of transfer 2', { exact: true }).boundingBox())!;
-	const to = (await card.getByLabel('Destination of transfer 2', { exact: true }).boundingBox())!;
-	const on = (await card.getByLabel('transfer 2 enabled', { exact: true }).boundingBox())!;
+	const from = (await card.getByLabel('From, transfer 2', { exact: true }).boundingBox())!;
+	const to = (await card.getByLabel('To, transfer 2', { exact: true }).boundingBox())!;
+	const on = (await card.getByLabel('Enabled, transfer 2', { exact: true }).boundingBox())!;
 	const rm = (await card.getByRole('button', { name: /^Remove transfer 2 / }).boundingBox())!;
 	const oct0 = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
 	expect(from.y).toBeGreaterThan(title.y + title.height - 1);
@@ -313,13 +323,13 @@ test('each rule is a card: its groups side by side and top-aligned, its rates wh
 	expect(tops).toHaveLength(3);
 	expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
 	const cap = (await card.getByLabel('Daily cap of transfer 2, m³', { exact: true }).boundingBox())!;
-	const takes = (await card.getByLabel('Where transfer 2 takes its water', { exact: true }).boundingBox())!;
+	const takes = (await card.getByLabel('Takes from, transfer 2', { exact: true }).boundingBox())!;
 	const oct = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
 	expect(cap.x).toBeGreaterThan(oct.x);
 	expect(takes.x).toBeGreaterThan(cap.x);
 	// The off-take's fields are a grid of two, not one tall column: Hands-off flow beside Losses.
 	const handsOff = (await card.getByLabel('Hands-off flow for transfer 2, m³/day', { exact: true }).boundingBox())!;
-	const losses = (await card.getByLabel('Conveyance losses of transfer 2, %', { exact: true }).boundingBox())!;
+	const losses = (await card.getByLabel('Losses on the way of transfer 2, %', { exact: true }).boundingBox())!;
 	expect(Math.abs(handsOff.y - losses.y)).toBeLessThan(1);
 	// Every month's field shows its rate whole (0.0129 and 12.345 were clipped in the old table).
 	for (const m of ['Oct', 'Nov', 'Dec']) {
@@ -327,9 +337,9 @@ test('each rule is a card: its groups side by side and top-aligned, its rates wh
 		expect(await f.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 	}
 	await expect(card.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toHaveValue('12.345');
-	// The off rule: "off" in its heading, "Off" beside its switch, and a tinted card.
+	// The off rule: "off" in its heading, its switch off, and a tinted card.
 	await expect(ruleCard(page, 3).getByRole('heading', { level: 3 })).toHaveText('Transfer 3 off');
-	await expect(ruleCard(page, 3).locator('.switch')).toHaveText('Off');
+	await expect(ruleCard(page, 3).getByLabel('Enabled, transfer 3', { exact: true })).not.toBeChecked();
 	const bg = (n: number) => ruleCard(page, n).evaluate((el) => getComputedStyle(el).backgroundColor);
 	expect(await bg(3)).not.toBe(await bg(1));
 	// The shortcut says the rate it copies (0.0129, not a rounded 0.013).
@@ -353,19 +363,97 @@ test('Remove asks first for a rule with rates, not for a blank one, and focus mo
 	await expect(page.getByTestId('transfer-rule')).toHaveCount(3);
 	// Confirmed, it goes, the rules renumber and the next rule's heading takes the focus.
 	await remove(1).click();
-	await answerConfirm(page, true, 'Discard on the save bar');
+	await answerConfirm(page, true, 'its monthly rates, limits and source settings go with it');
 	await expect(page.getByTestId('transfer-rule')).toHaveCount(2);
 	await expect(header(page).getByTestId('section-context')).toHaveText('2 transfer rules · 1 active');
 	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeFocused();
-	await expect(page.getByLabel('Where transfer 1 takes its water', { exact: true })).toHaveValue('river');
+	await expect(page.getByLabel('Takes from, transfer 1', { exact: true })).toHaveValue('river');
 	await expect(saveBar(page)).toBeVisible();
-	// A rule with no rate yet goes at once.
+	// A rule with no rate but other settings (an off-take's hands-off flow) asks too: they would go with it.
+	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
+	await page.getByLabel('Takes from, transfer 3', { exact: true }).selectOption('river');
+	await page.getByLabel('Hands-off flow for transfer 3, m³/day', { exact: true }).fill('250');
+	await remove(3).click();
+	await answerConfirm(page, false, 'Remove transfer 3?');
+	await expect(page.getByTestId('transfer-rule')).toHaveCount(3);
+	await remove(3).click();
+	await answerConfirm(page, true);
+	await expect(page.getByTestId('transfer-rule')).toHaveCount(2);
+	// A rule as + Add transfer made it goes at once.
 	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await remove(3).click();
 	await expect(page.getByRole('alertdialog')).toHaveCount(0);
 	await expect(page.getByTestId('transfer-rule')).toHaveCount(2);
 	// The last rule gone, focus goes to the one before it.
 	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 2 off', exact: true })).toBeFocused();
+});
+
+test('From and To offer hydrological units only; a saved gauge end stays, named so, and is a problem', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers units only');
+	const model = sampleModel();
+	await putModel(page.request, project.id, model);
+	await openTransfers(page, project.id);
+	const from = page.getByLabel('From, transfer 1', { exact: true });
+	await expect(from.locator('option')).toHaveText(['Upper farm', 'Lower farm']);
+	// + Add transfer starts between the first two units, never the outflow gauge first in the list.
+	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
+	await expect(page.getByLabel('From, transfer 2', { exact: true }).locator('option:checked')).toHaveText('Upper farm');
+	await expect(page.getByLabel('To, transfer 2', { exact: true }).locator('option:checked')).toHaveText('Lower farm');
+
+	// A rule saved (by an older version) from the gauge: shown as it is, and refused until it is changed.
+	const gaugeRule = await createProject(page.request, 'Transfers gauge end');
+	const g = sampleModel();
+	g.transfers[0]!.fromNodeId = g.nodes[0]!.id;
+	await putModel(page.request, gaugeRule.id, g);
+	await openTransfers(page, gaugeRule.id);
+	await expect(page.getByLabel('From, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Outflow gauge (not a hydrological unit)');
+	await page.getByLabel('Daily cap of transfer 1, m³', { exact: true }).fill('500');
+	await page.getByLabel('Daily cap of transfer 1, m³', { exact: true }).blur();
+	await expect(ruleCard(page, 1)).toContainText('"Outflow gauge" is a gauge, which can\'t send or receive water; choose a hydrological unit.');
+	await expect(page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Save changes' })).toBeDisabled();
+	await page.getByLabel('From, transfer 1', { exact: true }).selectOption({ label: 'Upper farm' });
+	await expect(ruleCard(page, 1)).not.toContainText('is a gauge');
+});
+
+test('every field’s name starts with its visible label, has an ⓘ, and large volumes show separators', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers labels');
+	const model = sampleModel();
+	Object.assign(model.transfers[0]!, { source: 'river', dailyCapM3: 250000, handsOffM3Day: 12000, lossPct: 0.1, lossReturnPct: 0.2 });
+	await putModel(page.request, project.id, model);
+	await openTransfers(page, project.id);
+	const card = ruleCard(page, 1);
+	// Label in name (WCAG 2.5.3): each visible label, then the rule.
+	for (const [word, name] of [
+		['From', 'From, transfer 1'],
+		['To', 'To, transfer 1'],
+		['Enabled', 'Enabled, transfer 1'],
+		['Daily cap, m³', 'Daily cap of transfer 1, m³'],
+		['Takes from', 'Takes from, transfer 1'],
+		['Takes', 'Takes, transfer 1'],
+		['Hands-off flow, m³/day', 'Hands-off flow for transfer 1, m³/day'],
+		['Losses on the way, %', 'Losses on the way of transfer 1, %'],
+		['Losses seeping back, %', 'Losses seeping back of transfer 1, %'],
+		['Rejoins the river below', 'Rejoins the river below, transfer 1'],
+		['Leaves the EWR in the river', 'Leaves the EWR in the river, transfer 1'],
+		['Tops up the destination’s dam', 'Tops up the destination’s dam, transfer 1']
+	] as const) {
+		await expect(card.getByLabel(name, { exact: true }), name).toBeVisible();
+		await expect(card.getByText(word, { exact: true }).first(), word).toBeVisible();
+		// The words the label shows, minus its unit, start the name.
+		expect(name.toLowerCase().startsWith(word.split(',')[0]!.toLowerCase()), name).toBe(true);
+	}
+	// Every field label in the river rule's groups carries its ⓘ.
+	const labels = card.locator('.g-limits .fld-l, .g-source .fld-l, .g-source .check-row');
+	const n = await labels.count();
+	expect(n).toBeGreaterThanOrEqual(9);
+	for (let i = 0; i < n; i++) await expect(labels.nth(i).locator('.helptip'), `label ${i}`).toHaveCount(1);
+	// Volumes group their thousands, as the node sheet does.
+	await expect(card.getByLabel('Daily cap of transfer 1, m³', { exact: true })).toHaveValue('250\u202f000');
+	await expect(card.getByLabel('Hands-off flow for transfer 1, m³/day', { exact: true })).toHaveValue('12\u202f000');
 });
 
 test('on a phone each card stacks: From and To full width, month rates four to a row and whole, fields tap-sized', async ({ page, owner }) => {
@@ -375,8 +463,8 @@ test('on a phone each card stacks: From and To full width, month rates four to a
 	await putModel(page.request, project.id, mixedModel());
 	await openTransfers(page, project.id);
 	const card = ruleCard(page, 2);
-	const from = (await card.getByLabel('Source of transfer 2', { exact: true }).boundingBox())!;
-	const to = (await card.getByLabel('Destination of transfer 2', { exact: true }).boundingBox())!;
+	const from = (await card.getByLabel('From, transfer 2', { exact: true }).boundingBox())!;
+	const to = (await card.getByLabel('To, transfer 2', { exact: true }).boundingBox())!;
 	expect(to.y).toBeGreaterThan(from.y + from.height - 1);
 	// Four months to a row: Feb starts the second row, under Oct.
 	const oct = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
@@ -388,9 +476,9 @@ test('on a phone each card stacks: From and To full width, month rates four to a
 		expect(await f.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 		expect((await f.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	}
-	for (const el of [card.getByLabel('transfer 2 enabled', { exact: true }), card.getByRole('button', { name: /^Remove transfer 2 / }), card.getByLabel('Where transfer 2 takes its water', { exact: true })])
+	for (const el of [card.getByLabel('Enabled, transfer 2', { exact: true }), card.getByRole('button', { name: /^Remove transfer 2 / }), card.getByLabel('Takes from, transfer 2', { exact: true })])
 		expect((await el.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 	// The source's selects take the card's width, so "The river (an off-take)" shows whole.
-	expect(await card.getByLabel('Where transfer 2 takes its water', { exact: true }).evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(250);
+	expect(await card.getByLabel('Takes from, transfer 2', { exact: true }).evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(250);
 	await expectNoSidewaysScroll(page);
 });

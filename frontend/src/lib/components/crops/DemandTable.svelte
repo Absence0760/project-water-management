@@ -36,11 +36,13 @@
 		{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net crop requirement; the hydrological unit abstracts that ÷ its irrigation
 	efficiency. Uses saved A-pan values and the crops and planted areas as edited, unsaved changes included.
 </p>
-<div class="table-wrap">
+<!-- 16 columns scroll sideways beside the crop list: the wrap takes focus so the keyboard can scroll it (axe scrollable-region-focusable). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div class="table-wrap" tabindex="0" role="region" aria-label="Irrigation demand by hydrological unit and month">
 	<table class="data compact demand">
 		<thead>
 			<tr>
-				<th scope="col" class="sticky">Farm</th>
+				<th scope="col" class="sticky">Hydrological unit</th>
 				<th scope="col" class="num">Area<br /><span class="u">ha</span></th>
 				{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">m³/day</span></th>{/each}
 				<th scope="col" class="num">Mean<br /><span class="u">m³/day</span></th>
@@ -97,6 +99,10 @@
 	}
 	.demand td {
 		min-width: 64px;
+	}
+	.table-wrap:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 	.heat {
 		background: color-mix(in srgb, color-mix(in srgb, var(--brand-outlet) 45%, transparent) var(--i), transparent);

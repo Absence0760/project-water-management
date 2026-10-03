@@ -71,6 +71,9 @@ test('river first with 2 pumps × 25 m³/h saves 1,200 m³/day; run of river wit
 	// Run of river has no dam: with Upper farm's 150 000 m³ dam the form says so and Save stays off.
 	await again.getByLabel('Supply rule', { exact: true }).selectOption({ label: 'Run of river' });
 	await expect(again.getByRole('alert')).toHaveText('Run of river has no dam; set the dam capacity to 0 or pick another supply rule.');
+	// The field it is about is marked and points at it.
+	await expect(again.getByLabel('Supply rule', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+	await expect(again.getByLabel('Supply rule', { exact: true })).toHaveAccessibleDescription(/Run of river has no dam/);
 	await expect(sheet.getByText('1 problem to fix before saving')).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Save changes' })).toBeDisabled();
 
@@ -79,6 +82,10 @@ test('river first with 2 pumps × 25 m³/h saves 1,200 m³/day; run of river wit
 	await expect(again.getByRole('alert')).toHaveCount(0);
 	await again.getByLabel('Back to the dam at (% of dam)').fill('30');
 	await expect(again.getByRole('alert')).toHaveText('The switch-back level must be at least the switch-to-river level.');
+	for (const level of ['Back to the dam at (% of dam)', 'Switch to river below (% of dam)']) {
+		await expect(again.getByLabel(level)).toHaveAttribute('aria-invalid', 'true');
+		await expect(again.getByLabel(level)).toHaveAccessibleDescription('The switch-back level must be at least the switch-to-river level.');
+	}
 	await expect(sheet.getByRole('button', { name: 'Save changes' })).toBeDisabled();
 });
 
@@ -171,9 +178,12 @@ test('the month fields show 12 345.5 and 0.0129 whole for an owner and a viewer,
 			// The previews write every figure as entered.
 			await expect(supply.getByTestId('hands-off-note')).toContainText('between 0.0129 and 12\u202f345.5 m³/day by month');
 			await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes between 0.0129 and 12\u202f345.5 m³/s by month. The one value above is not used.');
-			// Nothing in the sheet scrolls sideways.
+			// Nothing in the sheet scrolls sideways, but the jump row, which on a phone is one strip that does (ui.md § Node sheet).
 			const scrollers = await sheet.evaluate((d) =>
-				[d, ...d.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1).map((el) => el.className || el.tagName)
+				[d, ...d.querySelectorAll('*')]
+					.filter((el) => el.getAttribute('data-testid') !== 'node-sheet-jump')
+					.filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1)
+					.map((el) => el.className || el.tagName)
 			);
 			expect(scrollers).toEqual([]);
 			if (who === 'viewer') {

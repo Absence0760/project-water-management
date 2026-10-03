@@ -1,5 +1,6 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 
 // Synthetic records only. The gauge reads 80 % of the logger for 120 days of
 // one water year; the logger has one negative reading.
@@ -30,7 +31,7 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const min = page.getByLabel('Lowest gauge/logger ratio (%)');
 	await expect(min).toHaveValue('66.7');
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	// Out of the input's range: marked invalid and not taken.
 	await min.fill('0');
 	await expect(min).toHaveAttribute('aria-invalid', 'true');
@@ -42,8 +43,7 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 	await expect(save).toBeDisabled();
 	await days.fill('90');
 	await min.fill('90');
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	await page.goto(`/projects/${project.id}?tab=series`);
 	await expect(agreement.getByText('1 water year disagree:')).toBeVisible();
@@ -114,12 +114,11 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await keepDry.getByRole('button', { name: 'Keep a date range dry' }).click();
 	await keepDry.getByLabel('From').fill('2012-06-01');
 	await keepDry.getByLabel('To').fill('2012-08-15');
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	await expect(keepDry.getByRole('alert')).toHaveText('Keep-dry period 1: needs a reason.');
 	await expect(save).toBeDisabled();
 	await keepDry.getByLabel('Reason').fill('Farm records show no rain');
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// The Data tab follows the saved settings (in-app navigation, as a user moves between tabs).
 	// Its old rain is behind, so the section's link carries the badge's count in its name.
@@ -134,8 +133,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await expect(page.getByRole('group', { name: /^Keep dry/ }).getByLabel('Reason')).toHaveValue('Farm records show no rain');
 	await mode.selectOption('asRecorded');
 	await expect(page.getByRole('group', { name: /^Keep dry/ })).toHaveCount(0);
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(mode).toHaveValue('asRecorded');
 });
@@ -161,9 +159,8 @@ test('the zero-rain and low-vs-CHIRPS limits are settings the Data tab applies',
 	// The 76-day run no longer reaches 80 wet-season days; 2013/14 (a third of the usual ratio) is above 30 %.
 	await wet.fill('80');
 	await section.getByLabel('Low vs CHIRPS: flag below (% of the usual ratio)').fill('30');
-	const save = page.getByRole('button', { name: 'Save settings' });
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	const save = saveChanges(page);
+	await saveSettings(page);
 
 	await page.goto(`/projects/${projectId}?tab=series`);
 	await expect(page.getByRole('heading', { name: 'Data checks' })).toBeVisible();
@@ -172,6 +169,17 @@ test('the zero-rain and low-vs-CHIRPS limits are settings the Data tab applies',
 	// A cap below the floor blocks Save with a message.
 	await page.goto(`/projects/${projectId}?tab=settings`);
 	await section.getByLabel('Shortest flow flat stretch (days)').fill('100');
-	await expect(section.getByRole('alert')).toHaveText('The longest flow flat-line can’t be shorter than the shortest.');
+	await expect(section.getByRole('alert')).toHaveText('The longest flow flat stretch can’t be shorter than the shortest.');
 	await expect(save).toBeDisabled();
+});
+
+test('the Data quality panel says it holds limits runs use, and its Rain gaps link lands on the panel', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Data quality words');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const section = page.getByTestId('data-quality-settings');
+	await expect(section).toContainText('Input checks, and the zero-rain and low-vs-CHIRPS limits runs use');
+	await section.getByRole('link', { name: 'Rain gaps' }).click();
+	await expect(page).toHaveURL(/#set-rain$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Rain gaps and CHIRPS' })).toBeInViewport();
 });
