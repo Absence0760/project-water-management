@@ -1662,6 +1662,16 @@ reference/<kind>/`), so restore that version (copy it back over the key),
 `sha256sum` it, and run the workflow with its hash. Values a project
 already accepted were copied into the project and don't change either way.
 
+**Which file is loaded.** Each load records the object's key and SHA-256
+with the dataset, in the same transaction (`reference_load`, migration 192;
+`geo/referenceOrigin.ts`), so the record outlives the Actions log. The
+workflow's log prints the file it loaded and the one it replaced (key,
+SHA-256 and when it was loaded): that replaced file is the one to restore
+to undo the load. A local `pnpm import:*` of the same label names no
+bucket file, so it deletes the record rather than leave it describing data
+that is gone. The table is owner-only (the app never reads it); to read it
+outside a load, `SELECT * FROM reference_load` as the schema owner.
+
 Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
 workflow offers those kinds alone, its gate refuses the rest, and the
 Lambda refuses them again by name (`referenceLoad.test.ts` checks the

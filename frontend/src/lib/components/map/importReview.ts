@@ -4,6 +4,7 @@
 // stops the import. Pure, so vitest covers it (importReview.test.ts). The
 // server checks everything again on import: this only keeps the table from
 // offering a choice it would refuse.
+import { cleanName } from '@water-management/engine';
 import type { MapFeatureKind, MapGeometry, MapImportPreview, MapImportPreviewFeature, MapImportProblem, MapImportReviewed } from '$lib/api/types';
 import { KIND_LABEL, KIND_NODES } from './mapData';
 
@@ -92,7 +93,7 @@ export function importBody(rows: readonly ReviewRow[], current: MapImportPreview
 
 /** The body's `features`: every row, with its kind, name and node. */
 export const reviewedFeatures = (rows: readonly ReviewRow[]): MapImportReviewed[] =>
-	rows.flatMap((r) => (r.kind ? [{ index: r.index, kind: r.kind, name: r.name.trim(), nodeId: KIND_NODES[r.kind].length ? r.nodeId : null }] : []));
+	rows.flatMap((r) => (r.kind ? [{ index: r.index, kind: r.kind, name: cleanName(r.name), nodeId: KIND_NODES[r.kind].length ? r.nodeId : null }] : []));
 
 /** How many rows of each kind, in the review's order: "2 farm parcels, 1 river". */
 export function kindCounts(rows: readonly ReviewRow[]): string {

@@ -9,6 +9,7 @@
 	link on its first part; the second is a new parcel of the same kind.
 -->
 <script lang="ts">
+	import { cleanName } from '@water-management/engine';
 	import { api, type MapFeature, type MapGeometry, type MapPosition } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { areaText, KIND_LABEL } from '../mapData';
@@ -49,7 +50,7 @@
 		try {
 			const f = await api.map.split(projectId, feature.id, {
 				parts: [polygon(parts[0]), polygon(parts[1])],
-				names: [names[0].trim(), names[1].trim()],
+				names: [cleanName(names[0]), cleanName(names[1])],
 				...(boundary ? { as } : {})
 			});
 			await onsaved(f);

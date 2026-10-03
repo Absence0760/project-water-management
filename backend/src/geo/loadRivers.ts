@@ -12,7 +12,8 @@
 // a load can keep to the streams a catchment model cares about. A load
 // replaces every row of its dataset, in one transaction.
 import type pg from 'pg';
-import { checkGeometry, FEATURE_NAME_MAX, type Geometry } from './geojson.js';
+import { recordReferenceOrigin, type ReferenceOrigin } from './referenceOrigin.js';
+import { checkGeometry, featureNameOf, type Geometry } from './geojson.js';
 import { bboxOf } from './loadQuaternaries.js';
 
 export interface RiverRecord {
@@ -97,7 +98,7 @@ export function riverRecords(
 			seen.add(id);
 			records.push({
 				reachId: id,
-				name: typeof name === 'string' ? name.trim().slice(0, FEATURE_NAME_MAX) : '',
+				name: typeof name === 'string' ? featureNameOf(name) : '',
 				strahler,
 				upstreamKm2: bounded(pick(p, UPSTREAM_KEYS), 1e8),
 				lengthKm: bounded(pick(p, LENGTH_KEYS), 1e5),
@@ -111,8 +112,13 @@ export function riverRecords(
 	return { records, problems, belowOrder };
 }
 
-/** Replace every row of `dataset` with `records`, in one transaction, as the schema owner, in batches. Returns how many rows it wrote. */
-export async function replaceRivers(client: pg.ClientBase, dataset: string, records: readonly RiverRecord[]): Promise<number> {
+/**
+ * Replace every row of `dataset` with `records`, in one transaction, as the
+ * schema owner, in batches. `origin`: the reference-bucket file a production
+ * load read (recorded with the data; referenceOrigin.ts), null for any other
+ * replace. Returns how many rows it wrote.
+ */
+export async function replaceRivers(client: pg.ClientBase, dataset: string, records: readonly RiverRecord[], origin: ReferenceOrigin | null = null): Promise<number> {
 	await client.query('BEGIN');
 	try {
 		await client.query('DELETE FROM river_reference WHERE dataset = $1', [dataset]);
@@ -140,6 +146,7 @@ export async function replaceRivers(client: pg.ClientBase, dataset: string, reco
 				]
 			);
 		}
+		await recordReferenceOrigin(client, 'rivers', dataset, origin);
 		await client.query('COMMIT');
 		return records.length;
 	} catch (e) {

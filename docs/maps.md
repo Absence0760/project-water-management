@@ -596,7 +596,9 @@ did, and refuses the whole file on any problem, listing them per feature:
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
-  feature's name, and `description` and `ref`, trimmed and capped. Everything
+  feature's name (made one line, as every feature name is, since the map
+  draws it as a label: line breaks and control characters become spaces;
+  api.md § Catchment map), and `description` and `ref`, trimmed and capped. Everything
   else is dropped: an attribute table can carry owners' names or ID numbers,
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file

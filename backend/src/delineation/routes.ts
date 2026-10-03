@@ -12,6 +12,7 @@
 // needs `replaceBoundary: true` (409 otherwise), the import review's rule.
 // The computation runs between two short transactions, never holding a
 // database connection while it reads tiles and routes flow.
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -54,7 +55,7 @@ export const AcceptBody = z
 		as: z.enum(['catchment_boundary', 'other']),
 		/** With `as: 'catchment_boundary'`: replace the project's current boundary (refused without it when there is one). */
 		replaceBoundary: z.boolean().optional(),
-		name: z.string().trim().min(1).max(100).optional()
+		name: z.string().trim().min(1).max(100).refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE).optional()
 	})
 	.strict();
 

@@ -63,6 +63,11 @@ describe('riverRecords', () => {
 		expect(records[0]).toMatchObject({ reachId: 7, strahler: 2, upstreamKm2: 10, name: 'Sandspruit', source: 'Own survey', lengthKm: null, dischargeM3s: null });
 	});
 
+	it('makes a reach name one line, as a feature name (a reach added to a project carries it; issue #385)', () => {
+		const { records } = riverRecords([fc([line({ reachId: 7, name: 'Sand\r\nspruit\u2028river', source: 's' })])], 'fallback');
+		expect(records[0]!.name).toBe('Sand spruit river');
+	});
+
 	it('leaves out reaches below the minimum order (counted, not problems)', () => {
 		const { records, problems, belowOrder } = riverRecords([fc([line({ HYRIV_ID: 1, ORD_STRA: 1 }), line({ HYRIV_ID: 2, ORD_STRA: 3 }), line({ HYRIV_ID: 3 })])], 's', 2);
 		expect(records.map((r) => r.reachId)).toEqual([2]);

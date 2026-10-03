@@ -287,3 +287,21 @@ describe('dividing the valley', () => {
 		await expect(asOwner(`INSERT INTO start_proposal (project_id, mode, plan, from_dem, method, method_version) VALUES ($1, 'divide', '{}', false, 'm', 'start-2')`, [v.id])).rejects.toThrow(/start_proposal_divide_from_dem/);
 	});
 });
+
+describe('the own sub-catchment parcel’s name', () => {
+	it('fits the map’s 100 characters for a unit whose name is already near them', async () => {
+		const v = await valley('Divide, long name');
+		const long = `Top pump ${'x'.repeat(91)}`; // 100 characters, the most a node name takes
+		const model = (await owner.call('GET', v.at('/model'))).body;
+		model.nodes.find((n: ApiNode) => n.id === v.nodes.pump.id).name = long;
+		expect((await owner.call('PUT', v.at('/model'), model)).status).toBe(200);
+		const r = await owner.call('POST', v.at('/map/divide'), v.body);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const plan = r.body.proposal.plan;
+		const pump = plan.units.find((u: { nodeId: string | null }) => u.nodeId === v.nodes.pump.id);
+		const ok = await owner.call('POST', v.at(`/map/divide/${r.body.proposal.id}/apply`), { units: ticks(plan, { [pump.key]: { area: true } }), rest: { to: 'none' } });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const [parcel] = await asOwner(`SELECT name FROM map_feature WHERE node_id = $1 AND kind = 'farm_parcel'`, [v.nodes.pump.id]);
+		expect(parcel!.name).toBe(`${long}: own sub-catchment`.slice(0, 100));
+	});
+});

@@ -18,6 +18,7 @@
 // the feature named), and the quaternary lookup only proposes values the
 // hydrologist accepts in Settings.
 import { createHash } from 'node:crypto';
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
@@ -32,6 +33,7 @@ import {
 	centerOf,
 	checkGeometry,
 	FEATURE_NAME_MAX,
+	featureNameOf,
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	KIND_GEOMETRY,
@@ -86,7 +88,8 @@ const KIND_LABEL: Record<MapFeatureKind, string> = {
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
 const uuid = z.string().regex(UUID, 'not a valid id');
-const Name = z.string().trim().max(FEATURE_NAME_MAX);
+/** A feature name typed into a route: one line (issue #385; the Map draws it as a label), at most FEATURE_NAME_MAX characters. */
+const Name = z.string().trim().max(FEATURE_NAME_MAX).refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE);
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);
 
@@ -323,7 +326,7 @@ interface ImportRow {
 }
 type Made = { problems: GeoProblem[]; rows: ImportRow[] };
 
-const boundaryName = (name: string, fileName: string) => name || fileName.replace(/\.(geo)?json$/i, '').slice(0, FEATURE_NAME_MAX);
+const boundaryName = (name: string, fileName: string) => name || featureNameOf(fileName.replace(/\.(geo)?json$/i, ''));
 const mismatch = (f: ParsedFeature, kind: MapFeatureKind): GeoProblem => ({
 	feature: f.index,
 	message: `is a ${f.geometry.type}; ${KIND_LABEL[kind]} is a ${KIND_TYPES[kind].join(' or ')}`

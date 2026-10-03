@@ -15,6 +15,7 @@
 // at once. Properties are dropped except FEATURE_PROPERTIES; a `kind`,
 // `type` or `layer` property is read only to propose each feature's kind
 // (proposeKinds, issue #326 D2), and is not kept.
+import { cleanName } from '@water-management/engine';
 import { geometryAreaM2 } from './area.js';
 import { clipX, clipY, openRing } from './clip.js';
 
@@ -47,6 +48,16 @@ export const FEATURE_PROPERTIES = { description: 500, ref: 100 } as const;
 /** The property a feature's name is read from, in order. */
 const NAME_KEYS = ['name', 'Name', 'NAME', 'label', 'title'];
 export const FEATURE_NAME_MAX = 100;
+
+/**
+ * A feature name as stored: one line (the engine's cleanName: every run of
+ * whitespace and control characters one space, trimmed; issue #385) and at
+ * most FEATURE_NAME_MAX characters. For names read in bulk (a GeoJSON
+ * file, a river network), which are cleaned rather than refused; a name
+ * typed into a route is refused instead (routes.ts `Name`). The Map draws
+ * names as labels, and migration 192 holds the column to one line.
+ */
+export const featureNameOf = (s: string): string => cleanName(s).slice(0, FEATURE_NAME_MAX).trimEnd();
 
 /** The CRS names a GeoJSON 2008 `crs` member may carry that mean WGS84 lon/lat. */
 const WGS84_NAMES = new Set(['urn:ogc:def:crs:OGC:1.3:CRS84', 'urn:ogc:def:crs:OGC::CRS84', 'EPSG:4326', 'urn:ogc:def:crs:EPSG::4326', 'urn:ogc:def:crs:EPSG:4326']);
@@ -437,7 +448,7 @@ function crsProblem(crs: unknown): string | null {
 function featureName(props: Record<string, unknown>): string {
 	for (const k of NAME_KEYS) {
 		const v = props[k];
-		if (typeof v === 'string' && v.trim()) return v.trim().slice(0, FEATURE_NAME_MAX);
+		if (typeof v === 'string' && featureNameOf(v)) return featureNameOf(v);
 		if (typeof v === 'number' && Number.isFinite(v)) return String(v);
 	}
 	return '';

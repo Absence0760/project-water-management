@@ -196,14 +196,24 @@ The checklist for these is issue #62; the history scrub is #63.
 Model names (nodes, crops, boreholes, demand objects, schedule labels) are
 one line since migration 189 (api.md § Model data). Left, found on the way:
 
-- [ ] **Map feature names.** `map_feature.name` (`backend/src/geo/routes.ts`
+- [x] **Map feature names.** `map_feature.name` (`backend/src/geo/routes.ts`
       `Name`, the GeoJSON upload's `featureName`, the river loader) still
       takes line breaks and control characters, and the Map draws them as
       labels. Start and Divide already propose such a name on one line
       (`cleanName`). Durable fix: the same `hasNameControlChars` refusal on
       the feature routes, `cleanName` in the GeoJSON and river readers (bulk
       paths), and a migration cleaning stored feature names. Trigger: next
-      work on the map's feature routes.
+      work on the map's feature routes. **Done 2026-10-03:** the
+      feature routes' `Name` (create, rename, split, a reviewed import row)
+      and the delineation accept refuse them; the GeoJSON reader, the river
+      loader and a reach added to a project clean them (`featureNameOf`);
+      the map's sheets send `cleanName`d names; migration 192 cleans stored
+      feature and reach names and adds `map_feature_name_one_line` and
+      `river_reference_name_one_line` (`geo/featureNames.db.test.ts`). On
+      the way: Divide named a unit's own sub-catchment parcel
+      `<unit>: own sub-catchment` cut to 200 characters, past the column's
+      100, so a unit name over 82 characters made the apply fail with 409
+      "violates a data rule"; it is cut to 100 now (`divide.db.test.ts`).
 - [x] **A scenario's borehole may have a blank name.** The engine's
       `borehole.add` check (`scenario/ops.ts` `BOREHOLE_FIELDS.name`) takes
       0–200 characters where PUT /model needs 1–200, so a scenario can add a
@@ -4761,7 +4771,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
-- [ ] **Record which file a reference load came from (round 4 infra audit,
+- [x] **Record which file a reference load came from (round 4 infra audit,
       data finding 4).** A load checks the uploaded file's SHA-256, then
       drops it: the dataset rows don't say which key and hash they came
       from, so once the Actions log expires nobody can tell which file is
@@ -4773,6 +4783,15 @@ assume, the questions for counsel); these are the actions, with triggers.
       `geo/referenceLoad.ts` and cleared by any other replace, and shown on
       `/data-sources`. **Trigger:** the
       first production load, or the next migration touching those tables.
+      **Done 2026-10-03** (migration 192): `reference_load`, written by
+      the replace functions in the dataset's transaction when a production
+      load names its file (`geo/referenceOrigin.ts`) and deleted by any
+      other replace; the load returns the file it replaced and
+      load-reference.yml prints both (deployment.md § Reference datasets,
+      Which file is loaded). Not on `/data-sources`: that page is the
+      public, static credits page (no API call), and no signed-in page lists
+      the loaded datasets with their metadata, so the record is the
+      operator's (the load log, or SQL as the owner).
 
 ## Housekeeping
 

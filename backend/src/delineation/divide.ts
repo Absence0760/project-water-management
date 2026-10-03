@@ -20,7 +20,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
-import type { Geometry, Position } from '../geo/geojson.js';
+import { featureNameOf, type Geometry, type Position } from '../geo/geojson.js';
 import { KIND_NODES } from '../geo/routes.js';
 import { beginModelChange, recordAudit, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -499,7 +499,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 				const { rows } = await db.query<{ id: string }>(
 					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, created_by)
 					 VALUES ($1, 'farm_parcel', $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-					[id, `${name}: own sub-catchment`.slice(0, 200), nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2]
+					[id, featureNameOf(`${name}: own sub-catchment`), nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2]
 				);
 				await db.query(`UPDATE node SET area_source = 'map', area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, rows[0]!.id]);
 				return rows[0]!.id;

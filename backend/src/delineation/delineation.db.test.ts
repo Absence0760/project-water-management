@@ -163,6 +163,10 @@ describe('with the synthetic DEM', () => {
 		expect(refused.body.error).toMatch(/already has a boundary “Drawn boundary”/);
 		const kept = await editor.call('GET', at('/map/features'));
 		expect(kept.body.features.find((f: { kind: string }) => f.kind === 'catchment_boundary').name).toBe('Drawn boundary');
+		// A name is one line, as every feature name (issue #385): refused, and the proposal stays open.
+		const twoLines = await editor.call('POST', at(`/map/delineation/${p.id}/accept`), { as: 'catchment_boundary', replaceBoundary: true, name: 'Delineated\nvalley' });
+		expect(twoLines.status).toBe(400);
+		expect(JSON.stringify(twoLines.body)).toMatch(/cannot contain line breaks or control characters/);
 		const ok = await editor.call('POST', at(`/map/delineation/${p.id}/accept`), { as: 'catchment_boundary', replaceBoundary: true, name: 'Delineated valley' });
 		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
 		const after = (await editor.call('GET', at('/map/features'))).body.features.filter((f: { kind: string }) => f.kind === 'catchment_boundary');

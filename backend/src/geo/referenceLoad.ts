@@ -25,6 +25,7 @@ import type pg from 'pg';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
 import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
+import { referenceLoadOf, type ReferenceLoadRecord } from './referenceOrigin.js';
 
 /** One kind of reference dataset, and whether production may load it. */
 export type ReferenceKind = {
@@ -201,6 +202,13 @@ export interface LoadResult {
 	skipped: number;
 	/** Rivers: reaches below minOrder, left out on purpose. */
 	belowOrder: number;
+	/**
+	 * The file the dataset was loaded from before this load replaced it (its
+	 * key, SHA-256 and when), or null: a new dataset, or one a local import
+	 * wrote. The bucket keeps old versions for a year, so this is the one to
+	 * restore to undo the load (deployment.md § Reference datasets).
+	 */
+	replaced: ReferenceLoadRecord | null;
 }
 
 /**
@@ -210,6 +218,10 @@ export interface LoadResult {
  */
 export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest, text: string, log: (line: string) => void = () => {}): Promise<LoadResult> {
 	const name = req.key.split('/').pop()!;
+	// Recorded with the data, in the replace's transaction (referenceOrigin.ts).
+	const origin = { key: req.key, sha256: req.sha256 };
+	// Read before the replace: load-reference.yml's concurrency group runs one load at a time.
+	const replaced = await referenceLoadOf(client, req.kind, req.dataset);
 	let doc: unknown;
 	if (req.kind === 'land-cover') {
 		try {
@@ -223,8 +235,8 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		if (!got.cells.length) throw new LoadError(`${req.key}: no cells`, 'empty', 'the file has no cell with cropland');
 		const meta = jsonDatasetMeta(req.dataset, got, { source: req.source });
 		try {
-			const written = await replaceCroplandDataset(client, meta, [got.cells]);
-			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0 };
+			const written = await replaceCroplandDataset(client, meta, [got.cells], origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
 		}
@@ -252,8 +264,8 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 			method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
 		};
 		try {
-			const written = await replaceEvaporationDataset(client, meta, c);
-			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0 };
+			const written = await replaceEvaporationDataset(client, meta, c, origin);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0, replaced };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
 		}
@@ -263,8 +275,8 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 	if (problems.length > 50) log(`… and ${problems.length - 50} more skipped`);
 	if (!records.length) throw new LoadError(`${req.key}: no reach to load`, 'empty', 'the file has no reach the load can take');
 	try {
-		const written = await replaceRivers(client, req.dataset, records);
-		return { kind: req.kind, dataset: req.dataset, written, skipped: problems.length, belowOrder };
+		const written = await replaceRivers(client, req.dataset, records, origin);
+		return { kind: req.kind, dataset: req.dataset, written, skipped: problems.length, belowOrder, replaced };
 	} catch (e) {
 		throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
 	}

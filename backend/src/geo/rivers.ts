@@ -20,7 +20,7 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
-import { FEATURE_NAME_MAX, FEATURE_PROPERTIES, type Geometry } from './geojson.js';
+import { FEATURE_PROPERTIES, featureNameOf, type Geometry } from './geojson.js';
 import { BboxQuery } from './quaternaryLayer.js';
 import { unnamedReachName } from './reachName.js';
 import { loadFeature, toFeature } from './routes.js';
@@ -141,7 +141,7 @@ export const riverRoutes = new Hono<AuthEnv>()
 			await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${id}|${ref}`]);
 			const { rows: dup } = await db.query<{ id: string }>(`SELECT id FROM map_feature WHERE project_id = $1 AND kind = 'river' AND properties ->> 'ref' = $2`, [id, ref]);
 			if (dup[0]) throw new ApiError(409, 'That reach is on the map already.');
-			const name = (reach.name || unnamedReachName(reach.reachId)).slice(0, FEATURE_NAME_MAX);
+			const name = featureNameOf(reach.name) || featureNameOf(unnamedReachName(reach.reachId));
 			const properties = { description: reachDescription(reach), ref };
 			const { rows: ins } = await db.query<{ id: string }>(
 				`INSERT INTO map_feature (project_id, kind, name, geometry, properties, created_by)
