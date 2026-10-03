@@ -89,11 +89,12 @@ Model names are one line (migration 189, issue #385): `node.name`,
 `crop.name`, `borehole.name` and `demand_object.name` each have a CHECK
 refusing the engine's `NAME_CONTROL_CHARS` (C0, DEL, C1, U+2028, U+2029).
 The migration first made every stored name one line, as the engine's
-`cleanName` does, a node or crop name it made equal to another in its
+`oneLineName` does, a node or crop name it made equal to another in its
 project (ignoring case) taking " (2)", " (3)" …, an empty one "Unnamed";
 schedule labels in `demand_object.schedule` likewise. Run input snapshots,
 model revisions and scenario ops (hash-pinned) keep the names they were
-written with; a restore cleans them on the way in ([api.md § Model
+written with; a scenario's resave may keep them, and a restore cleans them
+on the way in ([api.md § Model
 data](./api.md#model-data)).
 
 ### Field mapping details
