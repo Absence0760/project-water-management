@@ -114,10 +114,13 @@ export function compareEvidenceNote(side: 'A' | 'B', e: RunEvidence | null | und
 
 /**
  * Why the nominate action is unavailable for a run, or null when it can be
- * nominated. The server refuses both cases too (409).
+ * nominated. The server refuses each case too (409).
  */
-export function nominateBlocker(run: Pick<RunMeta, 'id' | 'legacy'>, history: readonly Nomination[]): string | null {
+export function nominateBlocker(run: Pick<RunMeta, 'id' | 'legacy' | 'scenarioName' | 'trigger'>, history: readonly Nomination[]): string | null {
 	if (run.legacy) return 'A run of the legacy runoff model (removed in engine 1.0.0) is workbook comparison only, so it can’t be nominated as evidence.';
+	// scenarioName stays set once the scenario is deleted (the run records it).
+	if (run.scenarioName != null) return 'A scenario run is its scenario’s changes on a base run, not the catchment as it is, so it can’t be nominated as evidence. Nominate a run of the model.';
+	if (run.trigger === 'forecast') return 'A forecast run’s last days are modelled on forecast rain, so it can’t be nominated as evidence: evidence is judged on the record.';
 	if (currentNomination(history)?.runId === run.id) return 'This run is the nominated evidence run.';
 	return null;
 }

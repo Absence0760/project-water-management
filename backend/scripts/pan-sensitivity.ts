@@ -27,6 +27,7 @@ import {
 	calibrate,
 	DEFAULT_STARTS,
 	defaultProjectSettings,
+	MAX_STARTS,
 	PAN_COEFFICIENT_PRESETS,
 	runModel,
 	type CalibrationReport,
@@ -220,6 +221,14 @@ export function toMarkdown(results: CaseResult[], meta: { file: string; seed: nu
 	return lines.join('\n');
 }
 
+/** A whole-number CLI option inside [min, max], or the fallback when absent (pan-sensitivity's and fit-sweep's options). */
+export function intOption(name: string, raw: string | undefined, fallback: number | undefined, min: number, max: number): number | undefined {
+	if (raw === undefined) return fallback;
+	const n = Number(raw);
+	if (raw.trim() === '' || !Number.isInteger(n) || n < min || n > max) throw new Error(`--${name} must be a whole number from ${min} to ${max}, not "${raw}"`);
+	return n;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const { values, positionals } = parseArgs({
 		allowPositionals: true,
@@ -235,9 +244,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		console.error('usage: pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]');
 		process.exit(1);
 	}
-	const seed = values.seed ? Number(values.seed) : 1;
-	const starts = values.starts ? Number(values.starts) : DEFAULT_STARTS;
-	const budget = values.budget ? Number(values.budget) : undefined;
+	// The same bounds as fit-sweep's: a typo is a usage error, never a NaN fit.
+	let seed: number, starts: number, budget: number | undefined;
+	try {
+		seed = intOption('seed', values.seed, 1, 0, 2 ** 31 - 1)!;
+		starts = intOption('starts', values.starts, DEFAULT_STARTS, 1, MAX_STARTS)!;
+		budget = intOption('budget', values.budget, undefined, 1, 1_000_000);
+	} catch (err) {
+		console.error(`pan-sensitivity: ${(err as Error).message}`);
+		process.exit(1);
+	}
 	const out = values.out ? cliPath(values.out) : join(dirname(file), 'pan-sensitivity.md');
 
 	loadModelInput(file)

@@ -12,7 +12,7 @@
 	import { base } from '$app/paths';
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, ApiError } from '$lib/api';
-	import { passwordProblem } from '$lib/api/emailAuth';
+	import { displayNameProblem, passwordProblem } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import DeleteAccount from '$lib/components/account/DeleteAccount.svelte';
@@ -47,12 +47,9 @@
 		e.preventDefault();
 		nameSaved = false;
 		const name = displayName.trim();
-		if (!name) {
-			nameError = t('Enter a display name.');
-			return;
-		}
-		if (name.length > 100) {
-			nameError = t('Use at most 100 characters.');
+		const problem = displayNameProblem(name);
+		if (problem) {
+			nameError = t(problem);
 			return;
 		}
 		nameError = null;

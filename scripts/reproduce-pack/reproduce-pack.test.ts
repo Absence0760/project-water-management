@@ -81,6 +81,24 @@ describe('reproduce:pack', () => {
 		expect(out).toMatch(/FAIL\s+files\s+.*README\.md/);
 	});
 
+	it('reports a malformed bundle whose files match their hashes as a failing check, exit 1, never a crash', async () => {
+		const archive = await ZipArchive.open(new Uint8Array(await readFile(good)));
+		const files = new Map<string, Uint8Array<ArrayBuffer>>();
+		for (const name of archive.names) files.set(name, new Uint8Array(await archive.read(name)));
+		const notJson = new TextEncoder().encode('not json');
+		files.set('manifest.json', notJson);
+		const index = JSON.parse(new TextDecoder().decode(files.get('bundle.json')!));
+		index.files['manifest.json'] = hash(notJson);
+		files.set('bundle.json', new TextEncoder().encode(JSON.stringify(index)));
+		await writeFile(join(dir, 'malformed.zip'), await zip([...files].map(([name, data]) => ({ name, data }))));
+		const { code, out } = await run(['malformed.zip']);
+		expect(code).toBe(1);
+		expect(out).toMatch(/^Reproduction bundle /);
+		expect(out).toMatch(/ok\s+files\s/);
+		expect(out).toMatch(/FAIL\s+structure\s+the bundle is malformed: /);
+		expect(out).toContain('NOT reproduced: 1 check failed.');
+	});
+
 	it('draws an evidence-12 pack’s locality map again and checks its SVG against the manifest (figure:locality); a wrong hash fails it', async () => {
 		await writeFile(join(dir, 'locality.zip'), (await buildPackBundle(packBundleFixture(hash, { locality: true }), hash)).bytes);
 		const ok = await run(['locality.zip', '--no-run']);

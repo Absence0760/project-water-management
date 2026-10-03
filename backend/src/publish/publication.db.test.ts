@@ -181,6 +181,26 @@ describe('publishing', () => {
 		expect((await owner.call('DELETE', `/projects/${legacy}`)).status).toBe(204);
 	});
 
+	it('refuses a scenario run, and still once its scenario is deleted (positive control: its base run publishes)', async () => {
+		const pid = await makeProject(owner, 'Scenario publish');
+		const base = await run(owner, pid);
+		const sc = await owner.call('POST', `/projects/${pid}/scenarios`, { name: 'Twice the demand', baseRunId: base, ops: [{ op: 'demand.scale', factor: 2 }] });
+		expect(sc.status).toBe(201);
+		const sid = sc.body.scenario.id as string;
+		const made = await owner.call('POST', `/projects/${pid}/scenarios/${sid}/runs`, {});
+		expect(made.status).toBe(201);
+		const scenarioRun = made.body.run.id as string;
+		const refused = await publish(owner, scenarioRun, {}, pid);
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/^a scenario run cannot be published/);
+		expect((await owner.call('DELETE', `/projects/${pid}/scenarios/${sid}`)).status).toBe(204);
+		const orphan = await publish(owner, scenarioRun, {}, pid);
+		expect(orphan.status).toBe(409);
+		expect(orphan.body.error).toMatch(/^a scenario run cannot be published/);
+		expect(await asOwner('SELECT 1 FROM run_publication WHERE project_id = $1', [pid])).toEqual([]);
+		expect((await publish(owner, base, {}, pid)).status).toBe(201);
+	});
+
 	it('validates the notice', async () => {
 		const [{ run_id: runId }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
 		expect((await publish(editor, runId, { restriction: { level: 'none', pct: 5 } })).status).toBe(400);

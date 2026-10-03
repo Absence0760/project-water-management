@@ -150,5 +150,8 @@ describe('isBlockPaste', () => {
 		expect(isBlockPaste('12')).toBe(false);
 		expect(isBlockPaste('12\t13')).toBe(true);
 		expect(isBlockPaste('12\n13')).toBe(true);
+		// Excel for Mac puts bare CR line breaks on the clipboard.
+		expect(isBlockPaste('12\r13\r')).toBe(true);
+		expect(isBlockPaste('12\r')).toBe(false);
 	});
 });

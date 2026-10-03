@@ -142,7 +142,7 @@ as the database owner. A person sees only the projects and farms they have
 been given. A farmer sees only their own farms' figures. Automated tests
 check that people cannot see what they were not given.
 
-5.2 **Accounts.** Passwords are stored only as bcrypt hashes. Sessions are
+5.2 **Accounts.** Passwords are stored only as salted, memory-hard one-way hashes (Argon2id). Sessions are
 signed, HttpOnly, Secure, SameSite cookies, and can be revoked on every
 device. Sign-in attempts are rate-limited and locked out after repeated
 failures; sign-up is throttled. Email addresses are confirmed before an

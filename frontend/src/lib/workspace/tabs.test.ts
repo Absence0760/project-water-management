@@ -8,6 +8,7 @@ import {
 	LINKED_ONLY,
 	hasModelInputsToggle,
 	DEFAULT_HIDDEN_TABS,
+	TAB_HINTS,
 	hiddenChoice,
 	hiddenTabs,
 	stripTabs,
@@ -154,6 +155,13 @@ describe('hiddenChoice (the default hidden sections)', () => {
 		expect(visibleTabs('owner', { hidden: hiddenChoice(['crops']) }, PAGE)).toContain('history');
 		// Every default id is a real section, so the default never silently hides nothing.
 		for (const id of DEFAULT_HIDDEN_TABS) expect(ALL_TABS).toContain(id);
+	});
+});
+
+describe('TAB_HINTS', () => {
+	it('says what each section hidden by default is for, so Choose sections explains a name nobody has met', () => {
+		for (const id of DEFAULT_HIDDEN_TABS) expect(TAB_HINTS[id], id).toMatch(/\w{4,}/);
+		expect(TAB_HINTS.applications).toMatch(/licence application/);
 	});
 });
 

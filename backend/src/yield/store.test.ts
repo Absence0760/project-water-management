@@ -39,4 +39,12 @@ describe('yieldDedupeKey', () => {
 		expect(yieldDedupeKey(a)).toMatch(new RegExp(`^yield:${run}:${nodeId}:[0-9a-f]{16}$`));
 		expect(yieldDedupeKey(a).length).toBeLessThanOrEqual(200);
 	});
+
+	it('is a contributor’s own when given their id, within the column’s 200 characters', () => {
+		const a = YieldRequest.parse({ nodeId, scenarioId: run, kind: 'curve' });
+		const user = '33333333-3333-4333-8333-333333333333';
+		expect(yieldDedupeKey(a, user)).toBe(`${yieldDedupeKey(a)}:${user}`);
+		expect(yieldDedupeKey(a, user)).not.toBe(yieldDedupeKey(a, '44444444-4444-4444-8444-444444444444'));
+		expect(yieldDedupeKey(a, user).length).toBeLessThanOrEqual(200);
+	});
 });

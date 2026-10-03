@@ -5,7 +5,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, ApiError, type InviteInfo } from '$lib/api';
-	import { emailAuthApi, linkToken } from '$lib/api/emailAuth';
+	import { displayNameProblem, emailAuthApi, linkToken } from '$lib/api/emailAuth';
 	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
 	import { session } from '$lib/auth/session.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
@@ -110,6 +110,11 @@
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		error = null;
+		const nameProblem = displayNameProblem(displayName);
+		if (nameProblem) {
+			error = t(nameProblem);
+			return;
+		}
 		if (password.length < 8 || password.length > 200) {
 			error = t('Password must be 8–200 characters.');
 			return;

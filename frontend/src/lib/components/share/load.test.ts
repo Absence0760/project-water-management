@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '$lib/api/client';
 import type { SharePack, ShareScenario, ShareSeries, ShareSeriesKey, ShareView } from '$lib/api/types';
-import { loadPackShare, loadScenarioShare, loadShare, type ShareApi } from './load';
+import { latestOnly, loadPackShare, loadScenarioShare, loadShare, type ShareApi } from './load';
 
 const TOKEN = 'x'.repeat(43);
 const VIEW = { project: { name: 'Sandspruit' } } as ShareView;
@@ -93,5 +93,24 @@ describe('loadPackShare (128)', () => {
 	it('turns a 404 into the dead-link state and anything else into an error', async () => {
 		expect(await loadPackShare(fakeApi({ pack: async () => Promise.reject(new ApiError(404, 'not found')) }), TOKEN)).toEqual({ state: 'dead' });
 		expect(await loadPackShare(fakeApi({ pack: async () => Promise.reject(new Error('offline')) }), TOKEN)).toEqual({ state: 'error', message: 'offline' });
+	});
+});
+
+describe('latestOnly (a link pasted while another loads)', () => {
+	it('counts only the latest call: an earlier one that answers later is not current', async () => {
+		const pending: Record<string, (v: string) => void> = {};
+		const load = latestOnly((link: string) => new Promise<string>((resolve) => (pending[link] = resolve)));
+		const first = load('A');
+		const second = load('B');
+		pending.B!('view B');
+		expect(await second).toEqual({ current: true, value: 'view B' });
+		pending.A!('view A');
+		expect(await first).toEqual({ current: false });
+	});
+
+	it('a call on its own is current, and so is the next one after it finished', async () => {
+		const load = latestOnly(async (n: number) => n * 2);
+		expect(await load(1)).toEqual({ current: true, value: 2 });
+		expect(await load(2)).toEqual({ current: true, value: 4 });
 	});
 });

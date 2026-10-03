@@ -107,6 +107,10 @@ test('nothing submitted: the header says so, with no Decide link; a filter with 
 	await openApplications(page, project.id);
 	await expect(page.getByTestId('applications-empty')).toHaveText('No applications submitted.');
 	await expect(header(page).getByTestId('section-context')).toHaveText('No applications submitted yet');
+	// What an application is, for an assessor who has never met one: the card says so and its ⓘ opens the glossary entry.
+	await expect(applicationsCard(page).getByTestId('applications-intro')).toContainText('Water-use licence applications');
+	await applicationsCard(page).getByRole('button', { name: /Licence application/ }).click();
+	await expect(page.getByText(/licence applicant’s proposed change/)).toBeVisible();
 	await expect(header(page).getByRole('link', { name: 'Decide the longest waiting' })).toHaveCount(0);
 	await expect(applicationsCard(page).getByRole('group', { name: 'Show applications' })).toHaveCount(0);
 	// Where applications come from: applicants on the Project page, the baseline published in Runs & results.

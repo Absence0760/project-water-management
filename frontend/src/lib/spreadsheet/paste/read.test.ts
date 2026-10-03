@@ -12,6 +12,14 @@ describe('readPastedBlock', () => {
 		]);
 	});
 
+	it('splits rows on bare CR line breaks (Excel for Mac’s clipboard)', () => {
+		const b = readPastedBlock('Upper farm\t12\rLower farm\t4\r');
+		expect(b.cells).toEqual([
+			['Upper farm', '12'],
+			['Lower farm', '4']
+		]);
+	});
+
 	it('reads a CSV with quoted cells, where the comma separates and is no decimal comma', () => {
 		const b = readPastedBlock('﻿Name,"Area (km²)"\n"Smith, J",12\n"Say ""hi""",3\n');
 		expect(b.separator).toBe('comma');

@@ -246,7 +246,7 @@ export interface PastePlan {
 export const sameValue = (a: number | null, b: number) => a !== null && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 
 /** More than one cell (a tab, or a line break before the end): the grid takes it; one value is left to the input it was pasted into. */
-export const isBlockPaste = (text: string) => /[\t\n]/.test(text.replace(/[\r\n]+$/, ''));
+export const isBlockPaste = (text: string) => /[\t\r\n]/.test(text.replace(/[\r\n]+$/, ''));
 
 /**
  * A paste event on a grid's body: the block and the cell it landed in, or null

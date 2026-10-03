@@ -97,7 +97,7 @@ export function clearSession(c: Context): void {
 export const MFA_CHALLENGE_COOKIE = 'wm_mfa';
 export const MFA_CHALLENGE_TTL_SECONDS = 5 * 60;
 const CHALLENGE_ISSUER = 'water-management/mfa-challenge';
-/** The cookie's path: only the routes that read it get it. */
+/** The cookie's path: the whole site, as the session's (only POST /auth/mfa/verify reads it; SameSite=Strict keeps it off cross-site requests). */
 const CHALLENGE_PATH = '/';
 
 export async function issueMfaChallenge(c: Context, userId: string): Promise<void> {

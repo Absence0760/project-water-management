@@ -25,7 +25,7 @@
 // The repo ships only invented data (backend/fixtures/geo/). dPET is CC BY 4.0
 // (docs/maps.md § Sources): the files are the operator's own download, never
 // committed.
-import { config } from 'dotenv';
+import { loadDevEnv } from '../src/config/devEnv.js';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -200,7 +200,7 @@ const USAGE =
 	'usage: pnpm import:evaporation [--reduce <dir> <year>_daily_pet.nc … [--bbox w,s,e,n]] | [<file> … --dataset <label> [--bbox w,s,e,n] [--source "…"] [--version "…"] [--attribution "…"] [--out <grid.json[.gz]>]]';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	const args = parseEvaporationArgs(process.argv.slice(2));
 	if (typeof args === 'string') {
 		console.error(`${args}\n${USAGE}`);

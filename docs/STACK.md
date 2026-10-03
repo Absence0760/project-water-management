@@ -15,7 +15,7 @@ sides share.
   not part of `pnpm test`/CI since a loaded machine trips a hard budget).
   Imported as source by frontend and backend.
 - **backend/**: Hono on Node (`tsx watch`, port `3001`) and AWS Lambda (Function
-  URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `bcryptjs`,
+  URL, esbuild bundle). Uses `pg`, `zod`, `jose` (session JWT), `node:crypto`'s Argon2id for passwords (`bcryptjs` only to check older hashes),
   and for email `nodemailer` (SMTP → Mailpit locally) / `@aws-sdk/client-sesv2`
   (SES in production), picked by `MAIL_TRANSPORT`. Background jobs
   (`src/jobs/`) queue in a Postgres `job` table; a local worker process runs

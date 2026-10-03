@@ -9,6 +9,14 @@ import { parseSeriesFile } from './file';
 const fixture = readFileSync(new URL('../../../../packages/engine/fixtures/dws-daily-export.txt', import.meta.url), 'utf8');
 const EXPECTED = [0.412, 0.398, 1.897, null, null, null, 12.5, 0.371, null, 0.355, 0.349];
 
+describe('a DWS export with bare CR line endings', () => {
+	it('is recognised and read day for day like the LF file', () => {
+		const cr = fixture.replace(/\r?\n/g, '\r');
+		expect(isDwsExport(cr)).toBe(true);
+		expect(parseSeriesFile(cr).values).toEqual(EXPECTED);
+	});
+});
+
 describe('parseDwsExport on the shared fixture', () => {
 	const r = parseDwsExport(fixture);
 

@@ -17,6 +17,20 @@ test('refuses a bad date or value after the header, and an empty file', () => {
 	assert.throws(() => parseCsv('date,value\n'), /no rows/);
 });
 
+test('refuses an impossible calendar date instead of rolling it into the next month', () => {
+	assert.throws(() => parseCsv('2024-02-31,1\n2024-03-01,2\n'), /line 1: "2024-02-31" is not a calendar date/);
+	assert.throws(() => parseCsv('2023-02-29,1\n'), /not a calendar date/);
+	// Positive control: a leap day is a day.
+	assert.deepEqual(parseCsv('2024-02-29,1\n2024-03-01,2\n'), { startDate: '2024-02-29', values: [1, 2] });
+});
+
+test('refuses a day given twice, and a value that is not a plain decimal; rows may come in any order', () => {
+	assert.throws(() => parseCsv('2024-01-01,1\n2024-01-01,5\n'), /line 2: 2024-01-01 appears more than once/);
+	assert.throws(() => parseCsv('2024-01-01,0x10\n'), /"0x10" is not a number/);
+	assert.throws(() => parseCsv('2024-01-01,1e999\n'), /not a number/);
+	assert.deepEqual(parseCsv('2024-01-03,1\n2024-01-01,-2.5e-1\n2024-01-02,.5\n'), { startDate: '2024-01-01', values: [-0.25, 0.5, 1] });
+});
+
 test('re-dates a run so its last day is the one given, across a month end', () => {
 	assert.deepEqual(redate({ startDate: '2024-01-01', values: [1, 2, 3] }, '2024-03-01'), { startDate: '2024-02-28', values: [1, 2, 3] });
 });

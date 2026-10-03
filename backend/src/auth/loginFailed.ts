@@ -9,7 +9,7 @@
 // address, the account's id, the client address or the token, so a log
 // reader learns nothing about who was tried. The reason separates an unknown
 // address from a wrong password for the operator; the client never sees the
-// difference (both answer the same 401, after the same bcrypt work).
+// difference (both answer the same 401, after the same password-hash work).
 
 import { logEvent } from '../logging/logEvent.js';
 

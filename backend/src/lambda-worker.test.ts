@@ -216,7 +216,9 @@ describe('handler', () => {
 		it('reports only the record that threw, still handles the rest, and runs the tick', async () => {
 			vi.spyOn(console, 'info').mockImplementation(() => {});
 			const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-			acceptIngestResult.mockResolvedValueOnce('queued').mockRejectedValueOnce(new Error('deadlock detected')).mockResolvedValueOnce('queued');
+			// A pg error's text can quote a value (22P02 quotes the input): only its name and SQLSTATE may reach the log.
+			const pgError = Object.assign(new Error('invalid input syntax for type uuid: "ann@example.com"'), { code: '22P02' });
+			acceptIngestResult.mockResolvedValueOnce('queued').mockRejectedValueOnce(pgError).mockResolvedValueOnce('queued');
 			const res = await handler({
 				Records: [
 					{ messageId: 'm1', body: ingest(1) },
@@ -228,7 +230,8 @@ describe('handler', () => {
 			expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm2' }] });
 			expect(acceptIngestResult).toHaveBeenCalledTimes(3);
 			expect(runTick).toHaveBeenCalledTimes(1);
-			expect(error).toHaveBeenCalledWith(JSON.stringify({ event: 'worker_record_failed', messageId: 'm2', error: 'deadlock detected' }));
+			expect(error).toHaveBeenCalledWith(JSON.stringify({ event: 'worker_record_failed', messageId: 'm2', error: 'Error', code: '22P02' }));
+			for (const call of error.mock.calls) expect(call.join(' ')).not.toContain('ann@example.com');
 		});
 
 		it('never reports a dropped record (unknown message, or a result for an unknown fetch): a retry cannot fix it', async () => {

@@ -11,7 +11,7 @@
 // The repo ships only invented stations (region Z, backend/fixtures/geo/).
 // The DWS station catalogue's terms for commercial reuse are unconfirmed
 // (docs/maps.md § Sources): load it only once they are, and never commit it.
-import { config } from 'dotenv';
+import { loadDevEnv } from '../src/config/devEnv.js';
 import { readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,7 +61,7 @@ export async function importGaugeStations(url: string, args: Args): Promise<{ wr
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;
 	const args = parseArgs(process.argv.slice(2));
 	if (!url) {

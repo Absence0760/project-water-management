@@ -128,6 +128,13 @@ describe('nominateBlocker', () => {
 		expect(nominateBlocker({ id: 'b', legacy: false }, h)).toBeNull();
 		expect(nominateBlocker({ id: 'b', legacy: false }, [])).toBeNull();
 	});
+
+	it('refuses a scenario run (its scenario deleted too: the name stays) and a forecast run; a manual or auto run of the model may be', () => {
+		expect(nominateBlocker({ id: 's', legacy: false, scenarioName: 'Dam raise' }, [])).toMatch(/^A scenario run is its scenario’s changes/);
+		expect(nominateBlocker({ id: 'f', legacy: false, trigger: 'forecast' }, [])).toMatch(/^A forecast run’s last days/);
+		expect(nominateBlocker({ id: 'm', legacy: false, scenarioName: null, trigger: 'manual' }, [])).toBeNull();
+		expect(nominateBlocker({ id: 'a', legacy: false, scenarioName: null, trigger: 'auto' }, [])).toBeNull();
+	});
 });
 
 // 098_nomination_withdrawal: a withdrawal row has no run.

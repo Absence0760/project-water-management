@@ -54,7 +54,7 @@ export function splitCsvRow(line: string): string[] {
 export function readPastedBlock(text: string, opts: ReadOptions = {}): PastedBlock {
 	const lines = text
 		.replace(/^\ufeff/, '')
-		.replace(/\r/g, '')
+		.replace(/\r\n?/g, '\n')
 		.split('\n')
 		.map((l) => (opts.spaces ? l.trim() : l.replace(/^ +| +$/g, '')))
 		.filter((l) => l.trim().length);
