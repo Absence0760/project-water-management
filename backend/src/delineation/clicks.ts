@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
+import { panReferenceLoader } from './panReference.js';
 import type { Geometry, Position } from '../geo/geojson.js';
 import { loadFeature, toFeature } from '../geo/routes.js';
 import { recordAudit } from '../history/record.js';
@@ -191,8 +192,8 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, reachDistanceM: reaches[i]?.distanceM ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
-			});
+				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, head: reaches[i]?.head ?? null, reachDistanceM: reaches[i]?.distanceM ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
+			}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), projectId) });
 			return toClickPieces(r, reaches);
 		} catch (err) {
 			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
@@ -249,9 +250,10 @@ export const clickRoutes = new Hono<AuthEnv>()
 			const ids: string[] = [];
 			for (const p of saved) {
 				const { rows } = await db.query<{ id: string }>(
-					`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, created_by)
-					 VALUES ($1, 'other', $2, $3, $4, $5, app_current_user_id()) RETURNING id`,
-					[id, pieceName(p.click), JSON.stringify(p.geometry), JSON.stringify({ description: pieceDescription(r, p) }), p.areaM2]
+					`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, non_contributing_m2, created_by)
+					 VALUES ($1, 'other', $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
+					// What of it drains into pans (195): Use this area offers its effective area.
+					[id, pieceName(p.click), JSON.stringify(p.geometry), JSON.stringify({ description: pieceDescription(r, p) }), p.areaM2, p.nonContributingM2 === null ? null : Math.min(p.nonContributingM2, p.areaM2)]
 				);
 				ids.push(rows[0]!.id);
 			}

@@ -218,7 +218,7 @@ case "${1:-}" in
 		echo "Cutting $(basename "$shp") to $BBOX …"
 		rm -f "$RIVERS_FILE"
 		# -spat keeps every reach that meets the bbox (whole, not clipped); five decimals is about 1 m.
-		ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat "$west" "$south" "$east" "$north" -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS \
+		ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat "$west" "$south" "$east" "$north" -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS,ENDORHEIC \
 			-lco COORDINATE_PRECISION=5 "$RIVERS_FILE" "$shp"
 		du -h "$RIVERS_FILE"
 		(cd "$ROOT/backend" && NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsx scripts/import-rivers.ts "$RIVERS_FILE" --dataset HydroRIVERS-v10 --source "$RIVERS_SOURCE" --min-order "$RIVERS_MIN_ORDER")

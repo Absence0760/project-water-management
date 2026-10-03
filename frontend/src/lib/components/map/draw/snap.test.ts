@@ -8,7 +8,7 @@ const project = (q: MapPosition) => ({ x: (q[0] - 21) * 10000, y: -(q[1] + 33) *
 const screen = (lon: number, lat: number) => project([lon, lat]);
 
 function feature(id: string, kind: MapFeature['kind'], name: string, geometry: MapFeature['geometry']): MapFeature {
-	return { id, kind, name, nodeId: null, nodeName: null, geometry, properties: {}, areaM2: null, center: [0, 0], sourceId: null, createdBy: null, createdAt: '', updatedAt: '' };
+	return { id, kind, name, nodeId: null, nodeName: null, damPosition: null, geometry, properties: {}, areaM2: null, center: [0, 0], sourceId: null, nonContributingM2: null, createdBy: null, createdAt: '', updatedAt: '' };
 }
 
 const parcel = feature('p', 'farm_parcel', 'Upper farm', {

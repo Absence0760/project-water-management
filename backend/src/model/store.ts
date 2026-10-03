@@ -161,6 +161,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			-- An area accepted from the map (152, geo/routes.ts area-from-map) stays 'map' until the area is typed over (or the node changes kind).
 			area_source = CASE WHEN node.area_km2 IS DISTINCT FROM EXCLUDED.area_km2 OR node.kind IS DISTINCT FROM EXCLUDED.kind THEN 'typed' ELSE node.area_source END,
 			area_feature_id = CASE WHEN node.area_km2 IS DISTINCT FROM EXCLUDED.area_km2 OR node.kind IS DISTINCT FROM EXCLUDED.kind THEN NULL ELSE node.area_feature_id END,
+			-- Which area it took (195), gross or effective, goes with it.
+			area_basis = CASE WHEN node.area_km2 IS DISTINCT FROM EXCLUDED.area_km2 OR node.kind IS DISTINCT FROM EXCLUDED.kind THEN NULL ELSE node.area_basis END,
 			area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
 			flow_share_manual = EXCLUDED.flow_share_manual, pct_upstream_to_dam = EXCLUDED.pct_upstream_to_dam,
 			pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,

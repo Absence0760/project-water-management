@@ -41,7 +41,7 @@ describe('the committed synthetic river network', () => {
 
 describe('riverRecords', () => {
 	it('reads HydroRIVERS fields as ogr2ogr writes them, the source from --source', () => {
-		const { records, problems } = riverRecords([fc([line({ HYRIV_ID: 10552361, ORD_STRA: 4, UPLAND_SKM: 1234.5, LENGTH_KM: 2.31, DIS_AV_CMS: 3.2 })])], 'HydroRIVERS v1.0');
+		const { records, problems } = riverRecords([fc([line({ HYRIV_ID: 10552361, ORD_STRA: 4, UPLAND_SKM: 1234.5, LENGTH_KM: 2.31, DIS_AV_CMS: 3.2, ENDORHEIC: 1 })])], 'HydroRIVERS v1.0');
 		expect(problems).toEqual([]);
 		expect(records).toEqual([
 			{
@@ -51,6 +51,7 @@ describe('riverRecords', () => {
 				upstreamKm2: 1234.5,
 				lengthKm: 2.31,
 				dischargeM3s: 3.2,
+				endorheic: true,
 				geometry: { type: 'LineString', coordinates: [[21.3, -33.6], [21.31, -33.61]] },
 				bbox: [21.3, -33.61, 21.31, -33.6],
 				source: 'HydroRIVERS v1.0'
@@ -60,7 +61,15 @@ describe('riverRecords', () => {
 
 	it('reads the readable names too, and a name and a source of its own', () => {
 		const { records } = riverRecords([fc([line({ reachId: 7, strahler: 2, upstreamKm2: 10, name: 'Sandspruit', source: 'Own survey' })])], 'fallback');
-		expect(records[0]).toMatchObject({ reachId: 7, strahler: 2, upstreamKm2: 10, name: 'Sandspruit', source: 'Own survey', lengthKm: null, dischargeM3s: null });
+		expect(records[0]).toMatchObject({ reachId: 7, strahler: 2, upstreamKm2: 10, name: 'Sandspruit', source: 'Own survey', lengthKm: null, dischargeM3s: null, endorheic: null });
+	});
+
+	it('reads ENDORHEIC as 0/1 or false/true, and anything else as not given (196, the pans’ cross-check)', () => {
+		const flags = [0, 1, '0', '1', false, true, 2, 'yes', null].map((v, i) => line({ reachId: i + 1, ENDORHEIC: v, source: 's' }));
+		const { records, problems } = riverRecords([fc(flags)], 's');
+		expect(problems).toEqual([]);
+		expect(records.map((r) => r.endorheic)).toEqual([false, true, false, true, false, true, null, null, null]);
+		expect(riverRecords([fc([line({ reachId: 1, endorheic: false, source: 's' })])], 's').records[0]!.endorheic).toBe(false);
 	});
 
 	it('makes a reach name one line, as a feature name (a reach added to a project carries it; issue #385)', () => {

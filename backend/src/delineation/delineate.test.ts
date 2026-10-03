@@ -3,10 +3,21 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInRing } from '../geo/geojson.js';
 import { openDem } from './dem.js';
-import { boundsText, delineate, DelineationRefused, METHOD_VERSION, SNAP_RADIUS_M, tooLargeText } from './delineate.js';
+import {
+	boundsText,
+	delineate,
+	DELINEATION_METHOD_MAX_CHARS,
+	delineationMethod,
+	DelineationRefused,
+	fitDelineationMethod,
+	METHOD_VERSION,
+	SNAP_RADIUS_M,
+	tooLargeText,
+	type DelineationMethodFacts
+} from './delineate.js';
 import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_CELLS, FIXTURE_ZOOM, fixtureElevation, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { d8, DX, DY, edgeMask, fill, OUT } from './flow.js';
-import { PAN_METHOD } from './pans.js';
+import { ON_RIVER_METHOD, PAN_METHOD } from './pans.js';
 
 // Against the committed synthetic DEM (backend/fixtures/dem/, fixture.ts): a
 // valley in an elliptical ridge whose area is known, with a dam, a pan and a
@@ -258,5 +269,73 @@ describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
 		// A slope west of the river, away from the pan on the east flank.
 		const side = await delineate(dem, at(OUTLET_CELL.x - 30, OUTLET_CELL.y - 60), { keepPoint: true });
 		expect(side.pans).toEqual({ nonContributingM2: 0, count: 0, largest: [], method: PAN_METHOD });
+	});
+
+	// The cross-check (delineate-12). The fixture's pan spills down the 6 % flank, which falls past its floor within a cell or two,
+	// as below a dam's wall: so a river drawn through it and out to the valley's river makes it storage on a river.
+	const through = [at(PAN.x + 12, PAN.y - 2), at(PAN.x, PAN.y), at(OUTLET_CELL.x, PAN.y + 8)];
+	const reference = (rivers: { line: [number, number][]; directed: boolean }[], dams: [number, number][][] = []) => async () => ({ rivers, dams });
+
+	it('lists the pan as storage on a river when a mapped river flows through it and out, and counts nothing', async () => {
+		const r = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { panReference: reference([{ line: through, directed: false }]) });
+		expect(r.pans.count).toBe(0);
+		expect(r.pans.nonContributingM2).toBe(0);
+		expect(r.pans.onRiver).toMatchObject({ count: 1, largest: [{ by: 'river' }] });
+		expect(Math.abs(r.pans.onRiver!.largest[0]!.drainsM2 / expected - 1)).toBeLessThan(0.01);
+		expect(r.pans.method).toBe(`${PAN_METHOD} ${ON_RIVER_METHOD}`);
+		expect(r.method).toMatch(/is storage on a river: not counted\)$/);
+		// The catchment itself is the same either way.
+		expect(Math.abs(r.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
+	});
+
+	it('keeps it a pan when the river ends in it, and lists a dam on it as the dam’s', async () => {
+		const ending = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { panReference: reference([{ line: through.slice(0, 2), directed: true }]) });
+		expect(ending.pans.count).toBe(1);
+		expect(ending.pans.onRiver).toEqual({ count: 0, largest: [] });
+		const dam = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { panReference: reference([], [[at(PAN.x, PAN.y)]]) });
+		expect(dam.pans.count).toBe(0);
+		expect(dam.pans.onRiver).toMatchObject({ count: 1, largest: [{ by: 'dam' }] });
+	});
+});
+
+describe('the method fits delineation_proposal.method (175: at most 1 000 characters)', () => {
+	// The longest reach name the code makes (routes.ts and the delineate job: `reach <id> of <dataset>`): the largest id, and a
+	// dataset label at river_reference's 50-character limit (171); every clause on, every figure at its widest.
+	const name = `reach ${Number.MAX_SAFE_INTEGER} of ${'D'.repeat(50)}`;
+	const worst = (how: DelineationMethodFacts['how'], chosen: boolean): DelineationMethodFacts => ({
+		cellM: 99_999,
+		zoom: 30,
+		snapRadiusM: 99_999,
+		how,
+		reach: { name, km2: 99_999_999, chosen, fromHead: true },
+		keptBeside: { onChannel: false, distanceM: 99_999 },
+		gully: true,
+		checked: true
+	});
+
+	it('fits in full in the worst case of every placement, so the full rules are what is stored', () => {
+		for (const how of ['junction', 'matched', 'kept', 'snapped'] as const) {
+			for (const chosen of [false, true]) {
+				const full = delineationMethod(worst(how, chosen));
+				expect(full.length, `${how}${chosen ? ', chosen' : ''}`).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
+				expect(fitDelineationMethod(worst(how, chosen))).toBe(full);
+			}
+		}
+		// Every clause is in the worst case: the head reach's, the gully's and the pans' cross-check.
+		expect(delineationMethod(worst('matched', false))).toMatch(/from the DEM’s own area at the head reach’s upper end/);
+		expect(delineationMethod(worst('snapped', false))).toMatch(/looked for since the point is in a gully\).*storage on a river: not counted\)$/);
+	});
+
+	it('falls back to naming the version for the rules rather than pass the limit (a reach name longer than any made today)', () => {
+		const long = { ...worst('snapped', false), reach: { name: 'R'.repeat(400), km2: 1, chosen: false, fromHead: false } };
+		expect(delineationMethod(long).length).toBeGreaterThan(DELINEATION_METHOD_MAX_CHARS);
+		const fit = fitDelineationMethod(long);
+		expect(fit.length).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
+		expect(fit).toContain(`each rule as ${METHOD_VERSION} defines it`);
+		expect(fit).toMatch(/^D8 steepest descent .* storage on a river: not counted\)$/);
+		// However long the name, the brief form fits: the name is cut.
+		const huge = fitDelineationMethod({ ...long, reach: { ...long.reach, name: 'R'.repeat(5000) } });
+		expect(huge.length).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
+		expect(huge).toContain(`${'R'.repeat(119)}…`);
 	});
 });

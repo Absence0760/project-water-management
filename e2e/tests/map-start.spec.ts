@@ -118,10 +118,21 @@ test('an editor starts an empty model from the map: delineate, place the dam, re
 	await expect(unit.getByTestId('start-tick-area')).toBeChecked();
 	await expect(unit.getByTestId('start-tick-dam')).toBeChecked();
 	await expect(review.getByTestId('start-tick-rest-area')).toBeChecked();
+	// The valley's pan drains into the dam's piece (195): its ticked area asks which, gross until changed; the rest holds none.
+	const basis = unit.getByTestId('start-area-basis');
+	await expect(basis.getByRole('radio', { name: /^Gross, 3[2-5]\d\.\d\d km² \(what drains into pans included\)$/ })).toBeChecked();
+	await expect(review.getByTestId('start-rest-area-basis')).toHaveCount(0);
+	await basis.getByRole('radio', { name: /^Effective, \d+\.\d\d km² \(without the \d+\.\d\d km² draining into pans\)$/ }).check();
+	await expectNoViolations(page);
+	// Unticked, the choice goes with the area.
+	await unit.getByTestId('start-tick-area').uncheck();
+	await expect(basis).toHaveCount(0);
+	await unit.getByTestId('start-tick-area').check();
+	await expect(basis.getByRole('radio', { name: /^Effective/ })).toBeChecked();
 	await review.getByLabel('Outflow gauge’s name').fill('Valley weir');
 	await startSheet(page).getByTestId('start-apply').click();
 	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
-	await expect(confirm).toContainText('The empty model gets 3 nodes, with 2 areas');
+	await expect(confirm).toContainText('The empty model gets 3 nodes, with 2 areas (each saved as its unit’s parcel; Valley dam without what drains into pans)');
 	await confirm.getByRole('button', { name: 'Apply' }).click();
 
 	// 4. Data and the first run.
@@ -144,6 +155,13 @@ test('an editor starts an empty model from the map: delineate, place the dam, re
 	await expect(page.getByTestId('map-start-open')).toHaveCount(0);
 	await expect(page.getByTestId('map-feature-list').getByRole('button', { name: /^Valley dam/ }).first()).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('2 of 2 unit areas from the map');
+	// The dam's unit took its effective area, the rest its gross one, and the server says so (195).
+	const listed = await (await page.request.get(`${API_URL}/projects/${project.id}/map/features`)).json();
+	const by = Object.fromEntries(listed.nodes.map((n: { name: string; areaBasis: string | null; areaKm2: number }) => [n.name, n]));
+	expect(by['Valley dam'].areaBasis).toBe('effective');
+	expect(by['Rest of the catchment'].areaBasis).toBe('gross');
+	const parcel = listed.features.find((f: { nodeId: string; kind: string }) => f.kind === 'farm_parcel' && f.nodeId === by['Valley dam'].id);
+	expect(by['Valley dam'].areaKm2).toBeCloseTo((parcel.areaM2 - parcel.nonContributingM2) / 1e6, 6);
 });
 
 test('Discard returns to the points and changes nothing; with no units the catchment becomes one', async ({ page, owner }) => {
@@ -319,4 +337,55 @@ test('an outlet gauge at a confluence asks which river, and is placed on the one
 	await expect(review.getByTestId('start-outlet-placement')).toHaveText(/^The outlet: On the channel matching river reach 99100001 \(400 km²\), picked at the confluence, \d+ m from the point\.$/);
 	await expect(review.getByTestId('start-catchment')).toHaveText(/^[34]\d\d\.\d\d km²$/);
 	await expect(ask).toHaveCount(0);
+});
+
+test('a long dam marked off-channel on the map: its unit proposes Upstream inflow to dam 0 % and its own runoff share, and apply takes them (194)', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	const project = await createProject(page.request, 'Start with an off-channel dam');
+	const projectId = project.id;
+	const at = (body: unknown) => page.request.post(`${API_URL}/projects/${projectId}/map/features`, { data: body });
+	const weirRes = await at({ kind: 'gauge', name: 'Weir', lon: FIXTURE_MID_GAUGE[0], lat: FIXTURE_MID_GAUGE[1] });
+	expect(weirRes.status()).toBe(201);
+	const weir = ((await weirRes.json()) as { feature: { id: string } }).feature.id;
+	// Three cells wide and 20 long, the river its west column all the way (backend start.db.test.ts uses the same outline).
+	const ring = [
+		[20.7421875, -33.4474849],
+		[20.7463074, -33.4474849],
+		[20.7463074, -33.4703991],
+		[20.7421875, -33.4703991],
+		[20.7421875, -33.4474849]
+	];
+	const made = await at({ kind: 'dam', name: 'Long dam', geometry: { type: 'Polygon', coordinates: [ring] } });
+	expect(made.status()).toBe(201);
+	const damId = ((await made.json()) as { feature: { id: string } }).feature.id;
+	expect((await page.request.patch(`${API_URL}/projects/${projectId}/map/features/${damId}`, { data: { damPosition: 'off_channel' } })).status()).toBe(200);
+	await openMap(page, projectId, '&start=1');
+	await startSheet(page).getByTestId('start-skip-boundary').click();
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
+	await startSheet(page).getByTestId('start-outlet').selectOption(weir);
+	await expect(startSheet(page).getByLabel(/^Long dam/)).toHaveValue('dam');
+	await startSheet(page).getByTestId('start-propose').click();
+
+	const review = page.getByTestId('start-review');
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'review');
+	const unit = review.getByTestId('start-unit');
+	await expect(unit).toHaveCount(1);
+	await expect(unit.getByTestId('start-placement')).toHaveText('On the river where the dam’s own outflow joins it, as marked: off-channel, so the dam takes only its own catchment’s runoff.');
+	await expect(unit.getByTestId('start-tick-upstream')).not.toBeChecked();
+	await expect(unit).toContainText('Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it.');
+	await expect(unit).toContainText(/\d(\.\d)? % of its runoff reaches the dam: the [\d.]+ km² draining to the dam’s own outflow, of the unit’s [\d.,  ]+ km²; the rest passes it by\./);
+	await expectNoViolations(page);
+	await startSheet(page).getByTestId('start-tick-all').click();
+	await expect(unit.getByTestId('start-tick-upstream')).toBeChecked();
+	await expect(unit.getByTestId('start-tick-dam')).toBeChecked();
+	await startSheet(page).getByTestId('start-apply').click();
+	await page.getByRole('alertdialog', { name: 'Apply the ticked values?' }).getByRole('button', { name: 'Apply' }).click();
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'data');
+
+	const model = (await (await page.request.get(`${API_URL}/projects/${projectId}/model`)).json()) as { nodes: { name: string; pctUpstreamToDam: number; pctRunoffToDam: number }[] };
+	const dam = model.nodes.find((n) => n.name === 'Long dam')!;
+	expect(dam.pctUpstreamToDam).toBe(0);
+	expect(dam.pctRunoffToDam).toBeGreaterThan(0);
+	expect(dam.pctRunoffToDam).toBeLessThan(0.05);
 });

@@ -64,7 +64,19 @@ export function byteSource(url: string): ByteSource {
 	if (/^https?:\/\//.test(url)) {
 		return async (offset, length) => {
 			// No redirects: DEM_URL names the server, and nothing else is fetched.
-			const res = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+			const get = () => fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+			let res: Response;
+			try {
+				res = await get();
+			} catch (err) {
+				// The connection closed before any answer: a kept-alive socket the server had closed while the routing held the event
+				// loop (a large window routes for tens of seconds, so the close isn't seen until the next read reuses it). Sent once
+				// more on a fresh connection. Only for a socket closed under the request (undici's "other side closed" is
+				// UND_ERR_SOCKET, a reset ECONNRESET): a refused connection, a DNS failure, a refused redirect, a timeout
+				// (DOMException) or a second failure stands.
+				if (!socketClosed(err)) throw err;
+				res = await get();
+			}
 			if (res.status === 416) {
 				await res.body?.cancel();
 				return new Uint8Array(0);
@@ -86,6 +98,13 @@ export function byteSource(url: string): ByteSource {
 		const { bytesRead } = await (await fh).read(b, 0, length, offset);
 		return new Uint8Array(b.buffer, b.byteOffset, bytesRead);
 	};
+}
+
+/** fetch's TypeError whose cause is a connection closed under the request (not one never made). */
+function socketClosed(err: unknown): boolean {
+	if (!(err instanceof TypeError)) return false;
+	const code = (err.cause as { code?: unknown } | undefined)?.code;
+	return code === 'UND_ERR_SOCKET' || code === 'ECONNRESET';
 }
 
 /** A response body, refused once it passes `max` bytes (a ranged answer never should). */

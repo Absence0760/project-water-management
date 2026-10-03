@@ -67,7 +67,7 @@
 	import FeatureList from './FeatureList.svelte';
 	import MapChecks from './MapChecks.svelte';
 	import { mapChecks } from './mapChecks';
-	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
+	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
@@ -91,7 +91,8 @@
 	import type { DivideDraft } from './divideFlow';
 	import { emptyPlacement } from './placement';
 	import { litPieces, piecesShape } from './pieces';
-	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import type { MapAreaBasis, MapGeometry, MapPosition } from '$lib/api/types';
+	import { basisNote, basisOptions, offersEffective, takenAreaM2 } from './areaBasis';
 	import { Draft } from './draw/draft.svelte';
 	import DraftSheet from './draw/DraftSheet.svelte';
 	import DrawBar from './draw/DrawBar.svelte';
@@ -788,9 +789,23 @@
 	// --- per feature: link, area, delete (from the card and from Every feature) ---
 	let busy = $state<string | null>(null);
 	let rowError = $state<{ id: string; text: string } | null>(null);
-	/** The unit each polygon's area would go to: the linked farm, else the one picked. */
+	/** The unit each polygon's area would go to: the one picked, else the linked farm, else the farm that took its area (so In use shows). */
 	let areaTarget = $state<Record<string, string>>({});
-	const targetOf = (f: MapFeature) => areaTarget[f.id] ?? (f.nodeId && farms.some((n) => n.id === f.nodeId) ? f.nodeId : '');
+	const targetOf = (f: MapFeature) =>
+		areaTarget[f.id] ?? (f.nodeId && farms.some((n) => n.id === f.nodeId) ? f.nodeId : (farms.find((n) => n.areaSource === 'map' && n.areaFeatureId === f.id)?.id ?? ''));
+	/**
+	 * Which of a delineated polygon's areas Use takes (195): the editor's pick, else the one the unit already took from
+	 * it (so the card opens on what is in use), else gross.
+	 */
+	let areaBasis = $state<Record<string, MapAreaBasis>>({});
+	function basisOf(f: MapFeature): MapAreaBasis {
+		if (!offersEffective(f.areaM2, f.nonContributingM2)) return 'gross';
+		const picked = areaBasis[f.id];
+		if (picked) return picked;
+		const t = farms.find((n) => n.id === targetOf(f));
+		return t && t.areaSource === 'map' && t.areaFeatureId === f.id && t.areaBasis ? t.areaBasis : 'gross';
+	}
+	const useM2 = (f: MapFeature) => (f.areaM2 === null ? null : takenAreaM2(f.areaM2, f.nonContributingM2, basisOf(f)));
 
 	async function link(f: MapFeature, nodeId: string) {
 		busy = f.id;
@@ -805,21 +820,43 @@
 		}
 	}
 
+	/** Where a dam stands against its river (194): Start and Divide place it by this, '' leaving it to its outline. */
+	async function setDamPosition(f: MapFeature, value: string) {
+		busy = f.id;
+		rowError = null;
+		try {
+			await api.map.update(projectId, f.id, { damPosition: value === 'on_channel' || value === 'off_channel' ? value : null });
+			await load();
+		} catch (err) {
+			rowError = { id: f.id, text: msg(err) };
+		} finally {
+			busy = null;
+		}
+	}
+
 	async function acceptArea(f: MapFeature) {
 		const nodeId = targetOf(f);
 		const n = farms.find((x) => x.id === nodeId);
-		if (!n || f.areaM2 === null) return;
+		const m2 = useM2(f);
+		if (!n || f.areaM2 === null || m2 === null) return;
+		const basis = basisOf(f);
+		// A delineated polygon with pans says which of its areas this is (195), so the choice is never silent.
+		const which = offersEffective(f.areaM2, f.nonContributingM2)
+			? basis === 'effective'
+				? `its effective area, without the ${fmtNum(f.nonContributingM2! / 1e6, 3)} km² draining into pans`
+				: `its gross area, the ${fmtNum(f.nonContributingM2! / 1e6, 3)} km² draining into pans included`
+			: 'computed on the server';
 		const ok = await confirmDialog({
 			title: `Set ${n.name}’s area from the map?`,
-			message: `${n.name}’s catchment area changes from ${fmtNum(n.areaKm2, 3)} km² to ${fmtNum(f.areaM2 / 1e6, 3)} km², the area of ${f.name ? `“${f.name}”` : 'this polygon'} computed on the server. The change is saved to the model now and recorded in History; the next run uses it.`,
+			message: `${n.name}’s catchment area changes from ${fmtNum(n.areaKm2, 3)} km² to ${fmtNum(m2 / 1e6, 3)} km², the area of ${f.name ? `“${f.name}”` : 'this polygon'}, ${which}. The change is saved to the model now and recorded in History; the next run uses it.`,
 			confirmLabel: 'Use this area'
 		});
 		if (!ok) return;
 		busy = f.id;
 		rowError = null;
 		try {
-			const r = await api.map.areaFromMap(projectId, nodeId, f.id);
-			notice = `${n.name}’s area is now ${fmtNum(r.areaKm2, 3)} km², from the map. Run the model to see its effect.`;
+			const r = await api.map.areaFromMap(projectId, nodeId, f.id, basis);
+			notice = `${n.name}’s area is now ${fmtNum(r.areaKm2, 3)} km², from the map${r.areaBasis === 'effective' ? ' (effective, without what drains into pans)' : ''}. Run the model to see its effect.`;
 			await Promise.all([load(), onModelChanged()]);
 		} catch (err) {
 			rowError = { id: f.id, text: msg(err) };
@@ -981,6 +1018,18 @@
 	{/if}
 {/snippet}
 
+<!-- A dam outline's position against its river (194): a select for editors, else its words. Start and Divide place the dam by it. -->
+{#snippet damPosition(f: MapFeature)}
+	{#if canEdit}
+		<select class="cap" aria-label="Where {featureName(f)} stands against its river" aria-describedby="{uid}-dam-position" value={f.damPosition ?? ''} disabled={busy === f.id} onchange={(e) => setDamPosition(f, e.currentTarget.value)} data-testid="map-dam-position">
+			{#each ['', 'on_channel', 'off_channel'] as const as v (v)}<option value={v}>{DAM_POSITION_LABEL[v]}</option>{/each}
+		</select>
+		<p class="hint muted" id="{uid}-dam-position">Start and Divide take only an off-channel dam’s own catchment into it, the river passing it by; unsaid, its outline decides.</p>
+	{:else}
+		<span data-testid="map-dam-position">{DAM_POSITION_LABEL[f.damPosition ?? '']}</span>
+	{/if}
+{/snippet}
+
 <!-- Area into the model: a unit and Use, for a parcel or an "other" polygon only (never a dam or the boundary). -->
 {#snippet areaInto(f: MapFeature)}
 	{#if takesArea(f) && farms.length}
@@ -990,14 +1039,26 @@
 				<option value="">Choose a unit…</option>
 				{#each farms as n (n.id)}<option value={n.id}>{n.name} ({fmtNum(n.areaKm2, 3)} km²)</option>{/each}
 			</select>
+			{#if offersEffective(f.areaM2, f.nonContributingM2)}
+				<!-- A delineated polygon with pans (195): gross (the default) or effective, never chosen silently. -->
+				<select
+					class="cap"
+					aria-label="Which of {f.name || 'this polygon'}’s areas"
+					bind:value={() => basisOf(f), (v) => (areaBasis[f.id] = v)}
+					disabled={busy === f.id}
+					data-testid="map-area-basis"
+				>
+					{#each basisOptions(f.areaM2!, f.nonContributingM2!, 3) as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+				</select>
+			{/if}
 			<button
 				type="button"
 				class="btn btn-sm"
-				disabled={!target || busy === f.id || editor.dirty || (target && alreadyAccepted(target, f))}
+				disabled={!target || busy === f.id || editor.dirty || (target && alreadyAccepted(target, f, basisOf(f)))}
 				aria-describedby={editor.dirty ? `${uid}-dirty` : undefined}
 				onclick={() => acceptArea(f)}
 			>
-				{target && alreadyAccepted(target, f) ? 'In use' : `Use ${areaText(f.areaM2)}`}
+				{target && alreadyAccepted(target, f, basisOf(f)) ? 'In use' : `Use ${areaText(useM2(f))}`}
 			</button>
 		</span>
 	{:else}
@@ -1033,7 +1094,7 @@
 {#snippet unitArea(f: MapFeature)}
 	{@const s = areaSourceOf(f, nodes)}
 	{#if s}
-		{s.node.name}: {fmtNum(s.node.areaKm2, 3)} km² ·
+		{s.node.name}: {fmtNum(s.node.areaKm2, 3)} km²{basisNote(s.node.areaBasis) ? ` (${basisNote(s.node.areaBasis)})` : ''} ·
 		{#if s.source === 'this'}<span class="badge">From the map</span> this {KIND_LABEL[f.kind].toLowerCase()}{#if s.earlier}’s earlier outline{/if}
 		{:else if s.source === 'other'}
 			{@const other = s.node.areaFeatureId ? featureById.get(s.node.areaFeatureId) : undefined}
@@ -1054,6 +1115,10 @@
 			{#if KIND_NODES[picked.kind].length}
 				<dt>Stands for</dt>
 				<dd>{@render standsFor(picked)}</dd>
+			{/if}
+			{#if takesDamPosition(picked)}
+				<dt>Siting</dt>
+				<dd>{@render damPosition(picked)}</dd>
 			{/if}
 			{@render resultFacts(picked)}
 			{#if areaSourceOf(picked, nodes)}

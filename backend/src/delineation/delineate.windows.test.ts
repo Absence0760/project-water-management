@@ -120,3 +120,24 @@ describe('windowOrigin', () => {
 		expect(windowOrigin(40, 10.5, 15.5, 3, { box: [10, -50, 10, 15], cut: [false, false, false, true] })).toEqual([-10, -21]);
 	});
 });
+
+describe('delineate: a click near the head of a head reach (delineate-11)', () => {
+	// The invented valley 60 cells long: its head drains about 2 km², its outlet about 64; HydroRIVERS would start the reach at
+	// 10 km². A click 3 cells below the head drains about 5 km², under half the 13 km² the constant gives there.
+	const L = 60;
+	const dem = functionDem(valley(L));
+	const fraction = 3 / L;
+
+	it('is matched at the click from the DEM’s area at the reach’s upper end, where the constant slid it down the valley', async () => {
+		const reachKm2 = (await delineate(dem, at(0, 0), { windows: [512] })).areaM2 / 1e6;
+		const own = await delineate(dem, at(0, -L + 3), { windows: [512] });
+		const expected = { km2: 10 + (reachKm2 - 10) * fraction, reach: 'reach 1 of test', distanceM: 0 };
+		const slid = await delineate(dem, at(0, -L + 3), { windows: [512], expected });
+		expect(slid.snapDistanceM).toBeGreaterThan(250);
+		const d = await delineate(dem, at(0, -L + 3), { windows: [512], expected: { ...expected, head: { at: at(0, -L), fraction, reachKm2 } } });
+		expect(d.method).toMatch(/best matches reach 1 of test \(5 km² at the point, from the DEM’s own area at the head reach’s upper end;/);
+		expect(d.snapDistanceM).toBeLessThan(150);
+		expect(d.areaM2).toBeCloseTo(own.areaM2, -3);
+		expect(d.methodVersion).toBe('delineate-12');
+	});
+});

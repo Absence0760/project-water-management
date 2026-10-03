@@ -73,7 +73,7 @@ describe('without an elevation model', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-12' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-14' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -179,7 +179,7 @@ describe('with the synthetic DEM', () => {
 		expect(top.nonContributingM2).toBe(0);
 		expect(plan.rest.nonContributingM2).toBe(0);
 		expect(plan.warnings.filter((w: string) => /drains into a pan \(a closed depression on the elevation model, at /.test(w))).toEqual([
-			expect.stringMatching(/in Valley dam’s own area\. Use the effective area if you model them as non-contributing\.$/)
+			expect.stringMatching(/in Valley dam’s own area\. Choose the effective area beside an area’s tick if you model them as non-contributing\.$/)
 		]);
 		// A second proposal supersedes the first.
 		const again = await owner.call('POST', p.at('/map/start'), body);
@@ -228,7 +228,15 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-12/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-14/);
+		// Gross, the default (195): the units took the parcels' whole areas, and say so.
+		const bases = await asOwner(`SELECT name, area_basis FROM node WHERE project_id = $1 ORDER BY sort_order`, [p.id]);
+		expect(bases.map((b) => [b.name, b.area_basis])).toEqual([
+			['Valley weir', null],
+			['Top pump', 'gross'],
+			['Valley dam', null],
+			['Rest of the valley', 'gross']
+		]);
 		// The gauge stands for the outflow gauge; the dam for its unit.
 		const links = await asOwner('SELECT f.id, f.node_id FROM map_feature f WHERE f.id = ANY($1::uuid[])', [[gauge, dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(new Map([[gauge, by['Valley weir']!.id], [dam, by['Valley dam']!.id]]));
@@ -236,7 +244,8 @@ describe('with the synthetic DEM', () => {
 		// (The project's first change also records the baseline before it.)
 		const revs = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND id > $2 AND source <> 'baseline'`, [p.id, rev]);
 		expect(revs).toHaveLength(1);
-		expect(revs[0]!.reason).toMatch(/^Started from the map: 4 nodes; 2 areas and 1 drains-into from Synthetic DEM/);
+		// Both areas gross, the default (195): the reason says so.
+		expect(revs[0]!.reason).toMatch(/^Started from the map: 4 nodes; 2 areas \(gross\) and 1 drains-into from Synthetic DEM/);
 		expect(ok.body.proposal).toMatchObject({ status: 'applied', decidedBy: expect.any(String) });
 		expect(ok.body.proposal.decision.units.map((u: { name: string; area: boolean; drainsInto: boolean }) => [u.name, u.area, u.drainsInto])).toEqual([
 			['Top pump', true, false],
@@ -250,6 +259,81 @@ describe('with the synthetic DEM', () => {
 		expect(again.status).toBe(409);
 		expect(again.body.error).toMatch(/nodes already/);
 		expect((await viewer.call('GET', p.at('/map/start'))).body.modelEmpty).toBe(false);
+	});
+
+	it('takes a unit’s effective area when asked (195): without what drains into pans, recorded on the node, the decision and the revision', async () => {
+		const q = await newProject('Start, effective area');
+		const g = await feature(q.at, { kind: 'gauge', name: 'Valley weir', lon: pos(OUTLET_CELL.x, OUTLET_CELL.y)[0], lat: pos(OUTLET_CELL.x, OUTLET_CELL.y)[1] });
+		const d = await feature(q.at, { kind: 'dam', name: 'Valley dam', lon: pos(DAM_CELL.x, DAM_CELL.y + 1)[0], lat: pos(DAM_CELL.x, DAM_CELL.y + 1)[1] });
+		const t = await feature(q.at, { kind: 'other', name: 'Top pump', lon: pos(DAM_CELL.x, DAM_CELL.y - 100)[0], lat: pos(DAM_CELL.x, DAM_CELL.y - 100)[1] });
+		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: g, points: [{ featureId: d, role: 'dam' }, { featureId: t, role: 'abstraction' }] });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const { id: spid, plan } = r.body.proposal;
+		const [top, mid] = plan.units;
+		expect(mid.nonContributingM2).toBeGreaterThan(0);
+		const url = q.at(`/map/start/${spid}/apply`);
+		const rest = { include: true, name: 'Rest of the valley', area: true };
+		// The effective area needs the area ticked.
+		const unticked = await owner.call('POST', url, {
+			outletName: 'Valley weir',
+			units: [
+				{ key: top.key, name: 'Top pump', area: true, drainsInto: true, runoffToDam: false },
+				{ key: mid.key, name: 'Valley dam', area: false, areaBasis: 'effective', drainsInto: true, runoffToDam: true }
+			],
+			rest
+		});
+		expect(unticked.status).toBe(400);
+		expect(unticked.body.error).toMatch(/Tick Valley dam’s area to take its effective area/);
+		const ok = await owner.call('POST', url, {
+			outletName: 'Valley weir',
+			units: [
+				// Gross named outright: its whole piece (the positive control; it holds no pan anyway).
+				{ key: top.key, name: 'Top pump', area: true, areaBasis: 'gross', drainsInto: true, runoffToDam: false },
+				// Effective: the dam's piece less what drains into the valley's pan.
+				{ key: mid.key, name: 'Valley dam', area: true, areaBasis: 'effective', drainsInto: true, runoffToDam: true }
+			],
+			rest
+		});
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const by = Object.fromEntries((ok.body.model.nodes as { name: string; areaKm2: number }[]).map((n) => [n.name, n]));
+		expect(by['Top pump']!.areaKm2).toBeCloseTo(top.areaM2 / 1e6, 9);
+		expect(by['Valley dam']!.areaKm2).toBeCloseTo((mid.areaM2 - mid.nonContributingM2) / 1e6, 9);
+		expect(by['Valley dam']!.areaKm2).toBeLessThan(mid.areaM2 / 1e6);
+		expect(by['Rest of the valley']!.areaKm2).toBeCloseTo(plan.rest.areaM2 / 1e6, 9);
+		// The parcel keeps the gross outline and area, and what of it drains into pans; the node says which it took.
+		const rows = await asOwner(
+			`SELECT n.name, n.area_source, n.area_basis, f.area_m2, f.non_contributing_m2 FROM node n JOIN map_feature f ON f.id = n.area_feature_id
+			 WHERE n.project_id = $1 ORDER BY n.sort_order`,
+			[q.id]
+		);
+		expect(rows.map((x) => [x.name, x.area_source, x.area_basis])).toEqual([
+			['Top pump', 'map', 'gross'],
+			['Valley dam', 'map', 'effective'],
+			['Rest of the valley', 'map', 'gross']
+		]);
+		expect(rows[1]!.area_m2).toBeCloseTo(mid.areaM2, 3);
+		expect(rows[1]!.non_contributing_m2).toBeCloseTo(mid.nonContributingM2, 3);
+		expect(rows[0]!.non_contributing_m2).toBe(0);
+		expect(ok.body.proposal.decision.units.map((u: { name: string; areaBasis?: string }) => [u.name, u.areaBasis])).toEqual([
+			['Top pump', 'gross'],
+			['Valley dam', 'effective']
+		]);
+		expect(ok.body.proposal.decision.rest.areaBasis).toBe('gross');
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 1`, [q.id]);
+		expect(rev!.reason).toMatch(/^Started from the map: 4 nodes; 3 areas \(gross; effective, without what drains into pans: Valley dam\) and 2 drains-into/);
+		// The map lists the parcel's pans figure and the node's basis, so it can tell the area is still this parcel's.
+		const map = await viewer.call('GET', q.at('/map/features'));
+		expect(map.status).toBe(200);
+		const damNode = map.body.nodes.find((n: { name: string }) => n.name === 'Valley dam');
+		expect(damNode).toMatchObject({ areaSource: 'map', areaBasis: 'effective' });
+		const parcel = map.body.features.find((f: { id: string }) => f.id === damNode.areaFeatureId);
+		expect(parcel.nonContributingM2).toBeCloseTo(mid.nonContributingM2, 3);
+		// Typing over the area clears the basis with the source (store.ts).
+		const model = (await owner.call('GET', q.at('/model'))).body;
+		const typed = await owner.call('PUT', q.at('/model'), { ...model, nodes: model.nodes.map((n: { name: string; areaKm2: number }) => (n.name === 'Valley dam' ? { ...n, areaKm2: 1.5 } : n)) });
+		expect(typed.status, JSON.stringify(typed.body)).toBe(200);
+		const [after] = await asOwner(`SELECT area_source, area_basis FROM node WHERE project_id = $1 AND name = 'Valley dam'`, [q.id]);
+		expect(after).toEqual({ area_source: 'typed', area_basis: null });
 	});
 
 	it('refuses to apply once the model gained nodes since the proposal; a discarded proposal can’t be applied', async () => {
@@ -406,7 +490,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan, method, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-12');
+		expect(methodVersion).toBe('start-14');
 		expect(Math.abs(plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(plan.outlet.placement).toMatchObject({ placedBy: 'matched', reach: { dataset: DATASET, reachId: 99100001, chosen: false }, larger: null, unmatched: false });
 		expect(plan.dropped).toEqual([]);
@@ -464,6 +548,67 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect(onRiver.placement).toMatchObject({ placedBy: 'larger', larger: null });
 		expect(onRiver.totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
 		await owner.call('DELETE', q.at(`/map/features/${offDam}`));
+	});
+
+	it('places a long dam along the river by its marked siting, proposes its dam’s shares, and applies them (194)', async () => {
+		await clear();
+		// Its own project (the apply fills the model). Three cells wide and 20 long, the river its west column all the way: the
+		// outline alone can't tell it from a reservoir.
+		const w = await newProject('Start, a dam’s siting');
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 20];
+		const g = pos(DAM_CELL.x, DAM_CELL.y + 60);
+		const weir = await feature(w.at, { kind: 'gauge', name: 'Weir', lon: g[0], lat: g[1] });
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const longDam = await feature(w.at, { kind: 'dam', name: 'Long dam', geometry: { type: 'Polygon', coordinates: [ring] } });
+		const propose = () => owner.call('POST', w.at('/map/start'), { outletFeatureId: weir, points: [{ featureId: longDam, role: 'dam' }] });
+		const unitOf = (r: Awaited<ReturnType<typeof propose>>) => r.body.proposal.plan.units.find((u: { key: string }) => u.key === longDam);
+		const apply = (r: Awaited<ReturnType<typeof propose>>, t: Record<string, boolean>) =>
+			owner.call('POST', w.at(`/map/start/${r.body.proposal.id}/apply`), {
+				outletName: 'Weir',
+				units: [{ key: longDam, name: 'Long dam', area: true, drainsInto: true, runoffToDam: false, ...t }],
+				rest: { include: false, name: 'Rest', area: false }
+			});
+
+		// Unset (the positive control): placed and proposed as an unmarked dam always is (start-13), no shares, and none to take.
+		const unset = await propose();
+		expect(unset.status, JSON.stringify(unset.body)).toBe(201);
+		expect(unitOf(unset).totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
+		expect(unitOf(unset).placement).not.toHaveProperty('damPosition');
+		expect(unitOf(unset)).not.toHaveProperty('damShares');
+		expect(unset.body.proposal.methodVersion).toBe('start-14');
+		const refused = await apply(unset, { upstreamToDam: true });
+		expect(refused.status).toBe(400);
+		expect(refused.body.error).toMatch(/has no proposed upstream inflow to its dam: mark the dam on or off the river/);
+
+		// On the river: the river's cell, everything from upstream and all its own runoff into the dam.
+		expect((await owner.call('PATCH', w.at(`/map/features/${longDam}`), { damPosition: 'on_channel' })).status).toBe(200);
+		const on = await propose();
+		expect(unitOf(on).placement).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
+		expect(unitOf(on).damShares).toEqual({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null, pctRunoffToDamEffective: 1 });
+		expect(Math.abs(unitOf(on).totalAreaM2 / unitOf(unset).totalAreaM2 - 1)).toBeLessThan(0.001);
+
+		// Off-channel: its unit is the river's reach where its own outflow joins the river; the river passes the dam by and only
+		// its own catchment's runoff enters it.
+		expect((await owner.call('PATCH', w.at(`/map/features/${longDam}`), { damPosition: 'off_channel' })).status).toBe(200);
+		const off = await propose();
+		expect(off.status, JSON.stringify(off.body)).toBe(201);
+		const u = unitOf(off);
+		expect(u.placement).toMatchObject({ placedBy: 'polygon', larger: null, damPosition: 'off_channel' });
+		expect(u.totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
+		expect(u.damShares.pctUpstreamToDam).toBe(0);
+		expect(u.damShares.damCatchmentM2).toBeGreaterThan(0);
+		expect(u.damShares.pctRunoffToDam).toBeGreaterThan(0);
+		expect(u.damShares.pctRunoffToDam).toBeLessThan(0.05);
+		expect(Math.abs(u.damShares.pctRunoffToDam - u.damShares.damCatchmentM2 / u.areaM2)).toBeLessThanOrEqual(0.0005);
+		// Its effective share (195): the dam's catchment less its pans over the piece less its pans.
+		expect(Math.abs(u.damShares.pctRunoffToDamEffective - (u.damShares.damCatchmentM2 - u.damShares.damNonContributingM2) / (u.areaM2 - u.nonContributingM2))).toBeLessThanOrEqual(0.0005);
+		expect(off.body.proposal.method).toMatch(/1 point at a dam polygon’s outflow \(1 marked off-channel\)/);
+		const ok = await apply(off, { runoffToDam: true, upstreamToDam: true });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const node = ok.body.model.nodes.find((n: { name: string }) => n.name === 'Long dam');
+		expect(node).toMatchObject({ pctUpstreamToDam: 0, pctRunoffToDam: u.damShares.pctRunoffToDam });
+		expect(ok.body.proposal.decision.units).toEqual([expect.objectContaining({ key: longDam, runoffToDam: true, upstreamToDam: true })]);
 	});
 
 	it('asks for the river at a confluence, every such point at once, and places it on the one picked', async () => {

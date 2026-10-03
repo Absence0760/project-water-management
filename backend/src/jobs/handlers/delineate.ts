@@ -20,6 +20,7 @@
 import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
 import { delineate, DelineationRefused, tooLargeText, type LargerChannel, type WindowAim } from '../../delineation/delineate.js';
+import { panReferenceLoader } from '../../delineation/panReference.js';
 import { checkNote, storeProposal } from '../../delineation/proposals.js';
 import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
 import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
@@ -94,11 +95,13 @@ export const delineateHandler = defineHandler({
 			result = await delineate(dem, click, {
 				windows,
 				budgetMs,
-				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM } : null,
+				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM, head: near.reach.head } : null,
 				junction: near.junction,
 				keepPoint: req.keep_point,
 				// The request's last window cut the catchment here: the first window is placed over it, not centred on the click.
 				aim: parseAim(req.aim),
+				// Read in this job's own transaction, as the editor who clicked (the handler's role).
+				panReference: panReferenceLoader((fn) => fn(db), job.projectId),
 				// One step a window; a cancel (or a lost lease) stops it before the next.
 				onWindow: async (i, of) => {
 					if (!(await progress((i / of) * 100))) throw CANCELLED();

@@ -10,7 +10,7 @@
 //  - the per-account cap on elevation-model work counts every request.
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, signUp } from '../__tests__/helpers.js';
+import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { DEM_ATTEMPTS } from './attempt.js';
 import { BASIN_AREA_M2, DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 
@@ -76,7 +76,7 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 		near(low.totalAreaM2, dam.areaM2 + low.areaM2, 0.01);
 		expect(dam.geometry.type).toBe('Polygon');
 		expect(r.dataset.label).toMatch(/Synthetic DEM/);
-		expect(r.methodVersion).toBe('start-12');
+		expect(r.methodVersion).toBe('start-14');
 		const stored = await asOwner(`SELECT count(*)::integer AS n FROM map_feature WHERE project_id = $1`, [projectId]);
 		expect(stored[0]!.n).toBe(0);
 	});
@@ -103,12 +103,37 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 			[projectId]
 		)) as { name: string; description: string; area_m2: number }[];
 		// The upper piece holds the valley's pan: its description says how much of it drains there (start-11).
-		expect(rows[0]!.description).toMatch(/drains into sub-catchment 2; .* km² upstream in all\. [\d.]+ km² of its own area drains into pans \(non-contributing in WR2012’s sense; still in its area\)\. Delineated from Synthetic DEM.*\(start-12\)/);
+		expect(rows[0]!.description).toMatch(/drains into sub-catchment 2; .* km² upstream in all\. [\d.]+ km² of its own area drains into pans \(non-contributing in WR2012’s sense; still in its area\)\. Delineated from Synthetic DEM.*\(start-14\)/);
 		expect(rows[1]!.description).toMatch(/the lowest click/);
 		near(rows[0]!.area_m2 + rows[1]!.area_m2, BASIN_AREA_M2, 0.04);
 		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.subcatchments_saved'`, [projectId]);
-		expect(audit[0]!.subject).toMatchObject({ pieces: 2, methodVersion: 'start-12', featureIds: res.body.features.map((f: { id: string }) => f.id) });
+		expect(audit[0]!.subject).toMatchObject({ pieces: 2, methodVersion: 'start-14', featureIds: res.body.features.map((f: { id: string }) => f.id) });
 		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
+		// Each piece keeps what of it drains into pans (195): the upper one the pan's catchment, the lower none.
+		const [upper, lower] = res.body.features as { id: string; areaM2: number; nonContributingM2: number }[];
+		expect(upper!.nonContributingM2).toBeGreaterThan(0);
+		expect(upper!.nonContributingM2).toBeLessThan(upper!.areaM2);
+		expect(lower!.nonContributingM2).toBe(0);
+
+		// Use this area on a saved piece: gross by default (unchanged), effective when asked.
+		const weir = node('Weir', null);
+		const unit = node('Upper unit', weir.id, { areaKm2: 1 });
+		expect((await owner.call('PUT', at('/model'), { nodes: [weir, unit], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const url = at(`/nodes/${unit.id}/area-from-map`);
+		const gross = await editor.call('POST', url, { featureId: upper!.id });
+		expect(gross.status, JSON.stringify(gross.body)).toBe(200);
+		expect(gross.body).toMatchObject({ areaBasis: 'gross' });
+		expect(gross.body.areaKm2).toBeCloseTo(upper!.areaM2 / 1e6, 9);
+		const eff = await editor.call('POST', url, { featureId: upper!.id, basis: 'effective' });
+		expect(eff.status, JSON.stringify(eff.body)).toBe(200);
+		expect(eff.body).toMatchObject({ areaBasis: 'effective' });
+		expect(eff.body.areaKm2).toBeCloseTo((upper!.areaM2 - upper!.nonContributingM2) / 1e6, 9);
+		const [n] = await asOwner('SELECT area_basis FROM node WHERE id = $1', [unit.id]);
+		expect(n!.area_basis).toBe('effective');
+		// The lower piece holds no pan: its effective area is its gross one.
+		const low = await editor.call('POST', url, { featureId: lower!.id, basis: 'effective' });
+		expect(low.status).toBe(200);
+		expect(low.body.areaKm2).toBeCloseTo(lower!.areaM2 / 1e6, 9);
 	});
 
 	it('counts every request against the per-account cap on elevation-model work', async () => {

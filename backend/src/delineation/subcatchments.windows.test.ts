@@ -18,7 +18,7 @@ describe('delineateUnits: the windows (start-12)', () => {
 		const r = await delineateUnits(dem, { outlet: at(0, 0), boundary: null, points: [] }, { windows: [128, 256] });
 		expect(r.windowCells).toBe(256);
 		expect(Math.abs(r.catchment.areaM2 / whole.areaM2 - 1)).toBeLessThan(0.02);
-		expect(START_METHOD_VERSION).toBe('start-12');
+		expect(START_METHOD_VERSION).toBe('start-14');
 	});
 
 	it('grows for a river the window cuts at a gauge, instead of leaving the outlet in a gully (finding 1)', async () => {
@@ -58,5 +58,24 @@ describe('delineateUnits: `unmatched` on a click cut at the window (start-12)', 
 		const r = await delineateUnits(longer, { outlet: 'lowest', boundary: null, points: points(1_000_000) }, { windows: [128, 256] });
 		expect(r.outlet.id).toBe('low');
 		expect(r.outlet.unmatched).toBeFalsy();
+	});
+});
+
+describe('delineateUnits: a click near the head of a head reach (start-13)', () => {
+	// As in delineate.windows.test.ts: the invented valley 60 cells long, a click 3 cells below its head.
+	const L = 60;
+	const short = functionDem(valley(L));
+	const fraction = 3 / L;
+
+	it('is matched at the click from the DEM’s area at the reach’s upper end, as Delineate is', async () => {
+		const reachKm2 = (await delineate(short, at(0, 0), { windows: [512] })).areaM2 / 1e6;
+		const own = await delineate(short, at(0, -L + 3), { windows: [512] });
+		const expectedKm2 = 10 + (reachKm2 - 10) * fraction;
+		const slid = await delineateUnits(short, { outlet: 'lowest', boundary: null, points: [click('c1', 0, -L + 3, { expectedKm2, reachDistanceM: 0 })] }, { windows: [512] });
+		expect(slid.outlet.placedBy).toBe('matched');
+		expect(slid.catchment.areaM2 / own.areaM2).toBeGreaterThan(1.2);
+		const r = await delineateUnits(short, { outlet: 'lowest', boundary: null, points: [click('c1', 0, -L + 3, { expectedKm2, reachDistanceM: 0, head: { at: at(0, -L), fraction, reachKm2 } })] }, { windows: [512] });
+		expect(r.outlet.placedBy).toBe('matched');
+		expect(Math.abs(r.catchment.areaM2 / own.areaM2 - 1)).toBeLessThan(0.02);
 	});
 });

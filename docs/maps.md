@@ -684,6 +684,50 @@ feature is deleted (the area stays; the link goes). The area is the farm's
 sub-catchment, not its irrigated land. Only farm nodes take one, and only from a farm parcel or an `other` polygon: a dam's water surface and the catchment boundary are never offered, and the server refuses them (`AREA_KINDS`, `backend/src/geo/routes.ts`). While the
 model has unsaved edits the button waits: the change is saved straight away.
 
+### Pans and the effective area
+
+A polygon made from a delineation (an accepted proposal, a saved
+sub-catchment, a Start or Divide parcel) keeps what of it drains into pans
+(`map_feature.non_contributing_m2`, 195; [§ Delineation](#delineation)'s
+**Pans**). When some does, **Use** offers a choice beside it, and Start's
+and Divide's area ticks ask the same under the tick (`AreaBasisChoice.svelte`):
+
+- **Gross** (the default): the polygon's whole area, the pans' catchments
+  included, as WR2012's quaternary areas are.
+- **Effective**: the area less what drains into pans, for a hydrologist
+  who models the pans as non-contributing (WR2012's endoreic areas; the
+  PFRA's effective drainage area, [design/pans-research.md](./design/pans-research.md)).
+
+Gross is the default because it is what every reference figure quotes
+(WR2012's quaternary areas, a gauge's published catchment), so a unit's area
+can be checked against them, and because the pans are found from the DEM
+alone: a false pan taken out silently would remove real catchment
+(pans-research.md, Decision 1). The choice is never silent: the button and
+the confirmation name the area taken, and the unit records it
+(`node.area_basis`, `gross` or `effective`, cleared with `area_source` when
+the area is typed over), the revision reason says which ("Area of Dam unit
+from the map: “Sub-catchment 1” (11.100 km², the effective area, without the
+1.200 km² draining into pans, …)"; Start and Divide: "2 areas (gross;
+effective, without what drains into pans: Valley dam)"), and the card says
+"(effective, without pans)" beside the unit's area. The parcel itself keeps
+its gross outline and area. A feature with no pans figure (drawn,
+imported, split, or reshaped since: a new outline drops the figure, which
+was the old one's) offers no choice, and the server refuses an effective
+area for it (400).
+
+An off-channel dam's *runoff to the dam* follows the area taken.
+`pctRunoffToDam` is a share of the unit's runoff (model.md §2.7, M = I ×
+`pctRunoffToDam`), and that runoff is generated over the unit's `areaKm2`.
+Gross, the share is the dam's own catchment over the piece; effective, it
+is the dam's catchment less the pans in it over the piece less its pans
+(`damShares.pctRunoffToDamEffective`, with `damNonContributingM2`), so the
+same water reaches the dam whichever area the unit has. The card's line
+and the value applied are the ones for the area ticked (Divide: for the
+area the node keeps when its area isn't ticked). A dam on the river takes
+all its unit's runoff either way. A proposal made before the effective
+share existed is refused an effective area with that tick (400: propose
+again).
+
 ## Checks
 
 The Map tab's **Checks** (issue #326 A4) list what looks inconsistent
@@ -1123,7 +1167,9 @@ to a point on a river. The design, the method and its accuracy are in
   [design/delineation-snapping.md](./design/delineation-snapping.md)):
   near a loaded river reach (within 1 km), on the cell whose upstream area
   matches the reach's area at the click (its upper end's plus the rest in
-  proportion to how far down the line the click is); otherwise on the
+  proportion to how far down the line the click is; for a head reach, its
+  upper end's area as the elevation model drains it there, not
+  HydroRIVERS' 10 km² threshold); otherwise on the
   most-drained cell within about 150 m, and if a channel with 100× its
   upstream area runs within 1 km the sheet says so instead of proposing ("A
   much larger channel runs 504 m north of your point: …") with **Use that
@@ -1223,11 +1269,17 @@ to a point on a river. The design, the method and its accuracy are in
   share that is, and what the largest holds; **Effective area** is the
   catchment less it, if the pans contribute nothing (WR2012's endoreic
   areas). Neither changes the polygon or its area: the figure is stored
-  with the proposal for the hydrologist to use. *None found* means it
+  with the proposal, and an accepted one's feature keeps it, so **Use**
+  offers the effective area ([§ Pans and the effective area](#pans-and-the-effective-area)). *None found* means it
   looked and found none; a proposal from before delineate-9 says nothing.
   A dam drawn down below its spillway holds too little over its catchment
   to count, and the depression at the clicked point (a dam's basin behind
-  the wall) never counts.
+  the wall) never counts. A large dam low in a small catchment can hold
+  enough; since delineate-12 a depression a river-network reach that
+  reaches the sea (or the catchment's own drawn river) flows out of over a
+  wall, or that a dam of the register or the map holds, is listed as
+  **Storage on a river** and not counted ([§ River network
+  dataset](#river-network-dataset): it needs the network's `ENDORHEIC`).
 - **The DEM** (`DEM_URL`, backend env): empty (the committed default) turns
   delineation off; the Map shows no Delineate. Locally, after
   `pnpm dev:tiles:terrain` (§ Relief), put
@@ -1327,9 +1379,10 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   and whole catchment (`nonContributingM2`, `totalNonContributingM2`) and
   the rest, and a warning says how much (and what share) of the catchment
   drains into pans, where the largest is and which pieces hold it. The
-  areas themselves are unchanged (gross); a unit's area from the map is
-  its whole piece, pans included, so a hydrologist modelling them as
-  non-contributing types the effective area instead. A depression at a
+  areas themselves are unchanged (gross); each area tick whose piece holds
+  pans asks which area to take, gross (the default) or effective
+  ([§ Pans and the effective area](#pans-and-the-effective-area)), and the
+  parcel keeps the piece's figure. A depression at a
   unit's point (a dam's basin) is that unit's own, never a pan. A saved
   sub-catchment from clicks ([§ Sub-catchments from clicks](#sub-catchments-from-clicks))
   says the same in its description.
@@ -1362,7 +1415,35 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   catchment, 241–385 km² on GLO-30 for a 3 × 3-cell dam whose outline
   clipped one river cell, against 0.01–0.14 km² beside it). A long
   off-channel dam lying along the river, overlapping it for most of its
-  length, is still taken as on it. A
+  length, is taken as on it by the outline alone, so the dam's card asks
+  (**Siting**, a dam drawn as its outline only; 194 `map_feature.dam_position`):
+  *Not said (from its outline)*, the default, keeps the rule above;
+  *On the river* puts the dam on the outline's most-drained cell, the
+  river's, whatever the outline, and proposes *Upstream inflow to dam*
+  100 % and all of its unit's runoff into the dam; *Off-channel (filled by
+  a pump or a furrow)* finds the dam's own outflow, the most-drained
+  outline cell that is not on a watercourse, a watercourse being a cell
+  carrying 100× the outline's own cells (no off-channel dam's own slopes
+  drain a hundred times its water's edge), so no cell of the river is the
+  dam's however much of the outline it runs along (one drawn wholly on the
+  river is dropped, saying so). The unit goes where that outflow joins the
+  river (within 1 km, else at the outflow), as the model represents an
+  off-channel farm dam (model.md §2.7): a reach of the river whose
+  upstream inflow passes the dam by (*Upstream inflow to dam* 0 %, River
+  to dam filling it) and whose own runoff reaches the dam only from the
+  dam's own catchment (*runoff to the dam* = what drains to the dam's
+  outflow ÷ the unit's area, to 0.1 %; with the unit's area taken
+  effective, both less their pans, [§ Pans and the effective area](#pans-and-the-effective-area)). Both are proposed as ticks on the
+  unit's card in Start and Divide (`damShares`; Divide beside the node's
+  values now); an unmarked dam proposes only the old *all of its own runoff
+  reaches the dam* tick. The name
+  follows DWS practice: a dam registration (form DW762, section 21(b))
+  distinguishes off-channel storage, naming the watercourse it would drain
+  to, and DWS's own off-channel storage (OCS) dams are filled from a river
+  they don't sit on. A marked dam's card says it was placed as marked, and
+  the method counts them ("1 point at a dam polygon’s outflow (1 marked
+  off-channel)", with the rule) only when one is marked; an unmarked dam is
+  placed exactly as before, so the method stays `start-12`. A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the channel
   matching river reach 11509680 (292 km²), 602 m from the point"), and the
@@ -1476,7 +1557,8 @@ pick first.
 - **Pans** (`start-11`, [§ Delineation](#delineation)): a piece part of
   whose own area drains into pans says so on its line ("1.25 km² of it
   drains into pans (non-contributing)") and in its saved description; its
-  area still includes it.
+  area still includes it, and the saved area keeps the figure, so **Use**
+  offers its effective area ([§ Pans and the effective area](#pans-and-the-effective-area)).
 - **Every click is one request.** The map redraws all the pieces after each
   one; nothing is stored. Undo goes back to the answer before it without
   asking again. A click the server refuses (off the DEM, the lowest click's
@@ -1582,8 +1664,13 @@ reads it.
   Checksums](#checksums)), cuts it to `TILES_BBOX` (South Africa
   by default; every reach that meets the box, uncut) with `ogr2ogr` (GDAL:
   `sudo dnf install gdal`), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
-  `LENGTH_KM`, `DIS_AV_CMS` at five decimals, and loads it as dataset
-  `HydroRIVERS-v10` with the attribution as its source.
+  `LENGTH_KM`, `DIS_AV_CMS` and `ENDORHEIC` at five decimals, and loads it as dataset
+  `HydroRIVERS-v10` with the attribution as its source. `ENDORHEIC`
+  (`river_reference.endorheic`, migration 196) says whether a reach reaches
+  the sea; the delineation's pans are cross-checked against the reaches
+  that do ([design/delineation.md § Pans](./design/delineation.md#pans),
+  storage on a river). A network loaded before 196 has it NULL, which the
+  cross-check skips: run `pnpm dev:tiles:rivers` again to fill it.
   `RIVERS_MIN_ORDER` (a Strahler order; default 1, every reach) keeps a load
   to the bigger streams. HydroRIVERS holds rivers with at least 10 km² upstream
   or 0.1 m³/s mean flow, at 15 arc-seconds (about 500 m), so it misses the

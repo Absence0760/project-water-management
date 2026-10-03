@@ -11,9 +11,9 @@ const ring = [
 ] as [number, number][];
 function f(id: string, kind: MapFeatureKind, areaM2: number | null, extra: Partial<MapFeature> = {}): MapFeature {
 	const geometry = areaM2 === null ? (kind === 'river' ? { type: 'LineString' as const, coordinates: ring } : { type: 'Point' as const, coordinates: [0, 0] as [number, number] }) : { type: 'Polygon' as const, coordinates: [ring] };
-	return { id, kind, name: id, nodeId: null, nodeName: null, geometry, properties: {}, areaM2, center: [0, 0], sourceId: null, createdBy: null, createdAt: '2024-01-01', ...extra } as MapFeature;
+	return { id, kind, name: id, nodeId: null, nodeName: null, geometry, properties: {}, areaM2, center: [0, 0], sourceId: null, nonContributingM2: null, createdBy: null, createdAt: '2024-01-01', ...extra } as MapFeature;
 }
-const farm = (id: string, extra: Partial<MapNodeArea> = {}): MapNodeArea => ({ id, name: id, kind: 'farm', areaKm2: 10, areaSource: 'typed', areaFeatureId: null, ...extra });
+const farm = (id: string, extra: Partial<MapNodeArea> = {}): MapNodeArea => ({ id, name: id, kind: 'farm', areaKm2: 10, areaSource: 'typed', areaBasis: null, areaFeatureId: null, ...extra });
 
 describe('groupFeatures', () => {
 	it('puts parcels first and the boundary last, each group largest first then by name', () => {

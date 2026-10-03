@@ -1569,7 +1569,17 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
   geometry; CHECKs hold the type to the kind), `properties` (allowlisted
   strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
-  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  polygon), `non_contributing_m2` (195: of `area_m2`, what drains into
+  pans, when the feature was made from a delineation that looked: an
+  accepted proposal's `pans`, a saved sub-catchment's or a Start or Divide
+  parcel's piece; NULL when unknown, and set back to NULL by a new outline
+  or a split; a CHECK keeps it between 0 and `area_m2`; [maps.md § Pans and
+  the effective area](./maps.md#pans-and-the-effective-area)),
+  `dam_position` (194: `on_channel` | `off_channel` | NULL, a dam
+  polygon's position against its river as the editor said; NULL = not said,
+  the outline decides; `map_feature_dam_position_dam` holds it to a dam
+  polygon; Start and Divide place the dam by it, docs/maps.md § Start from
+  the map), `source_id` (composite key → `geo_source (id, project_id)`,
   cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
   `created_at`, `updated_at`. At most one `catchment_boundary` per project
   (partial unique index). It is Step 2's `catchment_geometry` source for the
@@ -1580,7 +1590,12 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   where a node's `area_km2` came from. `POST …/nodes/:nodeId/area-from-map`
   sets `map` and the feature; a model save that changes the area (or the
   node's kind) sets `typed` and clears the feature (`model/store.ts`).
-  Deleting the feature keeps the area. Not part of the engine's model.
+  Deleting the feature keeps the area. With them, **`node.area_basis`**
+  (195: `gross` | `effective`, NULL exactly when `area_source` is `typed`,
+  `node_area_basis_map`): which of the feature's areas was taken, all of it
+  or less its `non_contributing_m2`; the model save clears it with the
+  source. Every area from the map before 195 was gross. Not part of the
+  engine's model.
 - **`quaternary_reference`**: the dataset the quaternary lookup proposes
   from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
   label; `synthetic` for the committed fixture, region Z), `geometry`
@@ -1633,7 +1648,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `geo/geojson.ts`), `area_m2` (geodesic), `cells`, `cell_size_m`, `zoom`,
   `window_cells`, `dataset` (1–200, the DEM's label), `dataset_fingerprint`
   (16 hex: SHA-256 of the archive's header and root directory),
-  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387, `delineate-5` for clicks on the DEM's own channels, the wider offer from a gully and the reach's area at the click, `delineate-6` for the windows placed over the catchment and grown for a river they cut, and no data as the data's edge, `delineate-7` for keeping a click beside a confluence on its river's side of the DEM's junction, issue #390, `delineate-8` for 5's and 7's rules together, `delineate-9` for the pans, `delineate-10` for 6's and 9's together), `pans` (193: jsonb, under 20 KB, `{ nonContributingM2, count, largest[≤ 5], method }`, what of the catchment drains into pans, reported and never taken out of `area_m2` or the polygon; NULL before delineate-9; [design/delineation.md § Pans](./design/delineation.md#pans)), `feature_id`
+  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387, `delineate-5` for clicks on the DEM's own channels, the wider offer from a gully and the reach's area at the click, `delineate-6` for the windows placed over the catchment and grown for a river they cut, and no data as the data's edge, `delineate-7` for keeping a click beside a confluence on its river's side of the DEM's junction, issue #390, `delineate-8` for 5's and 7's rules together, `delineate-9` for the pans, `delineate-10` for 6's and 9's together, `delineate-11` for a head reach's upper end's area read from the DEM, `delineate-12` for the pans' cross-check against the river network and the dams), `pans` (193: jsonb, under 20 KB, `{ nonContributingM2, count, largest[≤ 5], onRiver?, method }`, what of the catchment drains into pans, reported and never taken out of `area_m2` or the polygon; from delineate-12 `onRiver: { count, largest[≤ 5] }`, the depressions found to be storage on a river and not counted; NULL before delineate-9; [design/delineation.md § Pans](./design/delineation.md#pans)), `feature_id`
   (composite key → `map_feature (id, project_id)`, `ON DELETE SET NULL
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
@@ -1678,12 +1693,14 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `discarded` | `superseded`; at most one `proposed` per project, partial
   unique index), `plan` (jsonb, under 4 MB: the units, their sub-catchments'
   areas and outlines, the order, the rest of the catchment, the outlet, the
-  warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
+  warnings; a dam marked on or off its river, 194, its `damShares`;
+  `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method` (1–1000: each placement rule that ran defined once, or, when nearly every kind ran at once and that would pass 1 000 characters, named by the method version instead, `fitMethod`),
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square, `start-13` for `delineate-11`'s head reach reaching them, `start-14` the pans' cross-check: storage on a river listed in `plan.pans.onRiver` and not counted), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
-  `applied`: the ticks, the node and parcel ids, the revision),
+  `applied`: the ticks, `upstreamToDam` on a unit with `damShares`, the
+  node and parcel ids, the revision),
   `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
   `decided_at` (set exactly when applied or discarded). The plan, the mode
   and every other column but the decision's never change (185: dataset,
@@ -1692,8 +1709,10 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (`start_proposal_final`, SECURITY DEFINER since 185). RLS: viewers read,
   editors insert, update and delete all but an applied one (the route
   prunes superseded and discarded rows past the newest 50 a project). What apply makes is
-  ordinary model data: nodes, `farm_parcel` features linked to them, and
-  `node.area_source = 'map'` for a ticked area. A division's plan
+  ordinary model data: nodes, `farm_parcel` features linked to them (with
+  the piece's `non_contributing_m2`), and `node.area_source = 'map'` with
+  its `area_basis` for a ticked area; the decision records each taken
+  area's `areaBasis` (195; absent on decisions before it, gross). A division's plan
   (`divide.ts` `DividePlan`) also keeps each node's values when proposed
   (`current`), which apply checks before replacing one. No node column, so
   farmers never read it.
@@ -1704,7 +1723,11 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   fixture; the source's own reach id, HydroRIVERS' `HYRIV_ID`), `name` (''
   when the source names none; one line, `river_reference_name_one_line`,
   migration 192, since a reach added to a project carries it), `strahler` (1–15), `upstream_km2`,
-  `length_km`, `discharge_m3s` (each NULL when not given), `geometry`
+  `length_km`, `discharge_m3s` (each NULL when not given), `endorheic`
+  (migration 196: HydroSHEDS' `ENDORHEIC`, true in a basin draining to an
+  inland sink, false when the reach reaches the sea, NULL when not given or
+  loaded before 196; read by the delineation's pans cross-check,
+  `delineation/panReference.ts`), `geometry`
   (LineString or MultiLineString), its bounding box (`min_lon`, `min_lat`,
   `max_lon`, `max_lat`, indexed for the layer's bbox query), `source`
   (1–500, copied into every reach added to a project), `loaded_at`. Global,

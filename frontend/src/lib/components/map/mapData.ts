@@ -3,8 +3,9 @@
 // import's refusal says. Pure, so the list, the table and the map agree and
 // vitest covers them (mapData.test.ts). No MapLibre here: this module ships
 // in the tab's chunk; the map library loads only when the map is drawn.
-import type { MapFeature, MapFeatureKind, MapGeometry, MapImportProblem, MapNodeArea, MapPosition } from '$lib/api/types';
+import type { DamPosition, MapAreaBasis, MapFeature, MapFeatureKind, MapGeometry, MapImportProblem, MapNodeArea, MapPosition } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
+import { takenAreaM2 } from './areaBasis';
 
 export const KIND_LABEL: Record<MapFeatureKind, string> = {
 	catchment_boundary: 'Catchment boundary',
@@ -39,6 +40,19 @@ export const isPolygon = (g: MapGeometry) => g.type === 'Polygon' || g.type === 
  * polygon, never a dam's water surface or the whole catchment's boundary.
  */
 export const takesArea = (f: Pick<MapFeature, 'kind' | 'geometry'>) => (f.kind === 'farm_parcel' || f.kind === 'other') && isPolygon(f.geometry);
+
+/**
+ * Whether a feature says where it stands against its river (194, map_feature.dam_position): a dam drawn as its outline only,
+ * the one shape Start and Divide place by its own outflow (a point has no footprint).
+ */
+export const takesDamPosition = (f: Pick<MapFeature, 'kind' | 'geometry'>) => f.kind === 'dam' && isPolygon(f.geometry);
+
+/** The feature sheet's words for a dam's position; '' is unset (its outline decides). */
+export const DAM_POSITION_LABEL: Record<DamPosition | '', string> = {
+	'': 'Not said (from its outline)',
+	on_channel: 'On the river',
+	off_channel: 'Off-channel (filled by a pump or a furrow)'
+};
 
 /** An area for people: km² with 3 decimals below 10 km², else 2; ha below 1 km². */
 export function areaText(m2: number | null): string {
@@ -124,6 +138,13 @@ export const problemText = (p: MapImportProblem) => (p.feature === null ? p.mess
 /** The farm nodes an area can be accepted into, with where each area came from. */
 export const areaTargets = (nodes: readonly MapNodeArea[]) => nodes.filter((n) => n.kind === 'farm');
 
-/** Whether accepting `f`'s area into `n` would change nothing (the same feature already accepted, the same area). */
-export const alreadyAccepted = (n: MapNodeArea, f: MapFeature) =>
-	n.areaSource === 'map' && n.areaFeatureId === f.id && f.areaM2 !== null && Math.abs(n.areaKm2 - f.areaM2 / 1e6) < 1e-9;
+/**
+ * Whether accepting `f`'s area into `n` would change nothing: the same feature already accepted, the same area on
+ * the basis it was taken (gross, or effective: without what drains into pans, 195), and, given `basis`, that basis.
+ */
+export function alreadyAccepted(n: MapNodeArea, f: MapFeature, basis?: MapAreaBasis): boolean {
+	if (n.areaSource !== 'map' || n.areaFeatureId !== f.id || f.areaM2 === null) return false;
+	const took = n.areaBasis ?? 'gross';
+	if (basis !== undefined && basis !== took) return false;
+	return Math.abs(n.areaKm2 - takenAreaM2(f.areaM2, f.nonContributingM2, took) / 1e6) < 1e-9;
+}

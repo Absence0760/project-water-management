@@ -5,7 +5,7 @@
 // editor's choices live in the sheet's draft, keyed by the map feature's id
 // ('' for the outlet gauge), and go with every proposal until changed.
 import { ApiError } from '$lib/api/client';
-import type { ConfluencePoint, PlacementChoice, PointPlacement } from '$lib/api/types';
+import type { ConfluencePoint, DamShares, MapAreaBasis, PlacementChoice, PointPlacement } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 
 /** The key the outlet gauge's choices are kept under (the server's too). */
@@ -62,6 +62,8 @@ export function placementLine(pl: PointPlacement | null | undefined, movedM: num
 		case 'exact':
 			return 'On the delineated outlet, as Delineate placed it.';
 		case 'polygon':
+			if (pl.damPosition === 'off_channel') return 'On the river where the dam’s own outflow joins it, as marked: off-channel, so the dam takes only its own catchment’s runoff.';
+			if (pl.damPosition === 'on_channel') return 'At the dam polygon’s most-drained cell, on the river, as marked.';
 			return pl.larger?.outline
 				? `At the outflow of the dam’s own outline: a much larger channel (${km2(pl.larger.km2)}) only clips its edge, so the dam was taken as off that channel.`
 				: 'At the dam polygon’s most-drained cell (its outflow).';
@@ -70,4 +72,32 @@ export function placementLine(pl: PointPlacement | null | undefined, movedM: num
 		default:
 			return `Snapped to the most-drained cell nearby${moved}${pl.unmatched && pl.reach ? `: no channel near it matches ${reach}, so it may be on another stream` : ''}.`;
 	}
+}
+
+/**
+ * The two ticks a dam marked on or off its river offers (194; docs/model.md §2.7 K and M): its runoff to the dam and its
+ * Upstream inflow to dam, each in words. `areaM2` is the unit's own piece. Null for an unmarked dam (today's single tick).
+ */
+export function damShareLines(shares: DamShares | undefined, areaM2: number | null, basis: MapAreaBasis = 'gross', ncM2?: number): { runoff: string; upstream: string } | null {
+	if (!shares) return null;
+	if (shares.pctUpstreamToDam === 1) {
+		return {
+			runoff: 'All of its own runoff reaches the dam (its area ends at the wall).',
+			upstream: 'Upstream inflow to dam 100 %: on the river, as marked on the map, so it catches everything coming down.'
+		};
+	}
+	// Taken effective (195), the share is of the runoff from the piece less its pans: the dam's catchment less its own pans over it.
+	const eff = basis === 'effective' && shares.pctRunoffToDamEffective !== undefined && ncM2 !== undefined;
+	const ratio = eff ? shares.pctRunoffToDamEffective! : shares.pctRunoffToDam;
+	const share = `${fmtNum(ratio * 100, ratio < 0.1 ? 1 : 0)} %`;
+	const own =
+		shares.damCatchmentM2 !== null && areaM2
+			? eff
+				? `: of the unit’s effective ${km2((areaM2 - ncM2!) / 1e6)}, what drains to the dam’s own outflow, its pans left out`
+				: `: the ${km2(shares.damCatchmentM2 / 1e6)} draining to the dam’s own outflow, of the unit’s ${km2(areaM2 / 1e6)}`
+			: '';
+	return {
+		runoff: `${share} of its runoff reaches the dam${own}; the rest passes it by.`,
+		upstream: 'Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it.'
+	};
 }
