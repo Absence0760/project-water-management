@@ -1095,7 +1095,15 @@ to a point on a river. The design, the method and its accuracy are in
   150 m, and if a channel with 100× its upstream area runs within 1 km the
   sheet says so instead of proposing ("A much larger channel runs 504 m
   north of your point: …") with **Use that channel** and **Keep my
-  point**. It says how far the point moved.
+  point**. **At a confluence** (reaches within 200 m whose areas differ by
+  1.5×) the server doesn't choose: the sheet asks which river ("The river
+  below the junction, 497 km²", "The main river above the junction, 422
+  km²", "The tributary above the junction, 67 km²"), and the outlet goes at
+  the DEM's own junction for the one picked (`junction.ts`: the tributary
+  followed downhill to where the main river joins it), else on the channel
+  within 2.5 km matching its area. Measured on 60 real junctions:
+  [design/delineation-snapping.md § Confluences](./design/delineation-snapping.md#confluences-third-experiment).
+  It says how far the point moved.
 - **What it does.** On the API, never in the engine: reads the DEM around
   the point (a 1 024-cell window, about 34 km, grown to 2 048 and 3 072
   cells while the catchment reaches its edge), fills depressions
@@ -1201,7 +1209,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-3)") and its area from it (*from the map*), the
+  delineated from … (start-4)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
@@ -1278,6 +1286,8 @@ pick first.
   channel**, which moves the click there and routes again (Undo moves it
   back). A click with under 1 km² upstream and no larger channel nearby is
   flagged ("very little drains here: it probably missed the channel").
+  A click at a confluence waits in the panel until the river is picked
+  (as Delineate's sheet asks), then goes at the DEM's junction for it.
   Measured: [design/delineation-snapping.md](./design/delineation-snapping.md).
 - **Every click is one request.** The map redraws all the pieces after each
   one; nothing is stored. Undo goes back to the answer before it without

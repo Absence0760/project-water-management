@@ -180,7 +180,7 @@ cell size, zoom and window, the dataset label and the archive's
 **fingerprint** (SHA-256 of its header and root directory, so two extracts
 are never confused), the method sentence and `methodVersion`
 (`delineate-1`, then `delineate-2` for the matched outlet and the
-larger-channel guard; bumped whenever the method changes what a click
+larger-channel guard, `delineate-3` for asking the river at a confluence; bumped whenever the method changes what a click
 proposes).
 
 ## Accuracy, as shown to the user

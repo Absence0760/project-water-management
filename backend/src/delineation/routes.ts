@@ -27,7 +27,7 @@ import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
-import { nearestReach } from './reach.js';
+import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear } from './reach.js';
 
 /** Delineations one project may ask for in an hour: each is seconds of CPU on the API (docs/design/delineation.md § Where it runs). */
 export const DELINEATIONS_PER_HOUR = 30;
@@ -44,7 +44,9 @@ export const DelineateBody = z
 		lat: Lat,
 		from: z.enum(['outlet', 'dam_wall']),
 		/** Keep the point even beside a much larger channel (otherwise 422 `larger_channel`, naming it; place.ts). */
-		keepPoint: z.boolean().optional()
+		keepPoint: z.boolean().optional(),
+		/** At a confluence, the river reach the editor means (one of the 422 `confluence` choices; its area is read from the database). */
+		reach: ReachChoiceBody.optional()
 	})
 	.strict();
 export const AcceptBody = z
@@ -159,10 +161,19 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			if (rows[0]!.n >= DELINEATIONS_PER_HOUR) {
 				throw new ApiError(429, `This catchment has asked for ${DELINEATIONS_PER_HOUR} delineations in the last hour; try again later.`);
 			}
-			// The nearest river reach's upstream area, for matching the outlet to it (issue #374).
-			const reach = await nearestReach(db, [body.lon, body.lat]);
+			// The river reach the click means, for matching the outlet to its area (issue #374): the one chosen at a
+			// confluence, else the nearest; at a confluence with none chosen, the editor is asked (422 `confluence`).
+			let reach;
+			let junction = null;
+			try {
+				({ reach, junction } = await reachFor(db, [body.lon, body.lat], body.reach ?? null));
+			} catch (err) {
+				if (err instanceof ConfluenceAmbiguity) throw new ApiError(422, err.message, { reason: 'confluence', choices: err.choices });
+				if (err instanceof ReachNotNear) throw new ApiError(400, err.message);
+				throw err;
+			}
 			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt).
-			return { id: await beginDemAttempt(db, 'delineation'), reach };
+			return { id: await beginDemAttempt(db, 'delineation'), reach, junction };
 		});
 		try {
 			const dem = configuredDem();
@@ -170,7 +181,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			let result;
 			try {
 				result = await delineate(dem, [body.lon, body.lat], {
-					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}` } : null,
+					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach } : null,
+					junction: attempt.junction,
 					keepPoint: body.keepPoint
 				});
 			} catch (err) {
