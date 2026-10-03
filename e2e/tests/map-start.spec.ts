@@ -187,6 +187,9 @@ test('a viewer is offered no start, and a link to it does nothing', async ({ pag
 test('a gauge inside the catchment becomes a gauge node; each piece has its number on the map and on its card', async ({ page, owner }) => {
 	void owner;
 	test.setTimeout(60_000);
+	// Picking the gauge frames the map on it; without reduced motion that is a 600 ms flight, and the hover below would
+	// aim at a badge still moving under the pointer (CI, #391). The animation isn't what this test checks.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 	const project = await createProject(page.request, 'Start with a gauge');
 	const post = async (data: Record<string, unknown>) => {
 		const r = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data });
