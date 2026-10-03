@@ -436,6 +436,18 @@ warning, an import warning, a form hint or an evidence-pack gate).
 | WP-1.34 Borehole depletion | The method kept (lagged linear reservoir, d and k; unmet depletion carried as a deficit). | Glover/Hunt need T, S, distance and streambed leakance, rarely known for SA farm boreholes; the two parameters span the same behaviour. The values and whether the boreholes pumped while the calibration record was measured are the client's. | Needs client data; docs (model.md §2.7d). |
 | WP-1.35 Land-cover split | Kept: the low-flow share on each day's flow up to the Q75 natural flow, the other share above. | Scott & Smith (1997) give separate reductions to total and low flows, and Q75 is the usual SA low-flow index (the paper's own definition wasn't re-read). Covers and areas are the client's. | Needs client data; land cover stays off; docs (model.md §2.5a). |
 
+## Provisional decisions 2026-10-03: allocation caps (issue #393)
+
+Two questions the engine end-to-end tests raised (#90 Q24 and Q28), answered
+by the operator on 2026-10-03 as **provisional** decisions, to be confirmed
+by the client's hydrologist, and built in engine 1.70.0 (model.md §2.12a,
+§2.6a). Any other answer is a new engine version.
+
+| Item | Decision | Why (source) | What changed |
+| --- | --- | --- | --- |
+| Q24 Cap mode before a licence starts | A water year in which none of a unit's allocations of a source is in force isn't capped for that source, as a unit with no allocation of it isn't; one run warning names the units, sources and years. | An existing lawful use may continue until a licence replaces it, and Schedule 1 use and general authorisations need none (National Water Act 36 of 1998, ss 32(1)(a), 34(1)), so use before a licence's start date isn't necessarily unlawful; the model can't tell which it was. A unit known not to abstract before its licence is modelled with its abstraction date (model.md §2.7g). | *Code*, engine 1.70.0: before, such a year had a budget of 0. Open: the year a licence starts or ends in keeps its prorated whole-year budget, spent from 1 October (model.md §2.12a, with L2's second half); a full allocation still scales a year with no licence in force to 0. |
+| Q28 Off-takes into a capped unit | A demand-sized off-take into a capped unit sizes to MIN(its demand, its surface room at the start of the day); a top-up's dam room stays uncapped (filling a dam is not use). | System models supply a curtailed user its curtailed requirement (WRPM's allocation algorithm passes the curtailed demand to the network simulation: DWAF 2006, *The Integrated Vaal River System, Pilot Study*, Appendix C), and this model already sizes an off-take to the drought-restricted demand (model.md §2.7i). Sizing to the full demand took river water the unit couldn't use and lost a share of it to the canal. | *Code*, engine 1.70.0. |
+
 ## Open questions for the hydrologist
 
 1. **H1 (closed 2026-09-26):** the base-flow reset was never replaced; engine

@@ -2325,7 +2325,8 @@ keep among them, so a sibling without a hands-off flow, even one taking
 ```
 keep_k  = MAX(Zs, handsOff_k, handsOffEwr_k ? Z : 0)      Zs: senior users' requirement passing the source (§2.7c)
 free_k  = MAX(0, U₀ − taken so far − keep_k)
-need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
+need_k  = (MIN(D_dst, sroom_dst) + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
+sroom_dst = dst's surface allocation room at the start of the day under a cap (§2.12a), ∞ without one (engine ≥ 1.70.0)
 room_dst = MAX(0, cap − (Q[t−1] + Pd + dam-rule receipts today − E − Sp)), E and Sp clamped as §2.7a's step clamps them (engine ≥ 1.69.0)
 v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), then shared in bands at the keep_k (above)
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
@@ -2368,6 +2369,31 @@ question 20):
   that day, fixed before the day runs, so the split never depends on which
   source is simulated first; their priorities order them only at their own
   source.
+- *Into a unit under an allocation cap* (engine ≥ 1.70.0, issue #393, #90
+  Q28; a provisional answer, pending the hydrologist), a demand-sized rule
+  sizes to the demand the cap still allows, MIN(D_dst, sroom_dst): the
+  destination's surface room at the start of the day, MIN(MAX(0, the water
+  year's surface budget − its surface use so far that year), the licence's
+  limit today: 0 outside its months of use, else its maximum rates × 86 400),
+  the number its `allocation_room_surface` column shows. It is known before
+  the day runs (no unit has used water yet that day; off-take water is the
+  destination's first surface source), so the split between rules and
+  sources stays order-free. Off-take water used is surface use, so the room
+  is all the destination may use of it; a top-up rule adds its dam's room
+  uncapped, since filling a dam is not use (§2.12a). Without a surface cap,
+  or in a water year none of its surface licences is in force in, sroom is
+  ∞ and the rule sizes to D as before. Before 1.70.0 it sized to D: the part
+  the cap didn't allow arrived, flowed on below the destination, and its
+  share of the conveyance losses left the catchment, so a capped unit's
+  canal took more of the river than the unit could use. Why: a supply sized
+  to the restricted (allocated) demand is how South African system models
+  run a curtailed user (WRPM's allocation algorithm hands the network
+  simulation the curtailed requirement, not the full one: DWAF 2006, *The
+  Integrated Vaal River System, Pilot Study*, Appendix C), and it is what
+  this model already does under a drought restriction, whose restricted
+  demand the rule sizes to (§2.7i). A capacity-sized rule is unchanged: a
+  canal that runs full delivers what it carries, and the destination uses
+  MIN(arrived, D, room) of it.
 - *Same day, no lag.* A canal delivers the day it takes (a daily model can't
   resolve a canal's travel time). The destination is simulated after its
   source (`network/offtake.ts offtakeOrder`); a rule whose destination drains
@@ -2408,7 +2434,9 @@ destination's split (used = MIN(in, D), the top-up share, the rest passed on)
 and its sources' supply of `D − used`, and every source's U with the
 off-takes taken out; `checkTransferLimits` holds each rule to its capacity,
 to the flow above what it must leave at its source (never more than the
-river there), Σ v to `offtake_out`, `offtake_in` to Σ v × (1 − l), and a
+river there), Σ v to `offtake_out`, `offtake_in` to Σ v × (1 − l) (and,
+engine ≥ 1.70.0, at a capped destination whose rules are all demand-sized
+without a top-up, to its surface room that day), and a
 source whose rules are all sized to capacity to taking MIN(Σ capacity, the
 flow above the largest keep), and (engine ≥ 1.42.0) `offtake_loss_return` at
 each return unit to Σ v × l × r, the source's flow before its off-takes being
@@ -7903,6 +7931,7 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
 
   ```
   budget(n,s,y) = Σ over n's allocations a of source s: V(a) × |L(y) ∩ [validFrom(a), validTo(a)]| ÷ |L(y)|
+                  ∞ (not capped) when no allocation a of n's of source s has L(y) ∩ [validFrom(a), validTo(a)] ≠ ∅   (engine ≥ 1.70.0)
   surface use   = G − GW          (the dam, the river pump and off-take water used; §2.7d–§2.7e, §2.6a)
   groundwater   = GW + GWd        (to the crop and into the dam)
   room(t)       = MAX(0, budget(y) − use so far in y),  at the start of day t
@@ -7911,8 +7940,50 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   with *L(y)* the whole water year, not only its days inside the run, so a
   run that starts or ends inside a year doesn't shrink it, and a unit may take
   its volume early in the year and then go without (that is what a volume per
-  year allows). On a day the unit's own sources give at most the room: off-take
-  water used is MIN(what arrived, D, surface room) and the rest flows on; the
+  year allows).
+
+  **A water year with no licence in force** (engine ≥ 1.70.0, issue #393,
+  #90 Q24; a provisional answer, pending the hydrologist): a water year in
+  which none of the unit's allocations of a source is in force on any of its
+  days (before the first starts, after the last ends, or between two) isn't
+  capped for that source, as a unit with no allocation of the source isn't.
+  One run warning names each such unit, source and water year (consecutive
+  years as a range), so the modeller sees that a licence wasn't in force and
+  can check its dates. An allocation of 0 m³ that is in force is a cap of 0,
+  not "no licence", and a licence in force for one day of a year makes that
+  year capped (at that day's share). Before 1.70.0 the formula gave such a
+  year a budget of 0, with no warning: a unit whose licence started partway
+  through a run took none of that source in the years before.
+  Why: under the National Water Act (Act 36 of 1998, Chapter 4 Part 3,
+  ss 32–35) an existing lawful water use (one
+  exercised in the two years before the Act took effect, s32(1)(a)) may
+  continue until a licence replaces it (s34(1)), and Schedule 1 use or a
+  general authorisation needs no licence at all, so use before a licence's
+  start date isn't necessarily unlawful; a licence's start date is often its
+  issue date, after years of the same use. The model can't tell lawful prior
+  use from unlawful, so it reads "no licence in force" as it reads "no
+  licence": the modelled demand, uncapped, with the warning. A modeller who
+  knows a unit didn't abstract before its licence models that with the
+  unit's abstraction date (§2.7g, `abstractionFrom`), not with the cap. The
+  other options were a budget of 0 (before 1.70.0) or the first licence's
+  volume.
+
+  *Open (the year a licence starts or ends in).* That year keeps the budget
+  above, prorated to the licence's days but spent from 1 October, so the use
+  before the start date counts against it: a licence from 1 September caps
+  the whole October–August before it at 30/365 of its volume, while one from
+  the next 1 October leaves that year uncapped. Capping only the days from
+  the first in-force day (the use before them not counted) would make the two
+  agree; the hydrologist decides, with the second half of engine-audit.md L2
+  (the same question for the licence's months and rate). A full allocation
+  likewise scales a unit's demand to 0 in a year with no licence in force,
+  while a unit with no allocation keeps its demand (below); whether Q24's
+  answer carries over to it is a separate decision.
+
+  On a day the unit's own sources give at most the room: off-take
+  water used is MIN(what arrived, D, surface room) and the rest flows on (a
+  demand-sized off-take into the unit asks for no more than MIN(D, surface
+  room) in the first place, engine ≥ 1.70.0, §2.6a); the
   river pump and the dam together give at most the surface room left
   (`surfaceSplit` on MIN(D left, room)); every pumping unit, the dam-target
   ones included, pumps within the groundwater room left, and a dam-target
@@ -7923,7 +7994,8 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   the river. A source with no allocation isn't capped (a warning names the
   units without any, and a unit with boreholes but no groundwater volume).
   The run stores each capped source's room (`allocation_room_surface`,
-  `allocation_room_groundwater`, m³ at the start of the day), and
+  `allocation_room_groundwater`, m³ at the start of the day; blank, null, in
+  a water year with none of its allocations in force, engine ≥ 1.70.0), and
   `RunSummary.allocations` lists per source the water years the cap bound
   (`capReached`: use within 10⁻⁹ of the budget) and, per water year, the
   days the limit held use back (`limitBound`, engine ≥ 1.40.0; see the
@@ -8058,14 +8130,19 @@ recomputed budget on 1 October, never below 0, and the day's use never above
 it; an `allocation_left_*` column exactly for a capped source with licence
 conditions (engine ≥ 1.40.0), within [0, the year's budget], starting at
 the budget on 1 October, falling by the day's use, with the room MIN(it, the
-limit); `limitBound` redone per day from those columns, the use, `demand` and
-`deficit` with `limitBoundKind`; a full
+limit); both columns blank (NaN) on exactly the days of a water year with
+none of the source's allocations in force, and numbers on every other day
+(engine ≥ 1.70.0); `limitBound` redone per day from those columns, the use, `demand` and
+`deficit` with `limitBoundKind` (an uncapped year never binds); a full
 allocation's factor constant within a year and each scaled unit's demand over
 the run's days of a year equal to the volume registered over them; no mode
 column in a run of another mode; and `RunSummary.allocations` equal to
 `compareAllocations` of the run's own series. The day replays in the balance
 and workings checks (the user's river take, the farm's dam, river pump,
-off-take and boreholes) read the room columns and the factor. The
+off-take and boreholes) read the room columns (a blank day as no limit) and
+the factor, and `checkTransferLimits` holds what a capped unit's
+demand-sized off-takes deliver, when none tops up its dam, to its surface
+room that day (engine ≥ 1.70.0, §2.6a). The
 "doubling crop areas never raises the supply fraction" property is checked
 with the mode off: a full allocation holds allocated demand fixed and a cap
 ties supply to the volume, so neither keeps it.
@@ -8074,7 +8151,9 @@ ties supply to the volume, so neither keeps it.
 any other, so `allocation.set` / `allocation.remove` change one for a
 scenario run and the mode then caps or scales to it, the months of use and
 maximum rate an op sets included (engine ≥ 1.37.0); nothing in this section
-changes ([scenarios.md § Registered volumes](./scenarios.md)).
+changes ([scenarios.md § Registered volumes](./scenarios.md)). A scenario
+that adds a licence starting partway through the run, or moves one's dates,
+leaves the years before it uncapped as above (engine ≥ 1.70.0).
 
 ### 2.13 Firm yield and storage–yield (engine ≥ 0.34.0, roadmap WP-3.6)
 

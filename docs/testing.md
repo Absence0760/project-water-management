@@ -162,7 +162,8 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
 `packages/engine/src/e2e/` holds whole-run tests of the engine, one file set per
 area (`demand`, `rain`, `network`, `balance`, `ewr`, `outputs`, `calibration`; then `cross` for
 features together, `edge` for long, tiny, huge and boundary-date runs, `deep` for the off-takes
-and allocations, `open` for questions the first round left):
+and allocations, `open` for questions the first round left, `caps` for the allocation cap
+around its licences' dates and the off-takes into a capped unit, engine 1.70.0, #393):
 small invented catchments run through `runModel` (or `calibrate`, the outlook,
 a resumed run), checked against values worked by hand, or by a small
 re-derivation inside the test, from docs/model.md, never against what the
