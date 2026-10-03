@@ -63,7 +63,7 @@ export interface ClickPiece {
 	 */
 	open: boolean;
 	/** How the click was put on the channel: matched to its nearby river reach's upstream area, or snapped to the most-drained cell near it. */
-	placedBy: 'matched' | 'snapped';
+	placedBy: 'matched' | 'snapped' | 'junction';
 	/** The river reach it was matched to. */
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead (the click stays where it snapped). */
@@ -104,7 +104,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			totalAreaM2: r.catchment.areaM2,
 			open: !!r.rest.open,
 			placedBy: r.outlet.placedBy ?? 'snapped',
-			reach: r.outlet.placedBy === 'matched' ? reachOf(lowest) : null,
+			reach: r.outlet.placedBy === 'matched' || r.outlet.placedBy === 'junction' ? reachOf(lowest) : null,
 			larger: r.outlet.larger ?? null,
 			unmatched: r.outlet.unmatched ? reachOf(lowest) : null
 		},
@@ -118,7 +118,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			totalAreaM2: u.totalAreaM2,
 			open: !!u.open,
 			placedBy: u.placedBy ?? ('snapped' as const),
-			reach: u.placedBy === 'matched' ? reachOf(Number(u.id)) : null,
+			reach: u.placedBy === 'matched' || u.placedBy === 'junction' ? reachOf(Number(u.id)) : null,
 			larger: u.larger ?? null,
 			unmatched: u.unmatched ? reachOf(Number(u.id)) : null
 		}))
@@ -156,13 +156,16 @@ export const pieceName = (click: number) => `Sub-catchment ${click + 1}`;
 
 /** Count the attempt (editor only), route the clicks, free the attempt. Refusals are 422 with the sentence. */
 async function route(userId: string, projectId: string, clicks: readonly z.infer<typeof Click>[]): Promise<ClickPieces> {
-	const { attempt, reaches } = await withUser(userId, async (db) => {
+	const { attempt, reaches, junctions } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
 		// Each click's nearest river reach, for matching it to the reach's upstream area (issue #374).
-		const reaches = [];
+		const reaches: (NearReach | null)[] = [];
+		const junctions: (Awaited<ReturnType<typeof reachFor>>['junction'])[] = [];
 		for (const [i, c] of clicks.entries()) {
 			try {
-				reaches.push(await reachFor(db, [c.lon, c.lat], c.reach ?? null));
+				const f = await reachFor(db, [c.lon, c.lat], c.reach ?? null);
+				reaches.push(f.reach);
+				junctions.push(f.junction);
 			} catch (err) {
 				// At a confluence the editor picks the river (the click's reach), naming the click so the client asks about that one.
 				if (err instanceof ConfluenceAmbiguity) throw new ApiError(422, `Click ${i + 1}: ${err.message}`, { reason: 'confluence', click: i, choices: err.choices });
@@ -170,7 +173,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 				throw err;
 			}
 		}
-		return { attempt: await beginDemAttempt(db, 'delineation'), reaches };
+		return { attempt: await beginDemAttempt(db, 'delineation'), reaches, junctions };
 	});
 	try {
 		const dem = configuredDem();
@@ -179,7 +182,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null }))
+				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
 			});
 			return toClickPieces(r, reaches);
 		} catch (err) {

@@ -164,15 +164,16 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			// The river reach the click means, for matching the outlet to its area (issue #374): the one chosen at a
 			// confluence, else the nearest; at a confluence with none chosen, the editor is asked (422 `confluence`).
 			let reach;
+			let junction = null;
 			try {
-				reach = await reachFor(db, [body.lon, body.lat], body.reach ?? null);
+				({ reach, junction } = await reachFor(db, [body.lon, body.lat], body.reach ?? null));
 			} catch (err) {
 				if (err instanceof ConfluenceAmbiguity) throw new ApiError(422, err.message, { reason: 'confluence', choices: err.choices });
 				if (err instanceof ReachNotNear) throw new ApiError(400, err.message);
 				throw err;
 			}
 			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt).
-			return { id: await beginDemAttempt(db, 'delineation'), reach };
+			return { id: await beginDemAttempt(db, 'delineation'), reach, junction };
 		});
 		try {
 			const dem = configuredDem();
@@ -180,7 +181,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			let result;
 			try {
 				result = await delineate(dem, [body.lon, body.lat], {
-					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}` } : null,
+					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach } : null,
+					junction: attempt.junction,
 					keepPoint: body.keepPoint
 				});
 			} catch (err) {

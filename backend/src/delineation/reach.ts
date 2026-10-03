@@ -156,15 +156,24 @@ export function confluenceChoices(click: Position, near: readonly NearReachLine[
  * never taken from the request; refused unless within MATCH_RADIUS_M), else
  * the nearest, unless the click is at a confluence (ConfluenceAmbiguity).
  */
-export async function reachFor(db: Db, click: Position, chosen?: { dataset: string; reachId: number } | null): Promise<NearReach | null> {
+export async function reachFor(
+	db: Db,
+	click: Position,
+	chosen?: { dataset: string; reachId: number } | null
+): Promise<{ reach: NearReach | null; junction: { rivers: { key: string; role: ConfluenceChoice['role']; km2: number }[]; chosenKey: string } | null }> {
 	const near = await reachesNear(db, click);
+	const plain = (r: NearReachLine): NearReach => ({ dataset: r.dataset, reachId: r.reachId, upstreamKm2: r.upstreamKm2, distanceM: r.distanceM });
+	const choices = confluenceChoices(click, near);
 	if (chosen) {
 		const r = near.find((x) => x.dataset === chosen.dataset && x.reachId === chosen.reachId);
 		if (!r) throw new ReachNotNear();
-		return { dataset: r.dataset, reachId: r.reachId, upstreamKm2: r.upstreamKm2, distanceM: r.distanceM };
+		// At a confluence the junction's rivers go along, so the outlet is put at the DEM's own junction (junction.ts).
+		const keyOf = (c: { dataset: string; reachId: number }) => `${c.dataset}:${c.reachId}`;
+		return {
+			reach: plain(r),
+			junction: choices ? { rivers: choices.map((c) => ({ key: keyOf(c), role: c.role, km2: c.upstreamKm2 })), chosenKey: keyOf(r) } : null
+		};
 	}
-	const choices = confluenceChoices(click, near);
 	if (choices) throw new ConfluenceAmbiguity(choices);
-	const [r] = near;
-	return r ? { dataset: r.dataset, reachId: r.reachId, upstreamKm2: r.upstreamKm2, distanceM: r.distanceM } : null;
+	return { reach: near[0] ? plain(near[0]) : null, junction: null };
 }

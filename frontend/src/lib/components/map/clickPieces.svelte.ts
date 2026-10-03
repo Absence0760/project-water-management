@@ -61,7 +61,11 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : `${p.drainsInto + 1}`} as an inflow`;
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.click + 1);
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
-	const placed = p.reach ? ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})` : '';
+	const placed = !p.reach
+		? ''
+		: p.placedBy === 'junction'
+			? ` · at the elevation model’s junction, on river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`
+			: ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`;
 	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the channel` : '';
 	// A larger channel nearby explains a small piece better than the other warnings do.
 	const warn = p.larger

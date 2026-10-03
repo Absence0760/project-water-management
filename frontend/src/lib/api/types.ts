@@ -3133,8 +3133,8 @@ export interface ClickPiece {
 	totalAreaM2: number | null;
 	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
 	open: boolean;
-	/** matched: put on the channel whose upstream area matches its nearby river reach's; snapped: on the most-drained cell near it. */
-	placedBy: 'matched' | 'snapped';
+	/** matched: put on the channel whose upstream area matches its nearby river reach's; junction: at the DEM's own junction for the river picked at a confluence; snapped: on the most-drained cell near it. */
+	placedBy: 'matched' | 'snapped' | 'junction';
 	/** The river reach it was matched to. */
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead. */

@@ -70,6 +70,11 @@ describe('pieceLine', () => {
 		expect(pieceLine(r, 0)).toBe('410.00 km² · the lowest point: the rest drains out here · on the channel matching river reach 11492928 (412.50 km²)');
 	});
 
+	it('says a click picked at a confluence went on the elevation model’s junction', () => {
+		const r = answer([{ ...piece(0, null, 250), placedBy: 'junction', reach: { dataset: 'HydroRIVERS-v10', reachId: 11491355, upstreamKm2: 497.3 } }], 0);
+		expect(pieceLine(r, 0)).toBe('250.00 km² · the lowest point: the rest drains out here · at the elevation model’s junction, on river reach 11491355 (497.30 km²)');
+	});
+
 	it('names a much larger channel beside a click, instead of the missed-channel warning', () => {
 		const r = answer([{ ...piece(0, null, 0.02), point: [21.465, -28.389], larger: { at: [21.465, -28.3845], distanceM: 504, km2: 619.8, pointKm2: 0.02 } }], 0);
 		expect(pieceLine(r, 0)).toBe(
