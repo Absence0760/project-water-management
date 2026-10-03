@@ -938,7 +938,7 @@ same way on every screen:
   page's body asks too). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
-  decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
+  decided per file; CRLF, LF or bare-CR line endings) or a DWS hydrology export (fixed-width YYYYMMDD with a
   quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
   rules. The form's **File formats** note lists them.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
