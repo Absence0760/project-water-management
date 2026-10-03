@@ -144,9 +144,13 @@
 		fileName = f.name;
 		step = 'reading';
 		if (isWorkbookFile(f)) return pickWorkbook(f);
+		// reset() moved `attempt` on: a read the dialog was closed (or reopened) under is dropped.
+		const mine = attempt;
 		try {
-			preview(await readImportFile(f));
+			const p = await readImportFile(f);
+			if (mine === attempt) preview(p);
 		} catch (e) {
+			if (mine !== attempt) return;
 			pickError = e instanceof Error ? e.message : String(e);
 			step = 'pick';
 		}
