@@ -108,12 +108,18 @@ the dense ones:
   carried as a deficit); modes and targets on a node without a dam.
 - **Allocations** (§2.12a): the cap per source (the budget prorated by the
   allocations' validity, the room MIN(left, the licence limit of the day's
-  months and rates), shared by every draw on the source), the `allocation_*`
+  months and rates), shared by every draw on the source; a day with none of
+  the source's allocations in force uncapped, its room blank and its use not
+  counted, engine ≥ 1.70.0, probes `cap-before-licence` and
+  `cap-licence-from-september`), a demand-sized off-take into a
+  capped unit sized to MIN(demand, its surface room) (§2.6a, engine ≥
+  1.70.0, probe `offtake-into-capped-unit`), the `allocation_*`
   columns, and the summary's `capReached` and `limitBound` rows (with the
   day's kind); full-allocation runs (k per unit and water year over both
-  sources, with a forecast tail, the floor held, the summary's `scaled`
-  rows; k fitted on the demand before the demand factors, which then apply
-  after it, engine ≥ 1.70.0); compare-only runs.
+  sources, 1 in a year with none in force, probe `full-allocation-gap-year`,
+  with a forecast tail, the floor held, the summary's `scaled` rows; k
+  fitted on the demand before the demand factors, which then apply after
+  it, engine ≥ 1.70.0); compare-only runs.
 - **Demand factors** (§2.3 item 4a) from `demandFactorFrom`.
 - **Demand objects** (§2.7f): monthly and per-unit sizing (losses, monthly
   factors), schedules (always, yearly, a date range, Easter-relative, by

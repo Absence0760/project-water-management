@@ -408,7 +408,14 @@ requested volume in a full-allocation background, is one op.
   Under `cap` (engine ≥ 1.37.0) the months of use and the maximum rate
   bind the scenario run as they bind a stored licence ([model.md
   §2.12a](./model.md)), so "what if this licence were winter-only" is one
-  op too.
+  op too. Its `validFrom` / `validTo` bind as well: under `cap` a day on
+  which none of the unit's licences of that source is in force isn't capped
+  for it, and its use doesn't count against the year's volume (engine ≥
+  1.70.0, #90 Q24), so a proposed licence that starts partway through the
+  run leaves the days before it as the unit's modelled demand (the run
+  warns, naming them); under a full allocation a water year with none in
+  force keeps the modelled demand. A demand-sized off-take into a capped
+  unit takes only the demand its cap still allows (§2.6a).
   Unknown keys are dropped, so a holder's name or a registration number never
   enters an op. An id the input has replaces that volume in place; a new id
   adds one.

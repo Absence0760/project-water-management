@@ -128,6 +128,31 @@ MUTANTS = [
         'b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)',
         'b += a["volume"]',
     ),
+    (
+        "a day with no licence in force is capped at 0 when the year has none (engine 1.69.0)",
+        "            if not any(a[\"from\"] <= o <= a[\"to\"] for a in lst):\n                room[(nid, s)] = (math.inf, math.inf, math.inf, math.inf)\n                continue\n",
+        "",
+    ),
+    (
+        "the cap holds from 1 October of a licence's first year, counting the use before its start (the first 1.70.0 draft)",
+        'if not any(a["from"] <= o <= a["to"] for a in lst):',
+        'if not any(overlap_days(wy, a["from"], a["to"]) > 0 for a in lst):',
+    ),
+    (
+        "use on a day with no licence in force counts against the year's volume",
+        "        if not math.isfinite(room[(nid, src)][3]):\n            return\n",
+        "",
+    ),
+    (
+        "a full allocation scales a year with no licence in force to 0 (before engine 1.70.0)",
+        "fac_y[y] = 1.0",
+        "fac_y[y] = 0.0",
+    ),
+    (
+        "an off-take into a capped unit sizes to its whole demand (before engine 1.70.0)",
+        "need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf)",
+        "need = dam_dem(dst, i)",
+    ),
     ("the licence rate ignores its months", 'if a["months"] and m not in a["months"]:\n            continue', "if False:\n            continue"),
     ("the rate limit is ignored", '        lim += a["rate"] * 86400\n', '        return math.inf\n'),
     (

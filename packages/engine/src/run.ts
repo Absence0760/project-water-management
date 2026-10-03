@@ -45,8 +45,8 @@ import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
-import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
-import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
+import { ALLOCATION_SERIES, inForceOver, limitBoundKind, matchAllocations, outsideMonths, planAllocations, registeredOver, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
@@ -2113,7 +2113,7 @@ function runAllocations(
 				const cap = plan.nodes[i]!.allocationCap!;
 				const limit = side.waterSource === 'surface' ? cap.surfaceLimit : cap.groundwaterLimit;
 				const outside = outsideMonths(ap.byNode.get(i) ?? [], side.waterSource, toEpochDay(startDate), budget.length);
-				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3));
+				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3, (ap.byNode.get(i) ?? []).filter((a) => a.waterSource === side.waterSource)));
 			}
 			sources.push(src);
 		}
@@ -2130,7 +2130,9 @@ function runAllocations(
  * (engine ≥ 1.40.0), the days per year the licence limit bound, split by
  * which limit set the room (limitBoundKind). A run resumed inside a water
  * year (`before`, the snapshot's use so far that year) counts the year's use
- * before the snapshot too, as the cap did.
+ * before the snapshot too, as the cap did. Only capped days count (engine ≥
+ * 1.70.0: a day no allocation of the source is in force on has an Infinity
+ * budget, and its use doesn't count); a year with none isn't listed.
  */
 function capYears(
 	budget: Float64Array,
@@ -2139,17 +2141,20 @@ function capYears(
 	source: 'surface' | 'groundwater',
 	r: NodeResult,
 	startDate: string,
-	before?: readonly [number, number]
+	before?: readonly [number, number],
+	/** The unit's allocations of `source`: a resumed run's first year counts as capped when one was in force before the snapshot. */
+	own: readonly AllocationEntry[] = []
 ): { capReached: { waterYear: number; budgetM3: number; usedM3: number }[]; limitBound: AllocationLimitBound[] } {
 	const capReached: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
 	const limitBound: AllocationLimitBound[] = [];
 	const start = toEpochDay(startDate);
 	let wy = NaN;
 	let used = 0;
-	let lastT = 0;
+	// The year's budget, from its capped days (engine ≥ 1.70.0: a day no allocation is in force on isn't capped,
+	// Infinity, and its use doesn't count); NaN for a year with none, which can't reach a cap.
+	let b = NaN;
 	let bound: AllocationLimitBound | null = null;
 	const close = () => {
-		const b = budget[lastT]!;
 		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) capReached.push({ waterYear: wy, budgetM3: b, usedM3: used });
 		if (bound?.days) limitBound.push(bound);
 	};
@@ -2158,18 +2163,23 @@ function capYears(
 		if (y !== wy) {
 			close();
 			// A run that starts on 1 October starts the year afresh (simulateNetwork clears the use then too).
-			used = t === 0 && before && startDate.slice(5) !== '10-01' ? before[source === 'surface' ? 0 : 1] : 0;
+			const resumed = t === 0 && before && startDate.slice(5) !== '10-01';
+			used = resumed ? before[source === 'surface' ? 0 : 1] : 0;
 			wy = y;
+			// A resumed run's first year had capped days before the snapshot if an allocation was in force on one of them.
+			const ys = toEpochDay(`${y}-10-01`);
+			b = resumed && inForceOver(own, ys, start - 1) ? registeredOver(own, y, ys, toEpochDay(`${y + 1}-10-01`) - 1) : NaN;
 			bound = { waterYear: y, days: 0, volumeDays: 0, rateDays: 0, monthsDays: 0 };
 		}
+		if (!(budget[t]! < Infinity)) continue;
+		b = budget[t]!;
 		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
-		const kind = limitBoundKind(Math.max(0, budget[t]! - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, budget[t]!);
+		const kind = limitBoundKind(Math.max(0, b - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, b);
 		if (kind) {
 			bound!.days++;
 			bound![kind]++;
 		}
 		used += use;
-		lastT = t;
 	}
 	close();
 	return { capReached, limitBound };
