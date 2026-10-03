@@ -13,7 +13,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
 import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, loadRiverNetwork, openMap, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, loadRiverNetwork, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const sheet = (page: Page, name = 'Delineate a catchment') => page.getByRole('dialog', { name });
@@ -21,7 +21,7 @@ const review = (page: Page) => sheet(page, 'The delineated catchment');
 
 /** Delineate → the draw bar → Enter coordinates → the sheet, filled and submitted. */
 async function delineateAt(page: Page, [lon, lat]: [number, number], from: 'The catchment’s outlet' | 'Just below a dam wall' = 'The catchment’s outlet') {
-	await header(page).getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
 	await expect(page.getByTestId('map-draw-bar')).toContainText('Delineating a catchment');
 	await page.getByTestId('map-enter-coordinates').click();
 	const s = sheet(page);
@@ -94,7 +94,7 @@ test('a boundary is replaced only with the tick; Reject changes nothing; a point
 	await expect(page.getByTestId('map-notice')).toHaveText(/Rejected the delineated catchment; nothing on the map changed\./);
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
 	// The sheet's opener (the draw bar) is gone: focus comes back to Delineate, not to <body> (WCAG 2.4.3).
-	await expect(header(page).getByRole('button', { name: 'Delineate' })).toBeFocused();
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toBeFocused();
 
 	// From the outlet: accepting as the boundary waits for the tick.
 	await delineateAt(page, FIXTURE_OUTLET);
@@ -103,7 +103,7 @@ test('a boundary is replaced only with the tick; Reject changes nothing; a point
 	await expect(accept).toBeDisabled();
 	// With it waiting, Delineate → Enter coordinates asks for a new point, and Back to the proposal returns to it.
 	await r.getByRole('button', { name: 'Close', exact: true }).click();
-	await header(page).getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
 	await page.getByTestId('map-enter-coordinates').click();
 	await expect(sheet(page).getByTestId('delineate-form')).toBeVisible();
 	await sheet(page).getByTestId('delineate-back').click();
@@ -118,6 +118,7 @@ test('a boundary is replaced only with the tick; Reject changes nothing; a point
 	await review(page).getByTestId('delineate-accept-boundary').click();
 	await expect(page.getByTestId('map-notice')).toContainText('Saved Catchment above the outlet (delineated)');
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
+	await showTab(page, 'features');
 	await expect(page.getByTestId('map-feature-list').getByRole('button', { name: /^Catchment above the outlet/ })).toBeVisible();
 	await expect(page.getByTestId('map-feature-list').getByRole('button', { name: /^Synthetic catchment/ })).toHaveCount(0);
 });
@@ -127,13 +128,13 @@ test('leaving Delineate for Place a point or Draw a shape leaves the delineating
 	const project = await seedRunnableProject(page.request, 'Delineate modes');
 	await openMap(page, project.id);
 	const bar = page.getByTestId('map-draw-bar');
-	await header(page).getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
 	await expect(bar).toContainText('Delineating a catchment');
-	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'true');
-	await header(page).getByRole('button', { name: 'Place a point' }).click();
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await expect(bar).toContainText('Placing a point');
-	await expect(header(page).getByRole('button', { name: 'Place a point' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveAttribute('aria-pressed', 'false');
 	await bar.getByTestId('map-enter-coordinates').click();
 	await expect(page.getByRole('dialog', { name: 'Place a point' })).toBeVisible();
 });
@@ -194,7 +195,7 @@ test('a viewer gets no Delineate', async ({ page, owner, signIn }) => {
 	const viewer = await signIn('Delineate viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await openMap(viewer.page, project.id);
-	await expect(header(viewer.page).getByRole('button', { name: 'Delineate' })).toHaveCount(0);
+	await expect(viewer.page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveCount(0);
 	// A link to the sheet does nothing for a viewer: the param goes.
 	await viewer.page.goto(`/projects/${project.id}?tab=map&delineate=1`);
 	await expect(viewer.page.locator('.map-page[data-ready]')).toBeVisible();

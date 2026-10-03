@@ -13,7 +13,8 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openMap, parcelsGeoJson, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openLayers, openMap, parcelsGeoJson, showTab, uploadThroughSheet } from '../support/map.ts';
+import { layoutSettled } from '../support/reflow.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const layers = (page: Page) => page.getByTestId('map-layers');
@@ -43,6 +44,9 @@ test('the quaternary outlines: a toggle in the URL, the codes around the catchme
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 
+	// The layers are a panel over the map's right edge, under the zoom buttons, opened from its Layers button.
+	await expect(layers(page)).toBeHidden();
+	await openLayers(page);
 	const toggle = layers(page).getByRole('checkbox', { name: 'Quaternary catchments' });
 	await expect(toggle).not.toBeChecked();
 	await expect(page.getByTestId('map-quaternaries')).toHaveCount(0);
@@ -62,6 +66,10 @@ test('the quaternary outlines: a toggle in the URL, the codes around the catchme
 	// A reload keeps the layer on; Back turns it off.
 	await page.reload();
 	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
+	// The panel's open state isn't in the URL (the layers are): its button counts the layers on.
+	await expect(page.getByTestId('map-layers-toggle')).toHaveAttribute('aria-expanded', 'false');
+	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (1 on)');
+	await openLayers(page);
 	await expect(layers(page).getByRole('checkbox', { name: 'Quaternary catchments' })).toBeChecked();
 	await expect(codes(page).getByRole('button')).toHaveCount(6);
 	await page.goBack();
@@ -77,6 +85,7 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 
+	await openLayers(page);
 	const toggle = layers(page).getByRole('checkbox', { name: 'River network' });
 	await expect(toggle).not.toBeChecked();
 	await toggle.check();
@@ -114,11 +123,37 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await expect(page.getByTestId('map-rivers')).toHaveCount(0);
 });
 
+/** The fit with the Layers panel open: the page doesn't scroll, the panel ends inside the map, the side column's panel inside the column. */
+const fitWithLayers = (page: Page) =>
+	page.evaluate(() => {
+		const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+		const map = r('.map-body');
+		const panel = r('.layers-panel');
+		const side = r('.map-side');
+		const shown = [...document.querySelectorAll('.map-side .tab-panel')].find((e) => !(e as HTMLElement).hidden)!.getBoundingClientRect();
+		const reaches = document.querySelector('.layers-panel') as HTMLElement;
+		return {
+			scroll: document.documentElement.scrollHeight,
+			inner: window.innerHeight,
+			panelBottom: panel.bottom,
+			mapBottom: map.bottom,
+			panelRight: panel.right,
+			mapRight: map.right,
+			panelScrolls: reaches.scrollHeight > reaches.clientHeight ? getComputedStyle(reaches).overflowY : 'fits',
+			shownBottom: shown.bottom,
+			sideBottom: side.bottom,
+			mapHeight: map.height
+		};
+	});
+
+// Until 2026-10-02 the layers were a box in the side column, squeezing the list and the picked feature's card (PR #348 found the
+// column running past a 1280×800 window). They are a panel over the map now: with both layers on, a reach and a feature picked, the
+// panel stays inside the map (scrolling in its own box), the page doesn't scroll, and the side column keeps its one panel whole.
 for (const [width, height] of [
 	[1440, 960],
 	[1280, 800]
 ] as const) {
-	test(`with both layers on and a reach picked the page still fits a ${width}×${height} window, the list keeping its room`, async ({ page, owner }) => {
+	test(`with both layers on, a reach and a feature picked, the Layers panel stays inside the map at ${width}×${height}`, async ({ page, owner }) => {
 		void owner;
 		await page.setViewportSize({ width, height });
 		await loadSyntheticQuaternaries();
@@ -127,66 +162,26 @@ for (const [width, height] of [
 		await openMap(page, project.id);
 		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 		await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
-		// No feature picked (the upload picked one): the reviewer's measured case, the card at its smallest.
 		await openMap(page, project.id, '&layers=quaternaries,rivers');
+		await openLayers(page);
 		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
 		await page.getByTestId('map-reach-list').getByRole('button').first().click();
 		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
-		const fit = await page.evaluate(() => ({
-			scroll: document.documentElement.scrollHeight,
-			inner: window.innerHeight,
-			list: document.querySelector('.list-box')!.getBoundingClientRect().height,
-			checksBottom: document.querySelector('[data-testid="map-checks-line"]')!.getBoundingClientRect().bottom
-		}));
-		expect(fit.scroll).toBeLessThanOrEqual(fit.inner);
-		expect(fit.list).toBeGreaterThanOrEqual(8 * 16);
-		expect(fit.checksBottom).toBeLessThanOrEqual(fit.inner);
-	});
-}
-
-/** The side column's fit: the page doesn't scroll, every box ends inside the column, the list keeps its room. */
-const sideFit = (page: Page) =>
-	page.evaluate(() => {
-		const side = document.querySelector('.map-side')!.getBoundingClientRect();
-		const boxes = [...document.querySelectorAll('.map-side > *')].map((e) => ({ cls: e.className, bottom: e.getBoundingClientRect().bottom }));
-		return {
-			scroll: document.documentElement.scrollHeight,
-			inner: window.innerHeight,
-			sideBottom: side.bottom,
-			overflowing: boxes.filter((b) => b.bottom > side.bottom + 0.5).map((b) => b.cls),
-			list: document.querySelector('.list-box')!.getBoundingClientRect().height,
-			card: document.querySelector('[data-testid="map-feature-card"]')!.getBoundingClientRect().height
-		};
-	});
-
-// Reported on PR #348: with a feature picked (its card at full size) as well as a reach, the side column ran
-// past the window at 1280×800. The card and the layers give way (each scrolls in its box), never the list's room.
-for (const [width, height] of [
-	[1440, 960],
-	[1280, 800]
-] as const) {
-	test(`with a feature and a reach picked the side column still fits a ${width}×${height} window`, async ({ page, owner }) => {
-		void owner;
-		await page.setViewportSize({ width, height });
-		await loadSyntheticQuaternaries();
-		await loadSyntheticRivers();
-		const project = await seedRunnableProject(page.request, `Map side fit ${width}`);
-		await openMap(page, project.id);
-		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
-		await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
-		await openMap(page, project.id, '&layers=quaternaries,rivers');
-		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
-		await page.getByTestId('map-reach-list').getByRole('button').first().click();
-		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
+		await showTab(page, 'features');
 		await page.getByTestId('map-feature-list').getByRole('button', { name: /Upper farm/ }).first().click();
 		await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
-		const fit = await sideFit(page);
+		// The pick leaves the Layers panel open: it is the map's, not the column's.
+		await expect(layers(page)).toBeVisible();
+		await layoutSettled(page);
+		const fit = await fitWithLayers(page);
 		expect(fit.scroll).toBeLessThanOrEqual(fit.inner);
-		expect(fit.overflowing).toEqual([]);
+		expect(fit.panelBottom).toBeLessThanOrEqual(fit.mapBottom);
+		expect(fit.panelRight).toBeLessThanOrEqual(fit.mapRight);
+		expect(['fits', 'auto']).toContain(fit.panelScrolls);
+		expect(fit.shownBottom).toBeLessThanOrEqual(fit.sideBottom + 0.5);
 		expect(fit.sideBottom).toBeLessThanOrEqual(fit.inner);
-		expect(fit.list).toBeGreaterThanOrEqual(8 * 14);
-		// The card keeps enough to read its heading and first facts.
-		expect(fit.card).toBeGreaterThanOrEqual(6 * 14);
+		// The map keeps the window's height: nothing stacks above it but the header.
+		expect(fit.mapHeight).toBeGreaterThanOrEqual(height - 260);
 	});
 }
 
@@ -196,6 +191,7 @@ test('the river network with nothing on the map yet: zoom in and it asks for the
 	const project = await seedRunnableProject(page.request, 'Map layers rivers empty');
 	await openMap(page, project.id);
 	await mapReady(page);
+	await openLayers(page);
 	await layers(page).getByRole('checkbox', { name: 'River network' }).check();
 	// The whole country is in view: too wide to ask for, so it says to zoom in, and asks nothing.
 	const rivers = page.getByTestId('map-rivers');
@@ -224,6 +220,8 @@ test('Download GeoJSON hands over every feature with its name, kind, node and ar
 	await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
 
+	// Download sits with the list, on the side column's Features tab.
+	await showTab(page, 'features');
 	const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('map-download-geojson').click()]);
 	expect(download.suggestedFilename()).toMatch(/^map-layers-download-map-\d{4}-\d{2}-\d{2}\.geojson$/);
 	const doc = JSON.parse(await readFile((await download.path())!, 'utf8'));
@@ -244,10 +242,10 @@ test('Measure from the keyboard: points at the crosshair, the distance in words,
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 	await mapReady(page);
 
-	await header(page).getByRole('button', { name: 'Measure' }).focus();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Measure', exact: true }).focus();
 	await page.keyboard.press('Enter');
 	await expect(measureBar(page)).toBeVisible();
-	await expect(header(page).getByRole('button', { name: 'Measure' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Measure', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(canvas(page)).toBeFocused();
 	await expect(canvas(page)).toHaveAttribute('aria-label', /measuring: .*Enter adds a point there.*Escape ends the measurement/);
 	await expect(result(page)).toHaveText('Click the map to add the first point, or press Enter at the crosshair.');
@@ -276,7 +274,7 @@ test('Measure from the keyboard: points at the crosshair, the distance in words,
 	await page.keyboard.press('Escape');
 	await expect(measureBar(page)).toHaveCount(0);
 	await expect(page.getByRole('alertdialog')).toHaveCount(0);
-	await expect(header(page).getByRole('button', { name: 'Measure' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Measure', exact: true })).toHaveAttribute('aria-pressed', 'false');
 	// Nothing was saved.
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
 });
@@ -290,12 +288,13 @@ for (const scheme of ['light', 'dark'] as const) {
 		const project = await seedRunnableProject(page.request, `Map layers axe ${scheme}`);
 		await openMap(page, project.id, '&layers=quaternaries,rivers');
 		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+		await openLayers(page);
 		await expect(codes(page).getByRole('button')).toHaveCount(6);
 		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
 		await page.getByTestId('map-reach-list').getByRole('button').first().click();
 		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
 		await expectNoViolations(page);
-		await header(page).getByRole('button', { name: 'Measure' }).click();
+		await page.getByTestId('map-tools').getByRole('button', { name: 'Measure', exact: true }).click();
 		await expect(measureBar(page)).toBeVisible();
 		await expectNoViolations(page);
 	});

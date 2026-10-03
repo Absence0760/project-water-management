@@ -766,9 +766,10 @@
 			linear-gradient(var(--mk-selected), var(--mk-selected)) center / 100% 3px no-repeat;
 		filter: drop-shadow(0 0 1px var(--mk-casing)) drop-shadow(0 0 1px var(--mk-casing));
 	}
+	/* --map-inset-left: room a caller's tools take on the map's left edge (the Map tab's palette); 0 elsewhere. */
 	.map-state {
 		position: absolute;
-		inset: 0.75rem 0.75rem auto 0.75rem;
+		inset: 0.75rem 0.75rem auto calc(0.75rem + var(--map-inset-left, 0px));
 		margin: 0;
 	}
 	.tiles-note {
@@ -816,12 +817,12 @@
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
-	/* The picked feature's name (#326 E9), over the top-left corner (the zoom buttons are top right). */
+	/* The picked feature's name (#326 E9), over the top-left corner (the zoom buttons are top right), right of any tools there. */
 	.picked-name {
 		position: absolute;
 		top: 0.6rem;
-		left: 0.6rem;
-		max-width: calc(100% - 5rem);
+		left: calc(0.6rem + var(--map-inset-left, 0px));
+		max-width: calc(100% - 5rem - var(--map-inset-left, 0px));
 		margin: 0;
 		padding: 0.25rem 0.55rem;
 		display: flex;

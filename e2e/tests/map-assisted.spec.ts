@@ -16,7 +16,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { box, openMap } from '../support/map.ts';
+import { box, openMap, showTab } from '../support/map.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { WATER_DAM, WATER_DRY } from '../support/water.ts';
 
@@ -63,7 +63,7 @@ test('snapping: a click near a parcel’s corner lands on it; Alt, and Snap to f
 	await page.getByTestId('map-show-everything').click();
 
 	// The draw bar takes room above the map, which keeps its middle: measure the canvas once it is there.
-	await header(page).getByRole('button', { name: 'Draw a shape' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Draw a shape', exact: true }).click();
 	await expect(bar(page).getByLabel('Snap to features')).toBeChecked();
 	const b = (await canvas(page).boundingBox())!;
 	const near = { x: b.x + b.width / 2 + 5, y: b.y + b.height / 2 - 4 };
@@ -87,7 +87,7 @@ test('snapping: a click near a parcel’s corner lands on it; Alt, and Snap to f
 
 	// By keyboard: the crosshair at the map's middle is the corner; Enter places it there, on the corner.
 	await page.mouse.move(b.x + b.width + 50, b.y + b.height / 2);
-	await header(page).getByRole('button', { name: 'Draw a shape' }).focus();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Draw a shape', exact: true }).focus();
 	await page.keyboard.press('Enter');
 	await expect(canvas(page)).toBeFocused();
 	await expect(page.getByTestId('map-crosshair')).toBeVisible();
@@ -105,6 +105,7 @@ test('splitting: the boundary into two named areas (it stays whole), a parcel in
 	const parcel = await place(page, project.id, { kind: 'farm_parcel', name: 'Upper farm', geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.04)] } });
 	await openMap(page, project.id);
 
+	await showTab(page, 'features');
 	await row(page, 'Synthetic catchment').click();
 	await card(page).getByRole('button', { name: 'Split along a line' }).click();
 	await expect(bar(page).getByRole('heading', { name: 'Splitting “Synthetic catchment”' })).toBeVisible();
@@ -135,6 +136,7 @@ test('splitting: the boundary into two named areas (it stays whole), a parcel in
 	await expect(sheet).toBeHidden();
 	await expect(bar(page)).toHaveCount(0);
 	await expect(page.getByTestId('map-notice')).toHaveText(/Split Synthetic catchment in two: “West unit” and “East unit”\./);
+	await showTab(page, 'features');
 	await expect(row(page, 'West unit')).toContainText('km²');
 	await expect(row(page, 'Synthetic catchment')).toBeVisible();
 
@@ -146,12 +148,14 @@ test('splitting: the boundary into two named areas (it stays whole), a parcel in
 	expect(halves[0]!.properties.description).toBe('Split from “Synthetic catchment” along a drawn line.');
 
 	// A parcel: it keeps its name and id on the first part.
+	await showTab(page, 'features');
 	await row(page, 'Upper farm').click();
 	await card(page).getByRole('button', { name: 'Split along a line' }).click();
 	await paste(page, 'LINESTRING(21.30 -33.67, 21.36 -33.67)');
 	await bar(page).getByRole('button', { name: 'Split…' }).click();
 	await expect(page.getByRole('dialog', { name: 'Split the shape' }).getByLabel('The parts are')).toHaveCount(0);
 	await page.getByTestId('split-submit').click();
+	await showTab(page, 'features');
 	await expect(row(page, 'Upper farm (part 2)')).toBeVisible();
 	all = await features(page, project.id);
 	expect(all.filter((f) => f.kind === 'farm_parcel').map((f) => f.name).sort()).toEqual(['Upper farm', 'Upper farm (part 2)']);
@@ -164,7 +168,7 @@ test('tracing a dam from typed coordinates: dry land is refused; the outline com
 	await place(page, project.id, boundary);
 	await openMap(page, project.id);
 
-	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true }).click();
 	await expect(bar(page).getByRole('heading', { name: 'Tracing a dam' })).toBeVisible();
 	// No snapping while placing a trace's point: it would pull a click in the water onto a shoreline.
 	await expect(bar(page).getByLabel('Snap to features')).toHaveCount(0);
@@ -202,6 +206,7 @@ test('tracing a dam from typed coordinates: dry land is refused; the outline com
 	await save.getByLabel('Name (optional)').fill('Traced dam');
 	await save.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(save).toBeHidden();
+	await showTab(page, 'features');
 	await expect(row(page, 'Traced dam')).toContainText('ha');
 	const dam = (await features(page, project.id)).find((f) => f.name === 'Traced dam')!;
 	expect(dam.kind).toBe('dam');
@@ -213,23 +218,23 @@ test('one placing mode at a time: Trace a dam, then Place a point or Delineate, 
 	const project = await seedRunnableProject(page.request, 'Map trace modes');
 	await place(page, project.id, boundary);
 	await openMap(page, project.id);
-	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
-	await expect(header(page).getByRole('button', { name: 'Trace a dam' })).toHaveAttribute('aria-pressed', 'true');
-	await header(page).getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true }).click();
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await expect(bar(page).getByLabel('Placing a point')).toBeVisible();
-	await expect(header(page).getByRole('button', { name: 'Trace a dam' })).toHaveAttribute('aria-pressed', 'false');
-	await expect(header(page).getByRole('button', { name: 'Place a point' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true })).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await page.getByTestId('map-enter-coordinates').click();
 	await expect(page.getByRole('dialog', { name: 'Place a point' })).toBeVisible();
 	await page.getByRole('dialog', { name: 'Place a point' }).getByRole('button', { name: 'Close' }).last().click();
-	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
-	await header(page).getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
 	await expect(bar(page).getByRole('heading', { name: 'Delineating a catchment' })).toBeVisible();
-	await expect(header(page).getByRole('button', { name: 'Trace a dam' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true })).toHaveAttribute('aria-pressed', 'false');
 	await bar(page).getByRole('button', { name: 'Cancel' }).click();
 
 	// A traced outline drawn as something else is no longer the trace, and says so.
-	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true }).click();
 	await page.getByTestId('map-enter-coordinates').click();
 	const sheet = page.getByRole('dialog', { name: 'Trace a dam' });
 	await sheet.getByLabel('Latitude').fill(String(WATER_DAM[1]));
@@ -249,6 +254,7 @@ test('on a phone the assisted tools fit and pass axe; a viewer gets neither Trac
 	await place(page, project.id, boundary);
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openMap(page, project.id);
+	await showTab(page, 'features');
 	await row(page, 'Synthetic catchment').click();
 	await card(page).getByRole('button', { name: 'Split along a line' }).click();
 	await paste(page, 'LINESTRING(21.35 -33.75, 21.35 -33.55)');
@@ -256,7 +262,7 @@ test('on a phone the assisted tools fit and pass axe; a viewer gets neither Trac
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
 	await bar(page).getByRole('button', { name: 'Cancel' }).click();
-	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true }).click();
 	await expect(bar(page).getByRole('combobox', { name: /^Water in at least\b/ })).toHaveValue('25');
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
@@ -264,8 +270,9 @@ test('on a phone the assisted tools fit and pass axe; a viewer gets neither Trac
 	const viewer = await signIn('Assisted viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await openMap(viewer.page, project.id);
-	await expect(header(viewer.page).getByRole('button', { name: 'Draw a shape' })).toHaveCount(0);
-	await expect(header(viewer.page).getByRole('button', { name: 'Trace a dam' })).toHaveCount(0);
+	await expect(viewer.page.getByTestId('map-tools').getByRole('button', { name: 'Draw a shape', exact: true })).toHaveCount(0);
+	await expect(viewer.page.getByTestId('map-tools').getByRole('button', { name: 'Trace a dam', exact: true })).toHaveCount(0);
+	await showTab(viewer.page, 'features');
 	await row(viewer.page, 'Synthetic catchment').click();
 	await expect(card(viewer.page).getByRole('heading', { name: 'Synthetic catchment' })).toBeVisible();
 	await expect(card(viewer.page).getByRole('button', { name: 'Split along a line' })).toHaveCount(0);
