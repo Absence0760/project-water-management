@@ -9,6 +9,7 @@ import type { DividePlan, DivideTicks, DivideUnit, MapFeature } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
 import { KIND_NODES } from './mapData';
 import { candidatePoints } from './startFlow';
+import type { PlacementChoices } from './placement';
 
 /** A point's choice: a node's id, a new gauge node, or not in the division. */
 export type DivideChoice = string | 'new-gauge' | 'none';
@@ -20,6 +21,8 @@ export interface DivideDraft {
 	picked: Record<string, DivideChoice>;
 	outlet: string | null;
 	ticks: Record<string, DivideTicks>;
+	/** The rivers picked at confluences and the larger channels taken, by point ('' the outlet gauge): sent with every proposal (placement.ts). */
+	placement: PlacementChoices;
 }
 
 /** The model's outflow: the node that drains nowhere (exactly one, or the model can't be divided). */

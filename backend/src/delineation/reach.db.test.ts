@@ -203,7 +203,7 @@ describe('Sub-catchments', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(200);
 		const [matched] = r.body.pieces;
 		expect(matched).toMatchObject({ click: 0, placedBy: 'matched', reach: { dataset: DATASET, reachId: 99000001 }, larger: null });
-		expect(r.body.methodVersion).toBe('start-6');
+		expect(r.body.methodVersion).toBe('start-7');
 		await asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
 		const plain = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, {
 			clicks: [

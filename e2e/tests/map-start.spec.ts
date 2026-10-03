@@ -11,13 +11,16 @@
 // Axe-scanned on the review, light and dark, and on a phone. A gauge inside
 // the catchment becomes a gauge node in the order, and each proposed piece
 // carries its number on the map and on its card (#326 C3's follow-up).
+// Each point is placed as Delineate places a click (start-7): an outlet
+// gauge beside a gully names the larger channel and Use that channel puts it
+// there; a gauge at a confluence asks which river.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_MID_GAUGE, FIXTURE_OUTLET } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_MID_GAUGE, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openMap } from '../support/map.ts';
+import { loadRiverNetwork, openMap } from '../support/map.ts';
 
 const startSheet = (page: Page) => page.getByRole('dialog', { name: 'Start the model from the map' });
 const bar = (page: Page) => page.getByTestId('map-draw-bar');
@@ -254,4 +257,63 @@ test('a gauge inside the catchment becomes a gauge node; each piece has its numb
 	const by = Object.fromEntries(model.nodes.map((n) => [n.name, n]));
 	expect(by['Mid weir']).toMatchObject({ kind: 'gauge', downstreamNodeId: by['Valley weir']!.id });
 	expect(by['Valley dam']).toMatchObject({ kind: 'farm', downstreamNodeId: by['Mid weir']!.id });
+});
+
+/** A project with one gauge on the map at `at`, the Start sheet open at the points with it as the outlet. */
+async function startAtGauge(page: Page, name: string, at: [number, number]): Promise<void> {
+	const project = await createProject(page.request, name);
+	const r = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'gauge', name: 'Weir', lon: at[0], lat: at[1] } });
+	expect(r.status()).toBe(201);
+	const weir = ((await r.json()) as { feature: { id: string } }).feature.id;
+	await openMap(page, project.id, '&start=1');
+	await startSheet(page).getByTestId('start-skip-boundary').click();
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'points');
+	await startSheet(page).getByTestId('start-outlet').selectOption(weir);
+}
+
+test('an outlet gauge beside a gully: the larger channel is named, and Use that channel puts the outlet on it', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	// Three cells off the river, as a displaced river line puts a gauge: a 150 m snap finds only the hillside.
+	await startAtGauge(page, 'Start beside a gully', FIXTURE_OFF_CHANNEL);
+	await startSheet(page).getByTestId('start-propose').click();
+	const review = page.getByTestId('start-review');
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'review');
+	await expect(review.getByTestId('start-warnings')).toContainText(/A much larger channel runs \d+ m west of the outlet \(Weir\)/);
+	await expect(review.getByTestId('start-outlet-placement')).toHaveText(/^The outlet: Snapped to the most-drained cell nearby, \d+ m from the point\.$/);
+	await expect(review.getByTestId('start-catchment')).toHaveText(/^\d\.\d\d km²$/);
+	await expectNoViolations(page);
+	await review.getByTestId('start-outlet-use-larger').click();
+	// Proposed again with the outlet on the river: the valley above the mid gauge, hundreds of km².
+	await expect(review.getByTestId('start-outlet-placement')).toHaveText(/^The outlet: On the larger channel, as you chose, \d+ m from the point\.$/);
+	await expect(review.getByTestId('start-catchment')).toHaveText(/^[34]\d\d\.\d\d km²$/);
+	await expect(review.getByTestId('start-outlet-use-larger')).toHaveCount(0);
+});
+
+test('an outlet gauge at a confluence asks which river, and is placed on the one picked', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	// The same reaches as Delineate's confluence spec (loading a dataset replaces it, so the two agree).
+	await loadRiverNetwork('e2e-confluence', [
+		{ id: 99100001, upstreamKm2: 400, order: 4, line: FIXTURE_JUNCTION_RIVER },
+		{ id: 99100002, upstreamKm2: 3, order: 1, line: FIXTURE_JUNCTION_TRIBUTARY }
+	]);
+	await startAtGauge(page, 'Start at a confluence', FIXTURE_JUNCTION);
+	await startSheet(page).getByTestId('start-propose').click();
+	const ask = startSheet(page).getByTestId('start-confluence');
+	await expect(ask).toBeVisible();
+	await expect(ask.getByRole('group', { name: 'The outlet (Weir)' }).getByRole('radio')).toHaveCount(2);
+	await expect(ask.getByTestId('start-confluence-submit')).toBeDisabled();
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await expectNoViolations(page);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
+	await ask.getByRole('radio', { name: 'The river along the point, 400 km²' }).check();
+	await ask.getByTestId('start-confluence-submit').click();
+	const review = page.getByTestId('start-review');
+	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'review');
+	await expect(review.getByTestId('start-outlet-placement')).toHaveText(/^The outlet: On the channel matching river reach 99100001 \(400 km²\), picked at the confluence, \d+ m from the point\.$/);
+	await expect(review.getByTestId('start-catchment')).toHaveText(/^[34]\d\d\.\d\d km²$/);
+	await expect(ask).toHaveCount(0);
 });

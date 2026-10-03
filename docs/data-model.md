@@ -1677,7 +1677,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   areas and outlines, the order, the rest of the catchment, the outlet, the
   warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),

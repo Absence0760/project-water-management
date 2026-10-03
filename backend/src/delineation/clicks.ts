@@ -29,7 +29,7 @@ import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
 import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach } from './reach.js';
 import { configuredDem } from './dem.js';
-import { delineateUnits, type Subcatchments } from './subcatchments.js';
+import { delineateUnits, type PlacedBy, type Subcatchments } from './subcatchments.js';
 
 /** Clicks one request may carry: Start from the map's cap on points. */
 export const CLICKS_MAX = 50;
@@ -85,6 +85,9 @@ export interface ClickPieces {
 	methodVersion: string;
 }
 
+/** A click is a point, so only these three placements reach it (no polygon, no delineated outlet, no editor's choice of a larger channel). */
+const clickPlacedBy = (h: PlacedBy | undefined): ClickPiece['placedBy'] => (h === 'matched' || h === 'junction' ? h : 'snapped');
+
 /** The partition's answer in clicks: the lowest click's piece is its "rest". Pure. */
 export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | null)[] = []): ClickPieces {
 	const reachOf = (i: number) => {
@@ -103,7 +106,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			areaM2: r.rest.areaM2,
 			totalAreaM2: r.catchment.areaM2,
 			open: !!r.rest.open,
-			placedBy: r.outlet.placedBy ?? 'snapped',
+			placedBy: clickPlacedBy(r.outlet.placedBy),
 			reach: r.outlet.placedBy === 'matched' || r.outlet.placedBy === 'junction' ? reachOf(lowest) : null,
 			larger: r.outlet.larger ?? null,
 			unmatched: r.outlet.unmatched ? reachOf(lowest) : null
@@ -117,7 +120,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			areaM2: u.areaM2,
 			totalAreaM2: u.totalAreaM2,
 			open: !!u.open,
-			placedBy: u.placedBy ?? ('snapped' as const),
+			placedBy: clickPlacedBy(u.placedBy),
 			reach: u.placedBy === 'matched' || u.placedBy === 'junction' ? reachOf(Number(u.id)) : null,
 			larger: u.larger ?? null,
 			unmatched: u.unmatched ? reachOf(Number(u.id)) : null

@@ -1240,8 +1240,8 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   cover, then Runs). Typing the model in on the Network stays the other
   way; upload works at every step.
 - **Sub-catchments.** With a DEM, the server routes one window around the
-  catchment once (the same fill and D8 as Delineation), snaps the outlet and
-  every point to the channel (a dam polygon: its most-drained cell), and
+  catchment once (the same fill and D8 as Delineation), puts the outlet and
+  every point on the channel (below), and
   gives each unit the cells whose flow meets it before any other unit: its
   own piece, outlined with its holes (a unit upstream lying wholly inside
   it). **Every area comes from the cells** (`start-6`): each cell's own
@@ -1258,13 +1258,36 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlet's own piece. A point that doesn't drain to the outlet, or snaps
   onto another, is dropped with the reason; a DEM catchment more than 10 %
   off the boundary's area is warned about.
+- **Placing the points: as Delineate does** (`start-7`, the hydrologist's
+  review finding 3; `delineation/pointPlacement.ts`). The outlet gauge and
+  each point are placed by Delineation's rules ([§ Delineation](#delineation)):
+  near a loaded river reach (within 1 km), on the cell whose upstream area
+  matches the reach's; otherwise on the most-drained cell within 150 m. A
+  point at a confluence is asked about in the sheet ("These points are at a
+  confluence …", each with its rivers to pick; every such point at once),
+  then goes at the DEM's junction for the river picked. A point snapped
+  beside a channel with 100× its upstream area keeps that channel as a
+  warning ("A much larger channel runs 202 m west of the outlet …"), the
+  outlet's first, and its card offers **use that channel**, which proposes
+  again with the point on it (a point dropped as "not upstream" from a
+  gully beside its river offers it too). A dam polygon takes its most-drained cell; a
+  delineated outlet (a boundary from Delineate) stays on its own cell, where
+  Delineate put it. Each card says where its point went ("On the channel
+  matching river reach 11509680 (292 km²), 602 m from the point"), and the
+  method names only the rules that ran. Before `start-7` every point was
+  snapped 150 m with no reach and the guard's warning dropped: on 12
+  HydroRIVERS reaches of 100–600 km², 5 gauge outlets landed in gullies
+  (5.6, 1.4 and 0.1 km² for reaches of 292, 237 and 166 km²) and the dams
+  above them were dropped as "not upstream"; placed as Delineate does, the
+  same gauges give 428, 334 and 156 km², Delineate's own answers
+  (`backend/scripts/research/snap-start.ts`).
 - **Without a DEM** (`DEM_URL` empty): the units come from the points with
   no area and all drain into the outflow gauge; the rest of the catchment is
   the boundary.
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-6)") and its area from it (*from the map*), the
+  delineated from … (start-7)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units

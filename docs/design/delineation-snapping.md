@@ -3,8 +3,9 @@
 Why a click on a river line can land in a gully, what the literature does
 about it, and what each way of moving a click onto the channel gets right on
 real South African rivers. Written for issue #374; the rules it led to are
-built in `backend/src/delineation/place.ts` (Delineate `delineate-2`, Start,
-Divide and Sub-catchments `start-3`) and described in
+built in `backend/src/delineation/place.ts` (Delineate `delineate-2`,
+Sub-catchments `start-3`, and Start and Divide only since `start-7`: until
+then they snapped every point 150 m, the hydrologist's review finding 3) and described in
 [maps.md § Delineation](../maps.md#delineation) and
 [delineation.md § Method](./delineation.md#method). Measured 2026-10-02.
 
