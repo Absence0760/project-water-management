@@ -175,7 +175,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were. The **Node table** and **Planted areas** also take a block copied from a spreadsheet: paste it into any cell, or use **Paste from a spreadsheet…** under the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. A preview lists every value it would change before **Apply**, and nothing is kept until you save.'
+						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet over the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard model changes** and **Done**, which brings you back where you were. The **Node table**, **Crop factors** and **Planted areas** also take a block copied from a spreadsheet: paste it into any cell, or use **Paste from a spreadsheet…** under the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. A preview lists every value it would change before **Apply**, and nothing is kept until you save.'
 					},
 					{
 						type: 'note',
@@ -301,7 +301,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Start with **Add outflow gauge**: the gauge at the catchment outlet.',
-							'Press **+ Add node** for each hydrological unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Tables** › **Node table**).',
+							'Press **+ Add node** for each hydrological unit (its form opens in a sheet over the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Tables** › **Node table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
 							'Give every hydrological unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
 							'For a hydrological unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card beside the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
