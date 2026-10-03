@@ -2190,13 +2190,40 @@ The workbook has two blocks of columns:
   first). Within one priority, rules into one destination share its room and
   rules from one source share its free water, each pro rata to its own limit,
   so results never depend on the list order. **Engine ≥ 1.70.0** (issue #90
-  Q25): the limit is `maxDaily` alone, proportional rationing, never first
-  capped at the source's free water (the bands below keep each rule above
-  its reserve), so a rule split into several gets the same total; before,
-  it was `MIN(maxDaily, srcFree)`, and on a short source the pieces of a
-  split rule got more (§2.6a, "Rules of one priority: proportional
-  rationing", for the rule, the source and a worked example of both paths).
+  Q25), proportional rationing in rounds: each rule asks its `maxDaily`
+  alone, never first cut to its source's free water or its receiver's room,
+  and within one priority
+  1. each source shares its water among its rules, in bands at their
+     reserves (below), pro rata to what each still asks;
+  2. each receiver's room is shared among the rules into it, pro rata to
+     what their sources gave them; a receiver given more than its room is
+     full;
+  3. room a rule couldn't fill because its source was short is offered
+     again: while a receiver filled in the round, the rules into receivers
+     that aren't full ask again for what they still want, from what their
+     sources have left (steps 1 and 2 again).
+  A round frees source water only by filling a receiver, and a full
+  receiver's rules ask nothing more, so this ends within one round more
+  than the receivers. Every step shares in proportion, so a rule split into
+  several (its limit divided between them) gets the same total, however
+  many sources feed a receiver; and no water is left that a receiver with
+  room could have had from a source with water above the rule's reserve.
   For one rule alone the move is still `MIN(srcFree, dstRoom, maxDaily)`.
+  Before 1.70.0 a rule asked `MIN(maxDaily, srcFree)` and the room was
+  shared first, so on a short source the pieces of a split rule got more
+  (§2.6a, "Rules of one priority: proportional rationing", for the rule,
+  its source and worked examples). Worked examples of the rounds
+  (`e2e/network.offtakeDecisions.e2e.test.ts`): an empty source and a full
+  one into one receiver with 400 m³ of room, limits 300 and 500: the empty
+  source gives nothing, the full one 500, so the room goes to it, 400
+  (sharing the room by the limits would have left 150 of it unused). A
+  source holding 50 m³ beside the full one: the sources give 50 and 500,
+  the room is shared 50 : 500, 36.4 and 363.6. One source of 900 m³ (reserve
+  0) into three receivers with rooms 100, 350 and 2 000, limits 1 000:
+  round 1 gives 300 each, the first receiver takes 100 (full), the second
+  300, the third 300; round 2 offers the 200 left, 100 each, the second
+  takes 50 (full), the third 100; round 3 the third takes the last 50: 100,
+  350, 450, and the source is empty (one round alone would leave 200 in it).
   **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90): the room cap, the fixed release in the room, settling before
   irrigation and the priority-then-pro-rata sharing are kept. A dam can't
   hold more than its room, and a transfer that spilled on arrival would be a
@@ -2229,21 +2256,17 @@ The workbook has two blocks of columns:
   at least a rule's reserve take together at most `MAX(0, storage[src][t−1]
   − taken by lower priorities − that reserve)` (§6 Verification).
   **The order of the two sharings within one priority** (verify/ probe
-  `band-and-room`): first each receiver's room is shared among the rules
-  into it, pro rata to their limits (`maxDaily`, engine ≥ 1.70.0; `MIN(maxDaily,
-  srcFree)` before), which cuts
-  each rule to what the receiver can take; then each source's bands are
-  shared among its rules, pro rata to what each still wants after that cut.
-  Nothing is redistributed afterwards: a rule the band cuts leaves its share
-  of the receiver's room unused that day. Example: a full 1 000 m³ dam, rule
-  a keeps 50 % and may send 400 m³ into a receiver with 100 m³ of room, rule
-  b keeps 0 % and may send 800 m³ into an empty dam. The room cuts a to 100;
-  the band 1 000–500 m³ is shared 100 : 800 (a 55.6, b 444.4) and the band
-  below goes to b (355.6 more), so a moves 55.6 and b 800 (sharing the bands
-  first and the room after would give a 100). Since a rule's limit isn't cut
-  to its source's free water before the room is shared (engine ≥ 1.70.0), a
-  rule from a source that is empty, or nearly, still takes its share of a
-  receiver's room, and the share it can't fill stays unused that day. The room is counted from the
+  `band-and-room`): engine ≥ 1.70.0, the source's bands first and the
+  receiver's room after, in rounds (above). Example: a full 1 000 m³ dam,
+  rule a keeps 50 % and may send 400 m³ into a receiver with 100 m³ of
+  room, rule b keeps 0 % and may send 800 m³ into an empty dam. The source
+  rations first: the band 1 000–500 m³ is shared 400 : 800 (a 166.7, b
+  333.3) and b takes its other 466.7 from below; the room then cuts a to
+  100 and that receiver is full, so nothing is offered again: a 100, b 800,
+  and the dam ends at 100 (a still never took it below 500). Before 1.70.0
+  the room came first, pro rata to `MIN(maxDaily, srcFree)`, cutting a to
+  100, then the band 1 000–500 was shared 100 : 800, so a moved 55.6, and a
+  rule the band cut left its share of the receiver's room unused that day. The room is counted from the
   receiver's **yesterday's** storage, as the formula says, even when the
   receiver sends water at a lower priority the same day: what it sends first
   makes no room for what it receives (probe `room-while-sending`).
@@ -2463,14 +2486,18 @@ than once at its full size, it takes that many times its licence: enter each
 licence once (a licence split into parts runs the same as one rule)`. One
 warning per group, its rules in id order (`network/offtake.ts`
 `splitLicenceWarnings`); a warning, never a refusal. Dam rules aren't
-checked. **What it costs:** an ask is no longer cut to what its source can
-give before the receiver's room is shared (§2.6, "the order of the two
-sharings"), so a dam rule from a source that is empty, or nearly, takes its
-share of a receiver's room and leaves it unused that day, as a demand-sized
-off-take from a dry source already did (its share of the need, "Several
-rules into one unit" above). Proportionality is the operator's decision;
-sharing a receiver's room by what each source can actually send would need
-the source's rationing first and the room after, then the source's again.
+checked. **Dam rules: no room wasted.** A dam rule's ask isn't cut to what
+its source holds before the receiver's room is shared, so the room is
+shared by what the sources actually give, in rounds that offer room a short
+source couldn't fill to the rules whose sources still have water (§2.6, the
+three steps and worked examples); a dam rule from an empty source never
+holds a share of a receiver's room. **Off-takes from several sources into
+one unit:** a demand-sized off-take's share of its destination's need is
+still fixed before the day, pro rata to the capacities into it ("Several
+rules into one unit" above), and a dry source's share isn't made up by
+another source that day: the sources are simulated in network order, so
+handing a dry source's share to another would make the result depend on
+which is simulated first.
 
 **A room into a dam with a fixed release (engine ≥ 1.70.0, provisional
 decision 2026-10-03, issue #90 Q26, to be confirmed by the client's
