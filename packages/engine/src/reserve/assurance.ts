@@ -602,7 +602,9 @@ export function assessSite(
 			meanActual: n ? ms.reduce((s, m) => s + m.actual, 0) / n : null,
 			naturalCurve: c.natural,
 			fdc,
-			daily: dailyCompliance(list.filter((r) => r.from >= 0), site.impacted, requiredM3Day)
+			// Every run month of this month of the year, a forecast tail's included, so the twelve add up to
+			// the site's daily figures (`list` holds only the history's months when there is a tail: the natural curve).
+			daily: dailyCompliance(rows.filter((r) => r.w === w && r.from >= 0), site.impacted, requiredM3Day)
 		};
 		if (table.lowFlow) row.lowFlowRate = n ? ms.filter((m) => m.lowFlowMet).length / n : null;
 		return row;
@@ -650,7 +652,9 @@ export function assessSite(
 		};
 	}
 	if (table.highFlows?.length) {
-		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
+		// Every complete month of the run, the one a forecast tail starts inside included: events are counted day by
+		// day, not on the duration curves that leave that month out, so a water year is judged whole (engine ≥ 1.69.0).
+		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, completeMonths(startDate, days), site.natural, site.impacted));
 	}
 	if (onBase) report.lowFlowMeasure = 'baseflow';
 	report.daily = dailyCompliance(inRun, site.impacted, requiredM3Day);

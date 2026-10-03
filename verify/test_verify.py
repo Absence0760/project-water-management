@@ -43,7 +43,7 @@ MUTANTS = [
     ),
     (
         "the receiver's room leaves out its dam's own rain, evaporation and seepage (before engine 0.19.0)",
-        "(storage[dst] + pd - e_raw - sp_raw)",
+        "(storage[dst] + pd + sched[dst] - e_c - sp_c)",
         "storage[dst]",
     ),
     (
@@ -173,6 +173,11 @@ MUTANTS = [
         "an off-take ignores its hands-off flow",
         'keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
         "keep_k = zs",
+    ),
+    (
+        "off-takes of one priority share the flow above the lowest keep among them",
+        "band = max(0.0, top - floor)",
+        "band = max(0.0, top - keeps[act[-1]])",
     ),
     ("canal seepage always returns at the source", 'rn = t.get("lossReturnNodeId") or xid', "rn = xid"),
     ("off-take water left over always tops up the dam", "to_dam = left_off * arr_up / arrives if arrives > 0 else 0.0", "to_dam = left_off"),

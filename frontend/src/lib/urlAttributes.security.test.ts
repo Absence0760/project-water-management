@@ -114,6 +114,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
 	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
+	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
+	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {
 		why: 'SignoffSection, the public verify page, the registration checks panel: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',

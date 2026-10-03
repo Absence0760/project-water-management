@@ -5,7 +5,7 @@
 // the same as a node that doesn't exist. Everything comes from the project's
 // *current* publication; a response names no other node (no id, no name)
 // beyond the gauges, which are public infrastructure.
-import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmRegistered, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel } from '@water-management/engine';
+import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmRegistered, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -26,7 +26,7 @@ import type { StoredCatchmentView } from '../publish/publish.js';
 const isoDate = z
 	.string()
 	.regex(/^\d{4}-\d{2}-\d{2}$/)
-	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date');
+	.refine((s) => isIsoDate(s), 'not a date');
 const CsvQuery = z
 	.object({ from: isoDate.optional(), to: isoDate.optional() })
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });

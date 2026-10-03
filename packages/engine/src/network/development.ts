@@ -19,7 +19,7 @@
 // Pure: runModel's plan (../run.ts buildNetworkPlan) reads these, the
 // simulation (./simulate.ts) scales by k, the self-checks read the run's
 // `dam_capacity` column.
-import { fromEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, toEpochDay, isIsoDate as isRealDate } from '../calendar';
 import type { NetworkNode } from '../project';
 
 /** Days per year for the sediment rate (a mean year, leap days included). */
@@ -33,7 +33,7 @@ export const DAM_SEDIMENT_WARN_FACTOR = 1.25;
 /** The run series that carries a dam's capacity on each day, when it changes over the run. */
 export const DAM_CAPACITY_SERIES = { key: 'dam_capacity', label: 'Dam capacity on the day (sediment, in service from)', unit: 'm³' } as const;
 
-const isIso = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && fromEpochDay(toEpochDay(v)) === v;
+const isIso = isRealDate;
 
 /** A problem with a node's development fields, for the model rules and the API; null when there is none. */
 export function developmentProblem(n: Pick<NetworkNode, 'kind' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>): string | null {
@@ -103,10 +103,14 @@ export function damPresence(
 /**
  * The day-by-day capacity factor k of a farm's dam over the run (`start`,
  * epoch day, for `days` days); undefined when it is 1 throughout (no rate,
- * no in-service date inside or after the run's start), so an unchanged dam
- * carries nothing. A field the run can't use is skipped with a warning.
+ * no in-service date after `spanStart`), so an unchanged dam carries
+ * nothing. `spanStart` is the first day of the record the run continues: the
+ * run's own first day, or for a run resumed from a snapshot (§2.16) the
+ * capture run's, so a resumed run carries the dam_capacity column exactly
+ * when the uninterrupted run does (engine ≥ 1.69.0). A field the run can't
+ * use is skipped with a warning.
  */
-export function capacityScaleOf(n: NetworkNode, start: number, days: number, warnings: string[]): Float64Array | undefined {
+export function capacityScaleOf(n: NetworkNode, start: number, days: number, warnings: string[], spanStart: number = start): Float64Array | undefined {
 	if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) return undefined;
 	const bad = developmentProblem(n);
 	if (bad) {
@@ -114,7 +118,7 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 		return undefined;
 	}
 	const rate = n.damSedimentPctPerYear ?? 0;
-	const from = n.damInServiceFrom ? toEpochDay(n.damInServiceFrom) - start : -Infinity;
+	const from = n.damInServiceFrom ? toEpochDay(n.damInServiceFrom) - spanStart : -Infinity;
 	if (!(rate > 0 && n.damSurveyDate) && !(from > 0)) return undefined;
 	const k = new Float64Array(days);
 	for (let t = 0; t < days; t++) k[t] = damCapacityFactor(n, start + t);

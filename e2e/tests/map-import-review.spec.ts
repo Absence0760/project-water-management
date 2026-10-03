@@ -12,7 +12,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { box, boundaryGeoJson, geoFile, openMap, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, box, geoFile, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 const poly = (name: string, ring: [number, number][]) => ({ type: 'Feature', properties: { name }, geometry: { type: 'Polygon', coordinates: [ring] } });
@@ -87,6 +87,7 @@ test('a mixed file: the review proposes each kind, one is changed, and the list 
 	await sheet.getByRole('button', { name: 'Import 5 features' }).click();
 	await expect(page.getByTestId('map-notice')).toContainText('Imported 5 features from mixed.geojson.');
 	await expect(sheet).toBeHidden();
+	await showTab(page, 'features');
 	const list = page.getByTestId('map-feature-list');
 	await expect(list.getByRole('heading', { level: 3 })).toHaveText([/^Farm parcels/, /^Dams/, /^Gauges/, /^Rivers/, /^Catchment boundary/]);
 	for (const [group, name] of [
@@ -156,5 +157,6 @@ test('a row marked as the boundary while the project has one warns, and Import w
 	await importButton.click();
 	await expect(page.getByTestId('map-notice')).toContainText('Imported 1 feature from wider.geojson.');
 	await expect(sheet).toBeHidden();
+	await showTab(page, 'features');
 	await expect(page.getByTestId('map-feature-list').getByRole('group', { name: /Catchment boundary/ }).locator('.nm')).toHaveText(['Wider catchment']);
 });

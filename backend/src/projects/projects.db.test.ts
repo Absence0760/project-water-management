@@ -291,7 +291,12 @@ describe('projects', () => {
 
 	it('points a copied EWR rule table at the copy’s node, and keeps the outlet table (engine ≥ 0.21.0)', async () => {
 		const a = await signUp('CopyRule');
-		const { projectId, outlet } = await projectWithModel(a);
+		const { projectId, outlet, model } = await projectWithModel(a);
+		// A second EWR site above the outlet: a table keyed by the outlet's own id beside the
+		// outlet's null-keyed one names one site twice, which a save refuses (engine ≥ 1.69.0).
+		const weir = { ...node('Weir', outlet.id), kind: 'gauge' };
+		const farmed = model.nodes.map((n) => (n.downstreamNodeId === outlet.id ? { ...n, downstreamNodeId: weir.id } : n));
+		expect((await a.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [...farmed, weir] })).status).toBe(200);
 		// Synthetic table: round numbers.
 		const table = (siteNodeId: string | null) => ({
 			siteNodeId,
@@ -304,21 +309,22 @@ describe('projects', () => {
 			natural: null,
 			scale: 1
 		});
-		const patched = await a.call('PATCH', `/projects/${projectId}`, { settings: { ewrRules: [table(null), table(outlet.id)] } });
+		expect((await a.call('PATCH', `/projects/${projectId}`, { settings: { ewrRules: [table(null), table(outlet.id)] } })).status).toBe(400);
+		const patched = await a.call('PATCH', `/projects/${projectId}`, { settings: { ewrRules: [table(null), table(weir.id)] } });
 		expect(patched.status).toBe(200);
-		expect(patched.body.project.settings.ewrRules.map((t: { siteNodeId: string | null }) => t.siteNodeId)).toEqual([null, outlet.id]);
+		expect(patched.body.project.settings.ewrRules.map((t: { siteNodeId: string | null }) => t.siteNodeId)).toEqual([null, weir.id]);
 		// Two tables for one site are refused.
 		expect((await a.call('PATCH', `/projects/${projectId}`, { settings: { ewrRules: [table(null), table(null)] } })).status).toBe(400);
 
 		const copy = await a.call('POST', `/projects/${projectId}/copy`, { name: 'Catchment E' });
 		expect(copy.status).toBe(201);
 		const dup = (await a.call('GET', `/projects/${copy.body.project.id}/model`)).body;
-		const gauge = dup.nodes.find((n: { name: string }) => n.name === 'Gauge');
-		expect(gauge.id).not.toBe(outlet.id);
-		expect(copy.body.project.settings.ewrRules.map((t: { siteNodeId: string | null }) => t.siteNodeId)).toEqual([null, gauge.id]);
+		const copiedWeir = dup.nodes.find((n: { name: string }) => n.name === 'Weir');
+		expect(copiedWeir.id).not.toBe(weir.id);
+		expect(copy.body.project.settings.ewrRules.map((t: { siteNodeId: string | null }) => t.siteNodeId)).toEqual([null, copiedWeir.id]);
 		// The original is untouched.
 		const orig = (await a.call('GET', `/projects/${projectId}`)).body.project;
-		expect(orig.settings.ewrRules[1].siteNodeId).toBe(outlet.id);
+		expect(orig.settings.ewrRules[1].siteNodeId).toBe(weir.id);
 	});
 });
 

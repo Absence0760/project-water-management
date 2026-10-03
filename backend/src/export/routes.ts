@@ -4,7 +4,7 @@
 // route loads what it needs inside its transaction, and the body is written
 // from memory as the client reads it. export.json is built in memory and
 // keeps the JSON cap (MAX_JSON_EXPORT_BYTES), so it always imports back.
-import { damCapacityOn, fromEpochDay, toEpochDay, type NetworkNode, type RunSummary } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, toEpochDay, type NetworkNode, type RunSummary, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -38,7 +38,7 @@ import { FARM_SERIES_KEYS, nodeColumnHeader, summaryCsvLines } from './run-table
 const isoDate = z
 	.string()
 	.regex(/^\d{4}-\d{2}-\d{2}$/)
-	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date');
+	.refine((s) => isIsoDate(s), 'not a date');
 const DailyQuery = z
 	.object({ nodeId: z.string().uuid().optional(), from: isoDate.optional(), to: isoDate.optional() })
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });

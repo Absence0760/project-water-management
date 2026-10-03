@@ -1,5 +1,5 @@
 // `pnpm dev:db:psql`: psql as the schema owner on this checkout's dev
-// database (`water`, or a worktree's water_w<n>; src/config/devEnv.ts).
+// database (`water`, or a worktree's water_w<tag>; src/config/devEnv.ts).
 import { spawnSync } from 'node:child_process';
 import { loadDevEnv } from '../src/config/devEnv.js';
 

@@ -9,7 +9,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { box } from '../support/map.ts';
+import { box, showTab } from '../support/map.ts';
 
 /** A parcel linked to one unit, and a boundary linked to none. */
 async function seedMap(request: APIRequestContext, projectId: string, nodeId: string): Promise<void> {
@@ -67,7 +67,9 @@ test('a unit with a parcel links to it on the map from the Network, Hydrological
 	await dams.getByRole('link', { name: 'Show on map (Upper farm)' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=map&node=${p.upper}$`));
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Map', exact: true })).toHaveAttribute('aria-current', 'page');
-	// … with that unit's parcel picked: pressed in the list, and named on the card.
+	// … with that unit's parcel picked: its Details shown, and pressed in the list.
+	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Upper parcel' })).toBeVisible();
+	await showTab(page, 'features');
 	await expect(page.getByTestId('map-feature-list').getByRole('button', { name: /^Upper parcel/ })).toHaveAttribute('aria-pressed', 'true');
 });
 

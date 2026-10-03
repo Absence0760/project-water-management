@@ -24,7 +24,7 @@ process.env.MFA_REQUIRED = 'false';
 // Their fixtures sign packs with invented registrations nobody checked (167_signers); evidence/packs.db.test.ts turns it back on for its issue test.
 process.env.REGISTRATION_CHECK_REQUIRED = 'false';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
-// the main checkout and water_test_w<n> in a git worktree (test-db.ts); see
+// the main checkout and water_test_w<tag> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.
 import { APP_URL, OWNER_URL } from './test-db.js';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? APP_URL;

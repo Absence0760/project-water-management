@@ -50,7 +50,19 @@ test('the owner sets the rain feed up from the boundary: the map links to the pr
 	try {
 		await openMap(page, id);
 		await expect(page.getByTestId('map-rain')).toHaveAttribute('data-state', 'none');
-		await expect(page.getByTestId('map-rain-link')).toContainText('No rain feed reads this catchment boundary yet.');
+		// The step is in the header's Getting started pill (it was a line above the map until 2026-10-02): 1 of 2, the boundary done.
+		const pill = page.getByTestId('map-setup-pill');
+		await expect(pill).toHaveText(/^\s*Getting started\s*· 1 of 2$/);
+		await pill.click();
+		await expect(pill).toHaveAttribute('aria-expanded', 'true');
+		const step = page.getByTestId('map-setup').locator('[data-step="rain"]');
+		await expect(step).toContainText('No rain feed reads this catchment boundary yet.');
+		await expect(step.getByTestId('map-rain-link')).toHaveText('Set up the rain feed from the boundary');
+		// Escape closes it and gives the focus back to the pill.
+		await page.keyboard.press('Escape');
+		await expect(pill).toHaveAttribute('aria-expanded', 'false');
+		await expect(pill).toBeFocused();
+		await pill.click();
 		await page.getByRole('link', { name: 'Set up the rain feed from the boundary' }).click();
 
 		// Settings → Data feeds, the proposal open.
@@ -81,6 +93,8 @@ test('the owner sets the rain feed up from the boundary: the map links to the pr
 		await openMap(page, id);
 		await expect(page.getByTestId('map-rain')).toHaveAttribute('data-state', 'current');
 		await expect(page.getByTestId('map-rain-link')).toHaveCount(0);
+		// Every step done: the pill goes (finished work leaves the page).
+		await expect(page.getByTestId('map-setup-pill')).toHaveCount(0);
 	} finally {
 		await removeBoundaryFeeds(page.request, id);
 	}

@@ -118,6 +118,22 @@ describe('buildPreviewRows: joining series with different periods', () => {
 	});
 });
 
+describe('buildPreviewRows: a rain-source period’s series is the rain (engine ≥ 1.69.0)', () => {
+	const alt = meta({ id: 'alt', kind: 'rain_catchment_alt_mm', startDate: '2020-01-01', length: 3 });
+	const valuesById: Record<string, Daily> = { alt: { startDate: '2020-01-01', values: [4, 6, 2] } };
+	const period = { start: '2020-01-01', end: '2020-01-03', series: 'rain_catchment_alt_mm' as const, factors: Array(12).fill(1), provenance: { source: 'invented', fittedFrom: '2019-01-01', fittedTo: '2019-12-31', method: 'invented' }, reason: 'invented' };
+
+	it('fills "Rain used" from the period’s series when it is the only rain', () => {
+		const rows = buildPreviewRows([alt], valuesById, { ...defaultProjectSettings(), rainSource: [period] } as never);
+		expect(rows.map((r) => r.derived?.rainUsedMm)).toEqual([4, 6, 2]);
+	});
+
+	it('leaves it empty when no period uses the series (positive control)', () => {
+		const rows = buildPreviewRows([alt], valuesById, defaultProjectSettings());
+		expect(rows.map((r) => r.derived?.rainUsedMm ?? null)).toEqual([null, null, null]);
+	});
+});
+
 describe('buildPreviewRows: rain gap-fill source, via the engine’s own prepareRun', () => {
 	// catchment covers 01-01..03 with a gap on 01-02; chirps covers 01-01..04;
 	// forecast only covers 01-04..05 — so day 5 falls back all the way to forecast.
