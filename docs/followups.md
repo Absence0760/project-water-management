@@ -3928,7 +3928,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       draining into pans (closed depressions at least 1 m deep, 0.1 km² in
       floor, holding at least 100 mm of their catchment's runoff) is reported
       beside every delineation (193, delineate-9), Start and Divide plan
-      (per piece, per unit's whole catchment; start-10) and click piece (its
+      (per piece, per unit's whole catchment; start-11) and click piece (its
       line on the sheet and its saved description), with the effective area;
       the routed catchment is unchanged.
 - [ ] **Take the effective area into the model** (from finding 8's fix).

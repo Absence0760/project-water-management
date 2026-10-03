@@ -146,7 +146,7 @@ export interface DivideUnit {
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (start-7). */
 	placement: PointPlacement;
-	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-10): reported, not taken out. Absent without a DEM or before start-10. */
+	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-11): reported, not taken out. Absent without a DEM or before start-11. */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
 }
@@ -158,7 +158,7 @@ export interface DividePlan {
 	units: DivideUnit[];
 	/** What drains to the outflow through no point. */
 	rest: { areaM2: number; geometry: Polygonal | null; nonContributingM2?: number };
-	/** The catchment's pans (pans.ts, start-10): what of it drains into one, the largest, the method. Absent without a DEM or before start-10. */
+	/** The catchment's pans (pans.ts, start-11): what of it drains into one, the largest, the method. Absent without a DEM or before start-11. */
 	pans?: PanReport;
 	/**
 	 * Units of the model with no point in the division: they keep their values,

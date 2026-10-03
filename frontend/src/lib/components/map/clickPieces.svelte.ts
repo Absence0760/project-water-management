@@ -82,7 +82,7 @@ export function pieceLine(r: ClickPieces, click: number): string {
 			: missed(p)
 				? ` · ${MISSED}`
 				: '';
-	// What of its own area drains into pans (start-10): reported, still in the area.
+	// What of its own area drains into pans (start-11): reported, still in the area.
 	const pans = p.nonContributingM2 ? ` · ${km2(p.nonContributingM2)} of it drains into pans (non-contributing)` : '';
 	return `${km2(p.areaM2)} · ${into}${upstream}${pans}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${moved}${farJunction}${warn}`;
 }

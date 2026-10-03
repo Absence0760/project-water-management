@@ -307,7 +307,7 @@ describe('delineateUnits: each point placed as Delineate places it (start-7, the
 		// The method says what ran, and only that.
 		expect(r.method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the river reach’s area \(Lehner 2012/);
 		expect(r.method).not.toMatch(/snapped/);
-		expect(r.methodVersion).toBe('start-10');
+		expect(r.methodVersion).toBe('start-11');
 	});
 
 	it('says when a reach is near but no channel matches it (unmatched), and keeps the guard', async () => {
@@ -363,7 +363,7 @@ describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
 		near(gauge.totalNonContributingM2, r.pans.nonContributingM2, 1e-6);
 		// Reported, not taken out: the areas are what they were.
 		near(dam.areaM2 + r.rest.areaM2, r.catchment.areaM2, 1e-12);
-		expect(r.methodVersion).toBe('start-10');
+		expect(r.methodVersion).toBe('start-11');
 	});
 
 	it('never counts a depression a unit’s point is in: a dam put on the pan makes it that unit’s own basin', async () => {

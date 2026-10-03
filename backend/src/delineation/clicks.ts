@@ -57,7 +57,7 @@ export interface ClickPiece {
 	areaM2: number | null;
 	/** Everything upstream of the click, its own piece included (m²); null when it, or a piece above it, is open. */
 	totalAreaM2: number | null;
-	/** Of its own area, what drains into pans (pans.ts, start-10; m²): reported, not taken out. Null when it is open. */
+	/** Of its own area, what drains into pans (pans.ts, start-11; m²): reported, not taken out. Null when it is open. */
 	nonContributingM2: number | null;
 	/**
 	 * Its catchment runs past the window routed around the clicks (or the DEM's data), so it has no whole piece:

@@ -242,7 +242,7 @@ proposes), and the pans' report (193).
 
 ## Pans
 
-Built for the hydrologist's review, finding 8 (delineate-9, start-10,
+Built for the hydrologist's review, finding 8 (delineate-9, start-11,
 migration 193; the research, thresholds and sources in
 [pans-research.md](./pans-research.md)). Priority-Flood fills every closed
 depression so that D8 can route it to the outlet; in the interior many of

@@ -31,10 +31,10 @@ import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
  * start-8 (issue #390): a point within JUNCTION_SIDE_M of a mapped junction kept on its river's side of the DEM's junction, and a junction placement on the river's own channel nearest the point, not at the junction;
  * start-9 (delineate-5's rules reaching Start, Divide and Sub-catchments): a point on the DEM's own channel stays on it, the reach's
  * matching channel offered; a gully snap offers the reach's channel out to 2.5 km; the reach's area is taken at the point.
- * start-10 (the hydrologist's review, finding 8): the area of the catchment, of each piece and of each unit's whole catchment that
+ * start-11 (the hydrologist's review, finding 8): the area of the catchment, of each piece and of each unit's whole catchment that
  * drains into pans (closed depressions the fill routes onward) reported as non-contributing beside the areas (pans.ts); the areas unchanged.
  */
-export const START_METHOD_VERSION = 'start-10';
+export const START_METHOD_VERSION = 'start-11';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 

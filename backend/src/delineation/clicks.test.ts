@@ -134,7 +134,7 @@ describe('the request and the names', () => {
 		expect(pieceDescription(r, r.pieces[2]!)).toBe(
 			'The land draining to 20.30000° E, 33.70000° S before any other click; the lowest click; more upstream than was routed; an inflow enters at sub-catchment 1. Delineated from Copernicus GLO-30 (start-2); check it against the map.'
 		);
-		// A piece part of which drains into pans says how much (start-10); one with none says nothing of it.
+		// A piece part of which drains into pans says how much (start-11); one with none says nothing of it.
 		expect(pieceDescription(r, { ...r.pieces[1]!, nonContributingM2: 1.25e6 })).toBe(
 			'The land draining to 20.20000° E, 33.60000° S before any other click; drains into sub-catchment 3; 3.00 km² upstream in all. 1.25 km² of its own area drains into pans (non-contributing in WR2012’s sense; still in its area). Delineated from Copernicus GLO-30 (start-2); check it against the map.'
 		);

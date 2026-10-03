@@ -3067,7 +3067,7 @@ export interface StartUnit {
 	drainsIntoProposed: boolean;
 	/** How its point was put on the channel; null without an elevation model (absent before start-7). */
 	placement?: PointPlacement | null;
-	/** Of its own area and its whole catchment, what drains into pans (m²; absent without an elevation model or before start-10). */
+	/** Of its own area and its whole catchment, what drains into pans (m²; absent without an elevation model or before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
 }
@@ -3079,7 +3079,7 @@ export interface StartPlan {
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
 	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
-	/** What of the catchment drains into pans (start-10; absent without an elevation model or before). */
+	/** What of the catchment drains into pans (start-11; absent without an elevation model or before). */
 	pans?: PanReport;
 	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
 	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
@@ -3138,7 +3138,7 @@ export interface DivideUnit {
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (absent before start-7). */
 	placement?: PointPlacement;
-	/** Of its own area and its whole catchment, what drains into pans (m²; absent before start-10). */
+	/** Of its own area and its whole catchment, what drains into pans (m²; absent before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
 }
@@ -3150,7 +3150,7 @@ export interface DividePlan {
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
 	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
-	/** What of the catchment drains into pans (start-10; absent before). */
+	/** What of the catchment drains into pans (start-11; absent before). */
 	pans?: PanReport;
 	untouched: { nodeId: string; name: string; areaKm2: number }[];
 	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
@@ -3195,7 +3195,7 @@ export interface ClickPiece {
 	areaM2: number | null;
 	/** Everything upstream of the click, its own piece included; null when it, or a piece above it, is open. */
 	totalAreaM2: number | null;
-	/** Of its own area, what drains into pans (m², start-10; null when it is open, absent before start-10): reported, not taken out. */
+	/** Of its own area, what drains into pans (m², start-11; null when it is open, absent before start-11): reported, not taken out. */
 	nonContributingM2?: number | null;
 	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
 	open: boolean;

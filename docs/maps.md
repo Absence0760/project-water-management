@@ -1299,7 +1299,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlet's own piece. A point that doesn't drain to the outlet, or snaps
   onto another, is dropped with the reason; a DEM catchment more than 10 %
   off the boundary's area is warned about.
-- **Pans** (`start-10`; [§ Delineation](#delineation)): the plan stores what
+- **Pans** (`start-11`; [§ Delineation](#delineation)): the plan stores what
   drains into pans for the catchment (`plan.pans`), each unit's own piece
   and whole catchment (`nonContributingM2`, `totalNonContributingM2`) and
   the rest, and a warning says how much (and what share) of the catchment
@@ -1343,7 +1343,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-10)") and its area from it (*from the map*), the
+  delineated from … (start-11)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
@@ -1429,7 +1429,7 @@ pick first.
   A click at a confluence waits in the panel until the river is picked
   (as Delineate's sheet asks), then goes at the DEM's junction for it.
   Measured: [design/delineation-snapping.md](./design/delineation-snapping.md).
-- **Pans** (`start-10`, [§ Delineation](#delineation)): a piece part of
+- **Pans** (`start-11`, [§ Delineation](#delineation)): a piece part of
   whose own area drains into pans says so on its line ("1.25 km² of it
   drains into pans (non-contributing)") and in its saved description; its
   area still includes it.

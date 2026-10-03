@@ -243,8 +243,10 @@ export function panWarning(report: PanReport, catchmentM2: number, pieces: reado
 	const share = catchmentM2 > 0 ? ` (${Math.round((100 * report.nonContributingM2) / catchmentM2)} %)` : '';
 	const held = pieces.filter((p) => p.ncM2 >= 0.005e6).map((p) => `${km2Text(p.ncM2)} in ${p.name}’s`);
 	return (
-		`${km2Text(report.nonContributingM2)} of the catchment above the outlet${share} drains into ${report.count === 1 ? 'a pan' : `${report.count} pans`}, ` +
-		`closed depressions on the elevation model (the largest at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). ` +
+		`${km2Text(report.nonContributingM2)} of the catchment above the outlet${share} drains into ` +
+		(report.count === 1
+			? `a pan (a closed depression on the elevation model, at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). `
+			: `${report.count} pans (closed depressions on the elevation model; the largest at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). `) +
 		`WR2012 counts such endoreic areas as non-contributing; the areas here still include them${held.length ? `: ${held.join(', ')} own area` : ''}. Use the effective area if you model them as non-contributing.`
 	);
 }

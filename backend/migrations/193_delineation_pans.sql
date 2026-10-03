@@ -16,7 +16,7 @@
 --    proposal; 185's proposal_record trigger already keeps every column but
 --    the decision's as proposed, this one included.
 --  * Start and Divide proposals carry the same report inside their plan
---    (start_proposal.plan, start-10), so they need no column.
+--    (start_proposal.plan, start-11), so they need no column.
 --  * No new table, policy, grant or function: the column inherits the
 --    table's RLS and water_app's grants (175).
 

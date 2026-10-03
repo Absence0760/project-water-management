@@ -3144,7 +3144,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
   geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
   totalAreaM2, nonContributingM2, open, placedBy, reach, larger, unmatched }` (`nonContributingM2`: of its own area,
-  what drains into pans, start-10, null when open; a saved piece's description says it; `placedBy`
+  what drains into pans, start-11, null when open; a saved piece's description says it; `placedBy`
   `matched`, `junction` (at the DEM's junction for a river picked at a
   confluence) or `snapped`); a click may carry `reach` as Delineate's
   body does, and a click at a confluence without one answers 422
@@ -3159,7 +3159,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-10`; every `areaM2` and `totalAreaM2` is summed from
+  the map's (`start-11`; every `areaM2` and `totalAreaM2` is summed from
   the DEM's cells, each at its own area on the ellipsoid, so the pieces add
   up to the catchment exactly; `geometry` is simplified for the map and its
   own area may differ a little). `placedBy` is `matched` (on the channel matching
@@ -3208,7 +3208,7 @@ values now, taken only when ticked.
   `StartUnit = { key (the feature's id), featureName, role, name, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto (a key, or null
   for the outflow gauge), drainsIntoProposed, placement, nonContributingM2?,
-  totalNonContributingM2? }`. The pans' figures (start-10; absent without a
+  totalNonContributingM2? }`. The pans' figures (start-11; absent without a
   DEM and on older plans): what of the catchment, the rest, each unit's own
   piece and its whole catchment drains into pans, reported beside the areas
   and never taken out of them; a warning says it in words. `decision` (once applied):

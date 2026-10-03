@@ -110,7 +110,7 @@ export interface StartUnit {
 	drainsIntoProposed: boolean;
 	/** How its point was put on the channel (start-7); null without a DEM. */
 	placement: PointPlacement | null;
-	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-10): reported, not taken out. Absent without a DEM or before start-10. */
+	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-11): reported, not taken out. Absent without a DEM or before start-11. */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
 }
@@ -123,7 +123,7 @@ export interface StartPlan {
 	units: StartUnit[];
 	/** What drains to the outlet through no unit: proposed as one more (natural) unit. */
 	rest: { name: string; areaM2: number | null; geometry: Polygonal | null; nonContributingM2?: number };
-	/** The catchment's pans (pans.ts, start-10): what of it drains into one, the largest, the method. Absent without a DEM or before start-10. */
+	/** The catchment's pans (pans.ts, start-11): what of it drains into one, the largest, the method. Absent without a DEM or before start-11. */
 	pans?: PanReport;
 	/** `placement`: how its point was put on the channel (start-7; absent without a DEM, or for a point never placed). */
 	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
