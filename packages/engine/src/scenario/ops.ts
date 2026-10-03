@@ -517,7 +517,7 @@ export function settingsValueError(path: string, value: unknown): string | null 
  * agreement, never the simulated water, so they are not scalable. The
  * reference gauge is never read by the engine.
  */
-export const SCALABLE_SERIES_KINDS = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'evap_apan_mm'] as const;
+export const SCALABLE_SERIES_KINDS = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'rain_catchment_alt_mm', 'rain_reanalysis_mm', 'evap_apan_mm'] as const;
 export type ScalableSeriesKind = (typeof SCALABLE_SERIES_KINDS)[number];
 /** Largest factor series.scale accepts: a scenario scales a driver, it doesn't replace it. */
 export const SERIES_SCALE_MAX = 10;

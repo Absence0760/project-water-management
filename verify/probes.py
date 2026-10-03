@@ -266,6 +266,35 @@ def junior_user() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(60, 8.0)}
 
 
+def offtake_keep_bands() -> dict:
+    """Three river off-takes of one priority from one farm (§2.6a): two keep a
+    hands-off flow of 2 000 m³/day, the third keeps nothing and may take
+    1 m³/day. The flow between two successive keeps goes to the rules keeping
+    that much or less, so the two never leave the river below 2 000 m³/day
+    beside the third's 1 m³ (scaled to the flow above the lowest keep, they
+    took down to 2 × 2 000 − the flow). The rain rises over the run, so the
+    flow crosses the keep on some days and twice it on others."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=3),
+        _node("d1", "farm", "o", areaKm2=0.1),
+        _node("d2", "farm", "o", areaKm2=0.1),
+        _node("d3", "farm", "o", areaKm2=0.1),
+    ]
+
+    def ot(i, b, m3_day, hands_off):
+        return {
+            "id": i, "fromNodeId": "s", "toNodeId": b, "months": list(range(1, 13)), "maxRateM3s": m3_day / 86400,
+            "dailyCapM3": None, "minStoragePct": 0, "enabled": True, "priority": 0, "source": "river",
+            "handsOffM3Day": hands_off, "handsOffEwr": False, "lossPct": 0, "sizing": "capacity", "topUpDam": False,
+        }
+
+    transfers = [ot("b1", "d1", 20000, 2000), ot("b2", "d2", 20000, 2000), ot("c", "d3", 1, None)]
+    days = 150
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.2 * k, 1) for k in range(days)]}}
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -279,4 +308,5 @@ PROBES = {
     "full-allocation-tail-new-year": full_allocation_tail_new_year(),
     "trigger-hysteresis": trigger_hysteresis(),
     "junior-user": junior_user(),
+    "offtake-keep-bands": offtake_keep_bands(),
 }

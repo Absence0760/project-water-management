@@ -633,7 +633,8 @@ function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null
 /**
  * The most a transfer's destination draws from its dam today for its demand
  * `D` (the transfer room, audit N4; engine ≥ 1.31.0, issue #200): `D` less
- * what its primary direct boreholes pump first (each unit's room today,
+ * what its primary direct boreholes pump first (each unit's room today, a
+ * dam-target one too on a day its dam has no capacity,
  * together within the groundwater allocation room), capped at the surface
  * allocation room. Both are known before the transfers are settled, and the
  * bound holds whatever else supplies part of `D` later in the day: off-take
@@ -645,9 +646,11 @@ export function damDrawBound(node: PlanNode, D: number, used: Float64Array | nul
 	let primary = 0;
 	const b = node.borehole;
 	if (b && used) {
+		// On a day the dam has no capacity a dam-target unit pumps direct (./boreholes.ts groundwaterDay).
+		const noDam = !(node.damCapacityM3 * capacityK(node, t) > 0);
 		for (let k = 0; k < b.units.length; k++) {
 			const u = b.units[k]!;
-			if (!u.toDam && u.mode === 1) primary += unitRoom(u, used[k]!);
+			if ((!u.toDam || noDam) && u.mode === 1) primary += unitRoom(u, used[k]!);
 		}
 	}
 	const c = node.allocationCap;
@@ -846,13 +849,26 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (!mine.length) return null;
 		return [...new Set(mine.map((k) => offtakes[k]!.priority))].sort((a, b) => a - b).map((p) => mine.filter((k) => offtakes[k]!.priority === p));
 	});
-	// Delivered into each unit today (after losses), the part from rules that top up the dam, and each demand-sized rule's share of its destination's need.
-	const otIn = new Float64Array(nodes.length);
-	// Conveyance losses seeping back to the river below each farm today (engine ≥ 1.42.0).
-	const otRet = new Float64Array(nodes.length);
-	const otInDam = new Float64Array(nodes.length);
+	// What each rule delivered today (after losses) and the share of its losses seeping back to the river (engine
+	// ≥ 1.42.0), kept per rule and summed at the destination (and the return unit) in the rules' id order, the
+	// order of `offtakes`, so a unit fed by several sources gets the same sums however the nodes are listed
+	// (docs/model.md §6, the ordering rule). Each demand-sized rule's share of its destination's need.
+	const otGot = new Float64Array(offtakes.length);
+	const otRetV = new Float64Array(offtakes.length);
+	const otInto: (Int32Array | null)[] = nodes.map((_, i) => {
+		const ks = offtakes.flatMap((o, k) => (o.to === i ? [k] : []));
+		return ks.length ? Int32Array.from(ks) : null;
+	});
+	const otRetAt: (Int32Array | null)[] = nodes.map((_, i) => {
+		const ks = offtakes.flatMap((o, k) => (o.lossReturn > 0 && o.returnAt === i ? [k] : []));
+		return ks.length ? Int32Array.from(ks) : null;
+	});
 	const otShare = new Float64Array(offtakes.length);
 	const otWant = new Float64Array(offtakes.length);
+	// Step-3-style bands for one priority's rules at a source (audit N6 applied to off-takes): each rule's keep today, the active rules.
+	const otKeep = new Float64Array(offtakes.length);
+	const otLeft = new Float64Array(offtakes.length);
+	const otAct = new Int32Array(offtakes.length);
 	const otCapInto = new Float64Array(nodes.length);
 	const trOut = transfers.map(() => new Float64Array(days));
 	const jToday = new Float64Array(nodes.length);
@@ -989,8 +1005,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// today can release less, but only when the release is cut to the water above dead
 				// storage, and then the dam ends at dead storage: either way it isn't overfilled.
 				// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date).
+				// A dam with no capacity today (not in service yet, or silted full) is no dam: it releases nothing.
 				const kd = capacityK(dst, t);
-				const rel = dst.release && dst.release.rule === 2 ? fixedReleaseFloor(dst.release, month[t]!, qStart - drawnToday[tr.to]!, kd === 1 ? dst.deadStorageM3 : dst.deadStorageM3 * kd) : 0;
+				const rel = dst.release && dst.release.rule === 2 && dst.damCapacityM3 * kd > 0 ? fixedReleaseFloor(dst.release, month[t]!, qStart - drawnToday[tr.to]!, kd === 1 ? dst.deadStorageM3 : dst.deadStorageM3 * kd) : 0;
 				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
@@ -1059,9 +1076,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// dam's room for a rule that tops it up, split between the rules into it pro rata to their capacity
 		// today, so the split never depends on which source is simulated first.
 		if (offtakes.length) {
-			otIn.fill(0);
-			otRet.fill(0);
-			otInDam.fill(0);
+			otGot.fill(0);
+			otRetV.fill(0);
 			otCapInto.fill(0);
 			for (const o of offtakes) if (o.sizing === 0) otCapInto[o.to]! += o.capM3Day[month[t]!]!;
 			for (let k = 0; k < offtakes.length; k++) {
@@ -1292,7 +1308,17 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// dam (the rules that say so, their share of what is left), and the rest flows on below the unit.
 			// The use left under an allocation cap (engine ≥ 1.18.0); Infinity when uncapped.
 			const [sRoom, gRoom] = allocationRoom(node, r, allocUsed[i]!, t);
-			const Xin = offtakes.length ? otIn[i]! : 0;
+			// In the rules' id order (§6), each source being simulated before this unit.
+			let Xin = 0;
+			let XinDam = 0;
+			const into = otInto.length ? otInto[i] : null;
+			if (into) {
+				for (let a = 0; a < into.length; a++) {
+					const k = into[a]!;
+					Xin += otGot[k]!;
+					if (offtakes[k]!.topUpDam) XinDam += otGot[k]!;
+				}
+			}
 			let Xused = 0;
 			let XtoDam = 0;
 			let Xpass = 0;
@@ -1300,7 +1326,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// Off-take water used here is surface use, within the cap.
 				Xused = Math.min(Xin, Dr, sRoom);
 				const rest = Xin - Xused;
-				XtoDam = rest > 0 && otInDam[i]! > 0 ? Math.min(rest, (rest * otInDam[i]!) / Xin) : 0;
+				XtoDam = rest > 0 && XinDam > 0 ? Math.min(rest, (rest * XinDam) / Xin) : 0;
 				Xpass = rest - XtoDam;
 			}
 			let avail0 = qStart + M + O + K + J;
@@ -1311,9 +1337,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// storage above dead storage, capped by the outlet. It comes before
 			// the boreholes (WP-3.9), so a dam-target borehole tops up what the
 			// release left and an emergency one sees the dam after it.
+			// A unit with no dam today (capacity 0: not in service yet, or silted full) has no release, as one
+			// without a dam (docs/model.md §2.7g); nor does a pass-inflow release's target hold back its pumps.
 			let Rel = 0;
-			if (node.release) {
-				Rel = releaseToday(node.release, month[t]!, K + M + O, Z, S, Math.max(avail0, 0), dead);
+			const relNow = cap > 0 ? node.release : undefined;
+			if (relNow) {
+				Rel = releaseToday(relNow, month[t]!, K + M + O, Z, S, Math.max(avail0, 0), dead);
 				avail0 -= Rel;
 			}
 			// Irrigation draws only what is above the dam's minimum operating
@@ -1332,7 +1361,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const river = pumpsRiverToday(sup, onRiver[i] === 1, qLevel);
 				onRiver[i] = river ? 1 : 0;
 				if (river) {
-					const rel = node.release;
+					const rel = relNow;
 					const target = rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month[t]!]! : Z) : 0;
 					room = riverRoom(sup, S, ho ? Math.max(Zs, target, hk) : Math.max(Zs, target));
 				}
@@ -1410,7 +1439,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						q[a] = q[a]! - Ep;
 					}
 				}
-				const relT = node.release;
+				const relT = relNow;
 				const target = relT && relT.rule === 1 ? (relT.m3DayByMonth ? relT.m3DayByMonth[month[t]!]! : Z) : 0;
 				const keep = ho ? Math.max(Zs, target, hk) : Math.max(Zs, target);
 				let flowPast = Rr + (S - Gr) + SpRet;
@@ -1446,40 +1475,72 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// River off-takes from this unit (engine ≥ 1.14.0, docs/model.md §2.6a): from the flow leaving it,
 			// by priority, above what must stay in the river (the senior users' requirement passing it, the
 			// rule's hands-off flow and, when asked, the EWR here), up to each rule's capacity today (and its
-			// share of the destination's need when sized to demand). Rules of one priority share the flow pro
-			// rata to their limits, never leaving less than the most any of them may, so the list order never matters.
+			// share of the destination's need when sized to demand). Rules of one priority share the flow in
+			// bands at their keeps, as dam rules share a dam's storage (step 3 of the transfers, audit N6): the
+			// flow between two successive keeps (highest first; the top band starts at the flow left to this
+			// priority) is shared, pro rata to what each still wants, by the rules whose keep is at or below it,
+			// so no rule takes the river below its own keep and the list order never matters. Where every rule
+			// keeps the same flow this is one band, the free flow shared pro rata to the rules' limits.
 			let Xout = 0;
 			const lv = otLevels[i];
 			if (lv) {
 				const U0 = U;
 				for (const level of lv) {
-					let freeMax = 0;
-					let total = 0;
+					let n = 0;
 					for (const k of level) {
 						const o = offtakes[k]!;
+						otWant[k] = 0;
 						const cap = o.capM3Day[month[t]!]!;
-						if (!(cap > 0)) {
-							otWant[k] = 0;
-							continue;
-						}
+						if (!(cap > 0)) continue;
 						const keep = Math.max(Zs, o.handsOffM3Day, o.handsOffEwr ? Z : 0);
 						const free = Math.max(0, U0 - Xout - keep);
 						const lim = o.sizing === 0 ? Math.min(cap, otShare[k]! / (1 - o.loss)) : cap;
-						otWant[k] = Math.max(0, Math.min(free, lim));
-						freeMax = Math.max(freeMax, free);
-						total += otWant[k]!;
+						const w = Math.max(0, Math.min(free, lim));
+						if (!(w > 0)) continue;
+						// Insert into the active rules, highest keep first, ties in id order (a level lists its rules in id order).
+						otKeep[k] = keep;
+						otLeft[k] = w;
+						let j = n++;
+						while (j > 0 && otKeep[otAct[j - 1]!]! < keep) {
+							otAct[j] = otAct[j - 1]!;
+							j--;
+						}
+						otAct[j] = k;
 					}
-					const scaleBy = total > freeMax ? freeMax / total : 1;
+					let top = U0 - Xout;
+					for (let j = 0; j < n; ) {
+						const floor = otKeep[otAct[j]!]!;
+						const band = Math.max(0, top - floor);
+						// The rules allowed into this band: this keep and every lower one (j onward).
+						let total = 0;
+						for (let a = j; a < n; a++) total += otLeft[otAct[a]!]!;
+						if (total > band) {
+							const scaleBy = band / total;
+							for (let a = j; a < n; a++) {
+								const k = otAct[a]!;
+								const got = otLeft[k]! * scaleBy;
+								otWant[k] = otWant[k]! + got;
+								otLeft[k] = otLeft[k]! - got;
+							}
+						} else {
+							// Every rule allowed here gets all it still wants: no lower band is needed.
+							for (let a = j; a < n; a++) {
+								const k = otAct[a]!;
+								otWant[k] = otWant[k]! + otLeft[k]!;
+							}
+							break;
+						}
+						if (top > floor) top = floor;
+						while (j < n && otKeep[otAct[j]!]! === floor) j++;
+					}
 					for (const k of level) {
 						const o = offtakes[k]!;
-						const v = scaleBy < 1 ? otWant[k]! * scaleBy : otWant[k]!;
+						const v = otWant[k]!;
 						otVol[k]![t] = v;
 						Xout += v;
-						const got = v * (1 - o.loss);
-						otIn[o.to]! += got;
+						otGot[k] = v * (1 - o.loss);
 						// A share of the losses seeps back to the river, below the source or a farm below it (engine ≥ 1.42.0).
-						if (o.lossReturn > 0) otRet[o.returnAt]! += v * o.loss * o.lossReturn;
-						if (o.topUpDam) otInDam[o.to]! += got;
+						if (o.lossReturn > 0) otRetV[k] = v * o.loss * o.lossReturn;
 					}
 				}
 				// The shares of a level can add up one ulp past the flow they split; the river never goes below 0.
@@ -1490,7 +1551,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// leaving it after its own off-takes, so no off-take takes back its own losses.
 			let Xret = 0;
 			if (r.offtakeReturn) {
-				Xret = otRet[i]!;
+				// In the rules' id order (§6); a rule returning at its own source was settled just above.
+				const back = otRetAt[i];
+				if (back) for (let a = 0; a < back.length; a++) Xret += otRetV[back[a]!]!;
 				U += Xret;
 				r.offtakeReturn[t] = Xret;
 			}

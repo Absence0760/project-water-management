@@ -122,5 +122,105 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"appliesWhen": "A primary or emergency borehole pumping into a farm's dam, on a day its crop requirement came out as float noise (the soil-water store's rain an ulp short of the need) or off-take water arrived an ulp short of the demand",
 		"summary": "A demand of 10⁻¹² m³ or less counted as the dam being drawn for demand, so the borehole topped the dam up by up to a day's capacity (495 and 1 590 m³ in the cases found), using its annual cap and depleting the river",
 		"source": "model.md §2.3, §2.7d; found by verify/ phase 2a"
+	},
+	{
+		"id": "ER-13",
+		"keyedOn": "run",
+		"firstAffected": "1.14.0",
+		"fixedIn": "1.69.0",
+		"severity": "High",
+		"appliesWhen": "A farm or water user with an allocation and groundwater pumped into its dam (a dam-target borehole) that also took river water past the dam: river off-take water used directly, or (engine ≥ 1.65.0) its own river abstractions",
+		"summary": "The allocation comparison counted that river water as drawn from the dam, so it netted the groundwater pumped into the dam against it and the surface use read low, by up to the water pumped into the dam that water year: a unit over its registered surface volume could read within it (RunSummary.allocations, the Allocations tab, an evidence pack's comparison)",
+		"source": "model.md §2.12; found by the engine end-to-end tests (2026-10-02)"
+	},
+	{
+		"id": "ER-14",
+		"keyedOn": "run",
+		"firstAffected": "1.14.0",
+		"fixedIn": "1.69.0",
+		"severity": "Medium",
+		"appliesWhen": "Two or more river off-takes of one priority from one source, at different hands-off flows (one without a hands-off flow counts as 0)",
+		"summary": "The off-takes shared the flow above the lowest hands-off flow among them, so the ones with a higher hands-off flow together took the river below it (the dam-transfer form of this was ER-11)",
+		"source": "model.md §2.6a; engine-audit.md N6"
+	},
+	{
+		"id": "ER-15",
+		"keyedOn": "run",
+		"firstAffected": "1.27.0",
+		"fixedIn": "1.69.0",
+		"severity": "Medium",
+		"appliesWhen": "A dam with a release rule (fixed or pass the inflow) on days it doesn't exist: before its in-service date, or once sediment has filled it",
+		"summary": "The release still ran, taking the water routed to the absent dam before irrigation, so the unit was supplied less than a unit without a dam (a proposed dam's release cut the baseline years before it is built)",
+		"source": "model.md §2.7a, §2.7g"
+	},
+	{
+		"id": "ER-16",
+		"keyedOn": "run",
+		"firstAffected": "1.27.0",
+		"fixedIn": "1.69.0",
+		"severity": "Medium",
+		"appliesWhen": "A borehole pumping into a dam (primary, supplemental or emergency) on days the dam doesn't exist: before its in-service date, or once sediment has filled it",
+		"summary": "The borehole found no room in a dam of 0 m³ and pumped nothing, where a unit without a dam has it pump straight to the crop, so the unit was supplied less",
+		"source": "model.md §2.7d, §2.7g"
+	},
+	{
+		"id": "ER-17",
+		"keyedOn": "run",
+		"firstAffected": "0.16.0",
+		"fixedIn": "1.69.0",
+		"severity": "Medium",
+		"appliesWhen": "A negative monthly A-pan value in settings (the API accepted any number until 1.69.0)",
+		"summary": "Dam and river-pool evaporation came out negative, so a dam gained water from nothing in that month, and demand used the negative A-pan",
+		"source": "model.md §2.2 Settings out of range, §2.7a"
+	},
+	{
+		"id": "ER-18",
+		"keyedOn": "run",
+		"firstAffected": "0.30.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A project whose only rain is a rain-source period's series (the alternative gauge, or its fallback), with no catchment, CHIRPS or forecast series",
+		"summary": "GR4J and demand ran on that rain, but the run had no rain_final, put no rain on the dams, gave no runoff coefficient, didn't warn about days with no rain value, and warned \"no rainfall series\"",
+		"source": "model.md §2.4e"
+	},
+	{
+		"id": "ER-19",
+		"keyedOn": "run",
+		"firstAffected": "1.17.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A sensitivity run (rain × 0.9 / × 1.1) on a project with a rain-source period",
+		"summary": "The rain range left the period's series (and a reanalysis fallback) unscaled, so the range under-reported the effect of rain over the period",
+		"source": "model.md §2.10g"
+	},
+	{
+		"id": "ER-20",
+		"keyedOn": "run",
+		"firstAffected": "0.21.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A Reserve rule table keyed by the outlet node's own id rather than \"the outlet\"",
+		"summary": "It was listed after the gauges in the Reserve report, and beside a table for \"the outlet\" the latter was used rather than neither",
+		"source": "model.md §2.9c"
+	},
+	{
+		"id": "ER-21",
+		"keyedOn": "run",
+		"firstAffected": "1.17.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "Reserve compliance on a run with a forecast tail (an outlook-style run made directly; a saved forecast run reports the history only)",
+		"summary": "Each month of the year's daily compliance left out the tail's months, so the twelve didn't add up to the site's daily figures",
+		"source": "model.md §2.9c"
+	},
+	{
+		"id": "ER-22",
+		"keyedOn": "run",
+		"firstAffected": "0.3.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "Calibration statistics where the simulated flow is the same every day (the mean flow, or an outlet the network dries out)",
+		"summary": "KGE, r and R² read \"not computed\" instead of r = 0: KGE 1 − √2 for the mean flow, 1 − √3 for no flow",
+		"source": "model.md §2.10"
 	}
 ];

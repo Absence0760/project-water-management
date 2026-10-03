@@ -126,6 +126,13 @@ Element types: a **Farm** element can also stand for a stand-alone dam or a
 natural (unused) area, depending on its parameters (see the `[Models]` sheet). A
 **Gauge** only passes flow through and reports it.
 
+**Settings out of range** (engine ≥ 1.69.0). The engine holds the settings to
+the ranges the API and scenarios accept, so an input saved some other way can't
+run nonsense: a negative monthly A-pan runs as 0 (evaporation is a loss; a dam
+would otherwise gain water), and an effective-rain fraction outside 0–1,
+February days outside 28–29 or a rain threshold outside 0–1 000 mm falls back
+to its default. Each says so in a run warning.
+
 ### 2.3 Irrigation demand
 
 Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
@@ -1580,7 +1587,12 @@ catchment-rain kind that the engine reads nowhere else. The primary
 catchment reading inside a period is never used. A day the alternative
 series lacks (or a month without a factor) falls through to the period's
 **fallback**, then forecast rain, then nothing (0 mm, with the run's usual
-"no rainfall value" warning).
+"no rainfall value" warning). A period's series (or its fallback) counts as the
+project's rain everywhere a run asks whether it has any: `rain_final`, rain on
+the dams, the runoff coefficient, the missing-rain warning and calibration.
+Before engine 1.69.0 a project whose only rain was a period's series ran GR4J
+and demand on it but showed no `rain_final`, put no rain on its dams, had no
+runoff coefficient and warned "no rainfall series".
 
 | Field | Values | Meaning |
 | --- | --- | --- |
@@ -2277,18 +2289,26 @@ the destination is simulated after its source.
 boreholes), returns, spill, release and stream depletion, the flow leaving it
 is U₀. The rules from it run by priority, lowest first; within one priority
 each rule's limit is `MIN(capacity, the flow above what it must leave, its
-share of the destination's need ÷ (1 − l))`, and the rules share the flow pro
-rata to those limits (no rule gets more than the flow above what the most
-permissive of them must leave), as dam rules share a dam (Q18):
+share of the destination's need ÷ (1 − l))`, and the rules share the flow in
+bands at what each must leave, as dam rules share a dam's storage in bands at
+their reserves (§2.6 step 3, audit N6; for off-takes engine ≥ 1.69.0): the
+flow between two successive keeps (highest first, the top band starting at
+U₀ − taken so far) goes to the rules keeping that much or less, pro rata to
+what each still wants, so no rule takes the river below its own keep, and a
+rule that keeps less (or takes nothing) never lowers another's. Where every
+rule keeps the same flow this is one band, the free flow shared pro rata to
+the limits. Before 1.69.0 the rules were scaled to the flow above the lowest
+keep among them, so a sibling without a hands-off flow, even one taking
+1 m³/day, let the others take the river below theirs:
 
 ```
 keep_k  = MAX(Zs, handsOff_k, handsOffEwr_k ? Z : 0)      Zs: senior users' requirement passing the source (§2.7c)
 free_k  = MAX(0, U₀ − taken so far − keep_k)
 need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
-v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), scaled down pro rata when Σ v > MAX free
+v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), then shared in bands at the keep_k (above)
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
-arrives = Σ v_k × (1 − l_k) at each destination
-back    = Σ v_k × l_k × r_k at each return unit             engine ≥ 1.42.0: canal seepage back to the river
+arrives = Σ v_k × (1 − l_k) at each destination             summed in rule-id order (§6, the ordering rule; engine ≥ 1.69.0)
+back    = Σ v_k × l_k × r_k at each return unit             engine ≥ 1.42.0: canal seepage back to the river, in rule-id order too
 lost    = Σ v_k × l_k × (1 − r_k)                           leaves the catchment
 ```
 
@@ -2664,7 +2684,10 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
   hydrologist.
 - *Fixed* releases a set amount from storage above dead storage.
 - The outlet cap (null = none) applies to both. No rule, or fixed with no
-  amounts, is no release.
+  amounts, is no release; nor is a day the dam has no capacity (§2.7g: not
+  in service yet, or silted full; engine ≥ 1.69.0), on which the transfer
+  room counts no floor and a pass-inflow target holds nothing back from the
+  river pump (§2.7e) or the river abstractions (§2.7j).
 - The release joins U the same day, so it stays in the catchment and counts
   toward every EWR site below. It is the `dam_release` series (only on a dam
   with a rule) and the water balance's `damReleaseM3` line (part of outflow,
@@ -3362,6 +3385,12 @@ On a node without a dam, an emergency borehole runs as supplemental and a
 dam-target one pumps direct, each with a warning; the backend refuses both on
 save (`modelRuleIssues`, like the drought rule), as it refuses a borehole on a
 gauge.
+The same holds day by day for a dam that has no capacity that day (not in
+service yet, or filled with sediment, §2.7g): a dam-target borehole pumps
+direct in its mode's step, primary first and supplemental and emergency after
+the surface (engine ≥ 1.69.0; before, it pumped nothing until the dam
+existed). The transfer room's dam draw counts a primary one as direct on such
+a day too (§2.6).
 
 **Annual caps.** Each unit's volume resets on the first day of each water
 year (and on the run's first day, so a run starting mid-year gives its first
@@ -3895,7 +3924,13 @@ day's capacity spills that day, so a shrinking dam spills what it can no
 longer hold. With no capacity (before the in-service date, or once sediment
 has filled it) the unit has no dam: nothing enters or stays in it, nothing
 evaporates or seeps from it, and what is routed to it passes on, as on a
-unit without a dam. The dam's starting storage is its initial level × the
+unit without a dam. It releases nothing that day (§2.7a item 3: a release
+rule, and a pass-inflow release's target that the river pump and river
+abstractions leave in the river, act only on a day the dam has capacity), and
+a borehole that pumps into the dam pumps straight to the crop or user instead
+(§2.7d), each in its own mode's step (engine ≥ 1.69.0; before, a release
+took the water routed to the absent dam before irrigation, and a dam-target
+borehole pumped nothing). The dam's starting storage is its initial level × the
 first day's capacity.
 
 A run with such a dam carries its `dam_capacity` column (m³, the day's
@@ -4765,7 +4800,10 @@ whole).
 one whose site is missing or isn't the outlet or a gauge. When a site has
 two usable tables (the API refuses that; stored settings can still carry it),
 **neither** is used, from engine 0.24.1: keeping the first made the result depend
-on the list's order. **Order invariance** (engine ≥ 0.24.1): a site's natural
+on the list's order. A table keyed by the outlet node's own id is the outlet's
+table, the same as one keyed `null` (engine ≥ 1.69.0): it is listed first, and
+beside a `null` one neither is used (before, it sorted among the gauges by id
+and the `null` one was used). **Order invariance** (engine ≥ 0.24.1): a site's natural
 flow is summed over its farms in node-id order, and a natural flow within 1e-12
 of a curve point counts as reaching it, so a one-ulp difference can't move the
 percentile across a flat stretch of the curve (equal natural flow at several %
@@ -5322,6 +5360,12 @@ record as it is.
 | log-NSE | NSE of ln(Q + ε), ε = ō / 100 (Pushpalatha et al. 2012) | fit of low flows |
 | Volume error | 100 × (Σs − Σo) / Σo | %; positive = model too wet (= −PBIAS) |
 | Annual volumes | Σ per water year of paired days, Mm³, and % difference | the annual water balance |
+
+A simulation that doesn't vary (the mean flow, or an outlet the network dries
+out) against a record that does has r = 0, as the fit's KGE′ scores it, so KGE
+reads 1 − √2 for the mean flow and 1 − √3 for no flow at all, not "not
+computed" (engine ≥ 1.69.0); R² is then 0. A record that doesn't vary leaves r,
+KGE and R² empty.
 
 No score is rated. Moriasi et al.'s (2007, 2015) "very good … unsatisfactory"
 thresholds were set for mostly monthly, SWAT-type work and don't carry over to
@@ -6862,7 +6906,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 
 | Factor | Low / high (default) | What changes | Skipped when |
 | --- | --- | --- | --- |
-| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
 | Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it | no unit or user has demand over the reporting window |
@@ -7507,7 +7551,7 @@ unrounded and the UI rounds for display ([audit R1, Q14, Q15](./engine-audit.md)
 | R | `ewrShortfallM3Day` | Average EWR shortfall for the period (m³/day) | Engine ≥ 0.17.0: `AVERAGE(−R_f over W)`, the EWR charge (§2.7b, Q17). The sheet: `AVERAGE(incremental EWR shortfall over W)` [`ROUND(…, 0)`] (≤ 0), read from `[EWR shortfalls]`, which copies Element sheet AB |
 | – | `ewrChargeIrrigationM3Day` | – | `AVERAGE(−A_irr over W)`: the part of R met by irrigating less (§2.7b; engine ≥ 0.17.0) |
 | – | `ewrChargeStorageM3Day` | – | `R − R_irr`: the part met by storing less or passing inflow |
-| – | `ewrSupplyCutM3Day`, `ewrSupplyCutLs` | – | `R_irr / (1 − β(1 − e))` (≤ 0): −ΔG, the cut in supply that removes R_irr of consumptive use (§2.7b); l/s = ÷ 86.4 |
+| – | `ewrSupplyCutM3Day`, `ewrSupplyCutLs` | – | `R_irr / k` (≤ 0), k = 1 − β(1 − e), the consumptive share of a m³ supplied: −ΔG, the cut in supply that removes R_irr of consumptive use (§2.7b); for a unit with demand objects, whose return share varies by object, k is the window's 1 − Σ returned ÷ Σ supplied (clamped to (0, 1], `windowConsumptiveShare`); l/s = ÷ 86.4 |
 | – | `ewrBindingSiteId` | – | The EWR site that set most of the farm's charged volume over W; null when not charged |
 | S | `totalChangeM3Day` | Total reductions (m³/day) | Engine ≥ 0.17.0 (Q13): `N − ΔG`, the change in **supply** (the storage part of the charge is not a supply cut). The sheet and older engines: `N + R`. Engine ≥ 1.44.0, on a unit with a basic-needs floor B (§2.7f): `MAX(N − ΔG, B − I)` |
 | T | `totalChangeLs` | Total reductions (l/s) | `S / 86.4` [sheet: `ROUNDDOWN(…, 1)`] |
@@ -7715,13 +7759,19 @@ the days *D(y)* of *y* inside the run:
 
   ```
   M(n,surface,y) = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam, Σ dam draw)
-  dam draw       = MAX(supplied − groundwater_used − river_abstraction, 0)   (per day)
+  dam draw       = MAX(supplied − groundwater_used − river side, 0)   (per day)
+  river side     = river_abstraction + offtake_used + Σ river_take@<key>
   ```
 
   with every Σ over *D(y)*. `supplied` includes what the farm draws from its
   own dam (§2.7d: G = Gs + GW + Gr, so the dam draw Gs is `supplied` less
-  groundwater to the crop and the river pump, `river_abstraction`, §2.7e, 0
-  without one). Groundwater pumped into the dam is already counted on the
+  groundwater to the crop and the river water in it: the river pump,
+  `river_abstraction`, §2.7e, a river off-take's water that met the demand
+  directly, `offtake_used`, §2.6a, and the unit's own river abstractions,
+  `river_take@<key>`, §2.7j; each 0 without one. Before engine 1.69.0 only the
+  river pump was taken off, so off-take and river-abstraction water pumped
+  past a dam topped up with groundwater was netted as if drawn from the dam,
+  and the surface use read low). Groundwater pumped into the dam is already counted on the
   groundwater side; drawing it back out is not a new surface take (in WARMS
   the groundwater take and the storage are separate registered uses), so the
   surface side nets it out: the year's dam draw is taken to be the pumped
@@ -7743,8 +7793,9 @@ the days *D(y)* of *y* inside the run:
     overstates the netting only by pumped water the dam lost to evaporation,
     seepage or a release before it was drawn. Pro rata to the dam's inflows
     would need the stored series of every inflow and still be an assumption.
-  - **Never below the river pump.** The netting is capped by the dam draw,
-    so the river pump's take always stays surface use.
+  - **Never below the river water.** The netting is capped by the dam draw,
+    so the river pump's, the off-takes' and the river abstractions' water
+    always stays surface use.
 
   Runs made before the river pump (no `river_abstraction` series) have no
   river take, so the dam draw is `supplied` − `groundwater_used`.
@@ -9151,8 +9202,11 @@ farms' flow shares (area and hi/lo totals), the catchment area Σ farm area,
 each farm's crops and crop areas (crop id, then area), the land-cover patches
 on a unit (patch id, §2.5a), the senior users' claims on a farm and each
 user's upstream share total (node id, §2.7c), the transfer rules (id, §2.6),
-each node's upstream inflows (node id, review F8) and the EWR attribution's
-impacts (`canonicalOrder`: furthest from the outlet first, then by id, §2.7b).
+each node's upstream inflows (node id, review F8), the river off-take water
+arriving at a unit and the canal seepage returning at one (rule id, §2.6a;
+engine ≥ 1.69.0, before which they were added as each source was simulated)
+and the EWR attribution's impacts (`canonicalOrder`: furthest from the outlet
+first, then by id, §2.7b).
 Whatever sums over a list in a new feature follows the same rule, and the
 bit-exact check catches one that doesn't even when no threshold amplifies it.
 

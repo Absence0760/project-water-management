@@ -50,6 +50,7 @@ import {
 	RAIN_SOURCE_SERIES,
 	type DailySeries,
 	type DataQualitySettings,
+	type ModelInput,
 	type RainSourceFactorProvenance,
 	type RainSourcePeriod,
 	type RainSourceQuantileMap,
@@ -97,6 +98,19 @@ const KIND_NAME: Record<string, string> = {
 	rain_reanalysis_mm: 'reanalysis',
 	rain_chirps_mm: 'CHIRPS'
 };
+/**
+ * Does the run have a rain series at all: the catchment gauge, CHIRPS, a
+ * forecast, or a rain-source period's series or fallback (§2.4e: a period's
+ * series is the catchment rain over its span). Every reader that asks "is
+ * there rain?" (rain_final, rain on the dams, the runoff coefficient, the
+ * missing-rain warning, calibration) asks this, so a project whose only rain
+ * is a period's series isn't treated as rainless.
+ */
+export function hasRainInput(series: ModelInput['series'] | undefined, periods: readonly RainSourcePeriod[] | undefined): boolean {
+	if (series?.rain_catchment_mm || series?.rain_chirps_mm || series?.rain_forecast_mm) return true;
+	return (periods ?? []).some((p) => !!series?.[p.series] || (!!p.fallback && !!series?.[p.fallback.series]));
+}
+
 /** A rain-source series or reference in words. */
 export const rainSourceKindName = (k: string): string => KIND_NAME[k] ?? k;
 

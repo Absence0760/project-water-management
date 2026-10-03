@@ -90,10 +90,11 @@ describe('calibrationStats — window', () => {
 		expect(c.windowStart).toBe('2020-10-01');
 		expect(c.windowEnd).toBe('2020-10-02');
 		expect(c.annualVolumes!.map((y) => y.waterYear)).toEqual([2020]);
-		// sim is constant inside the window: no correlation, so no KGE / R²
-		expect(c.kgeR).toBeNull();
-		expect(c.kge).toBeNull();
-		expect(c.r2).toBeNull();
+		// sim is constant inside the window: no correlation, r = 0 (engine ≥ 1.69.0), so KGE still scores it:
+		// α = 0, β = 4 / 3.5 = 8/7
+		expect(c.kgeR).toBe(0);
+		expect(c.kge).toBeCloseTo(1 - Math.sqrt(1 + 1 + (1 / 7) ** 2), 12);
+		expect(c.r2).toBe(0);
 		expect(c.kgeAlpha).toBe(0);
 	});
 

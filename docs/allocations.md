@@ -172,7 +172,9 @@ For a run, per farm or water user, per water source and per **water year**
   are separate registered uses), so the surface side nets it out: each water
   year, surface water = supplied − groundwater − MIN(pumped into the dam, drawn
   from the dam), where the dam draw is supplied less groundwater to the crop
-  and the river pump (`river_abstraction`). 10 000 m³ pumped into a dam and
+  and the river water in it (the river pump, `river_abstraction`; river
+  off-take water used directly, `offtake_used`; the unit's river
+  abstractions, `river_take@<key>`). 10 000 m³ pumped into a dam and
   40 000 m³ drawn from it read 30 000 m³ surface + 10 000 m³ groundwater,
   not 40 000 + 10 000. Water pumped before 1 October and drawn after it is
   not netted. The rule and its reasoning are in

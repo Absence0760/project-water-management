@@ -21,6 +21,7 @@
 //   parameters scored against another observed record (a logger when the fit
 //   used the gauge, or the reverse), over that record's own days. It tests
 //   the fit against a second instrument, not just a second period.
+import { hasRainInput } from '../rainSourcePeriods';
 import { fromEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf } from '../calendar';
 import { simulateNetwork } from '../network/simulate';
 import { alignFlow } from '../prepare';
@@ -438,7 +439,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// score, so each evaluation stops there (a full run is tens of ms on a
 	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
-	const hasRain = !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm);
+	const hasRain = hasRainInput(input.series, settings.rainSource);
 	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });

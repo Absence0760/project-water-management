@@ -174,6 +174,11 @@ MUTANTS = [
         'keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
         "keep_k = zs",
     ),
+    (
+        "off-takes of one priority share the flow above the lowest keep among them",
+        "band = max(0.0, top - floor)",
+        "band = max(0.0, top - keeps[act[-1]])",
+    ),
     ("canal seepage always returns at the source", 'rn = t.get("lossReturnNodeId") or xid', "rn = xid"),
     ("off-take water left over always tops up the dam", "to_dam = left_off * arr_up / arrives if arrives > 0 else 0.0", "to_dam = left_off"),
     # Other water users (§2.7c).

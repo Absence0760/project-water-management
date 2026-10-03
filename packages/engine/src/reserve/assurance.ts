@@ -602,7 +602,9 @@ export function assessSite(
 			meanActual: n ? ms.reduce((s, m) => s + m.actual, 0) / n : null,
 			naturalCurve: c.natural,
 			fdc,
-			daily: dailyCompliance(list.filter((r) => r.from >= 0), site.impacted, requiredM3Day)
+			// Every run month of this month of the year, a forecast tail's included, so the twelve add up to
+			// the site's daily figures (`list` holds only the history's months when there is a tail: the natural curve).
+			daily: dailyCompliance(rows.filter((r) => r.w === w && r.from >= 0), site.impacted, requiredM3Day)
 		};
 		if (table.lowFlow) row.lowFlowRate = n ? ms.filter((m) => m.lowFlowMet).length / n : null;
 		return row;

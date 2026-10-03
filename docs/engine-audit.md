@@ -218,6 +218,23 @@ reserves (counting one active that month at rate 0) keeps more water: its
 higher-reserve rules move less, down to the water above their own reserve,
 and the lower-reserve rules may take more of what is below it.
 
+**N6 for river off-takes (engine 1.69.0).** River off-takes (model.md
+§2.6a) shared the flow at a source the pre-N6 way until 1.69.0: the rules of
+one priority were scaled to the flow above the *lowest* keep among them
+(senior requirement, hands-off flow, EWR when asked), while each rule's own
+keep capped only its own volume. So a sibling with a lower keep, even one
+taking 1 m³/day, let the others take the river below their hands-off flow:
+two rules keeping 900 m³/day took 100 m³ together on 1 000 m³ alone, but
+200 m³ (leaving 799 m³) beside a 1 m³/day rule without one. They now share
+in bands at their keeps exactly as N6's dam rules do at their reserves
+(found by the e2e hunt, `src/e2e/network.bugs.e2e.test.ts`). Where a
+source's rules keep the same flow the split is the old one to the bit, and
+the examples have no river off-take, so they are unchanged. `checkTransferLimits` (its off-take part)
+gained N6's invariant: the rules of one priority keeping at least a rule's
+keep k take together at most `MAX(0, U₀ − taken by lower priorities − k)`.
+The same release adds that off-take water arriving at a unit is summed in
+rule-id order (model.md §6, the ordering rule).
+
 ## Regression suite: deviation list
 
 `packages/engine/src/run.test.ts` compares with the workbook column by

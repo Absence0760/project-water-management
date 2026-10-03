@@ -19,6 +19,7 @@ import {
 import {
 	applyRainSource,
 	finishRainSource,
+	hasRainInput,
 	rainSourceFactors,
 	rainSourceSpans,
 	rainSourcePeriodWarnings,
@@ -391,7 +392,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	// Daily A-pan (issue #45): every consumer reads it through `aligned`; this only counts and warns.
 	const apanDaily = apanDailyInfo(series.evap_apan_mm, alignSeries(series.evap_apan_mm, start, days), start, settings.apanMm.every((v) => v === 0), warnings);
 
-	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) {
+	if (!hasRainInput(series, settings.rainSource)) {
 		warnings.push('no rainfall series: natural flow is only what drains from the stores the warm-up filled, and demand is not reduced by rain');
 	}
 
@@ -512,6 +513,12 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	s.ewrRules = resolveEwrRules(raw?.ewrRules, warnings);
 	s.qualityFlags = resolveQualityFlags(raw?.qualityFlags, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
+	// Evaporation is a loss: a negative month would make the dams and pools gain water (the daily series already treats
+	// a negative day as missing; scenarios and the API refuse it). 0, with a warning (engine ≥ 1.69.0).
+	if (s.apanMm.some((v) => v < 0)) {
+		warnings.push('A-pan evaporation below 0 in some months; using 0 there');
+		s.apanMm = s.apanMm.map((v) => Math.max(v, 0)) as unknown as Monthly;
+	}
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {
 		warnings.push(`dam evaporation factor "${String(s.lakeEvapFactor)}" is not a number ≥ 0; using ${d.lakeEvapFactor}`);
@@ -535,6 +542,20 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 			// Allowed (it is the modeller's call), but never quietly: the AI workbook's all-zero row is this (issue #54).
 			warnings.push('the monthly effective rain fraction is 0 in every month, so rain never reduces irrigation demand');
 		}
+	}
+	// The same ranges the API and scenarios hold these to (scenario/ops.ts SETTINGS_CHECKS), so a direct input can't
+	// make rain raise demand or February's demand NaN (engine ≥ 1.69.0).
+	if (typeof s.effectiveRainFraction !== 'number' || !(s.effectiveRainFraction >= 0 && s.effectiveRainFraction <= 1)) {
+		warnings.push(`effective rain fraction "${String(s.effectiveRainFraction)}" is not a number from 0 to 1; using ${d.effectiveRainFraction}`);
+		s.effectiveRainFraction = d.effectiveRainFraction;
+	}
+	if (typeof s.februaryDays !== 'number' || !(s.februaryDays >= 28 && s.februaryDays <= 29)) {
+		warnings.push(`February days "${String(s.februaryDays)}" is not a number from 28 to 29; using ${d.februaryDays}`);
+		s.februaryDays = d.februaryDays;
+	}
+	if (typeof s.calibration.rainThresholdMm !== 'number' || !(s.calibration.rainThresholdMm >= 0 && s.calibration.rainThresholdMm <= 1000)) {
+		warnings.push(`rain threshold "${String(s.calibration.rainThresholdMm)}" mm is not a number from 0 to 1000; using ${d.calibration.rainThresholdMm} mm`);
+		s.calibration.rainThresholdMm = d.calibration.rainThresholdMm;
 	}
 	if (typeof s.effectiveRainStoreMm !== 'number' || !Number.isFinite(s.effectiveRainStoreMm) || s.effectiveRainStoreMm < 0) {
 		warnings.push(`soil-water store "${String(s.effectiveRainStoreMm)}" mm is not a size ≥ 0; using ${d.effectiveRainStoreMm} mm`);

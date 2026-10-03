@@ -80,6 +80,14 @@ export interface AllocationUseNode {
 	 * pump. Only used to tell the dam draw (supplied − groundwater − river) apart.
 	 */
 	riverAbstraction?: ArrayLike<number | null> | null;
+	/**
+	 * The unit's other river water in supplied (m³/day, engine ≥ 1.69.0): the
+	 * run's `offtake_used` (a river off-take met the demand directly, §2.6a) and
+	 * each `river_take@<key>` (its own river abstractions, §2.7j). None of it
+	 * came out of the dam, so like the river pump it is never netted against
+	 * groundwater pumped into the dam (§2.12).
+	 */
+	riverTakes?: readonly (ArrayLike<number | null> | null | undefined)[] | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 }
@@ -245,6 +253,12 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const gw = n.groundwater ?? null;
 		const gd = n.groundwaterToDam ?? null;
 		const ra = n.riverAbstraction ?? null;
+		const rivers = (n.riverTakes ?? []).filter((x): x is ArrayLike<number | null> => !!x);
+		const riverAt = (t: number) => {
+			let v = ra ? finite(ra[t]) : 0;
+			for (const x of rivers) v += finite(x[t]);
+			return v;
+		};
 		const side = (source: AllocationWaterSource): AllocationSourceComparison => {
 			// A storage-only (s21b) row is not a take: it counts for storage below, never here.
 			const own = allocs.filter((a) => a.waterSource === source && !isStorageOnly(a));
@@ -262,7 +276,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 						modelled += surface;
 						if (gd) {
 							toDam += pumped;
-							damDraw += Math.max(surface - (ra ? finite(ra[t]) : 0), 0);
+							damDraw += Math.max(surface - riverAt(t), 0);
 						}
 					}
 				}

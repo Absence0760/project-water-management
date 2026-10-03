@@ -497,18 +497,29 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * dam-target unit fills only for the demand the river leaves. Under an
  * allocation cap (engine ≥ 1.18.0) the surface gives at most `sRoom` and the
  * units together pump at most `gRoom` (the day's allocation_room columns;
- * Infinity without a cap). Call it once per day, in order. It assumes a fresh
- * run: each unit starts at 0, not a resumed run's saved volumes.
+ * Infinity without a cap). On a day with no capacity (`cap` 0: a dam not in
+ * service yet, or silted full) a dam-target unit pumps straight to the crop in
+ * its mode's step, as on a node without a dam (§2.7d, §2.7g). Call it once per
+ * day, in order. It assumes a fresh run: each unit starts at 0, not a resumed
+ * run's saved volumes.
  */
 function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const used = b ? b.units.map(() => 0) : [];
 	const units = b?.units ?? [];
 	const ks = units.map((_, k) => k);
-	const primary = ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 1);
-	const toDam = ks.filter((k) => units[k]!.toDam);
-	const later = [...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 0), ...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 2)];
+	const order = (noDam: boolean) => {
+		const direct = (k: number) => !units[k]!.toDam || noDam;
+		return {
+			primary: ks.filter((k) => direct(k) && units[k]!.mode === 1),
+			toDam: noDam ? [] : ks.filter((k) => units[k]!.toDam),
+			later: [...ks.filter((k) => direct(k) && units[k]!.mode === 0), ...ks.filter((k) => direct(k) && units[k]!.mode === 2)]
+		};
+	};
+	const withDam = order(false);
+	const withoutDam = order(true);
 	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1, sRoom = Infinity, gRoom = Infinity, dayD = D) => {
 		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
+		const { primary, toDam, later } = cap > 0 ? withDam : withoutDam;
 		let gLeft = gRoom;
 		const pump = (k: number, want: number) => {
 			const u = units[k]!;
@@ -706,7 +717,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		const f = farms[fi]!;
 		const cap = capOn(f.id, t);
 		const held = storage(f.id, t) + pd! - e! - sp!;
-		const rel = farmRelease[fi] ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * cap) : 0;
+		// A dam with no capacity today (not in service yet, or silted full) releases nothing (docs/model.md §2.7g).
+		const rel = farmRelease[fi] && cap > 0 ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * cap) : 0;
 		return cap - held + (farmDraw[fi]?.[t] ?? farmD[fi]![t]!) + rel;
 	};
 	for (let t = 0; t < out.days; t++) {
@@ -800,23 +812,32 @@ function checkRuleReserves(rules: readonly Rule[], defs: readonly Transfer[], ou
  * allocation_room_groundwater), capped at allocation_room_surface. The
  * primary direct units pump first, for the demand the off-take water left
  * (D − offtake_used), so replaying them from those columns gives each unit's
- * volume so far this water year. Like boreholeReplay it assumes a fresh run:
- * each unit starts at 0, not a resumed run's saved volumes.
+ * volume so far this water year. On a day the dam has no capacity (its
+ * dam_capacity column 0) a primary dam-target unit is direct too; on the other
+ * days what the dam-target units pumped into the dam (groundwater_to_dam) is
+ * given to them in order, each up to its room, which is what they pumped when
+ * every dam-target unit is primary, or there is one. Like boreholeReplay it
+ * assumes a fresh run: each unit starts at 0, not a resumed run's saved volumes.
  */
 function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model']['boreholes']>, get: SeriesMap, day0: number, days: number, D: readonly number[]): Float64Array {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
 	const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
 	const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 	const XUSED = g('offtake_used');
-	const units = (boreholeOf(n, own, []).borehole?.units ?? []).filter((u) => !u.toDam && u.mode === 1);
+	const CAPS = g(DAM_CAPACITY_SERIES.key);
+	const GD = g('groundwater_to_dam');
+	const units = (boreholeOf(n, own, []).borehole?.units ?? []).filter((u) => u.toDam || u.mode === 1);
 	const used = units.map(() => 0);
+	const roomOf = (k: number) => Math.max(0, Math.min(units[k]!.capacityM3Day, units[k]!.annualCapM3 - used[k]!));
 	const out = new Float64Array(days);
 	for (let t = 0; t < days; t++) {
 		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
+		const noDam = !((CAPS ? CAPS[t]! : n.damCapacityM3) > 0);
+		const direct = (k: number) => units[k]!.mode === 1 && (!units[k]!.toDam || noDam);
 		const d = D[t]!;
 		const gRoom = RG?.[t] ?? Infinity;
 		let room = 0;
-		for (let k = 0; k < units.length; k++) room += Math.max(0, Math.min(units[k]!.capacityM3Day, units[k]!.annualCapM3 - used[k]!));
+		for (let k = 0; k < units.length; k++) if (direct(k)) room += roomOf(k);
 		const primary = Math.min(room, gRoom);
 		out[t] = Math.min(Math.max(0, d - primary), RS?.[t] ?? Infinity);
 		// Today's pumping, as groundwaterDay's first step: in order, each for what the others left.
@@ -824,11 +845,20 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
 		let got = 0;
 		const want = d - (XUSED?.[t] ?? 0);
 		for (let k = 0; k < units.length; k++) {
+			if (!direct(k)) continue;
 			const u = units[k]!;
 			const v = Math.max(0, Math.min(u.capacityM3Day, u.annualCapM3 - used[k]!, want - got, gLeft));
 			used[k]! += v;
 			gLeft -= v;
 			got += v;
+		}
+		// What the dam-target units pumped into the dam today, in order.
+		let gd = noDam ? 0 : (GD?.[t] ?? 0);
+		for (let k = 0; k < units.length && gd > 0; k++) {
+			if (!units[k]!.toDam) continue;
+			const v = Math.min(roomOf(k), gd);
+			used[k]! += v;
+			gd -= v;
 		}
 	}
 	return out;
@@ -844,6 +874,11 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
  *   (the senior users' requirement passing, its hands-off flow, the EWR here
  *   when asked), so never more than the river there; the outflow is what was
  *   left, reduced by exactly Σ v;
+ * - no rule takes the river below its own keep (audit N6's rule for dam
+ *   rules, applied to off-takes): of a rule's priority, the rules keeping at
+ *   least its keep k take together at most MAX(0, U₀ − taken by lower
+ *   priorities − k), U₀ the flow before the off-takes; a rule that takes
+ *   nothing doesn't count;
  * - at the destination, Σ v × (1 − loss) = offtake_in;
  * - at the farm each rule's seepage rejoins (engine ≥ 1.42.0: the source or
  *   a farm below it), Σ v × loss × its return share = offtake_loss_return,
@@ -894,6 +929,22 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 				if (v > 0 && v > Math.max(0, U + sumAll(mine, t) - keep) + tol(Math.max(U, keep))) return `${where}: river off-take ${r.tr.id} took ${v}, more than the flow above what it must leave (${keep})`;
 			}
 			if (taken === undefined || Math.abs(taken - sum) > tol(sum)) return `${where}: offtake_out ${taken} ≠ Σ its river off-takes ${sum}`;
+			// Each rule's own keep holds against its priority's rules keeping as much or more.
+			const U0 = U + sum;
+			for (const r of mine) {
+				if (!(r.volume![t]! > 0)) continue;
+				const k = Math.max(Zs, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
+				let earlier = 0;
+				let above = 0;
+				for (const x of mine) {
+					const kx = Math.max(Zs, x.o.handsOffM3Day, x.o.handsOffEwr ? Z : 0);
+					if (x.o.priority < r.o.priority) earlier += x.volume![t]!;
+					else if (x.o.priority === r.o.priority && kx >= k) above += x.volume![t]!;
+				}
+				const free = Math.max(0, U0 - earlier - k);
+				if (above > free + tol(Math.max(U0, above, k)))
+					return `${where}: river off-take ${r.tr.id} and the rules of its priority keeping at least its ${k} took ${above} > the flow ${U0} − ${earlier} taken first − ${k}`;
+			}
 			if (sum > 0 && U < -tol(sum)) return `${where}: the river off-takes left ${U} in the river`;
 			if (mine.every((r) => r.o.sizing === 1)) {
 				const floor = Math.min(caps, Math.max(0, U + sum - keepMax));
@@ -1237,7 +1288,8 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
  *   required below the dam − S, outlet, S0 + M + O + K + J), the requirement
  *   being the rule's monthly amount or the EWR required at the node (Z);
  *   under fixed X = MIN(the month's amount, outlet, S0 + M + O + K + J −
- *   dead storage), never < 0; no rule, no release column;
+ *   dead storage), never < 0; no rule, no release column; X = 0 on a day
+ *   the dam has no capacity (not in service yet, or silted full, §2.7g);
  * - G = MIN(MAX(S0 + M + O + K + J − X − dead storage, 0), D): irrigation
  *   takes what is above the minimum operating level, up to demand (Q5);
  * - a farm with a supply rule that pumps from the river (WP-3.8) has the
@@ -1511,15 +1563,18 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const availScale = Math.max(Math.abs(qPrev), pd, ev, sp, m, o, k, Math.abs(j), dead, d, xin);
 			// Release (WP-3.5), before irrigation.
 			const x = REL?.[t] ?? 0;
-			if (rel) {
+			// No dam today (capacity 0: not in service yet, or silted full) is no release (docs/model.md §2.7g).
+			const relNow = cap > 0 ? rel : null;
+			if (rel && !relNow && x !== 0) return `${where}: released ${x} on a day the dam has no capacity`;
+			if (relNow) {
 				const month = monthOfEpochDay(day0 + t);
 				const passing = l + nn - o;
 				const want =
-					rel.rule === 1
-						? Math.max(0, Math.min(m + o + k, (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) - passing, rel.outletM3Day, Math.max(avail0, 0)))
-						: Math.max(0, Math.min(rel.m3DayByMonth![month]!, rel.outletM3Day, Math.max(avail0, 0) - dead));
-				if (x < 0 || x > rel.outletM3Day + tol(x)) return `${where}: release ${x} outside [0, outlet ${rel.outletM3Day}]`;
-				if (!near(x, want, availScale)) return `${where}: release ${x} ≠ ${want} (${rel.rule === 1 ? 'pass inflow' : 'fixed'} rule)`;
+					relNow.rule === 1
+						? Math.max(0, Math.min(m + o + k, (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) - passing, relNow.outletM3Day, Math.max(avail0, 0)))
+						: Math.max(0, Math.min(relNow.m3DayByMonth![month]!, relNow.outletM3Day, Math.max(avail0, 0) - dead));
+				if (x < 0 || x > relNow.outletM3Day + tol(x)) return `${where}: release ${x} outside [0, outlet ${relNow.outletM3Day}]`;
+				if (!near(x, want, availScale)) return `${where}: release ${x} ≠ ${want} (${relNow.rule === 1 ? 'pass inflow' : 'fixed'} rule)`;
 			}
 			const avail = avail0 - x;
 			const surface = Math.max(avail - dead, 0);
@@ -1534,7 +1589,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
 				onRiver = sup.rule !== 2 || (onRiver ? qLevel < sup.stopM3 : qLevel < sup.triggerM3);
 				const month = monthOfEpochDay(day0 + t);
-				keep = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				keep = Math.max(ZS?.[t] ?? 0, relNow && relNow.rule === 1 ? (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
 				if (gRiv < 0 || gRiv > sup.pumpM3Day + tol(gRiv)) return `${where}: pumped ${gRiv} from the river, outside [0, pump capacity ${sup.pumpM3Day}]`;
 				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
@@ -1587,7 +1642,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (riv) {
 				flowTaken = gRivT + poolChg;
 				const month = monthOfEpochDay(day0 + t);
-				const keepR = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				const keepR = Math.max(ZS?.[t] ?? 0, relNow && relNow.rule === 1 ? (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				const past = r + (ss - gRiv) + (sp - spl) + x + xpass;
 				const free = Math.max(0, past - keepR);
 				const sc = Math.max(past, keepR, gRivT);
@@ -2779,7 +2834,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					supplied,
 					groundwater: get.get(`${n.id}|groundwater_used`) ?? null,
 					groundwaterToDam: get.get(`${n.id}|groundwater_to_dam`) ?? null,
-					riverAbstraction: get.get(`${n.id}|river_abstraction`) ?? null
+					riverAbstraction: get.get(`${n.id}|river_abstraction`) ?? null,
+					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v)
 				}
 			];
 		})

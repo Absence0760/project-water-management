@@ -1392,3 +1392,16 @@ describe('remapSettingNodeIds and the drought restriction rule (engine 1.54.0)',
 		expect(SettingsPatch.safeParse({ droughtRestriction: { ...rule, basis: 'river' } }).success).toBe(false);
 	});
 });
+
+describe('SettingsPatch monthly rows that must not be negative (engine ≥ 1.69.0)', () => {
+	const row = (v: number) => new Array(12).fill(10).map((x, i) => (i === 3 ? v : x));
+	it('refuses a negative A-pan month and one over 10 000 mm, as scenarios do', () => {
+		expect(SettingsPatch.safeParse({ apanMm: row(-1) }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ apanMm: row(10_001) }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ apanMm: row(0) }).success).toBe(true);
+	});
+	it('refuses a negative pragmatic EWR month', () => {
+		expect(SettingsPatch.safeParse({ ewrPragmaticM3PerDay: row(-5) }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ ewrPragmaticM3PerDay: row(0) }).success).toBe(true);
+	});
+});

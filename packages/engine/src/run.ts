@@ -17,7 +17,7 @@ import {
 	seriesChecks
 } from './quality';
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
-import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
+import { hasRainInput, RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
 import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirpsGapMapLead, ZERO_RAIN_COLUMN } from './rain';
 import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
@@ -306,7 +306,7 @@ function runNetwork(
 	const areal = arealRainFactors(settings.arealRain);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
-	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
+	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource), days);
 	// The rain on the catchment as GR4J ran on it (engine ≥ 1.13.0, §2.4g): rain_final × the areal
 	// factor. What the catchment's own water balance reads (the WR2012 rain scaling, the water
 	// account, the plausibility checks); the same array as finalRain without a correction.
@@ -827,7 +827,7 @@ function runNetwork(
 
 	const window = resolveReportWindow(settings, start, days, warnings);
 	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
-	missingRainWarning(input, aligned, start, days, window, warnings);
+	missingRainWarning(input, settings.rainSource, aligned, start, days, window, warnings);
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -1460,7 +1460,7 @@ export function buildNetworkPlan(
 		if (open.length || pooled)
 			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
-	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
+	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
 	// A dam with a survey curve (WP-3.5) takes its area from it; one the run can't use says why and runs on the power law.
 	for (const n of nodes) {
@@ -2007,7 +2007,8 @@ function runAllocations(
 				supplied: r.supplied,
 				groundwater: b ? (r.groundwater) : null,
 				groundwaterToDam: b?.units.some((u) => u.toDam) ? (r.groundwaterToDam) : null,
-				riverAbstraction: (r.riverAbstraction ?? null)
+				riverAbstraction: (r.riverAbstraction ?? null),
+				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])]
 			};
 		})
 	});
@@ -2178,7 +2179,7 @@ function catchmentRunoffCoefficient(
 	month: ArrayLike<number>
 ): number | null {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!kinds.some((k) => input.series?.[k])) return null;
+	if (!hasRainInput(input.series, settings.rainSource)) return null;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	let rainMm = 0;
 	for (let t = 0; t < natural.length; t++) {
@@ -2238,8 +2239,16 @@ function assessEwrRules(
 	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null; history?: number[] }[] = [];
 	const siteOf = new Map(sites.map((s) => [s.node, s]));
 	const key = (id: string | null) => id ?? '';
-	const tables = [...settings.ewrRules].sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
-	const done = new Set<number>();
+	// A table keyed by the outlet node's own id is the outlet's table (null): the same site, listed
+	// first, and a second table beside one for "the outlet" is a duplicate, so neither is used (§2.9c).
+	const outletId = outflow >= 0 ? nodes[outflow]!.id : null;
+	const named = settings.ewrRules.map((t) => (outletId !== null && t.siteNodeId === outletId ? { ...t, siteNodeId: null } : t));
+	const perSite = new Map<string, number>();
+	for (const t of named) perSite.set(key(t.siteNodeId), (perSite.get(key(t.siteNodeId)) ?? 0) + 1);
+	for (const [site, n] of perSite) {
+		if (n > 1) warnings.push(`${n} EWR rule tables for ${site === '' ? 'the outlet' : `site ${site}`}: none is used, because each site has one`);
+	}
+	const tables = named.filter((t) => perSite.get(key(t.siteNodeId)) === 1).sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
 	for (const table of tables) {
 		const node = table.siteNodeId === null ? outflow : nodes.findIndex((n) => n.id === table.siteNodeId);
 		if (node < 0) {
@@ -2251,11 +2260,6 @@ function assessEwrRules(
 			continue;
 		}
 		const isOutlet = node === outflow;
-		if (done.has(node)) {
-			// A table keyed by the outlet node's id besides one for "the outlet" (null).
-			warnings.push(`a second EWR rule table for "${nodes[node]!.name}" is ignored: each site has one`);
-			continue;
-		}
 		if (!isOutlet && nodes[node]!.kind !== 'gauge') {
 			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: an EWR site is the outlet or a gauge`);
 			continue;
@@ -2291,7 +2295,6 @@ function assessEwrRules(
 			historyDays
 		);
 		warnings.push(...assuranceWarnings(a.report));
-		done.add(node);
 		out.push({
 			report: a.report,
 			requiredM3Day: a.requiredM3Day,
@@ -2424,6 +2427,7 @@ export const MISSING_RAIN_RANGES_LISTED = 3;
  */
 function missingRainWarning(
 	input: ModelInput,
+	periods: ProjectSettings['rainSource'],
 	aligned: (k: SeriesKind) => (number | null)[],
 	start: number,
 	days: number,
@@ -2431,7 +2435,7 @@ function missingRainWarning(
 	warnings: string[]
 ): void {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!kinds.some((k) => input.series?.[k])) return;
+	if (!hasRainInput(input.series, periods)) return;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	const ranges: [number, number][] = [];
 	let missing = 0;

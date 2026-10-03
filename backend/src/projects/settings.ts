@@ -256,6 +256,8 @@ export function importedAutoFitError(settings: Record<string, unknown>): string 
 }
 
 const monthly = z.array(z.number().finite()).length(12);
+/** 12 monthly values ≥ 0 (and ≤ max): what the engine and scenarios accept for A-pan and the pragmatic EWR (engine ≥ 1.69.0). */
+const monthlyNonNeg = (max = Number.MAX_VALUE) => z.array(z.number().finite().min(0).max(max)).length(12);
 
 const dqDays = (min: number) => z.number().int().min(min).max(366);
 /** The zero-run and low-vs-CHIRPS limits (engine RAIN_CHECK_KEYS): also recorded in a fit's forcing. */
@@ -895,7 +897,7 @@ export const SettingsPatch = z
 		lakeEvapFactorMonthly: z.array(z.number().finite().min(0).max(2)).length(12).nullable(),
 		// Where the dam evaporation factors came from (engine ≥ 1.49.0): free text, e.g. a lake-factor preset's note; provenance only; '' = none.
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
-		apanMm: monthly,
+		apanMm: monthlyNonNeg(10_000),
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
@@ -946,7 +948,7 @@ export const SettingsPatch = z
 			(v) => (isObj(v) ? withoutRetiredCalibration(v) : v),
 			z.object({ rainThresholdMm: z.number().finite().min(0).max(1000), catchmentAreaKm2: z.number().finite().min(0).max(1e6).nullable() }).partial().strict()
 		),
-		ewrPragmaticM3PerDay: monthly,
+		ewrPragmaticM3PerDay: monthlyNonNeg(),
 		// Reserve rule tables per EWR site (engine ≥ 0.21.0); the list is replaced whole.
 		ewrRules: EwrRuleList,
 		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.

@@ -288,6 +288,17 @@ describe('compareAllocations', () => {
 		expect(x.groundwater.years[0]!.modelledM3).toBeCloseTo(500, 9);
 	});
 
+	it('nets no off-take or river-abstraction water as a dam draw (engine ≥ 1.69.0)', () => {
+		// Per day: 100 supplied = 40 off-take used + 50 own river abstraction + 10 from the dam; 20 pumped into the dam.
+		const r = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(new Array(10).fill(100), new Array(10).fill(0), { groundwaterToDam: new Array(10).fill(20), riverTakes: [new Array(10).fill(40), new Array(10).fill(50)] })],
+			allocations: []
+		});
+		// Dam draw 100 over the days, pumped in 200: only 100 netted, so 1 000 − 100 stays surface.
+		expect(r.nodes[0]!.surface.years[0]!.modelledM3).toBeCloseTo(900, 9);
+	});
+
 	it('nets per water year: water pumped in before 1 October and drawn after it is not netted', () => {
 		// Pumped on 30 September 2002 (water year 2001), drawn on 1 October 2002 (water year 2002).
 		const n = span('2001-10-01', '2003-09-30');
