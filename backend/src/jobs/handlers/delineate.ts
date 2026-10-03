@@ -19,7 +19,7 @@
 // to the queue for the next tick instead of being killed or wrongly refused.
 import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
-import { delineate, DelineationRefused, type LargerChannel } from '../../delineation/delineate.js';
+import { delineate, DelineationRefused, tooLargeText, type LargerChannel } from '../../delineation/delineate.js';
 import { checkNote, storeProposal } from '../../delineation/proposals.js';
 import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
 import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
@@ -69,7 +69,7 @@ export const delineateHandler = defineHandler({
 		}
 		const windows = jobWindowsFrom(req.from_window);
 		if (windows.length === 0) {
-			return refuse('too_large', 'The catchment above that point is larger than the app delineates. Pick an outlet further upstream, or draw or import the boundary.');
+			return refuse('too_large', tooLargeText('click', null, near.reach?.upstreamKm2));
 		}
 		// Within the worker Lambda's time: a job claimed late in a tick goes back to the queue rather than be cut off.
 		const budgetMs = jobBudget(deadline, Date.now());

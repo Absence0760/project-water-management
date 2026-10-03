@@ -185,7 +185,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
+				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
 			});
 			return toClickPieces(r, reaches);
 		} catch (err) {

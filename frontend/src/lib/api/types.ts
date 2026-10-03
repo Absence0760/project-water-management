@@ -3211,10 +3211,12 @@ export interface LargerChannel {
 	at: MapPosition;
 	/** From the point (m). */
 	distanceM: number;
-	/** What drains through it inside the routed window (km²). */
+	/** What drains through it inside the routed window (km²; a floor when its catchment runs past the window). */
 	km2: number;
 	/** What drains through the cell the point snapped to (km²). */
 	pointKm2: number;
+	/** A dam outline's: the channel its outline only clips, the dam's own outflow placed instead (backend damOutflow). */
+	outline?: boolean;
 }
 
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */

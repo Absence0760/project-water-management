@@ -59,6 +59,8 @@ export interface LargerChannel {
 	km2: number;
 	/** What drains through the cell the point snapped to (km²). */
 	pointKm2: number;
+	/** A dam outline's: the channel its outline only clips, its own outflow placed instead (subcatchments.ts damOutflow). */
+	outline?: boolean;
 }
 
 export class DelineationRefused extends Error {
@@ -81,14 +83,49 @@ export function bearingWord(from: Position, to: Position): string {
 	return ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(deg / 45) % 8]!;
 }
 
-/** The refusal for a point beside a much larger channel: the sentence and the channel to offer. */
-export function largerChannelRefusal(click: Position, larger: LargerChannel, what = 'your point'): DelineationRefused {
-	const km2 = (v: number) => (v < 10 ? v.toFixed(2) : Math.round(v).toLocaleString('en-ZA'));
+const km2Text = (v: number) => `${v < 10 ? v.toFixed(2) : Math.round(v).toLocaleString('en-ZA')} km²`;
+
+/**
+ * The refusal for a point beside a much larger channel: the sentence and the channel to offer. `larger.km2` counts only what
+ * drains through it inside the routed window, so it isn't an "about" (the hydrologist's review, finding 10: 619 km² was quoted
+ * for the Orange, which carries 340 724). `context.open`: its catchment runs past the window (`windowKm` a side), so the figure
+ * is a floor; `context.reach`: the mapped river reach near the point, quoted for its own area when it is at least the channel's.
+ */
+export function largerChannelRefusal(
+	click: Position,
+	larger: LargerChannel,
+	what = 'your point',
+	context: { open?: boolean; windowKm?: number; reach?: { name: string; km2: number } | null } = {}
+): DelineationRefused {
+	const drains = context.open
+		? `at least ${km2Text(larger.km2)} drains through it inside the ${context.windowKm ?? '–'} km routed around ${what}, and more from beyond`
+		: `${km2Text(larger.km2)} drains through it`;
+	const reach = context.reach && context.reach.km2 >= larger.km2 ? ` (the mapped river here, ${context.reach.name}, drains ${km2Text(context.reach.km2)})` : '';
 	return new DelineationRefused(
 		'larger_channel',
-		`A much larger channel runs ${Math.round(larger.distanceM)} m ${bearingWord(click, larger.at)} of ${what}: about ${km2(larger.km2)} km² drains through it here, against ${km2(larger.pointKm2)} km² at ${what}. River lines on the map can sit a few hundred metres off the channel the elevation model sees. Use that channel, or keep ${what} if you meant the small one.`,
+		`A much larger channel runs ${Math.round(larger.distanceM)} m ${bearingWord(click, larger.at)} of ${what}: ${drains}${reach}, against ${km2Text(larger.pointKm2)} at ${what}. River lines on the map can sit a few hundred metres off the channel the elevation model sees. Use that channel, or keep ${what} if you meant the small one.`,
 		larger
 	);
+}
+
+/**
+ * The `too_large` sentence (the hydrologist's review, finding 11). A mapped reach larger than the routed square (`km` a side) can't
+ * fit in it wherever the outlet goes, so "pick an outlet further upstream" was wrong advice on a main stem (the Orange has none):
+ * there the answer is Sub-catchments, one per click, whose pieces take the water from above as an inflow. `km` null: the area isn't
+ * known here (the worker's request past its last window).
+ */
+export function tooLargeText(what: 'click' | 'outlet', km: number | null, reachKm2: number | null | undefined): string {
+	const around = km === null ? 'the area the app delineates' : `the ${km} km the app delineates`;
+	const pieces = 'Sub-catchments, one per click (click down the river; the water from above the top click enters as an inflow)';
+	const mainStem = reachKm2 != null && km !== null && reachKm2 > km * km;
+	if (what === 'outlet') {
+		return mainStem
+			? `The river at the outlet drains about ${km2Text(reachKm2)} (its mapped reach), more than fits in ${around} around it, so it can’t be divided into units here. Type the units in, or outline pieces of the river with ${pieces}.`
+			: `The catchment above the outlet reaches beyond ${around} around it, so it can’t be divided into units here. Pick an outlet gauge further upstream, or type the units in.`;
+	}
+	return mainStem
+		? `The river here drains about ${km2Text(reachKm2)} (its mapped reach), more than fits in ${around} around a click, so it can’t be proposed in one piece. Divide it with ${pieces}, or draw or import the boundary.`
+		: `The catchment above that point reaches beyond ${around} around a click, so it can’t be proposed whole. Click further upstream for a smaller catchment, divide the river with ${pieces}, or draw or import the boundary.`;
 }
 
 export interface Delineation {
@@ -245,12 +282,19 @@ export async function delineate(
 			const lx = placed.larger.cell % nCells;
 			const ly = (placed.larger.cell - lx) / nCells;
 			const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
-			throw largerChannelRefusal(click, {
-				at: toLonLat(x0 + lx + 0.5, y0 + ly + 0.5, W),
-				distanceM: placed.larger.distanceM,
-				km2: km2(acc[placed.larger.cell]!),
-				pointKm2: km2(acc[placed.cell]!)
-			});
+			// Whether the channel's catchment runs past this window: then its area here is only a floor.
+			const open = touchesEdge(grid, edge, upstream(nCells, nCells, dir, placed.larger.cell), noData);
+			throw largerChannelRefusal(
+				click,
+				{
+					at: toLonLat(x0 + lx + 0.5, y0 + ly + 0.5, W),
+					distanceM: placed.larger.distanceM,
+					km2: km2(acc[placed.larger.cell]!),
+					pointKm2: km2(acc[placed.cell]!)
+				},
+				undefined,
+				{ open: open.edge || open.noData, windowKm: Math.round((nCells * cellSizeM) / 1000), reach: opts.expected ? { name: opts.expected.reach, km2: opts.expected.km2 } : null }
+			);
 		}
 		const outlet = placed.cell;
 		const mask = upstream(nCells, nCells, dir, outlet);
@@ -265,12 +309,7 @@ export async function delineate(
 			const next = windows[wi + 1];
 			if (last || (next !== undefined && elapsed * (1 + (next / nCells) ** 2) > budget)) {
 				const km = Math.round((nCells * cellSizeM) / 1000);
-				throw new DelineationRefused(
-					'too_large',
-					`The catchment above that point reaches beyond the ${km} km the app delineates around a click, so it can’t be proposed whole. Pick an outlet further upstream, or draw or import the boundary.`,
-					undefined,
-					nCells
-				);
+				throw new DelineationRefused('too_large', tooLargeText('click', km, opts.expected?.km2), undefined, nCells);
 			}
 			continue;
 		}

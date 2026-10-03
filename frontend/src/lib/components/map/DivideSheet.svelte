@@ -352,7 +352,7 @@
 							{/if}
 							{#if placementLine(u.placement, u.snapDistanceM)}<p class="hint" data-testid="divide-placement">{placementLine(u.placement, u.snapDistanceM)}</p>{/if}
 							{#if u.placement?.larger}
-								<p class="hint">A much larger channel runs {fmtNum(u.placement.larger.distanceM, 0)} m away: <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="divide-use-larger">use that channel</button>, or keep the point if it is on the small stream.</p>
+								{#if u.placement.larger.outline}<p class="hint">If the dam is on that river, <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="divide-use-outline-channel">use that channel</button>; if it is filled by a pump or a furrow, keep it.</p>{:else}<p class="hint">A much larger channel runs {fmtNum(u.placement.larger.distanceM, 0)} m away: <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="divide-use-larger">use that channel</button>, or keep the point if it is on the small stream.</p>{/if}
 							{/if}
 						</li>
 					{/each}
