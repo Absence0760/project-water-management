@@ -16,9 +16,9 @@ export const POLL_MS = 2000;
 /** What the sheet says while the worker has it. */
 export function waitingText(r: DelineationRequest): string {
 	if (r.status === 'running') {
-		return `Working out the catchment in the background${r.progress ? ` (${Math.round(r.progress)} % through)` : ''}. A large catchment takes a minute or two; you can close this and come back.`;
+		return `Working out the catchment in the background${r.progress ? ` (${Math.round(r.progress)} % through)` : ''}. A large catchment takes a minute or two.`;
 	}
-	return 'The catchment is too large to work out at once, so it is queued for the background. It takes a minute or two; you can close this and come back.';
+	return 'The catchment is too large to work out at once, so it is queued for the background. It takes a minute or two.';
 }
 
 /** The sentence for a background delineation that failed (its job died). */
