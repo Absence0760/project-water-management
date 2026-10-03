@@ -7,8 +7,9 @@
 // series (the flow before the off-takes, the senior requirement, the EWR, the
 // destinations' demand and dam, each dam's capacity) and the rules and
 // release rules as stored, never the engine's code. Engine ≥ 1.70.0: a rule
-// also keeps its source's pass-inflow release target (issue #90 Q27), and a
-// top-up's room counts its destination's fixed release floor (Q26). A destination with a river abstraction (§2.7j) is sized to its dam
+// asks MIN(capacity, its need share), never capped at the flow above its keep
+// (issue #90 Q25), keeps its source's pass-inflow release target (Q27), and a
+// top-up's room counts its destination's fixed release, MIN(amount, outlet) (Q26). A destination with a river abstraction (§2.7j) is sized to its dam
 // side, which no series publishes, so the sources feeding one by demand are
 // left out. Synthetic values only.
 import { isRiverOfftake } from '../network/offtake';
@@ -44,14 +45,14 @@ const outletOf = (n: NetworkNode) => {
 	return typeof c === 'number' && Number.isFinite(c) && c >= 0 ? c : Infinity;
 };
 
-/** §2.6a bands at one source on one day (see deep.offtake.e2e.test.ts refShare). */
+/** §2.6a bands at one source on one day (see deep.offtake.e2e.test.ts refShare): each rule asks its limit, never capped at the flow above its keep (engine ≥ 1.70.0). */
 function share(rules: { id: string; priority: number; cap: number; keep: number; limit: number }[], U0: number): Map<string, number> {
 	const got = new Map(rules.map((r) => [r.id, 0]));
 	let taken = 0;
 	for (const p of [...new Set(rules.map((r) => r.priority))].sort((a, b) => a - b)) {
 		const act = rules
 			.filter((r) => r.priority === p && r.cap > 0)
-			.map((r) => ({ r, left: Math.max(0, Math.min(Math.max(0, U0 - taken - r.keep), r.limit)) }))
+			.map((r) => ({ r, left: Math.max(0, r.limit) }))
 			.filter((a) => a.left > 0);
 		let top = U0 - taken;
 		for (const f of [...new Set(act.map((a) => a.r.keep))].sort((a, b) => b - a)) {
@@ -123,11 +124,8 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 						const q = opt(out, dst.id, 'dam_storage')![t - 1]!;
 						const g = (k: string) => opt(out, dst.id, k)?.[t] ?? 0;
 						// The step's own (clamped) losses, and today's dam-rule receipts (engine ≥ 1.69.0).
-						// A fixed release's floor (engine ≥ 1.70.0): MIN(amount, outlet, held − dead), never below 0, held = the dam
-						// after yesterday, its rain, losses and the day's net dam-rule transfers (§2.6a, as §2.6's room).
-						const held = Math.max(0, q + g('rain_on_dam') + g('transfer') - g('dam_evaporation') - g('dam_seepage'));
-						const floor =
-							dst.damReleaseRule === 'fixed' && Array.isArray(dst.damReleaseM3Day) ? Math.max(0, Math.min(releaseAmount(dst, m), outletOf(dst), held - dst.damMinPct * capNow)) : 0;
+						// A fixed release (engine ≥ 1.70.0): MIN(amount, outlet) in full (§2.6a, as §2.6's room).
+						const floor = dst.damReleaseRule === 'fixed' && Array.isArray(dst.damReleaseM3Day) ? Math.min(releaseAmount(dst, m), outletOf(dst)) : 0;
 						if (floor > 0) reach.floor++;
 						need += Math.max(0, capNow - (q + g('rain_on_dam') + Math.max(0, g('transfer')) - g('dam_evaporation') - g('dam_seepage')) + floor);
 					}

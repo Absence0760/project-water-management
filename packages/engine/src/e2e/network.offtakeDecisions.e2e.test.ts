@@ -3,13 +3,17 @@
 // §2.7e). Each case is a small invented catchment worked by hand from the
 // docs, never from what the engine returned before.
 //
-// - Q25: rules of one priority still share a short river pro rata to what
-//   each can take (no method change), and a run warns about rules that look
-//   like one licence split up (same source, same destination, same priority,
-//   a month in common), since splitting raises the licence's share.
-// - Q26: a demand-sized off-take topping up a dam counts the dam's fixed
-//   release floor in its room, as a dam rule's room does (§2.6, engine ≥
-//   1.29.0); the dam's own inflow that day is still left out.
+// - Q25: rules of one priority share a short river (an off-take) or a dam's
+//   water (a dam rule) in proportion to what each asks, MIN(capacity, need),
+//   band by band at their keeps, never capped at the free flow first:
+//   proportional rationing, so a licence split into parts gets what it gets
+//   as one rule. A run warns about rules that may be one licence entered more
+//   than once at full size (same source, destination, priority, a month in
+//   common), which still takes that many times the licence.
+// - Q26: a room into a dam with a fixed release (a demand-sized off-take's
+//   top-up and a dam rule's room alike) counts MIN(amount, outlet) in full,
+//   since the water moved in arrives before the release; the dam's own
+//   inflow that day is still left out.
 // - Q27: an off-take's keep includes its source's pass-inflow release target,
 //   as the unit's own river pump does (§2.7e).
 //
@@ -124,32 +128,45 @@ function passes(input: ModelInput, out: ModelOutput) {
 	expect(out.summary.verification?.passed, JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))).toBe(true);
 	for (const s of out.series) if (['outflow', 'spill', 'dam_storage', 'dam_release', 'offtake_out', 'offtake_in'].includes(s.key) || s.key.startsWith('transfer_rule@')) s.values.forEach((v, t) => expect(v, `${s.nodeId}/${s.key} day ${t}`).toBeGreaterThanOrEqual(0));
 }
-const splitWarnings = (out: ModelOutput) => out.summary.warnings.filter((w) => /one licence split up/.test(w));
+const splitWarnings = (out: ModelOutput) => out.summary.warnings.filter((w) => /more than once at its full size/.test(w));
+const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
-// ── Q25: same-priority rules share a short river pro rata to what each can take ─────────────────────────────
+// ── Q25: proportional rationing within a priority (engine ≥ 1.70.0) ───────────────────────────────────────
 
-describe('Q25 (§2.6a): rules of one priority share a short river pro rata to their limits, and a split licence gains', () => {
+describe('Q25 (§2.6, §2.6a): rules of one priority share in proportion to MIN(capacity, need), so splitting a licence gains nothing', () => {
 	// One source S with all the runoff; three destinations with no demand (capacity sizing).
 	const net = (transfers: Transfer[]) => build({ nodes: [gauge(), farm('S', { areaKm2: 1 }), farm('D1'), farm('D2'), farm('D3')], transfers });
 
-	it('one band (every keep 0): licence A of 300 beside B of 100 on 200 m³ gets 133.3; split into two rules of 150 it gets 150', () => {
-		// Limits MIN(cap, free): A 200, B 100 → 300 asked of 200: A 200 × 200/300 = 133.33, B 66.67.
+	it('one band (every keep 0): licence A of 300 beside B of 100 on 200 m³ gets 150 as one rule and 150 split into two of 150', () => {
+		// One rule: asks 300 and 100 (never capped at the 200 there), 3 : 1 → A 150, B 50. Before 1.70.0 A asked
+		// MIN(300, 200) = 200 → 133.3 and B 66.7, and the split pieces asked 150 + 150 → A 150: splitting paid.
 		const one = net([ot('a', 'S', 'D1', 300), ot('b', 'S', 'D2', 100)]);
 		const o1 = run(one, [200]);
-		near(get(o1, 'S', 'transfer_rule@a'), [400 / 3]);
-		near(get(o1, 'S', 'transfer_rule@b'), [200 / 3]);
+		near(get(o1, 'S', 'transfer_rule@a'), [150]);
+		near(get(o1, 'S', 'transfer_rule@b'), [50]);
 		passes(one, o1);
-		// Split: limits 150, 150, 100 → 400 asked of 200: a1 75, a2 75 (A = 150), B 50. The licence gains 16.67, B loses it.
+		// Split: asks 150, 150, 100 → 75, 75, 50. A = 150 and B = 50, as before the split.
 		const two = net([ot('a1', 'S', 'D1', 150), ot('a2', 'S', 'D1', 150), ot('b', 'S', 'D2', 100)]);
 		const o2 = run(two, [200]);
 		near(get(o2, 'S', 'transfer_rule@a1'), [75]);
 		near(get(o2, 'S', 'transfer_rule@a2'), [75]);
 		near(get(o2, 'S', 'transfer_rule@b'), [50]);
 		near(get(o2, 'D1', 'offtake_in'), [150]);
-		passes(two, o2);
-		// The river below S is 0 either way: the total taken is the same, only the shares move.
 		near(get(o1, 'S', 'outflow'), [0]);
 		near(get(o2, 'S', 'outflow'), [0]);
+		passes(two, o2);
+	});
+
+	it('a licence entered twice at full size takes double: 300 + 300 beside B of 100 on 200 gets 171.4, and 600 with plenty of water', () => {
+		// Asks 300, 300, 100 on 200 → × 2/7: 85.7, 85.7, 28.6. With 1 000 there: 300 + 300 + 100. The warning's case.
+		const twice = net([ot('a1', 'S', 'D1', 300), ot('a2', 'S', 'D1', 300), ot('b', 'S', 'D2', 100)]);
+		const short = run(twice, [200]);
+		near(get(short, 'D1', 'offtake_in'), [1200 / 7]);
+		near(get(short, 'S', 'transfer_rule@b'), [200 / 7]);
+		expect(splitWarnings(short)).toHaveLength(1);
+		const plenty = run(twice, [1000]);
+		near(get(plenty, 'D1', 'offtake_in'), [600]);
+		passes(twice, plenty);
 	});
 
 	it('with plenty of water splitting changes nothing: every rule takes its capacity', () => {
@@ -162,34 +179,104 @@ describe('Q25 (§2.6a): rules of one priority share a short river pro rata to th
 		passes(two, out);
 	});
 
-	it('banded keeps: licence A of 600 keeping 600 beside C of 400 keeping 0, on 1 000 m³: A 200, C 400; split 300 + 300, A gets 240', () => {
-		// One rule: limits A MIN(600, 1 000 − 600) = 400, C MIN(400, 1 000) = 400. Band 1 000–600 (400) shared by
-		// both (A keeps 600, C 0 ≤ 600): 400 asked each → 200 : 200. Band 600–0 to C alone: 200 more (its 400). A 200, C 400.
+	it('banded keeps: licence A of 600 keeping 600 beside C of 400 keeping 0, on 1 000 m³: A 240, C 400, as one rule or split 300 + 300', () => {
+		// Asks 600 and 400. Band 1 000–600 (400): both (C keeps 0 ≤ 600), 6 : 4 → A 240, C 160. Band 600–0: C alone,
+		// its other 240. A 240, C 400, 360 passes (≥ A's keep 600 − its own band: the river at A's level is
+		// 1 000 − 240 − 160 = 600, so A never took below its keep). Split: asks 300, 300, 400 → 120, 120, 160, then
+		// C's 240: the same. (Before 1.70.0: one rule A 200, river 400; split A 240, river 360.)
 		const one = net([ot('a', 'S', 'D1', 600, { handsOffM3Day: 600 }), ot('c', 'S', 'D3', 400)]);
 		const o1 = run(one, [1000]);
-		near(get(o1, 'S', 'transfer_rule@a'), [200]);
+		near(get(o1, 'S', 'transfer_rule@a'), [240]);
 		near(get(o1, 'S', 'transfer_rule@c'), [400]);
-		near(get(o1, 'S', 'outflow'), [400]);
+		near(get(o1, 'S', 'outflow'), [360]);
 		passes(one, o1);
-		// Split: a1, a2 limits MIN(300, 400) = 300 each, C 400: the top band's 400 shared 300 : 300 : 400 → 120, 120,
-		// 160; C's other 240 from the band below. A = 240, C = 400, and the river below S ends at 360, not 400:
-		// the split licence's gain (40) comes out of the flow C's band would have left, not out of C.
 		const two = net([ot('a1', 'S', 'D1', 300, { handsOffM3Day: 600 }), ot('a2', 'S', 'D1', 300, { handsOffM3Day: 600 }), ot('c', 'S', 'D3', 400)]);
 		const o2 = run(two, [1000]);
 		near(get(o2, 'S', 'transfer_rule@a1'), [120]);
 		near(get(o2, 'S', 'transfer_rule@a2'), [120]);
 		near(get(o2, 'S', 'transfer_rule@c'), [400]);
 		near(get(o2, 'S', 'outflow'), [360]);
-		// A's rules never take the river below their keep: A takes from the band above 600 only (1 000 − 240 − 160 = 600).
-		expect(1000 - 240 - 160).toBeGreaterThanOrEqual(600);
 		passes(two, o2);
-		expect(splitWarnings(o2)).toHaveLength(1);
 	});
 
-	it('warns once for two rules of one priority from one source to one unit, naming them, and the run still shares as documented', () => {
+	it('dam rules too: a full 1 000 m³ dam keeping 70 % (300 free), licence A of 400 beside B of 200: A 200 as one rule or split 200 + 200', () => {
+		// Asks 400 and 200 → 2 : 1 of the 300 → A 200, B 100. Split 200 + 200 + 200 → 100 each: A 200. (Before 1.70.0
+		// one rule asked MIN(400, 300) = 300 → A 180, B 120; split, each asked 200 → A 200: splitting paid.)
+		const dams = (transfers: Transfer[]) =>
+			build({
+				nodes: [gauge(), farm('S', { damCapacityM3: 1000, damInitialPct: 1 }), farm('D1', { damCapacityM3: 5000 }), farm('D2', { damCapacityM3: 5000 })],
+				transfers
+			});
+		const rule = (id: string, to: string, cap: number): Transfer => ({ ...ot(id, 'S', to, cap), source: 'dam', minStoragePct: 0.7 });
+		const one = dams([rule('a', 'D1', 400), rule('b', 'D2', 200)]);
+		const o1 = run(one, [0]);
+		near(get(o1, 'S', 'transfer_rule@a'), [200]);
+		near(get(o1, 'S', 'transfer_rule@b'), [100]);
+		near(get(o1, 'S', 'dam_storage'), [700]);
+		passes(one, o1);
+		const two = dams([rule('a1', 'D1', 200), rule('a2', 'D1', 200), rule('b', 'D2', 200)]);
+		const o2 = run(two, [0]);
+		near(get(o2, 'D1', 'transfer'), [200]);
+		near(get(o2, 'S', 'transfer_rule@b'), [100]);
+		passes(two, o2);
+	});
+
+	it('property: random licences split into 1–4 random parts get the same totals, for off-takes and dam rules alike', () => {
+		const g = new Rng(25);
+		let short = 0;
+		for (let k = 0; k < 150; k++) {
+			const dam = g.bool(0.5);
+			const n = g.int(1, 4);
+			const licences = Array.from({ length: n }, (_, j) => ({
+				id: `L${j}`,
+				to: `D${g.int(0, 2)}`,
+				cap: g.float(10, 1500),
+				keep: dam ? g.pick([0, 0.2, 0.5, 0.8]) : g.pick([0, 0, g.float(0, 1500)]),
+				priority: g.pick([0, 0, 1])
+			}));
+			const flow = g.pick([0, g.float(0, 3000)]);
+			const make = (split: boolean, seed: number) => {
+				const h = new Rng(seed);
+				const transfers: Transfer[] = [];
+				for (const l of licences) {
+					const parts = split ? h.int(1, 4) : 1;
+					const w = Array.from({ length: parts }, () => h.float(0.1, 1));
+					const tot = sum(w);
+					w.forEach((x, p) => {
+						const base = ot(`${l.id}-${p}`, 'S', l.to, (l.cap * x) / tot, { priority: l.priority });
+						transfers.push(dam ? { ...base, source: 'dam', minStoragePct: l.keep } : { ...base, handsOffM3Day: l.keep || null });
+					});
+				}
+				const nodes = [gauge(), farm('S', dam ? { damCapacityM3: 2000, damInitialPct: flow / 3000 } : { areaKm2: 1 }), ...['D0', 'D1', 'D2'].map((id) => farm(id, dam ? { damCapacityM3: 1e6 } : {}))];
+				return build({ nodes, transfers });
+			};
+			const totals = (input: ModelInput, out: ModelOutput) => {
+				const t = new Map<string, number>();
+				for (const tr of input.model.transfers) {
+					const lid = tr.id.split('-')[0]!;
+					t.set(lid, (t.get(lid) ?? 0) + get(out, 'S', `transfer_rule@${tr.id}`)[0]!);
+				}
+				return t;
+			};
+			const a = make(false, k);
+			const b = make(true, 1000 + k);
+			const oa = run(a, [dam ? 0 : flow]);
+			const ob = run(b, [dam ? 0 : flow]);
+			const ta = totals(a, oa);
+			const tb = totals(b, ob);
+			for (const l of licences) expect(tb.get(l.id), `case ${k} ${dam ? 'dam' : 'river'} licence ${l.id}`).toBeCloseTo(ta.get(l.id)!, 6);
+			if (sum([...ta.values()]) < sum(licences.map((l) => l.cap)) - 1e-6) short++;
+			passes(a, oa);
+			passes(b, ob);
+		}
+		// Most cases are short, where the old rule paid a split.
+		expect(short).toBeGreaterThan(60);
+	});
+
+	it('warns once for two rules of one priority from one source to one unit, naming them in id order', () => {
 		const out = run(net([ot('a2', 'S', 'D1', 150), ot('a1', 'S', 'D1', 150), ot('b', 'S', 'D2', 100)]), [200]);
 		expect(splitWarnings(out)).toEqual([
-			'river off-take Unit S → Unit D1: 2 rules of priority 0 (a1, a2) take from the same river for the same unit. If they are one licence split up, enter it as one rule: rules of one priority share a short river pro rata to what each can take, so a licence split into several rules gets a larger share than the same licence as one rule'
+			'river off-take Unit S → Unit D1: 2 rules of priority 0 (a1, a2) take from the same river for the same unit. If they are one licence entered more than once at its full size, it takes that many times its licence: enter each licence once (a licence split into parts runs the same as one rule)'
 		]);
 	});
 
@@ -219,7 +306,6 @@ describe('Q25 (§2.6a): rules of one priority share a short river pro rata to th
 		const summer = { months: [10, 11, 12, 1, 2, 3] };
 		const winter = { months: [4, 5, 6, 7, 8, 9] };
 		expect(splitWarnings(run(net([ot('a1', 'S', 'D1', 150, summer), ot('a2', 'S', 'D1', 150, winter)]), [200]))).toEqual([]);
-		// a3 runs in March with a1: those two warn, a2 (winter only) meets neither.
 		const w = splitWarnings(run(net([ot('a1', 'S', 'D1', 150, summer), ot('a2', 'S', 'D1', 150, winter), ot('a3', 'S', 'D1', 150, { months: [3] })]), [200]));
 		expect(w).toHaveLength(1);
 		expect(w[0]).toMatch(/2 rules of priority 0 \(a1, a3\)/);
@@ -237,18 +323,18 @@ describe('Q25 (§2.6a): rules of one priority share a short river pro rata to th
 	});
 });
 
-// ── Q26: a top-up's room counts the destination dam's fixed release floor ───────────────────────────────────
+// ── Q26: a room into a dam with a fixed release counts MIN(amount, outlet) in full ────────────────────────
 
-describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release floor, as a dam rule’s room does', () => {
-	// S has 10 000 m³/day; D has a 1 000 m³ dam, no demand, no runoff of its own (area 0): the day has no inflow
-	// to the dam, so all it receives is the off-take's water. No rain, evaporation or seepage (A-pan 0, area 0).
-	// room = cap − held; floor = MIN(amount, outlet, held − dead), never below 0; need = room + floor.
+describe('Q26 (§2.6, §2.6a): a room into a dam with a fixed release counts MIN(amount, outlet), so the dam ends full and never spills', () => {
+	// S has 10 000 m³/day; D has a 1 000 m³ dam, no runoff of its own (area 0): the day has no inflow to the dam, so
+	// all it receives is the off-take's water. No rain, evaporation or seepage (A-pan 0, area 0).
+	// need = demand + (cap − held) + MIN(amount, outlet).
 	const net = (dam: Partial<NetworkNode>, transfers: Transfer[] = [ot('o', 'S', 'D', 5000, { sizing: 'demand', topUpDam: true })], extra: NetworkNode[] = [], days = 1) =>
 		build({ nodes: [gauge(), farm('S', { areaKm2: 1 }), farm('D', { damCapacityM3: 1000, ...dam }), ...extra], transfers, days });
 	const fixed = (m3Day: number, over: Partial<NetworkNode> = {}): Partial<NetworkNode> => ({ damReleaseRule: 'fixed', damReleaseM3Day: flat(m3Day), ...over });
 
 	it('a release (300) larger than the room (100): the off-take brings 400, the dam releases 300 and ends full, nothing spills', () => {
-		// held 900, room 100, floor MIN(300, 900 − 0) = 300 → 400. Before 1.70.0 it brought 100 and the dam ended at 700.
+		// Before 1.70.0 it brought 100 and the dam ended at 700.
 		const input = net({ damInitialPct: 0.9, ...fixed(300) });
 		const out = run(input, [10_000]);
 		near(get(out, 'S', 'transfer_rule@o'), [400]);
@@ -256,7 +342,6 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 		near(get(out, 'D', 'dam_release'), [300]);
 		near(get(out, 'D', 'dam_storage'), [1000]);
 		near(get(out, 'D', 'spill'), [0]);
-		// What leaves D is the release alone: 300.
 		near(get(out, 'D', 'outflow'), [300]);
 		passes(input, out);
 	});
@@ -287,7 +372,7 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 		passes(without, o2);
 	});
 
-	it('the outlet caps the floor: release 300 through a 120 m³/day outlet on a full dam brings 120', () => {
+	it('the outlet caps it: release 300 through a 120 m³/day outlet on a full dam brings 120; an outlet of 0 makes no room', () => {
 		const input = net({ damInitialPct: 1, ...fixed(300, { damOutletCapacityM3Day: 120 }) });
 		const out = run(input, [10_000]);
 		near(get(out, 'S', 'transfer_rule@o'), [120]);
@@ -295,19 +380,35 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 		near(get(out, 'D', 'dam_storage'), [1000]);
 		near(get(out, 'D', 'spill'), [0]);
 		passes(input, out);
+		const shut = net({ damInitialPct: 1, ...fixed(300, { damOutletCapacityM3Day: 0 }) });
+		const o0 = run(shut, [10_000]);
+		near(get(o0, 'S', 'transfer_rule@o'), [0]);
+		near(get(o0, 'D', 'dam_release'), [0]);
+		passes(shut, o0);
 	});
 
-	it('a dam near its dead storage: the floor is cut to the water above it, so the dam ends below full but never spills (the floor is a lower bound)', () => {
-		// held 500, dead 40 % = 400: floor MIN(300, 500 − 400) = 100, room 500 → 600. The day's release then sees
-		// 500 + 600 = 1 100, 700 above dead storage, so it releases its full 300 and the dam ends at 800, not 1 000:
-		// counting only the floor never overfills, at the cost of a dam that fills over two days rather than one.
+	it('a dam near its dead storage ends full: 500 m³ held, dead storage 400, release 300 → the off-take brings 800', () => {
+		// room 1 000 − 500 + MIN(300, ∞) = 800. The day: 500 + 800 = 1 300, 900 above dead storage, so it releases its
+		// full 300 and ends at 1 000. Day 2, full: brings 300, releases 300, full. (Before 1.70.0 the room counted only
+		// the floor MIN(300, 500 − 400) = 100: 600 brought and the dam ended at 800.)
 		const input = net({ damInitialPct: 0.5, damMinPct: 0.4, ...fixed(300) }, undefined, [], 2);
 		const out = run(input, [10_000, 10_000]);
-		// Day 2: held 800, floor MIN(300, 800 − 400) = 300, room 200 → 500; 800 + 500 − 300 = 1 000.
-		near(get(out, 'S', 'transfer_rule@o'), [600, 500]);
+		near(get(out, 'S', 'transfer_rule@o'), [800, 300]);
 		near(get(out, 'D', 'dam_release'), [300, 300]);
-		near(get(out, 'D', 'dam_storage'), [800, 1000]);
+		near(get(out, 'D', 'dam_storage'), [1000, 1000]);
 		near(get(out, 'D', 'spill'), [0, 0]);
+		passes(input, out);
+	});
+
+	it('a dam below its dead storage whose source is short: the release is cut to the water above dead storage and the dam ends at dead storage, not over', () => {
+		// held 300 < dead 400; room 1 000 − 300 + 300 = 1 000, but the off-take is capped at 150 a day. The day: 300 +
+		// 150 = 450, release MIN(300, 450 − 400) = 50, the dam ends at 400 = its dead storage ≤ its capacity.
+		const input = net({ damInitialPct: 0.3, damMinPct: 0.4, ...fixed(300) }, [ot('o', 'S', 'D', 150, { sizing: 'demand', topUpDam: true })]);
+		const out = run(input, [10_000]);
+		near(get(out, 'S', 'transfer_rule@o'), [150]);
+		near(get(out, 'D', 'dam_release'), [50]);
+		near(get(out, 'D', 'dam_storage'), [400]);
+		near(get(out, 'D', 'spill'), [0]);
 		passes(input, out);
 	});
 
@@ -315,16 +416,14 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 		const input = net({ damInitialPct: 0.9, damReleaseRule: 'passInflow', damReleaseM3Day: flat(300) });
 		const out = run(input, [10_000]);
 		near(get(out, 'S', 'transfer_rule@o'), [100]);
-		// No inflow to the dam today, so nothing to pass.
 		near(get(out, 'D', 'dam_release'), [0]);
 		near(get(out, 'D', 'dam_storage'), [1000]);
 		passes(input, out);
 	});
 
 	it('with a dam rule’s receipts: 900 m³ in a 1 000 m³ dam, 250 by a dam rule, release 300: the off-take brings 150', () => {
-		// The dam rule settles first: D receives 250 (its room, §2.6: 1 000 − 900 + the floor 300 = 400 ≥ 250). Then
-		// the top-up: held 900 + 250 = 1 150, floor MIN(300, 1 150 − 0) = 300, need = MAX(0, 1 000 − 1 150 + 300) = 150.
-		// The day: 1 150 + 150 − 300 = 1 000, full, no spill. (Before 1.70.0 the off-take brought 0, the dam ended at 850.)
+		// The dam rule settles first: its room is 1 000 − 900 + 300 = 400 ≥ 250, so D receives 250. The top-up: held
+		// 1 150, need = MAX(0, 1 000 − 1 150 + 300) = 150. The day: 1 150 + 150 − 300 = 1 000, full, no spill.
 		const input = net({ damInitialPct: 0.9, ...fixed(300) }, [ot('o', 'S', 'D', 5000, { sizing: 'demand', topUpDam: true }), { ...ot('t', 'S2', 'D', 250), source: 'dam' }], [
 			farm('S2', { damCapacityM3: 5000, damInitialPct: 1 })
 		]);
@@ -337,8 +436,18 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 		passes(input, out);
 	});
 
-	it('with a demand at the destination (200): the off-take brings demand + room + floor, the demand met first', () => {
-		// need = 200 + 100 + 300 = 600: 200 used, 400 into the dam, which releases 300 and ends full.
+	it('a dam rule alone into a dam near its dead storage: the room counts the full release too, and the dam ends full', () => {
+		// D at 500, dead 400, release 300, no demand: room = 1 000 − 500 + 0 + 300 = 800. 500 + 800 − 300 = 1 000.
+		const input = net({ damInitialPct: 0.5, damMinPct: 0.4, ...fixed(300) }, [{ ...ot('t', 'S2', 'D', 5000), source: 'dam' }], [farm('S2', { damCapacityM3: 5000, damInitialPct: 1 })]);
+		const out = run(input, [10_000]);
+		near(get(out, 'S2', 'transfer_rule@t'), [800]);
+		near(get(out, 'D', 'dam_release'), [300]);
+		near(get(out, 'D', 'dam_storage'), [1000]);
+		near(get(out, 'D', 'spill'), [0]);
+		passes(input, out);
+	});
+
+	it('with a demand at the destination (200): the off-take brings demand + room + release, the demand met first', () => {
 		const input = build({
 			nodes: [gauge(), farm('S', { areaKm2: 1 }), farm('D', { damCapacityM3: 1000, damInitialPct: 0.9, ...fixed(300) })],
 			transfers: [ot('o', 'S', 'D', 5000, { sizing: 'demand', topUpDam: true })],
@@ -367,15 +476,13 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 	});
 
 	it('the dam’s own inflow is left out: with 1 000 m³ of runoff into a dam at 900 and a release of 300, the off-take still brings 400 and the inflow spills', () => {
-		// D's runoff goes into its dam (pctRunoffToDam 100 %): the step holds 900 + 1 000 + 400 = 2 300, releases 300 and
-		// spills 1 000, the inflow exactly. That inflow is known only once the network runs, after the off-takes are
-		// sized, so the off-take brought room + floor as documented (§2.6a: the room leaves the day's inflow out).
+		// The step holds 900 + 1 000 + 400 = 2 300, releases 300 and spills 1 000, the inflow exactly: it is known only
+		// once the network runs, after the off-takes are sized (§2.6a: the room leaves the day's inflow out).
 		const input = build({
 			nodes: [gauge(), farm('S', { areaKm2: 1 }), farm('D', { areaKm2: 1, pctRunoffToDam: 1, damCapacityM3: 1000, damInitialPct: 0.9, ...fixed(300) })],
 			transfers: [ot('o', 'S', 'D', 5000, { sizing: 'demand', topUpDam: true })]
 		});
 		const out = run(input, [2000]);
-		// Area shares: S and D each 1 km² → 1 000 m³ each.
 		near(get(out, 'S', 'transfer_rule@o'), [400]);
 		near(get(out, 'D', 'dam_release'), [300]);
 		near(get(out, 'D', 'dam_storage'), [1000]);
@@ -383,30 +490,44 @@ describe('Q26 (§2.6a): a demand-sized top-up counts the dam’s fixed release f
 		passes(input, out);
 	});
 
-	it('swept by hand: on days with no inflow the off-take brings room + floor and nothing ever spills from it', () => {
+	it('property, both paths: on days with no inflow the delivery is demand + room + MIN(amount, outlet) (up to its capacity), and nothing overfills or spills', () => {
 		const g = new Rng(26);
-		for (let k = 0; k < 200; k++) {
+		let cut = 0;
+		for (let k = 0; k < 300; k++) {
+			const viaDamRule = g.bool(0.5);
 			const cap = g.float(100, 5000);
 			const init = g.frac();
 			const dead = g.pick([0, g.frac()]);
 			const amount = g.pick([0, g.float(0, 2000)]);
-			const outlet = g.pick([null, g.float(0, 1500)]);
+			const outlet = g.pick([null, 0, g.float(0, 1500)]);
 			const demand = g.pick([0, g.float(0, 1000)]);
-			const input = build({
-				nodes: [gauge(), farm('S', { areaKm2: 1 }), farm('D', { damCapacityM3: cap, damInitialPct: init, damMinPct: dead, ...fixed(amount, { damOutletCapacityM3Day: outlet }) })],
-				transfers: [ot('o', 'S', 'D', 1e7, { sizing: 'demand', topUpDam: true })],
-				objects: demand > 0 ? [town('D', demand)] : []
-			});
+			const limit = g.pick([1e7, g.float(0, 3000)]);
+			const dam = { damCapacityM3: cap, damInitialPct: init, damMinPct: dead, ...fixed(amount, { damOutletCapacityM3Day: outlet }) };
+			const input = viaDamRule
+				? build({
+						nodes: [gauge(), farm('S2', { damCapacityM3: 1e8, damInitialPct: 1 }), farm('D', dam)],
+						transfers: [{ ...ot('o', 'S2', 'D', limit), source: 'dam' }],
+						objects: demand > 0 ? [town('D', demand)] : []
+					})
+				: build({
+						nodes: [gauge(), farm('S', { areaKm2: 1 }), farm('D', dam)],
+						transfers: [ot('o', 'S', 'D', limit, { sizing: 'demand', topUpDam: true })],
+						objects: demand > 0 ? [town('D', demand)] : []
+					});
 			const out = run(input, [1e7]);
 			const held = init * cap;
-			const floor = Math.max(0, Math.min(amount, outlet ?? Infinity, held - dead * cap));
-			const want = demand + (cap - held) + floor;
-			const where = `case ${k}: cap ${cap}, held ${held}, dead ${dead * cap}, release ${amount}, outlet ${outlet}, demand ${demand}`;
-			expect(get(out, 'S', 'transfer_rule@o')[0], where).toBeCloseTo(want, 6);
+			// The dam rule's room counts the demand its dam meets (D), the off-take's need its demand: the same D here.
+			const want = Math.min(limit, demand + (cap - held) + Math.min(amount, outlet ?? Infinity));
+			const from = viaDamRule ? 'S2' : 'S';
+			const where = `case ${k} (${viaDamRule ? 'dam rule' : 'off-take'}): cap ${cap}, held ${held}, dead ${dead * cap}, release ${amount}, outlet ${outlet}, demand ${demand}, limit ${limit}`;
+			expect(get(out, from, 'transfer_rule@o')[0], where).toBeCloseTo(want, 6);
 			expect(get(out, 'D', 'spill')[0], where).toBeCloseTo(0, 6);
 			expect(get(out, 'D', 'dam_storage')[0], where).toBeLessThanOrEqual(cap * (1 + 1e-12));
+			if (get(out, 'D', 'dam_release')[0]! < Math.min(amount, outlet ?? Infinity) - 1e-9) cut++;
 			passes(input, out);
 		}
+		// Some days the release is cut to the water above dead storage (a short source): the dam then ends at dead storage.
+		expect(cut).toBeGreaterThan(10);
 	});
 });
 
@@ -531,16 +652,16 @@ describe('Q27 (§2.6a, §2.7e): an off-take leaves its source’s pass-inflow re
 		passes(input, out);
 	});
 
-	it('banded with a sibling of the same priority keeping more: target 400, sibling keeps 700, on 1 000: the band 1 000–700 shared, the rest above 400 to o', () => {
-		// keeps: o MAX(400, 0) = 400, s MAX(400, 700) = 700. Limits 2 000 → MIN(2 000, 600) = 600 and MIN(2 000, 300) = 300.
-		// Band 1 000–700 (300) shared 600 : 300 → o 200, s 100. Band 700–400 (300) to o alone: o 500 in all, s 100; 400 passes.
+	it('banded with a sibling of the same priority keeping more: target 400, sibling keeps 700, on 1 000: o 450, s 150', () => {
+		// keeps: o MAX(400, 0) = 400, s MAX(400, 700) = 700. Each asks its 2 000 (engine ≥ 1.70.0, never capped at the flow).
+		// Band 1 000–700 (300) shared 1 : 1 → o 150, s 150. Band 700–400 (300) to o alone: o 450 in all, s 150; 400 passes.
 		const input = build({
 			nodes: [gauge(), farm('S', { areaKm2: 1, damCapacityM3: 1000, damInitialPct: 1, damReleaseRule: 'passInflow', damReleaseM3Day: flat(400) }), farm('D'), farm('D2')],
 			transfers: [ot('o', 'S', 'D', 2000), ot('s', 'S', 'D2', 2000, { handsOffM3Day: 700 })]
 		});
 		const out = run(input, [1000]);
-		near(get(out, 'S', 'transfer_rule@o'), [500]);
-		near(get(out, 'S', 'transfer_rule@s'), [100]);
+		near(get(out, 'S', 'transfer_rule@o'), [450]);
+		near(get(out, 'S', 'transfer_rule@s'), [150]);
 		near(get(out, 'S', 'outflow'), [400]);
 		passes(input, out);
 	});

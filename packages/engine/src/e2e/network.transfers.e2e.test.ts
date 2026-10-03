@@ -338,12 +338,13 @@ describe('several rules (§2.6, Q18, N6)', () => {
 		passes(input, out);
 	});
 
-	it('equal priority: the free water shared pro rata to each rule’s MIN(limit, free)', () => {
-		// Both keep 70 %: free 300. Limits 200 and 400 → wants 200 and 300 → 120 and 180.
+	it('equal priority: the free water shared pro rata to each rule’s limit, never capped at the free water (engine ≥ 1.70.0)', () => {
+		// Both keep 70 %: free 300. Limits 200 and 400 → 1 : 2 → 100 and 200 (issue #90 Q25: proportional rationing;
+		// before 1.70.0 each asked MIN(limit, free), 200 and 300 → 120 and 180).
 		const input = three([rule('a', 'S', 'D1', { dailyCapM3: 200, minStoragePct: 0.7 }), rule('b', 'S', 'D2', { dailyCapM3: 400, minStoragePct: 0.7 })], 1000, 1000);
 		const out = run(input, zeros(2));
-		near(get(out, 'S', 'transfer_rule@a'), [120, 0]);
-		near(get(out, 'S', 'transfer_rule@b'), [180, 0]);
+		near(get(out, 'S', 'transfer_rule@a'), [100, 0]);
+		near(get(out, 'S', 'transfer_rule@b'), [200, 0]);
 		near(get(out, 'S', 'dam_storage'), [700, 700]);
 		passes(input, out);
 	});
