@@ -304,6 +304,22 @@ export function offChannelOutflow(mask: Uint8Array, acc: Int32Array, edge: Uint8
 	return best;
 }
 
+/**
+ * Where an off-channel dam's own outflow joins its river (194): down the D8 path from `from`, the first cell carrying at least
+ * `threshold` cells (a watercourse, as offChannelOutflow counts one), within `maxSteps` cells; -1 when none is that near (the
+ * dam drains to no river nearby, or leaves the window first). `from` itself counts. Pure.
+ */
+export function riverBelow(nx: number, dir: Uint8Array, acc: Int32Array, from: number, threshold: number, maxSteps: number): number {
+	let c = from;
+	for (let step = 0; c >= 0 && step <= maxSteps; step++) {
+		if (acc[c]! >= threshold) return c;
+		const d = dir[c]!;
+		if (d === OUT) return -1;
+		c = c + DY[d]! * nx + DX[d]!;
+	}
+	return -1;
+}
+
 // ---------------------------------------------------------------------------
 // The driver: reads the DEM, routes it, snaps, partitions and outlines.
 // ---------------------------------------------------------------------------
@@ -339,6 +355,11 @@ export interface UnitPiece {
 	unmatched?: boolean;
 	/** A dam polygon placed by the position the editor marked (194; damOutflow), not by its outline. Absent when unset. */
 	damPosition?: DamPosition;
+	/**
+	 * An off-channel dam's own catchment within the unit's piece (m²): what drains to its own outflow, the share of the unit's
+	 * runoff that reaches the dam (pctRunoffToDam), the rest of the piece and the river passing it by. Only with `off_channel`.
+	 */
+	damCatchmentM2?: number;
 	/**
 	 * Only with `outlet: 'lowest'`: its catchment runs past the routed window (or the DEM's data), so its piece is not whole.
 	 * Its outline is null and its areas count only the cells inside the window; the water from above it enters as an inflow.
@@ -466,7 +487,10 @@ export function placementText(
 	if (ran.has('polygon')) {
 		// A marked dam's rule replaces the outline's (damOutflow), so the outline's is defined only while a dam is unmarked.
 		if (positions.length < placed.filter((p) => p === 'polygon').length) defs.push('outflow: its own if a river only clips it');
-		if (positions.includes('off_channel')) defs.push(`marked off-channel: its own outflow, no cell carrying ${LARGER_FACTOR}× the outline’s cells taken`);
+		if (positions.includes('off_channel'))
+			defs.push(
+				`marked off-channel: its unit on the river where its own outflow (no cell carrying ${LARGER_FACTOR}× the outline’s cells) joins it within ${GUARD_RADIUS_M} m, what drains to that outflow the dam’s share`
+			);
 		if (positions.includes('on_channel')) defs.push('marked on the river: its most-accumulating cell');
 	}
 	if (ran.has('junction')) defs.push('at a junction: the DEM’s junction for the river picked');
@@ -754,6 +778,16 @@ export async function delineateUnits(
 		const droppedKm2 = new Map<string, number>();
 		const taken = new Map<number, string>([[outlet, '']]);
 		const kept: { p: UnitPoint; cell: number; snapDistanceM: number | null }[] = [];
+		/** An off-channel dam's own outflow cell, by its id: its catchment within the unit's piece is the dam's share. */
+		const damOwn = new Map<string, number>();
+		const riverSteps = Math.ceil(GUARD_RADIUS_M / cellSizeM);
+		/** An off-channel dam's unit cell: where its own outflow `own` joins a watercourse within GUARD_RADIUS_M, else `own`. */
+		const offChannelUnit = (own: number, mask: Uint8Array | null): number => {
+			let cells = 0;
+			if (mask) for (let i = 0; i < mask.length; i++) cells += mask[i]!;
+			const below = riverBelow(nCells, dir, acc, own, LARGER_FACTOR * Math.max(1, cells), riverSteps);
+			return below >= 0 && !edge[below] ? below : own;
+		};
 		for (const p of req.points) {
 			if (p.id === outletId) continue;
 			let cell: number | null = null;
@@ -773,8 +807,10 @@ export async function delineateUnits(
 					continue;
 				}
 				if (out && out.cell >= 0 && position) {
-					// The editor marked where it stands: its outline's rule doesn't decide, and no channel is offered.
-					cell = out.cell;
+					// The editor marked where it stands: its outline's rule doesn't decide, and no channel is offered. An off-channel
+					// dam's unit is the river's reach where its own outflow joins the river (the river passes it by, River to dam fills it).
+					cell = position === 'off_channel' ? offChannelUnit(out.cell, mask!) : out.cell;
+					if (position === 'off_channel') damOwn.set(p.id, out.cell);
 					how.set(p.id, { placedBy: 'polygon', damPosition: position });
 				} else if (out && out.cell >= 0 && out.straddled !== null && p.useLarger) {
 					// The editor said the dam is on the channel its outline clips: its outflow is that channel's cell.
@@ -792,7 +828,8 @@ export async function delineateUnits(
 					// Smaller than a cell and off-channel: the cell under its first corner, never snapped onto the river beside it.
 					const [cx, cy] = toGrid(rings[0]![0]!);
 					const c = Math.floor(cy) * nCells + Math.floor(cx);
-					cell = cx >= 0 && cy >= 0 && cx < nCells && cy < nCells && !edge[c] ? c : null;
+					cell = cx >= 0 && cy >= 0 && cx < nCells && cy < nCells && !edge[c] ? offChannelUnit(c, null) : null;
+					if (cell !== null) damOwn.set(p.id, c);
 					if (cell !== null) {
 						moved = movedM(rings[0]![0]!, cell);
 						how.set(p.id, { placedBy: 'polygon', damPosition: position });
@@ -943,6 +980,15 @@ export async function delineateUnits(
 				ncTotal[d]! += ncTotal[i]!;
 			}
 		}
+		// An off-channel dam's own catchment: the cells above its own outflow that its unit owns (its share of the unit's runoff).
+		const damM2 = kept.map((k, i) => {
+			const own = damOwn.get(k.p.id);
+			if (own === undefined || open[i]) return undefined;
+			const above = upstream(nCells, nCells, dir, own);
+			let m2 = 0;
+			for (let c = 0; c < above.length; c++) if (above[c] && part.owner[c] === i) m2 += rowM2[(c - (c % nCells)) / nCells]!;
+			return m2;
+		});
 		// A unit that owns no land: the cells above it, counted (the pieces above it would miss the land between).
 		kept.forEach((k, i) => {
 			if (ownsLand(k.p.role)) return;
@@ -976,6 +1022,7 @@ export async function delineateUnits(
 				nonContributingM2: ownsLand(k.p.role) ? ncPiece[i]! : 0,
 				totalNonContributingM2: ncTotal[i]!,
 				...(how.get(k.p.id) ?? {}),
+				...(damM2[i] !== undefined ? { damCatchmentM2: damM2[i] } : {}),
 				...(open[i] ? { open: true } : {})
 			})),
 			// A dropped point keeps its placement: one snapped into a gully beside its river names the river, so it can be moved there.

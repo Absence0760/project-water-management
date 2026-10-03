@@ -886,7 +886,7 @@
 		<select class="cap" aria-label="Where {featureName(f)} stands against its river" aria-describedby="{uid}-dam-position" value={f.damPosition ?? ''} disabled={busy === f.id} onchange={(e) => setDamPosition(f, e.currentTarget.value)} data-testid="map-dam-position">
 			{#each ['', 'on_channel', 'off_channel'] as const as v (v)}<option value={v}>{DAM_POSITION_LABEL[v]}</option>{/each}
 		</select>
-		<p class="hint muted" id="{uid}-dam-position">Start and Divide place an off-channel dam at its own outflow, never on the river beside it; unsaid, its outline decides.</p>
+		<p class="hint muted" id="{uid}-dam-position">Start and Divide take only an off-channel dam’s own catchment into it, the river passing it by; unsaid, its outline decides.</p>
 	{:else}
 		<span data-testid="map-dam-position">{DAM_POSITION_LABEL[f.damPosition ?? '']}</span>
 	{/if}

@@ -48,7 +48,9 @@ import {
 	START_PROPOSALS_PER_HOUR,
 	TINY_PIECE_M2,
 	toProposal,
-	upstreamFirst
+	upstreamFirst,
+	withDamShares,
+	type DamShares
 } from './start.js';
 import { panWarning, type PanReport } from './pans.js';
 import { delineateUnits, ownsLand, type DamPosition, type UnitRole } from './subcatchments.js';
@@ -94,8 +96,10 @@ export const DivideApplyBody = z
 						area: z.boolean(),
 						/** Take the proposed drains-into. */
 						drainsInto: z.boolean(),
-						/** A dam unit: all of its own runoff reaches its dam. */
+						/** A dam unit: its own runoff reaches its dam (pctRunoffToDam: 1, or a marked dam's share, damShares). */
 						runoffToDam: z.boolean(),
+						/** A dam marked on or off the river (194): take its Upstream inflow to dam (damShares.pctUpstreamToDam). */
+						upstreamToDam: z.boolean().optional(),
 						/** A new gauge: add it to the model (its other values need it). */
 						add: z.boolean(),
 						/** A new gauge's name. */
@@ -123,6 +127,8 @@ export interface DivideCurrent {
 	downstreamNodeId: string | null;
 	downstreamName: string | null;
 	pctRunoffToDam: number;
+	/** Absent on proposals before 194. */
+	pctUpstreamToDam?: number;
 }
 
 export interface DivideUnit {
@@ -149,6 +155,8 @@ export interface DivideUnit {
 	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-11): reported, not taken out. Absent without a DEM or before start-11. */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
+	/** A dam marked on or off the river (194): the dam's shares it proposes (start.ts damSharesOf). */
+	damShares?: DamShares;
 }
 
 export interface DividePlan {
@@ -175,7 +183,7 @@ export interface DividePlan {
 }
 
 export interface DivideDecision {
-	units: { key: string; nodeId: string | null; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; parcelId: string | null }[];
+	units: { key: string; nodeId: string | null; area: boolean; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; parcelId: string | null }[];
 	rest: { to: 'none' | 'node' | 'new'; nodeId: string | null; parcelId: string | null };
 	revisionId: string | null;
 }
@@ -343,12 +351,14 @@ export const divideRoutes = new Hono<AuthEnv>()
 								areaSource: inputs.areaSource.get(n.id) ?? 'typed',
 								downstreamNodeId: n.downstreamNodeId,
 								downstreamName: n.downstreamNodeId ? (nodes.get(n.downstreamNodeId)?.name ?? null) : null,
-								pctRunoffToDam: n.pctRunoffToDam
+								pctRunoffToDam: n.pctRunoffToDam,
+								pctUpstreamToDam: n.pctUpstreamToDam
 							}
 						: null,
 					placement: placementOf(u, reaches.get(u.id)),
 					nonContributingM2: u.nonContributingM2,
-					totalNonContributingM2: u.totalNonContributingM2
+					totalNonContributingM2: u.totalNonContributingM2,
+					...(land ? withDamShares(u) : {})
 				};
 			});
 			const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
@@ -451,7 +461,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 					nodes.set(n.id, n);
 					nodeOf.set(u.key, n.id);
 				} else {
-					if (t.area || t.drainsInto || t.runoffToDam) throw new ApiError(400, `${u.name} is a new gauge: tick Add it before taking its order.`);
+					if (t.area || t.drainsInto || t.runoffToDam || t.upstreamToDam) throw new ApiError(400, `${u.name} is a new gauge: tick Add it before taking its order.`);
 					nodeOf.set(u.key, null);
 				}
 			}
@@ -480,7 +490,12 @@ export const divideRoutes = new Hono<AuthEnv>()
 				if (t.runoffToDam) {
 					if (u.role !== 'dam') throw new ApiError(400, `${u.name} is not a dam unit.`);
 					if (cur && n.pctRunoffToDam !== cur.pctRunoffToDam) throw changed(`${u.name}’s runoff to the dam`);
-					n.pctRunoffToDam = 1;
+					n.pctRunoffToDam = u.damShares?.pctRunoffToDam ?? 1;
+				}
+				if (t.upstreamToDam) {
+					if (!u.damShares) throw new ApiError(400, `${u.name} has no proposed upstream inflow to its dam: mark the dam on or off the river on the map, and propose again.`);
+					if (cur && cur.pctUpstreamToDam !== undefined && n.pctUpstreamToDam !== cur.pctUpstreamToDam) throw changed(`${u.name}’s upstream inflow to the dam`);
+					n.pctUpstreamToDam = u.damShares.pctUpstreamToDam;
 				}
 			}
 			// The rest of the catchment.
@@ -549,7 +564,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 				const parcelId = nid && t.area && u.geometry && u.areaM2 !== null ? await parcel(nid, nodes.get(nid)!.name, u.geometry, u.areaM2) : null;
 				// The point stands for its node now, if it stood for nothing (a link, not a model value).
 				if (nid) await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND node_id IS NULL`, [u.key, id, nid]);
-				decisionUnits.push({ key: u.key, nodeId: nid, area: t.area, drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, add: t.add, parcelId });
+				decisionUnits.push({ key: u.key, nodeId: nid, area: t.area, drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, ...(u.damShares ? { upstreamToDam: !!t.upstreamToDam } : {}), add: t.add, parcelId });
 			}
 			const restParcel = restNode && plan.rest.geometry ? await parcel(restNode.id, restNode.name, plan.rest.geometry, plan.rest.areaM2) : null;
 			if (plan.outlet.featureId) await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind = 'gauge' AND node_id IS NULL`, [plan.outlet.featureId, id, outflow.id]);
@@ -557,12 +572,13 @@ export const divideRoutes = new Hono<AuthEnv>()
 			const areas = decisionUnits.filter((u) => u.area).length + (restParcel ? 1 : 0);
 			const orders = decisionUnits.filter((u) => u.drainsInto).length;
 			const runoff = decisionUnits.filter((u) => u.runoffToDam).length;
+			const upstream = decisionUnits.filter((u) => u.upstreamToDam).length;
 			const gauges = decisionUnits.filter((u) => u.add).length;
 			const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Divided from the map: ${s(areas, 'area')}, ${s(orders, 'drains-into', 'drains-into')}, ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
+				reason: `Divided from the map: ${s(areas, 'area')}, ${s(orders, 'drains-into', 'drains-into')}, ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${upstream ? `, ${s(upstream, 'upstream inflow to a dam', 'upstream inflows to dams')}` : ''}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
 			});
 			const decision: DivideDecision = {
 				units: decisionUnits,

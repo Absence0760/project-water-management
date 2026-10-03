@@ -7,7 +7,7 @@ import { delineate, DelineationRefused, worldPx } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { accumulate, OUT } from './flow.js';
 import { LARGER_FACTOR } from './place.js';
-import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, offChannelOutflow, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
+import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, offChannelOutflow, ownsLand, riverBelow, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -213,6 +213,18 @@ describe('rasterize and mostDrained', () => {
 		});
 	});
 
+	it('finds where an off-channel dam’s outflow joins its river, within the steps given', () => {
+		const g = riverGrid();
+		const acc = accumulate(g.nx, g.ny, g.dir);
+		for (let y = 0; y < g.ny; y++) acc[g.at(2, y)]! += 10_000;
+		// From (4, 1): west to (3, 1), then the river at (2, 1).
+		expect(riverBelow(g.nx, g.dir, acc, g.at(4, 1), 1000, 5)).toBe(g.at(2, 1));
+		expect(riverBelow(g.nx, g.dir, acc, g.at(4, 1), 1000, 1)).toBe(-1);
+		// A cell on the river is its own junction; no watercourse that large anywhere: none.
+		expect(riverBelow(g.nx, g.dir, acc, g.at(2, 3), 1000, 0)).toBe(g.at(2, 3));
+		expect(riverBelow(g.nx, g.dir, acc, g.at(4, 1), 1e9, 99)).toBe(-1);
+	});
+
 	it('picks the most-drained cell of a mask, never an edge cell', () => {
 		const acc = Int32Array.from([5, 9, 1, 2]);
 		expect(mostDrained(Uint8Array.from([1, 1, 1, 0]), acc, Uint8Array.from([0, 0, 0, 0]))).toBe(1);
@@ -384,7 +396,7 @@ describe('delineateUnits (synthetic DEM)', () => {
 		// A long off-channel dam lying along the river: three cells wide and 20 long, the river its west column all the way.
 		const along = [corner(X, Y), corner(X + 3, Y), corner(X + 3, Y + 20), corner(X, Y + 20), corner(X, Y)];
 
-		it('a long dam along the river: unset, the river’s catchment (the gap); marked off-channel, its own; on the river, the river’s', async () => {
+		it('a long dam along the river: unset, the dam takes the river (the gap); marked off-channel, its unit is the river’s reach and the dam’s own catchment its share; on the river, the river’s', async () => {
 			const river = await delineate(dem, at(X, Y + 19));
 			const unset = await delineateUnits(dem, { outlet, boundary: null, points: [dam(along)] });
 			const off = await delineateUnits(dem, { outlet, boundary: null, points: [dam(along, { damPosition: 'off_channel' })] });
@@ -393,12 +405,18 @@ describe('delineateUnits (synthetic DEM)', () => {
 			expect(unset.units[0]!.totalAreaM2).toBeGreaterThan(0.5 * river.areaM2);
 			expect(unset.units[0]!.damPosition).toBeUndefined();
 			expect(unset.method).not.toMatch(/marked/);
-			// Off-channel: nowhere near the river's area, nothing offered, and the method says so.
-			expect(off.units[0]!.totalAreaM2).toBeLessThan(0.02 * river.areaM2);
-			expect(off.units[0]!).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
-			expect(off.units[0]!.larger).toBeUndefined();
+			// Off-channel: the unit is the river's reach where the dam's own outflow joins it (the river passes the dam by, River to
+			// dam fills it), so the unit's area is the river's; the dam's own catchment, its share, is nowhere near it.
+			const u = off.units[0]!;
+			expect(u).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
+			expect(u.totalAreaM2).toBeGreaterThan(0.5 * river.areaM2);
+			expect(u.damCatchmentM2!).toBeGreaterThan(0);
+			expect(u.damCatchmentM2!).toBeLessThan(0.02 * river.areaM2);
+			expect(u.damCatchmentM2!).toBeLessThanOrEqual(u.areaM2);
+			expect(u.larger).toBeUndefined();
+			expect(unset.units[0]!.damCatchmentM2).toBeUndefined();
 			expect(off.method).toMatch(/1 point at a dam polygon’s outflow \(1 marked off-channel\)/);
-			expect(off.method).toMatch(/marked off-channel: its own outflow, no cell carrying 100× the outline’s cells taken/);
+			expect(off.method).toMatch(/marked off-channel: its unit on the river where its own outflow \(no cell carrying 100× the outline’s cells\) joins it within 1000 m, what drains to that outflow the dam’s share/);
 			expect(off.method).not.toMatch(/its own if a river only clips it/);
 			// On the river: the river's cell, as unset here.
 			expect(on.units[0]!).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
@@ -414,19 +432,21 @@ describe('delineateUnits (synthetic DEM)', () => {
 			near(r.units[0]!.totalAreaM2, river.areaM2, 0.05);
 		});
 
-		it('keeps a sub-cell off-channel dam on its own cell, never snapped onto the river beside it', async () => {
+		it('takes a sub-cell off-channel dam’s own catchment from the cell under it, never the river’s', async () => {
 			// A tenth of a cell, in the cell just east of the river.
 			const [cx, cy] = [X + 1.1, Y + 5.1];
 			const tiny = [corner(cx, cy), corner(cx + 0.1, cy), corner(cx + 0.1, cy + 0.1), corner(cx, cy + 0.1), corner(cx, cy)];
 			const river = await delineate(dem, at(X, Y + 5));
 			const unset = await delineateUnits(dem, { outlet, boundary: null, points: [dam(tiny)] });
 			const off = await delineateUnits(dem, { outlet, boundary: null, points: [dam(tiny, { damPosition: 'off_channel' })] });
-			// Unset, its corner is snapped to the most-drained cell within 150 m; off-channel, it stays in the cell under it.
+			// Unset, its corner is snapped to the most-drained cell within 150 m. Off-channel, the dam's own catchment is the cell
+			// under it (never the river's), and its unit the river beside it, where that cell drains.
 			expect(unset.units[0]!.placedBy).toBe('snapped');
-			expect(off.units[0]!).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
-			expect(off.units[0]!.snapDistanceM!).toBeLessThan(FIXTURE_CELL_M);
-			expect(off.units[0]!.totalAreaM2).toBeLessThanOrEqual(unset.units[0]!.totalAreaM2);
-			expect(off.units[0]!.totalAreaM2).toBeLessThan(0.02 * river.areaM2);
+			const u = off.units[0]!;
+			expect(u).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
+			expect(u.totalAreaM2).toBeGreaterThan(0.5 * river.areaM2);
+			expect(u.damCatchmentM2!).toBeGreaterThan(0);
+			expect(u.damCatchmentM2!).toBeLessThan(0.01 * river.areaM2);
 		});
 
 		it('drops an off-channel dam drawn wholly on the river, saying why', async () => {
@@ -585,10 +605,10 @@ describe('placementText and startMethod', () => {
 		expect(placementText(['polygon', 'polygon'], 0, null, 150, false, [])).toBe(unmarked);
 		expect(unmarked).not.toMatch(/marked/);
 		expect(placementText(['polygon', 'polygon', 'polygon'], 0, null, 150, false, ['off_channel', 'on_channel'])).toBe(
-			'placed on the channel: 3 points at a dam polygon’s outflow (1 marked off-channel, 1 marked on the river) (outflow: its own if a river only clips it; marked off-channel: its own outflow, no cell carrying 100× the outline’s cells taken; marked on the river: its most-accumulating cell)'
+			'placed on the channel: 3 points at a dam polygon’s outflow (1 marked off-channel, 1 marked on the river) (outflow: its own if a river only clips it; marked off-channel: its unit on the river where its own outflow (no cell carrying 100× the outline’s cells) joins it within 1000 m, what drains to that outflow the dam’s share; marked on the river: its most-accumulating cell)'
 		);
 		expect(placementText(['polygon'], 0, null, 150, false, ['off_channel'])).toBe(
-			'placed on the channel: 1 point at a dam polygon’s outflow (1 marked off-channel) (marked off-channel: its own outflow, no cell carrying 100× the outline’s cells taken)'
+			'placed on the channel: 1 point at a dam polygon’s outflow (1 marked off-channel) (marked off-channel: its unit on the river where its own outflow (no cell carrying 100× the outline’s cells) joins it within 1000 m, what drains to that outflow the dam’s share)'
 		);
 		// The brief form keeps the counts, the rules named by the version.
 		expect(placementText(['polygon'], 0, null, 150, true, ['on_channel'])).toBe(
