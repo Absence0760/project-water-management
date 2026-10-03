@@ -6,6 +6,7 @@
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { DEM_FIXTURE } from './dem.ts';
 import { API_URL, APP_E2E_URL, WEB_URL } from './env.ts';
 
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
@@ -27,6 +28,9 @@ const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
  * (`pnpm dev:s3:up`), and mails through Mailpit (`pnpm dev:mail:up`), with
  * links to the e2e site. Alert emails go to Mailpit too, their one-click
  * unsubscribe pointing at the e2e API (alerts-mailpit.spec.ts).
+ *
+ * A `delineate` job (a catchment sent to the background) reads the committed
+ * synthetic DEM, as the e2e API does (map-delineate-background.spec.ts).
  *
  * `schedule: false` runs only jobs already queued: no feed, report or alert
  * schedule queues anything. Leave it on only where the test needs the
@@ -50,7 +54,9 @@ export async function runJobsTick({ projects, schedule = true }: { projects: [st
 			// Alert emails' RFC 8058 one-click address: this checkout's e2e API.
 			API_PUBLIC_URL: API_URL,
 			STORAGE: 'local',
-			MAIL_TRANSPORT: 'smtp'
+			MAIL_TRANSPORT: 'smtp',
+			// A `delineate` job reads the same committed synthetic DEM as the e2e API (playwright.config.ts).
+			DEM_URL: DEM_FIXTURE
 		},
 		timeout: 60_000
 	});

@@ -8,14 +8,18 @@
 	dataset's notice, then Accept as the catchment boundary (replacing one
 	only with the tick: never silently), Accept as an area (an "other"
 	polygon), or Reject. Opened with an open proposal and no new point, the
-	sheet starts at Decide.
+	sheet starts at Decide. A catchment too large for the request (or one
+	sent to the background with the tick) comes back as a request the
+	worker answers (191_delineation_request): the sheet says it waits, asks
+	every POLL_MS, and on its outcome goes to Decide or shows the refusal as
+	the request would have.
 -->
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { api, type DelineationProposal, type DelineationState, type MapFeature } from '$lib/api';
+	import { api, type DelineationProposal, type DelineationRequest, type DelineationState, type MapFeature } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { MapPosition } from '$lib/api/types';
-	import { CAVEATS, datasetNotice, FROM_LABEL, openProposal, proposalFacts, provenanceFacts } from './delineation';
+	import { CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
 	import { choiceText, confluenceOf, largerChannelOf } from './largerChannel';
 	import type { ConfluenceChoice, LargerChannel } from '$lib/api';
@@ -49,9 +53,12 @@
 	const uid = $props.id();
 	const formId = `${uid}-form`;
 	const pending = $derived(openProposal(info));
-	// Seeded once from the caller: Delineate asks, Review it decides.
+	/** A delineation the background worker has (a catchment too large for the request): seeded from the state, so a reopened sheet picks it up. */
 	// svelte-ignore state_referenced_locally
-	let asking = $state(step === 'ask' || !openProposal(info));
+	let waiting = $state<DelineationRequest | null>(info.request && isWaiting(info.request) ? info.request : null);
+	// Seeded once from the caller: Delineate asks, Review it decides; a delineation still in the background is shown where it was asked.
+	// svelte-ignore state_referenced_locally
+	let asking = $state(step === 'ask' || !openProposal(info) || !!waiting);
 	/** The body's first element: its dialog's title takes the focus when the step changes (the focused control went with the old step). */
 	let bodyEl: HTMLElement | undefined = $state();
 	async function focusTitle() {
@@ -73,6 +80,8 @@
 	// svelte-ignore state_referenced_locally
 	let showCoords = $state(!at);
 	let from = $state<DelineationProposal['from']>('outlet');
+	/** Send it straight to the background worker: a catchment the editor knows is large (over about 100 km across). */
+	let background = $state(false);
 	const lat = $derived(parseDegrees(latText, 'lat'));
 	const lon = $derived(parseDegrees(lonText, 'lon'));
 	let tried = $state(false);
@@ -104,7 +113,20 @@
 		larger = null;
 		confluence = null;
 		try {
-			const r = await api.delineation.propose(projectId, { lon: at[0], lat: at[1], from, ...(keepPoint ? { keepPoint } : {}), ...(reach ? { reach } : {}) });
+			const r = await api.delineation.propose(projectId, {
+				lon: at[0],
+				lat: at[1],
+				from,
+				...(keepPoint ? { keepPoint } : {}),
+				...(reach ? { reach } : {}),
+				...(background ? { background } : {})
+			});
+			if ('request' in r) {
+				// Too large for the request (or sent to the background): the worker has it now.
+				waiting = r.request;
+				return;
+			}
+			waiting = null;
 			replace = false;
 			check = r.check;
 			await onproposed(r.proposal);
@@ -119,6 +141,44 @@
 			busy = null;
 		}
 	}
+	// While the worker has it, ask about it every POLL_MS (and stop when the sheet closes).
+	$effect(() => {
+		const w = waiting;
+		if (!w || !isWaiting(w)) return;
+		const timer = setTimeout(() => void poll(w.id), POLL_MS);
+		return () => clearTimeout(timer);
+	});
+	async function poll(id: string) {
+		try {
+			settle((await api.delineation.request(projectId, id)).request);
+		} catch (err) {
+			waiting = null;
+			error = err instanceof Error ? err.message : String(err);
+		}
+	}
+	/** The worker's answer, shown as the request's own would have been. */
+	async function settle(r: DelineationRequest) {
+		if (waiting?.id !== r.id) return;
+		if (isWaiting(r)) {
+			waiting = r;
+			return;
+		}
+		waiting = null;
+		if (r.status === 'proposed' && r.proposal) {
+			replace = false;
+			check = r.check;
+			await onproposed(r.proposal);
+			setAsking(false);
+		} else if (r.status === 'refused' && r.refusal) {
+			from = r.from;
+			if (r.refusal.reason === 'larger_channel' && r.refusal.larger) larger = { message: r.refusal.message, channel: r.refusal.larger, asked: r.click };
+			else error = r.refusal.message;
+		} else if (r.status === 'failed') {
+			error = failedText(r);
+		}
+		// Superseded: a newer click has it, and is the one waited for.
+	}
+
 	/** Use the channel the server named: the point moves there (the fields say so) and it is asked again. */
 	async function useLarger() {
 		if (!larger) return;
@@ -184,7 +244,17 @@
 					</div>
 				</div>
 			</details>
+			<label class="tick">
+				<input type="checkbox" bind:checked={background} data-testid="delineate-background" />
+				A large catchment, over about 100 km across: work it out in the background
+			</label>
 			{#if info.dataset}<p class="hint">From {info.dataset.label}. {#if notice}{notice}{/if}</p>{/if}
+			{#if waiting}
+				<div class="waiting" role="status" data-testid="delineate-waiting" data-status={waiting.status}>
+					<p>{waitingText(waiting)}</p>
+					{#if waiting.status === 'running' && waiting.progress !== null}<progress max="100" value={waiting.progress} aria-label="How far it is"></progress>{/if}
+				</div>
+			{/if}
 			{#if error}<p class="err" role="alert" data-testid="delineate-error">{error}</p>{/if}
 			{#if confluence}
 				{@const j = confluence}
@@ -329,8 +399,20 @@
 		border-radius: var(--radius-sm);
 		background: var(--warning-soft);
 	}
-	.offer p {
+	.offer p,
+	.waiting p {
 		margin: 0;
+	}
+	.waiting {
+		display: grid;
+		gap: 0.5rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+	}
+	.waiting progress {
+		width: 100%;
 	}
 	.offer-actions {
 		display: flex;
