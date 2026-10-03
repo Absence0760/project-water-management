@@ -168,7 +168,10 @@ a resumed run), checked against values worked by hand, or by a small
 re-derivation inside the test, from docs/model.md, never against what the
 engine returned before. The `*.differential.e2e.test.ts` files replay the
 documented formulas over a few hundred random networks. `*.regressions.e2e.test.ts`
-pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29). They run in
+pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29), and
+`network.offtakeDecisions.e2e.test.ts` the off-take decisions of engine 1.70.0
+(issue #90 Q25–Q27: the split-licence warning, a top-up's fixed release floor,
+the pass-inflow target an off-take keeps). They run in
 `pnpm test` (a few seconds in all); run one area with
 `pnpm -C packages/engine exec vitest run src/e2e/<area>`.
 

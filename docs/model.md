@@ -2323,10 +2323,15 @@ keep among them, so a sibling without a hands-off flow, even one taking
 1 m³/day, let the others take the river below theirs:
 
 ```
-keep_k  = MAX(Zs, handsOff_k, handsOffEwr_k ? Z : 0)      Zs: senior users' requirement passing the source (§2.7c)
-free_k  = MAX(0, U₀ − taken so far − keep_k)
+keep_k  = MAX(Zs, target, handsOff_k, handsOffEwr_k ? Z : 0)
+          Zs: senior users' requirement passing the source (§2.7c)
+          target: the source dam's pass-inflow release target (§2.7a, §2.7e), engine ≥ 1.70.0; 0 without one
 need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
-room_dst = MAX(0, cap − (Q[t−1] + Pd + dam-rule receipts today − E − Sp)), E and Sp clamped as §2.7a's step clamps them (engine ≥ 1.69.0)
+free_k  = MAX(0, U₀ − taken so far − keep_k)
+room_dst = MAX(0, cap − (Q[t−1] + Pd + dam-rule receipts today − E − Sp) + floor_dst)
+          E and Sp clamped as §2.7a's step clamps them (engine ≥ 1.69.0)
+floor_dst = a fixed release's floor, MAX(0, MIN(amount[month], outlet, held − dead storage)),
+          held = Q[t−1] + Pd − E − Sp + the day's net dam-rule transfers (engine ≥ 1.70.0; 0 for any other release)
 v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), then shared in bands at the keep_k (above)
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
 arrives = Σ v_k × (1 − l_k) at each destination             summed in rule-id order (§6, the ordering rule; engine ≥ 1.69.0)
@@ -2356,7 +2361,9 @@ question 20):
   own abstraction: the unit's own licence is at its own place, the off-take at
   the bottom of its reach. Upstream use first, as everywhere in the network.
 - *What must pass.* The senior users' requirement always (farms and their
-  off-takes are junior to them, §2.7c). The EWR is **not** protected unless
+  off-takes are junior to them, §2.7c), and (engine ≥ 1.70.0) the target
+  of a pass-inflow release on the source's dam: see "The keep and a
+  pass-inflow release" below. The EWR is **not** protected unless
   the rule says so (`handsOffEwr`) or a hands-off flow is set, as the river
   pump and River to dam don't unless their farm has a hands-off flow
   (§2.7h, engine ≥ 1.32.0) and the dam doesn't (§2.7b); the default
@@ -2394,6 +2401,88 @@ question 20):
   otherwise (its export is then net of what came back); at a site above
   which it doesn't return, nothing changes (the losses left that site's
   catchment). The return unit is never charged for water it merely carries.
+
+**Rules of one priority and a split licence (provisional decision
+2026-10-03, issue #90 Q25, to be confirmed by the client's hydrologist).**
+Kept: the rules of one priority at a source share a short river pro rata to
+their limits, in bands at their keeps (above), as dam rules share a dam
+(§2.6, §3 Q18). Ranking by priority and sharing a shortage in proportion
+inside a priority class is how South African system models and DWS
+restrictions allocate: a curtailment is set as a percentage of each user
+category's use (in September 2016, 15 % of urban and 20 % of irrigation use
+on the Vaal River System; [SAnews 2016](https://www.sanews.gov.za/node/32131)),
+and the result doesn't depend on the list order. **What "pro rata to their
+limits" means here:** a rule's limit is `MIN(capacity, need share ÷ (1 − l),
+the flow above its keep)`, so each rule is held to the free flow on its own
+before the sharing. A licence entered as several rules is then held to the
+free flow piece by piece, and on a short river its pieces together get more
+than the same licence as one rule beside the other rules of that priority.
+Worked example (`e2e/network.offtakeDecisions.e2e.test.ts`): 200 m³ of free
+flow, licence A of 300 m³/day beside B of 100. As one rule A asks MIN(300,
+200) = 200 and B 100, so A gets 200 × 200 ⁄ 300 = 133.3 and B 66.7. As two
+rules of 150, A asks 150 + 150 and B 100, so A gets 150 and B 50. With plenty
+of water the split changes nothing (every rule takes its capacity), and a
+licence entered twice at full size takes double whatever the flow (a data
+error the run can't tell from two licences). **Engine ≥ 1.70.0 warns** when
+one source has two or more planned river off-takes into one destination at
+one priority, at least two of them running in a common calendar month (a
+month in which both have capacity above 0; rules that never run in the same
+month never meet): `river off-take <source> → <destination>: n rules of
+priority p (ids) take from the same river for the same unit. If they are one
+licence split up, enter it as one rule: …`. One warning per such group, its
+rules in id order (`network/offtake.ts` `splitLicenceWarnings`). It names a
+group even when no other rule shares that priority at the source (then the
+split gains nothing today, but a scenario that adds one would), and it can't
+tell a split licence from two real licences on one canal, so it is a warning,
+never a refusal. Dam rules (§2.6) are not checked: they share a dam's storage
+the same way, but no off-take question was raised about them.
+
+**A top-up's room and a fixed release (engine ≥ 1.70.0, provisional decision
+2026-10-03, issue #90 Q26, to be confirmed by the client's hydrologist).** A
+demand-sized off-take that tops up a dam counts the dam's fixed release
+floor in its room, `floor_dst` above, as a dam rule's room has since 1.29.0
+(§2.6): the release as it would be with no inflow and no off-take water,
+from the dam as the step holds it once the day's dam rules are settled
+(yesterday's storage, its rain, the clamped evaporation and seepage, and the
+net dam-rule transfers in and out, all known when the off-takes are sized).
+The day's release is at least that, since the dam's inflow and the off-take
+water only add to what it releases from (§2.7a item 3 releases from the dam
+with both in it), so the dam passes on what it lets out and the off-take
+still never overfills it. Before 1.70.0 a full dam with a fixed release of
+300 m³/day took nothing from a top-up off-take and ended the day 300 m³
+down; it now takes 300 and ends full. A pass-inflow release adds nothing: it
+is at most the day's inflow. **The dam's own inflow that day (K, M, O) is
+still left out** (the room can overstate what fits by it, and the inflow
+then spills): it follows the river's flow, which is known only once the
+network runs, after the off-takes are sized at the start of the day (the
+same reason a dam rule's room leaves it out, §2.6). The floor is a lower bound, and two cases leave
+the dam short of full rather than over it: a dam near its dead storage, whose
+floor is cut to the water above it while the off-take water lifts it so the
+day's release is the full amount (a 1 000 m³ dam at 500 m³, dead storage
+400, release 300: floor 100, the off-take brings 600, the dam releases 300
+and ends at 800; the next day it fills), and a dam the dam rules draw from,
+whose room ignores what it sends (as for a dam rule's destination, §2.6).
+Counting `MIN(amount, outlet)` in full would be exact for the first case and
+still never overfill (the off-take water arrives before the release); it is
+not done, to keep the off-take's room the same as a dam rule's.
+
+**The keep and a pass-inflow release (engine ≥ 1.70.0, provisional decision
+2026-10-03, issue #90 Q27, to be confirmed by the client's hydrologist).** An
+off-take also leaves its source's pass-inflow release target in the river:
+the month's amount, or the EWR required at the source (its Z) when the rule
+has no amounts, on a day the dam has capacity (§2.7a item 3, §2.7g), exactly
+the target the unit's own river pump (§2.7e) and river abstractions (§2.7j)
+leave. A pass-inflow release exists to keep that flow below the dam wall, and
+the off-take's intake is on that reach (it takes from the flow leaving the
+unit, below the dam); an off-take taking it would turn the dam's release into
+canal water, and the release would show as passing water to a river that
+never got it. Before 1.70.0 it wasn't kept: on 1 000 m³/day below a dam
+passing inflow to 600, an off-take of 2 000 took all 1 000 (it now takes 400).
+What isn't kept: the source unit's own hands-off flow (§2.7h), which is a
+condition on the unit's own abstraction (its pump and River to dam), not a
+flow the dam is operated to pass; a fixed release, which has no target (its
+water simply joins the flow). The self-check `checkTransferLimits` holds each
+rule to the same keep.
 
 **Outputs.** On the source `offtake_out` and, per rule, `transfer_rule@<id>`
 (what it took, before losses); on the destination `offtake_in` (what arrived),
@@ -3581,6 +3670,8 @@ water to an absent dam (Q19). The decisions:
   pass-inflow release's target in the river: a release exists to keep that
   flow below the dam, and a pump taking S while the dam released to top it
   up would move dam water to the pump. A fixed release doesn't interact.
+  The unit's river off-takes (§2.6a) keep the same target, engine ≥ 1.70.0
+  (issue #90 Q27; before, an off-take could take what the pump left).
   The EWR is **not** protected by the pump unless the farm has a hands-off
   flow (§2.7h, engine ≥ 1.32.0): a m³/day by month and/or, with
   `handsOffEwr`, the EWR required at the farm. Neither is set by default.
@@ -3947,8 +4038,9 @@ longer hold. With no capacity (before the in-service date, or once sediment
 has filled it) the unit has no dam: nothing enters or stays in it, nothing
 evaporates or seeps from it, and what is routed to it passes on, as on a
 unit without a dam. It releases nothing that day (§2.7a item 3: a release
-rule, and a pass-inflow release's target that the river pump and river
-abstractions leave in the river, act only on a day the dam has capacity), and
+rule, and a pass-inflow release's target that the river pump, river
+abstractions and (engine ≥ 1.70.0) the unit's river off-takes leave in the
+river, act only on a day the dam has capacity), and
 a borehole that pumps into the dam pumps straight to the crop or user instead
 (§2.7d), each in its own mode's step (engine ≥ 1.69.0; before, a release
 took the water routed to the absent dam before irrigation, and a dam-target
@@ -4040,8 +4132,9 @@ pump keep = MAX(Zs, the pass-inflow release's target, keep_h)   (§2.7e)
 Gr     = on the river ? MIN(pump capacity, MAX(0, S − pump keep), demand) : 0
 ```
 
-The same `keep = MAX(Zs, handsOff, handsOffEwr ? Z : 0)` a river off-take
-uses at its source (§2.6a), with Z the node's own cumulative EWR. The
+The same `MAX(handsOff, handsOffEwr ? Z : 0)` a river off-take keeps at its
+source (§2.6a, beside the senior requirement and, engine ≥ 1.70.0, a
+pass-inflow release's target), with Z the node's own cumulative EWR. The
 senior users' pass runs first and the hands-off cut second; either order
 gives the same K, M and O (the pass cuts K and M only once O is 0), and this
 one keeps `passed_for_senior` meaning what it did.
@@ -4072,7 +4165,9 @@ one keeps `passed_for_senior` meaning what it did.
 - *A river off-take sourced at a farm* (§2.6a) keeps only its own hands-off
   flow (and the EWR, when its rule asks), never the farm's: the farm's
   hands-off flow binds the farm's own pump and River to dam, not other
-  rules drawing on the flow leaving it.
+  rules drawing on the flow leaving it. (A pass-inflow release's target on
+  the farm's dam is different: it is the flow the dam is operated to pass
+  below its wall, and an off-take keeps it, engine ≥ 1.70.0, §2.6a.)
 - *The EWR is the node's Z*, the requirement passing the farm (its own and
   upstream shares), as for a pass-inflow release and a river off-take; not
   only its own share Y.

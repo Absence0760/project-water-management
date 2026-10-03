@@ -235,6 +235,21 @@ keep k take together at most `MAX(0, U₀ − taken by lower priorities − k)`.
 The same release adds that off-take water arriving at a unit is summed in
 rule-id order (model.md §6, the ordering rule).
 
+**Off-take keeps, top-ups and split licences (engine 1.70.0, issue #90
+Q25–Q27).** Method decisions, not errata. An off-take's keep gains its
+source's pass-inflow release target (`keep = MAX(Zs, target, handsOff,
+handsOffEwr ? Z : 0)`), so it changes only at a source whose dam has a
+pass-inflow release, on days the target is the largest term: the off-take
+takes less and the river below the source carries the target. A
+demand-sized top-up into a dam with a fixed release counts the release's
+floor in its room, so it takes more and the dam ends fuller (never above
+capacity on a day without inflow). Rules of one priority still share pro
+rata to their limits; the run now warns about what looks like one licence
+split into several rules. The examples have no river off-take and the
+client catchment none with a release, so they are unchanged to the bit.
+`checkTransferLimits` (its off-take part) holds each rule to the new keep.
+Records: § Provisional decisions 2026-10-03 below; model.md §2.6a.
+
 ## Regression suite: deviation list
 
 `packages/engine/src/run.test.ts` compares with the workbook column by
@@ -435,6 +450,18 @@ warning, an import warning, a form hint or an evidence-pack gate).
 | An enlarged dam | Kept: resized along its own area–volume relation; a surveyed curve on the scenario wins when there is one. | The same basin filled to another level. | Docs only (model.md §2.13). |
 | WP-1.34 Borehole depletion | The method kept (lagged linear reservoir, d and k; unmet depletion carried as a deficit). | Glover/Hunt need T, S, distance and streambed leakance, rarely known for SA farm boreholes; the two parameters span the same behaviour. The values and whether the boreholes pumped while the calibration record was measured are the client's. | Needs client data; docs (model.md §2.7d). |
 | WP-1.35 Land-cover split | Kept: the low-flow share on each day's flow up to the Q75 natural flow, the other share above. | Scott & Smith (1997) give separate reductions to total and low flows, and Q75 is the usual SA low-flow index (the paper's own definition wasn't re-read). Covers and areas are the client's. | Needs client data; land cover stays off; docs (model.md §2.5a). |
+
+## Provisional decisions 2026-10-03: river off-takes (issue #90 Q25–Q27)
+
+Decided by the operator on 2026-10-03 from the engine end-to-end tests'
+open questions (issue #393), **provisional, to be confirmed by the client's
+hydrologist**; built in engine 1.70.0 (model.md §2.6a).
+
+| Item | Decision | Why (source) | What changed |
+| --- | --- | --- | --- |
+| Q25 Several off-take rules of one priority | Kept: pro rata to their limits, in bands at their keeps, as dam rules (§3 Q18). A run warns about two or more rules with one source, one destination and one priority that run in a common month. | Priority classes with a shortage shared in proportion inside a class are SA practice (DWS sets a curtailment as a % of each user category's use: 15 % urban and 20 % irrigation on the Vaal, [SAnews 2016](https://www.sanews.gov.za/node/32131)); order-free. A rule's limit is held to the free flow before the sharing, so a licence split into several rules gets a larger share of a short river than as one rule; the warning tells the modeller to enter one licence as one rule. | *Code*: the warning (`splitLicenceWarnings`); docs (model.md §2.6a). |
+| Q26 A top-up's room and a fixed release | The room counts the dam's fixed release floor, as a dam rule's room does (1.29.0); the dam's own inflow that day stays out. | The release leaves the dam whatever arrives, so without the floor a full dam with a fixed release never refilled from the off-take; the floor is a lower bound of the day's release, so the dam is never overfilled. The inflow is known only once the network runs, after the off-takes are sized. | *Code*, engine 1.70.0. |
+| Q27 An off-take's keep and a pass-inflow release | The keep includes the source dam's pass-inflow release target (its amount, or the EWR at the source without amounts), as the unit's river pump and river abstractions keep it. The unit's own hands-off flow is still not kept by off-takes. | A pass-inflow release exists to keep that flow below the dam wall, and the off-take's intake is on that reach; taking it would turn the release into canal water. The hands-off flow is a condition on the unit's own abstraction. | *Code*, engine 1.70.0; `checkTransferLimits`. |
 
 ## Open questions for the hydrologist
 
