@@ -10,7 +10,8 @@
 //   cap            — a year's use never exceeds its budget (the WHOLE year's
 //                    volume, not prorated to the run's days), the room column
 //                    is MAX(0, budget − use so far), capReached lists exactly
-//                    the years that reached it.
+//                    the years that reached it; a year with no allocation in
+//                    force isn't capped (engine ≥ 1.70.0).
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import type { AllocationEntry } from '../allocations/compare';
@@ -151,6 +152,7 @@ describe('outputs e2e: an allocation cap (§2.12a)', () => {
 	const out = runModel(withMode('cap'));
 	it('a year’s surface use never exceeds its budget; the room is MAX(0, budget − use so far); capReached lists exactly the years that reached it', () => {
 		const d0 = toEpochDay(out.startDate);
+		const uncapped: string[] = [];
 		for (const id of ['a', 'b']) {
 			const own = ALLOCS.filter((a) => a.nodeId === id);
 			const sup = series(out, id, 'supplied');
@@ -160,6 +162,14 @@ describe('outputs e2e: an allocation cap (§2.12a)', () => {
 			for (const s of spans(out)) {
 				// The budget is the whole water year's volume (validity prorated), not the run's days of it.
 				const budget = own.reduce((acc, a) => acc + reg(a, s.wy, wyStart(s.wy), wyStart(s.wy + 1) - 1), 0);
+				// A year none of the unit's allocations is in force in isn't capped (engine ≥ 1.70.0, #90 Q24): Farm B's
+				// first licence starts on 29 February 2004, so its 2002/03 part year has a blank room and isn't listed.
+				const inForce = own.some((a) => (!a.validFrom || toEpochDay(a.validFrom) < wyStart(s.wy + 1)) && (!a.validTo || toEpochDay(a.validTo) >= wyStart(s.wy)));
+				if (!inForce) {
+					for (let d = s.from; d <= s.to; d++) expect(room[d - d0], `${id} room ${fromEpochDay(d)}`).toBeNaN();
+					uncapped.push(`${id} ${s.wy}`);
+					continue;
+				}
 				let used = 0;
 				for (let d = s.from; d <= s.to; d++) {
 					expect(room[d - d0]!, `${id} room ${fromEpochDay(d)}`).toBeCloseTo(Math.max(0, budget - used), 6);
@@ -167,13 +177,17 @@ describe('outputs e2e: an allocation cap (§2.12a)', () => {
 					used += sup[d - d0]!;
 				}
 				expect(used, `${id} ${s.wy}`).toBeLessThanOrEqual(budget * (1 + 1e-9) + 1e-9);
-				// "use within 10⁻⁹ of the budget": a year with no volume in force (budget 0) has reached it at 0 m³.
+				// "use within 10⁻⁹ of the budget".
 				if (used >= budget - 1e-9 * budget) reached.push(s.wy);
 			}
 			expect((src.capReached ?? []).map((r) => r.waterYear), id).toEqual(reached);
 			// The cap binds somewhere (else this test proves little): Farm A asks for far more than 260 000 m³ a year.
 			if (id === 'a') expect(reached.length).toBeGreaterThan(2);
 		}
+		expect(uncapped).toEqual(['b 2002']);
+		expect(out.summary.warnings.filter((w) => w.includes('is in force'))).toEqual([
+			`allocation cap: none of a unit's licences of a source is in force in some water years, so its use of that source isn't capped there, as for a unit with no licence of it (check the licence dates): "${BASE.model.nodes.find((n) => n.id === 'b')!.name}" surface water in water year 2002`
+		]);
 	});
 	it('the first part year (from 15 March) still has the whole year’s volume to take', () => {
 		const d0 = toEpochDay(out.startDate);

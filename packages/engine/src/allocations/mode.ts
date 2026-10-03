@@ -12,7 +12,10 @@
 //    water year's registered volume (each allocation × its valid days in
 //    the year ÷ the year's days), so a run that starts or ends inside a year
 //    doesn't shrink it, and a farm may take its volume early. A source with
-//    no allocation isn't capped (a run warning names them).
+//    no allocation isn't capped (a run warning names them), nor (engine ≥
+//    1.70.0, issue #393, #90 Q24) is a water year in which none of the unit's
+//    allocations of the source is in force (one run warning names the units
+//    and years). Before 1.70.0 such a year had a budget of 0.
 //    Every draw from the dam counts as surface use, groundwater pumped into
 //    it included, so that water uses up both volumes; the comparison nets it
 //    (docs/model.md §2.12). Pending the hydrologist (followups.md §
@@ -141,11 +144,22 @@ export function registeredOver(allocs: readonly AllocationEntry[], wy: number, f
 	return sum;
 }
 
+/** Whether any of `own` is in force (its validity dates) on some day of water year `wy`. */
+function inForceIn(own: readonly AllocationEntry[], wy: number): boolean {
+	const lo = wyStart(wy);
+	const hi = wyStart(wy + 1) - 1;
+	return own.some((a) => (a.validFrom ? toEpochDay(a.validFrom) : -Infinity) <= hi && (a.validTo ? toEpochDay(a.validTo) : Infinity) >= lo);
+}
+
 /**
  * The cap's budget for each run day (`cap` mode): the registered volume of
  * `source` over the whole water year the day falls in (not only the run's
  * days of it), the same number on every day of a year. null when the node
- * has no allocation of that source (no cap).
+ * has no allocation of that source (no cap). A water year in which none of
+ * its allocations of the source is in force on any day (before the first
+ * starts, after the last ends, or between two) isn't capped either (engine ≥
+ * 1.70.0, issue #393, #90 Q24): Infinity on its days, as for a unit with no
+ * allocation of the source. Before 1.70.0 such a year had a budget of 0.
  */
 export function yearBudgets(allocs: readonly AllocationEntry[], source: AllocationWaterSource, start: number, days: number): Float64Array | null {
 	const own = allocs.filter((a) => a.waterSource === source);
@@ -154,12 +168,38 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
 	for (let t = 0; t < days; ) {
 		const wy = waterYearOf(start + t);
 		const end = wyStart(wy + 1) - 1;
-		const v = registeredOver(own, wy, wyStart(wy), end);
+		const v = inForceIn(own, wy) ? registeredOver(own, wy, wyStart(wy), end) : Infinity;
 		const last = Math.min(days - 1, end - start);
 		for (let k = t; k <= last; k++) out[k] = v;
 		t = last + 1;
 	}
 	return out;
+}
+
+/**
+ * The run's water years a capped source isn't capped in (engine ≥ 1.70.0,
+ * yearBudgets): none of the unit's allocations of `source` is in force on any
+ * of their days. Empty when the unit has no allocation of the source (that
+ * source isn't capped at all, and planAllocations warns about it apart).
+ */
+export function uncappedYears(allocs: readonly AllocationEntry[], source: AllocationWaterSource, start: number, days: number): number[] {
+	const own = allocs.filter((a) => a.waterSource === source);
+	if (!own.length || days <= 0) return [];
+	const out: number[] = [];
+	for (let wy = waterYearOf(start); wy <= waterYearOf(start + days - 1); wy++) if (!inForceIn(own, wy)) out.push(wy);
+	return out;
+}
+
+/** Water years as a short list: runs of consecutive years as a range ("2001–2003, 2007"). */
+export function waterYearList(years: readonly number[]): string {
+	const parts: string[] = [];
+	for (let k = 0; k < years.length; ) {
+		let j = k;
+		while (j + 1 < years.length && years[j + 1] === years[j]! + 1) j++;
+		parts.push(j === k ? String(years[k]) : `${years[k]}–${years[j]}`);
+		k = j + 1;
+	}
+	return parts.join(', ');
 }
 
 /**
@@ -427,9 +467,16 @@ export function planAllocations(
 		warnings.push(
 			`allocation mode ${mode}: ${without.length} unit${without.length === 1 ? ' has' : 's have'} no registered volume, so ${mode === 'cap' ? 'nothing caps their use' : 'their demand is left as modelled'} (${without.join('; ')})`
 		);
+	// cap: the units and sources a water year of the run isn't capped in, no allocation of the source being in force
+	// in it (engine ≥ 1.70.0), named in one warning after the loop, by node id (whatever order the nodes came in).
+	const notInForce: [number, string][] = [];
 	for (const [i, allocs] of byNode) {
 		const p = plan[i]!;
 		if (mode === 'cap') {
+			for (const source of ['surface', 'groundwater'] as const) {
+				const years = uncappedYears(allocs, source, start, days);
+				if (years.length) notInForce.push([i, `"${nodes[i]!.name}" ${source === 'surface' ? 'surface water' : 'groundwater'} in water year${years.length === 1 ? '' : 's'} ${waterYearList(years)}`]);
+			}
 			const surface = yearBudgets(allocs, 'surface', start, days);
 			const groundwater = yearBudgets(allocs, 'groundwater', start, days);
 			const surfaceLimit = dailyLimits(allocs, 'surface', start, days);
@@ -463,6 +510,10 @@ export function planAllocations(
 			p.objects = { ...p.objects, demand, total };
 		}
 	}
+	if (notInForce.length)
+		warnings.push(
+			`allocation cap: none of a unit's licences of a source is in force in some water years, so its use of that source isn't capped there, as for a unit with no licence of it (check the licence dates): ${notInForce.sort((a, b) => cmpStr(nodes[a[0]]!.id, nodes[b[0]]!.id)).map((x) => x[1]).join('; ')}`
+		);
 }
 
 /**
@@ -482,7 +533,8 @@ export function planAllocations(
 export function limitBoundKind(left: number, limit: number, outside: boolean, use: number, demand: number, deficit: number, budget: number): 'volumeDays' | 'rateDays' | 'monthsDays' | null {
 	if (!(deficit > 1e-9 * Math.max(demand, 1))) return null;
 	const room = Math.min(left, limit);
-	if (use < room - 1e-9 * Math.max(room, 1)) return null;
+	// No room limit at all (a water year the source isn't capped in, engine ≥ 1.70.0) never binds.
+	if (room === Infinity || use < room - 1e-9 * Math.max(room, 1)) return null;
 	// What is left carries the year's summing noise: a volume used up to within 10⁻⁹ of the budget is used up.
 	return left <= limit + 1e-9 * Math.max(budget, 1) ? 'volumeDays' : outside ? 'monthsDays' : 'rateDays';
 }

@@ -11,7 +11,7 @@ import { applyScenario } from '../scenario';
 import { checkResume } from '../testing/warmstartInvariants';
 import type { AllocationEntry } from './compare';
 import { checkAllocations } from '../verify/checks';
-import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, limitBoundKind, outsideMonths, rateShortfall, registeredOver, usableAllocations, yearBudgets } from './mode';
+import { ALLOCATION_SERIES, dailyLimits, fullAllocationFactors, limitBoundKind, matchAllocations, outsideMonths, planAllocations, rateShortfall, registeredOver, uncappedYears, usableAllocations, waterYearList, yearBudgets } from './mode';
 
 const col = (out: ModelOutput, nodeId: string | null, key: string) => out.series.find((x) => x.nodeId === nodeId && x.key === key)?.values;
 
@@ -134,6 +134,90 @@ describe("allocationMode 'cap'", () => {
 		const late = yearBudgets([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 3650, validFrom: '2002-04-01' }], 'surface', toEpochDay('2001-10-01'), 10);
 		expect(late![0]).toBeCloseTo(1830, 9);
 		expect(yearBudgets([{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: 1 }], 'surface', 0, 10)).toBeNull();
+	});
+
+	describe('a water year with no allocation of the source in force (engine 1.70.0, #90 Q24)', () => {
+		const s = (over: Partial<AllocationEntry>): AllocationEntry => ({ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 3650, ...over });
+		// Run: 1 Oct 2001 … 30 Sep 2004, three whole water years of 365, 366 and 365 days.
+		const start = toEpochDay('2001-10-01');
+		const days = toEpochDay('2004-10-01') - start;
+		const at = (iso: string) => toEpochDay(iso) - start;
+		it('yearBudgets: Infinity (not capped) before the first starts, after the last ends and between two; prorated where in force', () => {
+			const b = yearBudgets([s({ validFrom: '2002-10-01', validTo: '2002-12-31' }), s({ id: 't', validFrom: '2003-10-02' })], 'surface', start, days)!;
+			expect(b[0]).toBe(Infinity);
+			expect(b[at('2002-09-30')]).toBe(Infinity);
+			// 2002/03: 92 days of 365 in force; 2003/04: 365 of 366.
+			expect(b[at('2002-10-01')]).toBeCloseTo((3650 * 92) / 365, 9);
+			expect(b[at('2003-10-01')]).toBeCloseTo((3650 * 365) / 366, 9);
+			// The same number every day of a year, the days before the licence's start included.
+			expect(b[at('2003-10-01')]).toBe(b[at('2004-09-30')]);
+			const end = yearBudgets([s({ validTo: '2002-09-30' })], 'surface', start, days)!;
+			expect([end[0], end[at('2002-10-01')], end[at('2003-10-01')]]).toEqual([3650, Infinity, Infinity]);
+		});
+		it('a 0 m³ allocation in force is a budget of 0, not Infinity; one day in force is a capped year', () => {
+			expect(yearBudgets([s({ volumeM3PerYear: 0 })], 'surface', start, 3)!.every((v) => v === 0)).toBe(true);
+			const one = yearBudgets([s({ validFrom: '2002-09-30', validTo: '2002-09-30' })], 'surface', start, days)!;
+			expect(one[0]).toBeCloseTo(3650 / 365, 9);
+			expect(one[at('2002-10-01')]).toBe(Infinity);
+		});
+		it('a run that starts or ends inside an uncapped year: only the year matters, not the run’s days of it', () => {
+			const b = yearBudgets([s({ validFrom: '2002-09-30' })], 'surface', toEpochDay('2002-04-01'), 10)!;
+			// 2001/02 has its last day in force, so it is capped (at 10 m³) though the run's ten days precede it.
+			expect(b[0]).toBeCloseTo(10, 9);
+		});
+		it('uncappedYears lists exactly the Infinity years, per source; none for a source without allocations', () => {
+			const allocs = [s({ validFrom: '2003-10-01' }), { ...s({ id: 'g', waterSource: 'groundwater', validTo: '2001-12-31' }) }];
+			expect(uncappedYears(allocs, 'surface', start, days)).toEqual([2001, 2002]);
+			expect(uncappedYears(allocs, 'groundwater', start, days)).toEqual([2002, 2003]);
+			expect(uncappedYears([s({})], 'surface', start, days)).toEqual([]);
+			expect(uncappedYears([s({})], 'groundwater', start, days)).toEqual([]);
+			expect(uncappedYears(allocs, 'surface', start, 0)).toEqual([]);
+		});
+		it('waterYearList groups consecutive years', () => {
+			expect(waterYearList([2001])).toBe('2001');
+			expect(waterYearList([2001, 2002, 2003, 2007, 2009, 2010])).toBe('2001–2003, 2007, 2009–2010');
+			expect(waterYearList([])).toBe('');
+		});
+		it('planAllocations: one cap warning for every unit and source, none in the other modes', () => {
+			const nodes = [
+				{ id: 'a', name: 'Farm A', kind: 'farm' },
+				{ id: 'b', name: 'Farm B', kind: 'farm' }
+			];
+			const allocs = [s({ validFrom: '2003-10-01' }), s({ id: 'g', nodeId: 'b', waterSource: 'groundwater', validTo: '2001-12-31' }), s({ id: 'h', nodeId: 'b' })];
+			const plan = () => nodes.map(() => ({ demand: new Float64Array(days), irrigationEfficiency: 1 }));
+			const warn = (mode: 'cap' | 'fullAllocation' | 'none') => {
+				const w: string[] = [];
+				planAllocations(matchAllocations(allocs, mode, nodes, w), nodes, plan(), start, days, w);
+				return w.filter((x) => x.includes('is in force'));
+			};
+			expect(warn('cap')).toEqual([
+				`allocation cap: none of a unit's licences of a source is in force in some water years, so its use of that source isn't capped there, as for a unit with no licence of it (check the licence dates): "Farm A" surface water in water years 2001–2002; "Farm B" groundwater in water years 2002–2003`
+			]);
+			expect(warn('fullAllocation')).toEqual([]);
+			expect(warn('none')).toEqual([]);
+		});
+		it('the self-check holds the room blank exactly in the uncapped years', () => {
+			// A licence from 1 Oct 2003 with a rate, so the left column is stored too.
+			const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 50_000, validFrom: '2003-10-01', maxRateM3s: 0.01 }], 'cap');
+			const out = runModelWithoutChecks(x);
+			expect(checkAllocations(x, out)).toBeNull();
+			const d0 = toEpochDay(out.startDate);
+			const first = Math.max(0, toEpochDay('2003-10-01') - d0);
+			expect(first).toBeGreaterThan(0);
+			const tamper = (key: string, t: number, v: number) => {
+				const bad = structuredClone(out);
+				bad.series.find((c) => c.nodeId === 'a' && c.key === key)!.values[t] = v;
+				return checkAllocations(x, bad);
+			};
+			expect(tamper(ALLOCATION_SERIES.surfaceRoom.key, first - 1, 5)).toMatch(/in a water year none of its surface allocations is in force in, which isn't capped \(blank\)/);
+			expect(tamper(ALLOCATION_SERIES.surfaceLeft.key, 0, 5)).toMatch(/which isn't capped \(blank\)/);
+			expect(tamper(ALLOCATION_SERIES.surfaceRoom.key, first, NaN)).toMatch(/is not a number in a capped water year/);
+			expect(tamper(ALLOCATION_SERIES.surfaceLeft.key, first + 3, NaN)).toMatch(/is not a number in a capped water year/);
+		});
+		it('limitBoundKind: no room limit at all never binds', () => {
+			expect(limitBoundKind(Infinity, Infinity, false, 500, 600, 100, Infinity)).toBeNull();
+			expect(limitBoundKind(Infinity, Infinity, false, 0, 600, 600, Infinity)).toBeNull();
+		});
 	});
 
 	for (const at of ['2004-02-29', '2006-10-01', '2009-05-17']) {

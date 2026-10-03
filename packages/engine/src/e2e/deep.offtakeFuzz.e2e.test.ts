@@ -2,7 +2,9 @@
 // engine 1.69.0's bands) replayed on the engine's own random networks
 // (testing/fuzz.ts randomInput: GR4J runoff, dams with survey curves and
 // releases, boreholes, river pumps, senior and junior users, drought
-// restrictions, development, full-allocation and capped runs, gauges as ends
+// restrictions, development, full-allocation and capped runs (a demand-sized
+// rule into a capped unit sizes to the demand its cap still allows, engine ≥
+// 1.70.0), gauges as ends
 // and loops the run skips). The re-derivation reads only the run's published
 // series (the flow before the off-takes, the senior requirement, the EWR, the
 // destinations' demand and dam) and the rules as stored, never the engine's
@@ -98,6 +100,10 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 					const capInto = into.reduce((s, x) => s + (opt(out, x.fromNodeId, `transfer_rule@${x.id}`) ? capOf(x, m) : 0), 0);
 					const dst = nodes.get(tr.toNodeId)!;
 					let need = (opt(out, dst.id, 'restricted_demand') ?? opt(out, dst.id, 'demand')!)[t]!;
+					// Under an allocation cap, the demand the cap still allows: at most the surface room today, blank in
+					// a water year the source isn't capped in (engine ≥ 1.70.0, §2.6a, §2.12a, #90 Q28).
+					const room = opt(out, dst.id, 'allocation_room_surface')?.[t];
+					if (room !== undefined && Number.isFinite(room)) need = Math.min(need, room);
 					const capNow = opt(out, dst.id, 'dam_capacity')?.[t] ?? dst.damCapacityM3;
 					if (tr.topUpDam && capNow > 0) {
 						const q = opt(out, dst.id, 'dam_storage')![t - 1]!;

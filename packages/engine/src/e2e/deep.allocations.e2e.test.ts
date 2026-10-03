@@ -8,7 +8,10 @@
 //                    and groundwater use (groundwater_used + groundwater_to_dam)
 //                    never exceed the whole year's budget; the stored room is
 //                    MIN(MAX(0, budget − use so far), the licence limit) and
-//                    each day's use stays within it;
+//                    each day's use stays within it; a water year with none
+//                    of the source's allocations in force isn't capped
+//                    (engine ≥ 1.70.0, #90 Q24): its room is blank and it is
+//                    in neither capReached nor limitBound;
 //   fullAllocation — the factor is constant within a water year, and a year
 //                    with demand asks for exactly the volume registered over
 //                    its run days (both sources);
@@ -80,15 +83,22 @@ function spans(out: ModelOutput): { wy: number; from: number; to: number }[] {
 	return res;
 }
 
-/** §2.12a budget: Σ V × |whole year ∩ validity| ÷ |L(y)| over the unit's take allocations of one source. */
+/**
+ * §2.12a budget: Σ V × |whole year ∩ validity| ÷ |L(y)| over the unit's take allocations of one source;
+ * Infinity (not capped) when none of them is in force on any day of the year (engine ≥ 1.70.0).
+ */
 function budget(allocs: readonly AllocationEntry[], wy: number): number {
 	let sum = 0;
+	let inForce = false;
 	for (const a of allocs) {
 		const lo = Math.max(wyStart(wy), a.validFrom ? toEpochDay(a.validFrom) : -Infinity);
 		const hi = Math.min(wyStart(wy + 1) - 1, a.validTo ? toEpochDay(a.validTo) : Infinity);
-		if (hi >= lo) sum += (a.volumeM3PerYear * (hi - lo + 1)) / yearDays(wy);
+		if (hi >= lo) {
+			inForce = true;
+			sum += (a.volumeM3PerYear * (hi - lo + 1)) / yearDays(wy);
+		}
 	}
-	return sum;
+	return inForce ? sum : Infinity;
 }
 /** §2.12a licence limit on epoch day d: Σ rate × 86 400 over the in-force allocations whose months include d's; none in force or none stated = ∞. */
 function limit(allocs: readonly AllocationEntry[], d: number): number {
@@ -112,6 +122,7 @@ const GEN = { maxNodes: 9, maxDays: 800 };
 describe('deep: an allocation cap holds a year’s use to its whole-year budget (§2.12a)', () => {
 	it('surface and groundwater, every unit, every water year; the room column and each day’s use replayed', () => {
 		let bound = 0;
+		let uncapped = 0;
 		const kinds = { volumeDays: 0, rateDays: 0, monthsDays: 0 };
 		const bad: string[] = [];
 		for (const seed of SEEDS) {
@@ -137,6 +148,11 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 					}
 					for (const s of spans(out)) {
 						const b = budget(own, s.wy);
+						if (b === Infinity) {
+							uncapped++;
+							for (let t = s.from; t <= s.to; t++) if (!Number.isNaN(room[t]!)) bad.push(`seed ${seed} ${n.id} ${source} ${fromEpochDay(d0 + t)}: room ${room[t]} in an uncapped year, not blank`);
+							continue;
+						}
 						let used = 0;
 						for (let t = s.from; t <= s.to; t++) {
 							const use = source === 'surface' ? sup[t]! - gw[t]! : gw[t]! + gd[t]!;
@@ -159,6 +175,7 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 					const statesMonths = own.some((a) => a.months != null && a.months.length > 0);
 					for (const s of spans(out)) {
 						const b = budget(own, s.wy);
+						if (b === Infinity) continue;
 						let used = 0;
 						const y = { waterYear: s.wy, days: 0, volumeDays: 0, rateDays: 0, monthsDays: 0 };
 						for (let t = s.from; t <= s.to; t++) {
@@ -188,6 +205,8 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 		}
 		expect(bad).toEqual([]);
 		expect(bound).toBeGreaterThan(20);
+		// Some water years have none of a unit's allocations of a source in force, so the uncapped rule is reached.
+		expect(uncapped).toBeGreaterThan(5);
 		// Each kind of limit binds somewhere, so the limitBound replay isn't vacuous.
 		expect(kinds.volumeDays).toBeGreaterThan(0);
 		expect(kinds.rateDays).toBeGreaterThan(0);

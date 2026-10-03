@@ -90,26 +90,14 @@ describe('item 1: a negative CHIRPS value on a catchment-rain gap is missing (en
 	});
 });
 
-// ── Item 4 (c) DESIGN QUESTION ──────────────────────────────────────────────
-// §2.12a cap: budget(n,s,y) = Σ V(a) × |L(y) ∩ [validFrom, validTo]| ÷ |L(y)|.
-// A water year with no allocation of the source in force gets budget 0 by
-// that formula, so the capped unit takes no surface water that year (here a
-// licence from 1 Oct 2022 leaves 2021/22 at 0 m³ supplied, every day counted
-// in limitBound as `volumeDays`), with no warning. Yet the same section says
-// "A source with no allocation isn't capped", and on a day no allocation is in
-// force the *rate* limit is "none". So "the unit has a licence, just not yet"
-// caps at 0, while "the unit has no licence" isn't capped at all.
-// Decision (hydrologist/operator, with #90 and engine-audit.md L2): before a
-// licence starts, is the unit (i) not abstracting lawfully (budget 0, today),
-// (ii) uncapped (existing lawful use, as a unit with no allocation), or
-// (iii) capped at the first licence's volume? Whatever is chosen, warn when a
-// capped unit has a water year with no allocation in force. Proposed §2.12a
-// wording (keeping today's rule): "A water year in which none of a unit's
-// allocations of a source is in force has a budget of 0: the unit takes none
-// of that source that year, unlike a unit with no allocation of the source at
-// all, which is not capped. The run warns, naming the unit and the years."
-describe('item 4 (c): cap mode gives a water year with no allocation in force a budget of 0', () => {
-	it('a licence from 1 Oct 2022: 2021/22 supplies nothing (budget 0), 2022/23 its 36 500 m³', () => {
+// ── Item 4, decided (engine ≥ 1.70.0, #90 Q24, provisional) ────────────────
+// §2.12a cap: a water year in which none of a unit's allocations of a source
+// is in force isn't capped for that source, as a unit with no allocation of
+// it isn't (before 1.70.0 the budget formula gave such a year 0, so the unit
+// took nothing, with no warning). One run warning names the unit, the source
+// and the years. The full set of cases is in caps.licenceDates.e2e.test.ts.
+describe('item 4, decided: cap mode leaves a water year with no allocation in force uncapped (engine ≥ 1.70.0)', () => {
+	it('a licence of 18 250 m³ from 1 Oct 2022: 2021/22 takes its whole 36 500 m³ demand, 2022/23 its 18 250 m³', () => {
 		const days = 730;
 		const town: DemandObject = {
 			id: 'town-F',
@@ -136,20 +124,23 @@ describe('item 4 (c): cap mode gives a water year with no allocation in force a 
 				cropAreas: [],
 				transfers: [],
 				demandObjects: [town],
-				allocations: [{ id: 'L1', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 36_500, validFrom: '2022-10-01' }]
+				allocations: [{ id: 'L1', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 18_250, validFrom: '2022-10-01' }]
 			},
 			series: { rain_catchment_mm: { startDate: '2021-10-01', values: new Array(days).fill(0) } }
 		};
 		const out = runModelWith(input, () => ({ naturalFlowM3Day: new Array(days).fill(5000) }));
 		const supplied = get(out, 'F', 'supplied');
-		expect(sum(supplied, 0, 365)).toBe(0);
-		expect(sum(supplied, 365, 730)).toBeCloseTo(36_500, 6);
-		expect(get(out, 'F', 'allocation_room_surface')[0]).toBe(0);
+		// 2021/22: 365 days × 100 m³, uncapped (the dam holds 1e6 m³); 2022/23: the licence's 18 250 m³.
+		expect(sum(supplied, 0, 365)).toBeCloseTo(36_500, 6);
+		expect(sum(supplied, 365, 730)).toBeCloseTo(18_250, 6);
+		expect(get(out, 'F', 'allocation_room_surface')[0]).toBeNaN();
+		expect(get(out, 'F', 'allocation_room_surface')[365]).toBeCloseTo(18_250, 9);
 		const src = out.summary.allocations!.nodes[0]!.sources[0]!;
-		expect(src.capReached).toContainEqual({ waterYear: 2021, budgetM3: 0, usedM3: 0 });
-		expect(src.limitBound).toContainEqual({ waterYear: 2021, days: 365, volumeDays: 365, rateDays: 0, monthsDays: 0 });
-		// Today no warning says the year had no allocation in force.
-		expect(out.summary.warnings.filter((w) => /in force|no allocation/i.test(w))).toEqual([]);
+		expect(src.capReached).toEqual([{ waterYear: 2022, budgetM3: 18_250, usedM3: expect.closeTo(18_250, 6) }]);
+		expect(src.limitBound!.map((y) => y.waterYear)).toEqual([2022]);
+		expect(out.summary.warnings.filter((w) => /is in force/.test(w))).toEqual([
+			`allocation cap: none of a unit's licences of a source is in force in some water years, so its use of that source isn't capped there, as for a unit with no licence of it (check the licence dates): "Unit F" surface water in water year 2021`
+		]);
 	});
 });
 
