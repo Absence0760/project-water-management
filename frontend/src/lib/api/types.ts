@@ -3139,6 +3139,19 @@ export interface ClickPiece {
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead. */
 	larger: LargerChannel | null;
+	/** A river reach was near but no channel near the click matched its area: that reach (the click may be on another stream). */
+	unmatched: { dataset: string; reachId: number; upstreamKm2: number } | null;
+}
+
+/** GET …/map/channels?tile=i,j: one tile of the elevation model's channels (cells with ≥ minKm2 draining through them). */
+export interface ChannelTileAnswer {
+	tile: [number, number];
+	bounds: [number, number, number, number];
+	minKm2: number;
+	lines: { coordinates: MapPosition[]; km2: number }[];
+	cellSizeM: number;
+	dataset: { label: string; fingerprint: string };
+	cached: boolean;
 }
 
 /** A much larger channel near a point (a 422 `larger_channel`'s `details.larger`, or a click's piece). */

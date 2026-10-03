@@ -93,6 +93,23 @@ describe('Delineate', () => {
 	});
 });
 
+describe('the river-network check', () => {
+	it('warns when a reach nearby matches no channel’s area, on the proposal and on the click’s piece', async () => {
+		// The planted reach says 5 000 km²: no channel within 1 km drains within half of that.
+		await plantReach(5000);
+		const onRiver = at(DAM_CELL.x, DAM_CELL.y + 60);
+		const r = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: onRiver[0], lat: onRiver[1], from: 'outlet' });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		expect(r.body.check).toMatch(/^The river network has reach 99000001 of snap-test near this point, draining about 5\s?000 km², but no channel within 1 km drains within half of that: this catchment \([\d.]+ km²\) may be on another stream\./);
+		const clicks = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, { clicks: [{ lon: onRiver[0], lat: onRiver[1] }] });
+		expect(clicks.body.pieces[0]).toMatchObject({ placedBy: 'snapped', reach: null, unmatched: { reachId: 99000001, upstreamKm2: 5000 } });
+		// A matching reach: no check.
+		await plantReach(riverKm2);
+		const ok = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: onRiver[0], lat: onRiver[1], from: 'outlet' });
+		expect(ok.body.check).toBeNull();
+	});
+});
+
 describe('Sub-catchments', () => {
 	it('matches a click to its reach and says which; an unmatched click beside the river names the larger channel', async () => {
 		await plantReach(riverKm2);

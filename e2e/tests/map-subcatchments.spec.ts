@@ -19,6 +19,14 @@ import { openMap, uploadThroughSheet } from '../support/map.ts';
 const header = (page: Page) => page.getByTestId('section-header');
 const bar = (page: Page) => page.getByTestId('map-click-bar');
 const lines = (page: Page) => bar(page).getByTestId('map-click-piece');
+/** A piece's words (its badge aside). */
+const line = (page: Page, i: number) => lines(page).nth(i).getByTestId('map-click-line');
+/** Enter Sub-catchments: Delineate, then its choice. */
+async function startClicks(page: Page) {
+	await page.getByTestId('section-header').getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-delineate-clicks').check();
+	await expect(page.getByTestId('map-click-bar')).toBeVisible();
+}
 const mapReady = (page: Page) => expect(page.locator('.map-wrap[data-status="ready"]')).toBeVisible();
 const canvas = (page: Page) => page.getByTestId('catchment-map').locator('canvas');
 
@@ -63,36 +71,59 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, 'other', 'around-dam.geojson', squareAround(FIXTURE_DAM));
 	await mapReady(page);
-	await header(page).getByRole('button', { name: 'Show everything' }).click();
+	await page.getByTestId('map-show-everything').click();
 
-	// From the keyboard: the button, then the map has the focus and the crosshair; Enter puts an outlet under it.
-	await header(page).getByRole('button', { name: 'Sub-catchments' }).focus();
+	// The header's actions fit one row at 1440 (Sub-catchments is Delineate's choice, Download GeoJSON is the list's).
+	const tops = await header(page).locator('button, a.btn').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+	expect(new Set(tops).size).toBe(1);
+	const mapHeight = (await page.locator('.map-body').boundingBox())!.height;
+
+	// From the keyboard: Delineate, its choice of Sub-catchments; then the map has the focus and the crosshair, and Enter puts an outlet under it.
+	await header(page).getByRole('button', { name: 'Delineate' }).focus();
 	await page.keyboard.press('Enter');
-	await expect(header(page).getByRole('button', { name: 'Sub-catchments' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('map-draw-bar')).toContainText('Delineating a catchment');
+	await page.getByTestId('map-delineate-clicks').check();
+	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(bar(page)).toBeVisible();
 	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
 	await expect(canvas(page)).toBeFocused();
+	// Beside the map, in the picked feature's place: the map keeps its height.
+	await expect(page.getByRole('complementary', { name: 'Features' }).getByTestId('map-click-bar')).toBeVisible();
+	await expect(page.getByTestId('map-feature-card')).toHaveCount(0);
+	expect(Math.abs((await page.locator('.map-body').boundingBox())!.height - mapHeight)).toBeLessThan(2);
+	// The elevation model's own channels are drawn while the mode is on: the view (framed on the square) is one tile.
+	await expect(page.locator('.map-body')).not.toHaveAttribute('data-channel-tiles', '0');
+	await expect(page.getByTestId('map-channels-note')).toHaveCount(0);
+	await expect(bar(page).getByTestId('map-click-how')).toContainText('Click a red line (the elevation model’s channel) for each outlet');
 	await page.keyboard.press('Enter');
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(1);
 	// The synthetic valley above the dam wall is about 341 km² (backend/src/delineation/fixture.ts).
-	await expect(lines(page).nth(0)).toHaveText(/^1 Sub-catchment 1: 3[34]\d\.\d\d km² · the lowest click: everything above it drains out here$/);
+	// The crosshair isn't on a cell's centre, so the click may say how far it moved.
+	await expect(line(page, 0)).toHaveText(/^3[34]\d\.\d\d km² · the lowest point: the rest drains out here( · moved \d+ m to the channel)?$/);
+	await expect(lines(page).nth(0).getByTestId('piece-badge')).toHaveText('Piece 1: 1');
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('1 sub-catchment.');
 
 	// Below the dam: it becomes the lowest, and the dam's piece drains into it.
 	await typeOutlet(page, FIXTURE_OUTLET);
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(2);
-	await expect(lines(page).nth(0)).toHaveText(/^1 Sub-catchment 1: 3[34]\d\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all$/);
-	await expect(lines(page).nth(1)).toHaveText(/^2 Sub-catchment 2: 2\d\d\.\d\d km² · the lowest click: everything above it drains out here · 5[34]\d\.\d\d km² upstream in all$/);
+	await expect(line(page, 0)).toHaveText(/^3[34]\d\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all( · moved \d+ m to the channel)?$/);
+	await expect(line(page, 1)).toHaveText(/^2\d\d\.\d\d km² · the lowest point: the rest drains out here · 5[34]\d\.\d\d km² upstream in all$/);
 
 	// Above the dam: it takes the valley's head out of the dam's piece.
 	await typeOutlet(page, FIXTURE_UPPER);
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(3);
-	await expect(lines(page).nth(0)).toHaveText(/^1 Sub-catchment 1: \d+\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all$/);
-	await expect(lines(page).nth(2)).toHaveText(/^3 Sub-catchment 3: \d+\.\d\d km² · drains into 1 · \d+\.\d\d km² upstream in all$/);
-	await expect(bar(page).getByTestId('map-click-total')).toContainText('3 sub-catchments');
+	await expect(line(page, 0)).toHaveText(/^\d+\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all( · moved \d+ m to the channel)?$/);
+	// Typed on a cell's centre beside the channel: it moves one cell onto it, and says so.
+	await expect(line(page, 2)).toHaveText(/^\d+\.\d\d km² · drains into 1 · \d+\.\d\d km² upstream in all · moved 128 m to the channel$/);
+	await expect(bar(page).getByTestId('map-click-total')).toHaveText(/^5[34]\d\.\d\d km² in 3 sub-catchments\. A proposal from Synthetic DEM/);
+	// The key: each line's badge carries its piece's tint, and touching pieces differ.
+	const tints = await lines(page).getByTestId('piece-badge').evaluateAll((els) => els.map((e) => getComputedStyle(e).boxShadow));
+	// Piece 1 (between the dam and the head) touches both others; 2 and 3 don't touch, so they may share one.
+	expect(tints[0]).not.toBe(tints[1]);
+	expect(tints[0]).not.toBe(tints[2]);
 
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
@@ -108,7 +139,7 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await bar(page).getByTestId('map-click-save').click();
 	await expect(page.getByTestId('map-notice')).toContainText(/Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas/);
 	await expect(bar(page)).toHaveCount(0);
-	await expect(header(page).getByRole('button', { name: 'Sub-catchments' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'false');
 	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Sub-catchment 1' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
 });
@@ -117,7 +148,7 @@ test('a click beside a much larger channel names it, and Use the larger channel 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Sub-catchments larger channel');
 	await openMap(page, project.id);
-	await header(page).getByRole('button', { name: 'Sub-catchments' }).click();
+	await startClicks(page);
 	await typeOutlet(page, FIXTURE_OUTLET);
 	await typeOutlet(page, FIXTURE_OFF_CHANNEL);
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
@@ -129,7 +160,7 @@ test('a click beside a much larger channel names it, and Use the larger channel 
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page).nth(1)).not.toContainText('larger channel');
 	// On the river above the outlet: the valley's land above the mid gauge, hundreds of km².
-	await expect(lines(page).nth(1)).toHaveText(/^2 Sub-catchment 2: [34]\d\d\.\d\d km² · drains into 1/);
+	await expect(line(page, 1)).toHaveText(/^[34]\d\d\.\d\d km² · drains into 1/);
 	await bar(page).getByTestId('map-click-undo').click();
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Moved the click back.');
 	await expect(lines(page).nth(1)).toContainText('larger channel');
@@ -139,7 +170,7 @@ test('a click off the elevation model is taken back with the reason; Done asks b
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Sub-catchments refusals');
 	await openMap(page, project.id);
-	await header(page).getByRole('button', { name: 'Sub-catchments' }).click();
+	await startClicks(page);
 	await typeOutlet(page, FIXTURE_DAM);
 	await expect(lines(page)).toHaveCount(1);
 
@@ -154,12 +185,36 @@ test('a click off the elevation model is taken back with the reason; Done asks b
 	await bar(page).getByTestId('map-click-done').click();
 	await ask.getByRole('button', { name: 'Drop them' }).click();
 	await expect(bar(page)).toHaveCount(0);
-	await expect(header(page).getByRole('button', { name: 'Sub-catchments' })).toBeFocused();
+	await expect(header(page).getByRole('button', { name: 'Delineate' })).toBeFocused();
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
 
 	const viewer = await signIn('Sub-catchments viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await openMap(viewer.page, project.id);
 	await expect(header(viewer.page).getByRole('button', { name: 'Delineate' })).toHaveCount(0);
-	await expect(header(viewer.page).getByRole('button', { name: 'Sub-catchments' })).toHaveCount(0);
+	await expect(viewer.page.getByTestId('map-delineate-clicks')).toHaveCount(0);
+});
+
+test('on a phone the panel sits above the map, nothing scrolls inside itself, and One catchment switches back to Delineate', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	const project = await seedRunnableProject(page.request, 'Sub-catchments phone');
+	await openMap(page, project.id);
+	await startClicks(page);
+	await typeOutlet(page, FIXTURE_OUTLET);
+	await typeOutlet(page, FIXTURE_DAM);
+	await expect(lines(page)).toHaveCount(2);
+	// Above the map, not after the side column: the panel's bottom is above the map's top.
+	const panel = (await bar(page).boundingBox())!;
+	const map = (await page.locator('.map-body').boundingBox())!;
+	expect(panel.y + panel.height).toBeLessThanOrEqual(map.y + 1);
+	// Every line reads whole: nothing in the panel scrolls inside itself.
+	const inner = await bar(page).evaluate((el) => [el, ...el.querySelectorAll('*')].filter((e) => e.scrollHeight > e.clientHeight + 1 && ['auto', 'scroll'].includes(getComputedStyle(e).overflowY)).length);
+	expect(inner).toBe(0);
+	await expectNoViolations(page);
+	// One catchment, above a point: asks first (clicks would be lost), then Delineate's point.
+	await bar(page).getByTestId('map-delineate-one').check();
+	await page.getByRole('alertdialog', { name: 'Drop these clicks?' }).getByRole('button', { name: 'Drop them' }).click();
+	await expect(bar(page)).toHaveCount(0);
+	await expect(page.getByTestId('map-draw-bar')).toContainText('Delineating a catchment');
 });

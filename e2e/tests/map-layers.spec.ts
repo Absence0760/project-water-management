@@ -224,7 +224,7 @@ test('Download GeoJSON hands over every feature with its name, kind, node and ar
 	await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
 
-	const [download] = await Promise.all([page.waitForEvent('download'), header(page).getByRole('button', { name: 'Download GeoJSON' }).click()]);
+	const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('map-download-geojson').click()]);
 	expect(download.suggestedFilename()).toMatch(/^map-layers-download-map-\d{4}-\d{2}-\d{2}\.geojson$/);
 	const doc = JSON.parse(await readFile((await download.path())!, 'utf8'));
 	expect(doc.type).toBe('FeatureCollection');

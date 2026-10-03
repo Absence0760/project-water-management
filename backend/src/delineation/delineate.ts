@@ -89,6 +89,11 @@ export interface Delineation {
 	dataset: DemInfo;
 	method: string;
 	methodVersion: string;
+	/**
+	 * A river reach was within reach of the click but no channel near it matched its upstream area (place.ts):
+	 * the result may be on another stream, or the reach's area is wrong. Shown with the proposal; not stored.
+	 */
+	unmatched?: { reach: string; reachKm2: number };
 }
 
 export const worldPx = (z: number, size: number) => 2 ** z * size;
@@ -239,6 +244,7 @@ export async function delineate(
 		const snapDistanceM = Math.hypot(x0 + ox + 0.5 - gx, y0 + oy + 0.5 - gy) * cellSizeM;
 		const cellM = Math.round(cellSizeM);
 		return {
+			...(opts.expected && placed.how === 'snapped' ? { unmatched: { reach: opts.expected.reach, reachKm2: opts.expected.km2 } } : {}),
 			click,
 			outlet: outletPos,
 			snapDistanceM,

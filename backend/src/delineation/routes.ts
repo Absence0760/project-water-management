@@ -229,7 +229,11 @@ export const delineationRoutes = new Hono<AuthEnv>()
 					dataset: r.dataset.label,
 					methodVersion: r.methodVersion
 				});
-				return c.json({ proposal }, 201);
+				// The river-network check (issue #374): a reach nearby whose area no channel matched. With this answer only, not stored.
+				const check = r.unmatched
+					? `The river network has ${r.unmatched.reach} near this point, draining about ${Math.round(r.unmatched.reachKm2).toLocaleString('en-ZA')} km², but no channel within 1 km drains within half of that: this catchment (${(r.areaM2 / 1e6).toFixed(2)} km²) may be on another stream. Check it against the map.`
+					: null;
+				return c.json({ proposal, check }, 201);
 			});
 		} finally {
 			await finishDemAttempt(userId, attempt.id);

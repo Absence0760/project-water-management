@@ -34,6 +34,7 @@ import { traceRoutes } from './delineation/traceRoutes.js';
 import { startRoutes } from './delineation/start.js';
 import { divideRoutes } from './delineation/divide.js';
 import { clickRoutes } from './delineation/clicks.js';
+import { channelRoutes } from './delineation/channelRoutes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { noteRoutes } from './notes/routes.js';
@@ -198,6 +199,7 @@ export function createApp() {
 	projects.route('/', startRoutes);
 	projects.route('/', divideRoutes);
 	projects.route('/', clickRoutes);
+	projects.route('/', channelRoutes);
 	projects.route('/', croplandRoutes);
 	projects.route('/', evaporationRoutes);
 	projects.route('/', reportRoutes);
