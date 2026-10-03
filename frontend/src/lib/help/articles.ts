@@ -273,7 +273,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 	},
 	'runoff-to-dam': {
 		long: 'Set 100 % for a dam that captures the hydrological unit’s whole area, 0 % for a natural area or a hydrological unit whose dam doesn’t intercept its land.',
-		aliases: ['farm runoff above dam', 'runoff to dam'],
+		aliases: ['farm runoff above dam', 'runoff to dam', 'own runoff into dam', 'incremental catchment runoff'],
 		related: ['upstream-to-dam', 'dam-capacity'],
 		source: 'b023 Farm spec'
 	},

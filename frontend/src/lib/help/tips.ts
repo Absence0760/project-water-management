@@ -374,8 +374,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'runoff-to-dam',
-		term: 'Own runoff into dam',
-		short: 'Fraction of the hydrological unit’s own runoff that drains into its dam. The rest joins the river below the dam.',
+		term: 'Incremental runoff to dam',
+		short: 'Share of the unit’s incremental catchment runoff (its own, not upstream’s) that drains into its dam. The rest joins the river below it.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['node.pctRunoffToDam']

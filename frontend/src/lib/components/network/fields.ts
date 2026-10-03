@@ -174,12 +174,12 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'pctRunoffToDam',
-		label: 'Runoff to dam',
+		label: 'Incremental runoff to dam',
 		unit: '%',
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `Own runoff entering the dam at ${n}, %`,
-		help: "Share of the hydrological unit's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
+		aria: (n) => `Incremental catchment runoff entering the dam at ${n}, %`,
+		help: "Share of the hydrological unit's incremental catchment runoff (its own runoff, not what arrives from upstream) that enters the dam: the part of its area above the dam wall. The rest flows past below the dam."
 	},
 	{
 		key: 'divertCapacityM3Day',

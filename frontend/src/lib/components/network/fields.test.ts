@@ -29,7 +29,7 @@ describe('cardLabel', () => {
 			damInitialPct: 'Dam initial storage',
 			damMinPct: 'Dam minimum level',
 			pctUpstreamToDam: 'Upstream inflow to dam',
-			pctRunoffToDam: 'Runoff to dam',
+			pctRunoffToDam: 'Incremental runoff to dam',
 			divertCapacityM3Day: 'River to dam',
 			irrigationEfficiency: 'Efficiency',
 			lossReturnFraction: 'Losses returning',
