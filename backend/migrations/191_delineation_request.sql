@@ -115,6 +115,23 @@ CREATE FUNCTION delineation_request_final() RETURNS trigger
 CREATE TRIGGER delineation_request_final BEFORE UPDATE ON delineation_request
 	FOR EACH ROW EXECUTE FUNCTION delineation_request_final();
 
+-- Its job is a delineate job of its own project (as yield_result_guard, 040):
+-- on insert, and whenever the route links the job.
+CREATE FUNCTION delineation_request_job() RETURNS trigger
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	BEGIN
+		IF NEW.job_id IS NOT NULL AND NOT EXISTS (
+			SELECT 1 FROM job j WHERE j.id = NEW.job_id AND j.project_id = NEW.project_id AND j.kind = 'delineate'
+		) THEN
+			RAISE EXCEPTION 'job % is not a delineate job of this project', NEW.job_id USING ERRCODE = 'foreign_key_violation';
+		END IF;
+		RETURN NEW;
+	END
+	$$;
+CREATE TRIGGER delineation_request_job BEFORE INSERT OR UPDATE OF job_id, project_id ON delineation_request
+	FOR EACH ROW EXECUTE FUNCTION delineation_request_job();
+
 ALTER TABLE delineation_request ENABLE ROW LEVEL SECURITY;
 CREATE POLICY delineation_request_select ON delineation_request FOR SELECT USING (app_has_role(project_id, 'viewer'));
 CREATE POLICY delineation_request_insert ON delineation_request FOR INSERT
