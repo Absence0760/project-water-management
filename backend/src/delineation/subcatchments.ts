@@ -356,9 +356,10 @@ export const METHOD_MAX_CHARS = 1000;
 /**
  * The method's sentence on where the points went, from what ran (never a rule that didn't): `placed` is each point's
  * placement but the outlet's, `outletPlaced` the outlet's (null when it is a click), `unmatched` how many snapped points had a
- * reach near but no match. Each rule that ran is defined once, briefly enough that every rule together fits METHOD_MAX_CHARS. Pure.
+ * reach near but no match. Each rule that ran is defined once; `brief` names the method version for the definitions instead, the
+ * form fitMethod falls back to when every rule at once would pass METHOD_MAX_CHARS. Pure.
  */
-export function placementText(placed: readonly PlacedBy[], unmatched: number, outletPlaced: PlacedBy | null, snapRadiusM: number): string {
+export function placementText(placed: readonly PlacedBy[], unmatched: number, outletPlaced: PlacedBy | null, snapRadiusM: number, brief = false): string {
 	const short: Record<PlacedBy, string> = {
 		matched: 'matched',
 		junction: 'at a junction',
@@ -385,6 +386,7 @@ export function placementText(placed: readonly PlacedBy[], unmatched: number, ou
 	if (ran.has('junction')) defs.push('at a junction: the DEM’s junction for the river picked');
 	if (ran.has('snapped') || ran.has('larger'))
 		defs.push(`snapped: the most-accumulating cell within ${snapRadiusM} m${unmatched ? ` (${unmatched} by an unmatched reach)` : ''}, a ${LARGER_FACTOR}× larger channel within ${GUARD_RADIUS_M} m named`);
+	if (brief && defs.length) return `placed on the channel: ${parts.join(', ')} (each rule as ${START_METHOD_VERSION} defines it, docs/maps.md)`;
 	return `placed on the channel: ${parts.join(', ')}${defs.length ? ` (${defs.join('; ')})` : ''}`;
 }
 
@@ -396,6 +398,16 @@ export function startMethod(cellSizeM: number, zoom: number, placement: string):
 		`${placement}; ` +
 		`each unit drains into the first unit its flow path meets and owns the cells reaching it first (a water user or a gauge owns none); areas summed from the cells, each on the WGS84 ellipsoid; outlines simplified for the map (Douglas–Peucker, about ${cellM} m)`
 	);
+}
+
+/**
+ * The method that fits start_proposal.method: in full when it fits, else with the placement rules named by the method version
+ * instead of defined (a proposal with nearly every kind of placement at once ran past the column's 1 000 characters, which the
+ * insert would refuse). Pure.
+ */
+export function fitMethod(cellSizeM: number, zoom: number, placement: (brief: boolean) => string): string {
+	const full = startMethod(cellSizeM, zoom, placement(false));
+	return full.length <= METHOD_MAX_CHARS ? full : startMethod(cellSizeM, zoom, placement(true));
 }
 
 /**
@@ -829,15 +841,17 @@ export async function delineateUnits(
 			zoom: z,
 			windowCells: nCells,
 			dataset: info,
-			method: startMethod(
+			method: fitMethod(
 				cellSizeM,
 				z,
-				placementText(
-					req.points.flatMap((p) => (p.id === outletId || !how.has(p.id) ? [] : [how.get(p.id)!.placedBy])),
-					req.points.filter((p) => p.id !== outletId && how.get(p.id)?.unmatched).length,
-					lowest ? (outletId !== undefined ? (how.get(outletId)?.placedBy ?? null) : null) : (how.get(OUTLET)?.placedBy ?? null),
-					snapRadiusM
-				) + (lowest ? ' (the outlet: the click most water drains through)' : '')
+				(brief) =>
+					placementText(
+						req.points.flatMap((p) => (p.id === outletId || !how.has(p.id) ? [] : [how.get(p.id)!.placedBy])),
+						req.points.filter((p) => p.id !== outletId && how.get(p.id)?.unmatched).length,
+						lowest ? (outletId !== undefined ? (how.get(outletId)?.placedBy ?? null) : null) : (how.get(OUTLET)?.placedBy ?? null),
+						snapRadiusM,
+						brief
+					) + (lowest ? ' (the outlet: the click most water drains through)' : '')
 			),
 			methodVersion: START_METHOD_VERSION
 		};

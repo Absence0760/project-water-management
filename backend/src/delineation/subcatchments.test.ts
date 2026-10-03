@@ -7,7 +7,7 @@ import { delineate, DelineationRefused, worldPx } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { accumulate, OUT } from './flow.js';
 import { LARGER_FACTOR } from './place.js';
-import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, mercatorLat, METHOD_MAX_CHARS, mostDrained, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type UnitPoint } from './subcatchments.js';
+import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -465,10 +465,21 @@ describe('placementText and startMethod', () => {
 	});
 
 	it('fits start_proposal.method (1 000 characters) whatever ran, every rule at once', () => {
-		// Every placement a point can have, twice, with the longest outlet's and a click outlet's note.
-		const points = ['matched', 'junction', 'snapped', 'larger', 'polygon'] as const;
-		const m = startMethod(99_999, 11, placementText([...points, ...points], 50, 'boundary', 150) + ' (the outlet: the click most water drains through)');
+		// Every placement a point can have (a Record so a new kind fails to compile here until it's listed), twice, with the
+		// longest outlet's and a click outlet's note.
+		const kinds: Record<PlacedBy, true> = { matched: true, junction: true, snapped: true, larger: true, exact: true, polygon: true, boundary: true };
+		const points = Object.keys(kinds) as PlacedBy[];
+		const placement = (brief: boolean) => placementText([...points, ...points], 50, 'boundary', 150, brief) + ' (the outlet: the click most water drains through)';
+		// In full it runs past the column, so the stored method names the version for the rules instead of failing the insert.
+		expect(startMethod(99_999, 11, placement(false)).length).toBeGreaterThan(METHOD_MAX_CHARS);
+		const m = fitMethod(99_999, 11, placement);
 		expect(m.length).toBeLessThanOrEqual(METHOD_MAX_CHARS);
+		expect(m).toContain(`each rule as ${START_METHOD_VERSION} defines it`);
+		expect(m).toContain('2 points matched');
+		// An ordinary proposal keeps every definition.
+		const usual = fitMethod(30, 11, (brief) => placementText(['matched', 'snapped'], 1, 'exact', 150, brief));
+		expect(usual).toContain('matched: the cell within');
+		expect(usual).not.toContain('defines it');
 	});
 });
 
