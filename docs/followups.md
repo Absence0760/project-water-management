@@ -5527,13 +5527,19 @@ own. Loop in the CISO or security analyst before acting on any of them.
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.
       Trigger: a WUA asks, or Step 3's licensing evidence needs it.
-- [ ] **One guard for views over a run's stored series.** Every view that
-      reads a run's daily series (not its summary) must cut a forecast run
-      at `summary.forecast.from` (`beforeForecast`); issue #51 found four
-      that didn't, one at a time. A guard test listing each
-      `api.runs.series` / `run_series` consumer and how it treats a forecast
-      run would stop the next one. Trigger: the next view over stored
-      series.
+- [x] **One guard for views over a run's stored series** (2026-10-03).
+      `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`) lists every
+      reader of a run's stored series (the frontend's `api.runs.series`, the
+      bulk route and a share link's series; the backend's `FROM run_series`;
+      every SQL function whose latest definition reads it), how each treats a
+      forecast run (cut, band, whole, never, …) and the code that shows it,
+      and fails on an unlisted reader, a changed count or lost evidence. It
+      caught five, now fixed: a share link's chart averaged a published
+      forecast run's forecast days into the river's months (190 cuts
+      `app_share_series`); River & reserve counted forecast days below the
+      EWR; Compare runs' overlay read out and differenced the forecast days,
+      with no band; the report's licence-impact board counted them; the
+      runoff stores chart and the printed report's two charts had no band.
 
 ## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
 

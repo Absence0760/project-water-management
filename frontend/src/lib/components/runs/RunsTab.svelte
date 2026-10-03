@@ -705,7 +705,7 @@
 					</div>
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
-							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} />
+							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} forecastFrom={summary.forecast?.from ?? null} />
 						</div>
 					{/if}
 					{#if summary.wr2012}
