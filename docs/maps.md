@@ -1157,14 +1157,28 @@ to a point on a river. The design, the method and its accuracy are in
   is refused, never cut off.
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
-  the cells, the dataset (with its fingerprint) and the method, and the
-  caveats. **Accept as the catchment boundary** (replacing the current one
+  the cells, what drains into pans and the effective area (below), the
+  dataset (with its fingerprint) and the method, and the caveats. **Accept as the catchment boundary** (replacing the current one
   only with **Replace the current boundary** ticked; the server refuses
   otherwise), **Accept as an area** (an *other* polygon, e.g. a dam's
   upstream area, which can then be linked to a unit and Used), or
   **Reject**. A new point replaces an open proposal. Every proposal is kept
   with its decision (the last 50 superseded or rejected per project; the
   accepted ones all), and audited.
+- **Pans** (delineate-9; [design/delineation.md § Pans](./design/delineation.md#pans),
+  the research in [design/pans-research.md](./design/pans-research.md)).
+  The fill routes every closed depression to the outlet, so in pan veld the
+  catchment is the gross one. The sheet's **Into pans** says how much of it
+  drains into a pan (a closed depression at least 1 m deep, 0.1 km² in
+  floor and holding at least 100 mm of its own catchment's runoff), what
+  share that is, and what the largest holds; **Effective area** is the
+  catchment less it, if the pans contribute nothing (WR2012's endoreic
+  areas). Neither changes the polygon or its area: the figure is stored
+  with the proposal for the hydrologist to use. *None found* means it
+  looked and found none; a proposal from before delineate-9 says nothing.
+  A dam drawn down below its spillway holds too little over its catchment
+  to count, and the depression at the clicked point (a dam's basin behind
+  the wall) never counts.
 - **The DEM** (`DEM_URL`, backend env): empty (the committed default) turns
   delineation off; the Map shows no Delineate. Locally, after
   `pnpm dev:tiles:terrain` (§ Relief), put
@@ -1184,7 +1198,8 @@ to a point on a river. The design, the method and its accuracy are in
   460 MB at the largest window) and stops before 20 s, under the API's
   30 s timeout. On the worker a 6 144-cell window takes about 11 s on a
   laptop and peaks near 1 GB (an invented 6 144-cell valley, 2026-10-03),
-  and a job stops before 150 s.
+  about 1.2 GB with the pans' copy of the elevations (delineate-9, the real
+  DEM), and a job stops before 150 s.
 - **Attribution.** A delineated polygon is adapted Copernicus data, so the
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
@@ -1258,6 +1273,17 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlet's own piece. A point that doesn't drain to the outlet, or snaps
   onto another, is dropped with the reason; a DEM catchment more than 10 %
   off the boundary's area is warned about.
+- **Pans** (`start-10`; [§ Delineation](#delineation)): the plan stores what
+  drains into pans for the catchment (`plan.pans`), each unit's own piece
+  and whole catchment (`nonContributingM2`, `totalNonContributingM2`) and
+  the rest, and a warning says how much (and what share) of the catchment
+  drains into pans, where the largest is and which pieces hold it. The
+  areas themselves are unchanged (gross); a unit's area from the map is
+  its whole piece, pans included, so a hydrologist modelling them as
+  non-contributing types the effective area instead. A depression at a
+  unit's point (a dam's basin) is that unit's own, never a pan. A saved
+  sub-catchment from clicks ([§ Sub-catchments from clicks](#sub-catchments-from-clicks))
+  says the same in its description.
 - **Placing the points: as Delineate does** (`start-7`, the hydrologist's
   review finding 3; `delineation/pointPlacement.ts`). The outlet gauge and
   each point are placed by Delineation's rules ([§ Delineation](#delineation)):
@@ -1287,7 +1313,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-7)") and its area from it (*from the map*), the
+  delineated from … (start-10)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
@@ -1369,6 +1395,10 @@ pick first.
   A click at a confluence waits in the panel until the river is picked
   (as Delineate's sheet asks), then goes at the DEM's junction for it.
   Measured: [design/delineation-snapping.md](./design/delineation-snapping.md).
+- **Pans** (`start-10`, [§ Delineation](#delineation)): a piece part of
+  whose own area drains into pans says so on its line ("1.25 km² of it
+  drains into pans (non-contributing)") and in its saved description; its
+  area still includes it.
 - **Every click is one request.** The map redraws all the pieces after each
   one; nothing is stored. Undo goes back to the answer before it without
   asking again. A click the server refuses (off the DEM, the lowest click's

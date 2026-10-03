@@ -3922,6 +3922,33 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       this river elsewhere here: draw or import the boundary"). Trigger:
       finding 7's fix, which should cover these with a test on a DEM whose
       river is diverted.
+- [x] **Pans: the non-contributing area of a delineated catchment**
+      (persona-hydrologist finding 8, 2026-10-03, branch wip/r3-pans;
+      design/delineation.md § Pans, design/pans-research.md): the area
+      draining into pans (closed depressions at least 1 m deep, 0.1 km² in
+      floor, holding at least 100 mm of their catchment's runoff) is reported
+      beside every delineation (193, delineate-9), Start and Divide plan
+      (per piece, per unit's whole catchment; start-10) and click piece (its
+      line on the sheet and its saved description), with the effective area;
+      the routed catchment is unchanged.
+- [ ] **Take the effective area into the model** (from finding 8's fix).
+      The proposal reports the effective area, but "Use this area", Start's
+      and Divide's area ticks and a saved piece all still take the gross
+      area, so a hydrologist who models the pans as non-contributing types
+      it in. Durable fix: an explicit choice beside each area tick ("the
+      gross area" / "the effective area, without the pans"), recorded in the
+      node's area source and the revision reason, never a silent default.
+      Trigger: the hydrologist asking for it after using the figure, or a
+      client catchment in the pan veld (C, D, the Molopo).
+- [ ] **Cross-check a pan against the river network** (from finding 8's
+      fix). The storage rule keeps out a drawn-down dam and an embankment
+      pond on the synthetic DEM and on the real one around Bultfontein, but a
+      large storage dam low in its catchment could still pass it (a
+      depression holding over 100 mm of its catchment's runoff). Durable
+      fix: a depression a loaded HydroRIVERS reach flows out of is not a pan
+      (HydroSHEDS marks endorheic sinks itself), or WR2012's endoreic-area
+      polygons as reference data once their licence is known. Trigger: a
+      pan listed on a proposal that is a dam on a river.
 
 ## Crop factors (issue #54 item 1)
 
