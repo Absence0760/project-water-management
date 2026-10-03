@@ -1682,12 +1682,14 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `discarded` | `superseded`; at most one `proposed` per project, partial
   unique index), `plan` (jsonb, under 4 MB: the units, their sub-catchments'
   areas and outlines, the order, the rest of the catchment, the outlet, the
-  warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
+  warnings; a dam marked on or off its river, 194, its `damShares`;
+  `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method` (1–1000: each placement rule that ran defined once, or, when nearly every kind ran at once and that would pass 1 000 characters, named by the method version instead, `fitMethod`),
   `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
-  `applied`: the ticks, the node and parcel ids, the revision),
+  `applied`: the ticks, `upstreamToDam` on a unit with `damShares`, the
+  node and parcel ids, the revision),
   `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
   `decided_at` (set exactly when applied or discarded). The plan, the mode
   and every other column but the decision's never change (185: dataset,

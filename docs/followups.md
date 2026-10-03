@@ -3942,15 +3942,27 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       river's cell. Unset keeps the outline's rule (still `start-12`); the
       method names a marked dam only when one is marked (maps.md § Start
       from the map).
-- [ ] **Take a dam's siting into its unit** (from the siting fix above).
-      Start and Divide place an off-channel dam by its siting, but the
-      unit they propose still starts at *Upstream inflow to dam* 100 % (a
-      dam on the river, model.md §3 Q1), and the Dams page doesn't show
-      the siting. Durable fix: propose *Upstream inflow to dam* 0 % for a
-      dam marked off-channel (100 % on the river) as a tickable value in
-      Start's and Divide's plans, and show the map's siting beside the
-      field on the Dams page. Trigger: a client catchment started from the
-      map with off-channel dams (the client's are, 2026-10-02).
+- [x] **Take a dam's siting into its unit** (from the siting fix above;
+      2026-10-03, branch wip/r5-off-channel-dam). Start and Divide propose
+      a marked dam's *Upstream inflow to dam* (0 % off-channel, 100 % on
+      the river) as a tick, and its runoff tick takes the dam's own share:
+      off-channel, the unit is the river's reach where the dam's own
+      outflow joins it and the share is what drains to that outflow ÷ the
+      unit's area (model.md §2.7 K and M; River to dam fills it); on the
+      river, 100 %. Unmarked dams propose what they did (`damShares`
+      absent). maps.md § Start from the map.
+- [ ] **Show a dam's siting beside its Upstream inflow to dam** (from the
+      fix above). The map's siting reaches the model only through a Start
+      or Divide tick; the Network editor's *Upstream inflow to dam* field
+      (`network/fields.ts`), where the share is edited by hand, doesn't
+      show the map's siting, and nothing says when the two disagree (a dam
+      marked off-channel whose share is typed back to 100 %). Not on the
+      Dams page: it doesn't show the share at all. Durable fix: return each
+      linked dam polygon's `damPosition` with `GET …/map/linked-nodes` and
+      show it in the field's hint, with a warning when the share contradicts
+      it. Trigger: the next change to the Network editor's dam fields or to
+      `linked-nodes`, or a client model where a marked dam's typed share
+      disagrees with its siting.
 - [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
       gauge run). On 2 flat lower rivers GLO-30 has no channel within
       2.5 km carrying the river, and Delineate accepts a catchment under
