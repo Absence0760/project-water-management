@@ -3,7 +3,7 @@
 // the window's one scroll with a long table folded under "Show all", and Add data refreshing the list. Synthetic series only.
 import { fileURLToPath } from 'node:url';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, createRun, putSeries, seedRunnableProject, syntheticRain, updateSettings } from '../support/api.ts';
+import { addMember, createProject, createRun, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { csv } from '../support/addData.ts';
 import { API_URL } from '../support/env.ts';
 import { chartReady, openData, putEnding, sections, seedFreshnessMix, seriesChart, seriesRow, seriesRows, seriesTable } from '../support/data.ts';

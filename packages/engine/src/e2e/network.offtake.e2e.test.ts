@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
 import type { DemandObject, LandCoverPatch, ModelInput, ModelOutput, NetworkNode, ProjectSettings, RunSeries, Transfer } from '../project';
-import { runModel, runModelWith, withVerification } from '../run';
+import { runModelWith, withVerification } from '../run';
 import { checkInvariants } from '../verify/checks';
 
 const flat = (v: number) => new Array(12).fill(v);

@@ -233,7 +233,7 @@ test('a dam outline marked off-channel offers its Upstream inflow to dam and its
 	await expect(card).toHaveCount(1);
 	await expect(card.getByTestId('divide-tick-upstream')).not.toBeChecked();
 	await expect(card).toContainText(/Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it\. Now: \d+ %/);
-	await expect(card).toContainText(/\d(\.\d)? % of its runoff reaches the dam: the [\d.]+ km² draining to the dam’s own outflow, of the unit’s [\d.,  ]+ km²; the rest passes it by\. Now: \d+ %/);
+	await expect(card).toContainText(/\d(\.\d)? % of its runoff reaches the dam: the [\d.]+ km² draining to the dam’s own outflow, of the unit’s [\d.,\u202f]+ km²; the rest passes it by\. Now: \d+ %/);
 	await expectNoViolations(page);
 	await card.getByTestId('divide-tick-upstream').check();
 	await card.getByTestId('divide-tick-dam').check();

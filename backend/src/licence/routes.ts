@@ -11,7 +11,7 @@
 // Editors and owners read it; only owners record the outcome or confirm the
 // record (app_set_licence_outcome, app_confirm_licence_record, which check the
 // role again under the database's own rules).
-import { fromEpochDay, toEpochDay, isIsoDate } from '@water-management/engine';
+import { isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';

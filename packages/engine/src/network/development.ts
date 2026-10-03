@@ -19,7 +19,7 @@
 // Pure: runModel's plan (../run.ts buildNetworkPlan) reads these, the
 // simulation (./simulate.ts) scales by k, the self-checks read the run's
 // `dam_capacity` column.
-import { fromEpochDay, toEpochDay, isIsoDate as isRealDate } from '../calendar';
+import { toEpochDay, isIsoDate as isRealDate } from '../calendar';
 import type { NetworkNode } from '../project';
 
 /** Days per year for the sediment rate (a mean year, leap days included). */

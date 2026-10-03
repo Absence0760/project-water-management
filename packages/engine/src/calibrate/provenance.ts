@@ -10,7 +10,7 @@
 //   notes, engine version, time). It describes the parameters only while they
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
-import { fromEpochDay, toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
+import { toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
 import { defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';

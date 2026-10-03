@@ -112,11 +112,6 @@ const sum = (a: ArrayLike<number>) => {
 	for (let i = 0; i < a.length; i++) v += a[i]!;
 	return v;
 };
-const sumAbs = (a: ArrayLike<number>) => {
-	let v = 0;
-	for (let i = 0; i < a.length; i++) v += Math.abs(a[i]!);
-	return v;
-};
 
 describe('sixty years of daily GR4J', () => {
 	const input = sixtyYears();
