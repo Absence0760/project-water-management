@@ -162,6 +162,7 @@ import type {
 	DelineationProposal,
 	DelineationState,
 	ClickPieces,
+	ChannelTileAnswer,
 	DamTraceProposal,
 	DamTraceState,
 	MinOccurrence,
@@ -1109,7 +1110,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
 				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
-			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
+			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`),
+			/** One tile of the elevation model's channels (GET …/map/channels?tile=i,j; editor). */
+			channels: (id: string, tile: readonly [number, number]) => request<ChannelTileAnswer>('GET', `${p(id)}/map/channels?tile=${tile[0]},${tile[1]}`)
 		},
 		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
 		subcatchments: {

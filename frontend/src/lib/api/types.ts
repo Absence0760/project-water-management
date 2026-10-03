@@ -3141,6 +3141,17 @@ export interface ClickPiece {
 	larger: LargerChannel | null;
 }
 
+/** GET …/map/channels?tile=i,j: one tile of the elevation model's channels (cells with ≥ minKm2 draining through them). */
+export interface ChannelTileAnswer {
+	tile: [number, number];
+	bounds: [number, number, number, number];
+	minKm2: number;
+	lines: { coordinates: MapPosition[]; km2: number }[];
+	cellSizeM: number;
+	dataset: { label: string; fingerprint: string };
+	cached: boolean;
+}
+
 /** A much larger channel near a point (a 422 `larger_channel`'s `details.larger`, or a click's piece). */
 export interface LargerChannel {
 	at: MapPosition;

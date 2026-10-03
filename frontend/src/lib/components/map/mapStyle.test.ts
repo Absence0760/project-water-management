@@ -34,6 +34,8 @@ import {
 	quaternaryLayers,
 	RIVER_NETWORK_HIT_LAYER,
 	riverNetworkColour,
+	channelColour,
+	channelData,
 	riverNetworkData,
 	riverNetworkLayers,
 	RELIEF_LAYER,
@@ -153,12 +155,13 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', ...overlayLayers(dark).map((l) => l.id), ...proposalLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
 			quaternaries: { type: 'geojson', data: quaternaryData(null) },
 			rivers: { type: 'geojson', data: riverNetworkData(null) },
+			channels: { type: 'geojson', data: channelData(null) },
 			features: { type: 'geojson', data },
 			proposal: { type: 'geojson', data: proposalData(null) }
 		});
@@ -343,6 +346,28 @@ describe('the river network (#345)', () => {
 			for (const s of [c.boundary, c.parcel, c.other, c.selected, quaternaryColour(dark)]) expect(deltaE(r, s), `${r} vs ${s}`).toBeGreaterThanOrEqual(40);
 			// Both are water: a different blue, told apart by the dash and width as well (WCAG 1.4.1).
 			expect(deltaE(r, c.water)).toBeGreaterThanOrEqual(25);
+		}
+	});
+});
+
+describe('the elevation model’s channels', () => {
+	it('draws each line with its area, wider for more, over the river network and under the features', () => {
+		const d = channelData([{ coordinates: [[20, -33], [20.01, -33.01]], km2: 412.5 }]);
+		expect(d.features[0]).toMatchObject({ properties: { km2: 412.5 }, geometry: { type: 'LineString' } });
+		expect(channelData(null).features).toEqual([]);
+		const ids = mapStyle(null, false, overlayData([], null)).layers.map((l) => l.id);
+		expect(ids.indexOf('dem-channels')).toBeGreaterThan(ids.indexOf('rn-line'));
+		expect(ids.indexOf('dem-channels')).toBeLessThan(ids.findIndex((i) => i.startsWith('ov-')));
+	});
+
+	it('keeps the line at least 3:1 on the basemap and apart from every other stroke, the river network’s included', () => {
+		for (const dark of [false, true]) {
+			const r = channelColour(dark);
+			const b = basemapColours(dark);
+			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(r, g), `${r} on ${g}`).toBeGreaterThanOrEqual(3);
+			const c = overlayColours(dark);
+			for (const s of [c.boundary, c.parcel, c.water, c.other, c.selected, quaternaryColour(dark), riverNetworkColour(dark), proposalColour(dark)])
+				expect(deltaE(r, s), `${r} vs ${s}, ${dark ? 'dark' : 'light'}`).toBeGreaterThanOrEqual(40);
 		}
 	});
 });

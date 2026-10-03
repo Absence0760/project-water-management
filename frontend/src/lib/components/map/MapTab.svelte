@@ -2,9 +2,13 @@
 	// The map itself is a chunk of its own, and MapLibre one more below it
 	// (CatchmentMap.svelte imports it when it mounts): the list and card here
 	// load with the tab; the map library only once the map is drawn. The
-	// sheets stay in the tab's chunk: they are small, and a chunk of their
-	// own cost more in overhead than it saved (ui-playbook § 6).
+	// small sheets stay in the tab's chunk (a chunk of their own costs more
+	// in overhead than it saves, ui-playbook § 6); Start from the map, the
+	// largest, opened on few visits (an empty model), loads when opened,
+	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
+	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
 	const loadMap = () => import('./CatchmentMap.svelte');
+	const loadStartSheet = () => import('./StartSheet.svelte');
 </script>
 
 <script lang="ts">
@@ -43,6 +47,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import DivideSheet from './DivideSheet.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { saveBlob } from '$lib/export/download';
@@ -55,7 +60,7 @@
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
-	import { glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
+	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { layersOn } from './mapLayers';
 	import MapLayers from './MapLayers.svelte';
@@ -71,10 +76,9 @@
 	import DelineateSheet from './DelineateSheet.svelte';
 	import ClickBar from './ClickBar.svelte';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
+	import { ChannelLayer } from './channelLayer.svelte';
 	import { openProposal } from './delineation';
-	import StartSheet from './StartSheet.svelte';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
-	import DivideSheet from './DivideSheet.svelte';
 	import type { DivideDraft } from './divideFlow';
 	import { litPieces, piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
@@ -687,6 +691,14 @@
 		await load();
 	}
 
+	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
+	const channels = new ChannelLayer({
+		projectId: () => projectId,
+		on: () => canEdit && !!delineation?.available && (delineating || dividing),
+		view: () => mapView,
+		load: api.delineation.channels
+	});
+
 	// --- the relief: the land shaded from the DEM, on while `layers=relief` (and a DEM is configured) ---
 	const relief = $derived(!!terrainUrl && layersOn(params).has('relief'));
 	let reliefFailed = $state(false);
@@ -958,6 +970,22 @@
 							bind:minOccurrence
 						/>
 					{/if}
+					{#if channels.on}
+						<p class="channel-note small" role="status" data-testid="map-channels-note" data-tiles={channels.tileCount}>
+							<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
+							{#if channels.noView}
+								The elevation model’s channels are drawn on the map, which isn’t showing here.
+							{:else if channels.zoomIn}
+								Zoom in to see the elevation model’s channels.
+							{:else if channels.error}
+								<span class="err">The elevation model’s channels couldn’t be drawn: {channels.error}</span>
+							{:else if channels.loading}
+								Drawing the elevation model’s channels…
+							{:else}
+								Red lines: the elevation model’s channels, where a click goes. River lines can sit hundreds of metres off them.
+							{/if}
+						</p>
+					{/if}
 					<div class="map-body">
 						<Lazy load={loadMap}>
 							{#snippet children(CatchmentMap)}
@@ -976,6 +1004,7 @@
 									pickedQuaternary={quaternaries.picked}
 									onquaternary={(code) => (quaternaries.picked = code)}
 									rivers={rivers.reaches}
+									channels={channels.lines}
 									riversCredit={rivers.credited}
 									pickedReach={rivers.picked}
 									onreach={reachFromMap}
@@ -1133,11 +1162,13 @@
 				/>
 			{/if}
 			{#if startSheet.open && startInfo}
+				<Lazy load={loadStartSheet}>
+					{#snippet children(StartSheet)}
 				<StartSheet
 					bind:open={startSheet.open}
 					{projectId}
 					{features}
-					info={startInfo}
+					info={startInfo!}
 					bind:draft={startDraft}
 					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { noScroll: true, keepFocus: true }), false)}
 					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
@@ -1149,6 +1180,8 @@
 					onhighlight={(k) => (pieceLit = k)}
 					focusKey={pieceFocus}
 				/>
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if divideSheet.open && startInfo}
 				<DivideSheet
@@ -1156,7 +1189,7 @@
 					{projectId}
 					{features}
 					nodes={editor.model.nodes}
-					info={startInfo}
+					info={startInfo!}
 					bind:draft={divideDraft}
 					onplace={() => fromStart(startPlace, true, 'divide')}
 					onproposed={loadStart}
@@ -1332,6 +1365,22 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+	}
+	.channel-note {
+		display: flex;
+		gap: 0.45rem;
+		align-items: center;
+		margin: 0;
+		color: var(--text-muted);
+	}
+	.channel-note .swatch {
+		flex: none;
+		width: 1.25rem;
+		height: 3px;
+		border-radius: 2px;
+	}
+	.channel-note .err {
+		color: var(--danger);
 	}
 	.map-body {
 		position: relative;
