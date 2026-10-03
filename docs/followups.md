@@ -3911,6 +3911,19 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `backend/scripts/research/snap-gauges.ts` (the header says how) and
       refresh the section's numbers. Trigger: the round fixing those
       findings merging.
+- [ ] **Ask whether a dam is on its river or off it** (the hydrologist's
+      review finding 9, fixed in `start-9` for the common cases). A dam
+      polygon whose outline only clips a much larger channel now goes at
+      its own footprint's outflow with the river offered
+      (`subcatchments.ts` `damOutflow`), but the geometry can't tell a long
+      off-channel dam lying along the river, overlapping it for most of its
+      length, from a narrow reservoir on it: that one is still taken as on
+      the river, its catchment the river's. Durable fix: an "off-channel
+      (filled by a pump or a furrow)" choice on a dam feature (Dams page
+      and map), which Start and Divide honour by placing the dam at its
+      own outflow whatever the geometry says. Trigger: a client with
+      off-channel storage dams, or a Start plan where a dam's area is
+      many times its neighbours'.
 - [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
       gauge run). On 2 flat lower rivers (a Zululand floodplain, a wide
       Western Cape valley) GLO-30 has no channel within 2.5 km carrying the

@@ -111,7 +111,22 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    inside the boundary.
 3. **Each unit's point** is placed the same way. A dam *polygon* takes the
    most-drained cell inside it (or within the snap radius of it): its
-   spillway, near enough. A snapped point beside a channel with 100× its
+   spillway, near enough, when the river runs through the reservoir. An
+   outline that only clips a river (an off-channel dam filled by a pump or
+   a furrow, or a traced outline taking in a cell of the river beside it)
+   would give the dam the river's whole catchment, so `damOutflow`
+   (`start-9`, the hydrologist's review finding 9) follows the river's stem
+   up from that cell while it stays inside the outline: a stem twice as
+   long as the outline's longer side at most, carrying at least 100× the
+   most-drained outline cell off the stem (the guard's LARGER_FACTOR; twice
+   flagged hillside gullies beside a dam on GLO-30), means the river only clips it.
+   The dam then goes at that cell (its own footprint's outflow) and the
+   river is offered as a larger channel (`larger.outline`); **use that
+   channel** puts it on the river. Measured on GLO-30 (a 3 × 3-cell dam
+   beside three gauged rivers of 260–390 km², its outline taking in one
+   river cell): 241–385 km² before, the footprint's 0.01–0.14 km² after.
+   The geometry can't tell a long off-channel dam lying along the river
+   from a narrow reservoir on it, so that one is taken as on the river. A snapped point beside a channel with 100× its
    upstream area keeps the guard's finding in its `placement.larger` and a
    warning (the outlet's first, since every unit is placed against it);
    **use that channel** proposes again with `useLarger` for that point, and
