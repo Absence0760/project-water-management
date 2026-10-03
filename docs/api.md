@@ -2756,9 +2756,12 @@ what](./allocations.md#who-sees-what)).
   years with one). A capped source whose licence states months or a rate has
   the run series `allocation_left_surface` / `allocation_left_groundwater`
   (what is left of the year's volume, m³, start of the day) beside
-  `allocation_room_*`. Both are `null` on the days of a water year with none
-  of the unit's allocations of the source in force, which isn't capped
-  (engine ≥ 1.70.0; such a year is in neither `capReached` nor `limitBound`).
+  `allocation_room_*`. Both are `null` on a day none of the unit's
+  allocations of the source is in force, which isn't capped and whose use
+  doesn't count (engine ≥ 1.70.0; a year with no capped day is in neither
+  `capReached` nor `limitBound`). In a full-allocation run `scaled` leaves
+  out a water year with no allocation in force (its factor is 1, the
+  modelled demand; engine ≥ 1.70.0).
   The summary CSV adds an "Allocation cap by water year" block in a cap run.
 - `capYears` (the run comparison, `GET …/runs/:runId/allocations`): in a cap
   run, one `{ nodeId, waterSource, capReached, limitBound }` per unit and

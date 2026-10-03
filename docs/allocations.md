@@ -220,21 +220,27 @@ decides what the volumes do to a run
   groundwater use per water year stay within its volumes. The budget is the
   whole year's volume, so a unit may take it early; its boreholes cover what
   a capped surface can't, within the groundwater volume. A source with no
-  volume isn't capped, and nor is a water year in which none of a unit's
-  volumes of that source is in force (before its first licence starts,
-  after its last ends, or between two; engine ≥ 1.70.0, #90 Q24, provisional:
-  before, such a year was capped at 0). A demand-sized river off-take into a
+  volume isn't capped, and nor is a day on which none of a unit's volumes
+  of that source is in force (before its first licence starts, after its
+  last ends, or between two): the use on those days doesn't count against
+  the year's volume, which is prorated to the licences' days (a licence
+  from 1 September caps September at 30/365 of it; engine ≥ 1.70.0, #90 Q24,
+  provisional: before, a year with none in force was capped at 0 and a
+  licence's first year from 1 October). A demand-sized river off-take into a
   capped unit takes only the demand its cap still allows (engine ≥ 1.70.0,
   #90 Q28). What a cap does is visible: the run warns about the units it
-  leaves alone and, in one warning, the units and water years no licence was
-  in force in (check the licence dates), and the Allocations tab says the
-  run was capped. Both answers are provisional, pending the hydrologist
+  leaves alone and, in one warning, the units and days no licence was in
+  force on (check the licence dates), and the Allocations tab says the run
+  was capped. Both answers are provisional, pending the hydrologist
   ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72), §2.6a).
 - **Full allocation**: each unit's demand is scaled, year by year, to ask
   for exactly its volumes, keeping its seasonal shape: the river if every
   registered or licensed volume were taken in full (a registration is not an
   entitlement), the background of a cumulative
-  assessment (WP-3.11). A scenario can switch it on for one run
+  assessment (WP-3.11). A water year with no licence in force keeps the
+  unit's modelled demand (engine ≥ 1.70.0, #90 Q24, provisional; before, it
+  was scaled to 0), and the run warns, naming the units and years. A
+  scenario can switch it on for one run
   (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
 
 A scenario can also set, replace or remove a volume for one run

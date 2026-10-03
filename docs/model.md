@@ -2381,7 +2381,7 @@ question 20):
   sources stays order-free. Off-take water used is surface use, so the room
   is all the destination may use of it; a top-up rule adds its dam's room
   uncapped, since filling a dam is not use (§2.12a). Without a surface cap,
-  or in a water year none of its surface licences is in force in, sroom is
+  or on a day none of its surface licences is in force on, sroom is
   ∞ and the rule sizes to D as before. Before 1.70.0 it sized to D: the part
   the cap didn't allow arrived, flowed on below the destination, and its
   share of the conveyance losses left the catchment, so a capped unit's
@@ -7931,10 +7931,11 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
 
   ```
   budget(n,s,y) = Σ over n's allocations a of source s: V(a) × |L(y) ∩ [validFrom(a), validTo(a)]| ÷ |L(y)|
-                  ∞ (not capped) when no allocation a of n's of source s has L(y) ∩ [validFrom(a), validTo(a)] ≠ ∅   (engine ≥ 1.70.0)
+  capped(n,s,t) = some allocation a of n's of source s has validFrom(a) ≤ t ≤ validTo(a)      (engine ≥ 1.70.0)
   surface use   = G − GW          (the dam, the river pump and off-take water used; §2.7d–§2.7e, §2.6a)
   groundwater   = GW + GWd        (to the crop and into the dam)
-  room(t)       = MAX(0, budget(y) − use so far in y),  at the start of day t
+  room(t)       = MAX(0, budget(y) − use so far in y on capped days),  at the start of a capped day t
+                  ∞ (not capped; the day's use not counted) on a day that isn't capped     (engine ≥ 1.70.0)
   ```
 
   with *L(y)* the whole water year, not only its days inside the run, so a
@@ -7942,43 +7943,46 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   its volume early in the year and then go without (that is what a volume per
   year allows).
 
-  **A water year with no licence in force** (engine ≥ 1.70.0, issue #393,
-  #90 Q24; a provisional answer, pending the hydrologist): a water year in
-  which none of the unit's allocations of a source is in force on any of its
-  days (before the first starts, after the last ends, or between two) isn't
-  capped for that source, as a unit with no allocation of the source isn't.
-  One run warning names each such unit, source and water year (consecutive
-  years as a range), so the modeller sees that a licence wasn't in force and
-  can check its dates. An allocation of 0 m³ that is in force is a cap of 0,
-  not "no licence", and a licence in force for one day of a year makes that
-  year capped (at that day's share). Before 1.70.0 the formula gave such a
-  year a budget of 0, with no warning: a unit whose licence started partway
-  through a run took none of that source in the years before.
+  **A day with no licence in force** (engine ≥ 1.70.0, issue #393, #90 Q24;
+  a provisional answer, pending the hydrologist): on a day none of the
+  unit's allocations of a source is in force (before the first starts, after
+  the last ends, or between two) that source isn't capped, as a unit with no
+  allocation of the source isn't, and the day's use doesn't count against
+  the water year's budget. The budget stays prorated to the licences' days
+  in the year, so a licence from 1 September leaves October–August uncapped
+  and caps September at 30/365 of its volume, all of it left on 1 September;
+  one ending on 31 March caps October–March at its 182/365 share and leaves
+  April–September uncapped; a gap between two licences inside a year is
+  uncapped, and the two shares form one budget for the year's capped days,
+  which may be taken on either side of the gap (a unit may take its volume
+  early). An allocation of 0 m³ that is in force is a cap of 0, not "no
+  licence". One run warning names each unit, source and run of uncapped
+  days, so the modeller sees that a licence wasn't in force and can check
+  its dates. The room and left columns are blank on those days, and a year
+  with no capped day is in neither `capReached` nor `limitBound`.
+  Before 1.70.0 every day of a water year was capped: a year with none of
+  the source's allocations in force had a budget of 0, with no warning (a
+  unit whose licence started partway through a run took none of that source
+  in the years before), and in the year a licence starts or ends in its
+  prorated share was spent from 1 October, the use before its start
+  counted against it (a licence from 1 September capped October–August at
+  its 30/365 share).
   Why: under the National Water Act (Act 36 of 1998, Chapter 4 Part 3,
-  ss 32–35) an existing lawful water use (one
-  exercised in the two years before the Act took effect, s32(1)(a)) may
-  continue until a licence replaces it (s34(1)), and Schedule 1 use or a
-  general authorisation needs no licence at all, so use before a licence's
-  start date isn't necessarily unlawful; a licence's start date is often its
-  issue date, after years of the same use. The model can't tell lawful prior
-  use from unlawful, so it reads "no licence in force" as it reads "no
-  licence": the modelled demand, uncapped, with the warning. A modeller who
-  knows a unit didn't abstract before its licence models that with the
+  ss 32–35) an existing lawful water use (one exercised in the two years
+  before the Act took effect, s32(1)(a)) may continue until a licence
+  replaces it (s34(1)), and Schedule 1 use or a general authorisation needs
+  no licence at all, so use before a licence's start date isn't necessarily
+  unlawful; a licence's start date is often its issue date, after years of
+  the same use. The model can't tell lawful prior use from unlawful, so it
+  reads "no licence in force" as it reads "no licence": the modelled demand,
+  uncapped, with the warning. And a licence's volume a year binds only while
+  it is in force, so use outside its dates isn't taken from it. A modeller
+  who knows a unit didn't abstract before its licence models that with the
   unit's abstraction date (§2.7g, `abstractionFrom`), not with the cap. The
   other options were a budget of 0 (before 1.70.0) or the first licence's
-  volume.
-
-  *Open (the year a licence starts or ends in).* That year keeps the budget
-  above, prorated to the licence's days but spent from 1 October, so the use
-  before the start date counts against it: a licence from 1 September caps
-  the whole October–August before it at 30/365 of its volume, while one from
-  the next 1 October leaves that year uncapped. Capping only the days from
-  the first in-force day (the use before them not counted) would make the two
-  agree; the hydrologist decides, with the second half of engine-audit.md L2
-  (the same question for the licence's months and rate). A full allocation
-  likewise scales a unit's demand to 0 in a year with no licence in force,
-  while a unit with no allocation keeps its demand (below); whether Q24's
-  answer carries over to it is a separate decision.
+  volume. This settles the day-level half of engine-audit.md L2; whether a
+  licence's months of use and maximum rate should bind its out-of-month
+  days harder stays open there.
 
   On a day the unit's own sources give at most the room: off-take
   water used is MIN(what arrived, D, surface room) and the rest flows on (a
@@ -7994,8 +7998,8 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   the river. A source with no allocation isn't capped (a warning names the
   units without any, and a unit with boreholes but no groundwater volume).
   The run stores each capped source's room (`allocation_room_surface`,
-  `allocation_room_groundwater`, m³ at the start of the day; blank, null, in
-  a water year with none of its allocations in force, engine ≥ 1.70.0), and
+  `allocation_room_groundwater`, m³ at the start of the day; blank, null, on
+  a day with none of its allocations in force, engine ≥ 1.70.0), and
   `RunSummary.allocations` lists per source the water years the cap bound
   (`capReached`: use within 10⁻⁹ of the budget) and, per water year, the
   days the limit held use back (`limitBound`, engine ≥ 1.40.0; see the
@@ -8039,6 +8043,23 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   `scaled-no-demand-tail-year`). A tail that starts on 1 October starts a
   year with no historical days, a part year of its own over its tail days.
 
+  **A water year with no licence in force** (engine ≥ 1.70.0, issue #393,
+  #90 Q24; a provisional answer, pending the hydrologist): a year with none
+  of the unit's allocations (either source) in force on any of the days it
+  is scaled on keeps the unit's modelled demand, k = 1, as a unit with no
+  allocation does, and isn't listed in `scaled`; the same run warning as the
+  cap's names the units and water years ("no licence in force: modelled
+  demand used, uncapped"). The reasons are the cap's (above). Before 1.70.0
+  such a year was scaled to 0, so a full-allocation background showed a unit
+  taking nothing in the years before its licence. *Open:* a year a licence
+  starts or ends inside is still scaled as a whole to the volume over its
+  in-force days, the days outside it included (a licence from 1 April asks
+  the whole year for 183/365 of its volume), where the cap now leaves those
+  days uncapped; keeping the modelled demand on them would make the factor
+  vary within the year, which the outlook, warm start and tail rules assume
+  it doesn't. Pinned by `caps.licenceDates.e2e.test.ts`, for the
+  hydrologist.
+
 **Licence conditions** (the months of use, a maximum rate, conditions in
 words; migration 103) ride on the input. From engine 1.37.0 (issue #72) the
 **cap** applies the months and the rate, per source, each day:
@@ -8058,8 +8079,8 @@ room. The stored `allocation_room_*` columns are that day's room. An empty
 months list states none; a month or rate that doesn't read is dropped with a
 warning, keeping the volume, and a cap run warns about a rate that can't
 deliver its volume in its months (a rate of 0 by name: an export's blank
-field is often a 0). Two choices, **Needs hydrologist** (engine-audit.md
-L2, #90). First, the months and the rate limit only the draws (from the
+field is often a 0). One choice, **Needs hydrologist** (engine-audit.md
+L2, #90): the months and the rate limit only the draws (from the
 dam, the river pump and a water user's river take), never water going *into*
 the dam: the river inflow and diversion (K, M, O), off-take water sent to the
 dam (`XtoDam`) and transfers in stay unlimited. A licence rate usually names
@@ -8069,11 +8090,14 @@ winter-fill licence (months 4–9, 200 000 m³ a year) on a farm with a
 91 000 m³ of deficit, a spilling dam and about 0 m³ of modelled use, while
 filling the dam in summer stays unlimited: the water stays in the dam and
 can't be drawn in summer. For the impact downstream and on the Reserve that
-understates use, so it is not the conservative reading. Second, on a day no
-allocation of the source is in force the limit is none, while the year's
-budget still counts that licence's share: one for months 6–8 at 0.01 m³/s,
-valid October to March, puts half its volume in the budget, which the farm
-may take from April in any month at any rate. A full
+understates use, so it is not the conservative reading. (L2's other half,
+the days no allocation of the source is in force, was settled in engine
+1.70.0, provisionally: those days aren't capped at all and their use
+doesn't count, above. Before, the limit was none on them while the year's
+budget still counted the licence's share, so a licence for months 6–8 at
+0.01 m³/s valid October to March put half its volume in the budget, which
+the farm could take from April in any month at any rate; now April–September
+is uncapped and that half is the October–March days' budget.) A full
 allocation doesn't apply them (it scales to the volume, keeping the unit's
 own seasonal shape), and the conditions in words are never applied.
 
@@ -8130,12 +8154,13 @@ recomputed budget on 1 October, never below 0, and the day's use never above
 it; an `allocation_left_*` column exactly for a capped source with licence
 conditions (engine ≥ 1.40.0), within [0, the year's budget], starting at
 the budget on 1 October, falling by the day's use, with the room MIN(it, the
-limit); both columns blank (NaN) on exactly the days of a water year with
-none of the source's allocations in force, and numbers on every other day
-(engine ≥ 1.70.0); `limitBound` redone per day from those columns, the use, `demand` and
-`deficit` with `limitBoundKind` (an uncapped year never binds); a full
+limit); both columns blank (NaN) on exactly the days none of the source's
+allocations is in force, numbers on every other day, and what is left
+falling only by the use on the capped days (engine ≥ 1.70.0); `limitBound` redone per day from those columns, the use, `demand` and
+`deficit` with `limitBoundKind` (an uncapped day never binds); a full
 allocation's factor constant within a year and each scaled unit's demand over
-the run's days of a year equal to the volume registered over them; no mode
+the run's days of a year equal to the volume registered over them, or the
+factor 1 in a year with none in force on those days (engine ≥ 1.70.0); no mode
 column in a run of another mode; and `RunSummary.allocations` equal to
 `compareAllocations` of the run's own series. The day replays in the balance
 and workings checks (the user's river take, the farm's dam, river pump,
@@ -8153,7 +8178,7 @@ scenario run and the mode then caps or scales to it, the months of use and
 maximum rate an op sets included (engine ≥ 1.37.0); nothing in this section
 changes ([scenarios.md § Registered volumes](./scenarios.md)). A scenario
 that adds a licence starting partway through the run, or moves one's dates,
-leaves the years before it uncapped as above (engine ≥ 1.70.0).
+leaves the days before it uncapped as above (engine ≥ 1.70.0).
 
 ### 2.13 Firm yield and storage–yield (engine ≥ 0.34.0, roadmap WP-3.6)
 
