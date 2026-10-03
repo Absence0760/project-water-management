@@ -100,7 +100,7 @@
 			{#if record.auto}
 				{@const a = record.auto}
 				<div data-testid="fit-auto">
-					<dt>Picked by <HelpTip key="settings.calibrationRules" /></dt>
+					<dt>Picked by <HelpTip key="settings.calibrationRules" label="About how the fit was picked" /></dt>
 					<dd>
 						calibration rules revision {a.rules.revision} ({a.rules.signedOff ? `signed off by ${a.rules.signedOff.by} on ${a.rules.signedOff.on}` : 'draft, not signed off'}): kept
 						{a.cases[a.chosen]?.label ?? '–'} of {a.cases.length} fit{a.cases.length === 1 ? '' : 's'}, {a.cases.filter((c) => c.eligible).length} passing the filters
@@ -123,7 +123,7 @@
 					<dd>{arealRainText(resolveArealRain(record.forcing.arealRain, []))}</dd>
 				</div>
 				<div>
-					<dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt>
+					<dt>Pan coefficient <HelpTip key="settings.panCoefficient" label="About the fit’s pan coefficient" /></dt>
 					<dd>{monthsText(record.forcing.panCoefficient)}{recordedPe.kind === 'monthly' ? ' (not used by GR4J under a monthly PE)' : ''}</dd>
 				</div>
 				{#if record.forcing.panCoefficientSource}
@@ -182,7 +182,7 @@
 					<dd>{rainSourceText(record.forcing.rainSource ?? [])}</dd>
 				</div>
 				<div>
-					<dt>Zero-rain runs <HelpTip key="settings.zeroRainRuns" /></dt>
+					<dt>Zero-rain runs <HelpTip key="settings.zeroRainRuns" label="About the fit’s zero-rain runs" /></dt>
 					<dd>{record.forcing.zeroRainRuns ? describeZeroRain(record.forcing.zeroRainRuns) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
 				<!-- Engine ≥ 1.20.0 (issue #66): the data-quality limits that decide which rain is suspect; absent = the defaults. -->

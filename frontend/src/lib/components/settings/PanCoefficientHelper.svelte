@@ -52,7 +52,7 @@
 		</p>
 		<div class="row">
 			<fieldset class="plain">
-				<legend>Pan siting <HelpTip key="settings.panCoefficient" /></legend>
+				<legend>Pan siting <HelpTip key="settings.panCoefficient" label="About pan siting" /></legend>
 				{#each SITINGS as s (s)}
 					<label class="check">
 						<input type="radio" name="{uid}-siting" value={s} disabled={readonly} checked={form.siting === s} onchange={() => (form.siting = s)} />

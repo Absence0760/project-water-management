@@ -462,7 +462,7 @@
 				<FieldHistoryLine field="settings:effectiveRainStoreMm" />
 			</div>
 			<div class="field">
-				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" /></span>
+				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" label="About the evaporation factor of the dam" /></span>
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
 				<span class="hint" id="st-lef-h">Open-water evaporation from the hydrological units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
 				<FieldHistoryLine field="settings:lakeEvapFactor" />
@@ -493,7 +493,7 @@
 			{#if lakePresetError}<span class="err" role="status" data-testid="lake-preset-error">{lakePresetError}</span>{/if}
 		</div>
 		<div class="field lake-source">
-			<span class="lbl"><label for="st-lake-source">Dam evaporation factor source</label><HelpTip key="settings.lakeEvapFactorSource" /></span>
+			<span class="lbl"><label for="st-lake-source">Dam evaporation factor source</label><HelpTip key="settings.lakeEvapFactorSource" label="About where the dam evaporation factors come from" /></span>
 			<input
 				id="st-lake-source"
 				readonly={readonly}
@@ -810,7 +810,7 @@
 					</thead>
 					<tbody>
 						<tr>
-							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" /></th>
+							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" label="About the monthly pan coefficients" /></th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
 								<td><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
 							{/each}
@@ -820,7 +820,7 @@
 			</div>
 			<p class="hint muted">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
 			<div class="field pan-source">
-				<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" /></span>
+				<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" label="About where the pan coefficient comes from" /></span>
 				<input
 					id="st-pan-source"
 					readonly={readonly}
