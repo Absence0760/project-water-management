@@ -21,6 +21,11 @@ export const ReachChoiceBody = z.object({ dataset: z.string().min(1).max(100), r
 
 /** How close (m) another reach must be to make a click ambiguous: HydroRIVERS' cells are ~460 m, so a junction's lines pass within a cell of it. */
 export const CONFLUENCE_M = 200;
+/**
+ * How far (m) from a mapped junction a click on one of its rivers is kept on that river's side of the DEM's junction
+ * (junctionBeside); measured on clicks 100–1 000 m from 50 junctions (delineation-snapping.md § Beside a confluence).
+ */
+export const JUNCTION_SIDE_M = 1000;
 /** How different two reaches' areas must be to be different rivers to the click (rather than one river's two reaches). */
 export const DISTINCT_FACTOR = 1.5;
 
@@ -151,10 +156,42 @@ export function confluenceChoices(click: Position, near: readonly NearReachLine[
 	return withRole.sort((a, b) => order[a.role] - order[b.role] || b.upstreamKm2 - a.upstreamKm2).map((r) => ({ ...r, label: labelOf(r) }));
 }
 
+/** How close (m) two lines' ends must be to be one junction: HydroRIVERS' reaches share the junction's vertex exactly. */
+const SAME_POINT_M = 1;
+
+/**
+ * The confluence a click on a river lies beside, when it isn't at it: the
+ * nearest reach's lower or upper end, within JUNCTION_SIDE_M of the click,
+ * where at least two reaches flow in (one of them a tributary). Nothing is
+ * asked, since the click is on one river's line, but its outlet must stay on
+ * that river's side of the DEM's junction (junction.ts): matched by area
+ * alone, 350 m from a junction, a third of the clicks on the main river above
+ * it or the river below it landed on the other side, the tributary's share
+ * inside Lehner's 50 % (docs/design/delineation-snapping.md § Beside a
+ * confluence). The rivers are labelled against that junction, not the click.
+ * Pure.
+ */
+export function junctionBeside(click: Position, near: readonly NearReachLine[]): { rivers: { key: string; role: ConfluenceChoice['role']; km2: number }[]; chosenKey: string } | null {
+	const on = near[0];
+	if (!on) return null;
+	const keyOf = (c: { dataset: string; reachId: number }) => `${c.dataset}:${c.reachId}`;
+	let best: { d: number; rivers: { key: string; role: ConfluenceChoice['role']; km2: number }[] } | null = null;
+	for (const at of [on.end, on.start]) {
+		const d = pointDistM(click, at);
+		if (d > JUNCTION_SIDE_M || (best && best.d <= d)) continue;
+		const into = near.filter((r) => r.dataset === on.dataset && pointDistM(r.end, at) <= SAME_POINT_M);
+		const outOf = near.filter((r) => r.dataset === on.dataset && pointDistM(r.start, at) <= SAME_POINT_M);
+		if (into.length < 2) continue;
+		best = { d, rivers: [...into.map((r) => ({ key: keyOf(r), role: 'above' as const, km2: r.upstreamKm2 })), ...outOf.map((r) => ({ key: keyOf(r), role: 'below' as const, km2: r.upstreamKm2 }))] };
+	}
+	return best ? { rivers: best.rivers, chosenKey: keyOf(on) } : null;
+}
+
 /**
  * The reach to match a click to: the one the editor `chose` (re-read here,
  * never taken from the request; refused unless within MATCH_RADIUS_M), else
- * the nearest, unless the click is at a confluence (ConfluenceAmbiguity).
+ * the nearest, unless the click is at a confluence (ConfluenceAmbiguity); beside one, the nearest with that
+ * junction's rivers (junctionBeside).
  */
 export async function reachFor(
 	db: Db,
@@ -175,5 +212,6 @@ export async function reachFor(
 		};
 	}
 	if (choices) throw new ConfluenceAmbiguity(choices);
-	return { reach: near[0] ? plain(near[0]) : null, junction: null };
+	// Beside a confluence (not at it): the nearest reach, kept on its side of the DEM's junction.
+	return { reach: near[0] ? plain(near[0]) : null, junction: junctionBeside(click, near) };
 }

@@ -73,7 +73,7 @@ describe('Delineate', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(Math.abs(r.body.proposal.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(r.body.proposal.method).toMatch(/best matches reach 99000001 of snap-test/);
-		expect(r.body.proposal.methodVersion).toBe('delineate-4');
+		expect(r.body.proposal.methodVersion).toBe('delineate-7');
 	});
 
 	it('without a reach, refuses beside the larger channel and names it; keepPoint keeps the small catchment', async () => {
@@ -164,12 +164,43 @@ describe('at a confluence (issue #374’s follow-up)', () => {
 		expect(r.body.details.choices.map((c: { role: string }) => c.role)).toEqual(['below', 'above', 'above']);
 		const below = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: clon, lat: clat, from: 'outlet', reach: { dataset: DATASET, reachId: 99000012 } });
 		expect(below.status, JSON.stringify(below.body)).toBe(201);
-		expect(below.body.proposal.method).toMatch(/outlet placed at the DEM's own junction for reach 99000012 of snap-test, picked at a confluence/);
+		expect(below.body.proposal.method).toMatch(/outlet placed on the channel of reach 99000012 of snap-test nearest the point, on its side of the DEM's own junction .*the river picked at a confluence/);
 		// Below the junction it holds the tributary's water too: more than the main river above it.
 		const main = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: clon, lat: clat, from: 'outlet', reach: { dataset: DATASET, reachId: 99000011 } });
 		expect(main.status, JSON.stringify(main.body)).toBe(201);
-		expect(main.body.proposal.method).toMatch(/DEM's own junction for reach 99000011/);
+		expect(main.body.proposal.method).toMatch(/channel of reach 99000011 of snap-test nearest the point, on its side of the DEM's own junction/);
 		expect(below.body.proposal.areaM2).toBeGreaterThan(main.body.proposal.areaM2);
+	});
+
+	it('keeps a click ~500 m from a junction on its river’s side of the DEM’s junction without asking (issue #390, finding 5)', async () => {
+		await asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
+		const line = (id: number, km2: number, coords: [number, number][]) => {
+			const lons = coords.map((p) => p[0]);
+			const lats = coords.map((p) => p[1]);
+			return asOwner(
+				`INSERT INTO river_reference (dataset, reach_id, strahler, upstream_km2, geometry, min_lon, min_lat, max_lon, max_lat, source)
+				 VALUES ($1, $2, 2, $3, $4, $5, $6, $7, $8, 'test junction')`,
+				[DATASET, id, km2, JSON.stringify({ type: 'LineString', coordinates: coords }), Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]
+			);
+		};
+		// The main river and a tributary ending at CLICK, the river below starting there (HydroRIVERS shares the vertex).
+		await line(99000011, riverKm2 * 0.9, [at(DAM_CELL.x + 3, DAM_CELL.y + 20), CLICK]);
+		await line(99000013, 1.2, [at(DAM_CELL.x + 25, DAM_CELL.y + 45), CLICK]);
+		await line(99000012, riverKm2, [CLICK, at(DAM_CELL.x + 3, DAM_CELL.y + 100)]);
+		// Four cells (about 500 m) down the river below, and four up the main river: no other river within 200 m, so nothing is asked.
+		const down = at(DAM_CELL.x + 3, DAM_CELL.y + 64);
+		const up = at(DAM_CELL.x + 3, DAM_CELL.y + 56);
+		const below = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: down[0], lat: down[1], from: 'outlet' });
+		expect(below.status, JSON.stringify(below.body)).toBe(201);
+		expect(below.body.proposal.method).toMatch(/channel of reach 99000012 of snap-test nearest the point, on its side of the DEM's own junction .*the nearest river reach, within 1000 m of a mapped junction/);
+		const main = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: up[0], lat: up[1], from: 'outlet' });
+		expect(main.status, JSON.stringify(main.body)).toBe(201);
+		expect(main.body.proposal.method).toMatch(/channel of reach 99000011 of snap-test nearest the point/);
+		// The river below holds the tributary; the main river above doesn't; each stayed near its click.
+		expect(below.body.proposal.areaM2).toBeGreaterThan(main.body.proposal.areaM2);
+		expect(below.body.proposal.snapDistanceM).toBeLessThan(500); // the valley's channel runs 3 cells west of the lines
+		expect(main.body.proposal.snapDistanceM).toBeLessThan(500);
+		expect(below.body.check).toBeNull();
 	});
 
 	it('names the ambiguous click in Sub-catchments, and takes its chosen reach', async () => {
@@ -203,7 +234,7 @@ describe('Sub-catchments', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(200);
 		const [matched] = r.body.pieces;
 		expect(matched).toMatchObject({ click: 0, placedBy: 'matched', reach: { dataset: DATASET, reachId: 99000001 }, larger: null });
-		expect(r.body.methodVersion).toBe('start-6');
+		expect(r.body.methodVersion).toBe('start-8');
 		await asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
 		const plain = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, {
 			clicks: [

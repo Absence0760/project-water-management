@@ -11,7 +11,8 @@
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
 import { accumulate, d8, edgeMask, fill, touchesEdge, upstream, type Grid } from './flow.js';
-import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
+import { JUNCTION_SIDE_M } from './reach.js';
+import { JUNCTION_FLAG_M, JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
 import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place, type Placement } from './place.js';
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
 
@@ -19,9 +20,12 @@ import { simplifyRing, traceOutline, type Pt } from './outline.js';
 /**
  * delineate-2 (issue #374): the outlet matched to a nearby river reach's upstream area, and a much larger channel nearby refused unless kept;
  * delineate-3: at a confluence the river is asked for and its outlet put at the DEM's own junction; delineate-4 (issue #387): the snap radius
- * measured from the exact click to each cell's centre, so the snap distance never exceeds it (it counted whole cells from the clicked cell).
+ * measured from the exact click to each cell's centre, so the snap distance never exceeds it (it counted whole cells from the clicked cell);
+ * delineate-7 (issue #390, the hydrologist persona's findings 5 and 12): a click within JUNCTION_SIDE_M of a mapped junction kept on its
+ * river's side of the DEM's junction without asking, and every junction placement on the river's own channel nearest the click, not at
+ * the junction itself; one moved over JUNCTION_FLAG_M is flagged.
  */
-export const METHOD_VERSION = 'delineate-4';
+export const METHOD_VERSION = 'delineate-7';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */
@@ -109,6 +113,11 @@ export interface Delineation {
 	 * the result may be on another stream, or the reach's area is wrong. Shown with the proposal; not stored.
 	 */
 	unmatched?: { reach: string; reachKm2: number };
+	/**
+	 * Placed by a confluence's junction (junction.ts) more than JUNCTION_FLAG_M from the click: the DEM's rivers meet away from the
+	 * mapped junction, so keeping the click on its river's side moved it that far. Shown with the proposal; not stored.
+	 */
+	farJunction?: { reach: string; movedM: number };
 }
 
 const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? neg : pos}`;
@@ -279,6 +288,7 @@ export async function delineate(
 		const cellM = Math.round(cellSizeM);
 		return {
 			...(opts.expected && placed.how === 'snapped' ? { unmatched: { reach: opts.expected.reach, reachKm2: opts.expected.km2 } } : {}),
+			...(opts.expected && placed.how === 'junction' && snapDistanceM > JUNCTION_FLAG_M ? { farJunction: { reach: opts.expected.reach, movedM: snapDistanceM } } : {}),
 			click,
 			outlet: outletPos,
 			snapDistanceM,
@@ -293,7 +303,7 @@ export async function delineate(
 			method:
 				`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${z}); ` +
 				(placed.how === 'junction'
-					? `outlet placed at the DEM's own junction for ${opts.expected!.reach}, picked at a confluence (the tributary's channel matched by its area and followed downhill to where the main river joins it); `
+					? `outlet placed on the channel of ${opts.expected!.reach} nearest the point, on its side of the DEM's own junction (the tributary's channel matched by its area and followed downhill to where the main river joins it), ${opts.expected!.chosen ? 'the river picked at a confluence' : `the nearest river reach, within ${JUNCTION_SIDE_M} m of a mapped junction`}; `
 					: placed.how === 'matched'
 					? `outlet placed on the cell within ${opts.expected?.chosen ? JUNCTION_MATCH_M : MATCH_RADIUS_M} m whose upstream area best matches ${opts.expected!.reach} (${Math.round(opts.expected!.km2)} km²; Lehner 2012: area accordance at least ${MIN_ACCORDANCE} %, ranked by area and distance); `
 					: `outlet snapped to the most-accumulating cell within ${snapRadiusM} m (a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m is offered instead, unless the point is kept); `) +

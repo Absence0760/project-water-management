@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confluenceChoices, ConfluenceAmbiguity, CONFLUENCE_M, lineDistM, type NearReachLine } from './reach.js';
+import { confluenceChoices, ConfluenceAmbiguity, CONFLUENCE_M, junctionBeside, JUNCTION_SIDE_M, lineDistM, type NearReachLine } from './reach.js';
 
 // The junction behind issue #374's follow-up, rebuilt: a gauge 32 m from a
 // 67 km² tributary, 92 m from the 422 km² river above the junction, 102 m from
@@ -53,5 +53,50 @@ describe('confluenceChoices', () => {
 			[1, 'along', 'the river along the point'],
 			[2, 'above', 'the river above the junction']
 		]);
+	});
+});
+
+describe('junctionBeside', () => {
+	// The same junction; a gauge on one of its rivers, too far from it to be asked.
+	const lines = {
+		trib: [m(2000, 1500), m(800, 600), J] as [number, number][],
+		main: [m(-1500, 2500), m(-500, 900), J] as [number, number][],
+		below: [J, m(1500, -1500), m(2500, -2500)] as [number, number][]
+	};
+	const nearOf = (click: [number, number]) =>
+		[reach(11491129, 66.9, lines.trib, click), reach(11491128, 421.5, lines.main, click), reach(11491355, 497.3, lines.below, click)].sort((a, b) => a.distanceM - b.distanceM);
+	const rivers = [
+		{ key: 'HydroRIVERS-v10:11491129', role: 'above', km2: 66.9 },
+		{ key: 'HydroRIVERS-v10:11491128', role: 'above', km2: 421.5 },
+		{ key: 'HydroRIVERS-v10:11491355', role: 'below', km2: 497.3 }
+	];
+
+	it('gives a click 350 m up the main river that junction’s rivers, the main river chosen, without asking', () => {
+		// 350 m along the main river's last segment from the junction (it runs 500 m W, 900 m N).
+		const click = m(-170, 306);
+		const near = nearOf(click);
+		expect(confluenceChoices(click, near)).toBeNull();
+		const b = junctionBeside(click, near)!;
+		expect(b.chosenKey).toBe('HydroRIVERS-v10:11491128');
+		expect(b.rivers).toEqual(expect.arrayContaining(rivers));
+		expect(b.rivers).toHaveLength(3);
+	});
+
+	it('gives a click 350 m down the river below that junction, the river below chosen', () => {
+		const click = m(247, -247);
+		const b = junctionBeside(click, nearOf(click))!;
+		expect(b.chosenKey).toBe('HydroRIVERS-v10:11491355');
+		expect(b.rivers).toEqual(expect.arrayContaining(rivers));
+	});
+
+	it('gives nothing past JUNCTION_SIDE_M, or where the nearest reach’s ends meet no other river', () => {
+		const far = m(-1400, 2330); // on the main river, ~1.5 km up its line from the junction
+		expect(Math.hypot(1400, 2330)).toBeGreaterThan(JUNCTION_SIDE_M);
+		expect(junctionBeside(far, nearOf(far))).toBeNull();
+		// One river's two reaches meeting: one flows in, so no junction.
+		const click = m(-200, 300);
+		const one = [reach(1, 420, [m(-2000, 2000), J], click), reach(2, 431, [J, m(2000, -2000)], click)].sort((a, b) => a.distanceM - b.distanceM);
+		expect(junctionBeside(click, one)).toBeNull();
+		expect(junctionBeside(click, [])).toBeNull();
 	});
 });

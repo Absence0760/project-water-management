@@ -1128,12 +1128,22 @@ to a point on a river. The design, the method and its accuracy are in
   point**. **At a confluence** (reaches within 200 m whose areas differ by
   1.5×) the server doesn't choose: the sheet asks which river ("The river
   below the junction, 497 km²", "The main river above the junction, 422
-  km²", "The tributary above the junction, 67 km²"), and the outlet goes at
-  the DEM's own junction for the one picked (`junction.ts`: the tributary
-  followed downhill to where the main river joins it), else on the channel
-  within 2.5 km matching its area. Measured on 60 real junctions:
+  km²", "The tributary above the junction, 67 km²"), and the outlet goes on
+  the picked river's side of the DEM's own junction (`junction.ts`: the
+  tributary followed downhill to where the main river joins it), on that
+  river's channel nearest the point, else on the channel within 2.5 km
+  matching its area. Measured on 60 real junctions:
   [design/delineation-snapping.md § Confluences](./design/delineation-snapping.md#confluences-third-experiment).
-  It says how far the point moved.
+  **Beside a confluence** (a mapped junction of the nearest reach within
+  1 km, but no other river within 200 m) nothing is asked, and the outlet
+  is kept on the nearest reach's side of the DEM's junction the same way
+  (`delineate-7` / `start-8`): matched by area alone, a third of gauges a
+  few hundred metres up the main river or down the river below landed on
+  the other side ([§ Beside a
+  confluence](./design/delineation-snapping.md#beside-a-confluence-fifth-experiment)).
+  It says how far the point moved; a junction placement that moved it
+  more than 500 m adds a note that the elevation model's rivers meet away
+  from the mapped junction, to check the outlet against the map.
 - **What it does.** On the API, never in the engine: reads the DEM around
   the point (a 1 024-cell window, about 34 km, grown to 2 048 and 3 072
   cells while the catchment reaches its edge), fills depressions
