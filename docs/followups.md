@@ -200,8 +200,8 @@ one line since migration 189 (api.md § Model data). Left, found on the way:
       `Name`, the GeoJSON upload's `featureName`, the river loader) still
       takes line breaks and control characters, and the Map draws them as
       labels. Start and Divide already propose such a name on one line
-      (`cleanName`). Durable fix: the same `hasNameControlChars` refusal on
-      the feature routes, `cleanName` in the GeoJSON and river readers (bulk
+      (`oneLineName`). Durable fix: the same `hasNameControlChars` refusal on
+      the feature routes, `oneLineName` in the GeoJSON and river readers (bulk
       paths), and a migration cleaning stored feature names. Trigger: next
       work on the map's feature routes.
 - [ ] **A scenario's borehole may have a blank name.** The engine's

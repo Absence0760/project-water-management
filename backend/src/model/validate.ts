@@ -10,7 +10,7 @@ const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date (YYYY-MM-
  * A name or label: trimmed, `min` to `max` characters, one line (issue #385):
  * no line break, tab or other control character (the engine's
  * NAME_CONTROL_CHARS), which the schematic, map labels and tables would draw
- * broken. The workbook importers turn those into spaces (cleanName).
+ * broken. The workbook importers turn those into spaces (oneLineName).
  */
 export const nameText = (min: number, max: number) => z.string().trim().min(min).max(max).refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE);
 
