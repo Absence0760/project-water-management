@@ -13,13 +13,14 @@
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
 import { DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
+import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
 import { place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 
 /** Bump when the method changes what a proposal holds; recorded on every proposal. */
-/** start-3 (issue #374): a point with a nearby river reach matched to its upstream area; the rest snapped, with a much larger channel nearby named. */
-export const START_METHOD_VERSION = 'start-3';
+/** start-3 (issue #374): a point with a nearby river reach matched to its upstream area; the rest snapped, with a much larger channel nearby named; start-4: a click at a confluence asks for the river and goes at the DEM's own junction. */
+export const START_METHOD_VERSION = 'start-4';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -35,6 +36,10 @@ export interface UnitPoint {
 	geometry: Geometry;
 	/** A point's expected upstream area (km², a nearby river reach's): the point is matched to it (place.ts, issue #374). */
 	expectedKm2?: number | null;
+	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M. */
+	chosen?: boolean;
+	/** At a confluence: its rivers and the one picked; the point goes on the DEM's own junction (junction.ts), else by area. */
+	junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,9 +181,11 @@ export interface UnitPiece {
 	 */
 	totalAreaM2: number;
 	/** How the point was put on the channel (place.ts): matched to its expected area, or snapped to the most-drained cell near it. */
-	placedBy?: 'matched' | 'snapped';
+	placedBy?: 'matched' | 'snapped' | 'junction';
 	/** Snapped beside a much larger channel: that channel, to offer (the point stays where it snapped). */
 	larger?: LargerChannel;
+	/** It had an expected area (a nearby river reach) but no channel near it matched (place.ts): it may be on another stream. */
+	unmatched?: boolean;
 	/**
 	 * Only with `outlet: 'lowest'`: its catchment runs past the routed window (or the DEM's data), so its piece is not whole.
 	 * Its outline is null and its areas count only the cells inside the window; the water from above it enters as an inflow.
@@ -188,7 +195,7 @@ export interface UnitPiece {
 
 export interface Subcatchments {
 	/** `id`: with `outlet: 'lowest'`, the point taken as the outlet (it owns the rest, and is not among the units). */
-	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string; placedBy?: 'matched' | 'snapped'; larger?: LargerChannel };
+	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string; placedBy?: 'matched' | 'snapped' | 'junction'; larger?: LargerChannel; unmatched?: boolean };
 	/** The whole catchment above the outlet: its outline and geodesic area. */
 	catchment: { geometry: Extract<Geometry, { type: 'Polygon' }>; areaM2: number };
 	units: UnitPiece[];
@@ -318,11 +325,17 @@ export async function delineateUnits(
 		const acc = accumulate(nCells, nCells, dir);
 		const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
 		/** Each point's placement, by its key, for the pieces' facts. */
-		const how = new Map<string, { placedBy: 'matched' | 'snapped'; larger?: LargerChannel }>();
-		const snapAt = (p: Position, expectedKm2?: number | null, key?: string): number | null => {
+		const how = new Map<string, { placedBy: 'matched' | 'snapped' | 'junction'; larger?: LargerChannel; unmatched?: boolean }>();
+		const snapAt = (p: Position, expectedKm2?: number | null, key?: string, pt?: UnitPoint): number | null => {
 			const [x, y] = toGrid(p);
 			if (x < 0 || y < 0 || x >= nCells || y >= nCells) return null;
-			const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, x, y, { snapRadiusM, expectedKm2 });
+			const g0 = { nx: nCells, ny: nCells, acc, edge, cellSizeM };
+			const atJunction = pt?.junction ? junctionOutlets({ ...g0, dir }, x, y, pt.junction.rivers, snapRadiusM)?.get(pt.junction.chosenKey) : undefined;
+			if (atJunction !== undefined) {
+				if (key !== undefined) how.set(key, { placedBy: 'junction' });
+				return atJunction;
+			}
+			const placed = place(g0, x, y, { snapRadiusM, expectedKm2, matchRadiusM: pt?.chosen ? JUNCTION_MATCH_M : undefined });
 			if (!placed) return null;
 			if (key !== undefined) {
 				const larger = placed.larger
@@ -331,7 +344,7 @@ export async function delineateUnits(
 							return { at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]), distanceM: placed.larger.distanceM, km2: km2(acc[placed.larger.cell]!), pointKm2: km2(acc[placed.cell]!) };
 						})()
 					: undefined;
-				how.set(key, { placedBy: placed.how, ...(larger ? { larger } : {}) });
+				how.set(key, { placedBy: placed.how, ...(larger ? { larger } : {}), ...(expectedKm2 && placed.how === 'snapped' ? { unmatched: true } : {}) });
 			}
 			return placed.cell;
 		};
@@ -353,7 +366,7 @@ export async function delineateUnits(
 			outlet = -1;
 			for (const p of req.points) {
 				if (p.geometry.type !== 'Point') continue;
-				const c = snapAt(p.geometry.coordinates, p.expectedKm2, p.id);
+				const c = snapAt(p.geometry.coordinates, p.expectedKm2, p.id, p);
 				if (c === null || (outlet >= 0 && acc[c]! <= acc[outlet]!)) continue;
 				outlet = c;
 				outletId = p.id;
@@ -406,7 +419,7 @@ export async function delineateUnits(
 			let cell: number | null = null;
 			let moved: number | null = null;
 			if (p.geometry.type === 'Point') {
-				cell = snapAt(p.geometry.coordinates, p.expectedKm2, p.id);
+				cell = snapAt(p.geometry.coordinates, p.expectedKm2, p.id, p);
 				if (cell !== null) moved = movedM(p.geometry.coordinates, cell);
 			} else {
 				const rings = polygonRings(p.geometry);

@@ -3766,6 +3766,15 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       outlet is a gauge node in the order by default, partitioning like a
       water user; a division can add an unlinked gauge as a new gauge node
       (design/start-from-map.md § Gauges as nodes).
+- [ ] **The elevation model's channels from the tiles pipeline** (issue
+      #374 item 3, maps.md § The elevation model's channels): today each
+      0.2° tile is routed on request and kept in an in-memory cache, which
+      on Lambda lasts one instance, so a production user pays a few seconds
+      and an elevation-model attempt per tile per cold instance. Durable
+      path: build the channel lines once per DEM in the tiles pipeline (a
+      `pnpm dev:tiles:channels` step and the production tiles bucket, as
+      vector PMTiles) and draw them like the basemap. Trigger: the first
+      production deploy with `delineation_dem = true`.
 - [ ] **Delineation of catchments larger than about 100 km across**
       (design/delineation.md § Where it runs): the API refuses rather than
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job

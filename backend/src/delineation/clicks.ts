@@ -27,7 +27,7 @@ import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
-import { nearestReach, type NearReach } from './reach.js';
+import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach } from './reach.js';
 import { configuredDem } from './dem.js';
 import { delineateUnits, type Subcatchments } from './subcatchments.js';
 
@@ -36,7 +36,8 @@ export const CLICKS_MAX = 50;
 
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);
-const Click = z.object({ lon: Lon, lat: Lat }).strict();
+/** A click; `reach` is the river reach it means at a confluence (one of a 422 `confluence`'s choices). */
+const Click = z.object({ lon: Lon, lat: Lat, reach: ReachChoiceBody.optional() }).strict();
 export const ClicksBody = z.object({ clicks: z.array(Click).min(1).max(CLICKS_MAX) }).strict();
 
 type Poly = Extract<Geometry, { type: 'Polygon' }>;
@@ -62,11 +63,13 @@ export interface ClickPiece {
 	 */
 	open: boolean;
 	/** How the click was put on the channel: matched to its nearby river reach's upstream area, or snapped to the most-drained cell near it. */
-	placedBy: 'matched' | 'snapped';
+	placedBy: 'matched' | 'snapped' | 'junction';
 	/** The river reach it was matched to. */
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead (the click stays where it snapped). */
 	larger: LargerChannel | null;
+	/** A river reach was near but no channel near the click matched its area: the reach (it may be on another stream). */
+	unmatched: { dataset: string; reachId: number; upstreamKm2: number } | null;
 }
 
 export interface ClickPieces {
@@ -101,8 +104,9 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			totalAreaM2: r.catchment.areaM2,
 			open: !!r.rest.open,
 			placedBy: r.outlet.placedBy ?? 'snapped',
-			reach: r.outlet.placedBy === 'matched' ? reachOf(lowest) : null,
-			larger: r.outlet.larger ?? null
+			reach: r.outlet.placedBy === 'matched' || r.outlet.placedBy === 'junction' ? reachOf(lowest) : null,
+			larger: r.outlet.larger ?? null,
+			unmatched: r.outlet.unmatched ? reachOf(lowest) : null
 		},
 		...r.units.map((u) => ({
 			click: Number(u.id),
@@ -114,8 +118,9 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			totalAreaM2: u.totalAreaM2,
 			open: !!u.open,
 			placedBy: u.placedBy ?? ('snapped' as const),
-			reach: u.placedBy === 'matched' ? reachOf(Number(u.id)) : null,
-			larger: u.larger ?? null
+			reach: u.placedBy === 'matched' || u.placedBy === 'junction' ? reachOf(Number(u.id)) : null,
+			larger: u.larger ?? null,
+			unmatched: u.unmatched ? reachOf(Number(u.id)) : null
 		}))
 	];
 	// A total is known only when nothing above the click is open: the open pieces' areas count only what was routed.
@@ -150,13 +155,25 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 export const pieceName = (click: number) => `Sub-catchment ${click + 1}`;
 
 /** Count the attempt (editor only), route the clicks, free the attempt. Refusals are 422 with the sentence. */
-async function route(userId: string, projectId: string, clicks: readonly { lon: number; lat: number }[]): Promise<ClickPieces> {
-	const { attempt, reaches } = await withUser(userId, async (db) => {
+async function route(userId: string, projectId: string, clicks: readonly z.infer<typeof Click>[]): Promise<ClickPieces> {
+	const { attempt, reaches, junctions } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
 		// Each click's nearest river reach, for matching it to the reach's upstream area (issue #374).
-		const reaches = [];
-		for (const c of clicks) reaches.push(await nearestReach(db, [c.lon, c.lat]));
-		return { attempt: await beginDemAttempt(db, 'delineation'), reaches };
+		const reaches: (NearReach | null)[] = [];
+		const junctions: (Awaited<ReturnType<typeof reachFor>>['junction'])[] = [];
+		for (const [i, c] of clicks.entries()) {
+			try {
+				const f = await reachFor(db, [c.lon, c.lat], c.reach ?? null);
+				reaches.push(f.reach);
+				junctions.push(f.junction);
+			} catch (err) {
+				// At a confluence the editor picks the river (the click's reach), naming the click so the client asks about that one.
+				if (err instanceof ConfluenceAmbiguity) throw new ApiError(422, `Click ${i + 1}: ${err.message}`, { reason: 'confluence', click: i, choices: err.choices });
+				if (err instanceof ReachNotNear) throw new ApiError(400, `Click ${i + 1}: ${err.message}`);
+				throw err;
+			}
+		}
+		return { attempt: await beginDemAttempt(db, 'delineation'), reaches, junctions };
 	});
 	try {
 		const dem = configuredDem();
@@ -165,7 +182,7 @@ async function route(userId: string, projectId: string, clicks: readonly { lon: 
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null }))
+				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
 			});
 			return toClickPieces(r, reaches);
 		} catch (err) {

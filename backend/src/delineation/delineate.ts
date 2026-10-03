@@ -11,12 +11,13 @@
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
 import { accumulate, d8, edgeMask, fill, touchesEdge, upstream, type Grid } from './flow.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place } from './place.js';
+import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
+import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place, type Placement } from './place.js';
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
 
 /** Bump when the method changes what a click proposes; recorded on every proposal. */
-/** delineate-2 (issue #374): the outlet matched to a nearby river reach's upstream area, and a much larger channel nearby refused unless kept. */
-export const METHOD_VERSION = 'delineate-2';
+/** delineate-2 (issue #374): the outlet matched to a nearby river reach's upstream area, and a much larger channel nearby refused unless kept; delineate-3: at a confluence the river is asked for and its outlet put at the DEM's own junction. */
+export const METHOD_VERSION = 'delineate-3';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */
@@ -89,6 +90,11 @@ export interface Delineation {
 	dataset: DemInfo;
 	method: string;
 	methodVersion: string;
+	/**
+	 * A river reach was within reach of the click but no channel near it matched its upstream area (place.ts):
+	 * the result may be on another stream, or the reach's area is wrong. Shown with the proposal; not stored.
+	 */
+	unmatched?: { reach: string; reachKm2: number };
 }
 
 export const worldPx = (z: number, size: number) => 2 ** z * size;
@@ -156,8 +162,13 @@ export async function delineate(
 		snapRadiusM?: number;
 		budgetMs?: number;
 		now?: () => number;
-		/** The upstream area (km²) a river reach near the click gives: the outlet is then matched to it (place.ts), and `reach` names it in the method. */
-		expected?: { km2: number; reach: string } | null;
+		/**
+		 * The upstream area (km²) a river reach near the click gives: the outlet is then matched to it (place.ts), and `reach` names it in the
+		 * method; `chosen`: the editor picked it at a confluence, so it is looked for over JUNCTION_MATCH_M rather than MATCH_RADIUS_M.
+		 */
+		expected?: { km2: number; reach: string; chosen?: boolean } | null;
+		/** At a confluence: its rivers and the one picked; the outlet goes on the DEM's own junction (junction.ts), else by area. */
+		junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 		/** Keep the point even beside a much larger channel (otherwise refused with `larger_channel`). */
 		keepPoint?: boolean;
 	} = {}
@@ -193,7 +204,12 @@ export async function delineate(
 		fill(grid, edge);
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
-		const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, gx - x0, gy - y0, { snapRadiusM, expectedKm2: opts.expected?.km2 });
+		const grid0 = { nx: nCells, ny: nCells, acc, edge, cellSizeM };
+		const atJunction = opts.junction ? junctionOutlets({ ...grid0, dir }, gx - x0, gy - y0, opts.junction.rivers, snapRadiusM)?.get(opts.junction.chosenKey) : undefined;
+		const placed: (Omit<Placement, 'how'> & { how: Placement['how'] | 'junction' }) | null =
+			atJunction !== undefined
+				? { cell: atJunction, how: 'junction', larger: null }
+				: place(grid0, gx - x0, gy - y0, { snapRadiusM, expectedKm2: opts.expected?.km2, matchRadiusM: opts.expected?.chosen ? JUNCTION_MATCH_M : undefined });
 		if (placed === null) throw new DelineationRefused('no_data', 'The elevation model has no data around that point.');
 		if (placed.larger && !opts.keepPoint) {
 			const lx = placed.larger.cell % nCells;
@@ -239,6 +255,7 @@ export async function delineate(
 		const snapDistanceM = Math.hypot(x0 + ox + 0.5 - gx, y0 + oy + 0.5 - gy) * cellSizeM;
 		const cellM = Math.round(cellSizeM);
 		return {
+			...(opts.expected && placed.how === 'snapped' ? { unmatched: { reach: opts.expected.reach, reachKm2: opts.expected.km2 } } : {}),
 			click,
 			outlet: outletPos,
 			snapDistanceM,
@@ -252,8 +269,10 @@ export async function delineate(
 			dataset: info,
 			method:
 				`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${z}); ` +
-				(placed.how === 'matched'
-					? `outlet placed on the cell within ${MATCH_RADIUS_M} m whose upstream area best matches ${opts.expected!.reach} (${Math.round(opts.expected!.km2)} km²; Lehner 2012: area accordance at least ${MIN_ACCORDANCE} %, ranked by area and distance); `
+				(placed.how === 'junction'
+					? `outlet placed at the DEM's own junction for ${opts.expected!.reach}, picked at a confluence (the tributary's channel matched by its area and followed downhill to where the main river joins it); `
+					: placed.how === 'matched'
+					? `outlet placed on the cell within ${opts.expected?.chosen ? JUNCTION_MATCH_M : MATCH_RADIUS_M} m whose upstream area best matches ${opts.expected!.reach} (${Math.round(opts.expected!.km2)} km²; Lehner 2012: area accordance at least ${MIN_ACCORDANCE} %, ranked by area and distance); `
 					: `outlet snapped to the most-accumulating cell within ${snapRadiusM} m (a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m is offered instead, unless the point is kept); `) +
 				`outline traced on the cells’ edges and simplified (Douglas–Peucker, about ${cellM} m)`,
 			methodVersion: METHOD_VERSION

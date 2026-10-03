@@ -47,7 +47,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(page.getByTestId('map-no-boundary').getByRole('button', { name: 'Draw the boundary' })).toBeVisible();
 	await expect(page.getByTestId('map-no-boundary').getByRole('link', { name: 'upload it as a GeoJSON file' })).toBeVisible();
 	await expect(page.getByTestId('map-no-tiles')).toBeVisible();
-	await expect(header(page).getByRole('button', { name: 'Show everything' })).toHaveCount(0);
+	await expect(page.getByTestId('map-show-everything')).toHaveCount(0);
 
 	// Upload opens a sheet in the URL; a projected file is refused with its problem per feature, and the sheet stays.
 	await header(page).getByRole('link', { name: 'Upload GeoJSON' }).click();
@@ -246,7 +246,7 @@ test('a viewer sees the map, its sidebar row, the list, the card and Every featu
 	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Map', exact: true }).click();
 	await expect(v.locator('.map-page[data-ready]')).toBeVisible();
 	await expect(row(v, 'Synthetic catchment')).toBeVisible();
-	await expect(header(v).getByRole('button', { name: 'Show everything' })).toBeVisible();
+	await expect(v.getByTestId('map-show-everything')).toBeVisible();
 	await expect(header(v).getByRole('link', { name: 'Upload GeoJSON' })).toHaveCount(0);
 	await expect(header(v).getByRole('button', { name: 'Place a point' })).toHaveCount(0);
 	await expect(header(v).getByRole('button', { name: 'Draw a shape' })).toHaveCount(0);

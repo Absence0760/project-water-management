@@ -3133,12 +3133,37 @@ export interface ClickPiece {
 	totalAreaM2: number | null;
 	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
 	open: boolean;
-	/** matched: put on the channel whose upstream area matches its nearby river reach's; snapped: on the most-drained cell near it. */
-	placedBy: 'matched' | 'snapped';
+	/** matched: put on the channel whose upstream area matches its nearby river reach's; junction: at the DEM's own junction for the river picked at a confluence; snapped: on the most-drained cell near it. */
+	placedBy: 'matched' | 'snapped' | 'junction';
 	/** The river reach it was matched to. */
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead. */
 	larger: LargerChannel | null;
+	/** A river reach was near but no channel near the click matched its area: that reach (the click may be on another stream). */
+	unmatched: { dataset: string; reachId: number; upstreamKm2: number } | null;
+}
+
+/** GET …/map/channels?tile=i,j: one tile of the elevation model's channels (cells with ≥ minKm2 draining through them). */
+export interface ChannelTileAnswer {
+	tile: [number, number];
+	bounds: [number, number, number, number];
+	minKm2: number;
+	lines: { coordinates: MapPosition[]; km2: number }[];
+	cellSizeM: number;
+	dataset: { label: string; fingerprint: string };
+	cached: boolean;
+}
+
+/** One river at a confluence (a 422 `confluence`'s `details.choices`): pick it by sending its dataset and reach id back as `reach`. */
+export interface ConfluenceChoice {
+	dataset: string;
+	reachId: number;
+	upstreamKm2: number;
+	/** The point's distance from its line (m). */
+	distanceM: number;
+	role: 'above' | 'below' | 'along';
+	/** In words: "the river below the junction", "the tributary above the junction", … */
+	label: string;
 }
 
 /** A much larger channel near a point (a 422 `larger_channel`'s `details.larger`, or a click's piece). */
