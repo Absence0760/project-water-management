@@ -891,6 +891,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const left = new Float64Array(transfers.length);
 	const given = new Float64Array(transfers.length);
 	const act = new Int32Array(transfers.length);
+	// The rounds of proportional rationing (engine ≥ 1.70.0): what each rule still asks, each receiver's room
+	// left and whether it is full, and what each source has given this priority so far.
+	const rem = new Float64Array(transfers.length);
+	const roomLeft = new Float64Array(nodes.length);
+	const roomFull = new Uint8Array(nodes.length);
+	const srcTaken = new Float64Array(nodes.length);
+	const levelDests = levels.map((level) => Int32Array.from(new Set(level.map((k) => transfers[k]!.to))));
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
 	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, Math.min(days, plan.historyDays ?? days)));
@@ -957,7 +964,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// engine ≥ 1.31.0, issue #200) + a fixed release's floor (engine ≥
 		// 1.29.0) − scheduled into it today, so a transfer never pumps into a
 		// full dam only to spill, and one to a farm with no dam still serves its
-		// demand (audit N4). The dam's own gains and losses today (N2) count:
+		// demand (audit N4). (Engine ≥ 1.70.0: the fixed release in full, and the rules of a priority rationed
+		// in proportion in rounds, below.) The dam's own gains and losses today (N2) count:
 		// they follow yesterday's storage alone, so they are known before the
 		// transfer, and a room that ignored them left a leaking dam short of
 		// its demand by a fixed volume while the source had water to spare,
@@ -973,29 +981,19 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const prevQ = (n: number) => startStorage(n, t);
 		for (let li = 0; li < levels.length; li++) {
 			const level = levels[li]!;
-			// 1. Each active rule's own limit: its daily cap (engine ≥ 1.70.0, issue #90 Q25: not capped at its
-			// source's free water, which step 3's bands bound, so a rule split into several gets the same
-			// total as the one rule: proportional rationing). A rule with no rate this month is not active
-			// (engine 1.36.0).
-			for (const k of level) {
-				const tr = transfers[k]!;
-				want[k] = tr.activeMonth[month[t]!] && tr.maxDailyM3[month[t]!]! > 0 ? tr.maxDailyM3[month[t]!]! : 0;
-			}
-			// 2. Rules into one destination share its room, pro rata to their limits.
-			sumBy.fill(0);
-			for (const k of level) sumBy[transfers[k]!.to]! += want[k]!;
-			for (const k of level) {
-				const tr = transfers[k]!;
-				const total = sumBy[tr.to]!;
-				const dst = nodes[tr.to]!;
-				const q = prevQ(tr.to);
+			// Each receiver's room today, once per destination of this priority.
+			const dests = levelDests[li]!;
+			for (let a = 0; a < dests.length; a++) {
+				const d = dests[a]!;
+				const dst = nodes[d]!;
+				const q = prevQ(d);
 				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
 				// After the drought restriction's cut (engine ≥ 1.54.0), when the rule is on.
 				// A unit with river abstractions (engine ≥ 1.65.0): its dam side's demand only, as the dam serves no other.
-				const dstD = dst.river ? damD![tr.to]! : rD ? rD[tr.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
+				const dstD = dst.river ? damD![d]! : rD ? rD[d]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const qStart = q + loss.Pd - loss.E - loss.Sp;
-				const draw = damDrawBound(dst, dstD, bhUsed[tr.to]!, allocUsed[tr.to]!, t);
+				const draw = damDrawBound(dst, dstD, bhUsed[d]!, allocUsed[d]!, t);
 				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.29.0): the room
 				// counts MIN(amount, outlet) in full (engine ≥ 1.70.0, issue #90 Q26; ./dam.ts fixedReleaseRoom).
 				// The water moved in arrives before the release, so either the release is all of it and its
@@ -1004,57 +1002,100 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// in-service date); a dam with no capacity today is no dam: it releases nothing.
 				const kd = capacityK(dst, t);
 				const rel = dst.damCapacityM3 * kd > 0 ? fixedReleaseRoom(dst.release, month[t]!) : 0;
-				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[tr.to]!);
-				if (total > room) want[k] = (want[k]! * room) / total;
+				roomLeft[d] = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[d]!);
+				roomFull[d] = roomLeft[d]! > 0 ? 0 : 1;
 			}
-			// 3. Rules from one source share its free water, each only above its own reserve (engine
-			// 1.36.0). The water between two successive reserves (highest first; the top band starts
-			// at the storage left to this priority) is shared, pro rata to what each still wants, by
-			// the rules whose reserve is at or below that band, so no rule draws below its own
-			// reserve and a rule that moves nothing never lowers another's. Where every rule keeps the
-			// same reserve this is one band, the free water shared pro rata to the rules' limits, as
-			// before; an order-invariant split, since the groups follow the rules' id order.
-			for (const { from, rules } of levelSources[li]!) {
-				// Only the rules that want water set the bands: one that wants none can't lower anyone's.
-				let n = 0;
-				for (let j = 0; j < rules.length; j++) {
-					const k = rules[j]!;
-					if (want[k]! > 0) {
-						act[n++] = k;
-						left[k] = want[k]!;
+			for (const sx of levelSources[li]!) srcTaken[sx.from] = 0;
+			// What each active rule still asks: its daily limit (engine ≥ 1.70.0, issue #90 Q25: never first cut to
+			// its source's free water or its receiver's room, so a rule split into several asks the same total).
+			// A rule with no rate this month is not active (engine 1.36.0).
+			for (const k of level) {
+				const tr = transfers[k]!;
+				rem[k] = tr.activeMonth[month[t]!] && tr.maxDailyM3[month[t]!]! > 0 ? tr.maxDailyM3[month[t]!]! : 0;
+				want[k] = 0;
+			}
+			// Proportional rationing in rounds (engine ≥ 1.70.0, docs/model.md §2.6): (1) each source shares its
+			// water among its rules still asking, in bands at their reserves, pro rata to what each asks; (2) each
+			// receiver's room is shared among the rules into it pro rata to what their sources gave them, and a
+			// receiver whose rules were given more than its room is full; (3) room a rule couldn't fill (its source
+			// was short) is offered again: the rules into a receiver that isn't full ask again for what they still
+			// want, from what their sources have left. A round frees source water only by filling a receiver, and
+			// a full receiver's rules ask nothing more, so this ends within one round more than the receivers. Every
+			// step shares in proportion, so a rule split into several gets the same total, and the order of the
+			// list never matters.
+			for (;;) {
+				// 1. At each source, its water above each rule's own reserve (engine 1.36.0, audit N6): the water
+				// between two successive reserves (highest first; the top band starts at the storage left to this
+				// priority) is shared, pro rata to what each still asks, by the rules whose reserve is at or below it,
+				// so no rule draws below its own reserve and a rule that asks nothing never lowers another's.
+				for (const { from, rules } of levelSources[li]!) {
+					let n = 0;
+					for (let j = 0; j < rules.length; j++) {
+						const k = rules[j]!;
 						given[k] = 0;
+						if (rem[k]! > 0 && !roomFull[transfers[k]!.to]) {
+							act[n++] = k;
+							left[k] = rem[k]!;
+						}
+					}
+					if (n === 0) continue;
+					const K = capacityK(nodes[from]!, t);
+					let top = prevQ(from) - drawnToday[from]! - srcTaken[from]!;
+					for (let j = 0; j < n; ) {
+						const r = transfers[act[j]!]!.reserveM3;
+						const floor = r * K;
+						const band = Math.max(0, top - floor);
+						// The rules allowed into this band: this reserve and every lower one (j onward).
+						let total = 0;
+						for (let a = j; a < n; a++) total += left[act[a]!]!;
+						if (total > band) {
+							for (let a = j; a < n; a++) {
+								const k = act[a]!;
+								const got = (left[k]! * band) / total;
+								given[k] = given[k]! + got;
+								left[k] = left[k]! - got;
+							}
+						} else {
+							// Every rule allowed here gets all it still asks: no lower band is needed.
+							for (let a = j; a < n; a++) {
+								const k = act[a]!;
+								given[k] = given[k]! + left[k]!;
+							}
+							break;
+						}
+						if (top > floor) top = floor;
+						while (j < n && transfers[act[j]!]!.reserveM3 === r) j++;
 					}
 				}
-				if (n === 0) continue;
-				const K = capacityK(nodes[from]!, t);
-				let top = prevQ(from) - drawnToday[from]!;
-				for (let j = 0; j < n; ) {
-					const r = transfers[act[j]!]!.reserveM3;
-					const floor = r * K;
-					const band = Math.max(0, top - floor);
-					// The rules allowed into this band: this reserve and every lower one (j onward).
-					let total = 0;
-					for (let i = j; i < n; i++) total += left[act[i]!]!;
-					if (total > band) {
-						for (let i = j; i < n; i++) {
-							const k = act[i]!;
-							const got = (left[k]! * band) / total;
-							given[k] = given[k]! + got;
-							left[k] = left[k]! - got;
-						}
-					} else {
-						// Every rule allowed here gets all it still wants: no lower band is needed.
-						for (let i = j; i < n; i++) {
-							const k = act[i]!;
-							given[k] = given[k]! + left[k]!;
-						}
-						break;
-					}
-					if (top > floor) top = floor;
-					while (j < n && transfers[act[j]!]!.reserveM3 === r) j++;
+				// 2. Each receiver's room, pro rata to what the sources gave.
+				sumBy.fill(0);
+				for (const k of level) if (rem[k]! > 0 && !roomFull[transfers[k]!.to]) sumBy[transfers[k]!.to]! += given[k]!;
+				let filled = false;
+				for (const k of level) {
+					const tr = transfers[k]!;
+					if (!(rem[k]! > 0) || roomFull[tr.to]) continue;
+					const total = sumBy[tr.to]!;
+					const room = roomLeft[tr.to]!;
+					let x = total > room ? (given[k]! * room) / total : given[k]!;
+					// The shares of a band can add up one ulp past the water they split, and the rounds add them up:
+					// a source never gives more than it still holds (rules in the level's order, ids).
+					const still = prevQ(tr.from) - drawnToday[tr.from]! - srcTaken[tr.from]!;
+					if (x > still) x = Math.max(0, still);
+					want[k] = want[k]! + x;
+					rem[k] = rem[k]! - x;
+					srcTaken[tr.from] = srcTaken[tr.from]! + x;
 				}
-				// A rule moves what the bands it may reach gave it.
-				for (let j = 0; j < n; j++) want[act[j]!] = given[act[j]!]!;
+				for (let a = 0; a < dests.length; a++) {
+					const d = dests[a]!;
+					if (roomFull[d]) continue;
+					if (sumBy[d]! > roomLeft[d]!) {
+						roomLeft[d] = 0;
+						roomFull[d] = 1;
+						filled = true;
+					} else roomLeft[d] = roomLeft[d]! - sumBy[d]!;
+				}
+				// 3. Only a receiver filling this round can have left water at a source unused: offer it again.
+				if (!filled) break;
 			}
 			// 4. Move the water.
 			for (const k of level) {

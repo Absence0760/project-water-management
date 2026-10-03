@@ -145,8 +145,11 @@ Rules run by `priority`, lowest first; within a priority, rules into one
 destination share its room and rules from one source share its free water,
 each pro rata to its own limit, so the list order never matters. From engine
 1.70.0 (issue #90 Q25) that limit is `maxDaily` alone, never capped at the
-source's free water first (the bands below bound it): proportional rationing,
-so a rule split into several gets the same total. From engine
+source's free water first: proportional rationing in rounds, the sources'
+bands first, then each receiver's room pro rata to what the sources gave,
+then room a short source couldn't fill offered again while a receiver fills
+(model.md §2.6), so a rule split into several gets the same total and no
+room is wasted on a dry source. From engine
 1.36.0 (audit N6) each rule draws only above its own reserve: the source's
 water is split into bands at its rules' reserves, and each band is shared, pro
 rata to what each still wants, by the rules whose reserve is at or below it,
