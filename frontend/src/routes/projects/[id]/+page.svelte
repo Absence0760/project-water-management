@@ -77,6 +77,7 @@
 		hiddenChoice,
 		navSections,
 		stripTabs,
+		TAB_GUIDE,
 		TAB_LABELS,
 		VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT,
 		visibleTabs,
@@ -727,6 +728,7 @@
 			<div class="main-col">
 			<SectionHeader
 				title={LABEL[tab]}
+				guide="{base}/help/guides/{TAB_GUIDE[tab]}"
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
 				status={fresh || series || headerSlot.status ? headerStatus : null}

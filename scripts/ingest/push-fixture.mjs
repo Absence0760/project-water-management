@@ -22,8 +22,9 @@ const root = resolve(here, '..', '..');
 const DAY = 86_400_000;
 const toDay = (iso) => Math.round(Date.parse(`${iso}T00:00:00Z`) / DAY);
 const fromDay = (d) => new Date(d * DAY).toISOString().slice(0, 10);
+const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 
-/** `date,value` rows as one contiguous run of days from the first; gaps and blanks are null. */
+/** `date,value` rows (in any order) as one contiguous run of days from the first; gaps and blanks are null. A day twice, an impossible date or a value that isn't a decimal number is refused. */
 export function parseCsv(text) {
 	const days = new Map();
 	for (const [i, raw] of text.split(/\r?\n/).entries()) {
@@ -34,9 +35,16 @@ export function parseCsv(text) {
 			if (i === 0) continue; // a header row
 			throw new Error(`line ${i + 1}: "${date}" is not a YYYY-MM-DD date`);
 		}
+		// Date.parse rolls an impossible day over (2024-02-31 is 2 March), which would move the reading to another day.
+		const day = toDay(date);
+		if (!Number.isFinite(day) || fromDay(day) !== date) throw new Error(`line ${i + 1}: "${date}" is not a calendar date`);
+		// Plain decimals only: Number() also reads "0x10" as 16, "0b1" as 1 and " " as 0, and a logger never means those.
+		if (value !== '' && !DECIMAL.test(value)) throw new Error(`line ${i + 1}: "${value}" is not a number`);
 		const v = value === '' ? null : Number(value);
 		if (v !== null && !Number.isFinite(v)) throw new Error(`line ${i + 1}: "${value}" is not a number`);
-		days.set(toDay(date), v);
+		// A day twice is ambiguous (which reading is right?): say so rather than keep whichever came last.
+		if (days.has(day)) throw new Error(`line ${i + 1}: ${date} appears more than once`);
+		days.set(day, v);
 	}
 	if (days.size === 0) throw new Error('the CSV has no rows');
 	const first = Math.min(...days.keys());

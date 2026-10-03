@@ -87,10 +87,15 @@ template is downloadable from the Allocations page's Import sheet. The aliases a
 extract** from the client (followups.md): a column the importer doesn't know
 is listed as "not read", never guessed.
 
-- **File.** CSV, comma- or semicolon-separated (a `;` file reads a comma as
-  the decimal mark), UTF-8, at most 2 MB, 5 000 rows and 200 columns. Quoted fields,
-  doubled quotes and line breaks inside quotes are read. XLSX is not read
-  yet: save the sheet as CSV.
+- **File.** CSV, comma- or semicolon-separated, UTF-8, at most 2 MB, 5 000
+  rows and 200 columns. Quoted fields, doubled quotes and line breaks inside
+  quotes are read. XLSX is not read yet: save the sheet as CSV.
+- **Numbers.** A `;` file reads a comma as the decimal mark and a point as a
+  thousands separator; a `,` file the other way round. A thousands
+  separator, or a space, must group the digits in threes (`1,500`,
+  `12 000`, `1.500,5`), so the other locale's decimal (`"1,5"` in a `,`
+  file, `1.5` in a `;` file) is a row error that says so, never read as 15
+  or 1 500 (`parseNumber`, `allocations/parse.ts`).
 - **One row per s21 water use** (issue #72). WARMS registers water per
   water use, per property: a 21(a) row's registered volume is a take per
   year, but a 21(b) row's is the dam's storage. So each row is read by its

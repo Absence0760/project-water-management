@@ -799,7 +799,12 @@ alerts plug in as a further kind.
   with its key is running. That departs from the roadmap's index over
   `('queued','running')`: with that one, new data arriving *during* a re-run
   would be dropped as a duplicate of the run already reading the old data.
-  Here it queues, and runs once the first finishes.
+  Here it queues, and runs once the first finishes. If the running one then
+  fails in a way worth retrying, it can't go back to pending beside the newer
+  job, so it is finished as `dead` ("… (a newer job with the same key is
+  queued)") and the newer one does the work: logged as `job_superseded`, not
+  `job_dead`, so no alarm or `job_dead` alert (`jobs/runner.ts`
+  `recordFailure`).
 
 Adding a kind: write `jobs/handlers/<kind>.ts` with `defineHandler({ role,
 payload, run })` (`jobs/registry.ts` documents the contract) and list it in

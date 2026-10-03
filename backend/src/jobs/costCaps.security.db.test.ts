@@ -13,6 +13,7 @@
 //     cap, so a direct insert can't make a job run more engine runs.
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ALLOCATIONS_PER_PROJECT_MAX } from '../allocations/routes.js';
 import { ASSESSMENT_JOBS_PER_USER, ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -124,6 +125,24 @@ describe('report caps hold under a concurrent burst', () => {
 		expect(res.filter((r) => r.status === 409).every((r) => r.body.error === `a project can have at most ${MAX_SCHEDULES} report schedules`)).toBe(true);
 		expect((await asOwner('SELECT count(*)::int AS n FROM report_schedule WHERE project_id = $1', [c.projectId]))[0].n).toBe(MAX_SCHEDULES);
 	});
+});
+
+describe('the allocations cap holds under a concurrent burst', () => {
+	it(`at most ${ALLOCATIONS_PER_PROJECT_MAX} allocations per project, by hand or by import`, async () => {
+		const owner = await signUp('CapAllocations');
+		const c = await catchment(owner);
+		// Two short of the cap, as one import (a header and one row per allocation).
+		const rows = Array.from({ length: ALLOCATIONS_PER_PROJECT_MAX - 2 }, (_, i) => `CAP-${i},licence,groundwater,100`);
+		const text = ['registration_no,authorisation,water_source,volume_m3_year', ...rows].join('\n');
+		const imported = await owner.call('POST', `/projects/${c.projectId}/allocations/import/commit`, { kind: 'csv', fileName: 'cap.csv', text });
+		expect(imported.status, JSON.stringify(imported.body)).toBe(201);
+		const hand = (i: number) => ({ nodeId: null, registrationNo: `HAND-${i}`, authorisation: 'licence', waterSource: 'groundwater', volumeM3PerYear: 100 });
+		const res = await burst((i) => owner.call('POST', `/projects/${c.projectId}/allocations`, hand(i)), 2, 201, 409);
+		expect(res.filter((r) => r.status === 409).every((r) => r.body.error === `this project has reached the limit of ${ALLOCATIONS_PER_PROJECT_MAX} allocations`)).toBe(true);
+		expect((await asOwner('SELECT count(*)::int AS n FROM allocation WHERE project_id = $1', [c.projectId]))[0].n).toBe(ALLOCATIONS_PER_PROJECT_MAX);
+		// Filling the project to its cap is a 4 998-row import through the API (parse, match,
+		// insert, holders): seconds of real work on a CI runner, past vitest's 5 s default.
+	}, 60_000);
 });
 
 describe(`a report or schedule emails at most ${MAX_RECIPIENTS} people`, () => {

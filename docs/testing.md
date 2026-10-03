@@ -181,8 +181,9 @@ pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29). They run i
 - **Backend db suite**: runs serially (one Postgres test database). It took
   ~5 min until the RLS role functions moved to PL/pgSQL (026, security.md:
   policies were re-planning them for every row) and passwords were hashed at
-  bcrypt's minimum cost under vitest (`auth/password.ts`; the e2e API server
-  too, with `PASSWORD_HASH_COST=4`, e2e/README.md; 12 elsewhere).
+  the cheapest settings under vitest (`auth/password.ts`, now Argon2id's
+  smallest parameters; the e2e API server too, with `PASSWORD_HASH_FAST=1`,
+  e2e/README.md; production's elsewhere).
 - **DB test files share the job queue, so each cleans up the jobs it
   queues.** Claim, tick and purge are global on purpose, and the files run
   one after another on one database, so a job one file leaves pending is

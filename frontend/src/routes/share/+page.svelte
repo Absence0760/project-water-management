@@ -26,7 +26,7 @@
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import { recentMonths } from '$lib/components/share/chart';
 	import FlowChart from '$lib/components/share/FlowChart.svelte';
-	import { loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '$lib/components/share/load';
+	import { latestOnly, loadPackShare, loadScenarioShare, loadShare, type PackShareLoad, type ScenarioShareLoad, type ShareLoad } from '$lib/components/share/load';
 	import PackView from '$lib/components/share/PackView.svelte';
 	import { readShareKind, SHARE_RETURN_KEY } from '$lib/components/share/scenario';
 	import MemberSummary from '$lib/components/share/MemberSummary.svelte';
@@ -47,10 +47,15 @@
 	/** What the loaded link opens: the catchment view (null), an application or an evidence pack. */
 	let shown = $state<'scenario' | 'pack' | null>(null);
 
+	// Only the latest load counts: a link pasted while another was loading must not be replaced by the earlier one's answer.
+	const loadLink = latestOnly((k: typeof kind, tok: string | null): Promise<ShareLoad | ScenarioShareLoad | PackShareLoad> =>
+		k === 'scenario' ? loadScenarioShare(api.share, tok) : k === 'pack' ? loadPackShare(api.share, tok) : loadShare(api.share, tok)
+	);
 	async function load() {
 		result = null;
 		shown = kind;
-		result = kind === 'scenario' ? await loadScenarioShare(api.share, token) : kind === 'pack' ? await loadPackShare(api.share, token) : await loadShare(api.share, token);
+		const loaded = await loadLink(kind, token);
+		if (loaded.current) result = loaded.value;
 	}
 
 	const sview = $derived(shown === 'scenario' && result?.state === 'ready' ? (result as Extract<ScenarioShareLoad, { state: 'ready' }>).view : null);

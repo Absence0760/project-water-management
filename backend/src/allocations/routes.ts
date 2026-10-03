@@ -239,7 +239,13 @@ async function checkNode(db: Db, projectId: string, nodeId: string | null | unde
 	if (!rows[0]) throw new ApiError(400, 'nodeId is not a unit or water user of this project');
 }
 
+/**
+ * The project's allocations, counted for its cap: the count and the insert
+ * that follows go one transaction at a time per project (held to commit), so
+ * concurrent adds or imports can't pass ALLOCATIONS_PER_PROJECT_MAX together.
+ */
 async function countAllocations(db: Db, projectId: string): Promise<number> {
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('allocation_cap:' || $1::text, 0))`, [projectId]);
 	const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM allocation WHERE project_id = $1', [projectId]);
 	return rows[0]!.n;
 }

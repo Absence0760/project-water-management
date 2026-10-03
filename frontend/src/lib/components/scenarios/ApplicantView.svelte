@@ -71,7 +71,7 @@
 	{/if}
 {/snippet}
 
-<SectionHeader title="Applications" {badge} {context} {actions} {notices} />
+<SectionHeader title="Applications" guide="{base}/help/guides/applications-page" {badge} {context} {actions} {notices} />
 
 <LoadState {loading} {error} retry={load}>
 	<ScenariosTab projectId={project.id} runs={null} canEdit={false} applicant publishedRunId={publication?.runId ?? null} onRunsChange={() => {}} reloadRuns={async () => {}} />

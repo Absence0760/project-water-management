@@ -45,7 +45,7 @@ export const APP_USER_EXPORTED = [
 	'farm_notice_accepted_at'
 ] as const;
 export const APP_USER_EXCLUDED: Record<string, string> = {
-	password_hash: 'a secret (bcrypt hash of the password)'
+	password_hash: 'a secret (Argon2id hash of the password; bcrypt for an account not signed in since 2026-10)'
 };
 
 /**

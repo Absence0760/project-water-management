@@ -4,7 +4,9 @@
 //   tips.ts      term, short text, units, field keys: what a <HelpTip> shows.
 //                HelpTip loads that module alone (~11 KB gzip), never this one.
 //   articles.ts  the fuller text, other names, related ids and source, by id;
-//                articles-data.ts the same for the "Input data" topic (its own chunk).
+//                articles-data.ts the same for the "Input data" topic (its own chunk);
+//                articles-licensing.ts for "Scenarios and licensing" and
+//                articles-ewr.ts for the EWR topic (each its own chunk).
 //   farmer.ts    the farm view's words, whole (/farm/words loads only those).
 //
 // Every /help page loads this (the help sidebar lists the glossary's topics),
@@ -12,6 +14,8 @@
 
 import { ARTICLES as TOPIC_ARTICLES } from './articles';
 import { DATA_ARTICLES } from './articles-data';
+import { EWR_ARTICLES } from './articles-ewr';
+import { LICENSING_ARTICLES } from './articles-licensing';
 import { FARMER_HELP } from './farmer';
 import { TIPS, tipFor } from './tips';
 import type { HelpCategory, HelpEntry } from './types';
@@ -30,11 +34,12 @@ export const CATEGORY_TITLES: Record<HelpCategory, string> = {
 	data: 'Input data',
 	results: 'Run results',
 	fit: 'Goodness of fit',
+	licensing: 'Scenarios and licensing',
 	farmer: 'Words on your hydrological unit page'
 };
 
-/** Every article by id: articles.ts and the "Input data" topic's (articles-data.ts). */
-export const ARTICLES = { ...TOPIC_ARTICLES, ...DATA_ARTICLES };
+/** Every article by id: articles.ts, the "Input data" topic's (articles-data.ts), the EWR topic's (articles-ewr.ts) and "Scenarios and licensing"'s (articles-licensing.ts). */
+export const ARTICLES = { ...TOPIC_ARTICLES, ...DATA_ARTICLES, ...EWR_ARTICLES, ...LICENSING_ARTICLES };
 
 const regions = new Intl.DisplayNames(['en'], { type: 'region' });
 

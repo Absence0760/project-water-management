@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The glossary's EWR topic split into its own chunk (articles-ewr.ts) after #376's text took articles.ts's chunk to 43 KB over the 42 KB per-chunk ceiling: largest chunk now 38 KB, the extra chunk costs ~1 KB (1626 -> 1627 KB measured)"
+}

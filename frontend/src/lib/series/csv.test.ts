@@ -25,6 +25,15 @@ describe('parseSeriesCsv', () => {
 		expect(r.values).toEqual([3, 4]);
 	});
 
+	it('reads a file with bare CR line endings (Excel for Mac’s "CSV (Macintosh)")', () => {
+		const r = parseSeriesCsv('date,value\r2020-01-01,3\r2020-01-02,4\r');
+		expect([r.startDate, r.endDate, r.values]).toEqual(['2020-01-01', '2020-01-02', [3, 4]]);
+	});
+
+	it('refuses a span over the limit, naming its first and last dates', () => {
+		expect(() => parseSeriesCsv('1820-01-05,1\n2020-01-01,2\n2020-01-02,3')).toThrow(/spans .* days, from 1820-01-05 to 2020-01-02; the limit is .*mistyped year/);
+	});
+
 	it('fills gaps and blank values with null and sorts out-of-order rows', () => {
 		const r = parseSeriesCsv('2020-01-04,4\n2020-01-01,1\n2020-01-02,\n');
 		expect(r.startDate).toBe('2020-01-01');
@@ -159,6 +168,17 @@ describe('sub-daily files', () => {
 		expect(parseTime('2020-01-05 08:30')).toBe(510);
 		expect(parseTime('2020-01-05T24:00:00')).toBe(1440);
 		expect(parseTime('2020-01-05')).toBeNull();
+		// A 12-hour clock: the AM/PM is read, not dropped (7:00 PM was read as 07:00, 12:00 AM as noon).
+		expect(parseTime('1/5/2020 7:00 PM')).toBe(1140);
+		expect(parseTime('1/5/2020 7:00:30 am')).toBe(420.5);
+		expect(parseTime('1/5/2020 12:00:00 AM')).toBe(0);
+		expect(parseTime('1/5/2020 12:15 PM')).toBe(735);
+		expect(parseTime('1/5/2020 7:00PM')).toBe(1140);
+		expect(parseTime('1/5/2020 13:00 PM')).toBeNaN();
+		expect(parseTime('1/5/2020 0:30 AM')).toBeNaN();
+		// Anything else after the time would shift the hour if dropped: refused.
+		expect(parseTime('2020-01-05T08:00:00Z')).toBeNaN();
+		expect(parseTime('2020-01-05 08:00 +02:00')).toBeNaN();
 		const day = (iso: string, hm: string) => new Date(bookedDay(iso, parseTime(`${iso} ${hm}`)!, '08:00') * 86_400_000).toISOString().slice(0, 10);
 		expect(day('2020-01-06', '08:00')).toBe('2020-01-05');
 		expect(day('2020-01-06', '08:01')).toBe('2020-01-06');
@@ -166,6 +186,9 @@ describe('sub-daily files', () => {
 		const r = parseSeriesCsv('2020-01-05 09:00,1\n2020-01-05 10:00,\n2020-01-06 09:00,', { dayBoundary: '08:00' });
 		// The 6th has only a blank: no reading, not 0.
 		expect(r.values).toEqual([1, null]);
+		// An evening reading on a 12-hour clock belongs to the day it falls in, not the window before.
+		const pm = parseSeriesCsv('2020-01-02 7:00 AM,1\n2020-01-02 7:00 PM,2\n2020-01-03 7:00 AM,4', { dayBoundary: '08:00' });
+		expect([pm.startDate, pm.values]).toEqual(['2020-01-01', [1, 6]]);
 	});
 });
 

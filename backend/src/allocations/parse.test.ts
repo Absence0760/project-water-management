@@ -9,6 +9,7 @@ import {
 	parseMonths,
 	parseFrequency,
 	parseNumber,
+	separatorHint,
 	parsePurpose,
 	parseUnit,
 	parseWaterUse,
@@ -42,6 +43,40 @@ describe('cell parsers', () => {
 		expect(parseNumber('12.000,5', ';')).toBe(12000.5);
 		expect(parseNumber('', ',')).toBeNull();
 		expect(parseNumber('about 5', ',')).toBeNaN();
+		expect(separatorHint('about 5', ',')).toBe('');
+	});
+
+	it('refuses the other locale\'s decimal rather than read it as a thousands separator (a 10× volume)', () => {
+		// Positive controls: grouped in threes, in either locale, with spaces, signs, decimals and exponents.
+		expect(parseNumber('1,234,567', ',')).toBe(1234567);
+		expect(parseNumber('1.234.567,25', ';')).toBe(1234567.25);
+		expect(parseNumber(' 5\u00a0000 ', ',')).toBe(5000);
+		expect(parseNumber('5\u202f000,5', ';')).toBe(5000.5);
+		expect(parseNumber('-1,234.5', ',')).toBe(-1234.5);
+		expect(parseNumber('12.5', ',')).toBe(12.5);
+		expect(parseNumber('12,5', ';')).toBe(12.5);
+		expect(parseNumber('1.5e3', ',')).toBe(1500);
+		expect(parseNumber('.5', ',')).toBe(0.5);
+		// A decimal comma in a , file and a decimal point in a ; file: not 125 or 15.
+		expect(parseNumber('12,5', ',')).toBeNaN();
+		expect(parseNumber('0,75', ',')).toBeNaN();
+		expect(parseNumber('1.5', ';')).toBeNaN();
+		// Groups that aren't threes, or a separator with nothing before it.
+		expect(parseNumber('1,2345', ',')).toBeNaN();
+		expect(parseNumber('1234,567', ',')).toBeNaN();
+		expect(parseNumber('1 2', ',')).toBeNaN();
+		expect(parseNumber(',123', ',')).toBeNaN();
+		expect(parseNumber('1,2,3', ';')).toBeNaN();
+	});
+
+	it('flags a row whose volume has a decimal comma in a , file, instead of importing it ten times larger', () => {
+		const t = parseAllocationTable('registration_no,volume_m3_year\nR1,"12,5"\nR2,"12,500"\n', 'csv');
+		expect(t.rows[0]!.errors).toContain(
+			'volume “12,5” is not a number ≥ 0: in a comma-separated file a comma only groups thousands in threes (1,500); write a decimal with a point (1.5)'
+		);
+		expect(t.rows[0]!.volumeM3PerYear).toBeNull();
+		expect(t.rows[1]!.errors.filter((e) => e.startsWith('volume'))).toEqual([]);
+		expect(t.rows[1]!.volumeM3PerYear).toBe(12500);
 	});
 
 	it('reads ISO dates only, and only real ones', () => {
@@ -270,7 +305,12 @@ describe('the s21 water use, unit and frequency (issue #72)', () => {
 	});
 
 	it('converts a take in megalitres a year to m³', () => {
-		expect(warms('R1,Farm A,Surface,21(a),"1,5",Ml/a,')[0]).toMatchObject({ volumeM3PerYear: 15000, errors: [] });
+		expect(warms('R1,Farm A,Surface,21(a),1.5,Ml/a,')[0]).toMatchObject({ volumeM3PerYear: 1500, errors: [] });
+		// A decimal comma in a , file is 1.5 Ml or 15 Ml, never knowable: refused, not read as 15 000 m³.
+		expect(warms('R1,Farm A,Surface,21(a),"1,5",Ml/a,')[0]).toMatchObject({ volumeM3PerYear: null, errors: [expect.stringMatching(/^volume “1,5” is not a number ≥ 0: in a comma-separated file/)] });
+		// And a decimal point in a ; file.
+		const semi = parseAllocationTable('registration_no;authorisation;water_source;volume_m3_year\nR1;licence;surface;1.5\n', 'csv').rows[0]!;
+		expect(semi.errors).toEqual(['volume “1.5” is not a number ≥ 0: in a semicolon-separated file a point only groups thousands in threes (1.500); write a decimal with a comma (1,5)']);
 		expect(warms('R1,Farm A,Surface,21(a),12.5,ML per annum,')[0]).toMatchObject({ volumeM3PerYear: 12500, errors: [] });
 	});
 

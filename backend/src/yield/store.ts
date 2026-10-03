@@ -51,10 +51,17 @@ export type YieldRequest = z.infer<typeof YieldRequest>;
 /** The job's payload: the request as validated. */
 export const YieldPayload = YieldRequest;
 
-/** `yield:<run|scenario id>:<node>:<params hash>`: one pending job per identical request. */
-export function yieldDedupeKey(r: YieldRequest): string {
+/**
+ * `yield:<run|scenario id>:<node>:<params hash>`: one pending job per identical
+ * request. A contributor's (an applicant's) ends `:<their user id>`: they see
+ * only their own jobs (096 job_select_contributor), so another's pending job
+ * with the same key, such as an assessor's on their submitted application,
+ * can't stand for theirs; without it their enqueue collided with a job it
+ * couldn't read (a 500).
+ */
+export function yieldDedupeKey(r: YieldRequest, contributorId?: string): string {
 	const hash = createHash('sha256').update(canonicalJson({ kind: r.kind, params: r.params })).digest('hex').slice(0, 16);
-	return `yield:${r.runId ?? r.scenarioId}:${r.nodeId}:${hash}`;
+	return `yield:${r.runId ?? r.scenarioId}:${r.nodeId}:${hash}${contributorId ? `:${contributorId}` : ''}`;
 }
 
 /**

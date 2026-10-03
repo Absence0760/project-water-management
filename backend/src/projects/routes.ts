@@ -325,8 +325,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const autoError = settings && body.settings?.fitRecord !== undefined ? autoFitRecordError(mergeSettings(current.settings), settings) : null;
 			if (autoError) throw new ApiError(409, autoError);
 			// A new sign-off of the calibration rules is dated by the server, and it and a withdrawal are audited with the account (issue #153).
+			// Dated on the project's calendar (its time zone), as `today` is: UTC's date is a day behind around local midnight.
 			const signOff = settings && body.settings?.calibrationRules !== undefined ? signOffChange(current.settings, settings) : null;
-			if (signOff === 'signed') settings!.calibrationRules = { ...settings!.calibrationRules, signedOff: { by: settings!.calibrationRules.signedOff!.by, on: new Date().toISOString().slice(0, 10) } };
+			if (signOff === 'signed') {
+				const on = localDate(new Date(), body.timeZone ?? current.time_zone);
+				settings!.calibrationRules = { ...settings!.calibrationRules, signedOff: { by: settings!.calibrationRules.signedOff!.by, on } };
+			}
 			// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
 			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {

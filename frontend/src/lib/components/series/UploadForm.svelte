@@ -17,7 +17,7 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { holeBefore, mergePreview, type Daily } from './coverage';
 	import { dataEnd, guessSeries, headerLine, seriesEnd } from './freshness';
-	import { inStoredUnit, type UploadResult, type UploadSubmit } from './upload';
+	import { inStoredUnit, latestFileText, type UploadResult, type UploadSubmit } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 
@@ -194,6 +194,8 @@
 		else if (!same.some((s) => s.name === name.trim())) name = '';
 	}
 
+	const fileText = latestFileText();
+
 	async function read(f: File | null | undefined) {
 		parsed = null;
 		parseError = null;
@@ -202,9 +204,12 @@
 		subDailyText = null;
 		parseSeq++;
 		fileName = f?.name ?? '';
+		// Started before the early return, so clearing the file also drops a read still in flight.
+		const pending = fileText(f ?? null);
 		if (!f) return;
 		try {
-			const text = await f.text();
+			const text = await pending;
+			if (text === null) return; // another file was picked while this one was read
 			try {
 				parsed = parseSeriesFile(text);
 			} catch (err) {

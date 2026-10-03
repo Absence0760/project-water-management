@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, createApi } from './client';
 import { isPublicPath } from '../auth/session.svelte';
-import { emailAuthApi, linkToken, passwordProblem } from './emailAuth';
+import { displayNameProblem, emailAuthApi, linkToken, passwordProblem } from './emailAuth';
 
 function mockFetch(status: number, body?: unknown) {
 	return vi.fn(
@@ -89,5 +89,22 @@ describe('passwordProblem', () => {
 		expect(passwordProblem('x'.repeat(201), 'x'.repeat(201))).toBe('Use at most 200 characters.');
 		expect(passwordProblem('longenough', 'longenougH')).toBe('The two passwords don’t match.');
 		expect(passwordProblem('longenough', 'longenough')).toBeNull();
+	});
+});
+
+describe('displayNameProblem (the server’s rule, auth/displayName.ts)', () => {
+	it('accepts an ordinary name, an emoji and a script that needs joiners', () => {
+		for (const ok of ['Ann', '  Thandi Nkosi ', 'Piet 🚜', 'می‌خواهم', 'x'.repeat(100)]) expect(displayNameProblem(ok), ok).toBeNull();
+	});
+
+	it('refuses a name that would show as nothing', () => {
+		for (const blank of ['', '   ', '​', '​‍', '‮', '⁦⁩', '́']) {
+			expect(displayNameProblem(blank), JSON.stringify(blank)).toBe('Enter a display name.');
+		}
+	});
+
+	it('counts the length after cleaning, as the server does', () => {
+		expect(displayNameProblem('x'.repeat(101))).toBe('Use at most 100 characters.');
+		expect(displayNameProblem(`${'x'.repeat(100)}‮`)).toBeNull();
 	});
 });

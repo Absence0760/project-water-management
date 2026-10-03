@@ -1,5 +1,6 @@
 // The local-dev env loader (config/devEnv.ts): each checkout gets its own dev
 // database, and only a local URL naming the default `water` is redirected.
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { testDbName } from '../__tests__/test-db.js';
 import { checkoutDevDbName, devDbName, loadDevEnv, withDevDb } from './devEnv.js';
@@ -77,5 +78,20 @@ describe('loadDevEnv', () => {
 		const env: NodeJS.ProcessEnv = { DEV_DB_NAME: 'water_w42', DATABASE_URL: 'postgresql://water_app:water_app@127.0.0.1:5434/water_e2e' };
 		loadDevEnv(env);
 		expect(env.DATABASE_URL).toBe('postgresql://water_app:water_app@127.0.0.1:5434/water_e2e');
+	});
+});
+
+describe('the dev CLI scripts', () => {
+	// The reference-data importers (pnpm import:*) loaded dotenv themselves, so in a worktree they wrote to the
+	// main checkout's `water` and left the worktree's own database empty: its Map proposed nothing.
+	it('read the database URLs only through loadDevEnv, never dotenv directly', () => {
+		const dir = new URL('../../scripts/', import.meta.url);
+		const scripts = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+		const readsDb = scripts.filter((f) => /process\.env\.(MIGRATION_)?DATABASE_URL/.test(readFileSync(new URL(f, dir), 'utf8')));
+		expect(readsDb).toContain('import-quaternaries.ts');
+		const offenders = readsDb.filter((f) => /from 'dotenv'/.test(readFileSync(new URL(f, dir), 'utf8')));
+		expect(offenders).toEqual([]);
+		const unloaded = readsDb.filter((f) => !/loadDevEnv\(\)/.test(readFileSync(new URL(f, dir), 'utf8')));
+		expect(unloaded).toEqual([]);
 	});
 });

@@ -416,7 +416,21 @@ under a dead-invitation warning).
   address, with **Send the link again** (`POST /auth/resend-confirmation`,
   the same answer for any address). A taken address gets exactly the same
   pages. Sign-up through a live invitation link is still confirmed, joined and
-  signed in at once.
+  signed in at once. A dead confirmation link (`/verify-email`) opened signed
+  out asks for the **Email** and sends a fresh link from the page (**Send a new
+  link**, the same request and answer), with **Sign in** beside it: an
+  unconfirmed account can't sign in to reach the banner's *Resend email*.
+  Signed in to an unconfirmed account, it offers **Send a new link** for that
+  account's own address; signed in to a confirmed one, nothing to send (the
+  footer leads back). A live link for another address than the signed-in
+  account's (`POST /auth/verify-email` answers the address it confirmed)
+  confirms it and says so without naming the signed-in account as confirmed.
+- **Display names** are checked as the server checks them
+  (`lib/api/emailAuth.ts displayNameProblem`, `backend/src/auth/displayName.ts`):
+  a name of only invisible characters (zero-width spaces, a lone bidi
+  control) is *Enter a display name.* on the sign-up and account pages; the
+  server also turns whitespace runs into one space and drops control and
+  bidi override characters before storing it.
 
 - **Two-step sign-in** (issue #282). For an account with an authenticator,
   a right password turns the form into its second step: a **Two-step
@@ -656,7 +670,10 @@ on the sidebar's "Catchment" line, in words at the foot of the phone's
 Sections menu; once some are hidden, a count on the corner of the sidebar's
 icon, kept within its 24 px button so the slot never scrolls sideways, and
 "Hidden (n)" in the phone's words) opens a dialog with a
-checkbox per section the role shows here, opening right beside the button
+checkbox per section the role shows here (each section hidden by default
+followed by what it is for, `TAB_HINTS`: "Applications water-use licence
+applications to assess and decide", since the name alone didn't say whether
+to turn it on), opening right beside the button
 (centred on a phone), grouped as the sidebar is (the groups side by side,
 one column on a phone), with **Reset to default** (back to those three hidden; off while the person
 has no choice of their own) and **Done**. Summary is always shown (its box is ticked and disabled). The
@@ -800,6 +817,10 @@ role, freshness, Add data) and each tab's own header:
 
 - **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
   **Unsaved changes** shows beside it while the model or the project details have edits (editors).
+  After them, **How this page works** links to the page's guide on `/help`
+  (`TAB_GUIDE` in `lib/workspace/tabs.ts`, ids only so the workspace never
+  loads the guides; `guides.test.ts` checks every tab has one, about that
+  tab). The Applicant view's header links to the Applications guide.
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -938,7 +959,7 @@ same way on every screen:
   page's body asks too). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
-  decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
+  decided per file; CRLF, LF or bare-CR line endings) or a DWS hydrology export (fixed-width YYYYMMDD with a
   quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
   rules. The form's **File formats** note lists them.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
@@ -2612,8 +2633,9 @@ map" card) stays the schematic; this is the geography.
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
-  (its area *typed*, **From the map** this feature, or from another feature
-  by name), **Area into the model** (editors; parcels and `other` polygons
+  (its area *typed*, **From the map** this feature, or this feature's
+  *earlier outline* once it was reshaped or split after the area was
+  taken, or from another feature by name), **Area into the model** (editors; parcels and `other` polygons
   only, never a dam or the boundary): a unit (the linked one by default; the
   select stops at ~16rem) and **Use 9.257 km²**, which asks first ("Set
   Upper farm’s area from the map?", the old and new area) and then saves the
@@ -2904,7 +2926,8 @@ map" card) stays the schematic; this is the geography.
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
   button (`aria-pressed`) with the name and, under it, the size or
   position, what it stands for ("linked" when that's its own name) and, for
-  a parcel, its unit's area source ("area typed", "area from the map"). A
+  a parcel, its unit's area source ("area typed", "area from the map",
+  "area from an earlier outline" when the parcel changed since). A
   pick far down is kept in view inside the list, never by scrolling the page;
   stacked on a phone, a pick from the list brings the card into view. The
   head's **Every feature** opens the grid.
@@ -3672,7 +3695,9 @@ station's hourly log) is not refused: the form asks how to add it up into
 days, **08:00 to 08:00, booked to the day it starts** (the default, the
 manual-gauge day) or **midnight to midnight**, and its summary says how many
 readings, how many a day and how many days are short of that. Each
-timestamp closes its interval. The series records the choice
+timestamp closes its interval. A time is HH:MM (seconds optional) or a
+12-hour time with its AM/PM (7:00 PM is 19:00, 12:00 AM midnight); a time
+followed by anything else (a zone, `Z`) is refused, not trimmed. The series records the choice
 (`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 Below 640px wide each row becomes a card
@@ -5236,7 +5261,9 @@ read it before.
   fails still closes as published, with "The publication history couldn't
   be refreshed: reload the page to see it." rather than an error. A legacy-model run (a stored run from
   before engine 1.0.0) says why it can't be published: that model was
-  removed and the run is a workbook comparison only. In the runs list the current published run carries a
+  removed and the run is a workbook comparison only. A scenario run (also once
+  its scenario is deleted) says so too: farmers are shown the catchment as it
+  is, never a what-if. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
   the section. A run that was published says whether the responsible
@@ -5672,8 +5699,9 @@ read it before.
   which. Editors get a required **Why this run is the evidence** textarea (2 000
   characters at most) and **Nominate as evidence** (or **Nominate this run
   instead** when another run is current; `POST …/evidence`). A legacy-model
-  run (a stored run from before engine 1.0.0, which removed the model) and
-  the current evidence run say why they can't be nominated instead.
+  run (a stored run from before engine 1.0.0, which removed the model), a
+  scenario run (also once its scenario is deleted), a forecast run and the
+  current evidence run say why they can't be nominated instead.
   While a run is nominated, editors also get **Withdraw the nomination…**,
   which opens a required **Why the nomination is withdrawn** textarea and
   **Withdraw the nomination** (`POST …/evidence/withdraw`, 098); afterwards
@@ -6797,9 +6825,13 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   for 30 days"; "No applications submitted yet"), and **Decide the longest
   waiting**, a link to that application in the Scenarios tab (only while
   one awaits a decision). The counts and wording are `applications.ts`.
-- **Submitted applications** card: a one-line note (on the published
-  baseline; open one to see its changes and runs and decide it; drafts stay
-  with the applicant), a status filter (**All**, **Awaiting a decision**,
+- **Submitted applications** card: a note saying what an application is
+  (a water-use licence applicant's proposed change, such as a new or raised
+  dam, more abstraction or more land under irrigation, modelled on the
+  published baseline; open one to see its changes and runs and decide it;
+  drafts stay with the applicant) and an ⓘ beside the heading opening the
+  glossary's **Licence application** entry (with **Published baseline**,
+  **Scenario** and **Evidence pack** beside it in Basics), a status filter (**All**, **Awaiting a decision**,
   **Decided**, **Withdrawn**, each with its count; `&status=awaiting|decided|withdrawn`
   in the URL, so Back steps through the filters and a link keeps one; an
   unknown value shows all) and **Sort by** newest first or status (awaiting
@@ -7770,8 +7802,8 @@ Part of the workspace, so English, like the rest of the Applicant view
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, then four groups, *Start here*,
-*How it works*, *How to* and *Reference*, the last the glossary's index and
+(`help/HelpNav.svelte`: the overview, then five groups, *Start here*,
+*How it works*, *How to*, *Pages, one by one* and *Reference*, the last the glossary's index and
 one link per topic) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
 indented under a thin rule, so a group reads as a block (issue #162). One
@@ -7821,8 +7853,13 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
   setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
   order of the workspace's *Build the model* section, which `tour.test.ts`
-  guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
-  the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
+  guards), the model guides and **What each page does**: the page guides
+  (kind `page`, 2026-10-02), one for each workspace page the setup path and
+  the model guides don't cover (Scenarios, Applications, Allocations, the Map,
+  Dams, River & reserve, Hydrological units, Project and History), each
+  saying what the page is for and how to work it. Help names tabs with
+  `TAB_TITLES`, the workspace's own `TAB_LABELS`, so a renamed tab can't
+  leave help behind.
   *The whole process* has a **Getting around a project** section (the three
   sections, the Project and Dams pages, where the sections sit in the app
   sidebar under the catchment's name, Projects / Teams / Help at its top, the
@@ -8614,7 +8651,8 @@ signed in or out, for someone outside the project, on a phone first.
 - **The token** is in the fragment (`/share#t=…`). The page reads it once,
   strips it from the address bar (`replaceState`, as the reset pages strip
   `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
-  (only the fragment changes) is picked up the same way. The page sets
+  (only the fragment changes) is picked up the same way, and only the latest
+  link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
   Management" with "Shared view" under it, and the EN | AF switch beside,
   one row on a 360 px phone; its content lined up over the page's), not

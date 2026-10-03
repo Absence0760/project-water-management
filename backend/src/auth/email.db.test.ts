@@ -21,7 +21,8 @@ describe('email verification', () => {
 		// Anonymous on purpose: the token is the credential (link opened on another device).
 		const ok = await anon('POST', '/auth/verify-email', { token });
 		expect(ok.status).toBe(200);
-		expect(ok.body).toEqual({ verified: true });
+		// The address it confirmed, so the page can tell it from the account a browser is signed in to.
+		expect(ok.body).toEqual({ verified: true, email: u.email });
 		expect((await u.call('GET', '/auth/me')).body.user.emailVerified).toBe(true);
 
 		// Single use.

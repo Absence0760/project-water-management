@@ -39,7 +39,7 @@ export const yieldRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'contributor');
 			// Checked now so a bad request is a 400/403/404 here, not a dead job later.
 			await yieldInputFor(db, id, role, c.get('userId'), body);
-			const dedupeKey = yieldDedupeKey(body);
+			const dedupeKey = yieldDedupeKey(body, role === 'contributor' ? c.get('userId') : undefined);
 			const pending = await pendingYieldJobs(db);
 			const { rows: same } = await db.query(`SELECT 1 FROM job WHERE project_id = $1 AND dedupe_key = $2 AND status IN ('queued', 'failed')`, [id, dedupeKey]);
 			if (!same[0] && pending >= YIELD_JOBS_PER_USER)
