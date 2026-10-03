@@ -334,7 +334,11 @@ def dam_rules_rationing_and_release() -> dict:
     would make it 1 : 1 on the second day). A third rule fills a 1 000 m³ dam
     held near its dead storage (500, dead 400) that releases 300 m³/day: its
     room counts the release in full, 1 000 − 500 + 300 = 800, so the dam ends
-    full (the floor, MIN(300, 500 − 400) = 100, would leave it at 800)."""
+    full (the floor, MIN(300, 500 − 400) = 100, would leave it at 800). And
+    (engine 1.70.0's rounds) an empty source beside a full one into one
+    receiver: the full one fills the room; one source into three receivers
+    whose rooms fill one after another: the water a filled receiver couldn't
+    take is offered to the others again, twice over."""
     nodes = [
         _node("o", "gauge", None),
         _node("s", "farm", "o", areaKm2=1, damCapacityM3=5000, damInitialPct=1),
@@ -343,7 +347,22 @@ def dam_rules_rationing_and_release() -> dict:
         _node("s2", "farm", "o", damCapacityM3=1e6, damInitialPct=1),
         _node("d", "farm", "o", damCapacityM3=1000, damInitialPct=0.5, damMinPct=0.4, damReleaseRule="fixed", damReleaseM3Day=[300] * 12),
     ]
-    transfers = [_rule("ta", "s", "a", 3000, 0), _rule("tb", "s", "b", 1000, 0), _rule("td", "s2", "d", 100000, 0)]
+    # An empty source beside a full one into one receiver (room 400): the full one fills it. One source of 900
+    # into rooms of 100, 350 and 2 000: room a source couldn't fill is offered again, twice (100, 350, 450).
+    nodes += [
+        _node("e1", "farm", "o", damCapacityM3=1000, damInitialPct=0),
+        _node("e2", "farm", "o", damCapacityM3=5000, damInitialPct=1),
+        _node("r", "farm", "o", damCapacityM3=1000, damInitialPct=0.6),
+        _node("w", "farm", "o", damCapacityM3=900, damInitialPct=1),
+        _node("r1", "farm", "o", damCapacityM3=1000, damInitialPct=0.9),
+        _node("r2", "farm", "o", damCapacityM3=1000, damInitialPct=0.65),
+        _node("r3", "farm", "o", damCapacityM3=5000, damInitialPct=0.6),
+    ]
+    transfers = [
+        _rule("ta", "s", "a", 3000, 0), _rule("tb", "s", "b", 1000, 0), _rule("td", "s2", "d", 100000, 0),
+        _rule("te1", "e1", "r", 300, 0), _rule("te2", "e2", "r", 500, 0),
+        _rule("tw1", "w", "r1", 1000, 0), _rule("tw2", "w", "r2", 1000, 0), _rule("tw3", "w", "r3", 1000, 0),
+    ]
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": _dry(4)}
 
 
