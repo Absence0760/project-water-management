@@ -225,27 +225,20 @@ describe('item 10 (c): the bootstrap gives an interval when exactly half the res
 	});
 });
 
-// ── Item 11 (b) DOCUMENTED ──────────────────────────────────────────────────
-// §2.4d Detection: "Blank days count like zeros: the total covers a
-// tagged-missing day just as well"; window = the run, at most its last 92
-// days (ACC_MAX_RUN_DAYS) plus the reading day; Treatment: the window's
-// recorded total T is spread over it, and "A detected window can read far
-// less than CHIRPS over it … the run keeps the gauge's total rather than
-// guess a correction". The way out is documented too: "A detection is
-// dropped when its window touches a period listed as missing".
-// So a 150-day logger outage (blank) ended by a 30 mm reading CHIRPS missed
-// is an accumulation: its last 92 days get 30 mm in all instead of the
-// ~350 mm the CHIRPS fallback would give them. Documented, but the doc frames
-// it as a manual gauge left unread; for an automatic logger a blank is no
-// data, not an unread catch.
-// Proposed §2.4d addition: "A long outage of blank days ended by a reading of
-// 20 mm or more is treated the same way: the window's days get only the
-// reading's total instead of the CHIRPS fallback, which can remove most of a
-// season's rain. List an automatic logger's outages under
-// `zeroRainRuns.missing` so they stay CHIRPS-filled." Question for the
-// hydrologist (with the §2.4d provisional decision): should blank days count
-// towards ACC_MIN_RUN_DAYS beyond a short span (e.g. a week), or only zeros?
-describe('item 11 (b): a ≥ 20 mm reading after a long blank outage is spread back over 92 days (§2.4d)', () => {
+// ── Item 11 (b), decided (engine ≥ 1.70.0, Q31 in #90, issue #393) ──────────
+// Up to 1.69.0 blank days counted like zeros towards an accumulation, so a
+// 150-day logger outage (blank) ended by a 30 mm reading CHIRPS missed was an
+// accumulation: its last 92 days got 30 mm in all instead of ~350 mm of
+// CHIRPS fill. §2.4d now: a blank stretch counts only up to
+// ACC_MAX_BLANK_DAYS (7); a longer one is an outage that ends the run. A
+// ≥ 20 mm reading straight after an outage that passes the CHIRPS tests over
+// it is set aside as missing: CHIRPS × factor fills its day like the
+// outage's, it stays out of the CHIRPS fit, and the run warns.
+//
+// By hand: catchment = CHIRPS on every day but the outage and the reading,
+// so every CHIRPS factor is exactly 1 and every filled day reads CHIRPS.
+// CHIRPS is 0 on the reading day, so the set-aside reading's day gets 0 mm.
+describe('item 11 (b): a ≥ 20 mm reading after a long blank outage is set aside, not spread (§2.4d, engine ≥ 1.70.0)', () => {
 	const start = '2015-10-01';
 	const days = 1461;
 	const d0 = toEpochDay(start);
@@ -254,27 +247,65 @@ describe('item 11 (b): a ≥ 20 mm reading after a long blank outage is spread b
 	const read = toEpochDay('2018-03-01') - d0;
 	// CHIRPS: wet-season rain, dry on the reading day and the days either side.
 	const chirps = Array.from({ length: days }, (_, t) => (t >= read - 1 && t <= read + 1 ? 0 : wet(t) ? 3 + (t % 3) : 0.5));
-	const runWith = (reading: number) =>
-		runModel(
-			gr4j({
-				rain_catchment_mm: { startDate: start, values: Array.from({ length: days }, (_, t) => (t >= read - 150 && t < read ? null : t === read ? reading : chirps[t]!)) },
-				rain_chirps_mm: { startDate: start, values: chirps }
-			})
-		);
+	const series = (reading: number) => ({
+		rain_catchment_mm: { startDate: start, values: Array.from({ length: days }, (_, t) => (t >= read - 150 && t < read ? null : t === read ? reading : chirps[t]!)) },
+		rain_chirps_mm: { startDate: start, values: chirps }
+	});
+	const runWith = (reading: number, settings: Record<string, unknown> = {}) => runModel(gr4j(series(reading), settings));
+	/** CHIRPS over the days the catchment reads (the fit's shared days), mm. */
+	const outageFree = () => sum(chirps, 0, days) - sum(chirps, read - 150, read + 1);
 
-	it('positive control: a 19 mm reading (below 20 mm) leaves the outage CHIRPS-filled', () => {
+	it('positive control: a 19 mm reading (below 20 mm) is no candidate; the outage is CHIRPS-filled and the reading stays on its day', () => {
 		const out = runWith(19);
 		expect(out.summary.rainAccumulation?.windows ?? []).toEqual([]);
-		expect(sum(get(out, null, 'rain_used'), read - 92, read + 1)).toBeGreaterThan(350);
+		const used = get(out, null, 'rain_used');
+		// The 19 mm on a CHIRPS-dry day stays in the fit, so the factors move off 1 (the pooled
+		// one is (2 675 + 19) / 2 675); each outage day reads CHIRPS × its month's factor.
+		const corr = out.summary.chirpsCorrection!;
+		expect(corr.pooled!.factor).toBeCloseTo((outageFree() + 19) / outageFree(), 12);
+		for (let t = read - 150; t < read; t++) expect(used[t]).toBeCloseTo(chirps[t]! * corr.months[month(t) - 1]!.factor!, 12);
+		expect(used[read]).toBe(19);
+		expect(out.summary.chirpsCorrection!.fallbackDays).toBe(150);
 	});
 
-	it('a 30 mm reading: detected, the last 92 outage days + the reading day hold 30 mm in all', () => {
+	it('a 30 mm reading: set aside, its day filled from CHIRPS (0 mm here), the outage CHIRPS-filled, out of the fit, warned', () => {
 		const out = runWith(30);
 		const w = out.summary.rainAccumulation!.windows;
 		expect(w).toHaveLength(1);
-		expect([w[0]!.start, w[0]!.end]).toEqual(['2017-11-29', '2018-03-01']);
-		expect(sum(get(out, null, 'rain_used'), read - 92, read + 1)).toBeCloseTo(30, 9);
-		// The outage's earlier 58 days stay CHIRPS-filled.
-		expect(out.summary.chirpsCorrection!.fallbackDays).toBe(58);
+		expect(w[0]).toMatchObject({ start: '2018-03-01', end: '2018-03-01', status: 'setAside', source: 'detected', outageDays: 150, runDays: 150, readingMm: 30, totalMm: 30, daysInRun: 1, usedMm: 0 });
+		const used = get(out, null, 'rain_used');
+		// No day of the outage holds a share of the 30 mm: each reads its own CHIRPS (factor 1).
+		// The reading is out of the fit, so every factor is exactly 1 (catchment = CHIRPS on every other day).
+		for (const m of out.summary.chirpsCorrection!.months) expect(m.factor).toBe(1);
+		for (let t = read - 150; t < read; t++) expect(used[t]).toBeCloseTo(chirps[t]!, 12);
+		expect(used[read]).toBe(0);
+		expect(get(out, null, 'rain_source')[read]).toBe(2);
+		expect(out.summary.chirpsCorrection!.fallbackDays).toBe(151);
+		expect(out.summary.chirpsCorrection!.accumulationDaysLeftOut).toBe(1);
+		// Nothing was spread, so there is no spread column.
+		expect(ser(out, null, 'rain_catchment_spread')).toBeUndefined();
+		expect(out.summary.rainAccumulation!).toMatchObject({ spreadWindows: 0, spreadDays: 0, spreadMm: 0 });
+		const warn = out.summary.warnings.find((x) => x.includes('after a blank outage set aside as missing'));
+		expect(warn).toContain('2018-03-01 (30 mm read after 150 blank days; 0 mm used instead)');
+		// The stored series is unchanged.
+		expect(series(30).rain_catchment_mm.values[read]).toBe(30);
+	});
+
+	it('keepReadings keeps it as one day\'s rain (and in the fit); asRecorded leaves it on its day and warns of a possible double count', () => {
+		const kept = runWith(30, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [], keepReadings: [{ start: '2018-03-01', end: '2018-03-01', reason: 'invented: logger back, storm confirmed' }] } });
+		expect(kept.summary.rainAccumulation!.windows[0]!.status).toBe('kept');
+		expect(get(kept, null, 'rain_used')[read]).toBe(30);
+		expect(kept.summary.chirpsCorrection!.accumulationDaysLeftOut ?? 0).toBe(0);
+		const rec = runWith(30, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [], accumulationMode: 'asRecorded' } });
+		expect(rec.summary.rainAccumulation!.windows[0]!.status).toBe('asRecorded');
+		expect(get(rec, null, 'rain_used')[read]).toBe(30);
+		expect(rec.summary.warnings.find((x) => x.includes('run as recorded'))).toContain('may be counted twice (2018-03-01)');
+	});
+
+	it('listing the outage as missing changes nothing: the outage was blank and CHIRPS-filled already, and the reading is judged on its own day', () => {
+		const listed = runWith(30, { zeroRainRuns: { mode: 'missing', keepDry: [], missing: [{ start: fromEpochDay(d0 + read - 150), end: fromEpochDay(d0 + read - 1), reason: 'invented: logger outage' }] } });
+		const plain = runWith(30);
+		expect(listed.summary.rainAccumulation!.windows.map((w) => w.status)).toEqual(['setAside']);
+		expect(get(listed, null, 'rain_used')).toEqual(get(plain, null, 'rain_used'));
 	});
 });
