@@ -1,7 +1,10 @@
 // The local-dev env loader (config/devEnv.ts): each checkout gets its own dev
 // database, and only a local URL naming the default `water` is redirected.
-import { readdirSync, readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it } from 'vitest';
 import { testDbName } from '../__tests__/test-db.js';
 import { checkoutDevDbName, devDbName, loadDevEnv, withDevDb } from './devEnv.js';
 
@@ -67,17 +70,47 @@ describe('checkoutDevDbName', () => {
 });
 
 describe('loadDevEnv', () => {
+	// A temp directory holding only a copy of the committed file, so the developer's own (gitignored)
+	// backend/.env.development.local, which may point DATABASE_URL at a preview database, never reaches the test.
+	const committed = fileURLToPath(new URL('../../.env.development', import.meta.url));
+	const dirs: string[] = [];
+	function envDir(local?: string): string {
+		const dir = mkdtempSync(join(tmpdir(), 'wm-devenv-'));
+		dirs.push(dir);
+		copyFileSync(committed, join(dir, '.env.development'));
+		if (local !== undefined) writeFileSync(join(dir, '.env.development.local'), local);
+		return dir;
+	}
+	afterEach(() => {
+		for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+	});
+
 	it('loads the committed env file and points both URLs at the checkout database', () => {
 		const env: NodeJS.ProcessEnv = { DEV_DB_NAME: 'water_w42' };
-		loadDevEnv(env);
+		loadDevEnv(env, envDir());
 		expect(env.DATABASE_URL).toBe(APP.replace(/water$/, 'water_w42'));
 		expect(env.MIGRATION_DATABASE_URL).toBe(OWNER.replace(/water$/, 'water_w42'));
 	});
 
 	it('keeps a URL already set to another database', () => {
 		const env: NodeJS.ProcessEnv = { DEV_DB_NAME: 'water_w42', DATABASE_URL: 'postgresql://water_app:water_app@127.0.0.1:5434/water_e2e' };
-		loadDevEnv(env);
+		loadDevEnv(env, envDir());
 		expect(env.DATABASE_URL).toBe('postgresql://water_app:water_app@127.0.0.1:5434/water_e2e');
+	});
+
+	it('lets .env.development.local override the committed file, and leaves its other database alone', () => {
+		const env: NodeJS.ProcessEnv = { DEV_DB_NAME: 'water_w42' };
+		loadDevEnv(env, envDir('DATABASE_URL=postgresql://water_app:water_app@127.0.0.1:5434/preview\n'));
+		expect(env.DATABASE_URL).toBe('postgresql://water_app:water_app@127.0.0.1:5434/preview');
+		expect(env.MIGRATION_DATABASE_URL).toBe(OWNER.replace(/water$/, 'water_w42'));
+	});
+
+	it('reads nothing but the directory it is given', () => {
+		const env: NodeJS.ProcessEnv = { DEV_DB_NAME: 'water_w42' };
+		const dir = mkdtempSync(join(tmpdir(), 'wm-devenv-empty-'));
+		dirs.push(dir);
+		loadDevEnv(env, dir);
+		expect(env.DATABASE_URL).toBeUndefined();
 	});
 });
 
