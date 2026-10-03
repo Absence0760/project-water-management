@@ -1,52 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Dem, DemInfo } from './dem.js';
-import { aimAt, delineate, DelineationRefused, toLonLat, toPx, windowOrigin } from './delineate.js';
+import { aimAt, delineate, DelineationRefused, windowOrigin } from './delineate.js';
+import { at, functionDem, HW, OY, VALLEY_TILE, valley } from './valleyFixture.js';
 
-// The window a delineation routes, against invented terrain read straight
-// from a function (no archive): a long, narrow valley running north from its
-// outlet, longer than half the windows the tests give, so a window centred on
-// the click cuts it (persona-hydrologist, issue #390, findings 1, 2 and 6).
-// 64 px tiles at zoom 11, about 265 m cells at 30° S.
-
-const Z = 11;
-const TILE = 64;
-const W = 2 ** Z * TILE;
-const [OX, OY] = toPx(25, -30, W).map(Math.floor) as [number, number];
-/** Half the valley's width (cells). */
-const HW = 6;
-
-/**
- * Elevation (m) at (u, v) cells from the outlet (v north is negative): the
- * valley's floor rising 0.2 m a cell up to v = −length and 1 m a cell from
- * its axis, a ridge 10 m above it, falling 2 m a cell away beyond; the river
- * leaves south down column 0.
- */
-function valley(length: number) {
-	return (u: number, v: number): number => {
-		if (u === 0 && v > 0) return 100 - 0.5 * v;
-		const rise = 0.2 * Math.min(length, Math.max(0, -v));
-		if (Math.abs(u) <= HW && v <= 0 && v >= -length) return 100 + rise + Math.abs(u);
-		const d = Math.hypot(Math.max(0, Math.abs(u) - HW), Math.max(0, v, -length - v));
-		return 100 + rise + HW + 10 - 2 * d;
-	};
-}
-
-/** A DEM of `elevation`, with no tile at all north of tile row `holeAbove` (global, zoom 11) when given: the extract's edge. */
-function functionDem(elevation: (u: number, v: number) => number, holeAbove?: number): Dem {
-	const info: DemInfo = { label: 'Invented valley', attribution: '', fingerprint: '0123456789abcdef', tileType: 'png', maxZoom: Z, bounds: [16, -35, 33, -22] };
-	return {
-		info: async () => info,
-		tile: async (z, x, y) => {
-			if (z !== Z || (holeAbove !== undefined && y < holeAbove)) return null;
-			const t = new Float32Array(TILE * TILE);
-			for (let py = 0; py < TILE; py++) for (let px = 0; px < TILE; px++) t[py * TILE + px] = elevation(x * TILE + px - OX, y * TILE + py - OY);
-			return { size: TILE, z: t };
-		}
-	};
-}
-
-/** The lon, lat of cell (u, v)'s centre. */
-const at = (u: number, v: number) => toLonLat(OX + u + 0.5, OY + v + 0.5, W);
+// The window a delineation routes, against the invented valley (valleyFixture.ts): longer than half the windows the tests give, so a
+// window centred on the click cuts it (persona-hydrologist, issue #390, findings 1, 2 and 6).
 
 async function refusal(p: Promise<unknown>): Promise<DelineationRefused> {
 	const e = await p.then(
@@ -117,7 +74,7 @@ describe('delineate: windows over a river longer than half the window', () => {
 
 describe('delineate: the data’s edge (finding 2)', () => {
 	// No tile north of the tile row 100 cells above the outlet: the valley's top half lies in the hole.
-	const holeAbove = Math.floor((OY - 100) / TILE);
+	const holeAbove = Math.floor((OY - 100) / VALLEY_TILE);
 
 	it('refuses a catchment that runs into no data, instead of proposing what drains into the hole’s side', async () => {
 		const dem = functionDem(valley(200), holeAbove);
