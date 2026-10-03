@@ -27,6 +27,7 @@ import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
+import { nearestReach } from './reach.js';
 
 /** Delineations one project may ask for in an hour: each is seconds of CPU on the API (docs/design/delineation.md § Where it runs). */
 export const DELINEATIONS_PER_HOUR = 30;
@@ -37,7 +38,15 @@ const LISTED = 10;
 
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);
-export const DelineateBody = z.object({ lon: Lon, lat: Lat, from: z.enum(['outlet', 'dam_wall']) }).strict();
+export const DelineateBody = z
+	.object({
+		lon: Lon,
+		lat: Lat,
+		from: z.enum(['outlet', 'dam_wall']),
+		/** Keep the point even beside a much larger channel (otherwise 422 `larger_channel`, naming it; place.ts). */
+		keepPoint: z.boolean().optional()
+	})
+	.strict();
 export const AcceptBody = z
 	.object({
 		as: z.enum(['catchment_boundary', 'other']),
@@ -150,17 +159,22 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			if (rows[0]!.n >= DELINEATIONS_PER_HOUR) {
 				throw new ApiError(429, `This catchment has asked for ${DELINEATIONS_PER_HOUR} delineations in the last hour; try again later.`);
 			}
+			// The nearest river reach's upstream area, for matching the outlet to it (issue #374).
+			const reach = await nearestReach(db, [body.lon, body.lat]);
 			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt).
-			return beginDemAttempt(db, 'delineation');
+			return { id: await beginDemAttempt(db, 'delineation'), reach };
 		});
 		try {
 			const dem = configuredDem();
 			if (!dem) throw new ApiError(409, 'Delineation is off: the server has no elevation model (DEM_URL is empty).');
 			let result;
 			try {
-				result = await delineate(dem, [body.lon, body.lat]);
+				result = await delineate(dem, [body.lon, body.lat], {
+					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}` } : null,
+					keepPoint: body.keepPoint
+				});
 			} catch (err) {
-				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
+				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code, ...(err.larger ? { larger: err.larger } : {}) });
 				logEvent('error', { event: 'delineation_failed', ...safeError(err) });
 				throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
 			}
@@ -218,7 +232,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 				return c.json({ proposal }, 201);
 			});
 		} finally {
-			await finishDemAttempt(userId, attempt);
+			await finishDemAttempt(userId, attempt.id);
 		}
 	})
 	.post('/:id/map/delineation/:pid/accept', async (c) => {

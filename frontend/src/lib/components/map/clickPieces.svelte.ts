@@ -11,6 +11,7 @@
 // (off the elevation model, a catchment too large) is taken back with the
 // reason, so the clicks before it keep working.
 import type { ClickPieces, MapFeature, MapPosition } from '$lib/api/types';
+import { largerLine } from './largerChannel';
 import { interiorPoint, pieceTintsFor, type PiecesShape, type ProposalPiece } from './pieces';
 
 /** The map's shape for an answer: one piece per click, numbered by click, the lowest click as the outlet and every kept click marked. Pure. */
@@ -59,7 +60,10 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : `${p.drainsInto + 1}`} as an inflow`;
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.click + 1);
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
-	return `${km2(p.areaM2)} · ${into}${upstream}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${missed(p) ? ` · ${MISSED}` : ''}`;
+	const placed = p.reach ? ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})` : '';
+	// A larger channel nearby explains a small piece better than the missed-channel warning does.
+	const warn = p.larger ? ` · ${largerLine(p.point, p.larger)}` : missed(p) ? ` · ${MISSED}` : '';
+	return `${km2(p.areaM2)} · ${into}${upstream}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${warn}`;
 }
 
 /** The pieces Save keeps: whole and outlined. */
@@ -99,33 +103,48 @@ export class ClickDivider {
 	/** A click on the map (or typed): routed with the others; refused, it is taken back with the reason. */
 	async add(at: MapPosition) {
 		if (this.busy === 'save') return;
+		await this.#route([...this.clicks, { lon: at[0], lat: at[1] }], this.clicks.length);
+	}
+
+	/** Move click `i` to `at` (the larger channel its piece names), routed again; Undo moves it back. */
+	async replace(i: number, at: MapPosition) {
+		if (this.busy === 'save' || !this.clicks[i]) return;
+		await this.#route(
+			this.clicks.map((c, k) => (k === i ? { lon: at[0], lat: at[1] } : c)),
+			i
+		);
+	}
+
+	/** Route `clicks`, `changed` the index of the click that is new or moved (its piece is what the live line reports). */
+	async #route(clicks: Click[], changed: number) {
 		const before = { clicks: this.clicks, result: this.result };
-		const clicks = [...this.clicks, { lon: at[0], lat: at[1] }];
 		this.clicks = clicks;
 		this.error = null;
 		this.busy = 'pieces';
-		this.said = `Click ${clicks.length}: working out the sub-catchments…`;
+		this.said = `Click ${changed + 1}: working out the sub-catchments…`;
 		const seq = ++this.#seq;
 		try {
 			const r = await this.#fetch(clicks);
 			if (seq !== this.#seq) return;
 			this.#history.push(before);
 			this.result = r;
-			const dropped = r.dropped.find((d) => d.click === clicks.length - 1);
-			const newest = r.pieces.find((p) => p.click === clicks.length - 1);
+			const dropped = r.dropped.find((d) => d.click === changed);
+			const newest = r.pieces.find((p) => p.click === changed);
 			const whole = r.pieces.filter((p) => !p.open).length;
 			const open = r.pieces.length - whole;
 			this.said = dropped
-				? `Click ${clicks.length} is not a piece: it ${dropped.reason}.`
-				: newest && missed(newest)
-					? `Click ${clicks.length}: ${MISSED}.`
-					: `${whole === 1 ? '1 sub-catchment' : `${whole} sub-catchments`}${open ? `, ${open === 1 ? '1 inflow point' : `${open} inflow points`}` : ''}.`;
+				? `Click ${changed + 1} is not a piece: it ${dropped.reason}.`
+				: newest?.larger
+					? `Click ${changed + 1}: ${largerLine(newest.point, newest.larger)}.`
+					: newest && missed(newest)
+						? `Click ${changed + 1}: ${MISSED}.`
+						: `${whole === 1 ? '1 sub-catchment' : `${whole} sub-catchments`}${open ? `, ${open === 1 ? '1 inflow point' : `${open} inflow points`}` : ''}.`;
 		} catch (err) {
 			if (seq !== this.#seq) return;
 			// Taken back: the clicks before it still divide as they did.
 			this.clicks = before.clicks;
 			this.result = before.result;
-			this.error = `Click not added: ${err instanceof Error ? err.message : String(err)}`;
+			this.error = `${changed === clicks.length - 1 && clicks.length > before.clicks.length ? 'Click not added' : `Click ${changed + 1} not moved`}: ${err instanceof Error ? err.message : String(err)}`;
 			this.said = this.error;
 		} finally {
 			if (seq === this.#seq) this.busy = null;
@@ -138,9 +157,10 @@ export class ClickDivider {
 		this.#seq++;
 		this.busy = null;
 		this.error = null;
+		const moved = prev.clicks.length === this.clicks.length;
 		this.clicks = prev.clicks;
 		this.result = prev.result;
-		this.said = this.clicks.length ? `Took back click ${this.clicks.length + 1}.` : 'Took back the click; none left.';
+		this.said = moved ? 'Moved the click back.' : this.clicks.length ? `Took back click ${this.clicks.length + 1}.` : 'Took back the click; none left.';
 	}
 
 	clear() {

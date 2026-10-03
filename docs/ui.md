@@ -2707,7 +2707,14 @@ map" card) stays the schematic; this is the geography.
   Latitude and Longitude behind **Enter coordinates**), the dataset line
   (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
   (“Delineating…”). A refusal shows its sentence in the sheet ("That point
-  is outside the elevation model …"). The proposal is drawn dashed in teal
+  is outside the elevation model …"). A point beside a much larger channel
+  (issue #374) shows a warning box instead: "A much larger channel runs
+  504 m north of your point: about 620 km² drains through it here, against
+  0.18 km² at your point. River lines on the map can sit a few hundred
+  metres off the channel the elevation model sees. Use that channel, or
+  keep your point if you meant the small one.", with **Use that channel**
+  (primary: the coordinates move to it and it delineates there) and **Keep
+  my point** (delineates the point as asked, `keepPoint`). The proposal is drawn dashed in teal
   with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the
@@ -2741,8 +2748,15 @@ map" card) stays the schematic; this is the geography.
   was routed") and the inflow points entering it, or why it is not a piece:
   an inflow point ("an inflow point: its catchment runs past the area routed
   around the clicks, so no piece; …"), or a click that doesn't drain to the
-  lowest. A click with under 1 km² upstream adds "very little drains here:
-  it probably missed the channel; Undo and click closer to the river". A line with the focus or the pointer lights its piece, and a piece
+  lowest. A click matched to a river reach adds "on the channel matching
+  river reach 11492928 (412.50 km²)"; a click snapped beside a much larger
+  channel adds "a much larger channel (620 km²) runs 504 m north: the river
+  line may sit off the channel the elevation model sees" with **Use the
+  larger channel** at the line's end (the click moves there and the pieces
+  are routed again; the live line says "Click 2: a much larger channel …"
+  first); otherwise a click with under 1 km² upstream adds "very little
+  drains here: it probably missed the channel; Undo and click closer to the
+  river". A line with the focus or the pointer lights its piece, and a piece
   under the pointer lights itself. Under the lines: the count and total
   area, the dataset, and "A proposal from the elevation model: check each
   piece against the map before you save." **Enter coordinates** (a
@@ -2751,7 +2765,8 @@ map" card) stays the schematic; this is the geography.
   its neighbours, as Start's, every click's outlet a ringed dot); the map is
   framed on the first answer and then stays where the editor is clicking. A
   click the server refuses is taken back with the reason ("Click not added:
-  …"). **Undo the last click** goes back to the answer before it at once,
+  …"). **Undo** goes back to the answer before the last click or move at
+  once ("Took back click 3.", "Moved the click back."),
   **Clear** drops them all, **Save the *n* as areas** saves each piece as an
   *other* polygon ("Saved 2 sub-catchments, 547.19 km² in all on the map as
   areas. Link each to its unit and Use its area, or rename it on its card.",

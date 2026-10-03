@@ -12,7 +12,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openMap, uploadThroughSheet } from '../support/map.ts';
 
@@ -111,6 +111,28 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await expect(header(page).getByRole('button', { name: 'Sub-catchments' })).toHaveAttribute('aria-pressed', 'false');
 	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Sub-catchment 1' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
+});
+
+test('a click beside a much larger channel names it, and Use the larger channel moves the click onto it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Sub-catchments larger channel');
+	await openMap(page, project.id);
+	await header(page).getByRole('button', { name: 'Sub-catchments' }).click();
+	await typeOutlet(page, FIXTURE_OUTLET);
+	await typeOutlet(page, FIXTURE_OFF_CHANNEL);
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	const off = lines(page).nth(1);
+	await expect(off).toContainText(/a much larger channel \([\d ,]+ km²\) runs \d+ m west: the river line may sit off the channel the elevation model sees/);
+	await expect(bar(page).getByTestId('map-click-said')).toHaveText(/^Click 2: a much larger channel/);
+	await expectNoViolations(page);
+	await off.getByTestId('map-click-use-larger').click();
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	await expect(lines(page).nth(1)).not.toContainText('larger channel');
+	// On the river above the outlet: the valley's land above the mid gauge, hundreds of km².
+	await expect(lines(page).nth(1)).toHaveText(/^2 Sub-catchment 2: [34]\d\d\.\d\d km² · drains into 1/);
+	await bar(page).getByTestId('map-click-undo').click();
+	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Moved the click back.');
+	await expect(lines(page).nth(1)).toContainText('larger channel');
 });
 
 test('a click off the elevation model is taken back with the reason; Done asks before dropping clicks; a viewer gets no Sub-catchments', async ({ page, owner, signIn }) => {

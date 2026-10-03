@@ -139,11 +139,27 @@ All in `backend/src/delineation/`, pure functions over typed arrays
 4. **Flow direction: D8**, steepest drop over distance to one of the eight
    neighbours, on the filled surface.
 5. **Accumulation**: upstream cell counts, in topological order.
-6. **Snapping**: the click moves to the cell with the most upstream cells
-   within **150 m** (about five cells), the nearest of equals. A click a
-   little off the channel lands on it; a click on a slope finds the
-   gully below it. The distance moved is shown. Fewer than 9 upstream
-   cells is refused ("click on the river itself").
+6. **Placing the outlet** (`place.ts`, since `delineate-2`; the evidence is
+   [delineation-snapping.md](./delineation-snapping.md), issue #374). River
+   lines sit off the channel the DEM routes along (a median 150–260 m from
+   HydroRIVERS on South African reaches, over 1.2 km at the 90th
+   percentile), so the old rule alone, the most-drained cell within 150 m,
+   put about half of the clicks on a river line into a gully.
+   - **Matched**: with a river reach within 1 km of the click
+     (`river_reference`, `reach.ts`), the cell within 1 km whose upstream
+     area best matches the reach's, by Lehner's (2012) station allocation:
+     cells within 50 % of the area, ranked by area misfit plus twice the
+     scaled distance. None passing falls through to:
+   - **Snapped**: the cell with the most upstream cells within **150 m**
+     (about five cells), the nearest of equals, and the **larger-channel
+     guard**: when a channel with 100× its upstream cells runs within 1 km,
+     the click is refused (422 `larger_channel`) naming that channel's
+     nearest cell, its distance and both areas, and the sheet offers **Use
+     that channel** or **Keep my point** (`keepPoint`). It is never moved
+     there silently: near a confluence the bigger channel is the wrong
+     river.
+   The distance moved is shown. Fewer than 9 upstream cells is refused
+   ("click on the river itself").
 7. **Upstream cells**: every cell whose D8 path passes the snapped outlet.
 8. **Polygon**: the cells' outline traced along their edges, one ring
    (cells that touch only at a corner, which D8 joins, stay one piece,
@@ -163,7 +179,9 @@ snapped outlet and the distance, the polygon and its area, the cell count,
 cell size, zoom and window, the dataset label and the archive's
 **fingerprint** (SHA-256 of its header and root directory, so two extracts
 are never confused), the method sentence and `methodVersion`
-(`delineate-1`; bumped whenever the method changes what a click proposes).
+(`delineate-1`, then `delineate-2` for the matched outlet and the
+larger-channel guard; bumped whenever the method changes what a click
+proposes).
 
 ## Accuracy, as shown to the user
 

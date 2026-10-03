@@ -79,6 +79,7 @@
 		<ol class="pieces small" data-testid="map-click-pieces">
 			{#each divider.clicks as _, i (i)}
 				{@const isPiece = r?.pieces.some((p) => p.click === i && !p.open)}
+				{@const larger = r?.pieces.find((p) => p.click === i)?.larger}
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex (focusable so a keyboard user can light its piece; it says the same in words) -->
 				<li
 					class:dropped={r && !isPiece}
@@ -91,7 +92,13 @@
 					data-click={i}
 				>
 					<span class="num" aria-hidden="true">{i + 1}</span>
-					<span><span class="visually-hidden">Sub-catchment {i + 1}:</span> {r ? pieceLine(r, i) : 'working it out…'}</span>
+					<span><span class="visually-hidden">Sub-catchment {i + 1}:</span> {r ? pieceLine(r, i) : 'working it out…'}</span>{#if larger}<button
+							type="button"
+							class="btn btn-sm use"
+							disabled={!!divider.busy}
+							onclick={() => divider.replace(i, larger.at)}
+							data-testid="map-click-use-larger">Use the larger channel</button
+						>{/if}
 				</li>
 			{/each}
 		</ol>
@@ -123,7 +130,7 @@
 	</details>
 
 	<div class="bar-actions">
-		<button type="button" class="btn btn-sm" onclick={() => divider.undo()} disabled={!divider.canUndo} data-testid="map-click-undo">Undo the last click</button>
+		<button type="button" class="btn btn-sm" onclick={() => divider.undo()} disabled={!divider.canUndo} data-testid="map-click-undo">Undo</button>
 		<button type="button" class="btn btn-sm" onclick={() => divider.clear()} disabled={!divider.clicks.length || divider.busy === 'save'} data-testid="map-click-clear">Clear</button>
 		<button type="button" class="btn btn-sm btn-ghost" onclick={ondone} data-testid="map-click-done">Done</button>
 		<button type="button" class="btn btn-sm btn-primary" onclick={onsave} disabled={!kept.length || !!divider.busy} data-testid="map-click-save">
@@ -176,6 +183,10 @@
 	}
 	.pieces li.dropped {
 		color: var(--text-muted);
+	}
+	.use {
+		flex: none;
+		margin-left: auto;
 	}
 	.num {
 		flex: none;

@@ -3032,7 +3032,7 @@ map feature like any other.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[] }`: the newest 10, any status. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
-| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall' }` | `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window, about 100 km), `too_small` (almost nothing drains there), `outline` (no valid polygon); nothing is saved. `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included; security.md § Map uploads); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean }` | `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window, about 100 km), `too_small` (almost nothing drains there), `outline` (no valid polygon), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included; security.md § Map uploads); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
 | POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
 
@@ -3066,7 +3066,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   lowest, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
   `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
   geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
-  totalAreaM2, open }`. `click` and `drainsInto` are indexes into the request's
+  totalAreaM2, open, placedBy, reach, larger }`. `click` and `drainsInto` are indexes into the request's
   clicks (`drainsInto` null for the lowest); `point` is where the click
   snapped onto the channel; `totalAreaM2` everything upstream of it. `open`:
   an inflow point, its catchment past the routed window (about 100 km) or
@@ -3075,7 +3075,12 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-2`).
+  the map's (`start-3`). `placedBy` is `matched` (on the channel matching
+  the river reach within 1 km of the click, `reach = { dataset, reachId,
+  upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
+  snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's
+  refusal), else null. The click stays where it snapped; the client offers
+  the channel.
 - Save is in the audit log (`map.subcatchments_saved`: the features' ids,
   how many, the inflow points left out, their area, the dataset; never a
   polygon). The preview is not

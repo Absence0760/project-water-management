@@ -13,3 +13,5 @@ export const FIXTURE_DAM: [number, number] = [20.7428741, -33.4262838];
 export const FIXTURE_MID_GAUGE: [number, number] = [20.7428741, -33.4938799];
 /** Far up the river above the dam: an abstraction point there owns the valley's head. [lon, lat] */
 export const FIXTURE_UPPER: [number, number] = [20.7428741, -33.3104464];
+/** On the valley's side three cells (about 380 m) east of the mid gauge, as a displaced river line puts a click: beside a much larger channel. [lon, lat] */
+export const FIXTURE_OFF_CHANNEL: [number, number] = [20.746994, -33.4938799];

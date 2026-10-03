@@ -11,7 +11,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_OUTLET } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, openMap, uploadThroughSheet } from '../support/map.ts';
 
@@ -47,7 +47,7 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(r.getByRole('heading', { name: 'The delineated catchment' })).toBeFocused();
 	await r.getByText('How it was made').click();
 	await expect(r.getByTestId('delineate-fact-dataset')).toContainText('Synthetic DEM');
-	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-1]');
+	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-2]');
 	await expect(r.getByRole('heading', { name: 'Before you accept it' })).toBeVisible();
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
@@ -136,6 +136,32 @@ test('leaving Delineate for Place a point or Draw a shape leaves the delineating
 	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'false');
 	await bar.getByTestId('map-enter-coordinates').click();
 	await expect(page.getByRole('dialog', { name: 'Place a point' })).toBeVisible();
+});
+
+test('a point beside a much larger channel is not delineated quietly: the sheet names the channel, and Use that channel delineates it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Delineate larger channel');
+	await openMap(page, project.id);
+	await delineateAt(page, FIXTURE_OFF_CHANNEL);
+	const offer = sheet(page).getByTestId('delineate-larger');
+	await expect(offer).toBeVisible();
+	await expect(offer).toContainText(/^A much larger channel runs \d+ m west of your point: about [\d ,]+ km² drains through it here/);
+	await expect(sheet(page).getByTestId('delineate-error')).toHaveCount(0);
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await expectNoViolations(page);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
+	// Keep my point: the small catchment it snapped to.
+	await offer.getByTestId('delineate-keep-point').click();
+	await expect(review(page)).toBeVisible();
+	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^\d\.\d\d km²$/);
+	// Delineate again at the same point and use the channel instead: the valley above the mid gauge, hundreds of km².
+	await review(page).getByRole('button', { name: 'Delineate another point' }).click();
+	await sheet(page).getByTestId('delineate-submit').click();
+	await sheet(page).getByTestId('delineate-use-larger').click();
+	await expect(review(page)).toBeVisible();
+	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^[34]\d\d\.\d\d km²$/);
 });
 
 test('a viewer gets no Delineate', async ({ page, owner, signIn }) => {
