@@ -39,7 +39,7 @@ No env files to write. `backend/.env.development` and
 | `MIGRATION_DATABASE_URL` | `postgresql://water:water@127.0.0.1:5434/water` | Schema owner, used for migrations |
 
 In a git worktree both URLs point at that worktree's own dev database,
-`water_w<n>` (see below), not `water`.
+`water_w<tag>` (see below), not `water`.
 | `AUTH_JWT_SECRET` | a dev-only string (≥ 32 chars) | Signs session cookies. Production uses a real secret. |
 | `ALLOWED_ORIGINS` | `http://localhost:7777` | CORS allow-list (with credentials) |
 | `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; local dev is plain http. Unset (Secure on) when deployed. |
@@ -92,8 +92,9 @@ pnpm dev
   tiles are there next time. Like `dev:db:down`, it stops the containers every
   checkout shares.
 - Each checkout has its **own dev database** in that Postgres: `water` in the
-  main checkout, `water_w<n>` in a git worktree (n from a hash of its path,
-  the same as its `water_test_w<n>`). The backend's dev entry points
+  main checkout, `water_w<tag>` in a git worktree (`<tag>` is 16 hex digits
+  from its path, the same as its `water_test_w<tag>`; testing.md § Several
+  checkouts at once). The backend's dev entry points
   (`backend/src/config/devEnv.ts`) point `DATABASE_URL` and
   `MIGRATION_DATABASE_URL` at it, and `pnpm dev` / `pnpm dev:db:migrate`
   create it on first use. A new worktree's database starts empty: run
@@ -655,7 +656,7 @@ pnpm dev:db:reset           # DELETE all local data (every checkout's databases)
 ```bash
 pnpm check                  # typecheck all workspaces
 pnpm test                   # unit tests (engine, frontend, backend) with no DB
-pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<n> in a worktree); reports/render.db.test.ts renders a real PDF (skips, saying so, without MinIO) and reports/render.origin.db.test.ts drives Chromium (skips without it); under CI both fail instead of skipping (testing.md)
+pnpm test:backend:db        # API + RLS tests and catalogue guards (water_test DB; water_test_w<tag> in a worktree); reports/render.db.test.ts renders a real PDF (skips, saying so, without MinIO) and reports/render.origin.db.test.ts drives Chromium (skips without it); under CI both fail instead of skipping (testing.md)
 pnpm test:e2e               # Playwright end-to-end (own water_e2e DB, servers on :3101/:7801; per-worktree slot elsewhere; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 pnpm test:engine            # engine only; client catchment regression tests run when the data/ fixtures exist
 pnpm check:i18n             # what has no Afrikaans yet, and any stale translation; fails if the sheet (docs/i18n/af-translation-sheet.md) or the message id list is out of date, or a translation is stale

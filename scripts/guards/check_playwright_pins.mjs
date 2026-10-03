@@ -16,6 +16,13 @@
 // hand as renderer.Dockerfile's header says. Every pin must be exact: a range
 // would let the lockfile drift from the image.
 //
+// And CI's service containers (serviceImageProblems): every `services:` image
+// in .github/workflows/*.yml carries an @sha256 digest, and the same digest
+// docker-compose.yml gives that image:tag, so CI tests against what local dev
+// runs. Dependabot's docker-compose entry moves compose's tag and digest but
+// never a workflow's service image, so its PR fails here until ci.yml's
+// services move with it.
+//
 // The same guard holds the rest of the renderer image's pins, which have no
 // version to agree on but must stay pinned (imageProblems): every FROM
 // carries an @sha256 digest, and every apt-get update / install reads one
@@ -33,7 +40,7 @@
 // CI:    ci.yml, job `workflow-lint` (Playwright pins step).
 // Tests: node --test scripts/guards/check_playwright_pins.test.mjs
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -143,8 +150,73 @@ export function pinProblems(pins) {
 	return problems;
 }
 
+/**
+ * The `image:` of every service container in a workflow: [{ line, image }].
+ * A service is any key under a `services:` mapping (a job's); its image is the
+ * `image:` line inside it.
+ */
+function workflowServiceImages(workflow) {
+	const out = [];
+	let indent = null;
+	workflow.split('\n').forEach((raw, i) => {
+		if (/^\s*(#.*)?$/.test(raw)) return;
+		const depth = raw.length - raw.trimStart().length;
+		if (indent !== null && depth <= indent) indent = null;
+		const services = raw.match(/^(\s*)services:\s*(#.*)?$/);
+		if (services) {
+			indent = services[1].length;
+			return;
+		}
+		const image = indent !== null && raw.match(/^\s*image:\s*["']?([^"'\s#]+)["']?/);
+		if (image) out.push({ line: i + 1, image: image[1] });
+	});
+	return out;
+}
+
+const PINNED = /^([^\s@]+:[^\s@]+)@(sha256:[0-9a-f]{64})$/;
+
+/**
+ * CI's service images that aren't pinned to docker-compose.yml's digest for
+ * the same image:tag: one line each. `workflows` is [{ where, text }],
+ * `compose` docker-compose.yml's text.
+ */
+export function serviceImageProblems(workflows, compose) {
+	const composed = new Map();
+	for (const m of compose.matchAll(/^\s*image:\s*["']?([^"'\s#]+)["']?/gm)) {
+		const [name, digest] = m[1].split('@');
+		composed.set(name, digest ?? null);
+	}
+	const problems = [];
+	for (const { where, text } of workflows) {
+		for (const { line, image } of workflowServiceImages(text)) {
+			const at = `${where}:${line}`;
+			const pinned = image.match(PINNED);
+			if (!pinned) {
+				problems.push(`${at}: service image "${image}" is not pinned by digest (image:tag@sha256:…, the digest docker-compose.yml gives it)`);
+				continue;
+			}
+			const [, name, digest] = pinned;
+			if (!composed.has(name)) problems.push(`${at}: service image ${name} is not one docker-compose.yml runs; CI's services test against local dev's images`);
+			else if (composed.get(name) === null) problems.push(`${at}: docker-compose.yml names ${name} without a digest to match (image:tag@sha256:…)`);
+			else if (composed.get(name) !== digest) problems.push(`${at}: service image ${name} is at ${digest}, docker-compose.yml at ${composed.get(name)}; move ci.yml's services with compose`);
+		}
+	}
+	return problems;
+}
+
 function main() {
 	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+	const workflowDir = join(root, '.github', 'workflows');
+	const services = serviceImageProblems(
+		readdirSync(workflowDir)
+			.filter((f) => /\.ya?ml$/.test(f))
+			.map((f) => ({ where: `.github/workflows/${f}`, text: readFileSync(join(workflowDir, f), 'utf8') })),
+		readFileSync(join(root, 'docker-compose.yml'), 'utf8')
+	);
+	if (services.length) {
+		console.error(`::error::CI service images:\n${services.join('\n')}`);
+		process.exitCode = 1;
+	} else console.log("CI service images: by docker-compose.yml's digest.");
 	const pins = readPins((path) => readFileSync(join(root, path), 'utf8'));
 	const problems = pinProblems(pins);
 	const image = imageProblems(readFileSync(join(root, 'backend/renderer.Dockerfile'), 'utf8'));

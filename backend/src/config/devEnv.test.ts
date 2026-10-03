@@ -13,18 +13,18 @@ describe('devDbName', () => {
 		expect(devDbName('/home/x/project-water-management', false)).toBe('water');
 	});
 
-	it('gives a worktree water_w<n>, the same n as its test database', () => {
+	it('gives a worktree water_w<16 hex>, the same tag as its test database', () => {
 		for (const path of ['/home/x/wm-a', '/home/x/wm-b', '/tmp/wm-some-long-branch-name']) {
 			const name = devDbName(path, true);
-			expect(name).toMatch(/^water_w([1-9]|[1-9][0-9])$/);
+			expect(name).toMatch(/^water_w[0-9a-f]{16}$/);
 			expect(testDbName(path, true)).toBe(name.replace('water_w', 'water_test_w'));
 		}
 	});
 
-	it('is stable for a path and differs between paths', () => {
+	it('is stable for a path and distinct between paths', () => {
 		expect(devDbName('/home/x/wm-a', true)).toBe(devDbName('/home/x/wm-a', true));
-		const names = new Set(['a', 'b', 'c', 'd', 'e', 'f'].map((s) => devDbName(`/home/x/wm-${s}`, true)));
-		expect(names.size).toBeGreaterThan(1);
+		const names = Array.from({ length: 2000 }, (_, i) => devDbName(`/home/x/wm-${i}`, true));
+		expect(new Set(names).size).toBe(names.length);
 	});
 });
 
@@ -62,7 +62,7 @@ describe('checkoutDevDbName', () => {
 	});
 
 	it('without DEV_DB_NAME, names this checkout by where it is', () => {
-		expect(checkoutDevDbName({})).toMatch(/^water(_w\d+)?$/);
+		expect(checkoutDevDbName({})).toMatch(/^water(_w[0-9a-f]{16})?$/);
 	});
 });
 
