@@ -159,9 +159,42 @@ All in `backend/src/delineation/`, pure functions over typed arrays
    beyond, so the window grows (2 048, then 3 072 cells, and on the worker
    4 096 and 6 144, § Where it runs). A catchment still at the edge at the
    worker's cap is **refused, never cut off**.
+   - **Placed over the catchment** (since `delineate-6`): each larger
+     window is placed by the catchment the last one cut (`windowOrigin`).
+     On an axis where it was cut at one end only, the window starts just
+     short of the catchment's other end, so the whole window lies the way
+     it runs; cut at both ends or neither, it is centred on the
+     catchment's box. The click always stays 6.5 km inside (the junction's
+     match and its path downhill, `junction.ts`), so the outlet's placement
+     sees what it would in a centred window. Centred, the 3 072-cell cap
+     held only about 50 km upstream of the outlet and half the window lay
+     downstream: A62H's outlet (DWS 873 km², a long catchment running
+     east-south-east) was refused at every window, while placed it is
+     890 km² in the 3 072-cell window (persona-hydrologist finding 6).
+   - **A river the window cuts** (since `delineate-6`): when a river
+     reach gives the click an expected area and no channel matches it
+     (step 6), but a channel within the match radius is cut by the window
+     with less than twice that area, its area here is only a lower bound,
+     so the window grows (placed over that channel's catchment) instead of
+     falling back to the snap. In a 1 024-cell window (about 1 150 km²)
+     a river of a few hundred km² carries only its in-window share, so no
+     cell matched it and the click went into a gully or was refused beside
+     a "much larger channel" quoted at its window-local area: D17D's
+     outlet (DWS 750 km²) gave 134 km², N22D's and C51D's were refused
+     (persona-hydrologist finding 1); grown, they are 747, 344 and
+     869 km². It looks as far as `place()` matches (2.5 km for a river
+     picked at a confluence or from a gully, else 1 km). Not when the point
+     is kept (`keepPoint`: the editor chose the small channel), not when a
+     channel matching the reach is already offered (place.ts rules 3 and
+     4), not for a reach larger than the worker's cap's
+     whole square (the Orange: no window can match it), and at the
+     worker's cap the snap and its guard apply as before. The request's
+     last window hands such a click to the worker like any other
+     (`too_large` with its window, `capCells`).
 3. **Depression filling: Priority-Flood+ε** (Barnes, Lehman & Mulla 2014,
    *Computers & Geosciences* 62, Algorithm 3), seeded from the window's
-   edge and any no-data cells. Every pit and flat is raised to just above
+   border and from the cells beside no data, each at its own elevation
+   (no-data cells have none and seed nothing; step 9). Every pit and flat is raised to just above
    its spill point (the next float64 up, so the raise is invisible), which
    gives every cell a strictly lower neighbour: D8 then drains every cell
    to an edge with no cycles, and flats drain towards their outlet.
@@ -220,9 +253,18 @@ All in `backend/src/delineation/`, pure functions over typed arrays
    `checkGeometry` every map polygon passes, and its area computed on the
    ellipsoid (`geo/area.ts`). Typical outlines are tens to hundreds of
    vertices (a 600 km² catchment: about 650).
-9. **No data**: a catchment that reaches a no-data cell (the edge of the
-   operator's extract) is refused, since what lies beyond is unknown.
-   The sea is data (elevation 0 or below), not no data.
+9. **No data**: a catchment that reaches the data's edge (a cell beside a
+   missing tile: the edge of the operator's extract) is refused, since what
+   lies beyond is unknown; so is a click whose river reach is cut there
+   with no channel matching it (step 2). The sea is data (elevation 0 or
+   below), not no data. The cells beside no data are edges like the
+   window's border (`flow.ts` `edgeMask`, `NO_DATA_EDGE`): water leaves
+   there only where that is the lowest way out. Until `delineate-6` no
+   data flooded as lower than any elevation (RichDEM's convention, for a
+   DEM whose no data is the sea), so every cell beside it drained into it,
+   no catchment could reach it, and the refusal never fired: at 29.92° E,
+   22.01° S, two cells from the extract's northern edge, a river of
+   1 941 km² was proposed as 154.9 km² (persona-hydrologist finding 2).
 
 **Recorded on every proposal** (`delineation_proposal`): the click, the
 snapped outlet and the distance, the polygon and its area, the cell count,
@@ -235,9 +277,11 @@ larger-channel guard, `delineate-3` for asking the river at a confluence,
 `delineate-5` for a click on the DEM's own channel staying on it, a gully
 snap offering the reach's channel out to 2.5 km and the reach's area taken
 at the click, `delineate-7` for keeping a click beside a confluence on its
-river's side of the DEM's junction (issue #390; `delineate-6` is reserved),
-`delineate-8` for the two together, `delineate-9` for the pans reported
-beside the catchment, § Pans; bumped whenever the method changes what a click
+river's side of the DEM's junction (issue #390), `delineate-6` for windows
+placed over the catchment, grown for a river they cut, and no data as the
+data's edge, `delineate-8` for 5 and 7 together, `delineate-9` for the pans
+reported beside the catchment (§ Pans), `delineate-10` for 6 and 9
+together; bumped whenever the method changes what a click
 proposes), and the pans' report (193).
 
 ## Pans
@@ -281,6 +325,10 @@ after it) and reports, beside the catchment:
   request's 3 072-cell cap, 2.7 s at the worker's 6 144 (against fills of
   0.65, 1.7 and 13 s); the copy is 4 bytes a cell, so the worker's largest
   window now peaks at about 1.2 GB (it was 1.05 GB), inside its 2 048 MB.
+- **Beside missing data**: the pans read the elevations before the fill,
+  where a missing cell is NaN; only the catchment's cells are looked at, and
+  a catchment never holds a missing cell or one beside it (§ Method 9), so
+  missing data is never a pan.
 - **Tests**: `pans.test.ts` (hand-made grids: a pan and what drains into
   it, counted independently; too shallow, too small, too little storage;
   a depression at a point; nested pans), `delineate.test.ts` and

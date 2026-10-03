@@ -278,8 +278,6 @@ async function shiftProbe(dem: Dem, s: Station, reachKm2: number | null): Promis
 	let first: Pick<Shift, 'sides' | 'extentKm'> | null = null;
 	for (let move = 0; move <= 3; move++) {
 		const grid = await readWindow(dem, z, tile!.size, x0, y0, N);
-		const noData = new Uint8Array(grid.z.length);
-		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
 		fill(grid, edge);
 		const dir = d8(grid, edge);
@@ -298,7 +296,7 @@ async function shiftProbe(dem: Dem, s: Station, reachKm2: number | null): Promis
 			if (y < minY) minY = y;
 			if (y > maxY) maxY = y;
 		}
-		const touch = touchesEdge(grid, edge, mask, noData);
+		const touch = touchesEdge(grid, edge, mask);
 		if (!first) {
 			const ox = pl.cell % N;
 			const oy = (pl.cell - ox) / N;

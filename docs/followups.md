@@ -3824,6 +3824,23 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refused, not cut off. (Sub-catchments from clicks don't use it: a
       click past the window is an inflow point, maps.md § Sub-catchments
       from clicks.)
+- [x] **Delineate's windows and the DEM's edge** (persona-hydrologist
+      findings 1, 2 and 6, issue #390; `delineate-6`, branch wip/r3-windows;
+      design/delineation.md § Method 2 and 9): a river the window cuts grows
+      the window instead of falling back to a gully, each larger window is
+      placed over the catchment rather than centred on the click, and
+      missing DEM data is the data's edge instead of a sink beside it.
+      Measured with `scripts/research/snap-outlets.ts`
+      (design/delineation-snapping.md § Outlets of quaternaries).
+- [ ] **Start, Divide and Sub-catchments still route centred windows that
+      never grow for a cut river** (finding 1's third bullet, found with
+      the fix above). `delineateUnits` starts at the first window that
+      holds the clicks or the boundary, centred on them, and its points
+      don't yet carry the reach's area on the Start/Divide paths
+      (finding 3). Durable fix: reuse `windowOrigin` and `cutChannel`
+      (`delineate.ts`) in `delineateUnits` for its outlet, once finding 3
+      gives Start/Divide's outlet an expected area. Trigger: finding 3's
+      fix landing.
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on

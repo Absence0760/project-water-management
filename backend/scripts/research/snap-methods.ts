@@ -135,8 +135,6 @@ async function main() {
 		const x0 = Math.floor(gx) - WINDOW / 2;
 		const y0 = Math.floor(gy) - WINDOW / 2;
 		const grid = await readWindow(dem, z, tile.size, x0, y0, WINDOW);
-		const noData = new Uint8Array(grid.z.length);
-		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
 		fill(grid, edge);
 		const dir = d8(grid, edge);
@@ -235,7 +233,7 @@ async function main() {
 		const evalCell = (c: number) => {
 			if (!seen.has(c)) {
 				const up = upstream(WINDOW, WINDOW, dir, c);
-				const touch = touchesEdge(grid, edge, up, noData);
+				const touch = touchesEdge(grid, edge, up);
 				seen.set(c, { km2: km2(acc[c]!), edge: touch.edge || touch.noData });
 			}
 			return seen.get(c)!;

@@ -1169,12 +1169,19 @@ to a point on a river. The design, the method and its accuracy are in
   more than 500 m adds a note that the elevation model's rivers meet away
   from the mapped junction, to check the outlet against the map.
 - **What it does.** On the API, never in the engine: reads the DEM around
-  the point (a 1 024-cell window, about 34 km, grown to 2 048 and 3 072
-  cells while the catchment reaches its edge), fills depressions
-  (Priority-Flood+ε), routes flow with D8, collects every cell upstream of
-  the outlet and outlines them as one polygon, simplified to about a cell.
-  A catchment reaching the edge of the DEM's data is refused rather than
-  cut off; so is a point outside the DEM or one almost nothing drains to.
+  the point (a 1 024-cell window, about 34 km, centred on it, grown to
+  2 048 and 3 072 cells while the catchment reaches its edge, or while the
+  river reach near the point is cut by it with no channel matching its
+  area yet; each larger window is placed over the catchment the last one
+  cut, so it reaches up to about 95 km from the outlet in the direction the
+  catchment runs), fills depressions (Priority-Flood+ε), routes flow with
+  D8, collects every cell upstream of the outlet and outlines them as one
+  polygon, simplified to about a cell. A catchment reaching the edge of the
+  DEM's data (a missing tile) is refused rather than cut off, and so is a
+  river reach cut there; so is a point outside the DEM or one almost
+  nothing drains to. Since `delineate-6` the land beside missing data is
+  the data's edge, not a sink every cell beside it drained into, which
+  had hidden such catchments (issue #390).
   A catchment past the largest window is refused as too large: "Click
   further upstream for a smaller catchment, divide the river with
   Sub-catchments, one per click …", or, when the nearby river reach drains

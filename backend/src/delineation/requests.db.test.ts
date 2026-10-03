@@ -131,8 +131,9 @@ describe('a catchment too large for the request', () => {
 	});
 
 	it('records the refusal at the worker’s own cap, in the request’s words; the job is done, not failed', async () => {
+		// The valley runs about 240 cells north of the outlet: a 256-cell window placed over it (delineate-6) holds 203 of them.
 		delineationLimits.requestWindows = [128];
-		delineationLimits.jobWindows = [256, 384];
+		delineationLimits.jobWindows = [192, 256];
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status, JSON.stringify(res.body)).toBe(202);
 		const proposalsBefore = (await asOwner('SELECT count(*)::int AS n FROM delineation_proposal WHERE project_id = $1', [projectId]))[0].n;

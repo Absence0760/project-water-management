@@ -109,7 +109,7 @@ describe('Delineate', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(Math.abs(r.body.proposal.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(r.body.proposal.method).toMatch(/best matches reach 99000001 of snap-test/);
-		expect(r.body.proposal.methodVersion).toBe('delineate-9');
+		expect(r.body.proposal.methodVersion).toBe('delineate-10');
 	});
 
 	it('keeps a click on a channel of its own 500 m off the reach’s line there, offering the river’s channel (finding 4)', async () => {

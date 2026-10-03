@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accumulate, d8, DX, DY, edgeMask, fill, nextUp, OUT, snap, touchesEdge, upstream, type Grid } from './flow.js';
+import { accumulate, BORDER, d8, DX, DY, edgeMask, fill, NO_DATA_EDGE, nextUp, openFlags, OUT, snap, touchesEdge, upstream, type Grid } from './flow.js';
 
 const grid = (nx: number, ny: number, f: (x: number, y: number) => number): Grid => {
 	const z = new Float64Array(nx * ny);
@@ -61,15 +61,39 @@ describe('flow routing', () => {
 		expect(edge.reduce((s, v) => s + v, 0)).toBe(2 * 15 + 2 * 9 - 4);
 	});
 
-	it('treats no-data cells as edges the land drains into', () => {
+	it('makes no data and the cells beside it edges of their own kind, the window’s border another', () => {
 		const g = grid(9, 9, (x, y) => (x === 4 && y === 4 ? Number.NaN : 10 - Math.hypot(x - 4, y - 4)));
-		const noData = new Uint8Array(81);
-		noData[40] = 1;
+		const edge = edgeMask(g);
+		expect(edge[4 * 9 + 4]).toBe(NO_DATA_EDGE);
+		for (let d = 0; d < 8; d++) expect(edge[(4 + DY[d]!) * 9 + 4 + DX[d]!]).toBe(NO_DATA_EDGE);
+		expect(edge[0]).toBe(BORDER);
+		expect(edge[2 * 9 + 4]).toBe(0);
+	});
+
+	it('does not sink the land into no data: a river running in from a hole reaches it, and is seen to (persona-hydrologist finding 2)', () => {
+		// A plane falling south with a valley down column 6; the top three rows have no data, the river comes in from there.
+		const g = grid(13, 16, (x, y) => (y < 3 ? Number.NaN : 100 - 2 * y + Math.abs(x - 6)));
+		const { edge, dir, acc } = route(g);
+		// Every cell two rows below the hole drains south or along, never north into it (it used to flood at −∞ and swallow them).
+		for (let x = 1; x < 12; x++) expect(DY[dir[5 * 13 + x]!]).toBeGreaterThanOrEqual(0);
+		const outlet = 14 * 13 + 6;
+		expect(acc[outlet]).toBeGreaterThan(9);
+		const mask = upstream(13, 16, dir, outlet);
+		expect(touchesEdge(g, edge, mask)).toEqual({ edge: true, noData: true });
+		expect(openFlags(13, 16, dir, edge)[outlet]! & NO_DATA_EDGE).toBe(NO_DATA_EDGE);
+	});
+
+	it('openFlags says for every cell what touchesEdge says of its catchment', () => {
+		let seed = 7;
+		const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+		const g = grid(30, 24, (x, y) => ((x - 12) ** 2 + (y - 20) ** 2 < 10 ? Number.NaN : 50 - y + 3 * Math.abs(x - 15) * 0.3 + rand() * 4));
 		const { edge, dir } = route(g);
-		expect(edge[40]).toBe(1);
-		expect(exits(g, dir)[3 * 9 + 4]).toBe(40);
-		const mask = upstream(9, 9, dir, 3 * 9 + 4);
-		expect(touchesEdge(g, edge, mask, noData)).toEqual({ edge: true, noData: true });
+		const flags = openFlags(30, 24, dir, edge);
+		for (let i = 0; i < flags.length; i++) {
+			if (edge[i]) continue;
+			const t = touchesEdge(g, edge, upstream(30, 24, dir, i));
+			expect({ i, border: !!flags[i], noData: !!(flags[i]! & NO_DATA_EDGE) }).toEqual({ i, border: t.edge, noData: t.noData });
+		}
 	});
 
 	it('snaps to the most-accumulating cell in reach, the nearest of equals, never an edge', () => {

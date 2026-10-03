@@ -505,8 +505,6 @@ export async function delineateUnits(
 		};
 		const toPos = ([x, y]: Pt): Position => toLonLat(x0 + x, y0 + y, W);
 		const grid = await readWindow(dem, z, size, x0, y0, nCells);
-		const noData = new Uint8Array(grid.z.length);
-		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
 		// The elevations before the fill, to tell its pans (pans.ts): 4 bytes a cell.
 		const before = new Float32Array(grid.z);
@@ -602,7 +600,7 @@ export async function delineateUnits(
 			how.set(OUTLET, { placedBy: 'boundary' });
 		}
 		const catchment = upstream(nCells, nCells, dir, outlet);
-		const touch = touchesEdge(grid, edge, catchment, noData);
+		const touch = touchesEdge(grid, edge, catchment);
 		// Clicks: a catchment past the window is not refused. The pieces past it are open (inflows), the others whole; refused only when every piece is open.
 		let truncated = false;
 		if (lowest && (touch.edge || touch.noData)) {

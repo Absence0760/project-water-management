@@ -1,19 +1,20 @@
 // Delineate the catchment upstream of a clicked point (issue #326
 // B-delineate; docs/design/delineation.md). Reads a square window of the DEM
 // around the click at one zoom, fills its depressions, routes flow with D8,
-// snaps the click to the most-accumulating cell nearby, collects the cells
-// upstream of it and outlines them. When the catchment reaches the window's
-// edge the window grows, up to a cap; past the cap (or the time budget) the
+// places the outlet on the channel near the click (place.ts), collects the
+// cells upstream of it and outlines them. When the catchment reaches the
+// window's edge, or the river the click means is cut by it, the window grows
+// over the catchment, up to a cap; past the cap (or the time budget) the
 // request is refused rather than answered with a cut-off catchment.
 //
 // It only proposes: routes.ts stores the result as a proposal the editor
 // accepts or rejects; nothing here writes anything.
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
-import { accumulate, d8, edgeMask, fill, touchesEdge, upstream, type Grid } from './flow.js';
+import { accumulate, BORDER, d8, edgeMask, fill, NO_DATA_EDGE, openFlags, upstream, type Grid } from './flow.js';
 import { JUNCTION_SIDE_M } from './reach.js';
-import { JUNCTION_FLAG_M, JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
-import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, onOwnChannel, place, WIDE_MATCH_M, type Placement } from './place.js';
+import { JUNCTION_FLAG_M, JUNCTION_MATCH_M, JUNCTION_PATH_M, junctionOutlets, type JunctionRiver } from './junction.js';
+import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, onOwnChannel, place, WIDE_MATCH_M, type PlaceGrid, type Placement } from './place.js';
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
 import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
@@ -25,20 +26,25 @@ import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
  * measured from the exact click to each cell's centre, so the snap distance never exceeds it (it counted whole cells from the clicked cell);
  * delineate-5 (the hydrologist persona's findings 4, 7 and 13): a click on the DEM's own channel stays on it, the reach's matching channel
  * offered rather than taken; a gully snap offers the reach's channel out to 2.5 km; the reach's area is taken at the click (reach.ts).
- * delineate-6: reserved (the window sizing, issue #390 round 3).
+ * delineate-6 (issue #390, findings 1, 2 and 6): a river the window cuts grows the window instead of falling back to a gully, each larger
+ * window is placed over the catchment rather than centred on the click, and no data is the data's edge (flow.ts edgeMask), not a sink.
  * delineate-7 (issue #390, the hydrologist persona's findings 5 and 12): a click within JUNCTION_SIDE_M of a mapped junction kept on its
  * river's side of the DEM's junction without asking, and every junction placement on the river's own channel nearest the click, not at
  * the junction itself; one moved over JUNCTION_FLAG_M is flagged.
  * delineate-8: delineate-5's and delineate-7's rules together (one merge of the two).
  * delineate-9 (the hydrologist's review, finding 8): the area draining into pans (closed depressions the fill routed onward) reported
  * beside the catchment, as non-contributing, with its method (pans.ts); the catchment itself unchanged.
+ * delineate-10: delineate-6's windows and data's edge with delineate-9's rules (one merge of the two).
  */
-export const METHOD_VERSION = 'delineate-9';
+export const METHOD_VERSION = 'delineate-10';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */
 export const SNAP_RADIUS_M = 150;
-/** The windows a request tries, in cells a side; the last is its cap (about 100 km at zoom 11). */
+/**
+ * The windows a request tries, in cells a side; the last is its cap (about 100 km at zoom 11). The first is centred on the click; each
+ * larger one is placed over the catchment the last one cut (windowOrigin), so a catchment reaches up to about 95 km from its outlet.
+ */
 export const WINDOWS = [1024, 2048, 3072] as const;
 /**
  * The windows the background worker tries (the `delineate` job, docs/design/delineation.md § Where it runs), from the one after
@@ -243,6 +249,77 @@ function outlinePolygon(ring: Pt[], x0: number, y0: number, W: number): { geomet
 	throw new DelineationRefused('outline', 'The catchment’s outline could not be made into a valid polygon. Draw or import the boundary instead.');
 }
 
+/** The box (global pixels, inclusive) of a catchment a window cut, and the window sides it reached. */
+export interface Aim {
+	box: [number, number, number, number];
+	/** It reached the west, north, east, south border (a cell beside it). */
+	cut: [boolean, boolean, boolean, boolean];
+}
+
+/** Where `mask` (a catchment in the window at x0, y0) lies, for placing the next window. */
+export function aimAt(mask: Uint8Array, n: number, x0: number, y0: number): Aim {
+	let bx0 = n;
+	let by0 = n;
+	let bx1 = -1;
+	let by1 = -1;
+	for (let y = 0; y < n; y++) {
+		const row = y * n;
+		for (let x = 0; x < n; x++) {
+			if (!mask[row + x]) continue;
+			if (x < bx0) bx0 = x;
+			if (x > bx1) bx1 = x;
+			if (y < by0) by0 = y;
+			if (y > by1) by1 = y;
+		}
+	}
+	return { box: [x0 + bx0, y0 + by0, x0 + bx1, y0 + by1], cut: [bx0 <= 1, by0 <= 1, bx1 >= n - 2, by1 >= n - 2] };
+}
+
+/**
+ * The top-left (global pixels) of an n-cell window: centred on the click
+ * (gx, gy) without an aim; else, on each axis, starting just short of the
+ * catchment's end that the last window held when it was cut at the other end
+ * only, so the catchment gets the whole window in the direction it runs
+ * (persona-hydrologist finding 6: centred, the 3 072-cell cap held only about
+ * 50 km upstream of the outlet, and half the window lay downstream of it), or
+ * centred on the catchment's box when cut at both ends or neither. Either
+ * way the click stays `keep` cells inside, so the outlet's placement sees
+ * all it would in a centred window.
+ */
+export function windowOrigin(n: number, gx: number, gy: number, keep: number, aim: Aim | null): [number, number] {
+	const cx = Math.floor(gx);
+	const cy = Math.floor(gy);
+	if (!aim) return [cx - n / 2, cy - n / 2];
+	const axis = (c: number, lo: number, hi: number, cutLo: boolean, cutHi: boolean) => {
+		const o = cutHi && !cutLo ? lo - keep : cutLo && !cutHi ? hi + 1 + keep - n : Math.floor((lo + hi + 1 - n) / 2);
+		return Math.min(c - keep, Math.max(c + 1 + keep - n, o));
+	};
+	const [bx0, by0, bx1, by1] = aim.box;
+	return [axis(cx, bx0, bx1, aim.cut[0], aim.cut[2]), axis(cy, by0, by1, aim.cut[1], aim.cut[3])];
+}
+
+/**
+ * The most-drained cell within `radiusM` of the click (cx, cy) whose
+ * catchment the window (or the data's edge) cuts, with fewer than `maxCells`
+ * upstream cells; -1 when none.
+ */
+export function cutChannel(g: PlaceGrid, open: Uint8Array, cx: number, cy: number, radiusM: number, maxCells: number): number {
+	const { nx, ny, acc, edge, cellSizeM } = g;
+	const r = Math.ceil(radiusM / cellSizeM);
+	const ix = Math.floor(cx);
+	const iy = Math.floor(cy);
+	let best = -1;
+	for (let y = Math.max(0, iy - r); y <= Math.min(ny - 1, iy + r); y++) {
+		for (let x = Math.max(0, ix - r); x <= Math.min(nx - 1, ix + r); x++) {
+			const i = y * nx + x;
+			if (edge[i] || !open[i] || acc[i]! >= maxCells) continue;
+			if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) * cellSizeM > radiusM) continue;
+			if (best < 0 || acc[i]! > acc[best]!) best = i;
+		}
+	}
+	return best;
+}
+
 /** Delineate the catchment upstream of (lon, lat). Throws DelineationRefused with a sentence for the user. */
 export async function delineate(
 	dem: Dem,
@@ -261,6 +338,11 @@ export async function delineate(
 		junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 		/** Keep the point even beside a much larger channel (otherwise refused with `larger_channel`). */
 		keepPoint?: boolean;
+		/**
+		 * The largest window any try reaches (cells a side; default the last of `windows`): the request's is the worker's cap, since
+		 * a river cut at the request's last window goes on to the worker (too_large with windowCells) rather than to a gully.
+		 */
+		capCells?: number;
 		/** Called before each window is read, with its place in `windows` (the worker reports it as the job's progress). */
 		onWindow?: (index: number, of: number) => Promise<void> | void;
 	} = {}
@@ -285,20 +367,36 @@ export async function delineate(
 	const W = worldPx(z, size);
 	const [gx, gy] = toPx(lon, lat, W);
 	const cellSizeM = (2 * Math.PI * EARTH_RADIUS_M * Math.cos((lat * Math.PI) / 180)) / W;
+	// Cells the outlet may move from the click (the junction's match and its path downhill): every window keeps them inside.
+	const keepCells = Math.ceil((JUNCTION_MATCH_M + JUNCTION_PATH_M) / cellSizeM) + 2;
+	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
+	const capCells = opts.capCells ?? windows[windows.length - 1]!;
+	/** Where the last window cut the catchment: the next window is placed over it. */
+	let aim: Aim | null = null;
 	for (let wi = 0; wi < windows.length; wi++) {
 		const nCells = windows[wi]!;
 		await opts.onWindow?.(wi, windows.length);
-		const x0 = Math.floor(gx) - nCells / 2;
-		const y0 = Math.floor(gy) - nCells / 2;
+		const [x0, y0] = windowOrigin(nCells, gx, gy, keepCells, aim);
 		const grid = await readWindow(dem, z, size, x0, y0, nCells);
-		const noData = new Uint8Array(grid.z.length);
-		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
 		// The elevations before the fill, to tell its pans (pans.ts): 4 bytes a cell.
 		const before = new Float32Array(grid.z);
 		fill(grid, edge);
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
+		const open = openFlags(nCells, nCells, dir, edge);
+		/** Grow into the next window, aimed at `mask`; refused `too_large` past the last one or the budget. */
+		const grow = (mask: Uint8Array): void => {
+			const last = wi === windows.length - 1;
+			const elapsed = now() - started;
+			// The next window costs about (its cells / these cells)² times this one; stop before it would break the budget.
+			const next = windows[wi + 1];
+			if (last || (next !== undefined && elapsed * (1 + (next / nCells) ** 2) > budget)) {
+				const km = Math.round((nCells * cellSizeM) / 1000);
+				throw new DelineationRefused('too_large', tooLargeText('click', km, opts.expected?.km2), undefined, nCells);
+			}
+			aim = aimAt(mask, nCells, x0, y0);
+		};
 		const grid0 = { nx: nCells, ny: nCells, acc, edge, cellSizeM };
 		const byArea = place(grid0, gx - x0, gy - y0, { snapRadiusM, expectedKm2: opts.expected?.km2, chosen: opts.expected?.chosen, reachDistanceM: opts.expected?.distanceM });
 		// Beside a junction nobody picked a river at (reach.ts junctionBeside), a click on a DEM channel of its own stays there
@@ -307,24 +405,40 @@ export async function delineate(
 		const atJunction = opts.junction && !ownChannel ? junctionOutlets({ ...grid0, dir }, gx - x0, gy - y0, opts.junction.rivers, snapRadiusM)?.get(opts.junction.chosenKey) : undefined;
 		const placed: (Omit<Placement, 'how'> & { how: Placement['how'] | 'junction' }) | null = atJunction !== undefined ? { cell: atJunction, how: 'junction', larger: null } : byArea;
 		if (placed === null) throw new DelineationRefused('no_data', 'The elevation model has no data around that point.');
+		// No channel matched the river's area and none matching it is on offer (place.ts rules 3 and 4), but one in reach is cut by
+		// the window (or the data's edge) with less than twice it: its area here is only a lower bound, so it may be the river. A larger
+		// window can match it; settling for the snap would put the outlet in a gully beside a river bigger than the window. Looked for
+		// as far as place() matches: WIDE_MATCH_M for a river picked at a confluence or from a gully, else MATCH_RADIUS_M. Not when the
+		// point is kept (the editor chose the small channel), nor for a reach larger than the cap's whole square (the Orange), which no
+		// window can match.
+		if (placed.how === 'snapped' && opts.expected && !opts.keepPoint && !placed.larger?.reach) {
+			const gully = acc[placed.cell]! * cellKm2 < GULLY_SHARE * opts.expected.km2;
+			const radiusM = opts.expected.chosen || gully ? WIDE_MATCH_M : MATCH_RADIUS_M;
+			const cut = cutChannel(grid0, open, gx - x0, gy - y0, radiusM, (2 * opts.expected.km2) / cellKm2);
+			if (cut >= 0 && open[cut]! & NO_DATA_EDGE) {
+				throw new DelineationRefused('no_data', 'The river at that point runs past the edge of the elevation model’s data, so its catchment can’t be delineated whole.');
+			}
+			if (cut >= 0 && nCells < capCells && opts.expected.km2 <= (capCells * cellSizeM) ** 2 / 1e6) {
+				grow(upstream(nCells, nCells, dir, cut));
+				continue;
+			}
+		}
 		if (placed.larger && !opts.keepPoint) {
 			const lx = placed.larger.cell % nCells;
 			const ly = (placed.larger.cell - lx) / nCells;
-			const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
-			// Whether the channel's catchment runs past this window: then its area here is only a floor.
-			const open = touchesEdge(grid, edge, upstream(nCells, nCells, dir, placed.larger.cell), noData);
 			throw largerChannelRefusal(
 				click,
 				{
 					at: toLonLat(x0 + lx + 0.5, y0 + ly + 0.5, W),
 					distanceM: placed.larger.distanceM,
-					km2: km2(acc[placed.larger.cell]!),
-					pointKm2: km2(acc[placed.cell]!),
+					km2: acc[placed.larger.cell]! * cellKm2,
+					pointKm2: acc[placed.cell]! * cellKm2,
 					...(placed.larger.reach && opts.expected ? { reachKm2: opts.expected.km2 } : {})
 				},
 				undefined,
 				{
-					open: open.edge || open.noData,
+					// The channel's catchment runs past this window (or the data's edge): its area here is only a floor.
+					open: open[placed.larger.cell]! !== 0,
 					windowKm: Math.round((nCells * cellSizeM) / 1000),
 					reach: opts.expected ? { name: opts.expected.reach, km2: opts.expected.km2 } : null,
 					onChannel: !!placed.larger.reach?.onChannel
@@ -333,19 +447,11 @@ export async function delineate(
 		}
 		const outlet = placed.cell;
 		const mask = upstream(nCells, nCells, dir, outlet);
-		const touch = touchesEdge(grid, edge, mask, noData);
-		if (touch.noData) {
+		if (open[outlet]! & NO_DATA_EDGE) {
 			throw new DelineationRefused('no_data', 'The catchment above that point runs past the edge of the elevation model’s data, so it can’t be delineated whole.');
 		}
-		if (touch.edge) {
-			const last = wi === windows.length - 1;
-			const elapsed = now() - started;
-			// The next window costs about (its cells / these cells) times this one; stop before it would break the budget.
-			const next = windows[wi + 1];
-			if (last || (next !== undefined && elapsed * (1 + (next / nCells) ** 2) > budget)) {
-				const km = Math.round((nCells * cellSizeM) / 1000);
-				throw new DelineationRefused('too_large', tooLargeText('click', km, opts.expected?.km2), undefined, nCells);
-			}
+		if (open[outlet]! & BORDER) {
+			grow(mask);
 			continue;
 		}
 		let cells = 0;

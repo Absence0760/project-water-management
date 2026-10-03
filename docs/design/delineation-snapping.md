@@ -335,7 +335,9 @@ coordinate rounded to two decimals (±0.6 km) is enough to leave the river.
    the cut catchment, up to three times, made 59 of the 102 refusals below
    10 000 km² whole, all 59 within ½–2× (median 1.00×); 43 stay cut (longer
    than the window, the durable-path follow-up for large catchments). 64 of
-   the 102 touched only one side of the click-centred window.
+   the 102 touched only one side of the click-centred window. Since
+   `delineate-6` (`delineate-10` merged) each larger window is placed over
+   the catchment: § Outlets of quaternaries has the rerun.
 3. **The nearest line is often the wrong stream, and the area match obeys
    it silently** (18 of 380 below 10 000 km², 17 of them without a caveat):
    - **9 gauges on a river, beside a smaller stream's line:** a cell within
@@ -567,6 +569,57 @@ snaps with the guard's offer. The confluence experiment
 the app uses it: the picked river within 2.5 km 161 of 180 right before and
 after, the junction rule untouched; an unpicked click there (never placed by
 the app, which asks) flags 24 instead of 16.
+
+## Outlets of quaternaries: the windows (issue #390)
+
+The experiments above route one 2 048-cell window centred on each click, so
+they never saw what Delineate's window ladder does. The persona-hydrologist
+run of issue #390 drove the app's whole path at headwater quaternaries'
+outlets and found three ways the windows, not the placement rules, gave
+wrong answers (findings 1, 2 and 6). `delineate-6` fixes them
+([delineation.md § Method](./delineation.md#method), steps 2 and 9);
+`backend/scripts/research/snap-outlets.ts` reruns that path (reachFor,
+the request's windows, then the worker's from where the request stopped)
+on 30 headwater quaternaries (100–1 500 km², seed `outlets-1`, scored
+against the DWS area) plus the persona's clicks, before (`--src` on the
+`delineate-4` code) and after:
+
+| Click | DWS / reach km² | Before | After |
+|---|---|---|---|
+| D17D outlet, 28.25625, −29.78125 | 750 / 736 | 134 km², snapped, unmatched | 747 km², matched (2 048 cells) |
+| N22D outlet, 25.08125, −33.07708 | 344 / 335 | `larger_channel` "about 105 km²" | 344 km², matched (2 048) |
+| C51D, 26.15208, −29.40625, the 869 km² river picked | 922 / 869 | `larger_channel` "about 272 km²" | 869 km², at the DEM's junction (2 048) |
+| A62H outlet, 28.68958, −23.33958 | 873 / 863 | `too_large` in the request; the worker's 4 096 cells | 890 km², matched, in the request's 3 072 cells |
+| 29.91875, −22.01, 2 cells from the extract's edge | – / 1 941 | 154 km², snapped, unmatched | `no_data` |
+
+- **The 30 quaternaries:** 28 proposed before, 29 after (B82G, refused
+  `larger_channel` before, is 746 km² against a 751 km² reach); every one
+  proposed both times has the same area. Median 0.98× the DWS area before,
+  0.97× after; 18 of 30 within 0.8–1.25× both times, 27 → 28 within ½–2×.
+  Windows placed over the catchment let several stop a window earlier
+  (D24J, A62F, A71A, W57G, N11B, P30B: 3 072 → 2 048 cells), and C13D and
+  A71D no longer go to the worker.
+- **Confluences:** `snap-confluence.ts` (60 junctions, one 2 048-cell
+  window) gives byte-identical results before and after: the no-data
+  change only touches windows with missing tiles, and the window ladder
+  isn't in that harness.
+- **Gauges** (the station run of issue #390, local data, aggregates only):
+  of the gauges under 10 000 km² the request refused `too_large` with
+  centred windows, 103 here, the request's own windows placed over the
+  catchment now propose 55 within ½–2× of the published area, and with the
+  worker's windows 100 (two more come out whole but outside ½–2×, one is
+  still too large). The station run's own probe of a shifted window made
+  59 whole.
+- **Cost:** the window sizes are unchanged, so is memory: A62H at 6 144
+  cells peaks at 705 MB before and after (this laptop, idle). A river cut
+  by the first window costs the next window's routing (D17D: about 2 s
+  against 0.6 s for the wrong answer); the placed windows often save one.
+  Picking the first window from the reach's area (the persona's other
+  suggestion) wasn't needed: the 1 024-cell window costs 0.2–0.7 s.
+- **Not fixed here:** 23.85625, −22.01 (an 868 km² reach, 6.4 km²
+  proposed both times) is not a no-data case: the DEM's channel matching
+  it is 2.5 km from the line (292 km² there, whole, nowhere near missing
+  data), persona-hydrologist finding 7.
 
 ## What these samples can't show (check before trusting a number)
 
