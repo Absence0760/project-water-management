@@ -343,28 +343,28 @@ coordinate rounded to two decimals (±0.6 km) is enough to leave the river.
    - **9 gauges on a river, beside a smaller stream's line:** a cell within
      150 m of the gauge drains the published area, but the nearest reach is
      a tributary's, so the area match moves the point onto the tributary
-     (areas of 0.01–0.1× the published one, moved 30–900 m). 9 of 9 lie within 1 km of
+     (to a tenth of the published area or less). 9 of 9 lie within 1 km of
      a HydroRIVERS junction, beyond the 200 m that asks which river.
    - **4 gauges on a small stream beside a larger river's line:** moved onto
-     the river (2.7–7.8×; persona finding 4).
+     the river, over 2× the published area (persona finding 4).
    - 5 more where another reach within 2 km matches the published area.
 4. **The first window is too small for some rivers** (persona finding 1):
-   3 gauges of 440–3 800 km² snapped to 4–164 km² with only the
-   *unmatched* caveat in the 1 024-cell window, where the 3 072-cell window
-   matches the reach within 200 m of the gauge; a fourth (2 359 km²) got a
-   600 km² side channel at 2 048 cells. The same mechanism accepted two
-   main-stem gauges (18 000 and 63 000 km²) as 195 and 268 km², caveat
-   only. 8 `larger_channel` refusals below 10 000 km² quote a window-local
+   4 gauges of 100–10 000 km² snapped to a side channel (under half the
+   published area) with only the *unmatched* caveat, where the 3 072-cell
+   window matches the reach (3 of them) or holds more of the river. The
+   same mechanism accepted two main-stem gauges as side channels of under
+   1 % of their area, caveat only. 8 `larger_channel` refusals below 10 000 km² quote a window-local
    "about" area (persona finding 10); "Use that channel" then gave ½–2×
    for 3 of 18 (all sizes), the rest mostly `too_large`.
 5. **Off-river positions get a gully with no caveat at all**: 4 gauges more
-   than 1 km from any line snapped to 0.08–0.8 km² (published 1–2 400 km²),
+   than 1 km from any line snapped to under 1 km² (well under half the
+   published area),
    with no reach to raise the *unmatched* caveat and no channel within the
    guard's 1 km (persona finding 7, which assumed a reach was there).
-6. **Flat lower rivers**: 2 gauges (a Zululand coastal floodplain and a
-   wide Western Cape valley) have no GLO-30 channel within 2.5 km carrying
-   the river; the result (0.4 and 2 664 km² against 9 099 and 6 713 km²) is
-   accepted with the caveat only. New: no persona finding covers a DEM that
+6. **Flat lower rivers**: 2 gauges of 1 000–10 000 km² on flat lower
+   reaches have no GLO-30 channel within 2.5 km carrying the river; the
+   result (under half the published area) is accepted with the caveat
+   only. New: no persona finding covers a DEM that
    routes the river elsewhere.
 7. **Main stems are refused, as designed, but with the wrong advice**: 52 of
    66 `too_large` ("pick an outlet further upstream", persona finding 11),
@@ -387,12 +387,12 @@ measured 2026-10-03 with a probe run by hand, not committed). The harness
 counted a `too_large` after "Use that channel" as the end, but the app sends
 a request still at its window's edge to the background worker (4 096 and
 6 144 cells). Followed that far, the 18 `larger_channel` refusals came out:
-6 within ½–2× (3 of them only in the worker's windows, 853–2 197 km²), 9
-main stems of 10 000–985 000 km² refused `too_large` by the worker too, 1
-the first window's side channel (finding 1: 54 km² with the *unmatched*
-caveat for a 5 068 km² gauge), 1 the river beside a gauge on a 25 km²
-stream (the editor's choice was wrong, not the channel), and 1 gully-sized
-gauge snapped at 2×. So "Use that channel" isn't failing; on a main stem
+6 within ½–2× (3 of them only in the worker's windows), 9 main stems
+(≥ 10 000 km²) refused `too_large` by the worker too, 1 the first window's
+side channel (finding 1, with the *unmatched* caveat, a gauge of
+1 000–10 000 km²), 1 the river beside a gauge on a small stream (the
+editor's choice was wrong, not the channel), and 1 gully-sized gauge
+snapped at 2×. So "Use that channel" isn't failing; on a main stem
 nothing whole can come back. What changed is what the app says:
 - the refusal no longer calls the channel's window-local area "about": it
   says "at least … inside the 34 km routed around your point, and more
@@ -517,11 +517,9 @@ HydroRIVERS, fixed in `place.ts` / `reach.ts`, and measured before and after
   way round counts wherever the line is: the gauge validation (issue #390
   part 1, 446 gauges) found 9 gauges on a river whose nearest line was a
   tributary's moved silently onto the tributary (0.01–0.1× their area), all
-  within 1 km of a junction; at 26.74444° E, 33.50678° S (published 575 km²)
-  the 29 km² reach 59 m away pulled the outlet 511 m onto a 15.7 km²
-  channel. Now a click on a channel larger than the band stays on it and the
-  tributary's channel is offered: that gauge now asks, its point on the
-  river (370 km² inside the first window).
+  within 1 km of a junction. Now a click on a channel larger than the band
+  stays on it and the tributary's channel is offered: those gauges now ask,
+  their points on the river.
 - **A gully proposed beside a river whose channel lies 1–2.5 km off.** F20A's
   outlet (17.23542° E, 29.24375° S; reach 1 169 km²) gave 3.4 km² with only the
   *unmatched* note: the matching channel (1 161 km²) is 2.46 km away, past
