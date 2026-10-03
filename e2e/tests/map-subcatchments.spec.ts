@@ -72,6 +72,9 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await expect(bar(page)).toBeVisible();
 	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
 	await expect(canvas(page)).toBeFocused();
+	// The elevation model's own channels are drawn while the mode is on: the view (framed on the square) is one tile.
+	await expect(page.getByTestId('map-channels-note')).toContainText('Red lines: the elevation model’s channels, where a click goes.');
+	await expect(page.getByTestId('map-channels-note')).not.toHaveAttribute('data-tiles', '0');
 	await page.keyboard.press('Enter');
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(1);
