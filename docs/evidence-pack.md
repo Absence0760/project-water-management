@@ -847,7 +847,8 @@ pnpm reproduce:pack path/to/pack-xxxx-xxxx-xxxx.zip [--expect <manifest hash>] [
 
 | Check | Passes when |
 | --- | --- |
-| `archive`, `files` | the zip reads, every entry is listed in `bundle.json`, and each matches its SHA-256 there |
+| `archive`, `files` | the zip reads, `bundle.json` names the pack and its baseline run, every entry is listed in `bundle.json`, and each matches its SHA-256 there |
+| `structure` | fails only for a malformed bundle: a file that matches its hash but isn't what its name says (JSON that doesn't parse, a manifest or results file missing a part). `checkPackBundle` never throws for a bad bundle; this is the check that says so |
 | `manifest` | `manifest.json` is canonical and hashes to the pack's hash (and to `--expect`, the hash verify returned) |
 | `figure:locality` | § 1's locality map drawn again from the manifest's features (this checkout's `localityMapSvg`) hashes to the `svgSha256` the manifest names; only for a pack with a locality map (`evidence-12`); drawn with other drawing rules, it names the engine to check out |
 | `runs` | the runs are the ones the manifest names, with its engine versions |

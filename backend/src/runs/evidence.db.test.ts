@@ -372,3 +372,29 @@ describe('forecast runs (WP-2.12)', () => {
 		expect((await history(owner, pid)).map((n) => n.runId)).toEqual([ordinary]);
 	});
 });
+
+describe('scenario runs', () => {
+	it('refuses to nominate a scenario run (409), and still once its scenario is deleted; its base run is nominated', async () => {
+		const pid = await runnableProject(owner, 'Evidence scenario');
+		const base = await newRun(owner, pid, 'base');
+		const sc = await owner.call('POST', `/projects/${pid}/scenarios`, { name: 'Half demand', baseRunId: base, ops: [{ op: 'demand.scale', factor: 0.5 }] });
+		expect(sc.status).toBe(201);
+		const sid = sc.body.scenario.id as string;
+		const made = await owner.call('POST', `/projects/${pid}/scenarios/${sid}/runs`, {});
+		expect(made.status).toBe(201);
+		const scenarioRun = made.body.run.id as string;
+		const refused = await nominate(owner, scenarioRun, 'the what-if', pid);
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/^a scenario run cannot be nominated as evidence/);
+		// The scenario deleted: its run keeps the scenario in its inputs (scenario_id goes null), and is refused alike.
+		expect((await owner.call('DELETE', `/projects/${pid}/scenarios/${sid}`)).status).toBe(204);
+		expect((await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [scenarioRun]))[0]).toEqual({ scenario_id: null });
+		const orphan = await nominate(owner, scenarioRun, 'the what-if', pid);
+		expect(orphan.status).toBe(409);
+		expect(orphan.body.error).toMatch(/^a scenario run cannot be nominated as evidence/);
+		expect(await history(owner, pid)).toEqual([]);
+		// Positive control: the base run is nominated.
+		expect((await nominate(owner, base, 'the record', pid)).status).toBe(201);
+		expect((await history(owner, pid)).map((n) => n.runId)).toEqual([base]);
+	});
+});

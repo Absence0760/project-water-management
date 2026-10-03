@@ -334,6 +334,10 @@ async function loadProjectionRun(
  * event, decision.ts; `auto` for an auto run published by itself). One
  * transaction (the caller's), one publish at a time per project.
  */
+/** Why a scenario run can't be published (publishRun). */
+export const SCENARIO_NOT_PUBLISHABLE =
+	'a scenario run cannot be published: it is its scenario’s changes applied to a base run, not the catchment as it is; publish a run of the model';
+
 export async function publishRun(
 	db: Db,
 	projectId: string,
@@ -344,6 +348,13 @@ export async function publishRun(
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('run_publication:' || $1::text, 0))`, [projectId]);
 	const loaded = await loadProjectionRun(db, projectId, body.runId);
 	if (!loaded) throw new ApiError(400, 'no such run in this project');
+	// A scenario's run (or one whose scenario was deleted: its inputs still record it) is a what-if on a base run, never the
+	// season farmers are shown; an applicant's published baseline is a run of the model too (app_published_run_input, 045).
+	const { rows: scen } = await db.query<{ scenario: boolean }>(
+		`SELECT (scenario_id IS NOT NULL OR inputs ? 'scenario') AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
+		[projectId, body.runId]
+	);
+	if (scen[0]?.scenario) throw new ApiError(409, SCENARIO_NOT_PUBLISHABLE);
 	// Audit H1: a legacy-runoff run is a workbook comparison, not evidence.
 	if (loaded.runoffModel === 'legacy') throw new ApiError(409, 'this run used the legacy runoff model (removed in engine 1.0.0), a workbook comparison only; run the model again to publish');
 	let analysis;

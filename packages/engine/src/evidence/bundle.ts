@@ -356,8 +356,29 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * failing check.
  */
 export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundleOptions): Promise<BundleCheckResult> {
-	const { hash } = opts;
 	const checks: BundleCheck[] = [];
+	try {
+		return await checkBundle(bytes, opts, checks);
+	} catch (e) {
+		// A file that passed its hash but isn't what its name says (JSON that
+		// doesn't parse, a manifest or input missing a part): the bundle is
+		// malformed, a failing check like any other, never an exception.
+		checks.push({ id: 'structure', ok: false, detail: `the bundle is malformed: ${message(e)}` });
+		return { ok: false, checks, pack: null, engine: { here: ENGINE_VERSION, runs: [] } };
+	}
+}
+
+/** bundle.json's `pack` as a bundle names it: anything else is a malformed bundle. */
+function packRefProblem(pack: unknown): string | null {
+	const p = pack as Partial<PackBundleIndex['pack']> | null;
+	if (typeof p !== 'object' || p === null) return "its bundle.json doesn't name the pack";
+	if (typeof p.id !== 'string' || !Number.isInteger(p.version) || typeof p.shortCode !== 'string' || typeof p.manifestSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(p.manifestSha256))
+		return "its bundle.json's pack lacks an id, a version, a short code or a 64-hex manifest hash";
+	return null;
+}
+
+async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundleOptions, checks: BundleCheck[]): Promise<BundleCheckResult> {
+	const { hash } = opts;
 	const add = (id: string, ok: boolean, detail: string) => (checks.push({ id, ok, detail }), ok);
 	const result = (pack: BundleCheckResult['pack'], runs: string[]): BundleCheckResult => ({
 		ok: checks.length > 0 && checks.every((c) => c.ok),
@@ -376,6 +397,9 @@ export async function checkPackBundle(bytes: Uint8Array<ArrayBuffer>, opts: Chec
 		if (!inArchive.has('bundle.json')) throw new Error('it has no bundle.json');
 		index = JSON.parse(dec.decode(await archive.read('bundle.json'))) as PackBundleIndex;
 		if (index.version !== PACK_BUNDLE_VERSION) throw new Error(`its bundle.json is version ${String(index.version)}; this code reads ${PACK_BUNDLE_VERSION}`);
+		const packProblem = packRefProblem(index.pack);
+		if (packProblem) throw new Error(packProblem);
+		if (typeof index.runs !== 'object' || index.runs === null || !index.runs.baseline) throw new Error("its bundle.json doesn't name the baseline run");
 		const listed = Object.keys(index.files ?? {});
 		if (listed.length > BUNDLE_ZIP_LIMITS.maxEntries) throw new Error(`its bundle.json lists ${listed.length} files, more than a bundle holds (${BUNDLE_ZIP_LIMITS.maxEntries})`);
 		const inIndex = new Set(listed);

@@ -5207,7 +5207,9 @@ read it before.
   fails still closes as published, with "The publication history couldn't
   be refreshed: reload the page to see it." rather than an error. A legacy-model run (a stored run from
   before engine 1.0.0) says why it can't be published: that model was
-  removed and the run is a workbook comparison only. In the runs list the current published run carries a
+  removed and the run is a workbook comparison only. A scenario run (also once
+  its scenario is deleted) says so too: farmers are shown the catchment as it
+  is, never a what-if. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
   the section. A run that was published says whether the responsible
@@ -5643,8 +5645,9 @@ read it before.
   which. Editors get a required **Why this run is the evidence** textarea (2 000
   characters at most) and **Nominate as evidence** (or **Nominate this run
   instead** when another run is current; `POST …/evidence`). A legacy-model
-  run (a stored run from before engine 1.0.0, which removed the model) and
-  the current evidence run say why they can't be nominated instead.
+  run (a stored run from before engine 1.0.0, which removed the model), a
+  scenario run (also once its scenario is deleted), a forecast run and the
+  current evidence run say why they can't be nominated instead.
   While a run is nominated, editors also get **Withdraw the nomination…**,
   which opens a required **Why the nomination is withdrawn** textarea and
   **Withdraw the nomination** (`POST …/evidence/withdraw`, 098); afterwards

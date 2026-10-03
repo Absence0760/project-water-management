@@ -269,6 +269,60 @@ describe('buildPackBundle + checkPackBundle', () => {
 			expect(r.pack).toBeNull();
 			expect(failing(r)).toEqual(['archive']);
 		});
+
+		// A hostile or corrupt bundle whose every file matches its hash but isn't what its name says: a failing check, never an exception.
+		describe('malformed, hashes fixed: never throws', () => {
+			const check = async (edit: (f: Map<string, string>) => void) => checkPackBundle(await rezip((await buildPackBundle(input, hash)).bytes, edit), { hash });
+
+			it('control: the same rezip with no edit checks clean', async () => {
+				expect((await check(() => {})).ok).toBe(true);
+			});
+
+			it('bundle.json without its pack: archive fails, pack null', async () => {
+				const r = await check((f) => {
+					const index = JSON.parse(f.get('bundle.json')!) as Partial<PackBundleIndex>;
+					delete index.pack;
+					f.set('bundle.json', JSON.stringify(index));
+				});
+				expect(r.ok).toBe(false);
+				expect(r.pack).toBeNull();
+				expect(failing(r)).toEqual(['archive']);
+				expect(r.checks[0]!.detail).toMatch(/doesn't name the pack/);
+			});
+
+			it('bundle.json without its baseline run: archive fails', async () => {
+				const r = await check((f) => {
+					const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex;
+					f.set('bundle.json', JSON.stringify({ ...index, runs: { application: index.runs.application } }));
+				});
+				expect(failing(r)).toEqual(['archive']);
+			});
+
+			it('a manifest.json that is not JSON: structure fails', async () => {
+				const r = await check((f) => f.set('manifest.json', 'not json'));
+				expect(r.ok).toBe(false);
+				expect(r.pack).toBeNull();
+				expect(failing(r)).toEqual(['structure']);
+				expect(r.checks.find((c) => c.id === 'structure')!.detail).toMatch(/^the bundle is malformed: /);
+			});
+
+			it('a canonical manifest of the pack with no report, its hash fixed in bundle.json: structure fails', async () => {
+				const r = await check((f) => {
+					const manifest = JSON.parse(f.get('manifest.json')!) as { pack: unknown };
+					const text = canonicalJson({ pack: manifest.pack });
+					f.set('manifest.json', text);
+					const index = JSON.parse(f.get('bundle.json')!) as PackBundleIndex;
+					index.pack.manifestSha256 = hash(text);
+					f.set('bundle.json', JSON.stringify(index));
+				});
+				expect(failing(r)).toEqual(['structure']);
+			});
+
+			it('a results.json that is not JSON: structure fails', async () => {
+				const r = await check((f) => f.set('runs/baseline/results.json', '{'));
+				expect(failing(r)).toEqual(['structure']);
+			});
+		});
 	});
 });
 
