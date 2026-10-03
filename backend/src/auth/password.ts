@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
 // bcryptjs is pure JS (no native build step), so the Lambda bundle stays
@@ -35,11 +36,26 @@ export function passwordCost(env: Record<string, string | undefined> = process.e
 
 export const PASSWORD_COST = passwordCost();
 
-export const hashPassword = (password: string) => bcrypt.hash(password, PASSWORD_COST);
-export const verifyPassword = (password: string, hash: string) => bcrypt.compare(password, hash);
+/**
+ * bcrypt reads only the first 72 bytes of what it hashes, and a password may
+ * be 200 characters (up to 800 UTF-8 bytes): hashed as typed, two long
+ * passphrases that share their first 72 bytes would both open the account.
+ * So a new hash is of the password's SHA-256 (44 base64 characters, well
+ * inside bcrypt's 72 bytes), under its own prefix, so a hash made before this
+ * (a plain `$2b$…`, of the password as typed) still checks the old way. The
+ * prefix says which way a hash is checked; neither form is ever tried for the other.
+ */
+export const PREHASH_PREFIX = '$wm-sha256$';
+
+const prehash = (password: string) => createHash('sha256').update(password, 'utf8').digest('base64');
+
+export const hashPassword = async (password: string) => PREHASH_PREFIX + (await bcrypt.hash(prehash(password), PASSWORD_COST));
+export const verifyPassword = (password: string, hash: string) =>
+	hash.startsWith(PREHASH_PREFIX) ? bcrypt.compare(prehash(password), hash.slice(PREHASH_PREFIX.length)) : bcrypt.compare(password, hash);
 
 /** A real hash of a random string, compared against when the email is unknown,
  *  so login timing doesn't reveal which emails have accounts. It has the cost
  *  in use, so an unknown email takes as long as a known one. */
 export const DUMMY_HASH =
-	PASSWORD_COST === PRODUCTION_COST ? '$2b$12$9Vik78a3Kg7RDbvCFYCJgOZBiF9Zmk/m4MlqKjPTD.qUkhqk6vykW' : bcrypt.hashSync('not-a-password-8c1f', PASSWORD_COST);
+	PREHASH_PREFIX +
+	(PASSWORD_COST === PRODUCTION_COST ? '$2b$12$9Vik78a3Kg7RDbvCFYCJgOZBiF9Zmk/m4MlqKjPTD.qUkhqk6vykW' : bcrypt.hashSync('not-a-password-8c1f', PASSWORD_COST));
