@@ -805,7 +805,8 @@ const ACCUMULATION_STATUS: Record<string, string> = {
 	noChirps: 'left on the reading day (no CHIRPS rain)',
 	asRecorded: 'run as recorded',
 	kept: 'kept as recorded (settings)',
-	noReading: 'nothing to spread'
+	noReading: 'nothing to spread',
+	setAside: 'set aside as missing (read after a blank outage; CHIRPS fills its day)'
 };
 
 /** Multi-day accumulations in the catchment rain (engine ≥ 0.20.0, model.md §2.4d, audit B4), one row per window. */
@@ -823,7 +824,9 @@ export function* accumulationLines(a: RunSummary['rainAccumulation']): Generator
 	const c = a.criteria;
 	yield csvRow([
 		'Detected when',
-		`reading ≥ ${c.minMm} mm after ≥ ${c.minRunDays} days of 0 or blank; CHIRPS ±1 day < ${c.readingDayShare * 100} % of it; CHIRPS over the run ≥ ${c.runShare * 100} % of it; window ≤ ${c.maxRunDays} days + the reading day`
+		`reading ≥ ${c.minMm} mm after ≥ ${c.minRunDays} days of 0 or blank; CHIRPS ±1 day < ${c.readingDayShare * 100} % of it; CHIRPS over the run ≥ ${c.runShare * 100} % of it; window ≤ ${c.maxRunDays} days + the reading day` +
+			// Engine ≥ 1.70.0 (model.md §2.4d): a longer blank stretch is an outage.
+			(c.maxBlankDays != null ? `; blank stretches count up to ${c.maxBlankDays} days; a longer one is an outage that ends the run and a reading straight after it is set aside` : '')
 	]);
 	if (a.windows.length) {
 		yield csvRow([

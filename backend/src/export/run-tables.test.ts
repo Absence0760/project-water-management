@@ -1171,7 +1171,7 @@ describe('a withdrawn nomination (098)', () => {
 describe('multi-day accumulations block (B4)', () => {
 	const a: NonNullable<RunSummary['rainAccumulation']> = {
 		mode: 'spread',
-		criteria: { minMm: 20, minRunDays: 3, maxRunDays: 92, readingDayShare: 0.25, runShare: 0.5 },
+		criteria: { minMm: 20, minRunDays: 3, maxRunDays: 92, maxBlankDays: 7, readingDayShare: 0.25, runShare: 0.5 },
 		windows: [
 			{
 				start: '2003-06-01',
@@ -1186,6 +1186,7 @@ describe('multi-day accumulations block (B4)', () => {
 				nearChirpsMm: 1.5,
 				runChirpsMm: 90,
 				chirpsMm: 91.5,
+				outageDays: null,
 				daysInRun: 21,
 				usedMm: 120
 			},
@@ -1202,8 +1203,26 @@ describe('multi-day accumulations block (B4)', () => {
 				nearChirpsMm: 0,
 				runChirpsMm: 30,
 				chirpsMm: null,
+				outageDays: null,
 				daysInRun: 9,
 				usedMm: 0
+			},
+			{
+				start: '2005-02-10',
+				end: '2005-02-10',
+				source: 'detected',
+				reason: null,
+				status: 'setAside',
+				keptReason: null,
+				totalMm: 60,
+				readingMm: 60,
+				runDays: 30,
+				nearChirpsMm: 0.3,
+				runChirpsMm: 116,
+				chirpsMm: null,
+				outageDays: 30,
+				daysInRun: 1,
+				usedMm: 2.5
 			}
 		],
 		skipped: ['Listed accumulation 2005-01-01 to 2005-01-05 overlaps another listed accumulation, so it is not spread.'],
@@ -1216,10 +1235,11 @@ describe('multi-day accumulations block (B4)', () => {
 		expect([...accumulationLines(a)]).toEqual([
 			'Multi-day rain accumulations',
 			'Accumulations,spread over the days they cover',
-			'Detected when,reading ≥ 20 mm after ≥ 3 days of 0 or blank; CHIRPS ±1 day < 25 % of it; CHIRPS over the run ≥ 50 % of it; window ≤ 92 days + the reading day',
+			'Detected when,reading ≥ 20 mm after ≥ 3 days of 0 or blank; CHIRPS ±1 day < 25 % of it; CHIRPS over the run ≥ 50 % of it; window ≤ 92 days + the reading day; blank stretches count up to 7 days; a longer one is an outage that ends the run and a reading straight after it is set aside',
 			'Start,End (reading day),Source,Reason,What the run did,Days in the run,Recorded total (mm),Reading (mm),Zero or blank days before,CHIRPS around the reading (mm),CHIRPS over the run (mm),CHIRPS over the window (mm),Rain used from it (mm)',
 			'2003-06-01,2003-06-21,detected,,spread by CHIRPS,21,120,120,20,1.5,90,91.5,120',
 			'2004-07-01,2004-07-09,detected,thunderstorm,kept as recorded (settings),9,40,40,8,0,30,,0',
+			'2005-02-10,2005-02-10,detected,,set aside as missing (read after a blank outage; CHIRPS fills its day),1,60,60,30,0.3,116,,2.5',
 			'Windows spread,1',
 			'Run days from a window,21',
 			'Rain on them (mm),120',
@@ -1231,6 +1251,12 @@ describe('multi-day accumulations block (B4)', () => {
 		expect([...accumulationLines({ ...a, windows: [], skipped: [], spreadWindows: 0, spreadDays: 0, spreadMm: 0 })].at(-1)).toBe('None detected or listed');
 		expect([...accumulationLines(null)][1]).toBe('No catchment rain series');
 		expect([...accumulationLines(undefined)][1]).toMatch(/before engine 0\.20\.0/);
+	});
+
+	it('a run saved before engine 1.70.0 has no blank-day limit in its criteria, so the line leaves it out', () => {
+		const { maxBlankDays: _, ...old } = a.criteria;
+		const lines = [...accumulationLines({ ...a, criteria: old as typeof a.criteria })];
+		expect(lines[2]).toBe('Detected when,reading ≥ 20 mm after ≥ 3 days of 0 or blank; CHIRPS ±1 day < 25 % of it; CHIRPS over the run ≥ 50 % of it; window ≤ 92 days + the reading day');
 	});
 });
 
