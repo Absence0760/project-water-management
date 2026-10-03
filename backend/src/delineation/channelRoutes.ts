@@ -9,6 +9,7 @@
 // every elevation-model request is. On Lambda the cache is per instance; the
 // durable path is tiles built in the tiles pipeline (docs/followups.md).
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -37,6 +38,9 @@ export function parseTile(q: string | undefined): [number, number] | null {
 	return i >= -maxI && i < maxI && j >= -maxJ && j < maxJ ? [i, j] : null;
 }
 
+/** The query: one tile, nothing else (as the map's other layers, a strict schema over every parameter). */
+export const TileQuery = z.object({ tile: z.string().max(16) }).strict();
+
 /** For tests: forget every cached tile. */
 export const clearChannelCache = () => {
 	cache.clear();
@@ -46,7 +50,8 @@ export const clearChannelCache = () => {
 export const channelRoutes = new Hono<AuthEnv>().get('/:id/map/channels', async (c) => {
 	const id = c.req.param('id');
 	const userId = c.get('userId');
-	const tile = parseTile(c.req.query('tile'));
+	const q = TileQuery.safeParse(c.req.query());
+	const tile = q.success ? parseTile(q.data.tile) : null;
 	if (!tile) throw new ApiError(400, 'Ask for one tile as tile=i,j (whole numbers).');
 	const dem = configuredDem();
 	await withUser(userId, (db) => requireRole(db, id, 'editor'));
