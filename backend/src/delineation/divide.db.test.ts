@@ -111,7 +111,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-10' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-11' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the pump drains into the dam, the dam into the new gauge, the gauge into the outflow.
@@ -125,6 +125,12 @@ describe('dividing the valley', () => {
 		expect(mid).toMatchObject({ nodeId: null, current: null, areaM2: null, geometry: null });
 		expect(mid.totalAreaM2).toBeGreaterThan(pump.areaM2 + dam.areaM2);
 		expect(Math.abs((pump.areaM2 + dam.areaM2 + plan.rest.areaM2) / plan.catchment.areaM2 - 1)).toBeLessThan(1e-9);
+		// The valley's pan lies in the dam's own piece: reported beside the areas (start-11), the gauge's whole catchment holding it too.
+		expect(plan.pans).toMatchObject({ count: 1 });
+		expect(Math.abs(dam.nonContributingM2 / plan.pans.nonContributingM2 - 1)).toBeLessThan(1e-6);
+		expect(pump.nonContributingM2).toBe(0);
+		expect(Math.abs(mid.totalNonContributingM2 / plan.pans.nonContributingM2 - 1)).toBeLessThan(1e-6);
+		expect(plan.warnings.some((w: string) => /drains into a pan \(a closed depression .* in Valley dam’s own area\./.test(w))).toBe(true);
 		expect(plan.untouched).toEqual([{ nodeId: v.nodes.hill.id, name: 'Hillside', areaKm2: 3 }]);
 		// The GET lists it with its mode; the model isn't empty.
 		const get = await viewer.call('GET', v.at('/map/start'));
@@ -185,7 +191,7 @@ describe('dividing the valley', () => {
 			['Valley dam', 'typed', null, null],
 			['Valley weir', 'typed', null, null]
 		]);
-		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-10/);
+		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-11/);
 		// The parcel stores its piece's area from the cells, the unit's area: the simplified outline's own area is a little off it.
 		const [parcel] = await asOwner(
 			`SELECT f.area_m2, f.geometry FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.project_id = $1 AND n.name = 'Top pump'`,

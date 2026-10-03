@@ -394,6 +394,7 @@
 						<dd>{pending.method} [{pending.methodVersion}]</dd>
 						<dt>Cell size</dt>
 						<dd>{fmtNum(p.cellSizeM, 0)} m</dd>
+						{#if p.pans}<dt>Pans</dt><dd>{p.pans.method}</dd>{/if}
 					</dl>
 					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it (design/delineation.md § Accuracy).</p>
 				</details>

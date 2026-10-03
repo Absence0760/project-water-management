@@ -3091,9 +3091,16 @@ map feature like any other.
 - `DelineationProposal = { id, status: 'proposed' | 'accepted' | 'rejected' |
   'superseded', from, click: [lon, lat], outlet: [lon, lat], snapDistanceM,
   geometry (a Polygon), areaM2, cells, cellSizeM, zoom, windowCells,
-  dataset, datasetFingerprint, method, methodVersion, featureId, createdBy,
+  dataset, datasetFingerprint, method, methodVersion, pans, featureId, createdBy,
   createdAt, decidedBy, decidedAt }`. `outlet` is where the click snapped to;
   `featureId` the accepted feature (`null` again once it is deleted).
+  `pans` (193, delineate-9; null on older proposals) = `PanReport = {
+  nonContributingM2, count, largest: { at: [lon, lat], floorM2, depthM,
+  drainsM2, storageMm }[] (at most 5, the largest catchment first), method }`:
+  what of the catchment drains into pans (closed depressions at least 1 m
+  deep, 0.1 km² in floor, holding at least 100 mm of their catchment's
+  runoff), reported beside `areaM2` and never taken out of it or the
+  polygon ([design/delineation.md § Pans](./design/delineation.md#pans)).
 - `DelineationRequest = { id, status: 'queued' | 'running' | 'failed' |
   'proposed' | 'refused' | 'superseded', from, click, progress, error,
   proposal, check, refusal, createdAt, finishedAt }` (191_delineation_request):
@@ -3136,7 +3143,8 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   lowest, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
   `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
   geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
-  totalAreaM2, open, placedBy, reach, larger, unmatched }` (`placedBy`
+  totalAreaM2, nonContributingM2, open, placedBy, reach, larger, unmatched }` (`nonContributingM2`: of its own area,
+  what drains into pans, start-11, null when open; a saved piece's description says it; `placedBy`
   `matched`, `junction` (at the DEM's junction for a river picked at a
   confluence) or `snapped`); a click may carry `reach` as Delineate's
   body does, and a click at a confluence without one answers 422
@@ -3152,7 +3160,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-7`; every `areaM2` and `totalAreaM2` is summed from
+  the map's (`start-11`; every `areaM2` and `totalAreaM2` is summed from
   the DEM's cells, each at its own area on the ellipsoid, so the pieces add
   up to the catchment exactly; `geometry` is simplified for the map and its
   own area may differ a little). `placedBy` is `matched` (on the channel matching
@@ -3196,22 +3204,26 @@ values now, taken only when ticked.
   methodVersion, decision, createdBy, createdAt, decidedBy, decidedAt }`.
   `plan = { fromDem, outlet: { featureId, name, point, snapDistanceM,
   foundIn, placement }, catchment: { areaM2, boundaryAreaM2 }, units: StartUnit[]
-  (upstream first), rest: { name, areaM2, geometry }, dropped: { featureId,
+  (upstream first), rest: { name, areaM2, geometry, nonContributingM2? }, pans?: PanReport, dropped: { featureId,
   name, reason, placement? }[], warnings: string[], cellSizeM, zoom, windowCells }`;
   `StartUnit = { key (the feature's id), featureName, role, name, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto (a key, or null
-  for the outflow gauge), drainsIntoProposed, placement }`. `decision` (once applied):
+  for the outflow gauge), drainsIntoProposed, placement, nonContributingM2?,
+  totalNonContributingM2? }`. The pans' figures (start-11; absent without a
+  DEM and on older plans): what of the catchment, the rest, each unit's own
+  piece and its whole catchment drains into pans, reported beside the areas
+  and never taken out of them; a warning says it in words. `decision` (once applied):
   the ticks, the node and parcel ids made, the revision id. Every proposal
   carries `mode: 'start' | 'divide'`.
 - `DivideProposal` = the same with `mode: 'divide'` and `plan = { mode,
   outlet: { featureId, nodeId, name, point, snapDistanceM, foundIn, placement },
-  catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry
-  }, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
+  catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry,
+  nonContributingM2? }, pans?: PanReport, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
   dropped, warnings, cellSizeM, zoom, windowCells }`; `DivideUnit = { key,
   featureName, nodeId (null: a new gauge), name, role, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto, current: {
   areaKm2, areaSource, downstreamNodeId, downstreamName, pctRunoffToDam } \|
-  null, placement }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
+  null, placement, nonContributingM2?, totalNonContributingM2? }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
   land); a gauge's `totalAreaM2` is what it measures.
 - **Placing the points** (`start-7`, `delineation/pointPlacement.ts`): with a
   DEM, the outlet gauge and every map point are put on the DEM's channel as

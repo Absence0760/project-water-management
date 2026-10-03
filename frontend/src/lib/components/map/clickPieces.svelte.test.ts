@@ -63,6 +63,9 @@ describe('pieceLine', () => {
 		expect(pieceLine(r, 1)).toBe('5.00 km² · the lowest point: the rest drains out here · 7.00 km² upstream in all');
 		expect(pieceLine(r, 2)).toBe('not a piece: it doesn’t drain to the lowest click');
 		expect(pieceLine(answer([piece(0, null, 3)], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here');
+		// Part of it drains into pans (start-11): said after the areas; none, or a plan from before, says nothing.
+		expect(pieceLine(answer([{ ...piece(0, null, 3), nonContributingM2: 1.25e6 }], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here · 1.25 km² of it drains into pans (non-contributing)');
+		expect(pieceLine(answer([{ ...piece(0, null, 3), nonContributingM2: 0 }], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here');
 	});
 
 	it('says a click was put on the channel matching its river reach', () => {

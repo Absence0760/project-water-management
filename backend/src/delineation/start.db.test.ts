@@ -55,6 +55,9 @@ afterAll(() => {
 	else process.env.DEM_URL = before;
 });
 
+/** The warning every proposal over the fixture's valley carries: its pan (start-11, pans.ts). */
+const PAN_WARNING = /^[\d.]+ km² of the catchment above the outlet \(\d+ %\) drains into a pan \(a closed depression on the elevation model, at /;
+
 describe('without an elevation model', () => {
 	it('proposes the points as units with no area, all draining into the outflow gauge; the rest is the boundary', async () => {
 		process.env.DEM_URL = '';
@@ -70,7 +73,7 @@ describe('without an elevation model', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-10' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-11' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -168,6 +171,16 @@ describe('with the synthetic DEM', () => {
 		// Every area from the cells (since start-6): the pieces add up to the catchment exactly.
 		expect(Math.abs(sum / plan.catchment.areaM2 - 1)).toBeLessThan(1e-9);
 		expect(mid.totalAreaM2).toBeCloseTo(top.areaM2 + mid.areaM2, 0);
+		// The valley's pan lies between the pump and the dam: the dam's piece holds what drains into it, reported beside the
+		// areas (start-11), with a warning that says so; the pump's piece and the rest hold none.
+		expect(plan.pans).toMatchObject({ count: 1, method: expect.stringMatching(/^Non-contributing \(pans\)/) });
+		expect(mid.nonContributingM2).toBeGreaterThan(0);
+		expect(Math.abs(mid.nonContributingM2 / plan.pans.nonContributingM2 - 1)).toBeLessThan(1e-6);
+		expect(top.nonContributingM2).toBe(0);
+		expect(plan.rest.nonContributingM2).toBe(0);
+		expect(plan.warnings.filter((w: string) => /drains into a pan \(a closed depression on the elevation model, at /.test(w))).toEqual([
+			expect.stringMatching(/in Valley dam’s own area\. Use the effective area if you model them as non-contributing\.$/)
+		]);
 		// A second proposal supersedes the first.
 		const again = await owner.call('POST', p.at('/map/start'), body);
 		expect(again.status).toBe(201);
@@ -215,7 +228,7 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-10/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-11/);
 		// The gauge stands for the outflow gauge; the dam for its unit.
 		const links = await asOwner('SELECT f.id, f.node_id FROM map_feature f WHERE f.id = ANY($1::uuid[])', [[gauge, dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(new Map([[gauge, by['Valley weir']!.id], [dam, by['Valley dam']!.id]]));
@@ -265,7 +278,8 @@ describe('with the synthetic DEM', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(r.body.proposal.plan.outlet).toMatchObject({ foundIn: 'delineation', featureId: null, name: 'Outflow gauge' });
 		expect(r.body.proposal.plan.outlet.point).toEqual(d.body.proposal.outlet);
-		expect(r.body.proposal.plan.warnings).toEqual([]);
+		// Only the valley's pan is worth a word (start-11).
+		expect(r.body.proposal.plan.warnings).toEqual([expect.stringMatching(PAN_WARNING)]);
 		expect(Math.abs(r.body.proposal.plan.rest.areaM2 / d.body.proposal.areaM2 - 1)).toBeLessThan(0.02);
 	});
 
@@ -392,13 +406,13 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan, method, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-10');
+		expect(methodVersion).toBe('start-11');
 		expect(Math.abs(plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(plan.outlet.placement).toMatchObject({ placedBy: 'matched', reach: { dataset: DATASET, reachId: 99100001, chosen: false }, larger: null, unmatched: false });
 		expect(plan.dropped).toEqual([]);
 		expect(plan.units).toHaveLength(1);
 		expect(plan.units[0].placement).toMatchObject({ placedBy: 'matched', reach: { reachId: 99100001 } });
-		expect(plan.warnings).toEqual([]);
+		expect(plan.warnings).toEqual([expect.stringMatching(PAN_WARNING)]);
 		expect(method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the reach’s area/);
 		expect(method).not.toMatch(/snapped/);
 	});
@@ -424,7 +438,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect(p2.outlet.placement).toMatchObject({ placedBy: 'larger', larger: null });
 		expect(Math.abs(p2.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(p2.units.map((u: { key: string; placement: Placement }) => [u.key, u.placement.placedBy])).toEqual([[dam, 'larger']]);
-		expect(p2.warnings).toEqual([]);
+		expect(p2.warnings).toEqual([expect.stringMatching(PAN_WARNING)]);
 		expect(used.body.proposal.method).toMatch(/the outlet on the larger channel chosen/);
 	});
 

@@ -3,8 +3,9 @@
 // Invented terrain, no real place's elevations: a valley inside an elliptical
 // ridge, its river running south along the axis to an outlet on the rim, with
 // a dam (a wall across the river and its flat reservoir behind it) and a
-// closed pit on a flank, so depression filling, flats and snapping are all
-// exercised. Everything outside the ridge falls away from it.
+// pan on a flank (a flat-floored closed depression, its own closed
+// catchment above it), so depression filling, flats, pans and snapping are
+// all exercised. Everything outside the ridge falls away from it.
 //
 // The tests and the e2e click the points below and know the areas to expect.
 import { TARGET_ZOOM } from './delineate.js';
@@ -38,8 +39,12 @@ export const OUTLET_CELL = { x: CX, y: CY + B } as const;
 /** The dam wall across the river, and the reservoir's level behind it. */
 export const DAM_CELL = { x: CX, y: CY + 20 } as const;
 const DAM_WALL_M = 25;
-/** A closed pit on the eastern flank (fills, then spills to the river). */
-const PIT = { x: CX + 50, y: CY - 40, depthM: 30, radius: 6 };
+/**
+ * A pan on the eastern flank: a disc of `radius` cells whose flat floor lies `depthM` below the lowest point of its rim, so it
+ * is closed (the flank above it drains into it) and the fill spills it towards the river (pans.ts: a pan, since it holds far
+ * more than 100 mm over its catchment). It was a cone-shaped pit until delineate-9, which the 6 % flank never closed.
+ */
+export const PAN = { x: CX + 50, y: CY - 40, depthM: 3, radius: 6 } as const;
 
 /** Cell size near the fixture (m): zoom 10, 256 px tiles, about 33.5° S. */
 export const FIXTURE_CELL_M = (2 * Math.PI * 6378137 * Math.cos((fixtureLonLat(CX, CY)[1] * Math.PI) / 180)) / W;
@@ -69,8 +74,13 @@ export function fixtureElevation(x: number, y: number): number {
 		// The ridge's inner slope, cut by the river's gap in the south.
 		const gap = y > CY && Math.abs(x - CX) <= 2;
 		if (!gap && s > 0.9) z += (RIDGE_M * (s - 0.9)) / 0.1;
-		const dp = Math.hypot(x - PIT.x, y - PIT.y);
-		if (dp < PIT.radius) z -= PIT.depthM * (1 - dp / PIT.radius);
+		// The valley is a plane, so the lowest cell beside the disc lies down its slope, at most radius + √2 cells out: the
+		// floor sits depthM below the plane there, and so at least depthM below wherever the pan spills.
+		if (Math.hypot(x - PAN.x, y - PAN.y) < PAN.radius) {
+			const g = Math.hypot(0.06, 0.01);
+			const out = PAN.radius + Math.SQRT2;
+			z = valley(PAN.x - (out * 0.06) / g, PAN.y + (out * 0.01) / g) - PAN.depthM;
+		}
 		// The dam: a wall across the valley at DAM_CELL, the reservoir flat behind it at the crest less 5 m.
 		const level = valley(CX, DAM_CELL.y) + DAM_WALL_M - 5;
 		if (y === DAM_CELL.y && Math.abs(x - CX) <= 12) z += DAM_WALL_M;

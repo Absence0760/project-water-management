@@ -2996,11 +2996,25 @@ export interface DelineationProposal {
 	datasetFingerprint: string;
 	method: string;
 	methodVersion: string;
+	/** What of the catchment drains into pans, reported beside it (193, delineate-9); null on older proposals. */
+	pans: PanReport | null;
 	featureId: string | null;
 	createdBy: string | null;
 	createdAt: string;
 	decidedBy: string | null;
 	decidedAt: string | null;
+}
+
+/**
+ * The part of a catchment that drains into pans: closed depressions on the elevation model deep, wide and capacious enough to
+ * count (backend delineation/pans.ts; docs/design/delineation.md § Pans). Reported, never taken out of the area or the outline.
+ */
+export interface PanReport {
+	nonContributingM2: number;
+	count: number;
+	/** The largest few by what drains into them: the floor's deepest point, its area, depth below the spill, catchment and storage over it. */
+	largest: { at: MapPosition; floorM2: number; depthM: number; drainsM2: number; storageMm: number }[];
+	method: string;
 }
 
 /** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
@@ -3053,6 +3067,9 @@ export interface StartUnit {
 	drainsIntoProposed: boolean;
 	/** How its point was put on the channel; null without an elevation model (absent before start-7). */
 	placement?: PointPlacement | null;
+	/** Of its own area and its whole catchment, what drains into pans (m²; absent without an elevation model or before start-11). */
+	nonContributingM2?: number;
+	totalNonContributingM2?: number;
 }
 
 /** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */
@@ -3061,7 +3078,9 @@ export interface StartPlan {
 	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null; placement?: PointPlacement | null };
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
-	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
+	/** What of the catchment drains into pans (start-11; absent without an elevation model or before). */
+	pans?: PanReport;
 	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
 	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
@@ -3119,6 +3138,9 @@ export interface DivideUnit {
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (absent before start-7). */
 	placement?: PointPlacement;
+	/** Of its own area and its whole catchment, what drains into pans (m²; absent before start-11). */
+	nonContributingM2?: number;
+	totalNonContributingM2?: number;
 }
 
 /** What the server proposed to divide a model that has nodes (182; docs/api.md § Start from the map). */
@@ -3127,7 +3149,9 @@ export interface DividePlan {
 	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary'; placement?: PointPlacement };
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
-	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null; nonContributingM2?: number };
+	/** What of the catchment drains into pans (start-11; absent before). */
+	pans?: PanReport;
 	untouched: { nodeId: string; name: string; areaKm2: number }[];
 	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
@@ -3171,6 +3195,8 @@ export interface ClickPiece {
 	areaM2: number | null;
 	/** Everything upstream of the click, its own piece included; null when it, or a piece above it, is open. */
 	totalAreaM2: number | null;
+	/** Of its own area, what drains into pans (m², start-11; null when it is open, absent before start-11): reported, not taken out. */
+	nonContributingM2?: number | null;
 	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
 	open: boolean;
 	/** matched: put on the channel whose upstream area matches its nearby river reach's; junction: at the DEM's own junction for the river picked at a confluence; snapped: on the most-drained cell near it. */

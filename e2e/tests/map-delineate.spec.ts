@@ -43,11 +43,15 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(r).toBeVisible();
 	// The synthetic valley is about 547 km² (backend/src/delineation/fixture.ts).
 	await expect(r.getByTestId('delineate-fact-area')).toHaveText(/^5[34]\d\.\d\d km²$/);
+	// The valley's pan (fixture.ts PAN): what drains into it is reported beside the area, with the effective area (delineate-9).
+	await expect(r.getByTestId('delineate-fact-into-pans')).toHaveText(/^\d\.\d\d km² \(\d+ %\) drains into a pan; the largest holds [\d\s]+ mm over its \d\.\d\d km²\. Non-contributing in WR2012’s sense; still inside the area and outline$/);
+	await expect(r.getByTestId('delineate-fact-effective-area')).toHaveText(/^5[34]\d\.\d\d km², if the pans contribute nothing$/);
 	// The focused Delineate button went with the form: the sheet's title has the focus.
 	await expect(r.getByRole('heading', { name: 'The delineated catchment' })).toBeFocused();
 	await r.getByText('How it was made').click();
 	await expect(r.getByTestId('delineate-fact-dataset')).toContainText('Synthetic DEM');
-	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-8]');
+	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-9]');
+	await expect(r.getByTestId('delineate-fact-pans')).toContainText('Non-contributing (pans)');
 	await expect(r.getByRole('heading', { name: 'Before you accept it' })).toBeVisible();
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });

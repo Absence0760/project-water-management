@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DelineationProposal, DelineationRequest } from '$lib/api/types';
-import { afterPollError, COPERNICUS_NOTICE, datasetNotice, failedText, POLL_GIVE_UP, isWaiting, openProposal, proposalFacts, provenanceFacts, waitingText } from './delineation';
+import { afterPollError, COPERNICUS_NOTICE, datasetNotice, failedText, POLL_GIVE_UP, isWaiting, openProposal, panFacts, proposalFacts, provenanceFacts, waitingText } from './delineation';
 
 const proposal = (over: Partial<DelineationProposal> = {}): DelineationProposal => ({
 	id: 'p1',
@@ -19,6 +19,7 @@ const proposal = (over: Partial<DelineationProposal> = {}): DelineationProposal 
 	datasetFingerprint: '0e25a572b5cf789a',
 	method: 'D8 …',
 	methodVersion: 'delineate-1',
+	pans: null,
 	featureId: null,
 	createdBy: 'Ann',
 	createdAt: '2026-10-01T00:00:00Z',
@@ -44,6 +45,24 @@ describe('delineation helpers', () => {
 		expect(how.Dataset).toBe('Synthetic DEM 1 (0e25a572b5cf789a)');
 		expect(how.Method).toMatch(/\[delineate-1\]$/);
 		expect(Object.fromEntries(proposalFacts(proposal({ snapDistanceM: 0.2 }))).Outlet).toBe('where the point was');
+	});
+
+	it('reports the area draining into pans and the effective area beside it (delineate-9), and nothing before it', () => {
+		const pans = {
+			nonContributingM2: 54_719_000,
+			count: 3,
+			largest: [{ at: [26.1, -28.3] as [number, number], floorM2: 2_000_000, depthM: 4.5, drainsM2: 30_000_000, storageMm: 210 }],
+			method: 'Non-contributing (pans): …'
+		};
+		const f = Object.fromEntries(proposalFacts(proposal({ pans })));
+		expect(f['Into pans']).toBe('54.72 km² (10 %) drains into 3 pans; the largest holds 210 mm over its 30.00 km². Non-contributing in WR2012’s sense; still inside the area and outline');
+		expect(f['Effective area']).toBe('492.47 km², if the pans contribute nothing');
+		expect(Object.fromEntries(provenanceFacts(proposal({ pans }))).Pans).toBe('Non-contributing (pans): …');
+		// None found: said so, and no effective area to offer.
+		expect(panFacts({ areaM2: 1e6, pans: { ...pans, nonContributingM2: 0, count: 0, largest: [] } })).toEqual([['Into pans', 'none found (no closed depression deep and large enough)']]);
+		// A proposal from before delineate-9 never looked: nothing said either way.
+		expect(panFacts(proposal())).toEqual([]);
+		expect(provenanceFacts(proposal()).map(([k]) => k)).toEqual(['Dataset', 'Method']);
 	});
 
 	it('carries the Copernicus notice for the GLO-30 DEM only', () => {

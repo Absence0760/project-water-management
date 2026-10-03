@@ -2791,8 +2791,11 @@ map" card) stays the schematic; this is the geography.
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the
   point, on the channel"), Cells ("33 609 cells, each about 128 m across"),
-  **How it was made** (closed: Dataset with its fingerprint, Method with its
-  version), **Before you accept it** (three caveats), then **Accept as the
+  Into pans ("8.52 km² (2 %) drains into a pan; the largest holds … mm over
+  its … km². Non-contributing in WR2012’s sense; still inside the area and
+  outline", or "none found …"; delineate-9) and Effective area (the area
+  less it), **How it was made** (closed: Dataset with its fingerprint, Method with its
+  version, Pans: the pans' method), **Before you accept it** (three caveats), then **Accept as the
   catchment boundary** (disabled until **Replace the current boundary “…”**
   is ticked when there is one), **Accept as an area** and **Reject**;
   **Delineate another point** goes back to the form, and the form's **Back
