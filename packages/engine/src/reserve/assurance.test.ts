@@ -476,15 +476,15 @@ describe('Reserve compliance in a run', () => {
 
 	it('skips a table at a farm, a missing node or a second table for the outlet, with warnings', () => {
 		const t = table();
-		const out = runNet(network([{ ...t, siteNodeId: 'a' }, { ...t, siteNodeId: 'nope' }, { ...t, siteNodeId: 'out' }, t]));
+		const out = runNet(network([{ ...t, siteNodeId: 'a' }, { ...t, siteNodeId: 'nope' }, t]));
 		expect(out.summary.ewrAssurance!.map((s) => s.nodeId)).toEqual([null]);
 		expect(out.summary.warnings).toEqual(
-			expect.arrayContaining([
-				'EWR rule table for "a" skipped: an EWR site is the outlet or a gauge',
-				'EWR rule table skipped: its site (nope) is not in the network',
-				'a second EWR rule table for "out" is ignored: each site has one'
-			])
+			expect.arrayContaining(['EWR rule table for "a" skipped: an EWR site is the outlet or a gauge', 'EWR rule table skipped: its site (nope) is not in the network'])
 		);
+		// A table keyed by the outlet's own id is the outlet's: beside one for "the outlet" (null), neither is used (§2.9c).
+		const two = runNet(network([{ ...t, siteNodeId: 'out' }, t]));
+		expect(two.summary.ewrAssurance ?? []).toEqual([]);
+		expect(two.summary.warnings).toContain('2 EWR rule tables for the outlet: none is used, because each site has one');
 	});
 
 	it('natural flow meets its own table on an undeveloped random network, at every site', () => {

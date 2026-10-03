@@ -1,4 +1,4 @@
-// Rebuilds the checkout's test database (water_test, or water_test_w<n> in a worktree; test-db.ts) schema from backend/migrations before the
+// Rebuilds the checkout's test database (water_test, or water_test_w<tag> in a worktree; test-db.ts) schema from backend/migrations before the
 // DB test project runs. Needs local Postgres: `pnpm dev:db:up`.
 import pg from 'pg';
 import { migrate } from '../../scripts/migrate.js';

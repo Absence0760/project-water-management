@@ -39,7 +39,7 @@ import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { damCapacityOn } from '../network/development';
 import type { DailySeries, ModelInput, ModelOutput, SeriesKind } from '../project';
 import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
-import type { ModelStateSnapshot } from '../warmstart/snapshot';
+import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
 import { applyScenario } from '../scenario/overrides';
 import { quantileSorted } from '../uncertainty/bands';
@@ -540,9 +540,18 @@ export interface SeasonalOutlookOptions extends OutlookSeason {
 /**
  * The base run and the snapshot at `date` for an outlook: the ones given, or
  * one run that gives both (runModelCapturing), or a plain run when the date
- * is outside it (the member builders then say why).
+ * is outside it (the member builders then say why). The snapshot's full
+ * allocation factors are the ones the days before `date` fit
+ * (withAllocationKnownBefore, engine ≥ 1.69.0): a member reads nothing on or
+ * after the decision date, as the older path's members don't.
  */
 export function outlookBaseAndSnapshot(input: ModelInput, date: string, given: { baseRun?: OutlookBaseRun; snapshot?: ModelStateSnapshot } = {}): { baseRun: OutlookBaseRun; snapshot: ModelStateSnapshot | null } {
+	const got = baseAndSnapshot(input, date, given);
+	// A full allocation's factor for the decision year as the days before the decision date fit it (engine ≥ 1.69.0, §2.15).
+	return { baseRun: got.baseRun, snapshot: got.snapshot ? withAllocationKnownBefore(got.snapshot, input) : null };
+}
+
+function baseAndSnapshot(input: ModelInput, date: string, given: { baseRun?: OutlookBaseRun; snapshot?: ModelStateSnapshot }): { baseRun: OutlookBaseRun; snapshot: ModelStateSnapshot | null } {
 	if (given.baseRun) assertUnrestrictedBase(given.baseRun);
 	if (given.snapshot && given.snapshot.date !== date) throw new RangeError(`the snapshot is of ${given.snapshot.date}, not ${date}`);
 	if (given.baseRun && given.snapshot) return { baseRun: given.baseRun, snapshot: given.snapshot };
@@ -581,7 +590,8 @@ export function runOutlookMember(
 	if (snapshot.date !== resolveSeason(season).decisionDate) throw new RangeError(`the snapshot is of ${snapshot.date}, not the season's first day ${season.decisionDate}`);
 	const m = outlookSeasonInput(input, baseRun, season, analogue, ops);
 	if (m.problems.length) return { member: null, problems: m.problems };
-	return { member: outlookMember(runModelFrom(snapshot, m.input), m.input.model, season, analogue, siteNodeId), problems: [] };
+	// Nothing after the decision date is known (§2.15): a snapshot straight from captureModelState gets the same factor as outlookBaseAndSnapshot's.
+	return { member: outlookMember(runModelFrom(withAllocationKnownBefore(snapshot, input), m.input), m.input.model, season, analogue, siteNodeId), problems: [] };
 }
 
 function stat(values: readonly (number | null)[], enough: boolean): OutlookStat | null {

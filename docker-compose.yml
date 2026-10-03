@@ -8,13 +8,13 @@
 # worktree) drives the same containers: they have fixed container_names, so a
 # per-directory project name would make `up` from a worktree fail with a name
 # conflict while the main checkout's container runs. Per-worktree isolation
-# lives inside this one Postgres (water_test_w<n>, water_e2e…), not in
+# lives inside this one Postgres (water_w<tag>, water_test_w<tag>, water_e2e…), not in
 # separate containers.
 name: project-water-management
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     container_name: water-management-db
     ports:
       - "5434:5432"

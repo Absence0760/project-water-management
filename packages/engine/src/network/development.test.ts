@@ -80,6 +80,14 @@ describe('the capacity factor', () => {
 		expect(capacityScaleOf(node('A', 'farm', null, { ...plain, damCapacityM3: 100_000 }), d0, 60, [])).toBeUndefined();
 	});
 
+	it('a resumed run judges the in-service date against its capture run’s first day (spanStart, engine 1.69.0, §2.16)', () => {
+		const built = node('A', 'farm', null, { ...dam, damCapacityM3: 100_000, damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: '2021-02-01' });
+		// Resumed on the in-service day: the capture run (from d0) saw it come into service, so the column stays, all 1.
+		expect([...capacityScaleOf(built, d0 + 31, 10, [], d0)!]).toEqual(new Array(10).fill(1));
+		// Positive control: a run that starts there has nothing that changes.
+		expect(capacityScaleOf(built, d0 + 31, 10, [])).toBeUndefined();
+	});
+
 	it('says what is wrong with the fields, and the model rules report it', () => {
 		expect(developmentProblem({ ...dam, damSurveyDate: null })).toMatch(/needs the date the capacity was surveyed/);
 		expect(developmentProblem({ ...dam, damSedimentPctPerYear: 0.5 })).toMatch(/0 to 20 %/);

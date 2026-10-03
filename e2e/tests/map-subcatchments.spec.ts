@@ -23,7 +23,7 @@ const lines = (page: Page) => bar(page).getByTestId('map-click-piece');
 const line = (page: Page, i: number) => lines(page).nth(i).getByTestId('map-click-line');
 /** Enter Sub-catchments: Delineate, then its choice. */
 async function startClicks(page: Page) {
-	await page.getByTestId('section-header').getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
 	await page.getByTestId('map-delineate-clicks').check();
 	await expect(page.getByTestId('map-click-bar')).toBeVisible();
 }
@@ -79,11 +79,11 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	const mapHeight = (await page.locator('.map-body').boundingBox())!.height;
 
 	// From the keyboard: Delineate, its choice of Sub-catchments; then the map has the focus and the crosshair, and Enter puts an outlet under it.
-	await header(page).getByRole('button', { name: 'Delineate' }).focus();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).focus();
 	await page.keyboard.press('Enter');
 	await expect(page.getByTestId('map-draw-bar')).toContainText('Delineating a catchment');
 	await page.getByTestId('map-delineate-clicks').check();
-	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveAttribute('aria-pressed', 'true');
 	await expect(bar(page)).toBeVisible();
 	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
 	await expect(canvas(page)).toBeFocused();
@@ -139,7 +139,7 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await bar(page).getByTestId('map-click-save').click();
 	await expect(page.getByTestId('map-notice')).toContainText(/Saved 2 sub-catchments, 5[34]\d\.\d\d km² in all on the map as areas/);
 	await expect(bar(page)).toHaveCount(0);
-	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveAttribute('aria-pressed', 'false');
 	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Sub-catchment 1' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
 });
@@ -208,13 +208,13 @@ test('a click off the elevation model is taken back with the reason; Done asks b
 	await bar(page).getByTestId('map-click-done').click();
 	await ask.getByRole('button', { name: 'Drop them' }).click();
 	await expect(bar(page)).toHaveCount(0);
-	await expect(header(page).getByRole('button', { name: 'Delineate' })).toBeFocused();
+	await expect(page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toBeFocused();
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
 
 	const viewer = await signIn('Sub-catchments viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await openMap(viewer.page, project.id);
-	await expect(header(viewer.page).getByRole('button', { name: 'Delineate' })).toHaveCount(0);
+	await expect(viewer.page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true })).toHaveCount(0);
 	await expect(viewer.page.getByTestId('map-delineate-clicks')).toHaveCount(0);
 });
 

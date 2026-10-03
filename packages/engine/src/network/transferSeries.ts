@@ -54,7 +54,8 @@ export function canMove(tr: Pick<Transfer, 'months' | 'maxRateM3s' | 'dailyCapM3
 export function farmRules(transfers: readonly Transfer[], nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'>[]): Transfer[] {
 	const kind = new Map(nodes.map((n) => [n.id, n.kind]));
 	const river = transfers.some((tr) => tr.enabled && isRiverOfftake(tr)) ? new Set(planOfftakes(transfers, nodes, [], () => undefined).map((o) => o.id)) : null;
-	return transfers.filter((tr) => tr.enabled && kind.get(tr.fromNodeId) === 'farm' && kind.get(tr.toNodeId) === 'farm' && (!isRiverOfftake(tr) || !!river?.has(tr.id)));
+	// A rule from a unit to itself runs nowhere (engine ≥ 1.69.0 skips it, as planOfftakes skips such an off-take).
+	return transfers.filter((tr) => tr.enabled && tr.fromNodeId !== tr.toNodeId && kind.get(tr.fromNodeId) === 'farm' && kind.get(tr.toNodeId) === 'farm' && (!isRiverOfftake(tr) || !!river?.has(tr.id)));
 }
 
 /**
