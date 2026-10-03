@@ -37,8 +37,9 @@ export type Cell = number | string | boolean | XlDateTime | XlTime | XlDuration 
 
 /** Python's whitespace (str.isspace, and re's \s on str), which is not JavaScript's \s. */
 const PY_WS = '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
-const WS_RUN = new RegExp(`[${PY_WS}]+`, 'g');
 const WS_EDGES = new RegExp(`^[${PY_WS}]+|[${PY_WS}]+$`, 'g');
+/** extract_project.py _CLEAN_RUN: whitespace and the C0, DEL and C1 control characters (issue #385). */
+const CLEAN_RUN = new RegExp(`[${PY_WS}\\x00-\\x1f\\x7f-\\x9f]+`, 'g');
 
 /** Python str.strip(). */
 export function pyStrip(s: string): string {
@@ -252,9 +253,9 @@ export function isNumeric(v: Cell): boolean {
 	return pyFloat(pyStr(v)) !== null;
 }
 
-/** extract_project.py clean(): str(v or ''), whitespace runs collapsed to one space, stripped. */
+/** extract_project.py clean(): str(v or ''), runs of whitespace and control characters collapsed to one space, stripped. */
 export function clean(v: Cell): string {
-	return pyStrip((pyFalsy(v) ? '' : pyStr(v)).replace(WS_RUN, ' '));
+	return pyStrip((pyFalsy(v) ? '' : pyStr(v)).replace(CLEAN_RUN, ' '));
 }
 
 /** extract_project.py is_name(): a non-blank label that isn't a '|' separator or a '--' sentinel. */

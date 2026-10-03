@@ -84,7 +84,7 @@ NETWORK: list[tuple[str, str, list[str]]] = [
     ("Echo  Farm", "Farm", ["Bravo Farm", "Charlie Farm", "Delta Farm"]),  # double space: names are whitespace-normalised
     ("Midway Gauge", "Gauge", ["Echo Farm"]),  # a gauge inside the network
     ("Foxtrot Farm", "Farm", ["Midway Gauge"]),
-    ("Golf Farm", "Farm", []),
+    ("Golf\nFarm", "Farm", []),  # a line break typed in the cell (Alt+Enter): read as one space (issue #385)
     ("India Farm", "Farm", ["Golf Farm"]),  # a "dummy dam": pumps from the river
     ("Hotel Farm", "Farm", ["Foxtrot Farm", "India Farm"]),  # no Element sheet
     ("Outlet Gauge", "Gauge", ["Hotel Farm"]),
@@ -127,6 +127,9 @@ CROPS: list[tuple[str, list[float]]] = [
     ("Fodder E", [0.5, 0.5, 0, 0.5, 0.5, 1.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]),
     ("Pasture F", [0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.5, 0.5, 0.6]),  # Pasture C's row pasted: warned as copied
 ]
+# [Crop demand] names as typed, where they differ from CROPS: a stray C1 control character
+# (U+009F, as a paste from another program can leave) the importers read as a space (issue #385).
+CROP_AS_TYPED = {"Vines D": "Vines\x9fD"}
 # [Farm demand] crop columns: the six crops plus one that [Crop demand] doesn't define.
 FARM_DEMAND_CROPS = [c[0] for c in CROPS] + ["Hops X"]
 # Farm (as typed in [Farm demand]) -> area m2 per FARM_DEMAND_CROPS column. None = a blank row.
@@ -465,7 +468,7 @@ def crop_demand(wb) -> None:
         put(ws, f"{col('S', i)}30", m)
     r = 31
     for name, factors in CROPS:
-        put(ws, f"D{r}", name)
+        put(ws, f"D{r}", CROP_AS_TYPED.get(name, name))
         for i, f in enumerate(factors):
             put(ws, f"{col('F', i)}{r}", f)
             put(ws, f"{col('S', i)}{r}", round(APAN_MM[i] * f, 2))

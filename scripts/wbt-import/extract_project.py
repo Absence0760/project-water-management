@@ -135,8 +135,14 @@ def num(v: Any, default: float = 0.0) -> float:
         return default
 
 
+# Whitespace and control characters (C0, DEL, C1): a cell's line breaks (Alt+Enter), tabs and
+# stray controls become one space, so a name is one line (issue #385; the app refuses control
+# characters in names, packages/engine/src/names.ts). U+2028/2029 are whitespace to \s already.
+_CLEAN_RUN = re.compile(r"[\s\x00-\x1f\x7f-\x9f]+")
+
+
 def clean(v: Any) -> str:
-    return re.sub(r"\s+", " ", str(v or "")).strip()
+    return _CLEAN_RUN.sub(" ", str(v or "")).strip()
 
 
 def is_name(v: Any) -> bool:
