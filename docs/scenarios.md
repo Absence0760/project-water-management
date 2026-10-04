@@ -965,11 +965,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (Gazetted Reserve), total flow, 10 % points", so the compare page's
   Scenario overrides show the changed table, in red, with both confidence
   lines.
-- **The later ops in the form** (engine ≥ 1.35.0). **Move a node (what it
-  drains into)**: the node (not the outlet) and the node it will drain
+- **The later ops in the form** (engine ≥ 1.35.0). **Move what a unit,
+  gauge or user drains into**: the node (not the outlet) and the node it will drain
   into, with "Now: drains into …"; it reads "Move “Lower farm”: drains into
-  Outflow gauge → Upper farm". **Insert a node on a reach**: as **Add a
-  node** (kind, name, dam or demand), the node it drains into (only nodes
+  Outflow gauge → Upper farm". **Insert a hydrological unit or user on a reach**: as **Add a
+  hydrological unit or user** (kind, name, dam or demand), the node it drains into (only nodes
   something drains into), and a checkbox per node draining there now, at
   least one ticked; "Insert the hydrological unit “Weir dam” above Outflow
   gauge, taking what Upper farm drains, dam 50 000 m³". **Change a crop**:
@@ -1006,7 +1006,8 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
   changed** callout, in the tab and on the compare page. On a team scenario
-  the proposer's nodes (`ownedNodeIds`) are a checkbox list in the tab; on an
+  the proposer's hydrological units and users (`ownedNodeIds`) are a checkbox
+  list in the tab (gauges only while one is still ticked); on an
   application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's

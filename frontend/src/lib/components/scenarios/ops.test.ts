@@ -98,7 +98,7 @@ describe('describeOp', () => {
 		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every hydrological unit: 85 % of what they'd take (× 0.85)");
 		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
 		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");
-		expect(d({ op: 'demand.scale', factor: 0.5, nodeIds: ['gone'] })).toBe("Irrigation demand of a node the base run doesn’t have: 50 % of what they'd take (× 0.5)");
+		expect(d({ op: 'demand.scale', factor: 0.5, nodeIds: ['gone'] })).toBe("Irrigation demand of a unit, gauge or user the base run doesn’t have: 50 % of what they'd take (× 0.5)");
 	});
 
 	it('describes a supply rule and river pump change in run comparison\'s words (WP-3.8)', () => {
@@ -128,7 +128,7 @@ describe('describeOp', () => {
 	it('names a target the input no longer has from the names it had, and leaves out an unknown “was”', () => {
 		const gone = stepInputs(b, [{ op: 'node.remove', nodeId: LO }]).after;
 		expect(describeOp({ op: 'node.remove', nodeId: LO }, gone, namesOf([b.model]))).toBe('Remove “Lower farm”');
-		expect(describeOp({ op: 'node.remove', nodeId: 'nope' }, gone, namesOf([b.model]))).toBe('Remove “a node the base run doesn’t have”');
+		expect(describeOp({ op: 'node.remove', nodeId: 'nope' }, gone, namesOf([b.model]))).toBe('Remove “a unit, gauge or user the base run doesn’t have”');
 		expect(describeOp(raise, null, namesOf([b.model]))).toBe('Upper farm: Dam capacity → 180\u202f000 m³');
 		expect(describeOp({ op: 'transfer.remove', transferId: 'x' }, null)).toBe('Remove a transfer');
 	});
@@ -232,12 +232,12 @@ describe('buildOp', () => {
 	});
 
 	it('says what is missing or out of range, in the hydrological units typed', () => {
-		expect(buildOp(draft({ kind: 'node.set', field: 'damCapacityM3', value: '1' }), m)).toEqual({ ok: false, error: 'Pick a node' });
+		expect(buildOp(draft({ kind: 'node.set', field: 'damCapacityM3', value: '1' }), m)).toEqual({ ok: false, error: 'Pick a unit, gauge or user' });
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, value: '1' }), m)).toEqual({ ok: false, error: 'Pick what to change' });
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, field: 'damMinPct', value: '150' }), m)).toEqual({ ok: false, error: 'Must be at most 100 %' });
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, field: 'damCapacityM3', value: 'big' }), m)).toEqual({ ok: false, error: 'Dam capacity: “big” isn\'t a number' });
 		expect(buildOp(draft({ kind: 'series.scale', changePct: '-150' }), m)).toEqual({ ok: false, error: 'The change must be between −100 % and +900 %' });
-		expect(buildOp(draft({ kind: 'node.add', downstreamNodeId: UP }), m)).toEqual({ ok: false, error: 'Enter a name for the new node' });
+		expect(buildOp(draft({ kind: 'node.add', downstreamNodeId: UP }), m)).toEqual({ ok: false, error: 'Enter a name for the new unit or user' });
 		expect(buildOp(draft({ kind: 'demand.scale', demandPct: '250' }), m)).toEqual({ ok: false, error: "The demand must be between 0 % and 200 % of what they'd take" });
 		expect(buildOp(draft({ kind: 'demand.scale', demandPct: '-5' }), m)).toEqual({ ok: false, error: "The demand must be between 0 % and 200 % of what they'd take" });
 		expect(buildOp(draft({ kind: 'demand.scale' }), m)).toEqual({ ok: false, error: 'Enter the demand' });
@@ -421,7 +421,7 @@ describe('the later ops (engine ≥ 1.35.0): build, describe, apply', () => {
 		expect(ins).toMatchObject({ op: 'node.insert', node: { name: 'Weir dam', kind: 'farm', downstreamNodeId: G, damCapacityM3: 50_000 }, upstreamNodeIds: [UP, LO] });
 		expect(describeOp(ins, base())).toBe('Insert the hydrological unit “Weir dam” above Outflow gauge, taking what Upper farm, Lower farm drain, dam 50\u202f000 m³');
 		expect(applyScenario(base(), [ins]).problems).toEqual([]);
-		expect(buildOp(draft({ kind: 'node.insert', newName: 'X', downstreamNodeId: G, upstreamNodeIds: [] }), m, id)).toEqual({ ok: false, error: 'Tick the nodes that will drain into the new one (with none, add a node instead)' });
+		expect(buildOp(draft({ kind: 'node.insert', newName: 'X', downstreamNodeId: G, upstreamNodeIds: [] }), m, id)).toEqual({ ok: false, error: 'Tick what will drain into the new one (with nothing, add a unit or user instead)' });
 		expect(buildOp(draft({ kind: 'node.move', nodeId: LO }), m, id)).toEqual({ ok: false, error: 'Pick what it will drain into' });
 	});
 

@@ -7208,9 +7208,23 @@ closing, and **Discard edits** puts it back. **Edits to record**
   while a run is in flight: the run re-reads the scenario when it ends, and
   that read could otherwise land after a submit and show the old status. The "Add a change" form and rebase are hidden while
   override mode is open.
-- **The proposer's nodes**: a checkbox per node of the base. Changes to them
-  (and to nodes the scenario adds) are proposals; the rest are baseline
+- **The proposer's hydrological units** ("… and users" when the base has
+  other water users): a checkbox per hydrological unit, then per other
+  water user, each kind under its own label when both are there. A gauge
+  measures and proposes nothing, so it is listed only while an older
+  scenario still has one ticked (to untick it). Changes to the ticked ones
+  (and to any the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+  The hint says the list decides whose a change is, not where it applies: a
+  change to a crop applies on every unit that grows it, and one unit's
+  planting is changed with **Set a hydrological unit's crop area** (its
+  area and irrigation system). (Until 2026-10-04 it was "The proposer's
+  nodes", every node of the base, gauges included; the form's node ops read
+  "Change a node's value", "Add a node" and so on, and now name the kinds:
+  **Change a hydrological unit, gauge or user**, **Add a hydrological unit
+  or user**, **Remove a hydrological unit, gauge or user**, **Move what a
+  unit, gauge or user drains into**, **Insert a hydrological unit or user
+  on a reach**, the picker **Hydrological unit, gauge or user**.)
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
   application's too): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and

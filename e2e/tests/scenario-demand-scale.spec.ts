@@ -78,7 +78,7 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 	// A named farm that isn't the proposer's is another party's: a baseline assumption until it is.
 	await expect(changes).toContainText('Baseline assumption');
 	await expect(page.getByTestId('baseline-callout')).toContainText('Baseline assumptions changed');
-	await page.getByRole('group', { name: "The proposer's nodes" }).getByLabel('Upper farm').check();
+	await page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm').check();
 	await expect(changes).toContainText('Proposal');
 	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);
 

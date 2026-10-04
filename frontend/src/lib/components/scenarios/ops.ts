@@ -175,11 +175,11 @@ export const CLASS_LABEL: Record<OpClass, string> = { proposal: 'Proposal', base
 // ---------------------------------------------------------------------------
 
 export const OP_LABEL: Record<ScenarioOpName, string> = {
-	'node.set': "Change a node's value",
-	'node.add': 'Add a node',
-	'node.remove': 'Remove a node',
-	'node.move': 'Move a node (what it drains into)',
-	'node.insert': 'Insert a node on a reach',
+	'node.set': 'Change a hydrological unit, gauge or user',
+	'node.add': 'Add a hydrological unit or user',
+	'node.remove': 'Remove a hydrological unit, gauge or user',
+	'node.move': 'Move what a unit, gauge or user drains into',
+	'node.insert': 'Insert a hydrological unit or user on a reach',
 	'cropArea.set': "Set a hydrological unit's crop area",
 	'crop.add': 'Add a crop',
 	'crop.set': 'Change a crop',
@@ -205,7 +205,7 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 };
 
 /** A node or crop id that neither the base nor any name source knows. */
-export const UNKNOWN_NODE = 'a node the base run doesn’t have';
+export const UNKNOWN_NODE = 'a unit, gauge or user the base run doesn’t have';
 export const UNKNOWN_CROP = 'a crop the base run doesn’t have';
 
 const KIND_WORD: Record<string, string> = { farm: 'hydrological unit', user: 'other water user', gauge: 'gauge' };
@@ -695,35 +695,35 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'node.set': {
 				spec = draftSpec(d);
 				if (!spec) throw new DraftError('pick what to change');
-				const node = model.nodes.find((n) => n.id === need(d.nodeId, 'a node'));
+				const node = model.nodes.find((n) => n.id === need(d.nodeId, 'a unit, gauge or user'));
 				const value = parsed(spec, spec.t === 'months' ? d.months : d.value, NODE_FIELD_SPECS[d.field as NodeSetField].label);
 				op = { op: 'node.set', nodeId: node?.id ?? d.nodeId, field: d.field, value } as ScenarioOp;
 				break;
 			}
 			case 'node.add': {
 				const name = d.newName.trim();
-				if (!name) throw new DraftError('enter a name for the new node');
-				const node: NetworkNode = { ...newNode(Math.max(0, ...model.nodes.map((n) => n.sortOrder + 1)), need(d.downstreamNodeId, 'the node it drains into')), id: newId(), name, kind: d.newKind };
+				if (!name) throw new DraftError('enter a name for the new unit or user');
+				const node: NetworkNode = { ...newNode(Math.max(0, ...model.nodes.map((n) => n.sortOrder + 1)), need(d.downstreamNodeId, 'what it drains into')), id: newId(), name, kind: d.newKind };
 				if (d.newKind === 'farm') node.damCapacityM3 = number(d.damCapacityM3, 'the dam capacity')!;
 				else node.userDemandM3Day = new Array<number>(12).fill(number(d.demandM3Day, 'the demand')!);
 				op = { op: 'node.add', node };
 				break;
 			}
 			case 'node.remove':
-				op = { op: 'node.remove', nodeId: need(d.nodeId, 'a node') };
+				op = { op: 'node.remove', nodeId: need(d.nodeId, 'a unit, gauge or user') };
 				break;
 			case 'node.move':
-				op = { op: 'node.move', nodeId: need(d.nodeId, 'the node to move'), downstreamNodeId: need(d.downstreamNodeId, 'what it will drain into') };
+				op = { op: 'node.move', nodeId: need(d.nodeId, 'the unit, gauge or user to move'), downstreamNodeId: need(d.downstreamNodeId, 'what it will drain into') };
 				break;
 			case 'node.insert': {
 				const name = d.newName.trim();
-				if (!name) throw new DraftError('enter a name for the new node');
-				const node: NetworkNode = { ...newNode(Math.max(0, ...model.nodes.map((n) => n.sortOrder + 1)), need(d.downstreamNodeId, 'the node it drains into')), id: newId(), name, kind: d.newKind };
+				if (!name) throw new DraftError('enter a name for the new unit or user');
+				const node: NetworkNode = { ...newNode(Math.max(0, ...model.nodes.map((n) => n.sortOrder + 1)), need(d.downstreamNodeId, 'what it drains into')), id: newId(), name, kind: d.newKind };
 				if (d.newKind === 'farm') node.damCapacityM3 = number(d.damCapacityM3, 'the dam capacity')!;
 				else node.userDemandM3Day = new Array<number>(12).fill(number(d.demandM3Day, 'the demand')!);
 				// Only nodes that drain there now: a stale tick (the downstream node changed) is dropped.
 				const ups = d.upstreamNodeIds.filter((id) => model.nodes.some((n) => n.id === id && n.downstreamNodeId === node.downstreamNodeId));
-				if (!ups.length) throw new DraftError('tick the nodes that will drain into the new one (with none, add a node instead)');
+				if (!ups.length) throw new DraftError('tick what will drain into the new one (with nothing, add a unit or user instead)');
 				op = { op: 'node.insert', node, upstreamNodeIds: [...new Set(ups)] };
 				break;
 			}

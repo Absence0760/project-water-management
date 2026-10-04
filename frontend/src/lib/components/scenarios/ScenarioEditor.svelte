@@ -4,7 +4,7 @@
 	// changes (ops) with their class and the server's check, the red
 	// "Baseline assumptions changed" callout, and for an editor on a draft the
 	// "Add a change" form or override mode (the model tables, OverrideEditor),
-	// undo, the proposer's nodes, rename, rebase onto another run, and in the
+	// undo, the proposer's units, rename, rebase onto another run, and in the
 	// head row beside the name (issue #17): run, status and delete. Every edit is a PATCH that answers
 	// with the scenario's check against its base, so problems show without
 	// running. Viewers get the same page read only.
@@ -237,10 +237,19 @@
 		if (await patch({ name: name.trim(), description: description.trim() })) renaming = false;
 	}
 
-	// --- the proposer's nodes --------------------------------------------------------
+	// --- the proposer's units --------------------------------------------------------
 	const owned = $derived(new Set(s.ownedNodeIds));
 	/** Nodes of the base, and nodes the scenario adds (always the proposer's: classifyScenario counts them as owned). */
 	const baseNodes = $derived(baseInput?.model.nodes ?? []);
+	/**
+	 * What a proposer can own, by kind: hydrological units, then other water users. A gauge measures, it proposes
+	 * nothing, so it is listed only while an older scenario still has one ticked (so it can be unticked).
+	 */
+	const ownable = $derived([
+		{ legend: 'Hydrological units', nodes: baseNodes.filter((n) => n.kind === 'farm') },
+		{ legend: 'Other water users', nodes: baseNodes.filter((n) => n.kind === 'user') },
+		{ legend: 'Gauges', nodes: baseNodes.filter((n) => n.kind === 'gauge' && owned.has(n.id)) }
+	].filter((g) => g.nodes.length));
 	function toggleOwned(id: string, on: boolean) {
 		const next = on ? [...s.ownedNodeIds, id] : s.ownedNodeIds.filter((x) => x !== id);
 		patch({ ownedNodeIds: next });
@@ -254,7 +263,7 @@
 			to === 'submitted' &&
 			!(await confirmDialog({
 				title: `Submit “${s.name}”?`,
-				message: 'Its changes, base run and nodes are then frozen.',
+				message: 'Its changes, base run and the proposer’s units are then frozen.',
 				confirmLabel: 'Submit'
 			}))
 		)
@@ -473,15 +482,22 @@
 
 	{#if baseNodes.length && !isApplication && (editable || s.ownedNodeIds.length)}
 		<fieldset class="owned">
-			<legend>The proposer's nodes</legend>
+			<legend>The proposer's hydrological units{ownable.some((g) => g.legend !== 'Hydrological units') ? ' and users' : ''}</legend>
 			<p class="hint">
-				Changes to these nodes (and nodes the scenario adds) are the proposal; changes to anything else are baseline assumptions.
+				Changes to the ticked units and users (and to any the scenario adds) are the proposal; changes to anything else are
+				baseline assumptions. Ticking one says whose a change is; it doesn't limit where a change applies (a change to a crop
+				applies on every unit that grows it).
 			</p>
-			<div class="owned-list">
-				{#each baseNodes as n (n.id)}
-					<label><input type="checkbox" checked={owned.has(n.id)} disabled={!editable || saving} onchange={(e) => toggleOwned(n.id, e.currentTarget.checked)} /> {n.name}</label>
-				{/each}
-			</div>
+			{#each ownable as g (g.legend)}
+				<div class="owned-group" role="group" aria-label={g.legend}>
+					{#if ownable.length > 1}<span class="owned-kind">{g.legend}</span>{/if}
+					<div class="owned-list">
+						{#each g.nodes as n (n.id)}
+							<label><input type="checkbox" checked={owned.has(n.id)} disabled={!editable || saving} onchange={(e) => toggleOwned(n.id, e.currentTarget.checked)} /> {n.name}</label>
+						{/each}
+					</div>
+				</div>
+			{/each}
 		</fieldset>
 	{/if}
 
@@ -497,7 +513,7 @@
 	{#if editable && !isApplication && !overriding}
 		<details class="rebase">
 			<summary>Rebase onto another run</summary>
-			<p class="hint">Apply the same changes to a newer run of the model. The check lists any change that no longer applies (a node removed since, say).</p>
+			<p class="hint">Apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say).</p>
 			{#if rebaseChoices.length}
 				<div class="form-row">
 					<div class="field">
@@ -670,6 +686,14 @@
 	}
 	.owned legend {
 		font-weight: 600;
+	}
+	.owned-group + .owned-group {
+		margin-top: 0.5rem;
+	}
+	.owned-kind {
+		display: block;
+		font-size: 0.85rem;
+		color: var(--text-muted);
 	}
 	.owned-list {
 		display: flex;

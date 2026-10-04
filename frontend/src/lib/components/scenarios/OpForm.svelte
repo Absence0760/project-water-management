@@ -269,9 +269,9 @@
 
 		{#if d.kind === 'node.set' || d.kind === 'node.remove' || d.kind === 'node.move'}
 			<div class="field">
-				<label for="op-node">Node</label>
+				<label for="op-node">Hydrological unit, gauge or user</label>
 				<select id="op-node" value={d.nodeId} onchange={(e) => pickNode(e.currentTarget.value)}>
-					<option value="" disabled>Pick a node</option>
+					<option value="" disabled>Pick one</option>
 					{#each d.kind === 'node.set' ? nodes : nodes.filter((n) => n.downstreamNodeId !== null) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
@@ -279,7 +279,7 @@
 				<div class="field">
 					<label for="op-down">Drains into</label>
 					<select id="op-down" bind:value={d.downstreamNodeId}>
-						<option value="" disabled>Pick a node</option>
+						<option value="" disabled>Pick one</option>
 						{#each nodes.filter((n) => n.id !== d.nodeId) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 					</select>
 					{#if node}<span class="hint" data-testid="op-current">Now: drains into {nodeName(node.downstreamNodeId ?? '')}</span>{/if}
@@ -476,7 +476,7 @@
 						d.upstreamNodeIds = [];
 					}}
 				>
-					<option value="" disabled>Pick a node</option>
+					<option value="" disabled>Pick one</option>
 					{#each d.kind === 'node.insert' ? insertAbove : nodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
@@ -494,19 +494,19 @@
 		</div>
 		{#if d.kind === 'node.insert'}
 			<fieldset class="months" data-testid="op-insert-upstream">
-				<legend>What drains into it (from {d.downstreamNodeId ? nodeName(d.downstreamNodeId) : 'the node it drains into'})</legend>
+				<legend>What drains into it (from {d.downstreamNodeId ? nodeName(d.downstreamNodeId) : 'what it drains into'})</legend>
 				{#each insertUps as n (n.id)}
 					<label><input type="checkbox" checked={d.upstreamNodeIds.includes(n.id)} onchange={(e) => toggleUpstream(n.id, e.currentTarget.checked)} /> {n.name}</label>
 				{:else}
-					<span class="hint">Pick the node it drains into first.</span>
+					<span class="hint">Pick what it drains into first.</span>
 				{/each}
 			</fieldset>
-			<p class="hint">The new node sits on the river between the ticked nodes and the node they drained into, with no land of its own; change its other values with “Change a node's value” once it is added.</p>
+			<p class="hint">The new unit or user sits on the river between the ticked ones and what they drained into, with no land of its own; change its other values with “Change a hydrological unit, gauge or user” once it is added.</p>
 		{:else}
-			<p class="hint">A new node is a leaf, with no land of its own; change its other values with “Change a node's value” once it is added.</p>
+			<p class="hint">A new unit or user is a leaf, with no land of its own; change its other values with “Change a hydrological unit, gauge or user” once it is added.</p>
 		{/if}
 	{:else if d.kind === 'node.move'}
-		<p class="hint">Whatever drains into the node moves with it. Moving a node that isn't the proposer's own new structure, or one others drain into, is a <strong>baseline assumption</strong>: it redraws the river as modelled.</p>
+		<p class="hint">Whatever drains into it moves with it. Moving one that isn't the proposer's own new structure, or one others drain into, is a <strong>baseline assumption</strong>: it redraws the river as modelled.</p>
 	{:else if d.kind === 'crop.remove'}
 		<p class="hint">Removes the crop and its area on every hydrological unit that grows it. To stop growing it on one unit, set that unit's crop area to 0 instead.</p>
 	{:else if d.kind === 'ewrRule.remove'}
