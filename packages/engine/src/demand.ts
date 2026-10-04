@@ -438,8 +438,9 @@ export function demandFactorStart(from: string | null | undefined, start: number
 /**
  * Units whose return flow is more than their losses (engine ≥ 1.71.0): r above
  * 1 − e, e being the efficiency a run gives the unit (its plantings' systems
- * blended, else its own; unitIrrigationEfficiency at `apanMm`). The API refuses
- * a model with one and the editor lists it; a run caps r at 1 − e. Only farms
+ * blended, else its own; unitIrrigationEfficiency at `apanMm`). The API takes
+ * a model with one (since 1.72.0 the losses move with a crop's system, set
+ * elsewhere), the unit form warns, and a run caps r at 1 − e. Only farms
  * irrigate; a value outside (0, 1] runs as 1.
  */
 export function returnFlowProblems(

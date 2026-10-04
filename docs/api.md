@@ -1405,7 +1405,7 @@ each rule's `transfer_rule@<id>` (what it took, before losses), and
 `offtake_loss_return` on each unit seepage rejoins below (engine ≥ 1.42.0);
 `summary.waterBalance` and the water account gain `conveyanceLossM3` (what
 was lost, net of the seepage returned);
-nodes carry `irrigationEfficiency`, `returnFlowFraction` (engine ≥ 1.71.0: the share of the water supplied returning, at most 1 − `irrigationEfficiency`, refused above it; a document with 0.16.0–1.70.0's `lossReturnFraction` β, a share of the losses, is read as β(1 − e)), `damAreaFullM2`
+nodes carry `irrigationEfficiency`, `returnFlowFraction` (engine ≥ 1.71.0: the share of the water supplied returning, at most 1 − the unit's blended efficiency, accepted above it and capped by the run, which warns; a document with 0.16.0–1.70.0's `lossReturnFraction` β, a share of the losses, is read as β(1 − e)), `damAreaFullM2`
 (nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
 with a larger value from before loads and runs, with a warning, and must be
 brought to 1 or below to save) and `damSeepagePerDay`. A body without them
