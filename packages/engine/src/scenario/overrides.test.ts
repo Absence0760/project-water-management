@@ -35,7 +35,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 5000,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -111,6 +111,27 @@ describe('applyScenario: each op', () => {
 		expect(r.problems).toEqual([]);
 		expect(nodeOf(r.input, 'A')!.damCapacityM3).toBe(240_000);
 		expect(r.applied).toHaveLength(1);
+	});
+
+	it('a stored engine 0.16.0–1.70.0 op setting β (a share of the losses) validates and sets the return flow r = β(1 − e)', () => {
+		const legacy = { op: 'node.set', nodeId: 'A', field: 'lossReturnFraction', value: 0.5 };
+		const v = validateScenarioOps([legacy]);
+		expect(v.errors).toEqual([]);
+		const r = one(v.ops[0]!);
+		expect(r.problems).toEqual([]);
+		// Farm A is at 80 %: half of its 20 % losses is 10 % of the water supplied.
+		expect(nodeOf(r.input, 'A')!.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect('lossReturnFraction' in nodeOf(r.input, 'A')!).toBe(false);
+		expect(validateScenarioOps([{ ...legacy, value: 1.5 }]).errors).toEqual(['ops[0].value: must be at most 1']);
+	});
+
+	it('a stored engine 0.16.0–1.70.0 node.add carrying β gets r = β(1 − e) from its own efficiency', () => {
+		const { returnFlowFraction: _r, ...rest } = node('N', { downstreamNodeId: 'A' });
+		const v = validateScenarioOps([{ op: 'node.add', node: { ...rest, irrigationEfficiency: 0.9, lossReturnFraction: 1 } }]);
+		expect(v.errors).toEqual([]);
+		const added = (v.ops[0] as Extract<ScenarioOp, { op: 'node.add' }>).node;
+		expect(added.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect('lossReturnFraction' in added).toBe(false);
 	});
 
 	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.10.0, model.md §2.13)', () => {
@@ -1282,13 +1303,54 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 			{ op: 'crop.set', cropId: 'c1', field: 'name', value: '  Drip lucerne ' }
 		]);
 		expect(r.problems).toEqual([]);
-		expect(r.input.model.crops).toEqual([{ id: 'c1', name: 'Drip lucerne', cropFactor: factors, irrigationEfficiency: 0.9 }]);
+		// An engine 0.43.0–1.71.0 op's 90 % is the table's Drip row (engine ≥ 1.72.0): the crop's default system.
+		expect(r.input.model.crops).toEqual([{ id: 'c1', name: 'Drip lucerne', cropFactor: factors, irrigationSystemId: 'drip' }]);
 		expect(b.model.crops[0]!.name).toBe('Lucerne');
-		expect(texts(b, r.input)).toEqual(expect.arrayContaining([expect.stringMatching(/Drip lucerne/), expect.stringMatching(/irrigation efficiency: the farm's → 90/)]));
+		expect(texts(b, r.input)).toEqual(expect.arrayContaining([expect.stringMatching(/Drip lucerne/), expect.stringMatching(/irrigation system: the unit's → Drip/)]));
 		// The run: a lower crop factor lowers the farms' demand for it.
 		const lower = applyScenario(base(), [{ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: new Array(12).fill(0.1) }]).input;
 		const d = (x: ModelInput) => runModel(x).series.find((s) => s.nodeId === 'A' && s.key === 'demand')!.values.reduce((s, v) => s + v, 0);
 		expect(d(lower)).toBeLessThan(d(base()));
+	});
+
+	it('irrigation systems (engine 1.72.0): crop.set sets a crop’s default, cropArea.set one unit’s, and an old efficiency op adds a row when none matches', () => {
+		const b = deepFreeze(base());
+		const r = applyScenario(b, [
+			{ op: 'crop.set', cropId: 'c1', field: 'irrigationSystemId', value: 'surface' },
+			{ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: b.model.cropAreas[0]!.areaM2, irrigationSystemId: 'drip' }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.crops[0]!.irrigationSystemId).toBe('surface');
+		expect(r.input.model.cropAreas[0]!.irrigationSystemId).toBe('drip');
+		expect(texts(b, r.input)).toEqual(expect.arrayContaining(['Crop "Lucerne" irrigation system: the unit\'s → Flood / furrow', expect.stringMatching(/"Lucerne" irrigation system the crop's default → Drip/)]));
+		// A later area change keeps the unit's own system.
+		const kept = applyScenario(r.input, [{ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 5000 }]).input;
+		expect(kept.model.cropAreas[0]).toMatchObject({ areaM2: 5000, irrigationSystemId: 'drip' });
+		// A system the table lacks is refused.
+		expect(one({ op: 'crop.set', cropId: 'c1', field: 'irrigationSystemId', value: 'nope' }).problems).toEqual(['op 1 (crop.set): irrigation system nope not found']);
+		// 0.66 matches no row: the op adds "Scenario, 66 %" and the crop takes it, every unit's own choice for it dropped.
+		const odd = applyScenario(r.input, [{ op: 'crop.set', cropId: 'c1', field: 'irrigationEfficiency', value: 0.66 }]).input;
+		const row = odd.model.irrigationSystems!.find((s) => s.efficiency === 0.66)!;
+		expect(row).toMatchObject({ name: 'Scenario, 66 %', preset: null });
+		expect(odd.model.crops[0]!.irrigationSystemId).toBe(row.id);
+		expect(odd.model.cropAreas[0]!.irrigationSystemId).toBeUndefined();
+	});
+
+	it('an old node.set irrigationEfficiency op (engine ≤ 1.71.0) still changes the run: the unit’s plantings go on the row with that efficiency', () => {
+		// A migrated unit: its planting on Flood / furrow (70 %), the unit's own 70 % only a fallback.
+		const b = base();
+		b.model.cropAreas = b.model.cropAreas.map((a) => (a.nodeId === 'A' ? { ...a, irrigationSystemId: 'surface' } : a));
+		b.model.nodes = b.model.nodes.map((n) => (n.id === 'A' ? { ...n, irrigationEfficiency: 0.7 } : n));
+		deepFreeze(b);
+		const r = applyScenario(b, [{ op: 'node.set', nodeId: 'A', field: 'irrigationEfficiency', value: 0.9 }]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.cropAreas.filter((a) => a.nodeId === 'A').every((a) => a.irrigationSystemId === 'drip')).toBe(true);
+		expect(r.applied[0]!.notes.join(' ')).toMatch(/planting\(s\) on .* put on Drip \(90 %\)/);
+		// Drip abstracts less than flood for the same crop: the demand falls, as the op meant.
+		const d = (x: ModelInput) => runModel(x).series.find((s) => s.nodeId === 'A' && s.key === 'demand')!.values.reduce((s, v) => s + v, 0);
+		expect(d(r.input)).toBeLessThan(d(b));
+		// Another unit's plantings are left alone.
+		expect(r.input.model.cropAreas.filter((a) => a.nodeId !== 'A')).toEqual(b.model.cropAreas.filter((a) => a.nodeId !== 'A'));
 	});
 
 	it('crop.set refuses a missing crop, a bad value, a field it can’t set and a duplicate name', () => {

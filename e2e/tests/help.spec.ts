@@ -125,7 +125,7 @@ test('neighbouring help tips show their own close-up, with their feature ringed'
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 
 	const seen: { src: string; ring: { left: string; top: string } }[] = [];
-	for (const name of ['About capacity', 'About runoff to dam', 'About upstream inflow to dam']) {
+	for (const name of ['About capacity', 'About incremental runoff to dam', 'About upstream inflow to dam']) {
 		await page.getByRole('button', { name, exact: true }).first().click();
 		const bubble = page.locator('.bubble');
 		const ring = bubble.locator('.ring');

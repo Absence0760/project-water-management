@@ -5,7 +5,7 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SOURCES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, WATER_SOURCES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SOURCES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, WATER_SOURCES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
 import { randomDroughtRestriction } from './fuzz';
 import { CROP_SET_FIELDS, DEMAND_OBJECT_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
@@ -168,8 +168,8 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					damInitialPct: g.frac(),
 					damMinPct: g.frac(0.5, 0),
 					divertCapacityM3Day: kindOf === 'farm' ? g.logFloat(1, 1e5) : 0,
-					irrigationEfficiency: g.float(0.5, 1),
-					lossReturnFraction: g.frac(),
+					// The same draws as before engine 1.71.0: e, then β; the return flow is β of the losses.
+					...((e: number) => ({ irrigationEfficiency: e, returnFlowFraction: g.frac() * (1 - e) }))(g.float(0.5, 1)),
 					damAreaFullM2: null,
 					damAreaExponent: 0.7,
 					damSeepagePerDay: 0,
@@ -187,7 +187,9 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			case 'cropArea.set': {
 				const x = node();
 				const crop = crops.length && !g.bool(0.05) ? g.pick(crops) : missing();
-				ops.push({ op: 'cropArea.set', nodeId: x?.id ?? missing(), cropId: crop, areaM2: g.bool(0.2) ? 0 : g.float(0, 1e6) });
+				// Sometimes onto a system of its own on the unit (engine ≥ 1.72.0), or back to the crop's default.
+				const sys = g.bool(0.3) ? { irrigationSystemId: g.pick([...DEFAULT_IRRIGATION_SYSTEMS.map((s) => s.id), null]) } : {};
+				ops.push({ op: 'cropArea.set', nodeId: x?.id ?? missing(), cropId: crop, areaM2: g.bool(0.2) ? 0 : g.float(0, 1e6), ...sys });
 				break;
 			}
 			case 'crop.add': {
@@ -520,8 +522,7 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 						damInitialPct: v.frac(),
 						damMinPct: v.frac(0.5, 0),
 						divertCapacityM3Day: kindOf === 'farm' ? v.logFloat(1, 1e5) : 0,
-						irrigationEfficiency: v.float(0.5, 1),
-						lossReturnFraction: v.frac(),
+						...((e: number) => ({ irrigationEfficiency: e, returnFlowFraction: v.frac() * (1 - e) }))(v.float(0.5, 1)),
 						damAreaFullM2: null,
 						damAreaExponent: 0.7,
 						damSeepagePerDay: 0,
@@ -533,8 +534,18 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 				}
 				case 'crop.set': {
 					const cropId = crops2.length && !v.bool(0.05) ? v.pick(crops2) : missing();
-					const field = v.pick(CROP_SET_FIELDS);
-					const value = field === 'name' ? (v.bool(0.1) ? 'Crop 0' : `Renamed crop ${k}`) : field === 'cropFactor' ? monthly(v, () => v.float(0, 1.3)) : v.bool(0.3) ? null : v.float(0.5, 1);
+					// Not engine 0.43.0–1.71.0's own efficiency: only a stored scenario has that op (overrides.test.ts covers it).
+					const field = v.pick(CROP_SET_FIELDS.filter((f) => f !== 'irrigationEfficiency'));
+					const value =
+						field === 'name'
+							? v.bool(0.1)
+								? 'Crop 0'
+								: `Renamed crop ${k}`
+							: field === 'cropFactor'
+								? monthly(v, () => v.float(0, 1.3))
+								: v.bool(0.3)
+									? null
+									: v.pick(DEFAULT_IRRIGATION_SYSTEMS.map((s) => s.id));
 					ops.push({ op: 'crop.set', cropId, field, value } as ScenarioOp);
 					break;
 				}

@@ -11,7 +11,7 @@ import type { Erratum } from '../liability/errata';
 import type { Limitation } from '../liability/limitations';
 import type { MethodologyVersion } from '../liability/methodology';
 import type { DemandSourceShare } from '../network/demandSources';
-import type { AllocationLimitBound, DemandObjectCategory, DemandObjectDestination, DemandObjectPriority, DemandObjectSizing, DemandObjectSource, RunSummary } from '../project';
+import type { AllocationLimitBound, DemandMonthlyUnit, DemandObjectCategory, DemandObjectDestination, DemandObjectPriority, DemandObjectSizing, DemandObjectSource, RunSummary } from '../project';
 import type { CumulativeReport } from '../scenario/cumulative';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
@@ -614,6 +614,8 @@ export interface EvidenceDemandObject {
 	sizing: DemandObjectSizing;
 	/** 'monthly': m³/day per water-year month (Oct–Sep); null under 'perUnit'. */
 	monthlyM3Day: number[] | null;
+	/** The unit its monthly demand was entered in (engine ≥ 1.72.0, display only), when not m³/day; absent before. */
+	monthlyUnit?: DemandMonthlyUnit;
 	/** 'perUnit': how many, litres per unit per day, and losses (0–1); null (losses 0) under 'monthly'. */
 	count: number | null;
 	litresPerUnitDay: number | null;

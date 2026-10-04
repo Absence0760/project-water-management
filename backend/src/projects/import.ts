@@ -208,22 +208,27 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 	for (const p of m.landCover ?? []) old.add(p.id), old.add(p.nodeId);
 	for (const b of m.boreholes ?? []) old.add(b.id), old.add(b.nodeId);
 	for (const o of m.demandObjects ?? []) old.add(o.id), old.add(o.nodeId);
+	// The irrigation systems (engine ≥ 1.72.0) get fresh ids too: a copy's rows can't share the original's.
+	for (const x of m.irrigationSystems ?? []) old.add(x.id);
 	const sortedOld = [...old].sort(idOrder);
 	const fresh = new Set<string>();
 	while (fresh.size < sortedOld.length) fresh.add(crypto.randomUUID());
 	const sortedFresh = [...fresh].sort(idOrder);
 	const map = new Map(sortedOld.map((o, i) => [o, sortedFresh[i]!] as const));
 	const id = (o: string) => map.get(o)!;
+	// A system reference: a row's (now fresh) id, else a SABI preset's key, which stays (the store resolves it).
+	const sys = (ref: string | null | undefined) => (ref == null ? ref : (map.get(ref) ?? ref));
 	return {
 		model: {
 			nodes: m.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
-			crops: m.crops.map((c) => ({ ...c, id: id(c.id) })),
-			cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId) })),
+			crops: m.crops.map((c) => ({ ...c, id: id(c.id), ...(c.irrigationSystemId != null ? { irrigationSystemId: sys(c.irrigationSystemId) } : {}) })),
+			cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId), ...(a.irrigationSystemId != null ? { irrigationSystemId: sys(a.irrigationSystemId) } : {}) })),
 			// The unit an off-take's seepage rejoins below (engine ≥ 1.42.0) moves with the nodes; absent stays absent.
 			transfers: m.transfers.map((t) => ({ ...t, id: id(t.id), fromNodeId: id(t.fromNodeId), toNodeId: id(t.toNodeId), ...(t.lossReturnNodeId ? { lossReturnNodeId: id(t.lossReturnNodeId) } : {}) })),
 			landCover: (m.landCover ?? []).map((p) => ({ ...p, id: id(p.id), nodeId: id(p.nodeId) })),
 			...(m.boreholes?.length ? { boreholes: m.boreholes.map((b) => ({ ...b, id: id(b.id), nodeId: id(b.nodeId) })) } : {}),
-			...(m.demandObjects?.length ? { demandObjects: m.demandObjects.map((o) => ({ ...o, id: id(o.id), nodeId: id(o.nodeId) })) } : {})
+			...(m.demandObjects?.length ? { demandObjects: m.demandObjects.map((o) => ({ ...o, id: id(o.id), nodeId: id(o.nodeId) })) } : {}),
+			...(m.irrigationSystems ? { irrigationSystems: m.irrigationSystems.map((x) => ({ ...x, id: id(x.id) })) } : {})
 		},
 		ids: map
 	};

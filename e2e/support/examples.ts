@@ -39,7 +39,7 @@ export async function seedExamplesOnce(request: APIRequestContext): Promise<void
 		if (!probe.ok()) {
 			execFileSync('pnpm', ['exec', 'tsx', 'scripts/seed-examples.ts'], {
 				cwd: backendDir,
-				env: { ...process.env, DATABASE_URL: APP_E2E_URL },
+				env: { ...process.env, DATABASE_URL: APP_E2E_URL, SEED_SHOWCASE: '0' },
 				stdio: 'pipe'
 			});
 		}

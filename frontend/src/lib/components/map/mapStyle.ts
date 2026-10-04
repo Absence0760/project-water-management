@@ -454,15 +454,18 @@ export interface ChannelLineData {
 	km2: number;
 }
 
-/** The `channels` source's data. */
-export function channelData(lines: readonly ChannelLineData[] | null | undefined) {
+/** How opaque the channels are while the editor clicks, and while a delineated proposal is reviewed over them (dimmed: the outline reads first, the channels it follows still show). */
+export const CHANNEL_OPACITY = { on: 0.9, dim: 0.5 } as const;
+
+/** The `channels` source's data; `dim` while a delineated proposal is reviewed over them. */
+export function channelData(lines: readonly ChannelLineData[] | null | undefined, dim = false) {
 	return {
 		type: 'FeatureCollection' as const,
-		features: (lines ?? []).map((l) => ({ type: 'Feature' as const, properties: { km2: l.km2 }, geometry: { type: 'LineString' as const, coordinates: l.coordinates } as MapGeometry }))
+		features: (lines ?? []).map((l) => ({ type: 'Feature' as const, properties: { km2: l.km2, dim }, geometry: { type: 'LineString' as const, coordinates: l.coordinates } as MapGeometry }))
 	};
 }
 
-/** The channels: solid, 1 px at 1 km² up to 3.5 px at 10 000 km²; over the river network, under the features. */
+/** The channels: solid, 1 px at 1 km² up to 3.5 px at 10 000 km², dimmed behind a proposal; over the river network, under the features. */
 export function channelLayers(dark: boolean): Layer[] {
 	return [
 		{
@@ -470,7 +473,7 @@ export function channelLayers(dark: boolean): Layer[] {
 			type: 'line',
 			source: 'channels',
 			layout: { 'line-cap': 'round', 'line-join': 'round' },
-			paint: { 'line-color': channelColour(dark), 'line-width': ['interpolate', ['linear'], ['log10', ['max', 1, ['get', 'km2']]], 0, 1, 2, 2, 4, 3.5], 'line-opacity': 0.9 }
+			paint: { 'line-color': channelColour(dark), 'line-width': ['interpolate', ['linear'], ['log10', ['max', 1, ['get', 'km2']]], 0, 1, 2, 2, 4, 3.5], 'line-opacity': ['case', ['==', ['get', 'dim'], true], CHANNEL_OPACITY.dim, CHANNEL_OPACITY.on] }
 		}
 	];
 }

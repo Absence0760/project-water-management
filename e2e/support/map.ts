@@ -190,14 +190,14 @@ export async function uploadThroughSheet(page: Page, kind: string | null, name: 
  * The side column's tab (Details, Features, Checks; docs/ui.md § Map): one panel shows at a time, and a pick
  * shows its Details, so a spec opens the list's tab before reading the list after a pick.
  */
-export async function showTab(page: Page, tab: 'details' | 'features' | 'checks'): Promise<void> {
+export async function showTab(page: Page, tab: 'details' | 'features' | 'checks' | 'layers' | 'key'): Promise<void> {
 	const t = page.getByTestId(`map-tab-${tab}`);
 	await expect(t).toBeVisible();
 	if ((await t.getAttribute('aria-selected')) !== 'true') await t.click();
 	await expect(t).toHaveAttribute('aria-selected', 'true');
 }
 
-/** The Layers panel over the map's right edge (under the zoom buttons), opened if it isn't. */
+/** Layers, opened if it isn't: the side column's tab beside the map, a panel over the map's right edge otherwise. */
 export async function openLayers(page: Page): Promise<void> {
 	const b = page.getByTestId('map-layers-toggle');
 	await expect(b).toBeVisible();
@@ -205,7 +205,7 @@ export async function openLayers(page: Page): Promise<void> {
 	await expect(b).toHaveAttribute('aria-expanded', 'true');
 }
 
-/** The Key panel over the map's bottom-left corner (open by default only while the areas show a run's results on a wide map). */
+/** The Key, opened if it isn't: the side column's tab beside the map, a panel over the map's bottom-left corner otherwise. */
 export async function openKey(page: Page): Promise<void> {
 	const b = page.getByTestId('map-key-toggle');
 	await expect(b).toBeVisible();

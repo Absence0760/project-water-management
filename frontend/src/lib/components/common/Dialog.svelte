@@ -63,8 +63,17 @@
 			opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 			el.showModal();
 			place(el);
+			// Chromium makes a scrolling container keyboard-focusable, and showModal() then focuses the
+			// scrolling body itself when its content overflows: hand the focus to the first real control.
+			if (document.activeElement === el.querySelector(`#${CSS.escape(bodyId)}`)) firstControl(el)?.focus();
 		} else if (!open && el.open) el.close();
 	});
+
+	/** The dialog's first control a person would act on (what showModal() focuses when the body doesn't scroll). */
+	function firstControl(d: HTMLDialogElement): HTMLElement | null {
+		const sel = 'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+		return [...d.querySelectorAll<HTMLElement>(sel)].find((x) => x.offsetParent !== null || x.getClientRects().length > 0) ?? null;
+	}
 
 	// A caller that removes the dialog as it closes (`{#if open}` round a lazy
 	// dialog: the sign-off, SignoffSection.svelte) takes it out of the page

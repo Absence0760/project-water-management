@@ -36,7 +36,7 @@ function withoutReturns(x: ModelInput): ModelInput {
 		model: {
 			...x.model,
 			boreholes: [],
-			nodes: x.model.nodes.map((n) => ({ ...n, lossReturnFraction: 0, userReturnPct: 0, boreholeCapacityM3Day: null }))
+			nodes: x.model.nodes.map((n) => ({ ...n, returnFlowFraction: 0, userReturnPct: 0, boreholeCapacityM3Day: null }))
 		}
 	};
 }

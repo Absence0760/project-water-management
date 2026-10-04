@@ -272,7 +272,7 @@ describe('node.move and node.insert on random networks (engine ≥ 1.35.0)', () 
 	const gauge = (id: string, name: string, downstreamNodeId: string, ewrSite: boolean): NetworkNode =>
 		upgradeLegacyModel({
 			nodes: [
-				{ id, name, kind: 'gauge' as const, downstreamNodeId, sortOrder: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0, ewrSite }
+				{ id, name, kind: 'gauge' as const, downstreamNodeId, sortOrder: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0, ewrSite }
 			]
 		}).nodes[0]!;
 	/** Random moves and inserts: a move to any node (loops included, which the rules refuse), an insert above some of a node's upstream nodes. */

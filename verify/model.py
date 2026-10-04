@@ -594,26 +594,39 @@ def flow_shares(settings: dict, farms: list[dict]) -> dict[str, float]:
     return {n["id"]: ((n.get("areaKm2") or 0) / tot if tot > 0 else 0.0) for n in fs}
 
 
-def farm_efficiency(node: dict, rows: list[tuple[dict, float]], apan: list[float]) -> float:
-    """§2.3 item 6: the harmonic mean of the crops' efficiencies weighted by
-    their annual gross requirement at the monthly A-pan."""
+# model.md §2.3: the SABI 2021 systems a model without its own table runs on (engine DEFAULT_IRRIGATION_SYSTEMS).
+DEFAULT_SYSTEMS = {"drip": 0.9, "micro": 0.82, "pivot": 0.85, "sprinkler": 0.8, "movable": 0.75, "surface": 0.7}
+
+
+def farm_efficiency(node: dict, rows: list[tuple[dict, float, dict]], apan: list[float], systems: dict[str, float]) -> float:
+    """§2.3 item 6: the harmonic mean of the plantings' efficiencies weighted by
+    their annual gross requirement at the monthly A-pan. A planting's efficiency
+    (engine >= 1.72.0) is its own system on the unit's, else its crop's default
+    system's (`systems`, the model's table by id), else the crop's own (before
+    1.72.0), else the unit's."""
     e_f = node["irrigationEfficiency"]
 
-    def own(crop):
-        e = crop.get("irrigationEfficiency")
+    def valid(e):
         return e if isinstance(e, (int, float)) and 0 < e <= 1 else None
 
-    if not any(own(c) is not None for c, a in rows if a > 0):
+    def own(crop, planting):
+        # The planting's system, then the crop's: one the table lacks is skipped for the next.
+        for sid in (planting.get("irrigationSystemId"), crop.get("irrigationSystemId")):
+            if sid is not None and valid(systems.get(sid)) is not None:
+                return systems[sid]
+        return valid(crop.get("irrigationEfficiency"))
+
+    if not any(own(c, p) is not None for c, a, p in rows if a > 0):
         return e_f
     ws = []
-    for crop, area in rows:
+    for crop, area, _ in rows:
         ws.append(area * sum(max(0.0, crop["cropFactor"][m]) * max(0.0, apan[m]) for m in range(12)))
     if sum(ws) == 0:
-        ws = [area * sum(max(0.0, crop["cropFactor"][m]) for m in range(12)) for crop, area in rows]
+        ws = [area * sum(max(0.0, crop["cropFactor"][m]) for m in range(12)) for crop, area, _ in rows]
     num = 0.0
     den = 0.0
-    for (crop, area), w in zip(rows, ws):
-        e = own(crop) or e_f
+    for (crop, area, planting), w in zip(rows, ws):
+        e = own(crop, planting) or e_f
         num += w
         den += w / e
     return num / den if den > 0 else e_f
@@ -792,24 +805,26 @@ def run(doc: dict) -> dict:
         return float(f[wm[i]])
 
     fd: dict[str, dict] = {}
+    # The model's irrigation systems by id (engine >= 1.72.0), else the SABI defaults.
+    systems = {x["id"]: x["efficiency"] for x in model["irrigationSystems"]} if model.get("irrigationSystems") else dict(DEFAULT_SYSTEMS)
     for f in farms:
         rows = [
-            (crops[a["cropId"]], a["areaM2"])
+            (crops[a["cropId"]], a["areaM2"], a)
             for a in sorted(
                 (a for a in model.get("cropAreas", []) if a["nodeId"] == f["id"] and a["cropId"] in crops),
                 key=lambda a: (a["cropId"], a["areaM2"]),
             )
         ]
         cropped = 0.0
-        for _, a in rows:
+        for _, a, _p in rows:
             cropped += a
-        e = farm_efficiency(f, rows, apan)
+        e = farm_efficiency(f, rows, apan, systems)
         smax = cropped * store_mm / 1000
         w = 0.0
         gross_s, eff_s, soil_s, F_s, D_s, F0_s = [], [], [], [], [], []
         for i, m in enumerate(wm):
             gross = 0.0
-            for crop, a in rows:
+            for crop, a, _p in rows:
                 gross += a * (apan[m] * crop["cropFactor"][m]) / 1000 / mdays[m]
             frac = eff_monthly[m] if eff_monthly else settings["effectiveRainFraction"]
             pe_m3 = cropped * frac / 1000 * rain_demand[i]
@@ -1674,7 +1689,9 @@ def run(doc: dict) -> dict:
                     GW += pump(k_, rem - Gs - Gr - GW)
             G = min(used_off + Gs + Gr + GW, dem)
             # The demand objects' split of G (§2.7f).
-            beta = x["lossReturnFraction"]
+            # The return flow r, a share of the water supplied, at most the losses 1 − e (model.md §2.7, engine ≥ 1.71.0).
+            r_ret = x["returnFlowFraction"]
+            r_ret = (1 - d["e"]) if r_ret > 1 - d["e"] + 1e-9 else max(r_ret, 0)
             if objs[xid]:
                 left_g = G
                 g_crop = 0.0
@@ -1698,7 +1715,7 @@ def run(doc: dict) -> dict:
                         else:
                             obj_sup[ob["id"]][i] = g_
                     left_g = max(0.0, left_g - min(tot, left_g))
-                T = beta * (1 - d["e"]) * g_crop
+                T = r_ret * g_crop
                 for ob in dam_obs:
                     r_ = 0.0 if ob.get("destination") == "external" else (ob.get("returnPct") or 0.0)
                     T += r_ * obj_sup[ob["id"]][i]
@@ -1709,7 +1726,7 @@ def run(doc: dict) -> dict:
                         bn += min(obj_B[ob["id"]], obj_dem[ob["id"]][i])
                 cc["basic_needs"][i] = bn
             else:
-                T = beta * (1 - d["e"]) * G
+                T = r_ret * G
             P = avail + GWd - Gs
             Q = min(P, cap)
             R = max(P - cap, 0.0)
@@ -1781,7 +1798,7 @@ def run(doc: dict) -> dict:
                 for a, t in enumerate(ts):
                     g_riv += got[a]
                     if t["ob"] is None:
-                        back_r += beta * (1 - d["e"]) * got[a]
+                        back_r += r_ret * got[a]
                     else:
                         obj_sup[t["ob"]["id"]][i] = got[a]
                         r_ = 0.0 if t["ob"].get("destination") == "external" else (t["ob"].get("returnPct") or 0.0)

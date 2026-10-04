@@ -22,6 +22,8 @@
 	// Every field's accessible name starts with its visible label, then the
 	// rule ("From, transfer 3"), so speech input can say what it sees (WCAG
 	// 2.5.3).
+	import FlowUnitSelect from '$lib/components/network/FlowUnitSelect.svelte';
+	import { transferUnit } from '$lib/components/network/flowUnit.svelte';
 	import { onDestroy, tick } from 'svelte';
 	import { page as appPage } from '$app/state';
 	import { hashId, holdAnchor } from '$lib/help/anchor';
@@ -34,7 +36,19 @@
 	import MonthRates from './MonthRates.svelte';
 	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
 
-	let { editor, readonly, page = false }: { editor: ModelEditor; readonly: boolean; /** The workspace page (not a modal or override mode). */ page?: boolean } = $props();
+	let {
+		editor,
+		readonly,
+		page = false,
+		inModal = false
+	}: {
+		editor: ModelEditor;
+		readonly: boolean;
+		/** The workspace page (not a modal or override mode). */
+		page?: boolean;
+		/** In the grid modal, whose title names it: no heading of its own (one heading per modal). */
+		inModal?: boolean;
+	} = $props();
 
 	const nodes = $derived(editor.model.nodes);
 	const transfers = $derived(editor.model.transfers);
@@ -158,10 +172,12 @@
 			</div>
 		</section>
 	{:else}
-		<section class="rules-card" aria-labelledby="tr-h">
+		<section class="rules-card" aria-labelledby={inModal ? undefined : 'tr-h'}>
 			<div class="rules-head">
-				<h2 id="tr-h">Transfer rules</h2>
+				{#if !inModal}<h2 id="tr-h">Transfer rules</h2>{/if}
 				<span class="muted small">Water moved from one hydrological unit’s dam, or from the river there, to another hydrological unit, up to each month’s rate. Lower priorities move first.</span>
+				<!-- One unit for every rule's rates (display only, so a viewer has it too); each rule's title names it. -->
+				<span class="rate-unit"><span aria-hidden="true">Rates in</span> <FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" /></span>
 			</div>
 			<ol class="rule-list" data-testid="transfer-rules">
 				{#each transfers as t, i (t.id)}
@@ -220,7 +236,7 @@
 						<div class="rule-body">
 							<div class="grp g-rates">
 								<MonthRates rule={t} {label} disabled={readonly}>
-									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">m³/s</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
+									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">{transferUnit.label}</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
 								</MonthRates>
 							</div>
 
@@ -333,6 +349,15 @@
 	}
 	.rules-head h2 {
 		margin: 0;
+	}
+	.rate-unit {
+		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.8rem;
+		color: var(--text-2);
+		white-space: nowrap;
 	}
 	.rules-head .small {
 		font-size: 0.8rem;

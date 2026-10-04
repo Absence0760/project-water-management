@@ -43,6 +43,7 @@ import {
 	type AccumulationMode,
 	type Borehole,
 	type CropDef,
+	DEMAND_MONTHLY_UNITS,
 	type DemandObject,
 	type DemandPart,
 	type DemandScheduleWindow,
@@ -53,7 +54,8 @@ import {
 	type NodeKind,
 	type PeInput,
 	type Transfer,
-	type ZeroRainMode
+	type ZeroRainMode,
+	returnFlowFromLossReturn
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
 import { droughtRestrictionIssues } from '../network/restriction';
@@ -197,7 +199,7 @@ const DAM_AND_IRRIGATION = [
 	'damSeepagePerDay',
 	'divertCapacityM3Day',
 	'irrigationEfficiency',
-	'lossReturnFraction'
+	'returnFlowFraction'
 ] as const;
 /** Land and flow share: what the catchment's natural flow is split by (baseline hydrology). */
 const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
@@ -273,7 +275,7 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	damSeepagePerDay: frac,
 	divertCapacityM3Day: nonNeg,
 	irrigationEfficiency: range(0, 1, { loOpen: true }),
-	lossReturnFraction: frac,
+	returnFlowFraction: frac,
 	damReleaseRule: oneOf(DAM_RELEASE_RULES),
 	damReleaseM3Day: nullable(monthlyOf(nonNeg)),
 	damOutletCapacityM3Day: nullable(nonNeg),
@@ -647,18 +649,22 @@ export function ewrRuleTableOpIssues(raw: unknown): { table: EwrRuleTable | null
 // ---------------------------------------------------------------------------
 
 /**
- * The fields `crop.set` may change: the name, the 12 crop factors and the
- * crop's own irrigation efficiency (null = the farm's). Never `id`, and not
- * `sortOrder` (display only).
+ * The fields `crop.set` may change: the name, the 12 crop factors, its default
+ * irrigation system (engine ≥ 1.72.0, a row of the model's table; null = none)
+ * and, from engine 0.43.0–1.71.0's scenarios, its own irrigation efficiency
+ * (applied as the system row with that efficiency on every unit growing it,
+ * overrides.ts). Never `id`, and not `sortOrder` (display only).
  */
-export const CROP_SET_FIELDS = ['name', 'cropFactor', 'irrigationEfficiency'] as const;
+export const CROP_SET_FIELDS = ['name', 'cropFactor', 'irrigationSystemId', 'irrigationEfficiency'] as const;
 export type CropSetField = (typeof CROP_SET_FIELDS)[number];
 
 const cropFactors: Check = (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0');
 const CROP_FIELD_CHECKS: Record<CropSetField, Check> = {
 	name,
 	cropFactor: cropFactors,
-	// The crop's own irrigation efficiency (engine ≥ 0.43.0); null = the farm's.
+	// The crop's default irrigation system (engine ≥ 1.72.0): an id in the model's table, checked when it applies.
+	irrigationSystemId: nullable(id),
+	// The crop's own irrigation efficiency (engine 0.43.0–1.71.0's scenarios); null = the unit's.
 	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
 };
 
@@ -765,6 +771,8 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'category',
 	'sizing',
 	'monthlyM3Day',
+	// The unit its monthly demand is shown in (engine ≥ 1.72.0; display only).
+	'monthlyUnit',
 	'count',
 	'litresPerUnitDay',
 	'lossPct',
@@ -827,6 +835,7 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	category: oneOf(DEMAND_OBJECT_CATEGORIES),
 	sizing: oneOf(DEMAND_OBJECT_SIZINGS),
 	monthlyM3Day: nullable(monthlyOf(nonNeg)),
+	monthlyUnit: nullable(oneOf(DEMAND_MONTHLY_UNITS)),
 	count: nullable(nonNeg),
 	litresPerUnitDay: nullable(nonNeg),
 	lossPct: (v) => (isNum(v) && v >= 0 && v < 1 ? null : 'must be at least 0 and below 1'),
@@ -863,7 +872,7 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
 /** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no rank (1), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'rank', 'waterSource', 'riverPumpM3Day', 'riverPoolM3', 'note']);
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'rank', 'waterSource', 'riverPumpM3Day', 'riverPoolM3', 'note', 'monthlyUnit']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its
@@ -926,8 +935,12 @@ export type ScenarioOp =
 	| { op: 'node.move'; nodeId: string; downstreamNodeId: string }
 	/** A new node on a reach (engine ≥ 1.35.0): `upstreamNodeIds`, each draining into the new node's downstream node, drain into it instead. */
 	| NodeInsertOp
-	/** Set a farm's area of one crop; 0 removes the row. */
-	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number }
+	/**
+	 * Set a farm's area of one crop; 0 removes the row. `irrigationSystemId`
+	 * (engine ≥ 1.72.0) puts the crop on that system on this unit (null: the
+	 * crop's default); absent keeps the planting's own.
+	 */
+	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number; irrigationSystemId?: string | null }
 	| { op: 'crop.add'; crop: CropDef }
 	/** Change one field of a crop definition (engine ≥ 1.35.0): its name, crop factors or own irrigation efficiency. */
 	| CropSetOp
@@ -1069,6 +1082,14 @@ const NODE_FIELDS: Record<string, Check> = {
 	gaPropertyAreaHa: nullable(range(0, 10_000_000)),
 	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`))
 };
+/**
+ * The field engine 0.16.0–1.70.0 scenarios set a farm's return flow by: β, a
+ * share of the losses. A stored op setting it still validates and applies
+ * (overrides.ts converts it to the return flow r = β(1 − e) on the node it
+ * meets), so a saved or frozen scenario keeps running; no form writes it now.
+ */
+export const LEGACY_LOSS_RETURN_FIELD = 'lossReturnFraction';
+
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 const NODE_FIELD_ADD_CHECK = checksOf(NODE_FIELDS);
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -1102,6 +1123,7 @@ const CROP_FIELDS: Record<string, Check> = {
 	name,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
 	cropFactor: CROP_FIELD_CHECKS.cropFactor,
+	irrigationSystemId: CROP_FIELD_CHECKS.irrigationSystemId,
 	irrigationEfficiency: CROP_FIELD_CHECKS.irrigationEfficiency
 };
 const TRANSFER_FIELDS: Record<string, Check> = { id, ...TRANSFER_FIELD_CHECKS };
@@ -1127,7 +1149,22 @@ const BOREHOLE_FIELDS: Record<string, Check> = {
 };
 const NONE = new Set<string>();
 
-function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp | null {
+/**
+ * A node.add from engine 0.16.0–1.70.0 carries β, a share of its losses, and
+ * no return flow: give it r = β(1 − e) from its own efficiency, so a stored op
+ * still validates. Anything else is returned as it is.
+ */
+function upgradeLegacyNodeAdd(raw: unknown): unknown {
+	if (!isObj(raw) || raw.op !== 'node.add' || !isObj(raw.node)) return raw;
+	const n = raw.node;
+	const b = n[LEGACY_LOSS_RETURN_FIELD];
+	if (typeof b !== 'number' || n.returnFlowFraction !== undefined || typeof n.irrigationEfficiency !== 'number') return raw;
+	const { [LEGACY_LOSS_RETURN_FIELD]: _b, ...rest } = n;
+	return { ...raw, node: { ...rest, returnFlowFraction: returnFlowFromLossReturn(b, n.irrigationEfficiency) } };
+}
+
+function validateOne(input: unknown, where: string, errors: string[]): ScenarioOp | null {
+	const raw = upgradeLegacyNodeAdd(input);
 	if (!isObj(raw)) {
 		errors.push(`${where}: must be an object`);
 		return null;
@@ -1150,8 +1187,10 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 	switch (raw.op) {
 		case 'node.set': {
 			const nodeId = need('nodeId', id);
-			const field = need('field', (v) => (typeof v === 'string' && NODE_FIELD_CHECK.byName.has(v) ? null : 'is not a node field a scenario can set'));
-			if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
+			const legacy = raw.field === LEGACY_LOSS_RETURN_FIELD;
+			const field = need('field', (v) => (typeof v === 'string' && (NODE_FIELD_CHECK.byName.has(v) || legacy) ? null : 'is not a node field a scenario can set'));
+			if (legacy) need('value', frac);
+			else if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
 			op = { op: 'node.set', nodeId, field, value: cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}
@@ -1170,11 +1209,19 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			op = { op: 'node.insert', node, upstreamNodeIds: Array.isArray(ups) ? (cloneValue(ups) as string[]) : [] };
 			break;
 		}
-		case 'cropArea.set':
-			op = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
+		case 'cropArea.set': {
+			const a: Extract<ScenarioOp, { op: 'cropArea.set' }> = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
+			// Kept only when given, so an older op's stored form (and its hash) is what was sent.
+			if (raw.irrigationSystemId !== undefined) {
+				const e = nullable(id)(raw.irrigationSystemId);
+				if (e) errors.push(`${where}.irrigationSystemId: ${e}`);
+				else a.irrigationSystemId = raw.irrigationSystemId as string | null;
+			}
+			op = a;
 			break;
+		}
 		case 'crop.add':
-			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationEfficiency'])) as unknown as CropDef };
+			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationSystemId', 'irrigationEfficiency'])) as unknown as CropDef };
 			break;
 		case 'crop.set': {
 			const cropId = need('cropId', id);

@@ -33,7 +33,7 @@ const NODE: Omit<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'> = {
 	damMinPct: 0,
 	divertCapacityM3Day: 0,
 	irrigationEfficiency: 1,
-	lossReturnFraction: 0,
+	returnFlowFraction: 0,
 	damAreaFullM2: 0,
 	damAreaExponent: 0.7,
 	damSeepagePerDay: 0
@@ -123,9 +123,9 @@ function scaled(k: number, days = 1500): ModelInput {
 					pctRunoffToDam: 0.7,
 					divertCapacityM3Day: 300 * k,
 					irrigationEfficiency: 0.8,
-					lossReturnFraction: 0.5
+					returnFlowFraction: 0.1
 				},
-				{ ...NODE, id: 'C', name: 'C', kind: 'farm', downstreamNodeId: 'A', areaKm2: 2 * k, irrigationEfficiency: 0.9, lossReturnFraction: 0.3 }
+				{ ...NODE, id: 'C', name: 'C', kind: 'farm', downstreamNodeId: 'A', areaKm2: 2 * k, irrigationEfficiency: 0.9, returnFlowFraction: 0.03 }
 			],
 			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(0.8) }],
 			cropAreas: [

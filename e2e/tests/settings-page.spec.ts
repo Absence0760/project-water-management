@@ -27,7 +27,8 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 	await expect(fitSummary(page)).toHaveText('GR4J · no fit record: the parameters were set by hand or imported');
 	const jump = header(page).getByRole('link', { name: 'Fit the parameters', exact: true });
 	await expect(jump).toHaveAttribute('href', '#set-fit');
-	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toBeVisible();
+	// Runs start only from Runs & results, where they can be named.
+	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toHaveCount(0);
 	// The old intro paragraph is gone: the header and the menu's groups say it.
 	await expect(page.getByText(/^Grouped by what each setting drives/)).toHaveCount(0);
 

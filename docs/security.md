@@ -228,24 +228,27 @@ decide a licence application.
   a two-step one. Off with the switch below. Tests:
   `auth/stepUp.db.test.ts` (each action at 11 minutes, the step-up and the
   control), `lib/api/client.test.ts` (the retry).
-- **The prompt.** A person whose role needs it learns so before an action
-  is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
-  its own chunk, mounted by `routes/+layout.svelte`; the state is
-  `lib/auth/mfaPrompt.svelte.ts`) from `GET /auth/mfa`, read once per
-  account and again when the tab comes back into view. `required &&
-  !enrolled`: **Set up two-step sign-in**, a link to the Account page's
-  panel (`/account#two-step`). `required && enrolled && !sessionVerified`:
-  **Sign in again**, which signs out and returns to the page after the
-  password and the code. A `403 mfa_required` or `mfa_step_up` from any
-  request shows the same two (the API client's `onError`), for an editor
-  publishing to farmers or signing a run too, whose role alone doesn't need it; the action's
-  own error message stays where the page shows it. The banner is English
+- **The prompt.** Only a refused action prompts, never the role alone (the
+  operator's decision, 2026-10-03, replacing the up-front banner of
+  2026-10-01: a project that never does a protected action is never asked,
+  and one that does meets the prompt at that action, which the API refuses
+  as before, so nothing is less protected). A `403 mfa_required` or
+  `mfa_step_up` from any request (the API client's `onError`) shows a banner
+  (`layout/MfaBanner.svelte`, its own chunk, mounted by
+  `routes/+layout.svelte`; the state is `lib/auth/mfaPrompt.svelte.ts`):
+  **Set up two-step sign-in**, a link to the Account page's panel
+  (`/account#two-step`), or **Sign in again**, which signs out and returns to
+  the page after the password and the code. The action's own error message
+  stays where the page shows it. `GET /auth/mfa` (read once per account, and
+  again when the tab comes back into view) only clears a refusal it shows
+  resolved; its `required` still tells the Account page which roles need it.
+  End to end against a server with the requirement on:
+  `e2e/tests/mfa-required.spec.ts` (a second e2e API, `MFA_API_URL`). The banner is English
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal
-  (kept so by the operator's decision, 2026-10-01: every refused action
-  brings it back, so a person who needs it can't miss it for long), and
+  (every refused action brings it back, operator's decision, 2026-10-01), and
   for the rest of the tab (`sessionStorage`, so a reload doesn't bring it
-  back; the operator's call, 2026-10-01). While the need stands the account
+  back; the operator's call, 2026-10-01). After a refusal, while the need stands, the account
   menu keeps a badge and leads with **Set up two-step sign-in** or **Sign in
   again with a code**, dismissed or not, so it never drops out of sight;
   signing out forgets the dismissal. Tests: `lib/auth/mfaPrompt.test.ts`,
@@ -1490,6 +1493,18 @@ In short:
   covered automatically; the owner's positive controls prove they aren't
   vacuous. The two layers are tested apart: `requireRole` answers 404 at
   the route, and RLS alone must hold if a route forgets it.
+- **Irrigation systems** (`198_irrigation_systems.sql`,
+  `200_irrigation_system_seed_invoker.sql`,
+  `201_irrigation_system_viewer_read.sql`). `irrigation_system` is read from
+  viewer up and written by editors. A farmer or an applicant reads none of
+  it (201; 198 had let every role read it): its rows are the project's,
+  an "Imported, NN %" row was made from a farm's own efficiency, and the
+  farm view takes the systems from the published run's inputs server side,
+  not from the table (the table sweeps in `farmer-privacy.security.db.test.ts`
+  and `applicant.security.db.test.ts`). A new project gets its six SABI rows from an insert trigger;
+  the seed function it calls runs with its caller's rights and `water_app`
+  can't execute it, so it can't be used to write rows into a project the
+  caller has no role on (`irrigationSystems.db.test.ts`).
 - **Accounts under RLS** (`068_app_user_rls.sql`). `app_user` had no RLS
   (sign-in reads it before anyone is signed in), so any `water_app`
   transaction, an API key's or the job tick's included, could read every

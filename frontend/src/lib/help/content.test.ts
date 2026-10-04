@@ -29,7 +29,7 @@ import { TIPS, tipFor } from './tips';
 const NODE: Record<keyof NetworkNode, true> = {
 	id: true, name: true, kind: true, downstreamNodeId: true, sortOrder: true, areaKm2: true, areaHiKm2: true,
 	areaLoKm2: true, flowShareManual: true, pctUpstreamToDam: true, pctRunoffToDam: true, damCapacityM3: true,
-	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, lossReturnFraction: true,
+	damInitialPct: true, damMinPct: true, divertCapacityM3Day: true, irrigationEfficiency: true, returnFlowFraction: true,
 	damAreaFullM2: true, damAreaExponent: true, damSeepagePerDay: true,
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
 	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
@@ -40,8 +40,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true,
 	cropWaterSource: true, cropRiverPumpM3Day: true, cropRiverPoolM3: true
 };
-const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationEfficiency: true };
-const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
+const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationSystemId: true, irrigationEfficiency: true };
+const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true, irrigationSystemId: true };
 const TRANSFER: Record<keyof Transfer, true> = {
 	id: true, fromNodeId: true, toNodeId: true, months: true, maxRateM3s: true, dailyCapM3: true, minStoragePct: true, enabled: true,
 	priority: true, monthlyRateM3s: true, source: true, handsOffM3Day: true, handsOffEwr: true, lossPct: true, sizing: true, topUpDam: true,
@@ -55,7 +55,7 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 	demandObjects: true, riverTakes: true
 };
 const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
-	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, count: true, litresPerUnitDay: true, lossPct: true,
+	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, monthlyUnit: true, count: true, litresPerUnitDay: true, lossPct: true,
 	monthlyFactor: true, returnPct: true, priority: true, rank: true, destination: true, enabled: true, schedule: true, population: true, source: true, note: true,
 	waterSource: true, riverPumpM3Day: true, riverPoolM3: true
 };

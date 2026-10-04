@@ -21,7 +21,7 @@ test('the run form sits in the section header, last, with its status one slim li
 	await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-	// Run model where the other pages have it: last, after a plain Add data, one row with the title.
+	// The run form, the only Run model in the header: last, after a plain Add data, one row with the title.
 	await expect(h.getByRole('button')).toHaveText(['Add data', 'Run model']);
 	const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 	const run = h.getByRole('button', { name: 'Run model' });
@@ -206,7 +206,7 @@ test('the validation statement sits in the Record group, folded shut; opened, it
 	// The report's statement, its headings one level under the panel's.
 	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', /^Errata of engine \d+\.\d+\.\d+$/, 'Known limitations']);
 	await expect(panel.getByText('Engine version', { exact: true })).toBeVisible();
-	await expect(panel.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
+	await expect(panel.getByRole('rowheader', { name: 'B3', exact: true })).toBeVisible();
 	await expectNoViolations(page);
 
 	await page.setViewportSize({ width: 390, height: 844 });

@@ -27,8 +27,8 @@ export async function openNodeForm(page: Page, name?: string) {
 		return open;
 	}
 	const list = page.getByRole('list', { name: 'All nodes' });
-	await (name ? list.getByRole('button', { name: new RegExp(`^${name}`) }) : list.getByRole('button').first()).click();
-	await page.getByTestId('node-card').getByRole('button', { name: /^(Edit|Details) / }).click();
+	// The row's own Edit (the card has none since 2026-10-03).
+	await (name ? list.getByRole('button', { name: new RegExp(`^(Edit|Details) ${name}`) }) : list.getByRole('button', { name: /^(Edit|Details) / }).first()).click();
 	return page.getByRole('dialog', { name: /^Edit |: details$/ });
 }
 

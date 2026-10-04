@@ -2,6 +2,7 @@
 // item 2c, docs/model.md §2.7e): the pumps × m³/h calculator and the hint the
 // run gives a farm with no dam. The save rules are in $lib/model/validate.ts
 // (supplyIssues). Pure: no Svelte.
+import { riverToDamUnit } from './flowUnit.svelte';
 import { SUPPLY_DEFAULTS, type NetworkNode, type SupplyRule } from '@water-management/engine';
 import { describeMonths, WATER_YEAR_CALENDAR } from '$lib/format/months';
 import { groupedText } from '$lib/components/common/numberText';
@@ -80,8 +81,8 @@ export function diverts(n: Pick<NetworkNode, 'divertCapacityM3Day' | 'divertMont
 /** A value as its field shows it (12 345.5, 0.0129): every figure entered, thousands grouped; River to dam's in m³/s (`scale`). */
 const asEntered = (v: number, scale = 1) => groupedText(v, scale);
 
-/** River to dam is entered and shown in m³/s, stored in m³/day (fields.ts M3S_PER_M3DAY). */
-const M3S = { scale: 1 / 86_400, unit: 'm³/s' };
+/** River to dam's unit as picked (./flowUnit.svelte.ts), read when the text is made. */
+const riverUnit = () => ({ scale: riverToDamUnit.scale, unit: riverToDamUnit.label });
 const M3DAY = { scale: 1, unit: 'm³/day' };
 
 /**
@@ -172,7 +173,7 @@ export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>):
 	if (row === null) return null;
 	if (!row.some((v) => v > 0)) return 'River to dam is 0 in every month: it diverts nothing.';
 	const off = row.some((v) => !(v > 0));
-	return `River to dam takes ${amountRange(row, true, true, M3S)}${off ? `; nothing in ${zeroMonths(row)}` : ''}. The one value above is not used.`;
+	return `River to dam takes ${amountRange(row, true, true, riverUnit())}${off ? `; nothing in ${zeroMonths(row)}` : ''}. The one value above is not used.`;
 }
 
 /**
@@ -190,9 +191,10 @@ export function divertMonthsCell(n: Pick<NetworkNode, 'divertMonthlyM3Day'>, nam
 	if (!vals.length) return { text: 'by month', aria: `River to dam at ${name} is set by month` };
 	const lo = Math.min(...vals);
 	const hi = Math.max(...vals);
-	const [a, b] = [asEntered(lo, M3S.scale), asEntered(hi, M3S.scale)];
+	const { scale, unit } = riverUnit();
+	const [a, b] = [asEntered(lo, scale), asEntered(hi, scale)];
 	const range = lo === hi ? a : `${a}–${b}`;
-	const words = lo === hi ? `${a} m³/s every month` : `between ${a} and ${b} m³/s`;
+	const words = lo === hi ? `${a} ${unit} every month` : `between ${a} and ${b} ${unit}`;
 	return { text: `by month: ${range}`, aria: `River to dam at ${name} is set by month, ${words}` };
 }
 

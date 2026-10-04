@@ -306,10 +306,29 @@ describe('diffModel', () => {
 		e.setCropArea(UP, c.id, 150_000);
 		e.setCropArea(LO, CROP, 50_000);
 		expect(roundTrips(b, e.snapshot())).toEqual([
-			{ op: 'crop.add', crop: { id: c.id, name: 'Crop 2', cropFactor: new Array(12).fill(0.8) } },
+			// A new crop starts on drip (engine 1.72.0).
+			{ op: 'crop.add', crop: { id: c.id, name: 'Crop 2', cropFactor: new Array(12).fill(0.8), irrigationSystemId: 'drip' } },
 			{ op: 'cropArea.set', nodeId: UP, cropId: CROP, areaM2: 0 },
 			{ op: 'cropArea.set', nodeId: UP, cropId: c.id, areaM2: 150_000 },
 			{ op: 'cropArea.set', nodeId: LO, cropId: CROP, areaM2: 50_000 }
+		]);
+	});
+
+	it('records a unit’s own irrigation system with its area, and a crop’s default as crop.set; the table is not a scenario’s (engine 1.72.0)', () => {
+		const b = base();
+		const e = editing(b);
+		e.setPlantingSystem(UP, CROP, 'surface');
+		e.model.crops[0]!.irrigationSystemId = 'micro';
+		const area = e.cropArea(UP, CROP);
+		expect(area).toBeGreaterThan(0);
+		expect(roundTrips(b, e.snapshot())).toEqual([
+			{ op: 'crop.set', cropId: CROP, field: 'irrigationSystemId', value: 'micro' },
+			{ op: 'cropArea.set', nodeId: UP, cropId: CROP, areaM2: area, irrigationSystemId: 'surface' }
+		]);
+		const t = editing(b);
+		t.addIrrigationSystem();
+		expect(diffModel(b, t.snapshot()).unsupported).toEqual([
+			"The irrigation systems' table: a scenario can't change it. Put a crop or a unit's crop on another system instead, or change the table in the project."
 		]);
 	});
 

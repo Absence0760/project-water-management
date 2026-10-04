@@ -40,11 +40,13 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 	const grid = page.getByRole('dialog', { name: 'Node table' });
 
 	// Names and headings (an SA-locale copy: decimal commas), pasted into any cell, rows in any order.
-	await pasteInto(grid.getByLabel('Area of Upper farm, km²', { exact: true }), 'Name\tArea (km²)\tEfficiency (%)\tTotal\nLower farm\t9,5\t75\t1\nNowhere farm\t1\t1\t1\n');
+	await pasteInto(grid.getByLabel('Area of Upper farm, km²', { exact: true }), 'Name\tArea (km²)\tEfficiency (%)\tReturn flow (% of supply)\tTotal\nLower farm\t9,5\t75\t15\t1\nNowhere farm\t1\t1\t1\t1\n');
 	const dlg = page.getByRole('dialog', { name: 'Paste into the node table' });
 	await expect(dlg.getByTestId('paste-summary')).toHaveText('2 values change.');
 	await expect(dlg.getByRole('row', { name: /Lower farm Area km² 8 9\.5/ })).toBeVisible();
-	await expect(dlg.getByRole('row', { name: /Lower farm Efficiency % 80 75/ })).toBeVisible();
+	await expect(dlg.getByRole('row', { name: /Lower farm Return flow % of supply 10 15/ })).toBeVisible();
+	// The efficiency is its crops' irrigation systems blended (engine 1.72.0): shown in the table, never pasted.
+	await expect(dlg.getByText("Left out Efficiency (%): it comes from each unit's crops' irrigation systems, set on Crops & demand.")).toBeVisible();
 	await expect(dlg.getByText("Left out a row the table doesn't have: Nowhere farm.")).toBeVisible();
 	await expect(dlg.getByText("Left out a column the table doesn't have: Total.")).toBeVisible();
 	await expect(dlg.getByText('Decimal commas were read as decimal points (1,207 = 1.207).')).toBeVisible();
@@ -54,7 +56,7 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
 	await expect(dlg).toBeHidden();
 	await expect(grid.getByLabel('Area of Lower farm, km²', { exact: true })).toHaveValue('9.5');
-	await expect(grid.getByLabel('Irrigation efficiency of Lower farm, %')).toHaveValue('75');
+	await expect(grid.getByLabel('Irrigation return flow at Lower farm, % of the water supplied')).toHaveValue('15');
 
 	// A bare block of numbers fills from the cell it was pasted into.
 	await pasteInto(grid.getByLabel('Area of Upper farm, km²', { exact: true }), '20\t2\t3\n');
@@ -71,7 +73,7 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 	await page.reload();
 	const again = page.getByRole('dialog', { name: 'Node table' });
 	await expect(again.getByLabel('Area of Lower farm, km²', { exact: true })).toHaveValue('9.5');
-	await expect(again.getByLabel('Irrigation efficiency of Lower farm, %')).toHaveValue('75');
+	await expect(again.getByLabel('Irrigation return flow at Lower farm, % of the water supplied')).toHaveValue('15');
 	await expect(again.getByLabel('Area of Upper farm, km²', { exact: true })).toHaveValue('20');
 	await expect(again.getByLabel('Low-MAP area of Upper farm, km²')).toHaveValue('3');
 });

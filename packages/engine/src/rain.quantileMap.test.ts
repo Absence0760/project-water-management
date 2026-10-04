@@ -308,7 +308,7 @@ describe('CHIRPS gap map: invariants through a run', () => {
 	const node = (id: string, over: Partial<NetworkNode> = {}): NetworkNode => ({
 		id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 20, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null,
 		pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0,
-		irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over
+		irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over
 	});
 	const withNetwork = (extra: Partial<ModelInput['settings']>): ModelInput => ({
 		...input(extra),
@@ -343,7 +343,7 @@ describe('CHIRPS gap map: resumes, a month CHIRPS covers in part, and the ensemb
 	const node = (id: string, over: Partial<NetworkNode> = {}): NetworkNode => ({
 		id, name: id, kind: 'farm', downstreamNodeId: null, sortOrder: 0, areaKm2: 20, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null,
 		pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0,
-		irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over
+		irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0, ...over
 	});
 	const networked = (extra: Partial<ModelInput['settings']>, series = SERIES): ModelInput => ({
 		...input(extra, series),

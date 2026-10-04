@@ -34,6 +34,8 @@ import {
 	OBSERVED_SERIES_LABEL,
 	parseGaugeSeriesKey,
 	upgradeLegacyModel,
+	DEFAULT_IRRIGATION_SYSTEMS,
+	type CropArea,
 	type Borehole,
 	type CalibrationFitStatus,
 	type CalibrationStats,
@@ -1210,7 +1212,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['irrigationEfficiency', 'irrigation efficiency', pct],
-	['lossReturnFraction', 'share of losses returning', pct],
+	['returnFlowFraction', 'return flow (share of water supplied)', pct],
 	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
 	['userReturnPct', 'share returned', pct],
 	['userPriority', 'priority', plain],
@@ -1366,11 +1368,21 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		if (x.name !== y.name) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" renamed from "${x.name}"` });
 		const c = monthlyChange((x as CropDef).cropFactor, (y as CropDef).cropFactor, '');
 		if (c) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" crop factor: ${c}` });
-		// A crop's own irrigation efficiency (engine ≥ 0.43.0); none = the farm's.
-		const ea = (x as CropDef).irrigationEfficiency ?? null;
-		const eb = (y as CropDef).irrigationEfficiency ?? null;
-		const eff = (v: number | null) => (v === null ? "the farm's" : pct(v));
-		if (!same(ea, eb)) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" irrigation efficiency: ${eff(ea)} → ${eff(eb)}` });
+		// A crop's default irrigation system (engine ≥ 1.72.0), or its own efficiency (0.43.0–1.71.0); none = the unit's.
+		const sa = cropSystemText(a, x as CropDef);
+		const sb = cropSystemText(b, y as CropDef);
+		if (sa !== sb) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Crop "${y.name}" irrigation system: ${sa} → ${sb}` });
+	}
+
+	// --- the irrigation-systems table (engine ≥ 1.72.0): a row's efficiency moves every crop on it ---
+	{
+		const systems = matchByIdThenName([...(a.irrigationSystems ?? DEFAULT_IRRIGATION_SYSTEMS)], [...(b.irrigationSystems ?? DEFAULT_IRRIGATION_SYSTEMS)], (s) => s.id, (s) => s.name);
+		for (const s of systems.onlyA) out.push({ area: 'crops', kind: 'removed', subject: s.name, text: `Irrigation system "${s.name}" removed (was ${pct(s.efficiency)})` });
+		for (const s of systems.onlyB) out.push({ area: 'crops', kind: 'added', subject: s.name, text: `Irrigation system "${s.name}" added (${pct(s.efficiency)})` });
+		for (const [x, y] of systems.pairs) {
+			if (x.name !== y.name) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Irrigation system "${y.name}" renamed from "${x.name}"` });
+			if (!same(x.efficiency, y.efficiency)) out.push({ area: 'crops', kind: 'changed', subject: y.name, text: `Irrigation system "${y.name}" efficiency: ${pct(x.efficiency)} → ${pct(y.efficiency)}` });
+		}
 	}
 
 	// --- land cover (WP-1.35), keyed by (farm name, class) so copies line up ---
@@ -1518,19 +1530,23 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 	// and A's rows by the name their node/crop has in B when it was matched.
 	const nodeRename = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
 	const cropRename = new Map(crops.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
-	const areasA = new Map<string, { farm: string; crop: string; m2: number }>();
+	// Each planting's own irrigation system on its unit (engine ≥ 1.72.0), by name; none = the crop's default.
+	const plantingSystem = (m: ProjectModel, r: CropArea) => (r.irrigationSystemId != null ? systemName(m, r.irrigationSystemId) : "the crop's default");
+	const areasA = new Map<string, { farm: string; crop: string; m2: number; sys: string }>();
 	for (const r of a.cropAreas) {
 		const farm = nodeRename.get(r.nodeId) ?? na.node(r.nodeId) ?? '';
 		const crop = cropRename.get(r.cropId) ?? na.crop(r.cropId);
 		const k = areaKey(farm, crop);
-		areasA.set(k, { farm, crop, m2: (areasA.get(k)?.m2 ?? 0) + r.areaM2 });
+		const prev = areasA.get(k);
+		areasA.set(k, { farm, crop, m2: (prev?.m2 ?? 0) + r.areaM2, sys: [...new Set([...(prev ? prev.sys.split(' + ') : []), plantingSystem(a, r)])].sort().join(' + ') });
 	}
-	const areasB = new Map<string, { farm: string; crop: string; m2: number }>();
+	const areasB = new Map<string, { farm: string; crop: string; m2: number; sys: string }>();
 	for (const r of b.cropAreas) {
 		const farm = nb.node(r.nodeId) ?? '';
 		const crop = nb.crop(r.cropId);
 		const k = areaKey(farm, crop);
-		areasB.set(k, { farm, crop, m2: (areasB.get(k)?.m2 ?? 0) + r.areaM2 });
+		const prev = areasB.get(k);
+		areasB.set(k, { farm, crop, m2: (prev?.m2 ?? 0) + r.areaM2, sys: [...new Set([...(prev ? prev.sys.split(' + ') : []), plantingSystem(b, r)])].sort().join(' + ') });
 	}
 	for (const [k, r] of areasA) {
 		if (areasB.has(k)) continue;
@@ -1542,6 +1558,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		else if (old.m2 !== r.m2) {
 			out.push({ area: 'crops', kind: 'changed', subject: r.farm, text: `${r.farm}: "${r.crop}" area ${ha(old.m2)} → ${ha(r.m2)}` });
 		}
+		if (old && old.sys !== r.sys) out.push({ area: 'crops', kind: 'changed', subject: r.farm, text: `${r.farm}: "${r.crop}" irrigation system ${old.sys} → ${r.sys}` });
 	}
 
 	// --- transfers: by id, then by "from → to" route (A's route in B's names) ---
@@ -1762,6 +1779,17 @@ function diffSeries(
  * each run's stored values (`values`) on the days both cover, or, without
  * them, through the series' content hash when the dates are the same.
  */
+/** A system's name in a model's table (its own, else the defaults); an id the table lacks shows as itself. */
+function systemName(m: ProjectModel, id: string): string {
+	return (m.irrigationSystems ?? DEFAULT_IRRIGATION_SYSTEMS).find((s) => s.id === id)?.name ?? id;
+}
+
+/** A crop's irrigation as the input diff words it: its default system's name, else its own efficiency (0.43.0–1.71.0), else the unit's. */
+function cropSystemText(m: ProjectModel, c: CropDef): string {
+	if (c.irrigationSystemId != null) return systemName(m, c.irrigationSystemId);
+	return c.irrigationEfficiency != null ? `${Math.round(c.irrigationEfficiency * 1000) / 10} %` : "the unit's";
+}
+
 export function diffInputs(
 	a: RunInputsSnapshot | null | undefined,
 	b: RunInputsSnapshot | null | undefined,

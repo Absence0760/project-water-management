@@ -38,7 +38,7 @@ export const EWR_ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.7b; docs/engine-audit.md Q17'
 	},
 	'ewr-charge-split': {
-		long: 'For a hydrological unit charged A on a day, c = supplied − return flow is its consumptive irrigation and o = e − c the rest of its impact (storage gain and net export). The irrigation part is A × c ÷ (c + max(o, 0)); the rest is “store less / pass inflow”. A hydrological unit with no irrigation therefore gets no irrigation cut: its charge is a storage or release condition.\n\nThe supply cut that removes the irrigation part is irrigation part ÷ (1 − β(1 − e)), with e the irrigation efficiency and β the loss return fraction: cutting supply by ΔG removes ΔG × (1 − β(1 − e)) of consumptive use, since the returned losses come back to the river.',
+		long: 'For a hydrological unit charged A on a day, c = supplied − return flow is its consumptive irrigation and o = e − c the rest of its impact (storage gain and net export). The irrigation part is A × c ÷ (c + max(o, 0)); the rest is “store less / pass inflow”. A hydrological unit with no irrigation therefore gets no irrigation cut: its charge is a storage or release condition.\n\nThe supply cut that removes the irrigation part is irrigation part ÷ (1 − r), with r the return flow (the share of the water supplied that comes back to the river, at most 1 − the irrigation efficiency): cutting supply by ΔG removes ΔG × (1 − r) of consumptive use, since the returned water comes back to the river.',
 		aliases: ['supply cut', 'pass inflow', 'store less'],
 		related: ['ewr-charge', 'irrigation-efficiency'],
 		source: 'docs/model.md §2.7b and §2.11; docs/engine-audit.md Q13, Q17'

@@ -1,6 +1,7 @@
 // One header per workspace section (issue #17, option A; docs/ui.md §
 // Section header): the section's title, a one-line context, and on the right
-// the rain-freshness pill, the section's own actions, Add data and Run model.
+// the rain-freshness pill, the section's own actions and Add data (Runs &
+// results adds its run form, the only Run model in the header).
 // The notices (view only, new data) are one slim line under it; the
 // project's name and your role are at the top of the sidebar (a compact line
 // on a phone); Data carries a badge counting the series behind. Synthetic
@@ -30,45 +31,45 @@ test.describe('desktop', () => {
 		await expect(page.getByTestId('project-role')).toHaveText('owner');
 		await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-		// Summary: no run yet, so the context says so; the freshness pill, Add data and Run model on the right.
+		// Summary: no run yet, so the context says so; the freshness pill and Add data (primary) on the right, no Run model.
 		const h = header(page);
 		await expect(h.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
 		await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
 		// Every page links to its own guide, so what a page is for is one click away.
 		await expect(h.getByTestId('section-guide')).toHaveAttribute('href', '/help/guides/the-whole-process');
 		await expect(h.locator('summary', { hasText: 'Rain up to' })).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Run model' })).toBeEnabled();
+		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
+		await expect(h.getByRole('button', { name: 'Run model' })).toHaveCount(0);
 		// The title and the actions share one row.
 		const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
-		const run = (await h.getByRole('button', { name: 'Run model' }).boundingBox())!;
-		expect(run.y).toBeLessThan(title.y + title.height + 30);
-		expect(run.x).toBeGreaterThan(title.x + title.width);
+		const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
+		expect(add.y).toBeLessThan(title.y + title.height + 30);
+		expect(add.x).toBeGreaterThan(title.x + title.width);
 		await expectNoViolations(page);
 
-		// Network: its summary, Tables and Add node come from the tab, before Add data and Run model.
+		// Network: its summary, Tables and Add node come from the tab, before Add data.
 		await nav(page).getByRole('link', { name: 'Network' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
 		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
 		const actions = h.getByRole('button');
-		await expect(actions).toHaveText(['+ Add node', '+ Add other user', 'Add data', 'Run model']);
+		await expect(actions).toHaveText(['+ Add node', '+ Add other user', 'Add data']);
 		await expectNoViolations(page);
 
 		// Crops: its summary line and Add crop.
 		await nav(page).getByRole('link', { name: 'Crops & demand' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
 		await expect(h.getByTestId('crops-summary')).toContainText(/crops? · /);
-		await expect(actions).toHaveText(['Load crop factors…', '+ Add crop', 'Add data', 'Run model']);
+		await expect(actions).toHaveText(['Load crop factors…', '+ Add crop', 'Add data']);
 
-		// Data: Add data is the section's main action, after the tab's Preview all data; no Run model here. The context counts the series.
+		// Data: Add data, after the tab's Preview all data. The context counts the series.
 		await nav(page).getByRole('link', { name: /^Data/ }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
 		await expect(h.getByTestId('section-context')).toHaveText('2 daily input series · 1 behind');
 		await expect(actions).toHaveText(['Preview all data', 'Add data']);
 		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
 
-		// Runs: the tab's own run form (with a label) takes Run model's place, last in the header, after a plain Add data.
+		// Runs: the tab's own run form (with a label), the only Run model, last in the header, after a plain Add data.
 		await nav(page).getByRole('link', { name: 'Runs & results' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
 		await expect(actions).toHaveText(['Add data', 'Run model']);
@@ -77,10 +78,10 @@ test.describe('desktop', () => {
 		await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(1);
 	});
 
-	test('Run model in the header starts a run and opens it; the Summary then names it', async ({ page, owner }) => {
+	test('a run started on Runs & results is named on the Summary', async ({ page, owner }) => {
 		void owner;
 		const project = await seedRunnableProject(page.request, 'Header run');
-		await page.goto(`/projects/${project.id}?tab=network`);
+		await page.goto(`/projects/${project.id}?tab=runs`);
 		await header(page).getByRole('button', { name: 'Run model' }).click();
 		await expect(page).toHaveURL(/[?&]tab=runs&run=[\w-]+$/);
 		await expect(page.getByRole('heading', { level: 2, name: 'Untitled run' })).toBeVisible();
@@ -96,10 +97,10 @@ test.describe('desktop', () => {
 		void owner;
 		const project = await createProject(page.request, 'Header run needs');
 		await putModel(page.request, project.id, sampleModel());
-		await page.goto(`/projects/${project.id}`);
+		await page.goto(`/projects/${project.id}?tab=runs`);
 		const run = header(page).getByRole('button', { name: 'Run model' });
 		await expect(run).toBeDisabled();
-		await expect(run).toHaveAccessibleDescription('A run needs a rainfall series first.');
+		await expect(run).toHaveAccessibleDescription(/^A run needs a rainfall series\. /);
 	});
 
 	test('Data carries a badge counting the series behind, in its accessible name', async ({ page, owner }) => {
@@ -265,7 +266,6 @@ test.describe('phone', () => {
 		const h = header(page);
 		await expect(h.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
 		await expect(h.getByTestId('network-summary')).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Run model' })).toBeVisible();
 		await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
 		const toggle = (await page.getByRole('button', { name: /^Project sections:/ }).boundingBox())!;
 		const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;

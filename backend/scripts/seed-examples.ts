@@ -19,7 +19,9 @@
 // Each project gets one model run, published by its owner (WP-2.3; Sandspruit
 // with an advisory notice), so results and the farm views show immediately. Building the
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
-// (several seconds). What each example shows: docs/run-locally.md
+// (several seconds). Last comes the showcase (examples/showcaseSeed.ts), one
+// project of demo's with data behind every tab (about half a minute;
+// SEED_SHOWCASE=0 skips it). What each example shows: docs/run-locally.md
 // § Example catchments; catchments.test.ts keeps them current.
 import { createHash } from 'node:crypto';
 import { closePool } from '../src/db/pool.js';
@@ -38,6 +40,7 @@ import { hashPassword } from '../src/auth/password.js';
 import { checkGeometry } from '../src/geo/geojson.js';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { loadDevEnv } from '../src/config/devEnv.js';
+import { seedShowcase } from './examples/showcaseSeed.js';
 
 
 // DEV-ONLY demo credentials — these users exist only in local docker Postgres.
@@ -159,6 +162,7 @@ export async function seedExamples(): Promise<string[]> {
 	if (existing) {
 		await seedRiverExample();
 		await acceptCurrentTerms(SEEDED());
+		await seedShowcaseExample();
 		console.log('✓ the example catchments already exist: skipped');
 		return existing;
 	}
@@ -192,6 +196,7 @@ export async function seedExamples(): Promise<string[]> {
 	await seedMap(ANALYST.email, ids[2]!, SANDSPRUIT_MAP_FILE, sandspruitMap(sandspruit!.model));
 	await seedRiverExample();
 	await acceptCurrentTerms(SEEDED());
+	await seedShowcaseExample();
 	return ids;
 }
 
@@ -208,6 +213,19 @@ async function seedRiverExample() {
 	await publish(DEMO.email, id, await run(DEMO.email, id));
 	await seedMap(DEMO.email, id, ORANJE_MAP_FILE, oranjeMap(ex.model));
 	console.log(`seeded ${ex.name} (${DEMO.email})`);
+}
+
+/**
+ * The showcase (examples/showcase.ts, examples/showcaseSeed.ts): one project
+ * of the demo user's with data behind every tab. Apart from the bundle like
+ * Oranje, so an already seeded database gains it; skipped once it exists.
+ * After the terms are accepted, since it works through the app's API.
+ * SEED_SHOWCASE=0 leaves it out (the e2e suite, whose specs count the other
+ * examples' projects and farms, and whose setup budget it would eat).
+ */
+async function seedShowcaseExample() {
+	if (process.env.SEED_SHOWCASE === '0') return;
+	await seedShowcase({ demo: DEMO, analyst: ANALYST, farmers: FARMERS, applicant: APPLICANT, userId, ensureUser, linkFarmer, seedMap });
 }
 
 /**

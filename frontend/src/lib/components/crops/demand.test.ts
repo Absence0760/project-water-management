@@ -40,6 +40,27 @@ describe('farmDemands', () => {
 		expect(f!.annualMm3).toBe(0);
 		expect(f!.areaHa).toBe(0);
 	});
+
+	it('divides the requirement by the unit’s irrigation efficiency, as a run abstracts it (audit N1)', () => {
+		const farm = (id: string, e: number) => ({ id, name: id, kind: 'farm', irrigationEfficiency: e }) as unknown as ProjectModel['nodes'][number];
+		const withE: ProjectModel = { ...model, nodes: [farm('f1', 1), farm('f2', 0.8)] };
+		const [f1, f2] = farmDemands(withE, apan, 28.25, ['f1', 'f2']);
+		expect(f1!.efficiency).toBe(1);
+		expect(f2!.efficiency).toBe(0.8);
+		// 30 000 m³ a year of requirement ÷ 0.8: drip-like losses raise what the unit abstracts.
+		expect(f2!.annualMm3).toBeCloseTo(0.03 / 0.8, 9);
+		expect(f2!.monthlyM3Day[1]).toBeCloseTo((50_000 * 50) / 1000 / 30 / 0.8, 9);
+		expect(f2!.byCrop.get('vines')![1]).toBeCloseTo(f2!.monthlyM3Day[1]!, 9);
+		// A crop on its own system blends in, weighted by its requirement (the engine's farmIrrigationEfficiency).
+		const own: ProjectModel = { ...withE, crops: withE.crops.map((c) => (c.id === 'veg' ? { ...c, irrigationEfficiency: 0.5 } : c)) };
+		const [g1] = farmDemands(own, apan, 28.25, ['f1']);
+		// f1: vines 100 000 m² × 600 mm a year at e = 1, veg 31 000 m² × 100 mm at e = 0.5.
+		const w = [100_000 * 600, 31_000 * 100];
+		expect(g1!.efficiency).toBeCloseTo((w[0]! + w[1]!) / (w[0]! / 1 + w[1]! / 0.5), 12);
+		// A non-farm with crop areas abstracts its requirement (e = 1); an efficiency outside (0, 1] runs as 1.
+		const odd: ProjectModel = { ...model, nodes: [{ ...farm('f1', 0.5), kind: 'gauge' } as ProjectModel['nodes'][number], farm('f2', 0)] };
+		expect(farmDemands(odd, apan, 28.25, ['f1', 'f2']).map((f) => f.efficiency)).toEqual([1, 1]);
+	});
 });
 
 describe('annualMm3', () => {

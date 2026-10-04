@@ -18,7 +18,8 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 
 | Version | Written | For engines | Notes |
 | --- | --- | --- | --- |
-| [v1](./v1.md) | 2026-09-29 | ≥ 1.30.0 | First statement (issue #71) |
+| [v1](./v1.md) | 2026-09-29 | 1.30.0 – 1.71.0 | First statement (issue #71) |
+| [v2](./v2.md) | 2026-10-03 | ≥ 1.72.0 | §4: irrigation systems per crop and unit; the return flow a share of the water supplied (audit N1) |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

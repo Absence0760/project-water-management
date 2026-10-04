@@ -306,24 +306,49 @@ describe('land cover (WP-1.35)', () => {
 describe('ModelBody (PUT /model, project documents)', () => {
 	const body = (nodes: Record<string, unknown>[]) => ({ nodes, crops: [], cropAreas: [], transfers: [] });
 
-	it('needs 0 < irrigation efficiency ≤ 1 and a loss return fraction in 0–1 (N1)', () => {
+	it('needs 0 < irrigation efficiency ≤ 1 and a return flow from 0 to 1 (N1, engine 1.71.0)', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id);
 		expect(ModelBody.safeParse(body([out, farm])).success).toBe(true);
 		expect(ModelBody.safeParse(body([out, { ...farm, irrigationEfficiency: 0 }])).success).toBe(false);
 		expect(ModelBody.safeParse(body([out, { ...farm, irrigationEfficiency: 1.01 }])).success).toBe(false);
-		expect(ModelBody.safeParse(body([out, { ...farm, lossReturnFraction: -0.1 }])).success).toBe(false);
+		expect(ModelBody.safeParse(body([out, { ...farm, returnFlowFraction: -0.1 }])).success).toBe(false);
+		// Above the losses is refused by PUT /model against the unit's blended efficiency (routes.db.test.ts), not here.
 	});
 
-	it('takes an optional own irrigation efficiency per crop, 0 < e ≤ 1 or null (engine 0.43.0)', () => {
+	it('reads a model from engine 0.16.0–1.70.0, its β a share of the losses, as migration 197 stored it: r = β(1 − e)', () => {
+		const out = node('Gauge', null);
+		const { returnFlowFraction: _r, ...legacy } = node('A', out.id);
+		const parsed = ModelBody.parse(body([out, { ...legacy, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 }]));
+		expect(parsed.nodes[1]!.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect(parsed.nodes[1]).not.toHaveProperty('lossReturnFraction');
+	});
+
+	it('reads a document crop’s own efficiency (engine 0.43.0–1.71.0) as an irrigation system, and refuses one out of range', () => {
 		const out = node('Gauge', null);
 		const crop = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: new Array(12).fill(0.5) };
 		const m = (c: Record<string, unknown>) => ({ ...body([out]), crops: [c] });
-		expect(ModelBody.parse(m(crop)).crops[0]).not.toHaveProperty('irrigationEfficiency');
-		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: 0.9 })).crops[0]!.irrigationEfficiency).toBe(0.9);
-		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: 1 })).crops[0]!.irrigationEfficiency).toBe(1);
-		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: null })).crops[0]!.irrigationEfficiency).toBeNull();
+		expect(ModelBody.parse(m(crop)).crops[0]).not.toHaveProperty('irrigationSystemId');
+		// 90 % is the SABI Drip row; 66 % gets a row of its own in the document's table.
+		expect(ModelBody.parse(m({ ...crop, irrigationEfficiency: 0.9 })).crops[0]!.irrigationSystemId).toBe('drip');
+		const odd = ModelBody.parse(m({ ...crop, irrigationEfficiency: 0.66 }));
+		expect(odd.crops[0]!.irrigationSystemId).toBe('imported-0.66');
+		expect(odd.irrigationSystems!.at(-1)).toMatchObject({ name: 'Imported, 66 %', efficiency: 0.66 });
 		for (const bad of [0, -0.1, 1.01, 85, '0.9', Infinity]) expect(ModelBody.safeParse(m({ ...crop, irrigationEfficiency: bad })).success, String(bad)).toBe(false);
+	});
+
+	it('takes the irrigation-systems table, a crop’s default and a unit’s own system, each naming a row (engine 1.72.0)', () => {
+		const out = node('Gauge', null);
+		const farm = node('A', out.id);
+		const crop = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: new Array(12).fill(0.5), irrigationSystemId: 'own' };
+		const table = [{ id: 'own', name: 'Our drip', efficiency: 0.93, preset: 'drip' }];
+		const m = { nodes: [out, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 1000, irrigationSystemId: 'drip' }], transfers: [], irrigationSystems: table };
+		const parsed = ModelBody.parse(m);
+		expect(parsed.irrigationSystems).toEqual([{ id: 'own', name: 'Our drip', efficiency: 0.93, preset: 'drip' }]);
+		// 'drip' is the key of the preset the row started as: fine.
+		expect(modelProblems(parsed)).toEqual([]);
+		expect(modelProblems(ModelBody.parse({ ...m, crops: [{ ...crop, irrigationSystemId: 'gone' }] }))).toEqual(['crop "Citrus" names irrigation system gone, which is not in the table']);
+		for (const bad of [0, 1.2]) expect(ModelBody.safeParse({ ...m, irrigationSystems: [{ ...table[0], efficiency: bad }] }).success, String(bad)).toBe(false);
 	});
 
 	it('needs a whole-number transfer priority, and gives a transfer from an older document its list position (Q18)', () => {
@@ -339,10 +364,10 @@ describe('ModelBody (PUT /model, project documents)', () => {
 
 	it('reads a model from before engine 0.16.0 as migration 006 stored it: return flow % → efficiency', () => {
 		const out = node('Gauge', null);
-		const { irrigationEfficiency: _e, lossReturnFraction: _b, ...legacy } = node('A', out.id);
+		const { irrigationEfficiency: _e, returnFlowFraction: _b, ...legacy } = node('A', out.id);
 		const parsed = ModelBody.parse(body([out, { ...legacy, returnFlowPct: 0.25 }, { ...legacy, id: crypto.randomUUID(), name: 'B', returnFlowPct: 0 }]));
-		expect(parsed.nodes[1]).toMatchObject({ irrigationEfficiency: 0.75, lossReturnFraction: 1 });
-		expect(parsed.nodes[2]).toMatchObject({ irrigationEfficiency: 1, lossReturnFraction: 0 });
+		expect(parsed.nodes[1]).toMatchObject({ irrigationEfficiency: 0.75, returnFlowFraction: 0.25 });
+		expect(parsed.nodes[2]).toMatchObject({ irrigationEfficiency: 1, returnFlowFraction: 0 });
 		expect(parsed.nodes[1]).not.toHaveProperty('returnFlowPct');
 	});
 });

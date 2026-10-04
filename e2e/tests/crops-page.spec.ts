@@ -149,6 +149,20 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 	await expect(page.getByRole('button', { name: 'Add crop', exact: true })).toBeFocused();
 });
 
+test('a crop sheet tall enough to scroll at 1280×720 opens with the focus on Crop name, not its scrolling body', async ({ page, owner }) => {
+	// Chromium makes an overflowing scroll container keyboard-focusable, and showModal() then focused
+	// the sheet's body instead of its first control (fixed in Dialog.svelte, commit 460cd7325).
+	void owner;
+	const project = await seed(page, 'Crops page sheet focus');
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	const sheet = await openCropSheet(page, 'Vines');
+	// The precondition the bug needs: the sheet's body overflows at this size.
+	const body = sheet.locator('.body').first();
+	expect(await body.evaluate((b) => b.scrollHeight > b.clientHeight)).toBe(true);
+	await expect(sheet.getByRole('textbox', { name: 'Crop name' })).toBeFocused();
+});
+
 test('the Tables menu and Edit areas open the full grids over the page; a farm opens its drawer', async ({ page, owner }) => {
 	void owner;
 	const project = await seed(page, 'Crops page grids');
@@ -162,10 +176,10 @@ test('the Tables menu and Edit areas open the full grids over the page; a farm o
 	await expectNoViolations(page);
 	await closeModal(page);
 
-	// The menu holds the two crop grids only: the demand table is on the page, behind Show table (issue #174).
+	// The menu holds the two crop grids and the irrigation systems: the demand table is on the page, behind Show table (issue #174).
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas']);
+	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas', 'Irrigation systems']);
 	// The menu closes on Escape, focus back on its button.
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();

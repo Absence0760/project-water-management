@@ -42,7 +42,7 @@ const NODE: Omit<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'> = {
 	damMinPct: 0,
 	divertCapacityM3Day: 0,
 	irrigationEfficiency: 1,
-	lossReturnFraction: 0,
+	returnFlowFraction: 0,
 	damAreaFullM2: 0,
 	damAreaExponent: B_EXP,
 	damSeepagePerDay: 0
@@ -73,7 +73,7 @@ function catchment(start: string, rain: (number | null)[], settings: Record<stri
 					damAreaFullM2: A_FULL,
 					damSeepagePerDay: SEEP,
 					irrigationEfficiency: 0.8,
-					lossReturnFraction: 0.5
+					returnFlowFraction: 0.1
 				}
 			],
 			crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(KC) }],

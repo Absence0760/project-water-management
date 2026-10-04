@@ -24,7 +24,7 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	// The validation statement and the disclaimer (agreed 2026-09-28, so no draft line), before anyone signs.
 	const validation = page.locator('#rep-validation');
 	await expect(validation.getByRole('heading', { name: 'Known limitations' })).toBeVisible();
-	await expect(validation.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
+	await expect(validation.getByRole('rowheader', { name: 'B3', exact: true })).toBeVisible();
 	// The Reserve method's open choices are on it too (engine-audit A1–A7, issue #71).
 	await expect(validation.getByRole('rowheader', { name: 'A1', exact: true })).toBeVisible();
 	await expect(validation.getByText(/^Below a rule table.s driest point the requirement is scaled down with the flow/)).toBeVisible();

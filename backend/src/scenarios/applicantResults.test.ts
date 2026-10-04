@@ -28,7 +28,7 @@ const node = (id: string, name: string, kind: NetworkNode['kind'], downstreamNod
 		damMinPct: 0.1,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0.5,
+		returnFlowFraction: 0.1,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMAND_OBJECT_SOURCES, modelRuleIssues, type DemandObject, type ProjectModel } from '@water-management/engine';
-import { setSizing, setSource, sizingFixedBy, SOURCE_OPTION_LABEL } from './demandObjectSource';
+import { givenAsOf, setGivenAs, setSizing, setSource, sizingFixedBy, SOURCE_OPTION_LABEL } from './demandObjectSource';
 
 const object = (over: Partial<DemandObject> = {}): DemandObject => ({
 	id: 'o',
@@ -70,5 +70,23 @@ describe('demand object source in the node form (engine 1.56.0)', () => {
 			}
 		}
 		expect(sizingFixedBy(object())).toBeNull();
+	});
+});
+
+describe('Demand given as: m³/day, l/s or m³/s by month, or a count × litres (engine 1.72.0)', () => {
+	it('keeps the demand in m³/day whichever unit it is shown in, and drops the unit for a count', () => {
+		const o = object();
+		expect(givenAsOf(o)).toBe('monthly');
+		setGivenAs(o, 'monthly:ls');
+		expect([o.sizing, o.monthlyUnit, givenAsOf(o)]).toEqual(['monthly', 'ls', 'monthly:ls']);
+		expect(o.monthlyM3Day).toEqual(new Array(12).fill(40));
+		setGivenAs(o, 'monthly:m3s');
+		expect(givenAsOf(o)).toBe('monthly:m3s');
+		setGivenAs(o, 'perUnit');
+		expect(o.sizing).toBe('perUnit');
+		expect('monthlyUnit' in o).toBe(false);
+		setGivenAs(o, 'monthly');
+		expect(givenAsOf(o)).toBe('monthly');
+		expect(modelRuleIssues(model(o)).size).toBe(0);
 	});
 });

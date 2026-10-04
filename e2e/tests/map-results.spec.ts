@@ -72,6 +72,8 @@ test.describe('the seeded Sandspruit', () => {
 		const id = await sandspruitId(page);
 		await openMap(page, id);
 		await resultsReady(page, 'daysShort');
+		// The Key (the side column's tab beside the map) holds the measure, the run and the legend.
+		await openKey(page);
 		await expect(results(page).getByLabel('Colour areas by')).toHaveValue('daysShort');
 		await expect(page.getByTestId('map-run-caption')).toHaveText(/^From the published run “.+”, ran \d{4}-\d\d-\d\d\.$/);
 		// The legend names the measure and each band in words, with how many units are in it.
@@ -81,6 +83,7 @@ test.describe('the seeded Sandspruit', () => {
 		for (const word of await items.locator('strong').allTextContents()) expect(word).toMatch(BANDS);
 
 		// Every feature: each farm parcel has its unit's figure and band; the boundary and rivers have none.
+		await showTab(page, 'features');
 		await page.getByTestId('map-open-grid').click();
 		const grid = page.getByRole('dialog', { name: 'Every map feature' });
 		await expect(grid.getByRole('columnheader', { name: 'Result' })).toBeVisible();
@@ -107,14 +110,17 @@ test.describe('the seeded Sandspruit', () => {
 		const id = await sandspruitId(page);
 		await openMap(page, id);
 		await resultsReady(page, 'daysShort');
+		await openKey(page);
 		const measure = results(page).getByLabel('Colour areas by');
 		await measure.selectOption({ label: 'Dam level' });
 		await expect(page).toHaveURL(/[?&]measure=dam-level/);
 		await resultsReady(page, 'damLevel');
 		await expect(legend(page).getByText('Dam level', { exact: true })).toBeVisible();
+		await showTab(page, 'features');
 		await row(page, 'Vaalbank').click();
 		await expect(card(page).getByTestId('map-card-result')).toHaveText(/(full|minimum|No dam|not in this run).* · (ok|watch|short|no figure)$/i);
 
+		await openKey(page);
 		await measure.selectOption({ label: 'Curtailment' });
 		await expect(page).toHaveURL(/[?&]measure=curtailment/);
 		await resultsReady(page, 'curtailment');
@@ -134,6 +140,7 @@ test.describe('the seeded Sandspruit', () => {
 		await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
 		await openKey(page);
 		await expect(page.getByTestId('map-key').getByText('parcel', { exact: true })).toBeVisible();
+		await showTab(page, 'features');
 		await page.getByTestId('map-open-grid').click();
 		await expect(page.getByRole('dialog', { name: 'Every map feature' }).getByRole('columnheader', { name: 'Result' })).toHaveCount(0);
 	});
@@ -165,6 +172,7 @@ test('an editor sees the newest run until one is published, picks a run in the U
 	// Nothing published: the editor sees their newest run, and may pick another.
 	await openMap(page, project.id);
 	await resultsReady(page, 'daysShort');
+	await openKey(page);
 	await expect(page.getByTestId('map-run-caption')).toHaveText(/^From your newest run “Second”, ran .*: nothing is published yet\.$/);
 	const runPick = page.getByTestId('map-run');
 	await expect(runPick.locator('option')).toHaveText([/^Second · /, /^First · /]);
@@ -177,6 +185,7 @@ test('an editor sees the newest run until one is published, picks a run in the U
 	await expect(page.getByTestId('map-run-caption')).toHaveText(/“Second”/);
 
 	// The outlet gauge's EWR on its card and in the table, the parcels' figures beside it.
+	await showTab(page, 'features');
 	await row(page, 'Outflow gauge').click();
 	await expect(card(page).getByTestId('map-card-result')).toHaveText(/^EWR (met every day|missed on [\d\s,]+ days?) \(outlet\) · (ok|short)$/);
 	// Its marker takes the EWR's band colour too, where the browser can draw the map (no WebGL: the list and card above carry it).
@@ -278,6 +287,7 @@ test('thirty units with results: the page still fits 1440×960, the key row and 
 	await openMap(page, big.id);
 	await resultsReady(page, 'daysShort');
 	await layoutSettled(page);
+	await openKey(page);
 	expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBe(0);
 	await expect(legend(page)).toBeInViewport({ ratio: 1 });
 	await expect(page.getByTestId('catchment-map')).toBeInViewport({ ratio: 1 });

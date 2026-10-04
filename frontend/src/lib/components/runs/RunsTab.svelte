@@ -73,6 +73,7 @@
 		runs: initialRuns = null,
 		canRun,
 		modelDirty,
+		beforeRun,
 		onRunsChange,
 		onInputsRestored
 	}: {
@@ -85,6 +86,8 @@
 		runs?: RunMeta[] | null;
 		canRun: boolean;
 		modelDirty: boolean;
+		/** Asked before a run starts: the page saves unsaved edits first (with the person's say); false stops the run. */
+		beforeRun?: () => Promise<boolean>;
 		onRunsChange?: (runs: RunMeta[]) => void;
 		/** "Restore these inputs" changed the saved settings and model: the page reloads them. */
 		onInputsRestored?: () => Promise<void>;
@@ -280,6 +283,7 @@
 	}
 	/** Run the model, or (forecast) a forecast run: the history as an ordinary run, then the forecast days (WP-2.12). */
 	async function start(forecast: boolean) {
+		if (beforeRun && !(await beforeRun())) return;
 		running = true;
 		actionError = null;
 		elapsed = 0;
@@ -416,7 +420,7 @@
 	}
 
 	// The section header (workspace/SectionHeader) carries the title: the tab gives it the runs
-	// line and, for an editor, the run form where the other pages have Run model (last, after Add data).
+	// line and, for an editor, the run form, the one place a run starts from the header (last, after Add data).
 	$effect(() => fillHeader({ context: headerContext, main: canRun ? runForm : undefined }));
 	const runCount = (n: number) => `${n} ${n === 1 ? 'run' : 'runs'}`;
 
@@ -449,7 +453,7 @@
 {#snippet headerContext()}
 	{#if loading && !runs.length}Loading runs…{:else if !runs.length}No runs yet{:else}{runCount(runs.length)}{latest ? ` · newest ran ${ranAgo(latest.createdAt)}` : ''}{/if}
 {/snippet}
-<!-- The run form: in the section header, where the other pages have Run model; its status line opens the page. -->
+<!-- The run form: in the section header, after Add data; its status line opens the page. -->
 {#snippet runForm()}
 	<form class="run-form" onsubmit={run} aria-busy={running}>
 		<label class="run-label" for="run-label">Run label <span class="visually-hidden">(optional)</span></label>
@@ -489,7 +493,7 @@
 					<a href="?tab=settings">settings</a>.
 				</span>
 			{:else if modelDirty}
-				<span class="warn">The model has unsaved changes — runs use the last saved version.</span>
+				<span class="warn">The model has unsaved changes: Run model asks to save them first, since a run uses the saved model.</span>
 			{:else if stale}
 				<span class="warn">Inputs changed since the latest run ({stale.join('; ')}). Run again to update the results.</span>
 			{:else}

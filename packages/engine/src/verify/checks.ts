@@ -27,7 +27,7 @@ import { scheduleFactors } from '../network/demandSchedule';
 import { hasPumpLimit, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -391,9 +391,9 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const ks = capacityScaleOf(n, toEpochDay(out.startDate), out.days, []);
 		let qPrev = n.damInitialPct * cap * (ks?.[0] ?? 1);
 		totIn += qPrev;
-		// Return flow: the share β of the application losses (1 − e)·G (audit N1),
+		// Return flow: the share r of the water supplied G, at most the losses (1 − e)·G (engine ≥ 1.71.0),
 		// of the crops' part when the unit has demand objects, which return their own shares (engine ≥ 1.7.0).
-		const returnPerSupplied = n.lossReturnFraction * (1 - runEfficiency(input, n));
+		const returnPerSupplied = runReturnFlow(n.returnFlowFraction, runEfficiency(input, n));
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
 		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.16.0 have neither.
@@ -1378,7 +1378,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if ((seepRet < 1) !== !!SPL) return `${n.id}: dam_seepage_lost column ${SPL ? 'with all seepage returning' : 'missing'}`;
 		const Zc = g('ewr_cumulative')!;
 		const e = runEfficiency(input, n);
-		const returnPerSupplied = n.lossReturnFraction * (1 - e);
+		const returnPerSupplied = runReturnFlow(n.returnFlowFraction, e);
 		// Registered volumes (engine ≥ 1.18.0): a full allocation's factor on the demand, a cap's room per source.
 		const KF = g(ALLOCATION_SERIES.demandFactor.key);
 		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
@@ -2165,7 +2165,7 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 		farms.map((f) => {
 			const user = f.kind === 'user';
 			const G = col(f.id, 'supplied');
-			const k = user ? 1 - Math.min(Math.max(f.userReturnPct ?? 0, 0), 1) : 1 - f.lossReturnFraction * (1 - runEfficiency(input, f));
+			const k = user ? 1 - Math.min(Math.max(f.userReturnPct ?? 0, 0), 1) : 1 - runReturnFlow(f.returnFlowFraction, runEfficiency(input, f));
 			// A unit with demand objects (engine ≥ 1.7.0): consumptive use is G − T day by day, its objects returning their own shares.
 			const T = !user && demandObjectsByNode(input.model, []).has(f.id) ? col(f.id, 'return_flow') : null;
 			// A user has no runoff or transfers, and no irrigation-part series (checked as 0).

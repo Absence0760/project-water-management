@@ -24,6 +24,7 @@
 		grouped = true,
 		testid,
 		scale = 1,
+		decimals,
 		onchange
 	}: {
 		/** The row in water-year order (Oct first); a missing month shows `blank`. */
@@ -44,6 +45,8 @@
 		testid?: string;
 		/** Shown = stored × scale (River to dam: stored m³/day, shown m³/s). */
 		scale?: number;
+		/** Show at most this many decimals (display only; a value keeps its precision until edited). */
+		decimals?: number;
 		onchange: (next: number[]) => void;
 	} = $props();
 
@@ -72,6 +75,7 @@
 					label={label(m)}
 					min={0}
 					{scale}
+					{decimals}
 					grouped={grouped && readonly}
 					disabled={readonly}
 					value={values?.[i] ?? blank}

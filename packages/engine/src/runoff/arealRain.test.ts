@@ -27,7 +27,7 @@ const flat = (f: number, method: ArealRain['method'] = 'map', source = 'invented
 
 /** Two farms to a gauge; F irrigates, D has a dam that takes no runoff. 3 years of rain, an observed record from GR4J-like flow. */
 function catchment(settings: ModelInput['settings'] = {}, rainKind: 'rain_catchment_mm' | 'rain_chirps_mm' = 'rain_catchment_mm'): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0.5, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, lossReturnFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0.5, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const days = 1095;
 	const rain = Array.from({ length: days }, (_, i) => (i % 17 === 0 ? 40 : i % 5 === 0 ? 3 : 0));
 	const observed = Array.from({ length: days }, (_, i) => 0.05 + 0.3 * Math.exp(-(i % 17) / 4));

@@ -3449,16 +3449,11 @@ role and not before it.
 
 ## Server-side reports (WP-2.15 Phase B, issue #26)
 
-- [ ] **`http-cache-semantics` 4.2.0 in the renderer image (GHSA-ch52-4w7c-c8xp, 2026-10-03).**
-      No fixed release exists (the fix is on upstream's main, not on npm).
-      It arrives only through `aws-lambda-ric` → `node-gyp` →
-      `make-fetch-happen` in `backend/renderer-deps/`, used while `npm ci`
-      builds the native addon, never at run time, and the flaw needs a cache
-      shared between users. `osv-scanner.toml` records it (expires
-      2027-01-31) and the Dependabot alert is dismissed as a tolerable risk. When a
-      fixed version ships: `npm install --package-lock-only` in
-      `backend/renderer-deps/`, `pnpm check:renderer-image`, drop the
-      `osv-scanner.toml` entry.
+- [x] **`http-cache-semantics` 4.2.0 in the renderer image (GHSA-ch52-4w7c-c8xp, 2026-10-03).**
+      Fixed 2026-10-04: 4.3.0 shipped with the fix, and
+      `backend/renderer-deps/package-lock.json` now resolves it (through
+      `aws-lambda-ric` → `node-gyp` → `make-fetch-happen`, build-time only).
+      The `osv-scanner.toml` entry is gone.
 - [ ] **The renderer image has never run on Lambda.** CI and
       the gates cover the render path with the local Chromium (the worker's
       inline renderer, MinIO, Mailpit, e2e) and the renderer Lambda's

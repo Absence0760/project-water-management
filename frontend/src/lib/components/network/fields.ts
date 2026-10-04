@@ -1,6 +1,7 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { areaMismatches, estimatedDamAreaM2, IRRIGATION_SYSTEMS, onRiverDam, type FlowShareMethod, type IrrigationSystemId, type NetworkNode, type NodeKind } from '@water-management/engine';
+import { pumpUnit, riverToDamUnit, type FlowUnit } from './flowUnit.svelte';
+import { areaMismatches, estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type FlowShareMethod, type NetworkNode, type NodeKind } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -19,7 +20,7 @@ export type NodeNumberKey =
 	| 'pctRunoffToDam'
 	| 'divertCapacityM3Day'
 	| 'irrigationEfficiency'
-	| 'lossReturnFraction'
+	| 'returnFlowFraction'
 	| 'flowShareManual'
 	| 'boreholeCapacityM3Day'
 	| 'boreholeTriggerPct'
@@ -31,7 +32,7 @@ export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | 'm³/s' | '×' | 'days' | 'ha';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | 'l/s' | '×' | 'days' | 'ha';
 	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
 	scale?: number;
 	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
@@ -45,6 +46,14 @@ export interface NodeField {
 	nullable?: boolean;
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
+	/** A flow rate whose unit is picked beside it (./flowUnit.svelte.ts): `unit` and `scale` follow it. */
+	flowUnit?: FlowUnit;
+	/**
+	 * Worked out from elsewhere: the efficiency, from the unit's crops' irrigation systems (engine ≥ 1.72.0). Shown as text
+	 * while every planting is on a system; editable, as the efficiency for crops with no system, while one isn't
+	 * (model/systems.ts ownEfficiencyUsed). Never pasted.
+	 */
+	derived?: boolean;
 }
 
 /** m³/day → m³/s: River to dam is entered in m³/s and stored in m³/day. */
@@ -174,22 +183,28 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'pctRunoffToDam',
-		label: 'Runoff to dam',
+		label: 'Incremental runoff to dam',
 		unit: '%',
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `Own runoff entering the dam at ${n}, %`,
-		help: "Share of the hydrological unit's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
+		aria: (n) => `Incremental catchment runoff entering the dam at ${n}, %`,
+		help: "Share of the hydrological unit's incremental catchment runoff (its own runoff, not what arrives from upstream) that enters the dam: the part of its area above the dam wall. The rest flows past below the dam."
 	},
 	{
 		key: 'divertCapacityM3Day',
 		label: 'River to dam',
-		unit: 'm³/s',
-		scale: M3S_PER_M3DAY,
+		// The unit picked in the heading or the form (m³/s, l/s or m³/day; stored m³/day either way).
+		flowUnit: riverToDamUnit,
+		get unit() {
+			return riverToDamUnit.label;
+		},
+		get scale() {
+			return riverToDamUnit.scale;
+		},
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `River to dam at ${n}, m³/s`,
-		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in m³/s (0.2 m³/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
+		aria: (n) => `River to dam at ${n}, ${riverToDamUnit.label}`,
+		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in the unit picked beside it (0.2 m³/s = 200 l/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
 	},
 	{
 		key: 'irrigationEfficiency',
@@ -197,17 +212,18 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: '%',
 		group: 'irrigation',
 		farmOnly: true,
-		aria: (n) => `Irrigation efficiency of ${n}, %`,
-		help: 'Share of the water abstracted that reaches the crop. The hydrological unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
+		derived: true,
+		aria: (n) => `Irrigation efficiency of ${n}, %, from its crops' irrigation systems`,
+		help: "Share of the water abstracted that reaches the crop: the unit's crops' irrigation systems combined, each weighted by its yearly water requirement. The hydrological unit abstracts crop requirement ÷ efficiency. Set each crop's system in the unit's crops, or a crop's default in its sheet; the systems' efficiencies are on Crops & demand (Tables, Irrigation systems). A crop on no system uses the efficiency entered here."
 	},
 	{
-		key: 'lossReturnFraction',
-		label: 'Losses returning',
-		unit: '%',
+		key: 'returnFlowFraction',
+		label: 'Return flow',
+		unit: '% of supply',
 		group: 'irrigation',
 		farmOnly: true,
-		aria: (n) => `Share of irrigation losses returning to the river at ${n}, %`,
-		help: 'Share of the application losses that drains back to the river below the hydrological unit the same day (return flow). The rest leaves the catchment.'
+		aria: (n) => `Irrigation return flow at ${n}, % of the water supplied`,
+		help: 'Share of the irrigation water supplied that infiltrates the soil and returns to the river below the hydrological unit the same day. It comes out of the application losses, so it is at most 100 % − the irrigation efficiency (10 % at 90 %); the rest of the losses leaves the catchment (evaporation, deep percolation).'
 	},
 	{
 		key: 'flowShareManual',
@@ -224,10 +240,17 @@ export const NODE_FIELDS: NodeField[] = [
 		detailOnly: true,
 		notGauge: true,
 		label: 'Combined borehole capacity',
-		unit: 'm³/day',
+		// The pumps' unit, picked beside it (m³/day until changed; stored m³/day either way).
+		flowUnit: pumpUnit,
+		get unit() {
+			return pumpUnit.label;
+		},
+		get scale() {
+			return pumpUnit.scale;
+		},
 		group: 'groundwater',
 		nullable: true,
-		aria: (n) => `Combined borehole capacity of ${n}, m³/day`,
+		aria: (n) => `Combined borehole capacity of ${n}, ${pumpUnit.label}`,
 		help: 'Most that all the boreholes together can pump in a day. Empty (or 0) means none here. Groundwater counts as supply; the rule below says when it is used.'
 	},
 	{
@@ -296,7 +319,7 @@ export function cardLabel(f: NodeField): string {
 	return f.label;
 }
 
-export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
+export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day' || f.unit === '% of supply';
 /** What a field's input multiplies the stored value by to show it. */
 export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
 
@@ -355,16 +378,6 @@ export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMin
 }
 
 /**
- * The irrigation system whose SABI 2021 efficiency (IRRIGATION_SYSTEMS) this
- * value is, for the node form's helper; null for any other value (a farm
- * saved with an efficiency from before the table was unified, 0.65 say,
- * shows "Other" and keeps its value).
- */
-export function systemOf(efficiency: number): IrrigationSystemId | null {
-	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
-}
-
-/**
  * Whether a node carries any of a dam's development fields (engine ≥ 1.30.0:
  * survey date, sediment rate, in-service date), so the one-node form still
  * shows them on a node without a dam, or one turned into a gauge or user,
@@ -385,4 +398,17 @@ function fmtArea(m2: number): string {
 export function fmtVolume(m3: number): string {
 	if (m3 >= 100_000) return `${(m3 / 1e6).toFixed(2)} Mm³`;
 	return `${fmtNum(m3)} m³`;
+}
+
+/**
+ * Under a unit's return flow when it is more than its losses (engine ≥ 1.71.0):
+ * the efficiency `e` is its crops' irrigation systems blended (1.72.0), which a
+ * crop's system or the systems' table can move from another screen, so this is
+ * a warning, not a refusal; a run returns the losses, 1 − e, and says so. Null
+ * when the return flow fits.
+ */
+export function returnFlowHint(returnFlow: number, e: number): string | null {
+	if (!(returnFlow > 1 - e + RETURN_FLOW_SLACK)) return null;
+	const pct = (v: number) => `${Math.round(v * 1000) / 10} %`;
+	return `Only ${pct(1 - e)} of the water supplied is lost at its ${pct(e)} irrigation efficiency (its crops' systems), so runs return ${pct(1 - e)}, not ${pct(returnFlow)}. Lower it to match, or check its crops' systems.`;
 }

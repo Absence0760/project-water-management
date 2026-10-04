@@ -409,7 +409,7 @@
 <div class="history" class:side class:fit bind:this={root} bind:clientWidth={pageW} style:--h-top="{top}px" data-testid="history">
 	{#if restored}
 		<div class="alert alert-success-ish" role="status">
-			<p>Restored the version of {fmtDate(restored.at, true)}. The model and settings are as they were then; run the model again to update the results.</p>
+			<p>Restored the version of {fmtDate(restored.at, true)}. The model and settings are as they were then; <a href="?tab=runs">run the model again</a> to update the results.</p>
 			{#if restored.relink.length}
 				<p>Farmers aren't linked back automatically. Re-link them in the Farmers list on the <a href="?tab=project#farmers-h">Project page</a>:</p>
 				<ul>
@@ -421,7 +421,7 @@
 	{/if}
 	{#if seriesDone}
 		<div class="alert alert-success-ish" role="status">
-			<p>{seriesDone} Run the model again to use them.</p>
+			<p>{seriesDone} <a href="?tab=runs">Run the model again</a> to use them.</p>
 			<button type="button" class="btn btn-ghost btn-sm" onclick={() => (seriesDone = null)}>Dismiss</button>
 		</div>
 	{/if}

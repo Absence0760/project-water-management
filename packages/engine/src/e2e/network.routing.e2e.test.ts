@@ -30,7 +30,7 @@ function farm(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -371,7 +371,7 @@ describe('order independence', () => {
 		farm('B', { downstreamNodeId: 'C', areaKm2: 1, damCapacityM3: 500, damInitialPct: 0.4, pctRunoffToDam: 1 }),
 		farm('C', { downstreamNodeId: 'E', areaKm2: 1.5, damCapacityM3: 2000, damInitialPct: 0.7, pctUpstreamToDam: 0.6, pctRunoffToDam: 0.3, divertCapacityM3Day: 80 }),
 		farm('D', { downstreamNodeId: 'E', areaKm2: 0.5, damCapacityM3: 900, damInitialPct: 0.9 }),
-		farm('E', { areaKm2: 1, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 })
+		farm('E', { areaKm2: 1, irrigationEfficiency: 0.8, returnFlowFraction: 0.1 })
 	];
 	const transfers = (): Transfer[] => [
 		{ id: 't1', fromNodeId: 'C', toNodeId: 'D', months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxRateM3s: 0.002, dailyCapM3: null, minStoragePct: 0.2, enabled: true, priority: 0 },

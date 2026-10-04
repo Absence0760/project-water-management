@@ -114,7 +114,7 @@ exports round for display.
 | Sheet | Holds | App equivalent |
 | --- | --- | --- |
 | `[Network]` | Elements (Farm or Gauge), upstream elements (up to 7), "Has transfer?", the one **outflow gauge**. The rows must be in calculation order (upstream first). Bifurcation is not allowed. | `node` rows; `downstream_node_id` gives the tree, and the engine works out the calculation order |
-| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns + `project.settings.flowShareMethod`, `hiLoSplit`. The return flow % becomes `irrigationEfficiency` and `lossReturnFraction` (N1); the min % is not imported (Q5) |
+| `[Farm spec]` | Areas (total, high-MAP, low-MAP), the fragmentation method (Area / Hi-Lo / Specific), % upstream inflow "above dam", % farm runoff into dam, dam capacity, initial %, min % for transfers, downstream diversion back to dam (m³/s → m³/day), irrigation return flow % | `node` farm columns + `project.settings.flowShareMethod`, `hiLoSplit`. The return flow % r becomes `irrigationEfficiency` 1 − r and `returnFlowFraction` r, all the losses returning (N1); the min % is not imported (Q5) |
 | `[Crop demand]` | WR90 A-pan evaporation by month, effective-rainfall %, crop factors by month | `settings.apanMm`, `settings.effectiveRainFraction`, `crop` |
 | `[Farm demand]` | Crop area (m²) per farm per crop, days per month (Feb = 28.25 by default) | `crop_area`, `settings.februaryDays` |
 | `[Transfers]` | Hand-written transfer formulas, plus per-transfer parameters (from, to, months, max m³/s, min dam %) | `transfer` rows (structured rules) |
@@ -133,7 +133,7 @@ would otherwise gain water), so does a negative pragmatic EWR month, and an effe
 February days outside 28–29 or a rain threshold outside 0–1 000 mm falls back
 to its default. Each says so in a run warning. A unit's dam and return shares
 (`pctUpstreamToDam`, `pctRunoffToDam`, `damInitialPct`, `damMinPct`,
-`lossReturnFraction`) outside 0–1 stop the run with an error naming the unit
+`returnFlowFraction`) outside 0–1 stop the run with an error naming the unit
 (80 meant as a percent would start a dam at 80 × its capacity), and a window
 or period date that doesn't exist (2001-02-29) is not a date: a report window
 date warns and falls back, a simulation date stops the run (before 1.69.0
@@ -338,30 +338,47 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    Kept (provisional decision 2026-10-01, to be confirmed by the client's hydrologist, issue #90 N1): the SABI design crop factors
    (f = kp × kc, eq. 4.7, item 8) give the crop's net requirement, and SABI
    designs the gross by the system's efficiency, so the factors don't include
-   application losses and dividing by e doesn't count them twice. β (the
-   share of the losses returning, 0.5 for a new farm) stays an estimate: drip
-   and surface losses are mostly deep percolation that returns, sprinkler
-   losses partly evaporation and drift that doesn't, and no South African
-   source gives a split; it is per farm and the hydrologist can set it.
+   application losses and dividing by e doesn't count them twice. The return
+   flow r (engine ≥ 1.71.0) is the share of the water supplied that
+   infiltrates and returns, at most the losses 1 − e; 0.10 for a new farm,
+   all of drip's losses, as the client's hydrologist set it (2026-10-03).
+   Drip and surface losses are mostly deep percolation that returns,
+   sprinkler losses partly evaporation and drift that doesn't; it is per farm
+   and the hydrologist sets it.
 
-6. **Irrigation efficiency per crop (engine ≥ 0.43.0, issue #54 item 1).**
-   A crop may carry its own `irrigationEfficiency` (0 < e ≤ 1), for the
-   system it is under (drip, micro-sprinkler, pivot …). A crop without one uses the farm's own `e[f]`;
-   the crop's value **overrides** the farm's, never multiplies it. The farm
-   then runs on its crops' efficiencies combined, the harmonic mean weighted
-   by each crop's annual gross requirement at the monthly A-pan
-   (`farmIrrigationEfficiency` in `packages/engine/src/demand.ts`):
+6. **Irrigation systems per crop and unit (engine ≥ 1.72.0, migration 198; per crop from 0.43.0, issue #54 item 1).**
+   The project keeps a table of irrigation systems (`irrigationSystems`: a
+   name and an efficiency 0 < e ≤ 1 each), starting as SABI's Agricultural
+   Design Norms 2021, Table 4 (drip 0.90, micro-sprinkler 0.82, centre pivot
+   0.85, permanent sprinkler 0.80, movable sprinkler 0.75, flood / furrow
+   0.70, each inside SABI's range; the hydrologist may change any and add
+   rows; a model without a table runs on these, `DEFAULT_IRRIGATION_SYSTEMS`).
+   A crop has a default system (`CropDef.irrigationSystemId`); a unit that
+   waters it differently names its own (`CropArea.irrigationSystemId`). Each
+   planting's efficiency e[p] is resolved in that order (the unit's own, the
+   crop's default), then a crop's own `irrigationEfficiency` from engine
+   0.43.0–1.71.0 (a snapshot or older document), else the unit's own `e[f]`
+   (`plantingEfficiencyResolver`); a system the table lacks is skipped for the next, with a
+   warning. The unit then runs on its plantings' efficiencies combined, the
+   harmonic mean weighted by each one's annual gross requirement at the
+   monthly A-pan (`unitIrrigationEfficiency` in `packages/engine/src/demand.ts`):
 
    ```
-   w[c]  = area[f][c] × Σm MAX(0, cropFactor[c][m]) × MAX(0, apanMm[m])
-   e*[f] = Σc w[c] ÷ Σc (w[c] ÷ e[c])        e[c] = the crop's own, else e[f]
+   w[p]  = area[p] × Σm MAX(0, cropFactor[c(p)][m]) × MAX(0, apanMm[m])
+   e*[f] = Σp w[p] ÷ Σp (w[p] ÷ e[p])        e[p] = its system's, else e[f]
    D     = F ÷ e*[f]
    ```
+
+   The app shows e*[f] on the unit, read-only; `e[f]` is only the fallback.
+   Migration 198 gave every planting the system it ran at (a crop's own
+   efficiency as its default; a crop without one its farms' when they all
+   agreed, else each planting its farm's), adding a row "Imported, NN %"
+   for a value no SABI row matched, so saved models run as before.
 
    The harmonic mean is the one that keeps both halves of the balance exact
    when F is shared among the crops by their gross: the abstraction is
    Σ F[c] ÷ e[c], and the application losses (1 − e*)·G are each crop's
-   (1 − e[c])·G[c] summed, so the return flow β(1 − e*)G and the consumptive
+   (1 − e[c])·G[c] summed, so the return flow (at most (1 − e*)G) and the consumptive
    use are right too. e* always lies between the smallest and largest
    efficiency it combines, and lowering any crop's efficiency never lowers
    the farm's demand (both tested). With no A-pan in any month the weights are
@@ -2741,7 +2758,7 @@ storage to whole m³; the engine doesn't (R1).
 | Q | **Storage, end of day** (`store[t]`) | `MIN(P, damCapacity)` |
 | R | **Spill** | `MAX(P − damCapacity, 0)` |
 | S | Below-dam flow not diverted | `L + N − O` |
-| T | Irrigation return flow | `β × (1 − e) × G`: the share β (`lossReturnFraction`) of the application losses (engine ≥ 0.16.0, N1; the workbook's `G × returnPct`) |
+| T | Irrigation return flow | `r × G`: the share r (`returnFlowFraction`) of the water supplied, at most the losses `1 − e` (engine ≥ 1.71.0; engine 0.16.0–1.70.0 `β × (1 − e) × G`, β a share of the losses, N1; the workbook's `G × returnPct`) |
 | U | **Farm outflow** | `R + S + T + Sp` (seepage joins the outflow, engine ≥ 0.16.0) |
 | V | Balance check | `(H+I+J+Pd) − (G − T) − E − (store[t] − store[t−1]) − U` must be 0 (the invariant tests check it on random networks) |
 | W | **Irrigation deficit** | `D − G` |
@@ -2775,15 +2792,18 @@ compared with the full pragmatic EWR and the observed flow.
 
 **Irrigation efficiency and return flow (engine ≥ 0.16.0, [audit N1](./engine-audit.md)).**
 Each farm has an application efficiency `e` (`irrigationEfficiency`,
-0 < e ≤ 1) and a loss return fraction `β` (`lossReturnFraction`, 0–1). Per
-day: abstraction demand `D = F / e`; `G = MIN(available, D)`; the crop gets
-`e·G`; the losses `(1 − e)·G` split into return flow `T = β(1 − e)·G`, which
-joins the farm's outflow the same day, and `(1 − β)(1 − e)·G`, which leaves
-the catchment (evaporation, deep percolation); consumptive use is `G − T`;
+0 < e ≤ 1) and a return flow `r` (`returnFlowFraction`, engine ≥ 1.71.0):
+the share of the irrigation water supplied that infiltrates the soil and
+returns to the river the same day, 0 ≤ r ≤ 1 − e. Per day: abstraction
+demand `D = F / e`; `G = MIN(available, D)`; the crop gets `e·G`; the losses
+`(1 − e)·G` split into return flow `T = r·G`, which joins the farm's outflow
+the same day, and `(1 − e − r)·G`, which leaves the catchment (evaporation,
+deep percolation); consumptive use is `G − T`;
 the supplied fraction is `G / D` (= crop use / F); the deficit is `D − G`;
 curtailment works in D and G. The balance keeps its form,
 `V = (H + I + J) − (G − T) − ΔQ − U`, with the new T. New farms default to
-e = 0.90 (drip, confirmed by the client, issue #90) and β = 0.5; the
+e = 0.90 (drip, confirmed by the client, issue #90) and r = 0.10 (all of
+drip's losses; the client's hydrologist, 2026-10-03, engine 1.71.0); the
 one-node form's system helper and the Load crop factors dialog offer one
 table, the engine's `IRRIGATION_SYSTEMS` (SABI 2021 Table 4: drip 0.90,
 micro-sprinkler 0.82, centre pivot 0.85, permanent sprinkler 0.80, movable
@@ -9700,7 +9720,7 @@ text:
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R); from engine 1.44.0, on a unit with a basic-needs floor, B is the window mean of `basic_needs`, at most H, S = MAX(N − ΔG, B − I), U = MAX(M − ΔG, 0, B) and the held volume = U − MAX(M − ΔG, 0). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every return flow set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkOperatingRules` | Engine ≥ 1.32.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
 | `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the storage at the start of that day (every farm dam's, the listed dams', or under `own` each unit's own dam, in its own `restriction_level` column, the catchment column the deepest; from engine 1.70.0, while a dam that came into service after the run's first day hasn't yet started a day at the mildest level's share of its capacity, the milder of the level with the filling dams left out and with them counted, worked out in the check from the input, the storage and capacity columns, and the summary's `filling` held to it), raised to the EWR trigger's level after a day its site's EWR wasn't met (the outlet's catchment column, or the gauge's), 0 from a lift date, else held; only the units the rule cuts carry `restricted_demand`; each part's cut column (a shared basis only) is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's reviews, EWR-triggered reviews, days per level and unit means add up to the columns. The level, cut and floor formulas are written out in the check, not the engine's. A resumed run starts from the state its summary records (`start`), which the check takes as given: it can't see the snapshot. Without the rule, no restriction column or summary. |
@@ -9949,7 +9969,7 @@ step when a definition changes.
 | **Abstraction demand** | D = F ÷ irrigation efficiency: what the farm has to take to meet its crop water requirement (engine ≥ 0.16.0; run series `demand`, `FarmSummary.avgDemandM3Day`). The app's "Demand": supplied, deficit and % supplied are measured against it. Not "net of effective rainfall" alone, which is F. |
 | **EWR charge** | A farm's share of the EWR shortfall at the EWR sites below it (§2.7b). Shown everywhere as a positive volume charged, m³/day; the daily series are negative (§2.11). |
 | **In-sample** | Scores on the days the parameters were fitted on. A run's calibration scores are in-sample only when `fitStatus` is `fitted` (§2.10). |
-| **Return flow** | The part of the irrigation losses that runs back to the river the same day: loss return fraction × (1 − efficiency) × supplied. |
+| **Return flow** | The share of the irrigation water supplied that infiltrates and runs back to the river the same day: return flow % × supplied, at most the losses (1 − efficiency) × supplied. |
 | **Transfer** | Water moved from one farm's dam to another farm (pipeline or canal). |
 | **NSE** | Nash–Sutcliffe Efficiency = 1 − Σ(obs−sim)² / Σ(obs−mean obs)². 1 is perfect; ≤ 0 means no better than the mean. |
 | **PBIAS** | Percent bias = 100 × Σ(obs−sim) / Σobs (the engine's sign). Positive means the model under-predicts volume. |

@@ -4,7 +4,7 @@
 // crop, and the demand difference before anything is applied. Pure: the
 // dialog applies the accepted changes to the ModelEditor, and the normal save
 // (with its reason) saves them.
-import { farmIrrigationEfficiency, type CropDef, type ProjectModel } from '@water-management/engine';
+import { type CropDef, type ProjectModel } from '@water-management/engine';
 import { farmDemands } from './demand';
 
 /** Lower case, no accents or punctuation, a plural "s" dropped ("Pecans" ~ "pecan"; not "-ss", "-us": "Grass", "Citrus"). */
@@ -55,12 +55,12 @@ export type FactorShape = 'a-pan' | 'fao-et0';
 /** FAO-56 ch. 3, Table 5: Class A pan Kp by humidity, wind and fetch, 0.35–0.85. */
 export const FAO56_TABLE5_URL = 'https://www.fao.org/4/x0490e/x0490e08.htm';
 
-/** The dialog's source kinds, in radio order, each with the shape of its factors. A new kind is a row here. */
+/** The dialog's source kinds, in radio order, each with the shape of its factors and a line saying what it is. A new kind is a row here. */
 export const SOURCE_KINDS = [
-	{ id: 'library', label: 'Reference library (ARC/SABI A-pan, winter rainfall)', shape: 'a-pan' },
-	{ id: 'b023', label: 'A b023 workbook', shape: 'a-pan' },
-	{ id: 'node', label: 'A node-based workbook (FAO-56 Kc)', shape: 'fao-et0' }
-] as const satisfies readonly { id: string; label: string; shape: FactorShape }[];
+	{ id: 'library', label: 'Reference library', hint: 'ARC/SABI A-pan factors, winter rainfall area', shape: 'a-pan' },
+	{ id: 'b023', label: 'A b023 workbook', hint: 'Its [Crop demand] sheet: A-pan factors', shape: 'a-pan' },
+	{ id: 'node', label: 'A node-based workbook', hint: 'Its [Crop_Factors] sheet: FAO-56 Kc values', shape: 'fao-et0' }
+] as const satisfies readonly { id: string; label: string; hint: string; shape: FactorShape }[];
 export type SourceKind = (typeof SOURCE_KINDS)[number]['id'];
 
 export const shapeOf = (kind: SourceKind): FactorShape => SOURCE_KINDS.find((k) => k.id === kind)!.shape;
@@ -111,10 +111,11 @@ export function withKp(factors: readonly number[], kp: number): number[] {
 	return factors.map((f) => Math.round(f * kp * 10_000) / 10_000);
 }
 
-/** What the dialog would set on one project crop: new factors and/or an efficiency (undefined = keep the crop's). */
+/** What the dialog would set on one project crop: new factors and/or a default irrigation system (undefined = keep the crop's). */
 export interface CropChoice {
 	factors: number[] | null;
-	efficiency?: number;
+	/** A row of the project's irrigation-systems table (engine ≥ 1.72.0). */
+	systemId?: string;
 }
 
 export interface CropChange {
@@ -124,9 +125,10 @@ export interface CropChange {
 	next: number[];
 	/** Per water-year month: the factor changes. */
 	changed: boolean[];
-	currentEfficiency: number | null;
-	nextEfficiency: number | null;
-	/** Anything differs: a factor or the efficiency. */
+	/** The crop's default irrigation system now and with the change (null = none). */
+	currentSystemId: string | null;
+	nextSystemId: string | null;
+	/** Anything differs: a factor or the system. */
 	differs: boolean;
 }
 
@@ -134,14 +136,13 @@ export interface CropChange {
 export function cropChanges(crops: readonly CropDef[], choices: ReadonlyMap<string, CropChoice>): CropChange[] {
 	return crops.flatMap((c) => {
 		const ch = choices.get(c.id);
-		if (!ch || (!ch.factors && ch.efficiency === undefined)) return [];
+		if (!ch || (!ch.factors && ch.systemId === undefined)) return [];
 		const current = Array.from({ length: 12 }, (_v, m) => c.cropFactor[m] ?? 0);
 		const next = ch.factors ? [...ch.factors] : current;
-		const currentEfficiency = c.irrigationEfficiency ?? null;
-		const nextEfficiency = ch.efficiency ?? currentEfficiency;
+		const currentSystemId = c.irrigationSystemId ?? null;
+		const nextSystemId = ch.systemId ?? currentSystemId;
 		const changed = current.map((v, m) => !same(v, next[m]!));
-		const effDiffers = nextEfficiency !== currentEfficiency && !(nextEfficiency !== null && currentEfficiency !== null && same(nextEfficiency, currentEfficiency));
-		return [{ cropId: c.id, name: c.name, current, next, changed, currentEfficiency, nextEfficiency, differs: changed.some(Boolean) || effDiffers }];
+		return [{ cropId: c.id, name: c.name, current, next, changed, currentSystemId, nextSystemId, differs: changed.some(Boolean) || nextSystemId !== currentSystemId }];
 	});
 }
 
@@ -152,7 +153,10 @@ export function applyChanges(crops: readonly CropDef[], accepted: readonly CropC
 		const a = by.get(c.id);
 		if (!a) return c;
 		const out: CropDef = { ...c, cropFactor: [...a.next] };
-		if (a.nextEfficiency !== null) out.irrigationEfficiency = a.nextEfficiency;
+		if (a.nextSystemId !== a.currentSystemId) {
+			out.irrigationSystemId = a.nextSystemId;
+			delete out.irrigationEfficiency;
+		}
 		return out;
 	});
 }
@@ -169,14 +173,14 @@ export interface DemandRow {
 export interface DemandDifference {
 	rows: DemandRow[];
 	total: { gross: [number, number]; abstraction: [number, number] };
-	/** Catchment gross requirement per water-year month, m³/day: now and with the changes. */
+	/** Catchment irrigation demand (the requirement ÷ each unit's efficiency) per water-year month, m³/day: now and with the changes. */
 	monthly: [number[], number[]];
 }
 
 /**
  * The gross irrigation demand now and with `nextCrops`, per farm and for the
- * catchment, with the engine's own maths (grossFarmDemandM3PerDay through
- * ./demand.ts farmDemands, and farmIrrigationEfficiency), so it is what a
+ * catchment, with the engine's own maths (grossFarmDemandM3PerDay and
+ * farmIrrigationEfficiency through ./demand.ts farmDemands), so it is what a
  * run would use before effective rain.
  */
 export function demandDifference(
@@ -187,24 +191,15 @@ export function demandDifference(
 	farmIds: string[]
 ): DemandDifference {
 	const next: ProjectModel = { ...model, crops: nextCrops };
+	// farmDemands is already ÷ each unit's efficiency (as a run abstracts it); × it gives back the requirement.
 	const both = [model, next].map((m) => farmDemands(m, apanMm, februaryDays, farmIds));
-	const eff = (m: ProjectModel, nodeId: string) => {
-		const node = m.nodes.find((n) => n.id === nodeId);
-		// A non-farm with crop areas abstracts its requirement (e = 1), as the run's irrigation() has it; a value outside (0, 1] runs as 1.
-		if (node?.kind !== 'farm') return 1;
-		const e = node.irrigationEfficiency;
-		const own = e > 0 && e <= 1 ? e : 1;
-		const areas = new Map<string, number>();
-		for (const a of m.cropAreas) if (a.nodeId === nodeId) areas.set(a.cropId, (areas.get(a.cropId) ?? 0) + a.areaM2);
-		return farmIrrigationEfficiency(own, m.crops, areas, apanMm);
-	};
 	const rows = farmIds.map((id, i): DemandRow => {
-		const g: [number, number] = [both[0]![i]!.meanM3Day, both[1]![i]!.meanM3Day];
+		const [now, then] = [both[0]![i]!, both[1]![i]!];
 		return {
 			nodeId: id,
 			name: model.nodes.find((n) => n.id === id)?.name || '(unnamed)',
-			gross: g,
-			abstraction: [g[0] / eff(model, id), g[1] / eff(next, id)]
+			gross: [now.meanM3Day * now.efficiency, then.meanM3Day * then.efficiency],
+			abstraction: [now.meanM3Day, then.meanM3Day]
 		};
 	});
 	const sum = (k: 'gross' | 'abstraction', j: 0 | 1) => rows.reduce((s, r) => s + r[k][j], 0);

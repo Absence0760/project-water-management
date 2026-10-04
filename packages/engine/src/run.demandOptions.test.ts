@@ -32,7 +32,7 @@ function farm(over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 1,
+		returnFlowFraction: 0.2,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -85,13 +85,26 @@ describe('irrigation efficiency per crop (engine 0.43.0)', () => {
 		const out = run(input(twoCrops({ irrigationEfficiency: 0.5 })));
 		expect(get(out, 'crop_requirement')[0]).toBe(200);
 		expect(get(out, 'demand')[0]).toBeCloseTo(325, 9);
-		// Fully supplied, every loss returned (β = 1): consumptive use G − T is the crops' 200.
+		// Fully supplied; the farm's return flow r = 0.2 is a share of all the water supplied (engine ≥ 1.71.0),
+		// within the blend's losses (1 − 200/325): 65 of the 125 m³ lost return, and consumptive use is 260.
 		const G = get(out, 'supplied')[0]!;
 		expect(G).toBeCloseTo(325, 9);
-		expect(get(out, 'return_flow')[0]).toBeCloseTo(0.5 * 200 + 0.2 * 125, 9);
-		expect(G - get(out, 'return_flow')[0]!).toBeCloseTo(200, 9);
+		expect(get(out, 'return_flow')[0]).toBeCloseTo(0.2 * 325, 9);
+		expect(G - get(out, 'return_flow')[0]!).toBeCloseTo(260, 9);
 		expect(Math.abs(get(out, 'balance_residual')[0]!)).toBeLessThan(1e-9);
 		expect(out.summary.warnings.filter((w) => w.includes('efficiency'))).toEqual([]);
+	});
+
+	it('a model saved by engine 0.43.0–1.70.0 (β, a share of the losses) returns what that engine did: β at the blend', () => {
+		// The same unit stored with β = 1 and no r: 1.70.0 returned all of the blend's losses, 325 − 200 = 125 m³/day,
+		// not β(1 − 0.8) × 325 = 65 at the unit's own efficiency (upgradeLegacyInput).
+		const x = input(twoCrops({ irrigationEfficiency: 0.5 }));
+		x.model.nodes = x.model.nodes.map((n) => {
+			if (n.id !== 'F') return n;
+			const { returnFlowFraction: _r, ...rest } = n;
+			return { ...rest, lossReturnFraction: 1 } as unknown as typeof n;
+		});
+		expect(get(run(x), 'return_flow')[0]).toBeCloseTo(125, 9);
 	});
 
 	it('both crops with their own efficiency ignore the farm’s', () => {
@@ -243,5 +256,63 @@ describe('the invariants hold with both options on', () => {
 			expect(checkAll(x, seed), `seed ${seed}`).toBeNull();
 		}
 		expect(tested).toBe(12);
+	});
+});
+
+describe('irrigation systems per crop and per unit (engine 1.72.0)', () => {
+	const crop = (over: Partial<CropDef> = {}): CropDef => ({ id: 'a', name: 'Crop a', cropFactor: [...flat(1)], ...over });
+	const one = (c: CropDef, area: Partial<CropArea> = {}, systems?: NonNullable<ModelInput['model']['irrigationSystems']>): ModelInput => {
+		const x = input({ crops: [c], cropAreas: [{ nodeId: 'F', cropId: 'a', areaM2: 1000, ...area }], startDate: '2020-10-01', rain: [0] });
+		if (systems) x.model.irrigationSystems = systems;
+		return x;
+	};
+
+	it('runs a crop at its default system’s efficiency from the default table, and a unit’s own system over it', () => {
+		// 100 m³/day of requirement: Flood / furrow (70 %) abstracts 100 / 0.7, Drip (90 %) 100 / 0.9.
+		const flood = run(one(crop({ irrigationSystemId: 'surface' })));
+		expect(get(flood, 'demand')[0]).toBeCloseTo(100 / 0.7, 9);
+		const drip = run(one(crop({ irrigationSystemId: 'surface' }), { irrigationSystemId: 'drip' }));
+		expect(get(drip, 'demand')[0]).toBeCloseTo(100 / 0.9, 9);
+		expect(drip.summary.warnings.filter((w) => w.includes('irrigation system'))).toEqual([]);
+		// The unit's 20 % return flow is more than drip's 10 % of losses: the run caps it there and says so.
+		expect(drip.summary.warnings).toContain('unit "F": return flow 20 % of the water supplied is more than its losses at 90 % irrigation efficiency; using 10 %');
+	});
+
+	it('takes the project’s own table: a row’s efficiency moves every crop on it', () => {
+		const table = [{ id: 's1', name: 'Our drip', efficiency: 0.95, preset: 'drip' as const }];
+		expect(get(run(one(crop({ irrigationSystemId: 's1' }), {}, table)), 'demand')[0]).toBeCloseTo(100 / 0.95, 9);
+	});
+
+	it('the same crop on two units runs at each unit’s own system', () => {
+		const x = input({
+			crops: [crop({ irrigationSystemId: 'drip' })],
+			cropAreas: [
+				{ nodeId: 'F', cropId: 'a', areaM2: 1000 },
+				{ nodeId: 'G', cropId: 'a', areaM2: 1000, irrigationSystemId: 'surface' }
+			],
+			startDate: '2020-10-01',
+			rain: [0]
+		});
+		x.model.nodes.push(farm({ id: 'G', name: 'G', sortOrder: 1, downstreamNodeId: 'F' }));
+		const out = run(x);
+		expect(get(out, 'demand', 'F')[0]).toBeCloseTo(100 / 0.9, 9);
+		expect(get(out, 'demand', 'G')[0]).toBeCloseTo(100 / 0.7, 9);
+	});
+
+	it('falls back to the crop’s legacy efficiency, then the unit’s, and warns once for a system the table lacks', () => {
+		expect(get(run(one(crop({ irrigationEfficiency: 0.5 }))), 'demand')[0]).toBeCloseTo(200, 9);
+		expect(get(run(one(crop())), 'demand')[0]).toBeCloseTo(125, 9); // the unit's 0.8
+		const missing = run(one(crop({ irrigationSystemId: 'gone' })));
+		expect(get(missing, 'demand')[0]).toBeCloseTo(125, 9);
+		expect(missing.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; skipping it"]);
+	});
+
+	it('skips a unit’s system the table lacks for the crop’s default, then its legacy efficiency (fuzz seed 36, docs/model.md §2.3)', () => {
+		// The planting's own system is missing: the crop's default (Flood / furrow, 70 %) runs, not the unit's 0.8.
+		expect(get(run(one(crop({ irrigationSystemId: 'surface' }), { irrigationSystemId: 'gone' })), 'demand')[0]).toBeCloseTo(100 / 0.7, 9);
+		// A legacy crop (engine ≤ 1.71.0) runs at its own 0.5 whether or not the run's upgrade has turned it into a table row first.
+		const legacy = run(one(crop({ irrigationEfficiency: 0.5 }), { irrigationSystemId: 'gone' }));
+		expect(get(legacy, 'demand')[0]).toBeCloseTo(200, 9);
+		expect(legacy.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; skipping it"]);
 	});
 });

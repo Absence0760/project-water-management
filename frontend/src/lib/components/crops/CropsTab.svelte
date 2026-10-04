@@ -15,8 +15,8 @@
 	// drawer; Edit areas opens the planted-areas grid). From 1100 px of page
 	// width the list is a column that scrolls in itself and the chart and bars
 	// fill the window beside it, so they stay on the first screen whatever the
-	// number of crops or units. The full grids open from the Tables menu in the
-	// grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
+	// number of crops or units. The full grids, and the irrigation systems'
+	// table (`grid=systems`), open from the Tables menu in the grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
 	// through `sections` (CropGrids); scenario override mode shows all three
 	// inline the same way.
 	import { tick, untrack } from 'svelte';
@@ -58,7 +58,8 @@
 		sections,
 		onsave,
 		reason = $bindable(''),
-		apanDaily = false
+		apanDaily = false,
+		inModal = false
 	}: {
 		editor: ModelEditor;
 		settings: ProjectSettings;
@@ -71,6 +72,8 @@
 		reason?: string;
 		/** The project has a daily A-pan series, which runs use instead of the monthly means on the days it covers (model.md §2.3a). */
 		apanDaily?: boolean;
+		/** In the grid modal: the grid drops its own heading, the modal's title names it. */
+		inModal?: boolean;
 	} = $props();
 
 	const crops = $derived(editor.model.crops);
@@ -207,7 +210,8 @@
 	// --- the Tables menu (as the Network's): each full grid in the grid modal ---
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
-		['planted-areas', 'Planted areas']
+		['planted-areas', 'Planted areas'],
+		['systems', 'Irrigation systems']
 	];
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();
@@ -271,7 +275,7 @@
 {/snippet}
 
 {#if sections}
-	<CropGrids {editor} {settings} {readonly} {sections} {apanDaily} />
+	<CropGrids {editor} {settings} {readonly} {sections} {apanDaily} {inModal} />
 {:else}
 	<div class="crops-page">
 		{#if crops.length === 0}
@@ -327,7 +331,7 @@
 				<section class="panel dem-card" aria-labelledby="crop-dem-h">
 					<div class="panel-head">
 						<h2 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
-						<span class="muted small">Gross demand, whole catchment, m³/day</span>
+						<span class="muted small">Before rain, ÷ irrigation efficiency, whole catchment, m³/day</span>
 					</div>
 					{#if !apanSet}
 						<div class="alert alert-info">

@@ -7,7 +7,7 @@
 // get, on top, a daily A-pan record, demand factors (unit and crops part)
 // and a demand-factor start date in some seeds. Synthetic data only.
 import { describe, expect, it } from 'vitest';
-import type { DailySeries, ModelInput, ModelOutput, NetworkNode } from '../project';
+import { DEFAULT_IRRIGATION_SYSTEMS, type DailySeries, type ModelInput, type ModelOutput, type NetworkNode } from '../project';
 import { runModelWithoutChecks } from '../run';
 import { randomInput, Rng } from '../testing/fuzz';
 
@@ -98,27 +98,36 @@ function reference(input: ModelInput, out: ModelOutput, n: NetworkNode): Ref | n
 		r.soilMm.push((W * 1000) / cropped);
 		r.F.push(F);
 	}
-	// §2.3 item 6: the harmonic mean weighted by each crop's annual gross at the monthly A-pan.
+	// §2.3 item 6: the harmonic mean weighted by each planting's annual gross at the monthly A-pan. A
+	// planting's efficiency (engine ≥ 1.72.0): its own system, else its crop's default, from the project's
+	// table (else the SABI defaults), a system the table lacks or with an efficiency outside (0, 1] skipped
+	// for the next; then the crop's legacy own efficiency; else the unit's.
 	const eF = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
-	const own = (id: string) => {
-		const e = known.get(id)!.irrigationEfficiency;
-		return typeof e === 'number' && e > 0 && e <= 1 ? e : null;
+	const valid = (e: unknown) => (typeof e === 'number' && e > 0 && e <= 1 ? e : null);
+	const table = new Map((input.model.irrigationSystems ?? DEFAULT_IRRIGATION_SYSTEMS).map((x) => [x.id, x.efficiency]));
+	const own = (a: { cropId: string; irrigationSystemId?: string | null }) => {
+		const crop = known.get(a.cropId)!;
+		for (const id of [a.irrigationSystemId, crop.irrigationSystemId]) {
+			const e = id == null ? null : valid(table.get(id));
+			if (e !== null) return e;
+		}
+		return valid(crop.irrigationEfficiency);
 	};
-	if ([...areas].some(([id, area]) => area > 0 && own(id) !== null)) {
+	const plantings = input.model.cropAreas.filter((a) => a.nodeId === n.id && known.has(a.cropId) && a.areaM2 > 0);
+	if (plantings.some((a) => own(a) !== null)) {
 		let w = 0, wOverE = 0, k = 0, kOverE = 0;
-		for (const [id, area] of areas) {
-			if (!(area > 0)) continue;
-			const e = own(id) ?? eF;
+		for (const a of plantings) {
+			const e = own(a) ?? eF;
 			let byApan = 0, byFactor = 0;
 			for (let m = 0; m < 12; m++) {
-				const f = Math.max(0, cf(id, m));
+				const f = Math.max(0, cf(a.cropId, m));
 				byApan += f * Math.max(0, apan[m]!);
 				byFactor += f;
 			}
-			w += area * byApan;
-			wOverE += (area * byApan) / e;
-			k += area * byFactor;
-			kOverE += (area * byFactor) / e;
+			w += a.areaM2 * byApan;
+			wOverE += (a.areaM2 * byApan) / e;
+			k += a.areaM2 * byFactor;
+			kOverE += (a.areaM2 * byFactor) / e;
 		}
 		r.e = w > 0 ? w / wOverE : k > 0 ? k / kOverE : eF;
 	} else r.e = eF;

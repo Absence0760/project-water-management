@@ -20,7 +20,7 @@ function node(id: string, name: string, down: string | null): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0
@@ -119,6 +119,14 @@ describe('validateModel', () => {
 		const a = node('a', 'A', null);
 		a.irrigationEfficiency = 0;
 		expect(messages(model([a]))).toEqual(['"A": irrigation efficiency must be above 0%.']);
+	});
+
+	it('doesn’t refuse a return flow above the losses: the unit form warns and a run caps it (engine 1.72.0, systems.test.ts)', () => {
+		const g = node('g', 'G', null);
+		const a = node('a', 'A', 'g');
+		a.irrigationEfficiency = 0.9;
+		a.returnFlowFraction = 0.2;
+		expect(messages(model([g, a]))).toEqual([]);
 	});
 
 	it('needs a whole-number transfer priority (Q18)', () => {

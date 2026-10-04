@@ -4,11 +4,11 @@
 //   into names and dates a user can look up;
 // - waterBalance: where the water went, per water year and over the run.
 // Pure: it reads only the model input and the output's own series.
+import { upgradeLegacyInput } from '../demand';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import { capacityScaleOf } from '../network/development';
 import { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey } from '../network/riverSource';
 import {
-	upgradeLegacyModel,
 	type ModelInput,
 	type ModelOutput,
 	type RunVerification,
@@ -45,7 +45,7 @@ const CHECKS: [VerificationCheckId, string, (input: ModelInput, out: ModelOutput
 
 export function verifyRun(raw: ModelInput, out: ModelOutput, areaKm2: number | null = null): { verification: RunVerification; waterBalance: WaterBalance } {
 	// Read the model as the run did (runModel upgrades a model saved by an older engine).
-	const input = { ...raw, model: upgradeLegacyModel(raw.model) };
+	const input = { ...raw, model: upgradeLegacyInput(raw.model, raw.settings?.apanMm) };
 	const names = new Map(input.model.nodes.map((n) => [n.id, n.name]));
 	const d0 = toEpochDay(out.startDate);
 	// "<uuid> day 12" → "Farm A on 2001-10-13", so the detail points at something the user can open.

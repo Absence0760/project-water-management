@@ -374,8 +374,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'runoff-to-dam',
-		term: 'Own runoff into dam',
-		short: 'Fraction of the hydrological unit’s own runoff that drains into its dam. The rest joins the river below the dam.',
+		term: 'Incremental runoff to dam',
+		short: 'Share of the unit’s incremental catchment runoff (its own, not upstream’s) that drains into its dam. The rest joins the river below it.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['node.pctRunoffToDam']
@@ -485,6 +485,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.irrigationEfficiency', 'crop.irrigationEfficiency']
 	},
 	{
+		id: 'irrigation-system',
+		term: 'Irrigation system',
+		short: 'How a crop is watered on a unit (drip, pivot, flood…): its efficiency comes from the project’s table on Crops & demand.',
+		units: 'a row of the project’s table',
+		category: 'farm',
+		fields: ['crop.irrigationSystemId', 'cropArea.irrigationSystemId']
+	},
+	{
 		id: 'demand-factor',
 		term: 'Demand factor',
 		short: 'A scenario’s multiplier on what a unit or water user would take, per month (0.85 = 85 %); on a unit also per part (crops, a category).',
@@ -495,10 +503,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'return-flow',
 		term: 'Irrigation return flow',
-		short: 'The part of the irrigation losses that runs back into the river the same day: loss return fraction × (1 − efficiency) × supplied.',
-		units: 'fraction 0–1 (shown as %)',
+		short: 'The share of the irrigation water supplied that infiltrates and returns to the river the same day; at most 100 % − efficiency.',
+		units: 'fraction 0–1 of the water supplied (shown as %)',
 		category: 'farm',
-		fields: ['node.lossReturnFraction']
+		fields: ['node.returnFlowFraction']
 	},
 	{
 		id: 'spill',

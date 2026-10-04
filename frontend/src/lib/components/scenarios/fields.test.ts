@@ -93,6 +93,8 @@ describe('field specs cover the engine’s op catalogue', () => {
 					return '2022-03-01';
 				case 'node':
 					return 'n1';
+				case 'system':
+					return 'drip';
 				case 'pe':
 					return { kind: 'monthly', mm: [90, 110, 140, 160, 150, 120, 80, 50, 35, 30, 40, 60], source: 'Station FAO-56 ET₀, 2015–2020' };
 				case 'curve':

@@ -149,6 +149,18 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (n.kind === 'user') add(`caUser:${a.nodeId}`, `crop area on other water user "${n.name}": a user's demand is its monthly demand, not crops`);
 		if (!cropIds.has(a.cropId)) add(`caCrop:${a.nodeId}/${a.cropId}`, `crop area references unknown crop ${a.cropId}`);
 	}
+	// The irrigation systems (engine ≥ 1.72.0): a crop or planting names a row of the table (its id, or the key of the
+	// SABI preset a row started as). Without a table the project's own applies, which only the store can check.
+	if (m.irrigationSystems) {
+		dupes('irrigation system id', m.irrigationSystems.map((x) => x.id));
+		dupes('irrigation system name', m.irrigationSystems.map((x) => x.name.trim().toLowerCase()), (x) => `"${x}"`);
+		const known = new Set(m.irrigationSystems.flatMap((x) => (x.preset ? [x.id, x.preset] : [x.id])));
+		for (const c of m.crops)
+			if (c.irrigationSystemId != null && !known.has(c.irrigationSystemId)) add(`cropSystem:${c.id}`, `crop "${c.name}" names irrigation system ${c.irrigationSystemId}, which is not in the table`);
+		for (const a of m.cropAreas)
+			if (a.irrigationSystemId != null && !known.has(a.irrigationSystemId))
+				add(`caSystem:${a.nodeId}/${a.cropId}`, `"${byId.get(a.nodeId)?.name ?? a.nodeId}": a crop names irrigation system ${a.irrigationSystemId}, which is not in the table`);
+	}
 	const nodeIndex = new Map(m.nodes.map((n, i) => [n.id, i]));
 	for (const t of m.transfers) {
 		if (!byId.has(t.fromNodeId) || !byId.has(t.toNodeId)) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown node`);

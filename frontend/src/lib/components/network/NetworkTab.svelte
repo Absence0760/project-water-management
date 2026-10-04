@@ -13,14 +13,16 @@
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode } from './supplyColour';
 	import { damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
+	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { ownEfficiencyUsed, pctText, plantingSystemsLine, unitEfficiency } from '$lib/model/systems';
 	import { divertMonthsCell } from './supply';
-	import { cardLabel, fieldScale, fieldUnused, GROUPS, hasDam, isPct, isVolume, KIND_WORD, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
+	import { cardLabel, fieldScale, fieldUnused, GROUPS, hasDam, isPct, isVolume, KIND_WORD, NODE_FIELDS, returnFlowHint, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import { nodeSections, SECTION_SHORT, sectionId, type NodeSection } from './nodeSections';
 	import { keepInView } from './scroll';
 	import NetworkSchematic from './NetworkSchematic.svelte';
@@ -386,7 +388,8 @@
 		}
 		return spans;
 	});
-	// --- the Map layout: the picked node's card and the list of every node ---
+	// --- the Map layout: the list of every node, and the picked node's card below it ---
+	// (The card sits under the list so a pick, or the card coming and going, never moves the rows.)
 	const picked = $derived(nodes.find((n) => n.id === selectedId) ?? null);
 	// The picked node's row in All nodes stays in view inside its card: on a pick (from the drawing
 	// or a node= link too) and whenever the list's box changes size (playbook § 4).
@@ -590,6 +593,7 @@
 		transfers={editor.model.transfers}
 		{selectedId}
 		onselect={select}
+		onopen={(id) => void openEdit(id)}
 		editable={!readonly}
 		onreparent={reparent}
 		{colouring}
@@ -599,8 +603,8 @@
 
 {#if only === 'table'}
 	<!-- The node table alone: the grid modal's "Node table" (model/GridModal.svelte). -->
-	<section class="panel" aria-labelledby="net-h">
-		<div class="panel-head"><h2 id="net-h">Network nodes</h2></div>
+	<!-- No heading of its own: the modal's title ("Node table") names it (one heading per modal). -->
+	<section class="panel">
 		{#if nodes.length === 0}
 			<div class="empty">
 				<p>
@@ -616,7 +620,7 @@
 		{:else}
 		<p class="muted small intro">
 				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Settings &amp; calibration</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
-				<span class="wide-only">The ⓘ buttons and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
+				<span class="wide-only">The help buttons beside each heading and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
 			<div class="table-wrap net-wrap">
 				<table class="data compact net">
@@ -636,7 +640,7 @@
 								     unit and its ⓘ on one bottom line, the same in every column. -->
 								<th scope="col" class="num fh">
 									<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
-									<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
+									<span class="fh-u">{#if f.flowUnit}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{:else}<span class="u">{f.unit}</span>{/if}<HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
 								</th>
 							{/each}
 							<!-- Computed, not a field, so it isn't in TABLE_FIELDS: its ⓘ is the flow-share glossary entry. -->
@@ -715,12 +719,19 @@
 												<span aria-hidden="true" title="Set by month: the one value isn’t used.">{c.text}</span><span class="visually-hidden">{c.aria}</span>
 											{/if}
 										</td>
+									{:else if f.derived && !ownEfficiencyUsed(editor.model, node.id)}
+										<!-- Every crop here is on a system (engine ≥ 1.72.0): the efficiency is theirs blended, text, not an input. -->
+										<td class="num derived pct">
+											<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
+											<output aria-label={f.aria(label)}>{pctText(unitEfficiency(editor.model, node.id, editor.apanMm))}</output>
+										</td>
 									{:else}
 									{@const unused = fieldUnused(f, node)}
-									<td class:pct={isPct(f)} class:vol={isVolume(f)} class:unused={unused !== null} data-paste-col={fi} title={unused ?? undefined}>
+									{@const over = f.key === 'returnFlowFraction' && node.kind === 'farm' ? returnFlowHint(node.returnFlowFraction, unitEfficiency(editor.model, node.id, editor.apanMm)) : null}
+									<td class:pct={isPct(f)} class:vol={isVolume(f)} class:unused={unused !== null} class:over={over !== null} data-paste-col={fi} title={unused ?? over ?? undefined}>
 										<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 										<NumberInput
-											label={unused ? `${f.aria(label)}: ${unused}` : f.aria(label)}
+											label={unused ? `${f.aria(label)}: ${unused}` : f.derived ? `Irrigation efficiency of ${label} for crops with no system, %` : f.aria(label)}
 											min={0}
 											max={isPct(f) ? 100 : undefined}
 											scale={fieldScale(f)}
@@ -855,7 +866,26 @@
 			<div class="map-body">{@render colourStatus()}{@render drawing(true)}</div>
 		</section>
 		<aside class="map-side" aria-label="Nodes">
-			<section class="panel side-box" aria-label="Selected node">
+			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
+				<!-- tabindex: where the focus lands after a node is removed from its sheet. -->
+				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All nodes</h3>
+				<ul class="node-list" aria-labelledby="all-nodes-h" bind:this={listEl} bind:clientHeight={listH}>
+					{#each nodes as n (n.id)}
+						{@const band = dotBand(n.id)}
+						<li class:on={n.id === selectedId}>
+							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => pick(n.id)}>
+								<span class="dot {n.kind}" data-band={band} aria-hidden="true"></span>
+								<span class="nm">{n.name || '(unnamed)'}</span>
+								<span class="meta muted">{n.downstreamNodeId === null ? 'outlet' : `→ ${labelOf(n.downstreamNodeId)}`}</span>
+							</button>
+							<!-- The node's form straight from its row (as the card's Edit); shown on the picked row and on
+							     hover or focus, always where there is no hover (a phone). -->
+							<button type="button" class="btn btn-sm row-edit" onclick={() => openEdit(n.id)}>{readonly ? 'Details' : 'Edit'}<span class="visually-hidden"> {n.name || '(unnamed)'}</span></button>
+						</li>
+					{/each}
+				</ul>
+			</section>
+			<section class="panel side-box card-box" aria-label="Selected node">
 				{#if picked}
 					<NodeCard
 						node={picked}
@@ -870,27 +900,10 @@
 						farmHref={withParam(page.url, 'farm', picked.id)}
 						mapHref={mapped.has(picked.id) ? mapNodeHref(picked.id) : null}
 						{readonly}
-						onedit={() => openEdit(picked.id)}
 					/>
 				{:else}
 					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
 				{/if}
-			</section>
-			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
-				<!-- tabindex: where the focus lands after a node is removed from its sheet. -->
-				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All nodes</h3>
-				<ul class="node-list" aria-labelledby="all-nodes-h" bind:this={listEl} bind:clientHeight={listH}>
-					{#each nodes as n (n.id)}
-						{@const band = dotBand(n.id)}
-						<li>
-							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => pick(n.id)}>
-								<span class="dot {n.kind}" data-band={band} aria-hidden="true"></span>
-								<span class="nm">{n.name || '(unnamed)'}</span>
-								<span class="meta muted">{n.downstreamNodeId === null ? 'outlet' : `→ ${labelOf(n.downstreamNodeId)}`}</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
 			</section>
 		</aside>
 	</div>
@@ -941,6 +954,9 @@
 					onremovedemand={(id) => editor.removeDemandObject(id)}
 					{method}
 					planting={editing.kind === 'farm' ? farmPlanting(editor.model, editing.id) : null}
+					efficiency={editing.kind === 'farm' ? unitEfficiency(editor.model, editing.id, editor.apanMm) : null}
+					systemsLine={editing.kind === 'farm' ? plantingSystemsLine(editor.model, editing.id) : null}
+					ownEfficiency={editing.kind === 'farm' && ownEfficiencyUsed(editor.model, editing.id)}
 					plantedHref={editing.kind === 'farm' ? plantedHref(editing.id) : null}
 					transfersLine={editingTransfers}
 					transfersHref={editing.kind === 'farm' ? '?tab=transfers' : null}
@@ -1026,6 +1042,11 @@
 	.net td.vol {
 		min-width: 92px;
 	}
+	/* A return flow above its unit's losses (runs cap it): flagged, its reason in the title and the unit form. */
+	.net td.over :global(input) {
+		border-color: var(--warning);
+		box-shadow: inset 0 0 0 1px var(--warning);
+	}
 	.net td.rm {
 		min-width: 0;
 	}
@@ -1059,6 +1080,8 @@
 		gap: 0.2rem;
 		margin-top: 0.2rem;
 		min-height: 1.25rem;
+		/* A unit stays on its line ("% of supply"), so every header's help button sits on one row. */
+		white-space: nowrap;
 	}
 	/* Numbers right-aligned in even-width digits, like the totals under them. */
 	.net td :global(input) {
@@ -1095,6 +1118,13 @@
 	}
 	.net td.na {
 		color: var(--text-muted);
+	}
+	/* The efficiency from the crops' systems: text, lined up with the inputs' digits. */
+	.net td.derived {
+		text-align: right;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		padding-right: calc(0.35rem + 1px + 0.35rem);
 	}
 	/* River to dam set by month: read-only, lined up with the inputs' digits. */
 	.net td.by-month {
@@ -1249,6 +1279,9 @@
 		}
 		.jump-link {
 			min-height: 44px;
+			/* One scrolling row: each link keeps its width rather than shrinking into the next ("CatchFlowDam"). */
+			flex: none;
+			white-space: nowrap;
 		}
 	}
 	/* A control scrolled to by Tab stops below the sticky picker too, not
@@ -1392,7 +1425,26 @@
 		max-height: 24rem;
 		overflow-y: auto;
 	}
+	.node-list li {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		border-radius: var(--radius-sm);
+	}
+	.node-list li:hover {
+		background: var(--surface-2);
+	}
+	.node-list li.on {
+		background: var(--accent-soft);
+	}
+	/* Every row's Edit always shows (the operator's call, 2026-10-03): the form is one press from the list. */
+	.row-edit {
+		flex: none;
+		margin-right: 0.25rem;
+	}
 	.node-row {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -1408,11 +1460,7 @@
 		text-align: left;
 		cursor: pointer;
 	}
-	.node-row:hover {
-		background: var(--surface-2);
-	}
 	.node-row[aria-pressed='true'] {
-		background: var(--accent-soft);
 		font-weight: 600;
 	}
 	/* The name takes what the row has left and wraps between words; what it
@@ -1473,7 +1521,8 @@
 		.map-layout {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.node-row {
+		.node-row,
+		.row-edit {
 			min-height: 44px;
 		}
 	}
@@ -1504,6 +1553,15 @@
 			min-height: 0;
 			display: flex;
 			flex-direction: column;
+		}
+		/* The list takes what the card under it leaves (at least a few rows); a tall card scrolls in its own box. */
+		.nodes-box {
+			min-height: 9rem;
+		}
+		.card-box {
+			flex: none;
+			max-height: 60%;
+			overflow-y: auto;
 		}
 		.nodes-box .node-list {
 			flex: 1;

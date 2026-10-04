@@ -204,13 +204,16 @@
 		<p class="muted">This run has no catchment natural flow, so its water years can’t be classed. Run the model again.</p>
 	{:else}
 		{#if canEdit}
-			<form class="start" onsubmit={start} novalidate>
-				<div class="field">
+			<form onsubmit={start} novalidate>
+				<!-- Fields and hint first, then the action row: the run button lines up with the other panels'. -->
+				<div class="field start">
 					<label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
 					<input id="outcome-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outcome-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it).</span>
 				</div>
-				<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
+				<p class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it).</p>
+				<div class="action-row">
+					<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
+				</div>
 			</form>
 			{#if parsed.error}<p class="err" role="alert">{parsed.error}</p>{/if}
 		{/if}
@@ -320,10 +323,8 @@
 		margin: 0 0 0.75rem;
 	}
 	.start {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: 0.5rem 1rem;
+		margin-bottom: 0;
+		align-items: flex-start;
 	}
 	.start input {
 		min-width: 14rem;
@@ -335,6 +336,8 @@
 	.hint {
 		font-size: 0.8rem;
 		color: var(--text-muted);
+		max-width: 80ch;
+		margin: 0.3rem 0 0;
 	}
 	.err {
 		color: var(--danger);

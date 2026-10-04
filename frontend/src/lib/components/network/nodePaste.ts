@@ -16,7 +16,42 @@ const NAME_HEADINGS = ['Name', 'Node', 'Hydrological unit'];
 const heading = (f: NodeField) => `${cardLabel(f)} (${f.unit})`;
 
 /** The value columns, in the table's order: each matches its card label ("Dam capacity") or its column label ("Capacity"). */
-export const NODE_PASTE_COLUMNS: GridColumn[] = TABLE_FIELDS.map((f) => ({ key: f.key, labels: [cardLabel(f), f.label] }));
+/** The columns a paste can write: a derived field (the efficiency, from the crops' systems) is shown, never pasted. */
+const PASTE_FIELDS = TABLE_FIELDS.filter((f) => !f.derived);
+export const NODE_PASTE_COLUMNS: GridColumn[] = PASTE_FIELDS.map((f) => ({ key: f.key, labels: [cardLabel(f), f.label] }));
+
+/**
+ * The paste's notes with a derived field's column (the efficiency, worked out
+ * from the crops' irrigation systems, engine ≥ 1.72.0) said for what it is: the
+ * table shows it, so "a column the table doesn't have" would be wrong.
+ */
+function derivedNotes(notes: readonly string[]): string[] {
+	const derived = TABLE_FIELDS.filter((f) => f.derived);
+	const isDerived = (heading: string) => {
+		const h = heading.replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
+		return derived.find((f) => h === cardLabel(f).toLowerCase() || h === f.label.toLowerCase());
+	};
+	const out: string[] = [];
+	const said = new Set<string>();
+	for (const n of notes) {
+		const m = /^Left out (?:a column|columns) the table doesn't have: (.*)\.$/.exec(n);
+		if (!m) {
+			out.push(n);
+			continue;
+		}
+		const cols = m[1]!.split(', ');
+		const rest = cols.filter((c) => !isDerived(c));
+		for (const c of cols) {
+			const f = isDerived(c);
+			if (f && !said.has(f.key)) {
+				said.add(f.key);
+				out.push(`Left out ${c}: it comes from each unit's crops' irrigation systems, set on Crops & demand.`);
+			}
+		}
+		if (rest.length) out.push(`Left out ${rest.length === 1 ? 'a column' : 'columns'} the table doesn't have: ${rest.join(', ')}.`);
+	}
+	return out;
+}
 
 /** Why a field of this node takes no pasted value, or null when it does. */
 function notUsed(n: NetworkNode, f: NodeField): string | null {
@@ -47,7 +82,7 @@ function shown(n: NetworkNode, f: NodeField): number | null {
 export function planNodePaste(text: string, nodes: readonly NetworkNode[], anchor?: PasteAnchor | null): PastePlan | { error: string } {
 	const mapped = mapPaste(text, nodes, NODE_PASTE_COLUMNS, { anchor, nameHeadings: NAME_HEADINGS });
 	if ('error' in mapped) return mapped;
-	const plan: PastePlan = { changes: [], unchanged: 0, notes: [...mapped.notes] };
+	const plan: PastePlan = { changes: [], unchanged: 0, notes: derivedNotes(mapped.notes) };
 	const skipped: string[] = [];
 	for (const v of mapped.values) {
 		const n = nodes.find((x) => x.id === v.rowId)!;
@@ -84,7 +119,7 @@ export function applyNodePaste(nodes: NetworkNode[], plan: PastePlan): void {
  */
 export function nodeTableCsv(nodes: readonly NetworkNode[]): string {
 	return toCsv([
-		[NAME_HEADINGS[0]!, ...TABLE_FIELDS.map(heading)],
-		...nodes.map((n) => [n.name, ...TABLE_FIELDS.map((f) => (notUsed(n, f) ? null : shown(n, f)))])
+		[NAME_HEADINGS[0]!, ...PASTE_FIELDS.map(heading)],
+		...nodes.map((n) => [n.name, ...PASTE_FIELDS.map((f) => (notUsed(n, f) ? null : shown(n, f)))])
 	]);
 }

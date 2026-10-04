@@ -21,7 +21,8 @@ const TEXT = fileURLToPath(new URL('./methodology-text.generated.ts', import.met
  * statement was edited; restore it and write the change as a new version.
  */
 const PUBLISHED: Record<string, string> = {
-	'methodology-1': '8f26d0e2f723b302a0a499f6072db8c3c6ad35f4d12dc90f1501a2357cfcad88'
+	'methodology-1': '8f26d0e2f723b302a0a499f6072db8c3c6ad35f4d12dc90f1501a2357cfcad88',
+	'methodology-2': '4e342a3cf5a7636f469aeec76aa41d06e8dda765ef9e2c3f10062f0342095370'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

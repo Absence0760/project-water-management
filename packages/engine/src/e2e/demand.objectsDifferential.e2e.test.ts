@@ -172,7 +172,8 @@ describe('demand objects on random networks (differential, §2.7f)', () => {
 					const oSum = want.reduce((x, w) => x + w[t]!, 0);
 					return { crop: D[t]! - oSum, f };
 				});
-				const beta = fin(n.lossReturnFraction) ? Math.min(Math.max(n.lossReturnFraction, 0), 1) : 0;
+				// The return flow, a share of the water supplied (engine ≥ 1.71.0), at most the losses.
+				const ret = fin(n.returnFlowFraction) ? Math.max(n.returnFlowFraction, 0) : 0;
 				for (let t = 0; t < days; t++) {
 					const crop = e[t]!.crop;
 					const effE = crop > 0 ? e[t]!.f / crop : 1;
@@ -202,7 +203,7 @@ describe('demand objects on random networks (differential, §2.7f)', () => {
 					}
 					// T = β(1 − e)·G_crops + Σ r_k·G_k (r_k = 0 when piped out).
 					const r = (o: DemandObject) => (o.destination === 'external' ? 0 : fin(o.returnPct) ? Math.min(Math.max(o.returnPct, 0), 1) : 0);
-					const Tw = beta * (1 - effE) * cropGot + mine.reduce((x, o, k) => x + r(o) * gotK[k]!, 0);
+					const Tw = Math.min(ret, 1 - effE) * cropGot + mine.reduce((x, o, k) => x + r(o) * gotK[k]!, 0);
 					if (!close(T[t]!, Tw, 1e-7)) {
 						failures.push(`seed ${seed} ${n.id} return_flow on ${iso(d0 + t)}: engine ${T[t]}, doc ${Tw}`);
 						break;

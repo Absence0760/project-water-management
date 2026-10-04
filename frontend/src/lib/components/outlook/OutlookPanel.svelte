@@ -237,16 +237,20 @@
 		<p class="muted">An outlook is based on an ordinary run of the model, not a scenario or forecast run.</p>
 	{:else}
 		{#if canEdit}
-			<form class="start" onsubmit={start} novalidate>
-				<div class="field">
-					<label for="outlook-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
-					<input id="outlook-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outlook-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it).</span>
+			<form onsubmit={start} novalidate>
+				<!-- The checkbox sits level with the field's box; the hint goes under the row. Fields, hint and the
+				     monthly plan first, then the action row: the run button lines up with the other panels'. -->
+				<div class="start">
+					<div class="field">
+						<label for="outlook-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
+						<input id="outlook-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outlook-levels-h" aria-invalid={!!parsed.error} />
+					</div>
+					<label class="check">
+						<input type="checkbox" bind:checked={withPlan} disabled={busy} />
+						Add a monthly plan
+					</label>
 				</div>
-				<label class="check">
-					<input type="checkbox" bind:checked={withPlan} disabled={busy} />
-					Add a monthly plan
-				</label>
+				<p class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it).</p>
 				{#if withPlan}
 					<fieldset class="plan">
 						<legend>Monthly plan <span class="u">(% of today’s hydrological unit demand, by month of the season)</span></legend>
@@ -264,7 +268,9 @@
 						</div>
 					</fieldset>
 				{/if}
-				<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error || !!planError}>{outlook ? 'Run a new outlook' : 'Run seasonal outlook'}</button>
+				<div class="action-row">
+					<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error || !!planError}>{outlook ? 'Run a new outlook' : 'Run seasonal outlook'}</button>
+				</div>
 			</form>
 			{#if parsed.error}<p class="err" role="alert">{parsed.error}</p>{/if}
 			{#if planError}<p class="err" role="alert">{planError}</p>{/if}
@@ -441,20 +447,20 @@
 					<p class="small muted" data-testid="outlook-not-published">No outlook is published to farmers.</p>
 				{/if}
 				{#if canEdit && runLevels.length}
-					<div class="start">
-						<div class="field">
-							<label for="outlook-publish-level">Level the WUA has set</label>
-							<select id="outlook-publish-level" bind:value={publishLevel} disabled={publishing}>
-								{#each runLevels as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
-							</select>
-						</div>
-						<button type="button" class="btn btn-primary" onclick={publishToFarmers} disabled={publishing || !publishLevel}>Publish to farmers</button>
-						{#if publication}<button type="button" class="btn" onclick={withdraw} disabled={publishing}>Withdraw</button>{/if}
+					<div class="field publish-level">
+						<label for="outlook-publish-level">Level the WUA has set</label>
+						<select id="outlook-publish-level" bind:value={publishLevel} disabled={publishing}>
+							{#each runLevels as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+						</select>
 					</div>
 					<p class="hint">
 						Each linked farmer then sees, on their farm page, what that level gave their own hydrological unit in past years, until the season ends. It
 						replaces the outlook published before. Publish the level the WUA decided; the app doesn’t choose one.
 					</p>
+					<div class="action-row">
+						<button type="button" class="btn btn-primary" onclick={publishToFarmers} disabled={publishing || !publishLevel}>Publish to farmers</button>
+						{#if publication}<button type="button" class="btn" onclick={withdraw} disabled={publishing}>Withdraw</button>{/if}
+					</div>
 				{/if}
 				{#if publishError}<div class="alert alert-error" role="alert">{publishError}</div>{/if}
 			</div>
@@ -525,12 +531,24 @@
 		gap: 0.4rem;
 		align-items: center;
 	}
+	/* The checkbox's words on the same line as the text in the levels box. */
+	.start .field,
+	.start .check {
+		align-self: last baseline;
+	}
+	.start .field {
+		margin-bottom: 0;
+	}
+	.publish-level {
+		align-items: flex-start;
+		margin-bottom: 0;
+	}
 	.plan {
 		flex-basis: 100%;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		padding: 0.5rem 0.75rem;
-		margin: 0;
+		margin: 0.75rem 0 0;
 	}
 	.months {
 		display: flex;
@@ -545,6 +563,7 @@
 		font-size: 0.8rem;
 		color: var(--text-muted);
 		max-width: 80ch;
+		margin: 0.3rem 0 0;
 	}
 	.err {
 		color: var(--danger);

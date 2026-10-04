@@ -64,7 +64,7 @@ section it belongs to, with the example that taught it.
 - **The section header is the only page title.** Every workspace section
   gets `workspace/SectionHeader` from the page: the title (`TAB_LABELS`) as
   the `h1`, a one-line context, and on the right the rain pill, the
-  section's own actions, **Add data** and **Run model**. A tab adds its
+  section's own actions and **Add data**. A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
   (`workspace/headerSlot.svelte.ts`), and a status pill of its own beside
   the rain pill as `status` (the Summary's **Setup complete**); it never
@@ -73,7 +73,7 @@ section it belongs to, with the example that taught it.
   only there: Compare runs showed "Compare runs" twice in the workspace
   (the header's `h1` and its own `h2`, 65 px) until it filled the header
   with its context and actions when inside a tab and kept its own `h1`
-  only on `/compare`. A section whose main action replaces Run model passes
+  only on `/compare`. A section with a main action of its own passes
   it as `main`, rendered last after a plain Add data: Runs & results' run
   form (label, Run forecast, Run model) went there from a full-width panel
   that pushed the results 110 px down, its status one slim line under the
@@ -189,6 +189,20 @@ section it belongs to, with the example that taught it.
   positioned ancestor inside the scroller, so it sat at its static place far
   down the list, outside the clip, and the measured "space below" fed the
   overflow back into the fit. Test the fit with the big case, not the seed.
+  The same in a dialog: Load crop factors' two columns scroll inside a full
+  dialog that clips, and each crop card's visually hidden "to <crop>" (in its
+  Apply tick) sat at its static place under thirty cards, so the `<dialog>`
+  measured 1,116 px of hidden overflow; positioning the columns fixed it
+  (`crop-library.spec.ts` checks the dialog's `scrollHeight`).
+- **A dialog that changes many things shows the effect beside the choices.**
+  Load crop factors stacked source, Kp, a match table, a diff table per
+  crop and the demand difference in one 720 px column, with Apply at the
+  foot: with thirty crops a crop's match was 1,500 px from its diff and the
+  demand 3,000 px down. It is now a full dialog in numbered steps: the
+  choices in a scrolling left column, one card per item holding its choice
+  and its change together, the effect (headline tiles, then the detail) in
+  its own column beside them, and a one-line summary in the action row, so
+  a phone, where the columns stack, still sees the answer beside Apply.
 - **A sticky rail on a reading page fits from where it starts.** Runs &
   results scrolls (its results are long), with the runs list in a sticky
   rail beside them. `max-height: calc(100vh - top-offset)` only fits once
@@ -411,6 +425,20 @@ section it belongs to, with the example that taught it.
   `workspace-phone.spec.ts`). A popover anchored to the right edge (the
   rain pill's list) must open from the left once its trigger starts the
   row, or it runs off the screen.
+- **A form's buttons go in one action row under it, the same on every
+  panel of a page.** River & reserve's analysis panels each placed their
+  run differently (the ensemble's under six fields, Sensitivity's a small
+  secondary, the demand sweep's and the outlook's beside their levels box),
+  so the buttons zig-zagged down the page. Fields, hints, checkboxes (and
+  an expanding sub-form such as the outlook's monthly plan) come first,
+  then `<div class="action-row">` (`app.css`): at the content edge, the
+  same 0.75rem above it whatever precedes it, the main run first, default
+  size (not `btn-sm`), primary for the panel's main run and secondary for a
+  lesser one, Cancel after it. Focus order stays fields then button. Pin it
+  with each button's left edge equal to its first field's (or the other
+  panels' buttons') and below the fields (`uncertainty.spec.ts`,
+  `outcome-matrix.spec.ts`, `seasonal-outlook.spec.ts`). A one-field lookup
+  inside a table toolbar (Self-checks' Trace) is not this shape.
 - **A map's tools go on the map; the header keeps the page's actions.**
   The Map's header carried Measure, Draw a shape, Place a point, Delineate,
   Trace a dam, Upload GeoJSON and Add data as seven identical buttons that
@@ -428,6 +456,22 @@ section it belongs to, with the example that taught it.
   a spec had to click; it opens by default only while its colours need
   reading (a run's results), and the corners' boxes pass clicks through
   between their controls (`pointer-events: none` on the box).
+- **Over a map, only buttons; a panel goes in the side column when there is
+  one.** Even folded by default, the Layers and Key boxes over the map's
+  corners read as clutter to the operator ("i just dont really like the
+  bottom left box", 2026-10-03). Beside the map they are now tabs of the side
+  column (Layers, Key after Details, Features, Checks), the map keeping only
+  its zoom buttons, the tool strip and small toggles that pick those tabs
+  (`aria-controls` the tab panel, `aria-expanded` while picked, pressed
+  again or Escape gives the tab back). Where there is no column (a phone,
+  an empty map, the Sub-catchments panel taking it over) they stay panels
+  over the map, so nothing is lost; a picked one falls back to Features when
+  the column goes. Render a panel's body from one snippet in both places
+  (`MapTab.svelte` `layersBody`, `keyBody`), and only in one at a time, so
+  ids and test ids stay unique. Measure a bar of controls before promising
+  "one line": the Drawing bar's kind select, Snap and Follow, and its four
+  buttons are ~840 px with no hint at all, so at 1440 (a 790 px bar) it is
+  two lines and one line only from about 1100 px.
 - **A popover's controls aren't in the DOM while it's closed.** The Map's
   Getting started pill kept its steps' buttons in a `hidden` box, and a check
   that the header's controls share one row (`locator('button, a.btn')`) read
@@ -458,6 +502,26 @@ section it belongs to, with the example that taught it.
   help the eye: `pieceTintsFor` gives touching pieces different tints, and
   the map and the cards read number and tint from the one list, so they
   never disagree.
+- **Name every line on a map by what it is for, where the eye is, and in
+  the key.** While delineating, the Map drew the elevation model's channels
+  over the River network's dashed rivers; the key listed only "river
+  network", the bar called the channels "a red line" (orange-red in the dark
+  theme), and the operator asked why there were orange and blue lines and
+  which one the catchment followed (2026-10-03). The bar now names both with
+  their swatches ("Terrain channels: where your click goes; the outline
+  follows these", "River network: mapped rivers, for reference only; …")
+  and the key's Lines lead with the same words from one helper
+  (`map/mapList.ts` `delineationLines`). Don't name a thing by its colour
+  in text: colours change with the theme. And keep what a decision is
+  checked against on screen while it is decided: the channels went with the
+  click step, so the proposal couldn't be checked against them; they stay,
+  dimmed, until it is accepted or rejected.
+- **After accepting a proposal, say what it became and offer the next
+  step.** Accepting a delineated boundary saved a map feature only, and
+  nothing said so: the operator asked how it reached the network. The toast
+  says "It isn’t in the model yet." with the next step as a button (Divide
+  the model, or Start from the map), and the boundary's card keeps it while
+  it applies (`mapList.ts` `boundaryNextStep`).
 - **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
@@ -631,6 +695,7 @@ section it belongs to, with the example that taught it.
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
+| A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
 | A number field | `common/NumberInput.svelte` (`min`/`max` in displayed units, `scale`, `nullable`, `grouped`, `invalidMessage`): reads a decimal comma everywhere, keeps invalid text with its message and counts it in `common/invalidFields.svelte.ts` (ui.md § Number fields); prefer it to a bare `<input type="number">`, which leaves a decimal comma to the browser |
@@ -740,6 +805,14 @@ Interaction details that bit:
   puts its context in the header (`fillHeader`) and draws no heading; the
   standalone `/compare` keeps its `h1`. Count *all* headings with the
   title's name, not just `h1`s, when checking "one page title".
+- **One heading per modal.** A grid opened from a Tables menu showed the
+  modal's title ("Node table", "Crop factors") and then its panel's own
+  heading ("Network nodes", "Crop factors" with an ⓘ) right under it. The
+  modal's title stays (it names the dialog and holds the ✕); the panel takes
+  an `inModal` prop and drops its heading there, moving its subtitle and ⓘ
+  onto its intro line and keeping its actions; outside a modal it keeps its
+  heading. Pin it with `dialog.getByRole('heading')` →
+  `toHaveText([title])` (`network-map.spec.ts`, `model.spec.ts`).
 - **A fragment into a lazy tab needs the tab to land it.** Workspace tabs
   are lazy chunks, so the browser's own jump to `#set-ewr` runs before the
   element exists and the page opens at the top. Settings' note links
@@ -933,6 +1006,14 @@ Interaction details that bit:
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.
+- **Reference data a spec loads is global to the e2e database.** A river
+  network a spec loads (`loadRiverNetwork`) is read by every project, so a
+  reach planted near the synthetic DEM's valley moved other specs' clicks
+  onto its channel: four delineation and sub-catchment specs in other files
+  failed in the same run. Load a dataset only where the spec needs it, away
+  from every other spec's points (`support/dem.ts` names the points in use),
+  and prefer what needs no data (the River network layer's key entry shows
+  while the layer is on, with no reach loaded).
 - **Times the database stamps can't be set through the API.** "Waiting 30
   days" needs an application submitted 30 days ago, but the scenario trigger
   stamps `submitted_at` with `now()` and refuses to change it. Plant it in

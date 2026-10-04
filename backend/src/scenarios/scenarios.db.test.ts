@@ -292,7 +292,16 @@ describe('scenario ops', () => {
 		expect(checked.body.scenario.opNames.map((n: { name: string }) => n.name).sort()).toEqual(['Citrus', 'Gauge', 'Kalkoenkrans', 'Rooikloof']);
 
 		const body = await runScenario(u, c.projectId, sid);
-		const stored = await rowsAs<{ inputs: { model: { nodes: { id: string; downstreamNodeId: string | null }[]; crops: { id: string; irrigationEfficiency?: number }[]; allocations?: unknown[] } } }>(
+		const stored = await rowsAs<{
+			inputs: {
+				model: {
+					nodes: { id: string; downstreamNodeId: string | null }[];
+					crops: { id: string; irrigationEfficiency?: number; irrigationSystemId?: string | null }[];
+					irrigationSystems: { id: string; efficiency: number }[];
+					allocations?: unknown[];
+				};
+			};
+		}>(
 			u,
 			'SELECT inputs FROM model_run WHERE id = $1',
 			[body.run.id]
@@ -300,7 +309,9 @@ describe('scenario ops', () => {
 		const m = stored[0]!.inputs.model;
 		const down = (id: string) => m.nodes.find((n) => n.id === id)!.downstreamNodeId;
 		expect([down(weir.id), down(c.farm.id), down(c.other.id)]).toEqual([c.outlet.id, weir.id, c.farm.id]);
-		expect(m.crops[0]!.irrigationEfficiency).toBe(0.9);
+		// Engine ≥ 1.72.0: a crop's efficiency is its irrigation system's, so the op puts the crop on the table's row at 0.9 (Drip).
+		expect(m.crops[0]!.irrigationEfficiency).toBeUndefined();
+		expect(m.irrigationSystems.find((s) => s.id === m.crops[0]!.irrigationSystemId)?.efficiency).toBe(0.9);
 		expect(m.allocations).toEqual([volume]);
 		const expected = await withUser(u.id, async (db) => runModelChecked(applyScenario(await loadRunInput(db, base), ops).input));
 		expect(canon(body.run.summary)).toBe(canon(expected.summary));

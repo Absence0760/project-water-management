@@ -129,6 +129,11 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await expect(panel).toHaveAttribute('data-state', 'empty');
 	await expect(panel.getByTestId('outcome-empty')).toHaveText('No demand sweep on this run yet.');
 	await expect(panel.getByLabel(/^Demand levels/)).toHaveValue('100, 85, 70');
+	// The button is in an action row under the levels box and its hint, at the box's left edge (ui-playbook.md, action rows).
+	const box = (await panel.getByLabel(/^Demand levels/).boundingBox())!;
+	const btn = (await panel.getByRole('button', { name: 'Run demand sweep' }).boundingBox())!;
+	expect(btn.y).toBeGreaterThan(box.y + box.height);
+	expect(Math.abs(btn.x - box.x)).toBeLessThan(2);
 	await panel.getByRole('button', { name: 'Run demand sweep' }).click();
 	await expect(panel).toHaveAttribute('data-state', 'pending');
 	await expect(panel.getByTestId('sweep-status')).toHaveText('Queued: waiting for the background worker.');
