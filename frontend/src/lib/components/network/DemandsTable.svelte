@@ -9,15 +9,29 @@
 	import type { ProjectSettings } from '@water-management/engine';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { api, type AllocationList } from '$lib/api';
+	import { STATUS_LABEL } from '$lib/components/allocations/allocations';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
 	import { demandRows, demandShares, demandTotal, type DemandRow } from './demands';
 	import { DEMANDS_UNIT_CHOICES, demandsUnitView, parseDemandsUnit, UNIT_PARAM } from './demandUnits';
+	import { nodeSpans, registeredCells, registeredTotal } from './demandsRegistered';
 
-	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
+	let {
+		editor,
+		settings,
+		readonly,
+		projectId = null
+	}: {
+		editor: ModelEditor;
+		settings: ProjectSettings;
+		readonly: boolean;
+		/** Reads the project's registered volumes (docs/allocations.md) for the Registered column; none without it. */
+		projectId?: string | null;
+	} = $props();
 
 	const rows = $derived(demandRows(editor.model, settings.apanMm, settings.februaryDays));
 	const total = $derived(demandTotal(rows, settings.februaryDays));
@@ -34,6 +48,25 @@
 		const next = parseDemandsUnit(v);
 		void goto(next ? withParam(page.url, UNIT_PARAM, next) : withoutParam(page.url, UNIT_PARAM), { noScroll: true, keepFocus: true });
 	}
+	// --- registered volumes (docs/allocations.md): per unit or user, read as the Allocations page reads them, so a viewer
+	// sees per-unit volumes only when the owners allow it, and a farmer is refused (no column) ---
+	let allocations = $state<AllocationList | null>(null);
+	$effect(() => {
+		const id = projectId;
+		allocations = null;
+		if (!id) return;
+		let live = true;
+		api.allocations.list(id).then(
+			(l) => live && (allocations = l),
+			() => live && (allocations = null)
+		);
+		return () => (live = false);
+	});
+	/** The column shows once the volumes are in and this reader may see them per unit, with at least one in the project. */
+	const showRegistered = $derived(!!allocations && !allocations.unitsHidden && allocations.allocations.length > 0);
+	const cells = $derived(showRegistered ? registeredCells(rows, allocations!.allocations, localIsoDate(), settings.allocationTolerance ?? 0.1) : null);
+	const spans = $derived(nodeSpans(rows));
+	const regTotal = $derived(cells ? registeredTotal(cells) : null);
 
 	/** Where the rest of a row is set: a unit's crops in its farm drawer on Crops & demand, anything else in its node's sheet. */
 	const editHref = (r: DemandRow) => (r.kind === 'crops' ? `?tab=crops&farm=${encodeURIComponent(r.nodeId)}` : `?tab=network&edit=${encodeURIComponent(r.nodeId)}`);
@@ -95,6 +128,7 @@
 						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">{uv.label}</span></th>{/each}
 						<th scope="col" class="num">Mean<br /><span class="u">{uv.label}</span></th>
 						<th scope="col" class="num">Annual<br /><span class="u">Mm³/a</span></th>
+						{#if cells}<th scope="col" class="num">Registered<br /><span class="u">Mm³/a</span></th>{/if}
 						<th scope="col"><span class="visually-hidden">Edit</span></th>
 					</tr>
 				</thead>
@@ -123,6 +157,17 @@
 							{/each}
 							<td class="num">{show(r.meanM3Day)}</td>
 							<td class="num strong">{fmtQty(r.annualMm3, 3)}</td>
+							{#if cells && spans.has(r.key)}
+								{@const c = cells.get(r.nodeId)}
+								<td class="num reg" rowspan={spans.get(r.key)} data-registered={r.nodeId} data-status={c?.status}>
+									{#if c && c.count}{fmtQty(c.registeredM3 / 1e6, 3)}{:else}–{/if}
+									{#if c && c.status !== 'none'}
+										<span class="reg-status" class:over={c.status === 'over' || c.status === 'unregistered'}>
+											{STATUS_LABEL[c.status]}{#if spans.get(r.key)! > 1}: {fmtQty(c.demandM3 / 1e6, 3)} for the {r.kind === 'user' ? 'user' : 'unit'}{/if}
+										</span>
+									{/if}
+								</td>
+							{/if}
 							<td class="edit">
 								<a href={editHref(r)} aria-label="{readonly ? 'View' : 'Edit'} {r.name}{r.kind === 'user' ? '' : ` on ${r.unit}`}">{readonly ? 'View' : 'Edit'}</a>
 							</td>
@@ -136,6 +181,7 @@
 						{#each total.monthly as v, m (m)}<td class="num">{show(v)}</td>{/each}
 						<td class="num">{show(total.meanM3Day)}</td>
 						<td class="num strong">{fmtQty(total.annualMm3, 3)}</td>
+						{#if regTotal}<td class="num strong">{fmtQty(regTotal.registeredM3 / 1e6, 3)}</td>{/if}
 						<td></td>
 					</tr>
 				</tfoot>
@@ -146,6 +192,20 @@
 			{#if scheduled}A scheduled demand shows its months before its schedule windows.{/if}
 			A run's demand also follows rain, daily A-pan, demand factors and restrictions; its own figures are on its results.
 		</p>
+		{#if cells && regTotal}
+			<p class="muted small after" data-testid="demands-registered-note">
+				Registered: each unit's or user's registered and licensed volumes in force today (surface and groundwater, takes
+				only, not storage), beside the sum of its demands, banded ±{fmtPct(settings.allocationTolerance ?? 0.1, 0)} as the
+				Allocations page compares a run's use.{#if regTotal.over}
+					<strong>{regTotal.over} {regTotal.over === 1 ? 'is' : 'are'} above registered.</strong>{/if}
+				A demand above its registered volume is a flag to check, not a finding: a registered volume is not an entitlement,
+				and a run's modelled use is what the Allocations page compares.
+			</p>
+		{:else if allocations && allocations.unitsHidden}
+			<p class="muted small after" data-testid="demands-registered-note">Registered volumes per unit aren't shown to viewers in this project (Allocations).</p>
+		{:else if allocations && !allocations.allocations.length}
+			<p class="muted small after" data-testid="demands-registered-note">No registered volumes in this project yet, so there is nothing to put beside the demands (Allocations).</p>
+		{/if}
 	{/if}
 </section>
 
@@ -218,6 +278,20 @@
 		background: color-mix(in srgb, color-mix(in srgb, var(--brand-outlet) 45%, transparent) var(--i), transparent);
 	}
 	.strong {
+		font-weight: 600;
+	}
+	td.reg {
+		vertical-align: top;
+		white-space: normal;
+		min-width: 7rem;
+	}
+	.reg-status {
+		display: block;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.reg-status.over {
+		color: var(--danger);
 		font-weight: 600;
 	}
 	.after {

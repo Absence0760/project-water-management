@@ -364,7 +364,10 @@ run's per-unit daily series, which still bound use by the volume
 
 Names live in their own table (`allocation_holder`) so RLS, not the API,
 hides them. Farmers are refused the allocations routes (like every viewer
-route). Their farm view shows **Your registered water** (issue #72,
+route). The Network's Demands grid ([ui.md § Demands
+grid](./ui.md#demands-grid)) reads the same list, so it shows each unit's
+volume in force beside its demands only to whoever the list gives per-unit
+volumes, and a viewer a note otherwise. A farmer's farm view shows **Your registered water** (issue #72,
 `FarmView.registered`): the farm's own surface and groundwater volumes a
 year and registered storage in force today (Schedule 1 permissible use left
 out: it isn't registered with DWS), summed, read under their RLS,
