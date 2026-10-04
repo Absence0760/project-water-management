@@ -86,7 +86,7 @@ const waterYearOfDay = (i: number) => {
 const FITTED_AT = '2025-01-15T09:00:00.000Z';
 
 // Crop factors per water-year month (Oct … Sep). Indicative values for demos.
-const CROPS: Record<string, number[]> = {
+export const CROPS: Record<string, number[]> = {
 	Citrus: [0.65, 0.7, 0.7, 0.7, 0.7, 0.65, 0.6, 0.55, 0.55, 0.55, 0.6, 0.65],
 	Apples: [0.45, 0.65, 0.85, 0.95, 0.95, 0.8, 0.55, 0.3, 0.25, 0.25, 0.3, 0.35],
 	'Wine grapes': [0.3, 0.45, 0.6, 0.65, 0.6, 0.45, 0.3, 0.2, 0.2, 0.2, 0.2, 0.25],
@@ -98,9 +98,9 @@ const CROPS: Record<string, number[]> = {
 
 // A-pan evaporation, mm per water-year month (Oct … Sep).
 const APAN_WINTER_RAIN = [160, 210, 250, 260, 210, 180, 110, 70, 50, 50, 70, 110];
-const APAN_SUMMER_RAIN = [190, 200, 210, 200, 170, 160, 120, 90, 70, 80, 120, 170];
+export const APAN_SUMMER_RAIN = [190, 200, 210, 200, 170, 160, 120, 90, 70, 80, 120, 170];
 
-const panPreset = (id: string) => [...PAN_COEFFICIENT_PRESETS.find((p) => p.id === id)!.values] as ProjectSettings['panCoefficient'];
+export const panPreset = (id: string) => [...PAN_COEFFICIENT_PRESETS.find((p) => p.id === id)!.values] as ProjectSettings['panCoefficient'];
 
 type IrrigationSystem = (typeof IRRIGATION_SYSTEMS)[number]['id'];
 
@@ -175,7 +175,7 @@ interface TransferSpec {
 
 type Period = [start: string, end: string];
 
-interface CatchmentSpec {
+export interface CatchmentSpec {
 	key: string;
 	name: string;
 	description: string;
@@ -233,7 +233,7 @@ export function inputOf(ex: ExampleProject): ModelInput {
 	};
 }
 
-function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
+export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 	const nodeId = (name: string) => id(spec.key, `node:${name}`);
 	const cropNames = [...new Set(spec.farms.flatMap((f) => Object.keys(f.crops ?? {})))];
 	const crops: CropDef[] = cropNames.map((name) => ({ id: id(spec.key, `crop:${name}`), name, cropFactor: CROPS[name]! }));
