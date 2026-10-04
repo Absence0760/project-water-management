@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "paste and CSV download in the Demands grid (demandsPaste.ts, GridPasteDialog in its chunk): feat/demands-grid 1708 KB, this branch 1710 KB"
+}

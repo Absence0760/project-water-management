@@ -3,7 +3,8 @@
 // in one table, a unit's crops and demand objects in its supply order, then
 // each other water user; an editor types a monthly demand in place, and a
 // row's Edit opens the rest in its node's form. Synthetic data only.
-import type { Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putModel, sampleModel } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -11,6 +12,16 @@ import { expect, test } from '../support/fixtures.ts';
 import { saveModelChanges } from '../support/network.ts';
 
 const grid = (page: Page) => page.getByTestId('demands-grid');
+
+/** Paste `text` into a cell's input as Excel's clipboard would hand it over. */
+async function pasteInto(input: Locator, text: string) {
+	await input.focus();
+	await input.evaluate((el, t) => {
+		const data = new DataTransfer();
+		data.setData('text/plain', t);
+		el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+	}, text);
+}
 
 function demandsModel() {
 	const m = sampleModel();
@@ -143,4 +154,44 @@ test('a phone: the table scrolls inside its region, the page itself never sidewa
 	await expect(grid(page).getByRole('region', { name: 'Demands by month' })).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	await expectNoViolations(page, { include: '[data-testid="demands-grid"]' });
+});
+
+test('a block pasted from a spreadsheet: previewed, computed rows left out, applied and saved; the table downloads as CSV', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Demands grid paste');
+	await putModel(page.request, project.id, demandsModel());
+	await page.goto(`/projects/${project.id}?tab=network&grid=demands`);
+	await expect(page.getByRole('dialog', { name: 'Demands' })).toBeVisible();
+
+	// Names and month headings, in any order; the crops and a per-head demand take no paste, and the preview says so.
+	await pasteInto(page.getByLabel('Town, Oct, m³/day'), 'Demand\tNov (m³/day)\tOct\nQuarry\t45\t\nTown\t120\t130\nCattle\t9\t9\nNowhere\t1\t1\n');
+	const dlg = page.getByRole('dialog', { name: 'Paste demands' });
+	await expect(dlg.getByTestId('paste-summary')).toHaveText('3 values change.');
+	await expect(dlg.getByRole('row', { name: /Town Oct m³\/day 100 130/ })).toBeVisible();
+	await expect(dlg.getByText("Left out a row the table doesn't have: Nowhere.")).toBeVisible();
+	await expect(dlg.getByText(/^Left out a row whose months are made from other values .*: Cattle\.$/)).toBeVisible();
+	await expectNoViolations(page);
+	await dlg.getByRole('button', { name: 'Apply 3 changes' }).click();
+	await expect(dlg).toBeHidden();
+	await expect(page.getByLabel('Town, Oct, m³/day')).toHaveValue('130');
+	await expect(page.getByLabel('Quarry, Nov, m³/day')).toHaveValue('45');
+
+	// One copied row of 12 months, pasted into a cell, fills that demand from there.
+	await pasteInto(page.getByLabel('Quarry, Oct, m³/day'), `${new Array(12).fill('7').join('\t')}\n`);
+	await expect(dlg.getByTestId('paste-where')).toContainText('Quarry, Oct');
+	await dlg.getByRole('button', { name: 'Apply 12 changes' }).click();
+	await expect(page.getByLabel('Quarry, Sep, m³/day')).toHaveValue('7');
+	expect((await saveModelChanges(page)).status()).toBe(200);
+	await page.reload();
+	await expect(page.getByLabel('Town, Oct, m³/day')).toHaveValue('130');
+	await expect(page.getByLabel('Quarry, Nov, m³/day')).toHaveValue('7');
+
+	// The table as shown, as a CSV.
+	const [download] = await Promise.all([page.waitForEvent('download'), grid(page).getByRole('button', { name: 'Download the table as CSV' }).click()]);
+	expect(download.suggestedFilename()).toBe('demands.csv');
+	const csv = await readFile((await download.path())!, 'utf8');
+	expect(csv).toMatch(/^\uFEFFDemand,Unit,Kind,Water from,Supply order,Oct \(m³\/day\),/);
+	expect(csv).toContain('\r\nTown,Upper farm,Municipal (town),dam side,1 of 3,130,120,100,');
+	expect(csv).toContain('\r\nCrops (Lower farm),Lower farm,Irrigation (crops),');
 });
