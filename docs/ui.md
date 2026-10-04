@@ -201,7 +201,8 @@ One choice per kind of rate, each starting at the unit it always showed:
 **River to dam** (the node table column, the unit form and River to dam by
 month; m³/s), **pumps** (a unit's river pump, the crops' own, an other water
 user's and a demand object's river abstraction, `PumpCapacityField`, the
-borehole capacities and Combined borehole capacity; m³/day) and a
+borehole capacities, Combined borehole capacity and the Pipe capacity from
+another unit's dam in the crop supply table; m³/day) and a
 **transfer's max rate** (one "Rates in" select in the Transfer rules
 heading, for every rule; each rule's Max rate by month title names the unit
 as text; m³/s). The unit shows once: the select replaces the bracketed unit
