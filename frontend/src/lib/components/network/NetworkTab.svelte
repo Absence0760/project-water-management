@@ -619,7 +619,7 @@
 		{:else}
 		<p class="muted small intro">
 				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Settings &amp; calibration</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
-				<span class="wide-only">The ⓘ buttons and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
+				<span class="wide-only">The help buttons beside each heading and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
 			<div class="table-wrap net-wrap">
 				<table class="data compact net">
