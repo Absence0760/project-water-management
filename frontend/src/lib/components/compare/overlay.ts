@@ -248,6 +248,9 @@ export function overlayForecastFrom(a: string | null | undefined, b: string | nu
 	return a || b || null;
 }
 
+/** Relative difference below which two runs' values on a day count as the same (float rounding, not a change). */
+export const SAME_VALUE_TOLERANCE = 1e-9;
+
 /** A read-out of the overlay over the days both runs have a value (the text beside the canvas chart). */
 export function deltaStats(a: DailySeries, b: DailySeries): DeltaStats {
 	const a0 = toEpochDay(a.startDate);
@@ -267,7 +270,9 @@ export function deltaStats(a: DailySeries, b: DailySeries): DeltaStats {
 		days++;
 		sa += x;
 		sb += y;
-		const dv = y - x;
+		// A change within float rounding of the values (the same water summed in another order) is no change:
+		// counted, it made "B is higher on 10 days … the largest change is 0" for two runs that agree.
+		const dv = Math.abs(y - x) <= SAME_VALUE_TOLERANCE * Math.max(Math.abs(x), Math.abs(y)) ? 0 : y - x;
 		if (dv > 0) higher++;
 		else if (dv < 0) lower++;
 		if (dv !== 0 && (!largest || Math.abs(dv) > Math.abs(largest.delta))) largest = { date: fromEpochDay(d), delta: dv };

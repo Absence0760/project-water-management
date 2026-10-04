@@ -9,17 +9,21 @@ import { expect, test } from '../support/fixtures.ts';
 
 const overlay = (page: Page) => page.getByRole('region', { name: 'Daily series' });
 
-/** Run A on the sample model; run B after a bigger Upper dam, a renamed Lower farm and a new farm. */
+/**
+ * Run A on the sample model; run B after a smaller Upper dam, a renamed Lower farm and a new farm. The Upper dam
+ * never fills at its sample 150 000 m³, so a bigger one changed nothing downstream of it: Upper farm's outflow
+ * differed only by float rounding, and the summary's largest change read 0. At 30 000 m³ it spills after storms.
+ */
 async function seedPair(page: Page, name: string) {
 	const project = await seedRunnableProject(page.request, name);
 	const runA = await createRun(page.request, project.id, 'Baseline');
 	const [gauge, upper, lower] = project.model.nodes as { id: string }[];
 	const model = structuredClone(project.model);
-	model.nodes[1] = { ...model.nodes[1], damCapacityM3: 400_000 };
+	model.nodes[1] = { ...model.nodes[1], damCapacityM3: 30_000 };
 	model.nodes[2] = { ...model.nodes[2], name: 'Lower farm east' };
 	model.nodes.push({ ...model.nodes[2], id: crypto.randomUUID(), name: 'New farm', sortOrder: 4, damCapacityM3: 0 });
 	await putModel(page.request, project.id, model);
-	const runB = await createRun(page.request, project.id, 'Bigger dam');
+	const runB = await createRun(page.request, project.id, 'Smaller dam');
 	return { project, runA, runB, gauge: gauge!.id, upper: upper!.id, lower: lower!.id };
 }
 
@@ -38,7 +42,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			const series = panel.getByLabel('Series');
 			await expect(node).toHaveValue('catchment');
 			await expect(series).toHaveValue('simulated_outflow');
-			await expect(panel.getByRole('img', { name: /^Catchment \(outflow gauge\) · Simulated outflow · run A vs run B: line chart of A · Baseline, B · Bigger dam, in m³\/s, \d+ \w+ \d{4} to \d+ \w+ \d{4}$/ })).toBeVisible();
+			await expect(panel.getByRole('img', { name: /^Catchment \(outflow gauge\) · Simulated outflow · run A vs run B: line chart of A · Baseline, B · Smaller dam, in m³\/s, \d+ \w+ \d{4} to \d+ \w+ \d{4}$/ })).toBeVisible();
 
 			// Nodes are matched by id and listed in network order; the rename is named.
 			await expect(node.getByRole('option')).toHaveText([

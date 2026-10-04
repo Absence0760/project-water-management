@@ -392,7 +392,11 @@ bottom:
    series share nothing. Under the overlay a sentence reads the pair out over
    the days both runs have a value: mean A, mean B, mean B − A, the days B is
    higher and lower, and the day of the largest change (three significant
-   figures, so a small daily change doesn't round to 0). The charts behave
+   figures, so a small daily change doesn't round to 0). A day whose two
+   values differ by no more than float rounding (a relative 1e-9,
+   `SAME_VALUE_TOLERANCE`: the same water summed in another order) counts as
+   no change, so two runs that agree read "identical", not "higher on 10
+   days" with a largest change of 0. The charts behave
    like every daily chart: Earlier / Later and Shift+drag pan through the
    record, the last three years or the full period, and on a flow series the
    log scale and the m³/s ↔ m³/day switch (the read-out follows the unit). A
