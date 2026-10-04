@@ -124,7 +124,9 @@ test('the setup steps are one pill: the boundary then the rain feed, each with i
 	const before = await page.evaluate(() => document.documentElement.scrollHeight);
 	await pill.click();
 	const setup = page.getByTestId('map-setup');
-	await expect(setup.locator('[data-step="boundary"]')).toContainText('No catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file (WGS84).');
+	// The e2e server has an elevation model, so the step leads with Delineate, as the empty map does.
+	await expect(setup.locator('[data-step="boundary"]')).toContainText('No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it as a GeoJSON file (WGS84).');
+	await expect(setup.getByTestId('map-setup-delineate')).toHaveText('Delineate from the outlet');
 	await expect(setup.locator('[data-step="rain"]')).toContainText('Once the boundary is on the map');
 	// Opening it never makes the page taller, and it stays inside the window (not over the sidebar).
 	expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(before);

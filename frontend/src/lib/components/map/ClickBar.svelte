@@ -19,6 +19,8 @@
 	import { choiceText } from './largerChannel';
 	import PieceBadge from './PieceBadge.svelte';
 	import DelineateChoice from './DelineateChoice.svelte';
+	import DelineationLines from './DelineationLines.svelte';
+	import type { KeyItem } from './mapList';
 	import type { ProposalPiece } from './pieces';
 
 	let {
@@ -29,7 +31,8 @@
 		ondone,
 		onsave,
 		onlit,
-		onone
+		onone,
+		lines = null
 	}: {
 		divider: ClickDivider;
 		/** The map's pieces (clickShape), for each line's tint. */
@@ -44,6 +47,8 @@
 		onlit: (key: string | null) => void;
 		/** Switch to delineating one catchment (the choice in the panel). */
 		onone: () => void;
+		/** The lines on the map in words (mapList.ts delineationLines): the terrain channels, and the river network while it is on. */
+		lines?: KeyItem[] | null;
 	} = $props();
 
 	const uid = $props.id();
@@ -88,9 +93,10 @@
 	<DelineateChoice value="clicks" onchange={(v) => v === 'one' && onone()} />
 	<p class="how small" data-testid="map-click-how">
 		{mapReady
-			? `${phone ? 'Tap' : 'Click'} a red line (the elevation model’s channel) for each outlet, or press Enter at the crosshair. Each gets the land that drains to it before any other ${phone ? 'tap' : 'click'}.`
+			? `${phone ? 'Tap' : 'Click'} a terrain channel for each outlet, or press Enter at the crosshair. Each gets the land that drains to it before any other ${phone ? 'tap' : 'click'}, following the terrain.`
 			: 'The map can’t be drawn here: enter each outlet’s coordinates.'}
 	</p>
+	{#if lines?.length && mapReady}<DelineationLines {lines} />{/if}
 	<p class="said small muted" role="status" data-testid="map-click-said">{divider.said}</p>
 	{#if divider.error}<p class="problem small" role="alert" data-testid="map-click-error">{divider.error}</p>{/if}
 	{#if divider.pendingChoice}

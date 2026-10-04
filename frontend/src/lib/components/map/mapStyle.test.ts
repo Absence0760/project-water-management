@@ -34,8 +34,10 @@ import {
 	quaternaryLayers,
 	RIVER_NETWORK_HIT_LAYER,
 	riverNetworkColour,
+	CHANNEL_OPACITY,
 	channelColour,
 	channelData,
+	channelLayers,
 	riverNetworkData,
 	riverNetworkLayers,
 	RELIEF_LAYER,
@@ -358,6 +360,16 @@ describe('the elevation model’s channels', () => {
 		const ids = mapStyle(null, false, overlayData([], null)).layers.map((l) => l.id);
 		expect(ids.indexOf('dem-channels')).toBeGreaterThan(ids.indexOf('rn-line'));
 		expect(ids.indexOf('dem-channels')).toBeLessThan(ids.findIndex((i) => i.startsWith('ov-')));
+	});
+
+	it('dims the channels behind a delineated proposal under review, and draws them full while clicking', () => {
+		const line = [{ coordinates: [[20, -33], [20.01, -33.01]] as [number, number][], km2: 3 }];
+		expect(channelData(line).features[0].properties.dim).toBe(false);
+		expect(channelData(line, true).features[0].properties.dim).toBe(true);
+		const paint = channelLayers(false)[0].paint as Record<string, unknown>;
+		expect(paint['line-opacity']).toEqual(['case', ['==', ['get', 'dim'], true], CHANNEL_OPACITY.dim, CHANNEL_OPACITY.on]);
+		expect(CHANNEL_OPACITY.dim).toBeLessThan(CHANNEL_OPACITY.on);
+		expect(CHANNEL_OPACITY.dim).toBeGreaterThan(0);
 	});
 
 	it('keeps the line at least 3:1 on the basemap and apart from every other stroke, the river network’s included', () => {

@@ -108,11 +108,31 @@ export function headerLine(features: readonly MapFeature[], nodes: readonly MapN
 /** A file's SHA-256 shortened for the screen (the full one is copied and in the tooltip). */
 export const shortHash = (sha256: string) => sha256.slice(0, 12);
 
-/** One entry of the map's key: its words, how its swatch is drawn, and its colour (from mapStyle's overlayColours). */
+/** One entry of the map's key: its words, how its swatch is drawn, its colour (from mapStyle's overlayColours), and what it is for when its name alone doesn't say. */
 export interface KeyItem {
 	label: string;
 	swatch: 'dashed' | 'area' | 'dotted' | 'line' | 'gauge' | 'dam' | 'other';
 	colour: string;
+	/** A few plain words after the name ("where your click goes; the outline follows these"). */
+	note?: string;
+}
+
+/** The key entry of the elevation model's channels while Delineate, Sub-catchments or a delineated proposal shows them (issue #374). */
+export const CHANNEL_KEY_LABEL = 'terrain channels';
+export const CHANNEL_KEY_NOTE = 'where your click goes; the outline follows these';
+/** The River network's note beside the channels: the operator asked which of the two lines a catchment follows. */
+export const RIVER_NETWORK_BESIDE_CHANNELS_NOTE = 'mapped rivers, for reference only; they can sit off the terrain channels';
+
+/**
+ * The two lines a delineation shows, in plain words, for the delineate and click bars (where the eye is
+ * while clicking) and the key: the terrain channels the outline follows, then the mapped rivers while the
+ * River network layer is on. Colours from mapStyle (channelColour, riverNetworkColour).
+ */
+export function delineationLines(colours: { channels: string; riverNetwork?: string | null }): KeyItem[] {
+	return [
+		{ label: CHANNEL_KEY_LABEL, swatch: 'line', colour: colours.channels, note: CHANNEL_KEY_NOTE },
+		...(colours.riverNetwork ? [{ label: 'river network', swatch: 'dashed' as const, colour: colours.riverNetwork, note: RIVER_NETWORK_BESIDE_CHANNELS_NOTE }] : [])
+	];
 }
 
 /**
@@ -120,9 +140,15 @@ export interface KeyItem {
  * Points. Colours come from `overlayColours(dark)` so the key can't drift
  * from the map; the point colours follow CatchmentMap's markers (gauges and dams
  * are water, told apart by shape; other in the other colour). With the River
- * network layer on, its dashed line joins the Lines.
+ * network layer on, its dashed line joins the Lines; while the elevation
+ * model's channels are drawn (Delineate, Sub-catchments, a delineated
+ * proposal), they lead the Lines and both say what they are for
+ * (delineationLines), so the two kinds of line are never a mystery.
  */
-export function keyGroups(c: { boundary: string; parcel: string; water: string; other: string }, layers: { riverNetwork?: string | null } = {}): { label: string; items: KeyItem[] }[] {
+export function keyGroups(
+	c: { boundary: string; parcel: string; water: string; other: string },
+	layers: { riverNetwork?: string | null; channels?: string | null } = {}
+): { label: string; items: KeyItem[] }[] {
 	return [
 		{
 			label: 'Areas',
@@ -135,11 +161,13 @@ export function keyGroups(c: { boundary: string; parcel: string; water: string; 
 		},
 		{
 			label: 'Lines',
-			items: [
-				{ label: 'river', swatch: 'line', colour: c.water },
-				// The River network layer (#345), while it is on: dashed, in its own colour (mapStyle.ts riverNetworkColour).
-				...(layers.riverNetwork ? [{ label: 'river network', swatch: 'dashed' as const, colour: layers.riverNetwork }] : [])
-			]
+			items: layers.channels
+				? [...delineationLines({ channels: layers.channels, riverNetwork: layers.riverNetwork }), { label: 'river', swatch: 'line', colour: c.water }]
+				: [
+						{ label: 'river', swatch: 'line', colour: c.water },
+						// The River network layer (#345), while it is on: dashed, in its own colour (mapStyle.ts riverNetworkColour).
+						...(layers.riverNetwork ? [{ label: 'river network', swatch: 'dashed' as const, colour: layers.riverNetwork }] : [])
+					]
 		},
 		{
 			label: 'Points',
@@ -169,11 +197,42 @@ function keyEntryDrawn(group: string, label: string, f: MapFeature): boolean {
 /**
  * The key cut to what is on the map: each entry only while a feature it stands
  * for is drawn, a group only while it has an entry. A layer's own entry (the
- * River network's dashed line) stays while the layer is on: it draws its own
- * reaches, not the project's features.
+ * River network's dashed line, the terrain channels) stays while the layer is
+ * on: it draws its own lines, not the project's features.
  */
 export function presentKey(groups: { label: string; items: KeyItem[] }[], features: readonly MapFeature[]): { label: string; items: KeyItem[] }[] {
 	return groups
-		.map((g) => ({ ...g, items: g.items.filter((i) => i.label === 'river network' || features.some((f) => keyEntryDrawn(g.label, i.label, f))) }))
+		.map((g) => ({ ...g, items: g.items.filter((i) => i.label === 'river network' || i.label === CHANNEL_KEY_LABEL || features.some((f) => keyEntryDrawn(g.label, i.label, f))) }))
 		.filter((g) => g.items.length > 0);
+}
+
+/** What turns a catchment boundary on the map into the model: the sheet it opens, its button, and one line on what it does. */
+export interface BoundaryNextStep {
+	sheet: 'start' | 'divide';
+	label: string;
+	text: string;
+}
+
+/**
+ * The next step after a boundary is on the map (the operator asked "how does the catchment I create end up in
+ * the network?": accepting saves a map feature only). Start from the map while the model is empty, Divide the
+ * model once it has nodes (with an elevation model), each reviewed again while a proposal waits; null for a
+ * viewer, with neither offered, or once a unit already took its area from the map (the map and the model are
+ * joined, so there is nothing to point to).
+ */
+export function boundaryNextStep(s: { canStart: boolean; canDivide: boolean; pendingStart: boolean; pendingDivide: boolean; unitAreasFromMap: number }): BoundaryNextStep | null {
+	const lead = 'This boundary is on the map, not in the model yet.';
+	if (s.canStart)
+		return {
+			sheet: 'start',
+			label: s.pendingStart ? 'Review the proposed model' : 'Start from the map',
+			text: `${lead} Start from the map proposes the model’s units from it: each unit’s area at your dams, abstraction points and gauges, for you to tick.`
+		};
+	if (s.canDivide && s.unitAreasFromMap === 0)
+		return {
+			sheet: 'divide',
+			label: s.pendingDivide ? 'Review the proposed division' : 'Divide the model',
+			text: `${lead} Divide the model splits it into each unit’s area at your dams, abstraction points and gauges, for you to tick.`
+		};
+	return null;
 }

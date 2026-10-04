@@ -8,12 +8,21 @@
 // for the Replace tick (never silently), Reject leaves the map alone, and a
 // point outside the DEM is refused with its reason. A viewer gets no
 // Delineate. Axe-scanned on the review, light and dark.
+//
+// The operator's questions (2026-10-03): what are the two kinds of line, why
+// do the channels go when the proposal shows, which line does the catchment
+// follow, and how does the boundary reach the model? The bar and the Key name
+// the terrain channels and the mapped rivers in words, the channels stay
+// (dimmed) behind the proposal until it is decided, and after accepting a
+// boundary the toast and its card offer Divide the model (Start from the map
+// for an empty model).
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, seedRunnableProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
+import { addMember, createProject, seedRunnableProject } from '../support/api.ts';
+import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_MID_GAUGE, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, loadRiverNetwork, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
+import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { boundaryGeoJson, loadRiverNetwork, openKey, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
 
 const sheet = (page: Page, name = 'Delineate a catchment') => page.getByRole('dialog', { name });
 const review = (page: Page) => sheet(page, 'The delineated catchment');
@@ -76,6 +85,136 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Catchment above the outlet (delineated)' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
 	await expect(page.getByTestId('map-delineation-pending')).toHaveCount(0);
+	// What it is, and the next step: a boundary on the map, not the model yet; the model has nodes, so Divide the model.
+	await expect(page.getByTestId('map-notice')).toContainText('on the map as the catchment boundary. It isn’t in the model yet.');
+	await expect(page.getByTestId('map-notice-next')).toHaveText('Divide the model');
+	await expect(page.getByTestId('map-notice-next')).toHaveAttribute('href', /[?&]divide=1(&|$)/);
+	const next = page.getByTestId('map-boundary-next');
+	await expect(next).toContainText('This boundary is on the map, not in the model yet. Divide the model splits it into each unit’s area at your dams, abstraction points and gauges, for you to tick.');
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await expectNoViolations(page);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
+	await next.getByTestId('map-boundary-next-open').click();
+	await expect(page.getByRole('dialog', { name: 'Divide the model from the map' })).toBeVisible();
+	await expect(page).toHaveURL(/[?&]divide=1(&|$)/);
+	// Back closes the sheet and leaves the boundary's card with its next step.
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByTestId('map-boundary-next')).toBeVisible();
+});
+
+/** A small square round `[lon, lat]` uploaded as an "other" area: Show everything then frames a view the channels draw in. */
+const squareAround = ([lon, lat]: [number, number], d = 0.03) =>
+	JSON.stringify({
+		type: 'FeatureCollection',
+		features: [
+			{
+				type: 'Feature',
+				properties: { name: 'View square' },
+				geometry: {
+					type: 'Polygon',
+					coordinates: [
+						[
+							[lon - d, lat - d],
+							[lon + d, lat - d],
+							[lon + d, lat + d],
+							[lon - d, lat + d],
+							[lon - d, lat - d]
+						]
+					]
+				}
+			}
+		]
+	});
+
+test('while delineating, the bar and the Key say which line is which; the channels stay, dimmed, behind the proposal and go once it is decided', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	// The River network layer on (its key entry and the bar's line show while the layer is; no reach is loaded near
+	// the valley, since river datasets are global to the e2e database and a reach there moves other specs' clicks).
+	const project = await seedRunnableProject(page.request, 'Delineate lines');
+	await openMap(page, project.id, '&layers=rivers');
+	await uploadThroughSheet(page, 'other', 'square.geojson', squareAround([FIXTURE_MID_GAUGE[0], -33.515]));
+	await expect(page.locator('.map-wrap[data-status="ready"]')).toBeVisible();
+	await page.getByTestId('map-show-everything').click();
+	const body = page.locator('.map-body');
+	await expect(body).not.toHaveAttribute('data-channels');
+
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
+	const bar = page.getByTestId('map-draw-bar');
+	// What to click and what the result follows, in two sentences.
+	await expect(bar.getByTestId('map-draw-how')).toHaveText(
+		'Click a terrain channel at the catchment’s outlet, or just below a dam wall. The catchment follows the terrain: all the land that drains to that point.'
+	);
+	const lines = bar.getByTestId('map-delineation-lines');
+	await expect(lines.getByRole('listitem')).toHaveText([
+		'Terrain channels: where your click goes; the outline follows these',
+		'River network: mapped rivers, for reference only; they can sit off the terrain channels'
+	]);
+	await expect(body).toHaveAttribute('data-channels', 'on');
+	await expect(body).not.toHaveAttribute('data-channel-tiles', '0');
+	// The Key names both lines in the same words.
+	await openKey(page);
+	const key = page.getByTestId('map-key');
+	await expect(key.locator('[data-key-item="terrain channels"]')).toHaveText('terrain channels: where your click goes; the outline follows these');
+	await expect(key.locator('[data-key-item="river network"]')).toHaveText('river network: mapped rivers, for reference only; they can sit off the terrain channels');
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await expectNoViolations(page);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
+	// A phone: the bar's lines wrap under its how-to, nothing scrolls sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(lines).toBeVisible();
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+	await page.setViewportSize({ width: 1440, height: 960 });
+
+	// The proposal: the click step ends, the channels stay behind it, dimmed, and the Key still names them.
+	await bar.getByTestId('map-enter-coordinates').click();
+	const s = sheet(page);
+	await s.getByLabel('Latitude').fill(String(FIXTURE_OUTLET[1]));
+	await s.getByLabel('Longitude').fill(String(FIXTURE_OUTLET[0]));
+	await s.getByTestId('delineate-submit').click();
+	await expect(review(page)).toBeVisible();
+	await expect(page.getByTestId('map-draw-bar')).toHaveCount(0);
+	await expect(body).toHaveAttribute('data-channels', 'dim');
+	await expect(review(page)).toContainText('its outline follows the terrain channels, drawn dimmed behind it');
+	await review(page).getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(page.getByTestId('map-delineation-pending')).toContainText('drawn dashed on the map over the terrain channels it follows, waiting for your decision.');
+	await expect(body).toHaveAttribute('data-channels', 'dim');
+	await expect(key.locator('[data-key-item="terrain channels"]')).toBeVisible();
+
+	// Rejected: the channels go with it, and the Key drops them.
+	await page.getByTestId('map-delineation-pending').getByRole('link', { name: 'Review it' }).click();
+	await review(page).getByTestId('delineate-reject').click();
+	await expect(page.getByTestId('map-notice')).toHaveText(/Rejected the delineated catchment/);
+	await expect(body).not.toHaveAttribute('data-channels');
+	await expect(key.locator('[data-key-item="terrain channels"]')).toHaveCount(0);
+	await expect(key.locator('[data-key-item="river network"]')).toHaveText('river network');
+});
+
+test('an empty model: Delineate from the Getting started pill, accept the boundary, and Start from the map is the next step', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Delineate empty model');
+	await openMap(page, project.id);
+	await page.getByTestId('map-setup-pill').click();
+	await page.getByTestId('map-setup-delineate').click();
+	await expect(page.getByTestId('map-draw-bar')).toContainText('Delineating a catchment');
+	await page.getByTestId('map-enter-coordinates').click();
+	const s = sheet(page);
+	await s.getByLabel('Latitude').fill(String(FIXTURE_OUTLET[1]));
+	await s.getByLabel('Longitude').fill(String(FIXTURE_OUTLET[0]));
+	await s.getByTestId('delineate-submit').click();
+	await review(page).getByTestId('delineate-accept-boundary').click();
+	await expect(page.getByTestId('map-notice')).toContainText('It isn’t in the model yet.');
+	await expect(page.getByTestId('map-boundary-next')).toContainText('Start from the map proposes the model’s units from it');
+	await page.getByTestId('map-notice-next').click();
+	await expect(page.getByRole('dialog', { name: 'Start the model from the map' })).toBeVisible();
+	await expect(page).toHaveURL(/[?&]start=1(&|$)/);
 });
 
 test('a boundary is replaced only with the tick; Reject changes nothing; a point outside the DEM is refused', async ({ page, owner }) => {

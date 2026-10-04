@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Map delineation flow (2026-10-03): the terrain-channel and river-network lines named in the delineate and click bars (DelineationLines) and the Key, the channels kept dimmed behind a proposal, the boundary's next step (Divide the model / Start from the map) on its card and in the accept toast, Delineate in the Getting started pill, and the help guide's words; measured +2.08 KB gzipped JS+CSS against the branch point (2 040 311 -> 2 042 392 bytes)"
+}

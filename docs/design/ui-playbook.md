@@ -472,6 +472,26 @@ section it belongs to, with the example that taught it.
   help the eye: `pieceTintsFor` gives touching pieces different tints, and
   the map and the cards read number and tint from the one list, so they
   never disagree.
+- **Name every line on a map by what it is for, where the eye is, and in
+  the key.** While delineating, the Map drew the elevation model's channels
+  over the River network's dashed rivers; the key listed only "river
+  network", the bar called the channels "a red line" (orange-red in the dark
+  theme), and the operator asked why there were orange and blue lines and
+  which one the catchment followed (2026-10-03). The bar now names both with
+  their swatches ("Terrain channels: where your click goes; the outline
+  follows these", "River network: mapped rivers, for reference only; …")
+  and the key's Lines lead with the same words from one helper
+  (`map/mapList.ts` `delineationLines`). Don't name a thing by its colour
+  in text: colours change with the theme. And keep what a decision is
+  checked against on screen while it is decided: the channels went with the
+  click step, so the proposal couldn't be checked against them; they stay,
+  dimmed, until it is accepted or rejected.
+- **After accepting a proposal, say what it became and offer the next
+  step.** Accepting a delineated boundary saved a map feature only, and
+  nothing said so: the operator asked how it reached the network. The toast
+  says "It isn’t in the model yet." with the next step as a button (Divide
+  the model, or Start from the map), and the boundary's card keeps it while
+  it applies (`mapList.ts` `boundaryNextStep`).
 - **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
@@ -947,6 +967,14 @@ Interaction details that bit:
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.
+- **Reference data a spec loads is global to the e2e database.** A river
+  network a spec loads (`loadRiverNetwork`) is read by every project, so a
+  reach planted near the synthetic DEM's valley moved other specs' clicks
+  onto its channel: four delineation and sub-catchment specs in other files
+  failed in the same run. Load a dataset only where the spec needs it, away
+  from every other spec's points (`support/dem.ts` names the points in use),
+  and prefer what needs no data (the River network layer's key entry shows
+  while the layer is on, with no reach loaded).
 - **Times the database stamps can't be set through the API.** "Waiting 30
   days" needs an application submitted 30 days ago, but the scenario trigger
   stamps `submitted_at` with `now()` and refuses to change it. Plant it in

@@ -22,11 +22,18 @@ export interface MapSetupStep {
  * the one left still being read (the rain feeds loading or failing to load),
  * so the pill never flashes up and goes again.
  */
-export function mapSetupSteps(s: { boundaryName: string | null; rain: RainReads }): MapSetupStep[] | null {
+export function mapSetupSteps(s: { boundaryName: string | null; rain: RainReads; canDelineate?: boolean }): MapSetupStep[] | null {
 	const hasBoundary = s.boundaryName !== null;
 	const boundary: MapSetupStep = hasBoundary
 		? { id: 'boundary', title: 'Catchment boundary', done: true, detail: `${s.boundaryName || 'The catchment boundary'} is on the map.` }
-		: { id: 'boundary', title: 'Catchment boundary', done: false, detail: 'No catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file (WGS84).' };
+		: {
+				id: 'boundary',
+				title: 'Catchment boundary',
+				done: false,
+				detail: s.canDelineate
+					? 'No catchment boundary yet. Delineate it from its outlet on the river, draw it on the map, or upload it as a GeoJSON file (WGS84).'
+					: 'No catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file (WGS84).'
+			};
 	const rain: MapSetupStep = !hasBoundary
 		? { id: 'rain', title: 'Rain from the boundary', done: false, detail: 'Once the boundary is on the map, a rain feed can read the cells inside it.' }
 		: s.rain === 'none'

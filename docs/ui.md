@@ -2832,7 +2832,10 @@ map" card) stays the schematic; this is the geography.
   opening it never moves the map; Escape closes it and gives the pill the
   focus, a click outside closes it. Its steps: **Catchment boundary** ("No
   catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
-  (WGS84)." with **Draw the boundary** and **Upload a GeoJSON file**) and
+  (WGS84)." with **Draw the boundary** and **Upload a GeoJSON file**; with a
+  DEM on the server, as the empty map does, "No catchment boundary yet.
+  Delineate it from its outlet on the river, draw it on the map, or upload
+  it …" with a primary **Delineate from the outlet** first) and
   **Rain from the boundary** (issue #326 B-rain: "No rain feed reads this
   catchment boundary yet." with **Set up the rain feed from the boundary**,
   or "The boundary changed since the rain feed took its cells." with
@@ -2909,7 +2912,11 @@ map" card) stays the schematic; this is the geography.
   The **Key** (a panel over the map's bottom-left corner, from its **Key**
   button, "Key · Days short" while a measure shows; a row under the map until
   2026-10-02) groups **Areas** (catchment boundary, parcel, dam, other),
-  **Lines** (river) and **Points** (gauge, dam, other), listing only the
+  **Lines** (river; while the elevation model's channels are drawn, first
+  "terrain channels: where your click goes; the outline follows these" and,
+  with the River network layer on, "river network: mapped rivers, for
+  reference only; they can sit off the terrain channels", each on its own
+  line, the panel then 23rem wide) and **Points** (gauge, dam, other), listing only the
   entries a feature on the map stands for (`mapList.ts` `presentKey`; a
   layer's own entry while the layer is on), each swatch drawn in the colour
   `mapStyle.ts` `overlayColours(dark)` gives the map (`mapList.ts`
@@ -3086,8 +3093,17 @@ map" card) stays the schematic; this is the geography.
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
   Delineation](./maps.md#delineation)). The map's **Delineate** tool puts the
   map in the point-placing mode with the draw bar headed "Delineating a
-  catchment" ("Click the river at the catchment’s outlet, or just below a
-  dam wall."); **Delineate…** (or the bar's **Enter coordinates**) opens
+  catchment": what to click and what the result follows ("Click a terrain
+  channel at the catchment’s outlet, or just below a dam wall. The catchment
+  follows the terrain: all the land that drains to that point."; with the
+  point placed, "Drag the point onto a terrain channel if it missed, then
+  Delineate…"), then the lines on the map in words with their swatches
+  (`DelineationLines.svelte`, the Key's words, `mapList.ts`
+  `delineationLines`): **Terrain channels**: where your click goes; the
+  outline follows these, and, with the River network layer on, **River
+  network**: mapped rivers, for reference only; they can sit off the terrain
+  channels (2026-10-03: the operator saw red and blue lines with neither in
+  the Key, and asked which one a catchment follows); **Delineate…** (or the bar's **Enter coordinates**) opens
   the **Delineate a catchment** sheet (`delineate=1`): "The point is" The
   catchment’s outlet / Just below a dam wall, the clicked position (or
   Latitude and Longitude behind **Enter coordinates**), the dataset line
@@ -3139,19 +3155,39 @@ map" card) stays the schematic; this is the geography.
   coordinates) always opens the form; **Review it** and a reload with
   `delineate=1` open the waiting proposal. Closed with a proposal open, a
   slim line among the notices says "A delineated catchment (547.19 km²) is
-  drawn dashed on the map, waiting for your decision." with **Review it**.
-  Accepting saves the feature, picks it and says "Saved Catchment above the
-  outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
-  the map
-  changed.
+  drawn dashed on the map over the terrain channels it follows, waiting for
+  your decision." with **Review it**. The last caveat says the outline
+  follows the terrain channels, drawn dimmed behind it, and to close the
+  sheet to look. Accepting saves the feature and picks it; accepted as an
+  area it says "Saved Catchment above the outlet (delineated), 547.19 km² on
+  the map."; accepted as the catchment boundary, "Saved … on the map as the
+  catchment boundary. It isn’t in the model yet." with the next step as a
+  button in the toast (**Divide the model**, or **Start from the map** for an
+  empty model), and the boundary's card holds the same step while it applies
+  (below). Rejecting says nothing on the map changed.
+- **The boundary's next step** (editors; `mapList.ts` `boundaryNextStep`,
+  2026-10-03): accepting a boundary saves a map feature only, so the
+  catchment boundary's card (the side column's Details) says so under its
+  facts in a tinted box: "This boundary is on the map, not in the model
+  yet. Divide the model splits it into each unit’s area at your dams,
+  abstraction points and gauges, for you to tick." with **Divide the model**
+  (`divide=1`; **Review the proposed division** while one waits), or for an
+  empty model "… Start from the map proposes the model’s units from it: …"
+  with **Start from the map** (`start=1`). It goes once a unit has taken its
+  area from the map; without a DEM (no Divide) it doesn't show.
 - **The elevation model's channels** (while Delineate or Sub-catchments is
   on; issue #374, [maps.md § The elevation model's channels](./maps.md#the-elevation-models-channels)):
-  solid red lines over the river network, wider for a larger area, and one
-  slim status line under the bar with a red swatch ("Red lines: the
-  elevation model's channels, where a click goes. River lines can sit
-  hundreds of metres off them."; "Drawing …", "Zoom in to see …" past
-  0.35°, "… are drawn on the map, which isn't showing here." without WebGL,
-  or the refusal's sentence).
+  solid red lines (orange-red in dark) over the river network, wider for a
+  larger area, named in words in the bar and the Key (**Terrain channels**,
+  above). They stay drawn while a delineated proposal waits for a decision
+  and no other tool has the map, dimmed (`CHANNEL_OPACITY`, `channelsDim`)
+  so the outline reads first and can be checked against them, and go once
+  it is accepted or rejected (`.map-body`'s `data-channels`: `on`, `dim`).
+  A pill over the map's top says only what needs saying ("Drawing the
+  terrain channels…", "Zoom in to see the terrain channels." past 0.35°,
+  "… the terrain channels the outline follows." while reviewing, "… are
+  drawn on the map, which isn't showing here." without WebGL, or the
+  refusal's sentence).
 - **Sub-catchments** (editors, with a DEM on the server; Delineate's choice
   **Sub-catchments, one per click**, in its bar and back again with **One
   catchment, above a point**, asking first when clicks would be lost;
@@ -3162,10 +3198,10 @@ map" card) stays the schematic; this is the geography.
   drawn, and the **Sub-catchments** panel opens: in the side column in the
   picked feature's place from a 56rem page (the map keeps its fitted
   height), above the map on a narrower one (MapTab picks by the page's
-  width, so the panel is in the DOM once). It has how ("Click a red line
-  (the elevation model's channel) for each outlet, or press Enter at the
-  crosshair. Each gets the land that drains to it before any other
-  click."), a polite line for the last change ("2 sub-catchments.", "Click 3
+  width, so the panel is in the DOM once). It has how ("Click a terrain
+  channel for each outlet, or press Enter at the crosshair. Each gets the
+  land that drains to it before any other click, following the terrain.")
+  with the lines on the map in words under it (as Delineate's bar), a polite line for the last change ("2 sub-catchments.", "Click 3
   is not a piece: it …", "Took back click 3.", "Moved the click back."), and
   one line per click under its badge (`PieceBadge`, the number and tint its
   piece has on the map, so the list is the map's key): its area, where its
