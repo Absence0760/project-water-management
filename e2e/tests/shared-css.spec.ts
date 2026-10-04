@@ -108,7 +108,7 @@ test('Crops grids: units in the table heads and the small captions', async ({ pa
 	// The crop grids open in the grid modal over the Crops page (issue #17).
 	await page.goto(`/projects/${project.id}?tab=crops&grid=planted-areas`);
 	const grid = page.getByRole('dialog', { name: 'Planted areas' });
-	const caption = grid.getByText('Irrigated area per hydrological unit and crop, hectares · rows follow the network order');
+	const caption = grid.getByText('Irrigated area per hydrological unit and crop, hectares, and its irrigation system there · rows follow the network order');
 	await expect(caption).toBeVisible();
 	const unit = grid.locator('thead th .u').filter({ hasText: /^ha$/ }).first();
 	await expect(unit).toBeVisible();

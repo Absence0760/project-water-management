@@ -36,7 +36,19 @@
 	import MonthRates from './MonthRates.svelte';
 	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
 
-	let { editor, readonly, page = false }: { editor: ModelEditor; readonly: boolean; /** The workspace page (not a modal or override mode). */ page?: boolean } = $props();
+	let {
+		editor,
+		readonly,
+		page = false,
+		inModal = false
+	}: {
+		editor: ModelEditor;
+		readonly: boolean;
+		/** The workspace page (not a modal or override mode). */
+		page?: boolean;
+		/** In the grid modal, whose title names it: no heading of its own (one heading per modal). */
+		inModal?: boolean;
+	} = $props();
 
 	const nodes = $derived(editor.model.nodes);
 	const transfers = $derived(editor.model.transfers);
@@ -160,9 +172,9 @@
 			</div>
 		</section>
 	{:else}
-		<section class="rules-card" aria-labelledby="tr-h">
+		<section class="rules-card" aria-labelledby={inModal ? undefined : 'tr-h'}>
 			<div class="rules-head">
-				<h2 id="tr-h">Transfer rules</h2>
+				{#if !inModal}<h2 id="tr-h">Transfer rules</h2>{/if}
 				<span class="muted small">Water moved from one hydrological unit’s dam, or from the river there, to another hydrological unit, up to each month’s rate. Lower priorities move first.</span>
 				<!-- One unit for every rule's rates (display only, so a viewer has it too); each rule's title names it. -->
 				<span class="rate-unit"><span aria-hidden="true">Rates in</span> <FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" /></span>

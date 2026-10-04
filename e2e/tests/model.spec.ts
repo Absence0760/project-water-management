@@ -23,6 +23,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	const names = grid.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
 	await expect(names.nth(0)).toHaveValue('Outflow gauge');
+	// One heading per modal: the title names the table, the table has none of its own.
+	await expect(grid.getByRole('heading')).toHaveText(['Node table']);
 	// A new node is a "Unit N", as the workspace calls it (operator decision, 2026-10-01).
 	await expect(names.nth(1)).toHaveValue('Unit 1');
 	await expect(names.nth(2)).toHaveValue('Unit 2');

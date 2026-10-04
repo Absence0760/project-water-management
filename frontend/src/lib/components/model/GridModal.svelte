@@ -55,11 +55,11 @@
 		{#if grid === 'nodes'}
 			<NetworkTab {editor} {settings} {readonly} {projectId} {runs} only="table" />
 		{:else if grid === 'transfers'}
-			<TransfersTab {editor} {readonly} />
+			<TransfersTab {editor} {readonly} inModal />
 		{:else if grid === 'systems'}
 			<IrrigationSystemsPanel {editor} {readonly} />
 		{:else}
-			<CropsTab {editor} {settings} {readonly} sections={[CROP_SECTION[grid]]} {apanDaily} />
+			<CropsTab {editor} {settings} {readonly} sections={[CROP_SECTION[grid]]} {apanDaily} inModal />
 		{/if}
 	</div>
 

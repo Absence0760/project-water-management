@@ -602,8 +602,8 @@
 
 {#if only === 'table'}
 	<!-- The node table alone: the grid modal's "Node table" (model/GridModal.svelte). -->
-	<section class="panel" aria-labelledby="net-h">
-		<div class="panel-head"><h2 id="net-h">Network nodes</h2></div>
+	<!-- No heading of its own: the modal's title ("Node table") names it (one heading per modal). -->
+	<section class="panel">
 		{#if nodes.length === 0}
 			<div class="empty">
 				<p>

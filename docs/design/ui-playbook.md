@@ -790,6 +790,14 @@ Interaction details that bit:
   puts its context in the header (`fillHeader`) and draws no heading; the
   standalone `/compare` keeps its `h1`. Count *all* headings with the
   title's name, not just `h1`s, when checking "one page title".
+- **One heading per modal.** A grid opened from a Tables menu showed the
+  modal's title ("Node table", "Crop factors") and then its panel's own
+  heading ("Network nodes", "Crop factors" with an ⓘ) right under it. The
+  modal's title stays (it names the dialog and holds the ✕); the panel takes
+  an `inModal` prop and drops its heading there, moving its subtitle and ⓘ
+  onto its intro line and keeping its actions; outside a modal it keeps its
+  heading. Pin it with `dialog.getByRole('heading')` →
+  `toHaveText([title])` (`network-map.spec.ts`, `model.spec.ts`).
 - **A fragment into a lazy tab needs the tab to land it.** Workspace tabs
   are lazy chunks, so the browser's own jump to `#set-ewr` runs before the
   element exists and the page opens at the top. Settings' note links

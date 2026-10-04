@@ -3934,6 +3934,14 @@ modal: the page leaves the parameter to the tab, and over any other tab
 the link goes to that tab with it open (`movedGridHref`;
 [§ Map](#map-tabmap)).
 
+- **One heading:** the modal's title (the dialog's name, beside its ✕) is
+  the only heading over the grid. The grid inside draws none of its own
+  (`inModal` on `CropsTab`/`CropGrids` and `TransfersTab`; the node table
+  is only ever in the modal, so it has none): what its heading line said
+  moves onto the intro line, with its ⓘ (crop factors: "Water year, October
+  → September"), and its actions stay. The same grids keep their headings
+  in scenario override mode and on the Transfers tab. Headings a grid has
+  per item (a transfer rule's title, `h3`) stay.
 - **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify
   (the #17 checklist).

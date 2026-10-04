@@ -246,6 +246,8 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	const area = grid.getByLabel('Orchard on Upper farm, ha');
 	await expect(area).toHaveValue('20');
 	await expect(grid.getByRole('heading', { name: 'Crop factors' })).toHaveCount(0);
+	// One heading per modal: the title names the grid, the grid has no heading of its own.
+	await expect(grid.getByRole('heading')).toHaveText(['Planted areas']);
 	await expect(grid).toContainText('No unsaved changes');
 	await expectNoViolations(page);
 
@@ -262,6 +264,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await (await gridLink(page, 'Crop factors')).click();
 	const factors = page.getByRole('dialog', { name: 'Crop factors' });
 	await expect(factors.getByLabel('Orchard crop factor, Oct')).toHaveValue('0.6');
+	await expect(factors.getByRole('heading')).toHaveText(['Crop factors']);
 	await factors.getByRole('textbox', { name: 'Reason for this change (optional)' }).fill('Block replanted');
 	await factors.getByRole('button', { name: 'Save changes' }).click();
 	await expect(factors).toContainText('No unsaved changes');

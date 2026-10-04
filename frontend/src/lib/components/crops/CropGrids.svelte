@@ -35,7 +35,8 @@
 		settings,
 		readonly,
 		sections,
-		apanDaily = false
+		apanDaily = false,
+		inModal = false
 	}: {
 		editor: ModelEditor;
 		settings: ProjectSettings;
@@ -44,6 +45,8 @@
 		sections?: readonly ('factors' | 'areas' | 'demand')[];
 		/** The project has a daily A-pan series, which runs use instead of the monthly means on the days it covers (model.md §2.3a). */
 		apanDaily?: boolean;
+		/** In the grid modal, whose title names the grid: no heading of its own (one heading per modal, playbook § 2). */
+		inModal?: boolean;
 	} = $props();
 	const show = (s: 'factors' | 'areas' | 'demand') => !sections || sections.includes(s);
 
@@ -211,12 +214,15 @@
 <div class="crop-grids">
 
 {#if show('factors')}
-<section class="panel" aria-labelledby="crops-h">
-	<div class="panel-head">
-		<h2 id="crops-h">Crop factors <HelpTip key="crop.cropFactor" /></h2>
-		<span class="muted small">Water year, October → September</span>
-	</div>
+<section class="panel" aria-labelledby={inModal ? undefined : 'crops-h'}>
+	{#if !inModal}
+		<div class="panel-head">
+			<h2 id="crops-h">Crop factors <HelpTip key="crop.cropFactor" /></h2>
+			<span class="muted small">Water year, October → September</span>
+		</div>
+	{/if}
 	<p class="muted small intro">
+		{#if inModal}Water year, October → September. <HelpTip key="crop.cropFactor" />{/if}
 		A crop factor scales monthly A-pan evaporation to the crop's water use: gross irrigation need (mm) = A-pan × crop
 		factor. It is <strong>× A-pan, not an FAO Kc</strong>: FAO-56 Kc values multiply reference ET₀, about 0.6–0.85 × pan (0.35–0.85 in FAO-56 Table 5), so
 		multiply a published Kc by the pan coefficient before entering it. Use 0 for months the crop isn't irrigated.
@@ -308,11 +314,15 @@
 {/if}
 
 {#if show('areas')}
-<section class="panel" aria-labelledby="areas-h">
-	<div class="panel-head">
-		<h2 id="areas-h">Planted areas</h2>
-		<span class="muted small">Irrigated area per hydrological unit and crop, hectares, and its irrigation system there · rows follow the network order</span>
-	</div>
+<section class="panel" aria-labelledby={inModal ? undefined : 'areas-h'}>
+	{#if inModal}
+		<p class="muted small intro">Irrigated area per hydrological unit and crop, hectares, and its irrigation system there · rows follow the network order</p>
+	{:else}
+		<div class="panel-head">
+			<h2 id="areas-h">Planted areas</h2>
+			<span class="muted small">Irrigated area per hydrological unit and crop, hectares, and its irrigation system there · rows follow the network order</span>
+		</div>
+	{/if}
 	{#if farms.length === 0 || crops.length === 0}
 		<p class="muted">
 			Add at least one hydrological unit (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.

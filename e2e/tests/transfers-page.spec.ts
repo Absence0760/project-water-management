@@ -243,6 +243,8 @@ test('the Transfers grid on the Network keeps its own Add transfer', async ({ pa
 	await page.goto(`/projects/${project.id}?tab=network&grid=transfers`);
 	const grid = page.getByRole('dialog', { name: 'Transfers' });
 	await expect(grid.getByLabel('Enabled, transfer 1', { exact: true })).toBeChecked();
+	// One heading per modal: the title, then each rule's own; no "Transfer rules" under it.
+	await expect(grid.getByRole('heading', { level: 2 })).toHaveText(['Transfers']);
 	await expect(grid.getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
 	await grid.getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await expect(grid.getByLabel('From, transfer 2', { exact: true })).toBeFocused();

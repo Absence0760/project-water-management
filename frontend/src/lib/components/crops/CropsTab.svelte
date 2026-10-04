@@ -58,7 +58,8 @@
 		sections,
 		onsave,
 		reason = $bindable(''),
-		apanDaily = false
+		apanDaily = false,
+		inModal = false
 	}: {
 		editor: ModelEditor;
 		settings: ProjectSettings;
@@ -71,6 +72,8 @@
 		reason?: string;
 		/** The project has a daily A-pan series, which runs use instead of the monthly means on the days it covers (model.md §2.3a). */
 		apanDaily?: boolean;
+		/** In the grid modal: the grid drops its own heading, the modal's title names it. */
+		inModal?: boolean;
 	} = $props();
 
 	const crops = $derived(editor.model.crops);
@@ -272,7 +275,7 @@
 {/snippet}
 
 {#if sections}
-	<CropGrids {editor} {settings} {readonly} {sections} {apanDaily} />
+	<CropGrids {editor} {settings} {readonly} {sections} {apanDaily} {inModal} />
 {:else}
 	<div class="crops-page">
 		{#if crops.length === 0}
