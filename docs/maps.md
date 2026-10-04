@@ -1351,7 +1351,9 @@ so these are the lines to click: a click on one snaps onto it.
   click goes; the outline follows these, and, with the River network layer
   on, **River network**: mapped rivers, for reference only; they can sit off
   the terrain channels. The Key's Lines lead with the same two entries while
-  the channels are drawn. A pill over the map's top appears only when there
+  the channels are drawn (the Key is the side column's Key tab beside the
+  map, so the bar's lines and the Key's sit side by side without covering the
+  map). A pill over the map's top appears only when there
   is something to say: "Drawing the terrain channels…", "Zoom in to see …",
   that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
   309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
@@ -1633,7 +1635,7 @@ the app can analyse; this layer is.
   basemap and ΔE ≥ 40 from every other stroke (`mapStyle.test.ts`). While
   the layer is on, the key's **Lines** gain "river network" with a dashed
   swatch.
-- **The list beside the map.** The Layers panel says how many reaches are
+- **The list beside the map.** The Layers panel (the side column's Layers tab on a wide page, a panel over the map on a phone) says how many reaches are
   around the catchment and where they come from ("10 reaches around the
   catchment, the biggest first, from synthetic." and, for the repo's
   network, **Synthetic test data, never real rivers.**), and lists them as

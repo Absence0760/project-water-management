@@ -442,6 +442,22 @@ section it belongs to, with the example that taught it.
   a spec had to click; it opens by default only while its colours need
   reading (a run's results), and the corners' boxes pass clicks through
   between their controls (`pointer-events: none` on the box).
+- **Over a map, only buttons; a panel goes in the side column when there is
+  one.** Even folded by default, the Layers and Key boxes over the map's
+  corners read as clutter to the operator ("i just dont really like the
+  bottom left box", 2026-10-03). Beside the map they are now tabs of the side
+  column (Layers, Key after Details, Features, Checks), the map keeping only
+  its zoom buttons, the tool strip and small toggles that pick those tabs
+  (`aria-controls` the tab panel, `aria-expanded` while picked, pressed
+  again or Escape gives the tab back). Where there is no column (a phone,
+  an empty map, the Sub-catchments panel taking it over) they stay panels
+  over the map, so nothing is lost; a picked one falls back to Features when
+  the column goes. Render a panel's body from one snippet in both places
+  (`MapTab.svelte` `layersBody`, `keyBody`), and only in one at a time, so
+  ids and test ids stay unique. Measure a bar of controls before promising
+  "one line": the Drawing bar's kind select, Snap and Follow, and its four
+  buttons are ~840 px with no hint at all, so at 1440 (a 790 px bar) it is
+  two lines and one line only from about 1100 px.
 - **A popover's controls aren't in the DOM while it's closed.** The Map's
   Getting started pill kept its steps' buttons in a `hidden` box, and a check
   that the header's controls share one row (`locator('button, a.btn')`) read

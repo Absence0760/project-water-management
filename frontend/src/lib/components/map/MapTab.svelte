@@ -243,12 +243,17 @@
 		sideTab = 'details';
 	}
 
-	// --- the side column: one thing at a time (Details · Features · Checks), the Sub-catchments panel taking it over ---
-	type SideTab = 'details' | 'features' | 'checks';
+	// --- the side column: one thing at a time (Details · Features · Checks, and on a wide page Layers · Key), the Sub-catchments panel taking it over ---
+	type SideTab = 'details' | 'features' | 'checks' | 'layers' | 'key';
 	const SIDE_TABS: { id: SideTab; label: string }[] = [
 		{ id: 'details', label: 'Details' },
 		{ id: 'features', label: 'Features' },
 		{ id: 'checks', label: 'Checks' }
+	];
+	/** Layers and Key join the tabs while the column shows them (`panelsInSide`); otherwise they are panels over the map. */
+	const PANEL_TABS: { id: SideTab; label: string }[] = [
+		{ id: 'layers', label: 'Layers' },
+		{ id: 'key', label: 'Key' }
 	];
 	let sideTab = $state<SideTab>('features');
 	// A new pick (on the map, in the list, a link, Back) shows its details; the pick going (a delete) shows the list again.
@@ -271,12 +276,12 @@
 	const tabEls: Record<string, HTMLButtonElement | undefined> = $state({});
 	/** Arrow keys, Home and End move between the tabs (the focus and the choice together). */
 	function tabKey(e: KeyboardEvent) {
-		const i = SIDE_TABS.findIndex((t) => t.id === sideTab);
-		const n = SIDE_TABS.length;
+		const i = sideTabs.findIndex((t) => t.id === sideTab);
+		const n = sideTabs.length;
 		const to = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
 		if (to < 0) return;
 		e.preventDefault();
-		sideTab = SIDE_TABS[to]!.id;
+		sideTab = sideTabs[to]!.id;
 		tabEls[sideTab]?.focus();
 	}
 
@@ -929,7 +934,24 @@
 		dark: () => dark
 	});
 
-	// --- on the map: the Layers and Key panels (disclosures over its corners), the tool strip, the Getting started steps ---
+	// --- Layers and Key: tabs in the side column on a wide page with features (until 2026-10-03 boxes over the map's corners);
+	// disclosures over the map otherwise (a phone, an empty map, the Sub-catchments panel taking the column over) ---
+	const panelsInSide = $derived(wide && features.length > 0 && !(canEdit && dividing));
+	const sideTabs = $derived(panelsInSide ? [...SIDE_TABS, ...PANEL_TABS] : SIDE_TABS);
+	// The column stops showing them (narrowed, emptied, dividing) while one is picked: back to the list.
+	$effect(() => {
+		if (!panelsInSide && (sideTab === 'layers' || sideTab === 'key')) untrack(() => (sideTab = 'features'));
+	});
+	// And while it shows them, the panels over the map are folded, so narrowing never brings back one opened long before.
+	$effect(() => {
+		if (!panelsInSide) return;
+		untrack(() => {
+			layersOpen = false;
+			if (keyChoice) keyChoice = false;
+		});
+	});
+	/** The tab the map's Layers or Key button took over from, for its second press (and Escape) to give back. */
+	let tabBefore: SideTab = 'features';
 	let layersOpen = $state(false);
 	/**
 	 * The Key: open by default while the areas are coloured by a run's results (their colours need the legend) and the map is
@@ -937,16 +959,27 @@
 	 */
 	let keyChoice = $state<boolean | null>(null);
 	/** On a narrow map (a window narrowed with both open, too) the Key gives way to an open Layers panel. */
-	const keyOpen = $derived((keyChoice ?? (wide && results.on)) && (wide || !layersOpen));
-	// The default is taken once, when the runs and the page's width are in: switching the measure to Kind from inside the
+	const keyOpen = $derived((keyChoice ?? (wide && results.on && !panelsInSide)) && (wide || !layersOpen));
+	/** Shown where they are now: the tab picked, or the panel open over the map. */
+	const layersShown = $derived(panelsInSide ? sideTab === 'layers' : layersOpen);
+	const keyShown = $derived(panelsInSide ? sideTab === 'key' : keyOpen);
+	// The default is taken once, when the runs, the features and the page's width are in: switching the measure to Kind from inside the
 	// open panel must not fold it under the pointer.
 	$effect(() => {
-		if (keyChoice !== null || runs === null || !pageWidth) return;
+		if (keyChoice !== null || runs === null || !pageWidth || !data) return;
 		const open = wide && results.on;
-		untrack(() => (keyChoice = open));
+		// In the column the Key is a tab the list would give way to: the column opens on the list (or a pick's Details) as ever.
+		untrack(() => (keyChoice = open && !panelsInSide));
 	});
 	/** On a narrow map the two panels would overlap: opening one folds the other. */
 	function openPanel(which: 'layers' | 'key', on = true) {
+		if (panelsInSide) {
+			if (on && sideTab !== which) {
+				if (sideTab !== 'layers' && sideTab !== 'key') tabBefore = sideTab;
+				sideTab = which;
+			} else if (!on && sideTab === which) sideTab = tabBefore;
+			return;
+		}
 		if (which === 'layers') layersOpen = on;
 		else keyChoice = on;
 		if (on && !wide) {
@@ -1217,6 +1250,21 @@
 	</div>
 {/snippet}
 
+{#snippet layersBody()}
+	<MapLayers
+		{quaternaries}
+		{rivers}
+		{dark}
+		{canEdit}
+		onriveradded={riverAdded}
+		onshowfeature={(id) => void selectFromList(id)}
+		relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
+	/>
+{/snippet}
+{#snippet keyBody()}
+	<MapKeyRow {results} {key} {features} {canEdit} {dark} />
+{/snippet}
+
 <div class="map-page" data-ready={data ? 'true' : undefined} bind:clientWidth={pageWidth}>
 	<!-- What the last action did (an import, a save, a split): a toast over the page's foot, so it never pushes the map down. It stays until
 	     Dismiss, the next one, or a tool starting. The live region is always there, so each new one is announced. -->
@@ -1321,40 +1369,36 @@
 						<!-- Layers (#326 A6, #345; a box in the side column until 2026-10-02): under the zoom buttons, its panel over the map's right edge. -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="layers-at ov" onkeydown={(e) => panelKey(e, 'layers')}>
-							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersOpen} aria-controls="{uid}-layers" bind:this={layersBtn} onclick={() => openPanel('layers', !layersOpen)} data-testid="map-layers-toggle">
+							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
 								<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" class="ctl-ic"><path d="m10 3 7 3.8-7 3.8-7-3.8z" /><path d="m3 10.4 7 3.8 7-3.8" /><path d="m3 13.8 7 3.8 7-3.8" /></svg>
 								Layers{#if layersOn(params).size}<span class="ctl-count" aria-hidden="true">{layersOn(params).size}</span><span class="visually-hidden">{` (${layersOn(params).size} on)`}</span>{/if}
 							</button>
-							{#if canEdit && !tilesUrl && !layersOpen}
+							{#if canEdit && !tilesUrl && !layersShown}
 								<!-- An operator's matter (docs/maps.md says how to serve a basemap): a small note under Layers, never a line above the map. Owners and editors only. -->
 								<p class="map-chip small" data-testid="map-no-tiles">No basemap configured (docs/maps.md)</p>
 							{/if}
-							<div class="panel-over layers-panel" id="{uid}-layers" hidden={!layersOpen}>
-								<MapLayers
-									{quaternaries}
-									{rivers}
-									{dark}
-									{canEdit}
-									onriveradded={riverAdded}
-									onshowfeature={(id) => void selectFromList(id)}
-									relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
-								/>
-							</div>
+							{#if !panelsInSide}
+								<div class="panel-over layers-panel" id="{uid}-layers" hidden={!layersOpen}>
+									{@render layersBody()}
+								</div>
+							{/if}
 						</div>
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="foot-at ov" onkeydown={(e) => panelKey(e, 'key')} style:--tools-h="{toolsH}px">
 							<!-- The key (#326 E7, A1; a row under the map until 2026-10-02): what the areas are coloured by, which run, and what each colour means. -->
 							<!-- Focusable: it can scroll on a short map with nothing to focus inside (ui-playbook § 5). -->
-							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<div class="panel-over key-panel" id="{uid}-key" hidden={!keyOpen} role="region" aria-label="Map key" tabindex="0">
-								<MapKeyRow {results} {key} {features} {canEdit} {dark} />
-							</div>
+							{#if !panelsInSide}
+								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+								<div class="panel-over key-panel" id="{uid}-key" hidden={!keyOpen} role="region" aria-label="Map key" tabindex="0">
+									{@render keyBody()}
+								</div>
+							{/if}
 							<div class="foot-row">
 								{#if features.length && mapState === 'ready'}
 									<!-- On the map, not the header: the map's own view action (issue #374). -->
 									<button type="button" class="btn btn-sm map-ctl" onclick={() => mapRef?.showAll()} data-testid="map-show-everything">Show everything</button>
 								{/if}
-								<button type="button" class="btn btn-sm map-ctl" aria-expanded={keyOpen} aria-controls="{uid}-key" bind:this={keyBtn} onclick={() => openPanel('key', !keyOpen)} data-testid="map-key-toggle">
+								<button type="button" class="btn btn-sm map-ctl" aria-expanded={keyShown} aria-controls={panelsInSide ? `${uid}-panel-key` : `${uid}-key`} bind:this={keyBtn} onclick={() => openPanel('key', !keyShown)} data-testid="map-key-toggle">
 									Key{#if results.on}<span class="ctl-sub">· {viewLabel(results.view)}</span>{/if}
 								</button>
 							</div>
@@ -1409,7 +1453,7 @@
 						<!-- One thing at a time: the picked feature, every feature, or the checks (until 2026-10-02 stacked, each squeezing the others). -->
 						<div class="panel side-box side-tabs">
 							<div class="tabs" role="tablist" aria-label="Side panel" data-testid="map-side-tabs">
-								{#each SIDE_TABS as t (t.id)}
+								{#each sideTabs as t (t.id)}
 									<button
 										type="button"
 										role="tab"
@@ -1453,6 +1497,18 @@
 								</p>
 								{#if checks.length}<MapChecks {features} {nodes} onpick={pickFromCheck} heading={false} />{/if}
 							</div>
+							{#if panelsInSide}
+								<!-- Layers and Key (until 2026-10-03 boxes over the map); the map's buttons pick these tabs, Escape gives the tab back. -->
+								<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_interactive_supports_focus -->
+								<div class="tab-panel layers-tab" role="tabpanel" id="{uid}-panel-layers" aria-labelledby="{uid}-tab-layers" hidden={sideTab !== 'layers'} onkeydown={(e) => panelKey(e, 'layers')}>
+									{@render layersBody()}
+								</div>
+								<!-- Focusable: the key has nothing to focus inside while the kinds colour the areas, and it can scroll. -->
+								<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+								<div class="tab-panel key-tab" role="tabpanel" id="{uid}-panel-key" aria-labelledby="{uid}-tab-key" hidden={sideTab !== 'key'} tabindex="0" onkeydown={(e) => panelKey(e, 'key')}>
+									{@render keyBody()}
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</aside>
@@ -1867,7 +1923,8 @@
 	/* The side column's tabs: one panel at a time. */
 	.tabs {
 		display: flex;
-		gap: 0.25rem;
+		flex-wrap: wrap;
+		gap: 0 0.1rem;
 		border-bottom: 1px solid var(--border);
 		margin: -0.25rem 0 0.6rem;
 	}
@@ -1876,7 +1933,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		min-height: 36px;
-		padding: 0.3rem 0.6rem;
+		padding: 0.3rem 0.5rem;
 		margin-bottom: -1px;
 		border: 0;
 		border-bottom: 2px solid transparent;

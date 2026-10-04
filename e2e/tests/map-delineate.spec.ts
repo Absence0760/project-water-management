@@ -185,6 +185,8 @@ test('while delineating, the bar and the Key say which line is which; the channe
 	await review(page).getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByTestId('map-delineation-pending')).toContainText('drawn dashed on the map over the terrain channels it follows, waiting for your decision.');
 	await expect(body).toHaveAttribute('data-channels', 'dim');
+	// Back from the phone, the Key's tab fell back to the list: open it again.
+	await openKey(page);
 	await expect(key.locator('[data-key-item="terrain channels"]')).toBeVisible();
 
 	// Rejected: the channels go with it, and the Key drops them.

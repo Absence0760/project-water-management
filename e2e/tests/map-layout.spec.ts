@@ -151,7 +151,7 @@ test('the side column shows one panel at a time; a pick shows its Details, the a
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await mapped(page, 'Map layout tabs');
 	const tabs = page.getByRole('tablist', { name: 'Side panel' });
-	await expect(tabs.getByRole('tab')).toHaveText([/^Details/, /^Features\s*3$/, /^Checks/]);
+	await expect(tabs.getByRole('tab')).toHaveText([/^Details/, /^Features\s*3$/, /^Checks/, 'Layers', 'Key']);
 	// The import picked its first feature: Details.
 	await expect(page.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
 	await expect(page.getByRole('tabpanel')).toHaveCount(1);
@@ -162,7 +162,7 @@ test('the side column shows one panel at a time; a pick shows its Details, the a
 	await expect(page.getByRole('tab', { name: /^Features/ })).toHaveAttribute('aria-selected', 'true');
 	await expect(page.getByRole('tabpanel')).toContainText('Upper farm');
 	await page.keyboard.press('End');
-	await expect(page.getByRole('tab', { name: /^Checks/ })).toHaveAttribute('aria-selected', 'true');
+	await expect(page.getByRole('tab', { name: 'Key' })).toHaveAttribute('aria-selected', 'true');
 	await page.keyboard.press('ArrowRight');
 	await expect(page.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true');
 	// A pick from the list shows its Details; Back shows the one before.
@@ -181,41 +181,54 @@ test('the side column shows one panel at a time; a pick shows its Details, the a
 	await expect(page.getByTestId('map-checks-line')).toBeVisible();
 });
 
-test('Layers and Key open over the map’s corners, inside the map; Escape closes each and gives its button the focus', async ({ page, owner }) => {
+test('beside the map, Layers and Key are side-column tabs the map’s buttons pick; Escape gives the tab back and the button the focus', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await mapped(page, 'Map layout panels');
 	await mapReady(page);
-	const map = (await page.locator('.map-body').boundingBox())!;
-	const inside = async (sel: string) => {
-		const r = (await page.locator(sel).boundingBox())!;
-		expect(r.x).toBeGreaterThanOrEqual(map.x);
-		expect(r.y).toBeGreaterThanOrEqual(map.y);
-		expect(r.x + r.width).toBeLessThanOrEqual(map.x + map.width + 0.5);
-		expect(r.y + r.height).toBeLessThanOrEqual(map.y + map.height + 0.5);
-		return r;
-	};
+	const keyBtn = page.getByTestId('map-key-toggle');
+	const layersBtn = page.getByTestId('map-layers-toggle');
+	// Over the map only small buttons: no panel boxes.
+	await expect(page.locator('.map-body .panel-over')).toHaveCount(0);
 	// With the kinds' colours (no run) the key starts folded; open, it lists only what the map draws.
-	await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
+	await expect(keyBtn).toHaveAttribute('aria-expanded', 'false');
+	await expect(page.getByTestId('map-side-tabs').getByRole('tab')).toHaveText(['Details', /^Features/, /^Checks/, 'Layers', 'Key']);
+	await showTab(page, 'features');
 	await openKey(page);
+	await expect(page.getByTestId('map-tab-key')).toHaveAttribute('aria-selected', 'true');
+	await expect(keyBtn).toHaveAttribute('aria-controls', (await page.getByTestId('map-tab-key').getAttribute('aria-controls'))!);
 	const key = page.getByTestId('map-key');
 	await expect(key.locator('.key-h')).toHaveText(['Areas']);
 	await expect(key.locator('.key-item')).toHaveText(['catchment boundary', 'parcel']);
-	const k = await inside('.key-panel');
-	// Clear of the tools above it.
-	const pal = (await tools(page).boundingBox())!;
-	expect(k.y).toBeGreaterThanOrEqual(pal.y + pal.height);
-	await page.getByRole('region', { name: 'Map key' }).focus();
+	// In the side column, not over the map.
+	const side = (await page.locator('.map-side').boundingBox())!;
+	const k = (await page.locator('.key-tab').boundingBox())!;
+	expect(k.x).toBeGreaterThanOrEqual(side.x);
+	expect(k.y + k.height).toBeLessThanOrEqual(side.y + side.height + 0.5);
+	await page.getByRole('tabpanel', { name: 'Key' }).focus();
 	await page.keyboard.press('Escape');
-	await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
-	await expect(page.getByTestId('map-key-toggle')).toBeFocused();
+	await expect(keyBtn).toHaveAttribute('aria-expanded', 'false');
+	await expect(keyBtn).toBeFocused();
+	await expect(page.getByTestId('map-tab-features')).toHaveAttribute('aria-selected', 'true');
 
+	// One at a time: Layers takes the Key's place; pressed again it gives back the tab it took over from.
+	await openKey(page);
 	await openLayers(page);
-	await inside('.layers-panel');
+	await expect(keyBtn).toHaveAttribute('aria-expanded', 'false');
 	await page.getByTestId('map-layers').getByRole('checkbox', { name: 'Quaternary catchments' }).focus();
 	await page.keyboard.press('Escape');
-	await expect(page.getByTestId('map-layers-toggle')).toHaveAttribute('aria-expanded', 'false');
-	await expect(page.getByTestId('map-layers-toggle')).toBeFocused();
+	await expect(layersBtn).toHaveAttribute('aria-expanded', 'false');
+	await expect(layersBtn).toBeFocused();
+	await openLayers(page);
+	await layersBtn.click();
+	await expect(page.getByTestId('map-tab-features')).toHaveAttribute('aria-selected', 'true');
+	// The arrow keys reach them like the other tabs.
+	await page.getByTestId('map-tab-checks').click();
+	await page.keyboard.press('ArrowRight');
+	await expect(page.getByTestId('map-tab-layers')).toBeFocused();
+	await expect(layersBtn).toHaveAttribute('aria-expanded', 'true');
+	await page.keyboard.press('End');
+	await expect(keyBtn).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('on a phone the Layers and Key panels take turns, so they never cover each other', async ({ page, owner }) => {
@@ -232,13 +245,15 @@ test('on a phone the Layers and Key panels take turns, so they never cover each 
 	await openKey(page);
 	await expect(layersBtn).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.getByTestId('map-layers')).toBeHidden();
-	// Opened wide and narrowed to a phone with both open, the Key gives way too.
+	// Wide they are tabs of the side column; narrowed to a phone with the Key's tab picked, the column falls back to Features
+	// and neither panel covers the map.
 	await resizeTo(page, { width: 1440, height: 960 });
-	await openLayers(page);
 	await openKey(page);
-	await expect(layersBtn).toHaveAttribute('aria-expanded', 'true');
+	await expect(page.getByTestId('map-tab-key')).toHaveAttribute('aria-selected', 'true');
 	await resizeTo(page, { width: 390, height: 844 });
+	await expect(page.getByTestId('map-tab-features')).toHaveAttribute('aria-selected', 'true');
 	await expect(keyBtn).toHaveAttribute('aria-expanded', 'false');
+	await expect(layersBtn).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.locator('.key-panel')).toBeHidden();
 });
 
