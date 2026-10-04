@@ -44,6 +44,8 @@ export interface MapOptions {
 	anchor?: PasteAnchor | null;
 	/** Headings of the name column ("Name", "Farm"), so a heading row is recognised by its first cell too. */
 	nameHeadings?: string[];
+	/** Headings of columns the grid's own CSV has but a paste can't change (a Total, a Kind): left out without a note. */
+	ignoreHeadings?: string[];
 }
 
 /**
@@ -111,6 +113,7 @@ export function mapPaste(text: string, rows: readonly GridRow[], cols: readonly 
 		for (const l of own) if (cols.some((o) => o !== c && o.labels.some((x) => normalName(x) === l))) shared.add(l);
 	}
 	const nameHeads = new Set((opts.nameHeadings ?? ['name']).map(normalName));
+	const ignored = new Set((opts.ignoreHeadings ?? []).map(normalName));
 	// The heading's column (null: none, or a name two columns share) and the key it matched by.
 	const headingCol = (h: string): { col: GridColumn | null; key: string } => {
 		const keys = headingKeys(h);
@@ -139,7 +142,7 @@ export function mapPaste(text: string, rows: readonly GridRow[], cols: readonly 
 		const map = first.map((h, j) => {
 			if (j < startCol) return null;
 			const { col: c, key: k } = headingCol(h);
-			if (!c && h.trim() && !(j === 0 && headingKeys(h).some((x) => nameHeads.has(x)))) left.push(shared.has(k) ? `${h.trim()} (two columns have that name)` : h.trim());
+			if (!c && h.trim() && !(j === 0 && headingKeys(h).some((x) => nameHeads.has(x))) && !headingKeys(h).some((x) => ignored.has(x))) left.push(shared.has(k) ? `${h.trim()} (two columns have that name)` : h.trim());
 			return c;
 		});
 		const seen = new Set<string>();

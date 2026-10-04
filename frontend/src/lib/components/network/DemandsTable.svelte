@@ -8,10 +8,14 @@
 	// planted areas (the farm drawer). Edits go into the shared ModelEditor.
 	import type { ProjectSettings } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { saveBlob } from '$lib/export/download';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { demandRows, demandShares, demandTotal, type DemandRow } from './demands';
+	import { applyDemandPaste, demandsCsv, pasteNames, planDemandPaste } from './demandsPaste';
 
 	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
 
@@ -42,6 +46,43 @@
 			months[m] = v;
 			o.monthlyM3Day = months;
 		}
+	}
+
+	// --- paste a block of months from a spreadsheet (issue #285's pattern): into a month cell, or from the button ---
+	// The grid's display unit: m³/day (a unit picker would set both, demandsPaste.ts's `scale` and `unit`).
+	const PASTE_SCALE = 1;
+	const PASTE_UNIT = 'm³/day';
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteAnchor = $state<PasteAnchor | null>(null);
+	let announce = $state('');
+	const pasteWhere = $derived(pasteAnchor && rows[pasteAnchor.row] ? `${pasteNames(rows).get(rows[pasteAnchor.row]!.key)}, ${WATER_YEAR_MONTHS[pasteAnchor.col]}` : null);
+	function onPaste(e: ClipboardEvent) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		pasteAnchor = t.anchor;
+		pasteText = t.text;
+		pasteOpen = true;
+	}
+	function openPaste() {
+		pasteAnchor = null;
+		pasteText = '';
+		pasteOpen = true;
+	}
+	function applyPaste(plan: PastePlan) {
+		applyDemandPaste(
+			plan,
+			(key, m, v) => {
+				const r = rows.find((x) => x.key === key);
+				if (r) setMonth(r, m, v);
+			},
+			PASTE_SCALE
+		);
+		announce = `Pasted ${plan.changes.length} monthly ${plan.changes.length === 1 ? 'demand' : 'demands'}. Save the model to keep them.`;
+	}
+	/** The table as shown, as a CSV (with a BOM, so Excel reads m³ as UTF-8). */
+	function downloadCsv() {
+		saveBlob(new Blob(['\uFEFF' + demandsCsv(rows, PASTE_SCALE, PASTE_UNIT)], { type: 'text/csv;charset=utf-8' }), 'demands.csv');
 	}
 </script>
 
@@ -77,9 +118,9 @@
 						<th scope="col"><span class="visually-hidden">Edit</span></th>
 					</tr>
 				</thead>
-				<tbody>
-					{#each rows as r (r.key)}
-						<tr class:off={!r.enabled} data-row={r.key}>
+				<tbody onpaste={readonly ? undefined : onPaste}>
+					{#each rows as r, i (r.key)}
+						<tr class:off={!r.enabled} data-row={r.key} data-idx={i}>
 							<th scope="row" class="sticky">
 								{r.name}
 								{#if !r.enabled}<span class="tag">not modelled</span>{/if}
@@ -93,11 +134,11 @@
 							<td>{r.order ?? '–'}</td>
 							{#each r.monthlyM3Day as v, m (m)}
 								{#if r.editable && !readonly}
-									<td class="num cell">
+									<td class="num cell" data-paste-col={m}>
 										<NumberInput label="{r.name}, {WATER_YEAR_MONTHS[m]}, m³/day" min={0} grouped value={v} onchange={(x) => setMonth(r, m, x)} />
 									</td>
 								{:else}
-									<td class="num heat" style={r.enabled ? shade(v) : undefined}>{fmtNum(v)}</td>
+									<td class="num heat" data-paste-col={m} style={r.enabled ? shade(v) : undefined}>{fmtNum(v)}</td>
 								{/if}
 							{/each}
 							<td class="num">{fmtNum(r.meanM3Day)}</td>
@@ -125,7 +166,25 @@
 			{#if scheduled}A scheduled demand shows its months before its schedule windows.{/if}
 			A run's demand also follows rain, daily A-pan, demand factors and restrictions; its own figures are on its results.
 		</p>
+		<div class="toolbar after">
+			{#if !readonly}<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>{/if}
+			<button type="button" class="btn" onclick={downloadCsv}>Download the table as CSV</button>
+		</div>
+		{#if !readonly}
+			<GridPasteDialog
+				bind:open={pasteOpen}
+				bind:text={pasteText}
+				title="Paste demands"
+				layout="Monthly demands ({PASTE_UNIT}): a row per demand with its name first (a name two rows share takes its unit in brackets, as the CSV below has it), under a heading row of months, Oct to Sep; without names or headings the values fill the table from the cell you pasted into, so one copied row of 12 months fills a demand. Only a monthly demand object's and another water user's months take a paste: the crops' and a per-person or per-head demand's are made from other values."
+				where={pasteWhere}
+				plan={(t) => planDemandPaste(t, rows, pasteAnchor, PASTE_SCALE, PASTE_UNIT)}
+				onapply={applyPaste}
+				csv={() => demandsCsv(rows, PASTE_SCALE, PASTE_UNIT)}
+				csvName="demands.csv"
+			/>
+		{/if}
 	{/if}
+	<p class="visually-hidden" aria-live="polite">{announce}</p>
 </section>
 
 <style>
