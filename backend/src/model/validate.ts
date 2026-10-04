@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -213,6 +213,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				category: z.enum(DEMAND_OBJECT_CATEGORIES).default('other'),
 				sizing: z.enum(DEMAND_OBJECT_SIZINGS).default('monthly'),
 				monthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				// The unit it is shown in (engine ≥ 1.72.0, display only): l/s or m³/s; null = m³/day.
+				monthlyUnit: z.enum(DEMAND_MONTHLY_UNITS).nullable().default(null),
 				count: nonNeg.nullable().default(null),
 				litresPerUnitDay: nonNeg.nullable().default(null),
 				lossPct: z.number().min(0).lt(1).default(0),

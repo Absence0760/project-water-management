@@ -181,8 +181,9 @@ describe('model store', () => {
 					waterSource: 'river',
 					riverPumpM3Day: null,
 					riverPoolM3: 2500.25,
+					monthlyUnit: null,
 					note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', rank: null, destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], monthlyUnit: 'ls', count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', rank: null, destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -231,6 +232,8 @@ describe('model store', () => {
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
+		// Migration 199's CHECK keeps the unit to l/s or m³/s below the API's own check (engine 1.72.0).
+		await expect(asOwner(`UPDATE demand_object SET monthly_unit = 'gpm' WHERE id = $1`, [model.demandObjects[1]!.id])).rejects.toMatchObject({ code: '23514' });
 		// Migration 127's CHECK refuses a negative population below the API's own check (engine 1.44.0).
 		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
 		// Migration 134's CHECK keeps the source in the list below the API's own check (engine 1.56.0).

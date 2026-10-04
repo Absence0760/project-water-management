@@ -2614,7 +2614,11 @@ itself.
   number** (engine ≥ 1.56.0, issue #54 Q11, `demandObjectSource.ts`: Not
   recorded, the default; Meter records; Reconciliation strategy's AADD;
   Population × litres a day (a norm); Other), **Demand given as**
-  (m³/day by month, or a count × litres a day; picking meter records or an
+  (m³/day, l/s or m³/s by month, or a count × litres a day; l/s and m³/s
+  are only how it is entered and shown, engine ≥ 1.72.0: the demand stays in
+  m³/day, so switching unit never changes it, the month fields and the mean
+  line show it in the unit, "5 l/s (432 m³/day) on average", and the object
+  reopens in the unit it was given in; picking meter records or an
   AADD sets it to m³/day by month and a norm to a count × litres, and locks
   it with "Set by the source." under it; Other and Not recorded leave it to
   the modeller), **Priority** (Before the crops / With the crops, pro rata /

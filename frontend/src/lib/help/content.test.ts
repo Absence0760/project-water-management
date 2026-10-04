@@ -55,7 +55,7 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 	demandObjects: true, riverTakes: true
 };
 const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
-	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, count: true, litresPerUnitDay: true, lossPct: true,
+	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, monthlyUnit: true, count: true, litresPerUnitDay: true, lossPct: true,
 	monthlyFactor: true, returnPct: true, priority: true, rank: true, destination: true, enabled: true, schedule: true, population: true, source: true, note: true,
 	waterSource: true, riverPumpM3Day: true, riverPoolM3: true
 };

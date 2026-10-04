@@ -8,6 +8,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { ungroup } from '../support/format.ts';
+import { API_URL } from '../support/env.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -123,4 +124,42 @@ test('each demand object is titled by its name, and removing one with a demand a
 	await group.getByRole('button', { name: 'Remove Town B' }).click();
 	await answerConfirm(page, true, 'Remove “Town B”?');
 	await expect(group.getByRole('button', { name: '+ Add demand' })).toBeFocused();
+});
+
+test('a town demand given in l/s or m³/s by month is kept in m³/day and reopens in the unit it was given in (engine 1.72.0)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Demand in l/s');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await openNodeForm(page);
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	const group = page.getByRole('group', { name: 'Demand objects', exact: true });
+	await group.getByLabel('Category of the new demand object').selectOption('municipal');
+	await group.getByRole('button', { name: '+ Add demand' }).click();
+	await group.getByLabel('Name').fill('Town');
+	await group.getByLabel('Demand given as').selectOption('monthly:ls');
+	await expect(group.getByRole('group', { name: 'Demand, l/s, per month', exact: true })).toBeVisible();
+	await group.getByLabel('Demand of Town in Oct, l/s').fill('5');
+	await group.getByRole('button', { name: 'Use October’s demand for every month' }).click();
+	// 5 l/s is 432 m³/day: shown in both.
+	await expect(group.getByTestId(/^demand-object-mean-/)).toHaveText('5 l/s (432 m³/day) on average.');
+	await expectNoViolations(page, { include: '.detail' });
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toHaveCount(0);
+
+	// Stored in m³/day, with the unit it was given in.
+	const model = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { demandObjects: { monthlyM3Day: number[]; monthlyUnit: string | null }[] };
+	expect(model.demandObjects[0]!.monthlyM3Day[0]).toBeCloseTo(432, 9);
+	expect(model.demandObjects[0]!.monthlyUnit).toBe('ls');
+
+	await page.reload();
+	await openNodeForm(page);
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	const again = page.getByRole('group', { name: 'Demand objects', exact: true });
+	await expect(again.getByLabel('Demand given as')).toHaveValue('monthly:ls');
+	await expect(again.getByLabel('Demand of Town in Mar, l/s')).toHaveValue('5');
+	// The same demand in m³/s, and back in m³/day: never changed by the unit.
+	await again.getByLabel('Demand given as').selectOption('monthly:m3s');
+	await expect(again.getByLabel('Demand of Town in Mar, m³/s')).toHaveValue('0.005');
+	await again.getByLabel('Demand given as').selectOption('monthly');
+	await expect(again.getByLabel('Demand of Town in Mar, m³/day')).toHaveValue('432');
 });

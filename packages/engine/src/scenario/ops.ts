@@ -43,6 +43,7 @@ import {
 	type AccumulationMode,
 	type Borehole,
 	type CropDef,
+	DEMAND_MONTHLY_UNITS,
 	type DemandObject,
 	type DemandPart,
 	type DemandScheduleWindow,
@@ -770,6 +771,8 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'category',
 	'sizing',
 	'monthlyM3Day',
+	// The unit its monthly demand is shown in (engine ≥ 1.72.0; display only).
+	'monthlyUnit',
 	'count',
 	'litresPerUnitDay',
 	'lossPct',
@@ -832,6 +835,7 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	category: oneOf(DEMAND_OBJECT_CATEGORIES),
 	sizing: oneOf(DEMAND_OBJECT_SIZINGS),
 	monthlyM3Day: nullable(monthlyOf(nonNeg)),
+	monthlyUnit: nullable(oneOf(DEMAND_MONTHLY_UNITS)),
 	count: nullable(nonNeg),
 	litresPerUnitDay: nullable(nonNeg),
 	lossPct: (v) => (isNum(v) && v >= 0 && v < 1 ? null : 'must be at least 0 and below 1'),
@@ -868,7 +872,7 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
 /** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no rank (1), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'rank', 'waterSource', 'riverPumpM3Day', 'riverPoolM3', 'note']);
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'rank', 'waterSource', 'riverPumpM3Day', 'riverPoolM3', 'note', 'monthlyUnit']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its

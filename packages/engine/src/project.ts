@@ -2054,6 +2054,17 @@ export const DEMAND_OBJECT_SIZINGS = ['monthly', 'perUnit'] as const;
 export type DemandObjectSizing = (typeof DEMAND_OBJECT_SIZINGS)[number];
 
 /**
+ * The unit a 'monthly' demand object's demand is entered and shown in (engine
+ * ≥ 1.72.0), besides m³/day: litres or cubic metres a second. Display only:
+ * the model keeps `monthlyM3Day` in m³/day, and a run never reads this.
+ */
+export const DEMAND_MONTHLY_UNITS = ['ls', 'm3s'] as const;
+export type DemandMonthlyUnit = (typeof DEMAND_MONTHLY_UNITS)[number];
+/** Shown = stored m³/day × this (1 l/s = 86.4 m³/day). */
+export const DEMAND_MONTHLY_UNIT_SCALE: Record<DemandMonthlyUnit, number> = { ls: 1000 / 86_400, m3s: 1 / 86_400 };
+export const DEMAND_MONTHLY_UNIT_LABEL: Record<DemandMonthlyUnit, string> = { ls: 'l/s', m3s: 'm³/s' };
+
+/**
  * Where a demand object's number comes from (engine ≥ 1.56.0, issue #54 Q11,
  * confirmed in issue #90; docs/model.md §2.7f), best first: the client's
  * rule is meter records where they exist, else the reconciliation
@@ -2147,6 +2158,8 @@ export interface DemandObject {
 	sizing: DemandObjectSizing;
 	/** 'monthly': abstraction demand, m³/day per water-year month (Oct–Sep); null under 'perUnit'. */
 	monthlyM3Day: number[] | null;
+	/** 'monthly': the unit it is entered and shown in, l/s or m³/s (display only); null or absent = m³/day. */
+	monthlyUnit?: DemandMonthlyUnit | null;
 	/** 'perUnit': how many (people, head, stands); null under 'monthly'. */
 	count: number | null;
 	/** 'perUnit': litres per unit per day at the tap or trough; null under 'monthly'. */

@@ -58,7 +58,7 @@ const MODEL_JSON = `json_build_object(
 			emergency_below_pct AS "emergencyBelowPct", target, depletion_factor AS "depletionFactor"
 		FROM borehole WHERE project_id = $1) r),
 	'demandObjects', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
-		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", unit_count AS "count",
+		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", monthly_unit AS "monthlyUnit", unit_count AS "count",
 			litres_per_unit_day AS "litresPerUnitDay", loss_pct AS "lossPct", monthly_factor AS "monthlyFactor",
 			return_pct AS "returnPct", priority, priority_rank AS "rank", destination, enabled, schedule, population, source,
 			water_source AS "waterSource", river_pump_m3_day AS "riverPumpM3Day", river_pool_m3 AS "riverPoolM3", note
@@ -357,10 +357,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		'borehole'
 	);
 	await upsertAll(
-		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
+		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, monthly_unit, unit_count, litres_per_unit_day,
 			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source,
 			water_source, river_pump_m3_day, river_pool_m3, note)
-		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
+		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, monthly_unit, unit_count, litres_per_unit_day,
 			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source,
 			water_source, river_pump_m3_day, river_pool_m3, note
 		 FROM jsonb_populate_recordset(NULL::demand_object, $2::jsonb)
@@ -372,6 +372,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			category: o.category,
 			sizing: o.sizing,
 			monthly_m3_day: o.monthlyM3Day,
+			// The unit it is shown in (199, display only); absent and null alike = m³/day.
+			monthly_unit: o.monthlyUnit ?? null,
 			unit_count: o.count,
 			litres_per_unit_day: o.litresPerUnitDay,
 			loss_pct: o.lossPct,

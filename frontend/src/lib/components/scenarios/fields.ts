@@ -259,6 +259,7 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	category: { label: 'Category', spec: { t: 'enum', options: plain(DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL) } },
 	sizing: { label: 'Demand given as', spec: { t: 'enum', options: [{ value: 'monthly', label: 'm³/day by month' }, { value: 'perUnit', label: 'a count × litres a day' }] } },
 	monthlyM3Day: { label: 'Demand by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
+	monthlyUnit: { label: 'Monthly demand shown in', spec: { t: 'enum', options: [{ value: 'ls', label: 'l/s' }, { value: 'm3s', label: 'm³/s' }], nullable: true, nullLabel: 'm³/day' } },
 	count: { label: 'Count (people, head or units)', spec: num('', { nullable: true }) },
 	litresPerUnitDay: { label: 'Litres per unit a day', spec: num('l', { nullable: true }) },
 	lossPct: { label: 'Distribution losses', spec: pct() },

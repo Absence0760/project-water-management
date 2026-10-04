@@ -1510,8 +1510,10 @@ before 2, equal ranks pro rata; null = 1; ignored on 'shared'),
 destination ('internal' | 'external'), enabled, schedule (below, or null),
 population (≥ 0 or null), source ('meter' | 'aadd' | 'perCapita' | 'other',
 or null), waterSource ('dam' | 'river', or null = the dam), riverPumpM3Day
-(≥ 0 or null = no limit), riverPoolM3 (≥ 0 or null = none), note (≤ 1000
-chars) }[]`,
+(≥ 0 or null = no limit), riverPoolM3 (≥ 0 or null = none), monthlyUnit
+('ls' | 'm3s', or null = m³/day; engine ≥ 1.72.0, migration 199: the unit a
+monthly demand is entered and shown in, display only, `monthlyM3Day` stays
+m³/day), note (≤ 1000 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
 null, internal, true, null, null, null, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
