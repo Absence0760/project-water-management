@@ -32,7 +32,7 @@ function catchment(): ModelInput {
 			damMinPct: 0.1,
 			divertCapacityM3Day: rng.float(0, 2000),
 			irrigationEfficiency: 0.8,
-			lossReturnFraction: 0.5,
+			returnFlowFraction: 0.1,
 			damAreaFullM2: null,
 			damAreaExponent: 0.7,
 			damSeepagePerDay: 0.001

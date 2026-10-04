@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapFeatureKind, MapNodeArea } from '$lib/api/types';
-import { areaSourceOf, areaSourceText, featureForNode, groupFeatures, headerLine, inListOrder, keyGroups, pickedFeature, presentKey, shortHash } from './mapList';
-import { overlayColours, riverNetworkColour } from './mapStyle';
+import { areaSourceOf, areaSourceText, boundaryNextStep, delineationLines, featureForNode, groupFeatures, headerLine, inListOrder, keyGroups, pickedFeature, presentKey, shortHash } from './mapList';
+import { channelColour, overlayColours, riverNetworkColour } from './mapStyle';
 
 const ring = [
 	[0, 0],
@@ -117,5 +117,52 @@ describe('presentKey', () => {
 	});
 	it('keeps the River network layer’s line while the layer is on, with nothing of the project’s drawn', () => {
 		expect(labels(presentKey(keyGroups(c, { riverNetwork: riverNetworkColour(false) }), []))).toEqual(['Lines: river network']);
+	});
+	it('keeps the terrain channels while they are drawn, first among the lines, with nothing of the project’s drawn', () => {
+		expect(labels(presentKey(keyGroups(c, { channels: channelColour(false), riverNetwork: riverNetworkColour(false) }), [f('R', 'river', null)]))).toEqual([
+			'Lines: terrain channels, river network, river'
+		]);
+		expect(labels(presentKey(keyGroups(c, { channels: channelColour(false) }), []))).toEqual(['Lines: terrain channels']);
+	});
+});
+
+describe('the two lines a delineation shows (the operator asked: orange or blue?)', () => {
+	it('names the terrain channels as what the click and the outline follow, and the mapped rivers as reference only', () => {
+		for (const dark of [false, true]) {
+			const lines = delineationLines({ channels: channelColour(dark), riverNetwork: riverNetworkColour(dark) });
+			expect(lines).toEqual([
+				{ label: 'terrain channels', swatch: 'line', colour: channelColour(dark), note: 'where your click goes; the outline follows these' },
+				{ label: 'river network', swatch: 'dashed', colour: riverNetworkColour(dark), note: 'mapped rivers, for reference only; they can sit off the terrain channels' }
+			]);
+			// Without the River network layer, only the channels.
+			expect(delineationLines({ channels: channelColour(dark) }).map((i) => i.label)).toEqual(['terrain channels']);
+			// The key says the same words while the channels are drawn, and nothing about them otherwise.
+			const keyed = keyGroups(overlayColours(dark), { channels: channelColour(dark), riverNetwork: riverNetworkColour(dark) }).find((g) => g.label === 'Lines')!.items;
+			expect(keyed.slice(0, 2)).toEqual(lines);
+			expect(keyGroups(overlayColours(dark), { riverNetwork: riverNetworkColour(dark) }).flatMap((g) => g.items).some((i) => i.note)).toBe(false);
+		}
+	});
+});
+
+describe('boundaryNextStep: what turns the boundary on the map into the model', () => {
+	const base = { canStart: false, canDivide: false, pendingStart: false, pendingDivide: false, unitAreasFromMap: 0 };
+	it('offers Start from the map while the model is empty', () => {
+		const s = boundaryNextStep({ ...base, canStart: true })!;
+		expect(s).toMatchObject({ sheet: 'start', label: 'Start from the map' });
+		expect(s.text).toMatch(/^This boundary is on the map, not in the model yet\. Start from the map proposes/);
+		expect(boundaryNextStep({ ...base, canStart: true, pendingStart: true })!.label).toBe('Review the proposed model');
+	});
+	it('offers Divide the model once it has nodes, saying what it does', () => {
+		const s = boundaryNextStep({ ...base, canDivide: true })!;
+		expect(s).toEqual({
+			sheet: 'divide',
+			label: 'Divide the model',
+			text: 'This boundary is on the map, not in the model yet. Divide the model splits it into each unit’s area at your dams, abstraction points and gauges, for you to tick.'
+		});
+		expect(boundaryNextStep({ ...base, canDivide: true, pendingDivide: true })!.label).toBe('Review the proposed division');
+	});
+	it('offers nothing once a unit took its area from the map, or when neither flow is open (a viewer, no elevation model)', () => {
+		expect(boundaryNextStep({ ...base, canDivide: true, unitAreasFromMap: 2 })).toBeNull();
+		expect(boundaryNextStep(base)).toBeNull();
 	});
 });

@@ -158,6 +158,46 @@ def iso(d: Any) -> str:
     raise ValueError(f"not a date: {d!r}")
 
 
+# The engine's DEFAULT_IRRIGATION_SYSTEMS (packages/engine/src/project.ts IRRIGATION_SYSTEMS): the SABI 2021
+# Table 4 systems, their preset keys as ids. The importer parity test compares this output with the browser's.
+DEFAULT_IRRIGATION_SYSTEMS = [
+    {"id": "drip", "name": "Drip", "efficiency": 0.9, "preset": "drip", "sortOrder": 0},
+    {"id": "micro", "name": "Micro-sprinkler", "efficiency": 0.82, "preset": "micro", "sortOrder": 1},
+    {"id": "pivot", "name": "Centre pivot / linear move", "efficiency": 0.85, "preset": "pivot", "sortOrder": 2},
+    {"id": "sprinkler", "name": "Sprinkler (permanent)", "efficiency": 0.8, "preset": "sprinkler", "sortOrder": 3},
+    {"id": "movable", "name": "Sprinkler (movable)", "efficiency": 0.75, "preset": "movable", "sortOrder": 4},
+    {"id": "surface", "name": "Flood / furrow", "efficiency": 0.7, "preset": "surface", "sortOrder": 5},
+]
+
+
+def _pct_text(e: float) -> str:
+    """e as a percentage to one decimal, as JavaScript prints Math.round(e * 1000) / 10 ("77", "82.5")."""
+    v = math.floor(e * 1000 + 0.5) / 10
+    return str(int(v)) if v == int(v) else repr(v)
+
+
+def planting_systems(crop_areas: list[dict[str, Any]], efficiency_of: dict[str, float]) -> list[dict[str, Any]] | None:
+    """The irrigation systems a workbook's plantings run on (engine >= 1.72.0), as the browser's plantingSystems:
+    the SABI table plus a row "Workbook, NN %" for each farm efficiency none of them has, in the order the
+    plantings first need them. Sets each planting's system to its farm's; None without plantings."""
+    if not crop_areas:
+        return None
+    table = [dict(s) for s in DEFAULT_IRRIGATION_SYSTEMS]
+    for a in crop_areas:
+        e = efficiency_of.get(a["nodeId"], 1)
+        row = next((s for s in table if s["efficiency"] == e), None)
+        if row is None:
+            row = {"id": f"workbook-{_js_number(e)}", "name": f"Workbook, {_pct_text(e)} %", "efficiency": e, "preset": None, "sortOrder": len(table)}
+            table.append(row)
+        a["irrigationSystemId"] = row["id"]
+    return table
+
+
+def _js_number(v: float) -> str:
+    """A number as JavaScript's String(v) prints it: 1 not 1.0, 0.77 as 0.77."""
+    return str(int(v)) if v == int(v) else repr(v)
+
+
 def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> dict[str, Any]:
     """The node's operating-rule fields (engine >= 0.16.0, docs/engine-audit.md).
 
@@ -184,9 +224,11 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
         )
     r = num(spec.get("returnFlowPct"))
     if r > 0:
-        irrigation = {"irrigationEfficiency": max(1 - min(r, 1), 0.01), "lossReturnFraction": 1}
+        # Every loss returns: r of the water supplied (engine ≥ 1.71.0), 0.99 when e is floored at 0.01.
+        e = max(1 - min(r, 1), 0.01)
+        irrigation = {"irrigationEfficiency": e, "returnFlowFraction": min(r, 0.99)}
     else:
-        irrigation = {"irrigationEfficiency": 1, "lossReturnFraction": 0}
+        irrigation = {"irrigationEfficiency": 1, "returnFlowFraction": 0}
     return {"damMinPct": 0, **irrigation, "damAreaFullM2": None, "damAreaExponent": 0.7, "damSeepagePerDay": 0}
 
 
@@ -1192,6 +1234,9 @@ def extract(
                     wb.notes.append(f"[Farm demand] crop {crop} is not in [Crop demand]; ignored")
                     continue
                 crop_areas.append({"nodeId": node_id[farm], "cropId": crop_id[crop], "areaM2": a})
+        # Each planting on its unit's irrigation system (engine >= 1.72.0): the workbook has one efficiency per farm,
+        # 1 - its return flow (N1), so a SABI system when one has it, else a "Workbook, NN %" row of the project's own.
+        irrigation_systems = planting_systems(crop_areas, {n["id"]: n.get("irrigationEfficiency", 1) for n in nodes})
         demand_objects: list[dict[str, Any]] = []
         if gross_days is not None and len(gross_days) == 12 and all(d > 0 for d in gross_days):
             factors = {c["name"]: c["cropFactor"] for c in crops}
@@ -1310,6 +1355,7 @@ def extract(
                 "cropAreas": crop_areas,
                 "transfers": model_transfers,
                 **({"demandObjects": demand_objects} if demand_objects else {}),
+                **({"irrigationSystems": irrigation_systems} if irrigation_systems else {}),
             },
             "series": flow["series"],
         }

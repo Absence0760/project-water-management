@@ -193,10 +193,11 @@ function handCurtailment(input: ModelInput, out: ModelOutput, from: number, to: 
 	const res = new Map<string, HandCurtailmentFarm>();
 	for (const [id, b] of base) {
 		const e = b.node.irrigationEfficiency ?? 1;
-		const beta = b.node.lossReturnFraction ?? 0;
+		// The return flow, a share of the water supplied, at most the losses (engine ≥ 1.71.0).
+		const ret = Math.min(Math.max(b.node.returnFlowFraction ?? 0, 0), 1 - e);
 		const M = b.H * (Ktot ?? 0);
 		const N = M - b.I;
-		const cut = b.H > 0 ? b.Rirr / (1 - beta * (1 - e)) : 0;
+		const cut = b.H > 0 ? b.Rirr / (1 - ret) : 0;
 		const U = Math.max(M + cut, 0);
 		res.set(id, {
 			H: b.H,

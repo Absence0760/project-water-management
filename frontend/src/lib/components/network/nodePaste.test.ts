@@ -19,15 +19,15 @@ const plan = (r: ReturnType<typeof planNodePaste>) => {
 describe('planNodePaste', () => {
 	it('reads a % as 0–100 and stores it 0–1; only real changes are listed, with what they replace', () => {
 		const nodes = sample();
-		const p = plan(planNodePaste('Name\tArea (km²)\tEfficiency (%)\tDam capacity (m³)\nUpper farm\t12\t85\t150 000\nLower farm\t9,5\t90\t', nodes));
+		const p = plan(planNodePaste('Name\tArea (km²)\tReturn flow (% of supply)\tDam capacity (m³)\nUpper farm\t12\t5\t150 000\nLower farm\t9,5\t10\t', nodes));
 		expect(p.changes).toEqual([
-			{ rowId: 'u', rowName: 'Upper farm', key: 'irrigationEfficiency', column: 'Efficiency', unit: '%', from: 90, to: 85 },
+			{ rowId: 'u', rowName: 'Upper farm', key: 'returnFlowFraction', column: 'Return flow', unit: '% of supply', from: 10, to: 5 },
 			{ rowId: 'l', rowName: 'Lower farm', key: 'areaKm2', column: 'Area', unit: 'km²', from: 8, to: 9.5 }
 		]);
-		// Upper's area and capacity, and Lower's 90 % efficiency, are what the table holds already.
+		// Upper's area and capacity, and Lower's 10 % return flow, are what the table holds already.
 		expect(p.unchanged).toBe(3);
 		applyNodePaste(nodes, p);
-		expect(nodes[1]!.irrigationEfficiency).toBeCloseTo(0.85, 12);
+		expect(nodes[1]!.returnFlowFraction).toBeCloseTo(0.05, 12);
 		expect(nodes[2]!.areaKm2).toBe(9.5);
 		expect(nodes[1]!.areaKm2).toBe(12);
 	});
@@ -71,7 +71,14 @@ describe('planNodePaste', () => {
 
 	it('stops on a negative value or a % above 100', () => {
 		expect(planNodePaste('Name\tArea\nUpper farm\t-1', sample())).toEqual({ error: 'Upper farm, Area: -1 is below 0.' });
-		expect(planNodePaste('Name\tEfficiency\nUpper farm\t120', sample())).toEqual({ error: 'Upper farm, Efficiency: 120 % is above 100 %.' });
+		expect(planNodePaste('Name\tReturn flow\nUpper farm\t120', sample())).toEqual({ error: 'Upper farm, Return flow: 120 % is above 100 %.' });
+	});
+
+	it('leaves out the efficiency, which comes from the crops’ irrigation systems (engine 1.72.0), and says so', () => {
+		const p = plan(planNodePaste('Name\tEfficiency (%)\tArea\tTotal\nUpper farm\t85\t12\t1', sample()));
+		expect(p.changes).toEqual([]);
+		expect(p.notes).toContain("Left out Efficiency (%): it comes from each unit's crops' irrigation systems, set on Crops & demand.");
+		expect(p.notes).toContain("Left out a column the table doesn't have: Total.");
 	});
 
 	it('clears a nullable field only by typing it: a blank leaves it', () => {
@@ -88,9 +95,12 @@ describe('nodeTableCsv', () => {
 		const csv = nodeTableCsv(nodes);
 		const cells = readPastedBlock(csv).cells;
 		expect(cells[0]!.slice(0, 5)).toEqual(['Name', 'Area (km²)', 'High-MAP area (km²)', 'Low-MAP area (km²)', 'Dam capacity (m³)']);
-		expect(cells[0]!.length).toBe(1 + TABLE_FIELDS.length);
-		const eff = 1 + TABLE_FIELDS.findIndex((f) => f.key === 'irrigationEfficiency');
-		expect(cells[2]![eff]).toBe('90');
+		// Every column a paste can write: not the efficiency, which is worked out (engine 1.72.0).
+		const pasteable = TABLE_FIELDS.filter((f) => !f.derived);
+		expect(cells[0]!.length).toBe(1 + pasteable.length);
+		expect(cells[0]).not.toContain('Efficiency (%)');
+		const ret = 1 + pasteable.findIndex((f) => f.key === 'returnFlowFraction');
+		expect(cells[2]![ret]).toBe('10');
 		// The gauge has no dam: blank.
 		expect(cells[1]![4]).toBe('');
 		const back = plan(planNodePaste(csv, nodes));

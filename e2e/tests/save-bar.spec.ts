@@ -3,7 +3,7 @@
 // the problems that block a save as links to where they are fixed (even from a page
 // the problem isn't on, and with that page hidden from the sidebar), asks before
 // Discard, and says "Changes saved" / "Changes discarded" with the focus on the
-// page's title once it goes. The header's Run model saves unsaved edits first.
+// page's title once it goes. Runs & results' Run model saves unsaved edits first.
 // Synthetic data only.
 import type { Page } from '@playwright/test';
 import { createProject, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
@@ -96,19 +96,26 @@ test('Run model with unsaved edits asks to save first, then runs the saved edits
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Bar run');
 	await openTransfers(page, project.id);
+	// The edits are made on Transfers and the run started from Runs & results, the only Run model.
 	const run = page.getByTestId('section-header').getByRole('button', { name: 'Run model', exact: true });
+	const toRuns = async () => {
+		await sections(page).getByRole('link', { name: 'Runs & results' }).click();
+		await expect(title(page, 'Runs & results')).toBeVisible();
+	};
 
 	// A problem: the run is refused, saying why, and Show the problem goes to it.
 	await page.getByLabel('To, transfer 1', { exact: true }).selectOption({ label: 'Upper farm' });
+	await toRuns();
 	await run.click();
-	await answerConfirm(page, false, 'A run uses the saved model, and your unsaved model edits can’t be saved yet');
+	await answerConfirm(page, true, 'A run uses the saved model, and your unsaved model edits can’t be saved yet');
 	await expect(page).toHaveURL(/tab=transfers/);
 	await page.getByLabel('To, transfer 1', { exact: true }).selectOption({ label: 'Lower farm' });
 
 	// A real edit: Cancel runs nothing; Save and run saves it, then runs.
 	await page.getByLabel('Daily cap of transfer 1, m³', { exact: true }).fill('500');
 	await page.getByLabel('Daily cap of transfer 1, m³', { exact: true }).blur();
-	await expect(run).toHaveAccessibleDescription(/your unsaved model edits are saved first/);
+	await toRuns();
+	await expect(page.locator('#run-note')).toHaveText(/^The model has unsaved changes: Run model asks to save them first/);
 	await run.click();
 	await answerConfirm(page, false, 'Save your changes and run?');
 	await expect(saveBar(page)).toBeVisible();
@@ -156,7 +163,7 @@ test('a number that needs fixing counts as unsaved: the bar lists it, and leavin
 	await expect(confirmBox(page)).toBeHidden();
 });
 
-test('on Settings, Run model with unsaved settings saves them first; a settings problem is a link in the bar and stops the run', async ({ page, owner }) => {
+test('Run model with unsaved settings saves them first; a settings problem is a link in the bar and stops the run', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Bar settings run');
 	await page.goto(`/projects/${project.id}?tab=settings`);
@@ -168,14 +175,17 @@ test('on Settings, Run model with unsaved settings saves them first; a settings 
 	await page.getByLabel('Simulation start').fill('2022-06-01');
 	await page.getByLabel('Simulation end').fill('2022-01-01');
 	await expect(bar.getByRole('link', { name: 'Simulation period: Simulation start must be before the end.' })).toBeVisible();
+	await sections(page).getByRole('link', { name: 'Runs & results' }).click();
 	await run.click();
 	await answerConfirm(page, false, 'A run uses the saved model, and your unsaved settings can’t be saved yet');
+	await sections(page).getByRole('link', { name: /^Settings/ }).click();
 	await page.getByLabel('Simulation start').fill('');
 	await page.getByLabel('Simulation end').fill('');
 
 	// An edit: Save and run saves the settings (the project's PATCH), then runs.
 	await page.getByLabel('A-pan evaporation, Oct, mm').fill('160');
 	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
+	await sections(page).getByRole('link', { name: 'Runs & results' }).click();
 	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/projects/${project.id}`));
 	const ran = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${project.id}/runs`));
 	await run.click();

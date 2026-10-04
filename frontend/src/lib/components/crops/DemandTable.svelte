@@ -30,11 +30,12 @@
 </script>
 
 <p class="muted small intro">
-	Gross demand = Σ area × A-pan × crop factor, spread over the days in each month (February {fmtNum(settings.februaryDays, 2)}
-	days). On each simulated day the model then subtracts effective rainfall ({fmtPct(settings.effectiveRainFraction, 0)} of rain on the
-	cropped area{#if settings.effectiveRainStoreMm > 0}, with what the crop can't use that day carried over in a
-		{fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) to get the net crop requirement; the hydrological unit abstracts that ÷ its irrigation
-	efficiency. Uses saved A-pan values and the crops and planted areas as edited, unsaved changes included.
+	Irrigation demand = Σ area × A-pan × crop factor ÷ the hydrological unit's irrigation efficiency (its crops' systems
+	blended), spread over the days in each month (February {fmtNum(settings.februaryDays, 2)} days): what it abstracts, so an
+	efficiency below 100 % raises it. On each simulated day the model also subtracts effective rainfall
+	({fmtPct(settings.effectiveRainFraction, 0)} of rain on the cropped area{#if settings.effectiveRainStoreMm > 0}, with what the
+		crop can't use that day carried over in a {fmtNum(settings.effectiveRainStoreMm, 0)} mm soil-water store{/if}) from the crop
+	requirement first, so this preview is before rain. Uses saved A-pan values and the crops and planted areas as edited, unsaved changes included.
 </p>
 <!-- 16 columns scroll sideways beside the crop list: the wrap takes focus so the keyboard can scroll it (axe scrollable-region-focusable). -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

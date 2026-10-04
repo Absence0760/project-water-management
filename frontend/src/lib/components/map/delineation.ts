@@ -116,5 +116,5 @@ export function provenanceFacts(p: DelineationProposal): [string, string][] {
 export const CAVEATS = [
 	'A proposal from a 30 m global elevation model, not a survey. In flat land the divide can be hundreds of metres out, and a catchment can come out joined to, or cut from, its neighbour.',
 	'Flats, dams and pans drain towards their outlet by construction: the area draining into pans is reported beside it, not taken out. A dam drawn down below its spillway, or a pond behind an embankment, can count as a pan if it holds a lot over its catchment, unless a mapped river flows out of it over a wall or the register or the map has a dam there (then it is listed as storage on a river). Canals, pipelines, culverts and transfers between basins are invisible to it.',
-	'Check it against the map (the Relief layer, the rivers, the quaternary outlines) before accepting; you can edit the shape afterwards.'
+	'Check it against the map before accepting: its outline follows the terrain channels, drawn dimmed behind it, and the Relief layer, the mapped rivers and the quaternary outlines help you judge it. Close this sheet to look (Review it brings it back); you can edit the shape afterwards.'
 ] as const;

@@ -57,7 +57,7 @@ const node = (over: Partial<NetworkNode> & Pick<NetworkNode, 'id' | 'name' | 'ki
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -94,7 +94,7 @@ function handBuilt(): ModelInput {
 					damAreaExponent: 0.8,
 					damSeepagePerDay: 0.002,
 					irrigationEfficiency: 0.8,
-					lossReturnFraction: 0.5,
+					returnFlowFraction: 0.1,
 					demandFactor: [1, 1, 1.2, 1.2, 1.2, 1, 1, 0.8, 0.8, 0.8, 1, 1]
 				}),
 				node({
@@ -110,7 +110,7 @@ function handBuilt(): ModelInput {
 					damSeepagePerDay: 0.01,
 					damSeepageReturnPct: 0.4,
 					irrigationEfficiency: 0.75,
-					lossReturnFraction: 0.3
+					returnFlowFraction: 0.075
 				})
 			],
 			crops: [{ id: 'c', name: 'Citrus', cropFactor: [0.7, 0.7, 0.75, 0.75, 0.75, 0.7, 0.65, 0.6, 0.6, 0.6, 0.65, 0.7] as never }],

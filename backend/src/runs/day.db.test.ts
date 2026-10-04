@@ -18,7 +18,7 @@ const farm = node('Upper', outlet.id, {
 	pctRunoffToDam: 0.5,
 	pctUpstreamToDam: 0,
 	irrigationEfficiency: 0.8,
-	lossReturnFraction: 0.5,
+	returnFlowFraction: 0.1,
 	divertCapacityM3Day: 50
 });
 const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
@@ -55,7 +55,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 			damInitialPct: 0.4,
 			damMinPct: 0.1,
 			irrigationEfficiency: 0.8,
-			lossReturnFraction: 0.5,
+			returnFlowFraction: 0.1,
 			damAreaFullM2: null,
 			damAreaExponent: 0.7,
 			damSeepagePerDay: 0
@@ -192,7 +192,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		const pid = (await owner.call('POST', '/projects', { name: 'Trace crop efficiency' })).body.project.id;
 		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
 		const out2 = node('Outlet', null);
-		const farm2 = node('Upper', out2.id, { damCapacityM3: 50_000, damInitialPct: 1, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 });
+		const farm2 = node('Upper', out2.id, { damCapacityM3: 50_000, damInitialPct: 1, irrigationEfficiency: 0.8, returnFlowFraction: 0.1 });
 		const drip = { ...crop, id: crypto.randomUUID(), irrigationEfficiency: 0.9 };
 		const model = { nodes: [out2, farm2], crops: [drip], cropAreas: [{ nodeId: farm2.id, cropId: drip.id, areaM2: 10_000 }], transfers: [] };
 		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
@@ -214,7 +214,7 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		try {
 			await db.query(
 				`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (
-					SELECT jsonb_agg((n - 'irrigationEfficiency' - 'lossReturnFraction') || '{"returnFlowPct": 0.2}'::jsonb)
+					SELECT jsonb_agg((n - 'irrigationEfficiency' - 'returnFlowFraction') || '{"returnFlowPct": 0.2}'::jsonb)
 					FROM jsonb_array_elements(inputs->'model'->'nodes') n)) WHERE id = $1`,
 				[runId]
 			);
@@ -222,8 +222,28 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 			await db.end();
 		}
 		const res = await day(owner, '2020-01-02');
-		expect(res.body.params).toMatchObject({ irrigationEfficiency: 0.8, lossReturnFraction: 1 });
+		expect(res.body.params).toMatchObject({ irrigationEfficiency: 0.8, returnFlowFraction: 0.2 });
 		expect(res.body.params).not.toHaveProperty('returnFlowPct');
+	});
+
+	it('reads a run saved by engine 0.16.0–1.70.0, its β a share of the losses, as migration 197 maps it: r = β(1 − e)', async () => {
+		const pg = (await import('pg')).default;
+		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await db.connect();
+		try {
+			await db.query(
+				`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (
+					SELECT jsonb_agg((n - 'irrigationEfficiency' - 'returnFlowFraction' - 'returnFlowPct') || '{"irrigationEfficiency": 0.8, "lossReturnFraction": 0.5}'::jsonb)
+					FROM jsonb_array_elements(inputs->'model'->'nodes') n)) WHERE id = $1`,
+				[runId]
+			);
+		} finally {
+			await db.end();
+		}
+		const res = await day(owner, '2020-01-02');
+		expect(res.body.params.irrigationEfficiency).toBe(0.8);
+		expect(res.body.params.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect(res.body.params).not.toHaveProperty('lossReturnFraction');
 	});
 
 	it('returns a gauge with its own columns and no storage', async () => {

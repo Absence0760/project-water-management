@@ -256,7 +256,7 @@ test('a run scenario shows its run’s validation statement under the comparison
 
 	await panel.getByRole('heading', { name: 'Validation statement' }).click();
 	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', /^Errata of engine \d+\.\d+\.\d+$/, 'Known limitations']);
-	await expect(panel.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
+	await expect(panel.getByRole('rowheader', { name: 'B3', exact: true })).toBeVisible();
 	await expectNoViolations(page);
 
 	await page.setViewportSize({ width: 390, height: 844 });

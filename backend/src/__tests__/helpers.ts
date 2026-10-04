@@ -114,7 +114,7 @@ export function node(name: string, downstreamNodeId: string | null, extra: Recor
 		damMinPct: 0.1,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0.5,
+		returnFlowFraction: 0.1,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,

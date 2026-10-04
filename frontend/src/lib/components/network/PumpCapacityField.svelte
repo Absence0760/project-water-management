@@ -11,6 +11,8 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { pumpM3Day } from './supply';
+	import FlowUnitSelect from './FlowUnitSelect.svelte';
+	import { pumpUnit } from './flowUnit.svelte';
 
 	let {
 		idBase,
@@ -64,10 +66,13 @@
 		</div>
 	{/if}
 	<div class="field">
-		<span class="lbl"><label for={id('cap')}>{label}{forWhom} <span class="u">(m³/day)</span></label>{#if helpKey}<HelpTip key={helpKey} />{/if}</span>
+		<span class="lbl"
+			><label for={id('cap')}>{label}{forWhom}{' '}<span class="visually-hidden">({pumpUnit.label})</span></label><FlowUnitSelect unit={pumpUnit} label="Unit of {label.toLowerCase()}{forWhom}" />{#if helpKey}<HelpTip key={helpKey} />{/if}</span
+		>
 		<NumberInput
 			id={id('cap')}
 			min={0}
+			scale={pumpUnit.scale}
 			grouped
 			nullable
 			placeholder="no limit"
@@ -84,7 +89,8 @@
 		/>
 		<span class="hint" id="{id('cap')}-h" data-testid={noteTestId}>
 			{#if pumpM3Day(pumps, rate) !== null}
-				{fmtNum(pumps, 0, true)} × {fmtNum(rate, 2, true)} m³/h × 24 h = {fmtNum(pumpM3Day(pumps, rate), 0)} m³/day.
+				<!-- The sum is always in m³/day (m³/h × 24 h); the picked unit follows in brackets. -->
+				{fmtNum(pumps, 0, true)} × {fmtNum(rate, 2, true)} m³/h × 24 h = {fmtNum(pumpM3Day(pumps, rate)!, 0, true)} m³/day{#if pumpUnit.id !== 'm3day'}{' '}({fmtNum(pumpM3Day(pumps, rate)! * pumpUnit.scale, 3, true)} {pumpUnit.label}){/if}.
 			{:else}
 				{note}
 			{/if}
@@ -109,10 +115,6 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
-	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
 	}
 	@media (max-width: 640px) {
 		.field :global(input) {

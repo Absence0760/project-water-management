@@ -1,7 +1,7 @@
 // The later scenario ops through the "Add a change" form (engine ≥ 1.35.0,
 // issue #73; docs/scenarios.md § Op catalogue, docs/ui.md § Scenarios): an
 // editor moves a farm to drain into another, inserts a new dam on the reach
-// above the outflow gauge, changes a crop's own irrigation efficiency and
+// above the outflow gauge, puts a crop on another irrigation system and
 // asks for a registered volume on a farm. The list reads each one and
 // classes it (a move of another party's farm and a crop's efficiency are
 // baseline assumptions; the new dam is the proposal, and so is the volume
@@ -56,14 +56,14 @@ test('an editor moves and inserts nodes, changes a crop and sets a registered vo
 	await expect(changes.nth(1)).toContainText(/Insert the hydrological unit “Weir dam” above Outflow gauge, taking what Upper farm drains, dam 50\s000 m³/);
 	await expect(changes.nth(1)).toContainText('Proposal');
 
-	// A crop's own irrigation efficiency: it applies on every farm growing it, so a baseline assumption.
+	// A crop's default irrigation system (engine 1.72.0): it applies on every farm growing it, so a baseline assumption.
 	await form.getByLabel('Kind of change').selectOption({ label: 'Change a crop' });
 	await form.getByLabel('Crop', { exact: true }).selectOption({ label: 'Orchard' });
-	await form.getByLabel('Field').selectOption({ label: 'Irrigation efficiency' });
-	await form.getByLabel('Irrigation efficiency (%)').fill('90');
+	await form.getByLabel('Field').selectOption({ label: 'Irrigation system' });
+	await form.locator('#op-value').selectOption({ label: 'Drip, 90 %' });
 	await add();
 	await expect(changes).toHaveCount(3);
-	await expect(changes.nth(2)).toContainText("Crop Orchard: Irrigation efficiency the hydrological unit's → 90 %");
+	await expect(changes.nth(2)).toContainText("Crop Orchard: Irrigation system none (each unit's own) → Drip, 90 %");
 	await expect(changes.nth(2)).toContainText('Baseline assumption');
 
 	// A new registered volume on Upper farm: the proposal once the farm is the proposer's.

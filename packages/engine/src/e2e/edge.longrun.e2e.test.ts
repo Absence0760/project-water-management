@@ -41,7 +41,7 @@ const NODE: Omit<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId'> = {
 	damMinPct: 0,
 	divertCapacityM3Day: 0,
 	irrigationEfficiency: 1,
-	lossReturnFraction: 0,
+	returnFlowFraction: 0,
 	damAreaFullM2: 0,
 	damAreaExponent: 0.7,
 	damSeepagePerDay: 0
@@ -88,8 +88,8 @@ function sixtyYears(): ModelInput {
 		model: {
 			nodes: [
 				{ ...NODE, id: 'G', name: 'Outlet', kind: 'gauge', downstreamNodeId: null },
-				{ ...NODE, id: 'A', name: 'Unit A', kind: 'farm', downstreamNodeId: 'G', areaKm2: 25, damCapacityM3: CAP, damInitialPct: 0.5, damMinPct: 0.05, damAreaFullM2: 150_000, damSeepagePerDay: 0.0005, irrigationEfficiency: 0.85, lossReturnFraction: 0.4, pctUpstreamToDam: 0.6, pctRunoffToDam: 0.8, divertCapacityM3Day: 2000 },
-				{ ...NODE, id: 'B', name: 'Unit B', kind: 'farm', downstreamNodeId: 'A', areaKm2: 15, damCapacityM3: 200_000, damInitialPct: 0.3, damAreaFullM2: 60_000, irrigationEfficiency: 0.9, lossReturnFraction: 0.5 }
+				{ ...NODE, id: 'A', name: 'Unit A', kind: 'farm', downstreamNodeId: 'G', areaKm2: 25, damCapacityM3: CAP, damInitialPct: 0.5, damMinPct: 0.05, damAreaFullM2: 150_000, damSeepagePerDay: 0.0005, irrigationEfficiency: 0.85, returnFlowFraction: 0.06, pctUpstreamToDam: 0.6, pctRunoffToDam: 0.8, divertCapacityM3Day: 2000 },
+				{ ...NODE, id: 'B', name: 'Unit B', kind: 'farm', downstreamNodeId: 'A', areaKm2: 15, damCapacityM3: 200_000, damInitialPct: 0.3, damAreaFullM2: 60_000, irrigationEfficiency: 0.9, returnFlowFraction: 0.05 }
 			],
 			crops: [{ id: 'c', name: 'Crop', cropFactor: KC }],
 			cropAreas: [

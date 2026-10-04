@@ -25,7 +25,7 @@ import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -94,7 +94,8 @@ import {
 	type RunAllocations,
 	type RunAllocationSource,
 	type RiverTakeSummary,
-	type UserSummary
+	type UserSummary,
+	runReturnFlow
 } from './project';
 import type { AllocationLimitBound } from './project';
 import { ENGINE_VERSION } from './version';
@@ -855,7 +856,7 @@ function runNetwork(
 					supplied: r.supplied,
 					ewrCharge: attribution.charge[i]!,
 					ewrChargeIrrigation: attribution.chargeIrrigation[i]!,
-					consumptivePerSupplied: 1 - plan.nodes[i]!.lossReturnFraction * (1 - plan.nodes[i]!.irrigationEfficiency),
+					consumptivePerSupplied: 1 - plan.nodes[i]!.returnFlowFraction,
 					// A unit with demand objects (engine ≥ 1.7.0): k over the window from what it returned.
 					...(plan.nodes[i]!.objects ? { returned: sim.workings![i]!.returnFlow } : {}),
 					// Its basic-needs floor (engine ≥ 1.44.0): the volume left never goes below it.
@@ -1399,12 +1400,12 @@ export function buildNetworkPlan(
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
 	const factorFrom = start === undefined ? 0 : demandFactorStart(settings.demandFactorFrom, start, days);
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
-	const model = upgradeLegacyModel(input.model);
+	const model = upgradeLegacyInput(input.model, input.settings?.apanMm);
 	const nodes = model.nodes;
 	// Shares of 0–1, as the API and the database hold them: 80 meant as a percent would start a dam at 80 × its
 	// capacity and spill water that never existed, with every self-check passing (engine ≥ 1.69.0: refused).
 	for (const n of nodes) {
-		for (const f of ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'lossReturnFraction'] as const) {
+		for (const f of ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'returnFlowFraction'] as const) {
 			const v = n[f];
 			if (v != null && !(v >= 0 && v <= 1)) throw new Error(`unit "${n.name}": ${f} is ${String(v)}, not a share from 0 to 1 (enter 80 % as 0.8)`);
 		}
@@ -1954,7 +1955,7 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 }
 
 function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
-	return n.kind === 'user' ? 1 - (n.userReturn ?? 0) : 1 - n.lossReturnFraction * (1 - n.irrigationEfficiency);
+	return n.kind === 'user' ? 1 - (n.userReturn ?? 0) : 1 - n.returnFlowFraction;
 }
 
 /**
@@ -2231,25 +2232,40 @@ function damStorage(n: NetworkNode, warnings: string[]): { damCurve?: DamCurve; 
 	return { ...(curve ? { damCurve: curve } : {}), ...(release ? { release } : {}), ...(ret < 1 ? { seepageReturn: ret } : {}) };
 }
 
+/** A share as a percentage to one decimal, for a warning ("12.5 %"). */
+const pctText = (v: number) => `${Math.round(v * 1000) / 10} %`;
+
 /**
- * A farm's irrigation efficiency and loss return (audit N1). Validation keeps
- * 0 < e ≤ 1 and 0 ≤ β ≤ 1; a value outside that (a hand-edited document)
- * runs as e = 1 and β clamped, with a warning, rather than dividing by 0.
- * `fromCrops` combines the farm's value with its crops' own efficiencies
- * (engine ≥ 0.43.0, ./demand.ts farmIrrigationEfficiency).
+ * A farm's irrigation efficiency and return flow (audit N1; engine ≥ 1.71.0
+ * the return flow r is a share of the water supplied). Validation keeps
+ * 0 < e ≤ 1 and 0 ≤ r ≤ 1 − e; a value outside that (a hand-edited document)
+ * runs as e = 1 and r clamped to [0, 1 − e], with a warning, rather than
+ * dividing by 0 or returning more than was lost. `fromCrops` combines the
+ * farm's efficiency with its crops' own (engine ≥ 0.43.0, ./demand.ts
+ * farmIrrigationEfficiency), and the cap holds against that blend: a crop on a
+ * more efficient system leaves less to return.
  */
-function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficiency: number) => number): { irrigationEfficiency: number; lossReturnFraction: number } {
-	if (n.kind !== 'farm') return { irrigationEfficiency: 1, lossReturnFraction: 0 };
+
+function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficiency: number) => number): { irrigationEfficiency: number; returnFlowFraction: number } {
+	if (n.kind !== 'farm') return { irrigationEfficiency: 1, returnFlowFraction: 0 };
 	let e = n.irrigationEfficiency;
 	if (!(e > 0 && e <= 1)) {
 		warnings.push(`unit "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
 		e = 1;
 	}
 	e = fromCrops(e);
-	const b = n.lossReturnFraction;
-	const beta = Number.isFinite(b) ? Math.min(Math.max(b, 0), 1) : 0;
-	if (beta !== b) warnings.push(`unit "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
-	return { irrigationEfficiency: e, lossReturnFraction: beta };
+	// The return flow comes out of the losses (engine ≥ 1.71.0): at most 1 − e of the water supplied,
+	// e being the efficiency the run uses (the unit's blended with its crops' own systems).
+	const r = n.returnFlowFraction;
+	const rr = runReturnFlow(r, e);
+	if (rr !== r) {
+		warnings.push(
+			r > 1 - e && r <= 1
+				? `unit "${n.name}": return flow ${pctText(r)} of the water supplied is more than its losses at ${pctText(e)} irrigation efficiency; using ${pctText(rr)}`
+				: `unit "${n.name}": return flow ${String(r)} is not in [0, 1]; using ${rr}`
+		);
+	}
+	return { irrigationEfficiency: e, returnFlowFraction: rr };
 }
 
 /**
@@ -2741,16 +2757,13 @@ function buildDemand(
 ): { net: Float64Array; netBase?: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => {
-		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
-		const e = ownCropEfficiency(c.irrigationEfficiency);
-		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the unit's`);
-		return {
-			id: c.id,
-			name: c.name,
-			cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings),
-			...(e !== undefined ? { irrigationEfficiency: e } : {})
-		};
+		// A crop's legacy own efficiency (engine 0.43.0–1.71.0, a snapshot or older document); one outside (0, 1] falls back to the farm's.
+		if (c.irrigationSystemId == null && c.irrigationEfficiency != null && ownCropEfficiency(c.irrigationEfficiency) === undefined)
+			warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the unit's`);
+		return { id: c.id, name: c.name, cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings) };
 	});
+	// Each planting's efficiency (engine ≥ 1.72.0): its system on the unit, else its crop's, from the project's table.
+	const plantingEfficiency = plantingEfficiencyResolver(cropDefs, input.model.irrigationSystems, warnings);
 	const cropIds = new Set(crops.map((c) => c.id));
 	// Crops and crop areas are summed in id order (crop id, then area), not
 	// list order, so a farm's demand is the same to the last bit however the
@@ -2790,6 +2803,7 @@ function buildDemand(
 		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days), efficiency: farmOnly };
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
+		const plantings: PlantingEfficiency[] = [];
 		let cropped = 0;
 		for (const ca of sortedAreas) {
 			if (ca.nodeId !== node.id) continue;
@@ -2798,6 +2812,8 @@ function buildDemand(
 				continue;
 			}
 			areas.set(ca.cropId, (areas.get(ca.cropId) ?? 0) + ca.areaM2);
+			const e = plantingEfficiency(ca);
+			plantings.push({ cropId: ca.cropId, areaM2: ca.areaM2, ...(e !== undefined ? { efficiency: e } : {}) });
 			cropped += ca.areaM2;
 		}
 		if (cropped === 0) return d;
@@ -2823,8 +2839,8 @@ function buildDemand(
 		// The requirement before the factor (engine ≥ 1.70.0): a full allocation fits its factor on it (§2.12a).
 		const netBase = factor && factorFrom < days ? Float64Array.from(f.net) : undefined;
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
-		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
-		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);
+		// Plantings under their own irrigation system (engine ≥ 0.43.0 per crop, 1.72.0 per unit): weighted by their annual requirement at the monthly A-pan.
+		const efficiency = (e: number) => unitIrrigationEfficiency(e, crops, plantings, settings.apanMm);
 		return { net: f.net, ...(netBase ? { netBase } : {}), gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.

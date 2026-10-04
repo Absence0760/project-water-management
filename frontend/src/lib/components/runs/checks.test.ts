@@ -121,7 +121,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 	name: 'Farm b',
 	kind: 'farm',
 	previousStorageM3: 500,
-	params: { pctUpstreamToDam: 0.4, pctRunoffToDam: 0.5, divertCapacityM3Day: 100, damCapacityM3: 1000, damInitialPct: 0.5, damMinPct: 0, irrigationEfficiency: 0.9, lossReturnFraction: 1, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
+	params: { pctUpstreamToDam: 0.4, pctRunoffToDam: 0.5, divertCapacityM3Day: 100, damCapacityM3: 1000, damInitialPct: 0.5, damMinPct: 0, irrigationEfficiency: 0.9, returnFlowFraction: 0.1, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
 	columns: Object.entries({
 		gross_demand: F,
 		effective_rain: 0,

@@ -23,6 +23,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	const names = grid.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
 	await expect(names.nth(0)).toHaveValue('Outflow gauge');
+	// One heading per modal: the title names the table, the table has none of its own.
+	await expect(grid.getByRole('heading')).toHaveText(['Node table']);
 	// A new node is a "Unit N", as the workspace calls it (operator decision, 2026-10-01).
 	await expect(names.nth(1)).toHaveValue('Unit 1');
 	await expect(names.nth(2)).toHaveValue('Unit 2');
@@ -346,8 +348,8 @@ test.describe('network layout', () => {
 			const card = page.getByTestId('node-card');
 			await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 
-			// Edit opens the full form in a sheet the width of the screen.
-			await card.getByRole('button', { name: 'Edit Upper farm' }).click();
+			// The row's Edit (the card has none) opens the full form in a sheet the width of the screen.
+			await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: 'Edit Upper farm' }).click();
 			const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
 			const picker = sheet.getByLabel('Node to edit');
 			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · hydrological unit');
@@ -358,7 +360,7 @@ test.describe('network layout', () => {
 			await expect(sheet.getByRole('button', { name: /^Move (up|down) the list$/ })).toHaveCount(0);
 
 			// Deep in the farm form, the picker and ‹ › are still on screen, at the top of the sheet.
-			await sheet.getByLabel('Losses returning (%)').scrollIntoViewIfNeeded();
+			await sheet.getByLabel('Return flow (% of supply)').scrollIntoViewIfNeeded();
 			await expect(picker).toBeInViewport();
 			await expect(sheet.getByRole('button', { name: 'Next node' })).toBeInViewport();
 			await sheet.getByRole('button', { name: 'Next node' }).click();

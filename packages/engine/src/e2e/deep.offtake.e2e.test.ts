@@ -39,7 +39,7 @@ function farm(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,

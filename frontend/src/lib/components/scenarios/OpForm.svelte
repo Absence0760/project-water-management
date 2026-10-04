@@ -6,6 +6,7 @@
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
 	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { guardUnsaved } from '$lib/nav/unsaved';
 	import { leavesScenario } from './leaves';
@@ -42,7 +43,7 @@
 	const pumpers = $derived(nodes.filter((n) => n.kind !== 'gauge'));
 	// demand.scale (issue #53 R1): the nodes of the category picked.
 	const demandNodes = $derived(nodes.filter((n) => n.kind === d.demandCategory));
-	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? id;
+	const nodeName = (id: string) => nodes.find((n) => n.id === id)?.name ?? (findSystem(input.model, id) ? systemLabel(findSystem(input.model, id)!) : id);
 	// ewrRule.set (engine ≥ 1.6.0): the outlet and every gauge still marked as an EWR site; the table itself is the Settings tab's editor.
 	const loadRuleEditor = () => import('$lib/components/settings/EwrRuleTablesEditor.svelte');
 	// settings.set droughtRestriction (engine ≥ 1.54.0, WP-3.8): the rule, in the Settings tab's own editor.
@@ -77,6 +78,13 @@
 		if (d.kind === 'landCover.set') return patch && d.field ? (patch as unknown as Record<string, unknown>)[d.field] : undefined;
 		if (d.kind === 'demandObject.set') return demandObject && d.field ? ((demandObject as unknown as Record<string, unknown>)[d.field] ?? null) : undefined;
 		return undefined;
+	});
+	// The planting's own system on the unit now, if it has one (engine ≥ 1.72.0).
+	const currentSystem = $derived.by(() => {
+		if (d.kind !== 'cropArea.set' || !d.nodeId || !d.cropId) return null;
+		const own = input.model.cropAreas.find((a) => a.nodeId === d.nodeId && a.cropId === d.cropId)?.irrigationSystemId;
+		const s = findSystem(input.model, own);
+		return s ? systemLabel(s) : null;
 	});
 	const currentArea = $derived(
 		d.kind === 'cropArea.set' && d.nodeId && d.cropId
@@ -219,6 +227,11 @@
 					<option value="" disabled>Pick one</option>
 					<option value="true">Yes</option>
 					<option value="false">No</option>
+				</select>
+			{:else if s.t === 'system'}
+				<select id="op-value" bind:value={d.value}>
+					{#if s.nullLabel !== undefined}<option value="">{s.nullLabel.charAt(0).toUpperCase() + s.nullLabel.slice(1)}</option>{:else}<option value="" disabled>Pick an irrigation system</option>{/if}
+					{#each systemsOf(input.model) as x (x.id)}<option value={x.id}>{systemLabel(x)}</option>{/each}
 				</select>
 			{:else if s.t === 'node'}
 				<select id="op-value" bind:value={d.value}>
@@ -555,6 +568,15 @@
 				<label for="op-area">Area (ha)</label>
 				<input id="op-area" type="text" inputmode="decimal" bind:value={d.areaHa} />
 				{#if currentArea !== null}<span class="hint" data-testid="op-current">Now: {currentArea / 10_000} ha; 0 removes the crop from the hydrological unit</span>{/if}
+			</div>
+			<!-- Its irrigation system on this unit (engine ≥ 1.72.0): a proposal to convert a unit's crop to drip, say. -->
+			<div class="field">
+				<label for="op-system">Irrigation system</label>
+				<select id="op-system" bind:value={d.systemId}>
+					<option value="">Keep its system{currentSystem ? ` (${currentSystem})` : ''}</option>
+					<option value="default">The crop's default</option>
+					{#each systemsOf(input.model) as x (x.id)}<option value={x.id}>{systemLabel(x)}</option>{/each}
+				</select>
 			</div>
 		</div>
 	{:else if d.kind === 'crop.add'}

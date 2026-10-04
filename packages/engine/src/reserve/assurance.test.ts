@@ -411,7 +411,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -533,7 +533,7 @@ describe('Reserve compliance in a run', () => {
 			const x = randomInput(seed, { maxDays: 900 });
 			if (!x.model.cropAreas.length) continue;
 			// Without return flow, extra use upstream only lowers the flow downstream (as checkDoubledCropAreas).
-			for (const n of x.model.nodes) n.lossReturnFraction = 0;
+			for (const n of x.model.nodes) n.returnFlowFraction = 0;
 			x.settings.ewrRules = [{ ...table({ points: [...DEFAULT_ASSURANCE_POINTS], naturalSource: 'run', natural: null, ewr: rows([9, 8, 7, 6, 5, 4, 3, 2, 1, 0.5].map((v) => v * 1e-3)) }) }];
 			const more = cloneInput(x);
 			for (const a of more.model.cropAreas) a.areaM2 *= 3;

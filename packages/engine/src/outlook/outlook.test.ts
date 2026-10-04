@@ -302,7 +302,7 @@ describe('return flows: why the EWR half of the monotonicity invariant needs β 
 		const withReturns = testCatchment({ ewrM3Day: 1500 });
 		const [full, lower] = at(withReturns);
 		expect(lower!.some((b, i) => b > full![i]!)).toBe(true);
-		const noReturns = { ...withReturns, model: { ...withReturns.model, nodes: withReturns.model.nodes.map((n) => ({ ...n, lossReturnFraction: 0 })) } };
+		const noReturns = { ...withReturns, model: { ...withReturns.model, nodes: withReturns.model.nodes.map((n) => ({ ...n, returnFlowFraction: 0 })) } };
 		const [f0, l0] = at(noReturns);
 		expect(l0!.every((b, i) => b <= f0![i]!)).toBe(true);
 	});

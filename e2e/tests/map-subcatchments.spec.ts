@@ -95,7 +95,8 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	// The elevation model's own channels are drawn while the mode is on: the view (framed on the square) is one tile.
 	await expect(page.locator('.map-body')).not.toHaveAttribute('data-channel-tiles', '0');
 	await expect(page.getByTestId('map-channels-note')).toHaveCount(0);
-	await expect(bar(page).getByTestId('map-click-how')).toContainText('Click a red line (the elevation model’s channel) for each outlet');
+	await expect(bar(page).getByTestId('map-click-how')).toContainText('Click a terrain channel for each outlet');
+	await expect(bar(page).getByTestId('map-delineation-lines').getByRole('listitem')).toHaveText(['Terrain channels: where your click goes; the outline follows these']);
 	await page.keyboard.press('Enter');
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(1);

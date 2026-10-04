@@ -33,7 +33,7 @@ function unit(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -238,7 +238,7 @@ describe('supply order on a short day (§2.7f, ranks)', () => {
 		obj({ id: 'o3', name: 'Packhouse', category: 'industrial', priority: 'shared', monthlyM3Day: flat(100), returnPct: 1 }),
 		obj({ id: 'o4', name: 'Bulk export', category: 'external', priority: 'last', monthlyM3Day: flat(200), destination: 'external', returnPct: 0 })
 	];
-	const dam = (m3: number) => unit('A', { damCapacityM3: m3, damInitialPct: 1, irrigationEfficiency: 0.5, lossReturnFraction: 0.5 });
+	const dam = (m3: number) => unit('A', { damCapacityM3: m3, damInitialPct: 1, irrigationEfficiency: 0.5, returnFlowFraction: 0.25 });
 
 	it('each level in full before the next; the crops share their level pro rata with the shared objects', () => {
 		// 1 000 m³ in the dam, 1 400 wanted: o1 300, o2 500, then 200 for crops (400) + o3 (100) → 4/5 each... 200/500 = 0.4.

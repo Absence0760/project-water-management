@@ -58,7 +58,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page.getByText('Select a node on the map or in the list to see it here.')).toBeVisible();
 	// The table isn't on the page in this layout.
 	await expect(page.locator('table.net')).toHaveCount(0);
-	await expect(nodeList(page).getByRole('button')).toHaveCount(3);
+	await expect(nodeList(page).getByRole('button', { name: /^(?!Edit |Details )/ })).toHaveCount(3);
 	await expect(nodeList(page).getByRole('button').first()).toContainText('Outflow gauge');
 	await expect(nodeList(page).getByRole('button').first()).toContainText('outlet');
 
@@ -81,9 +81,11 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(c).toContainText('Selected · outflow gauge');
 	await expect(c).not.toContainText('Supplied');
 
-	// Edit opens the node's full form in a sheet over the map; ‹ › and the picker move it to another node.
+	// A row's Edit opens the node's full form in a sheet over the map; ‹ › and the picker move it to another node.
+	// The card has no Edit of its own (2026-10-03): the row's is the one.
 	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).click();
-	await c.getByRole('button', { name: 'Edit Lower farm' }).click();
+	await expect(c.getByRole('button', { name: /^(Edit|Details) / })).toHaveCount(0);
+	await nodeList(page).getByRole('button', { name: 'Edit Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]edit=${project.model.nodes[2]!.id}`));
 	const sheet = page.getByRole('dialog', { name: 'Edit Lower farm' });
 	await expect(sheet.getByLabel('Node to edit')).toHaveValue(String(project.model.nodes[2]!.id));
@@ -110,6 +112,48 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await page.goto(`/projects/${project.id}?tab=network&view=node`);
 	await expect(page.getByRole('dialog', { name: /^Edit / })).toBeVisible();
 	await expect(page).toHaveURL(/[?&]edit=/);
+});
+
+test('the card opens under the list, so a pick never moves the rows; each row has its own Edit', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network list order');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await waitForMapFit(page);
+	const rowY = async (name: string) => (await nodeList(page).getByRole('button', { name: new RegExp(`^${name}`) }).boundingBox())!.y;
+	// Nothing picked yet: the hint sits where the card will, below the list.
+	const before = await rowY('Lower farm');
+	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
+	await expect(card(page)).toBeVisible();
+	expect(await rowY('Lower farm')).toBe(before);
+	await nodeList(page).getByRole('button', { name: /^Outflow gauge/ }).click();
+	await expect(card(page)).toContainText('Selected · outflow gauge');
+	expect(await rowY('Lower farm')).toBe(before);
+	const listBox = (await nodeList(page).boundingBox())!;
+	expect((await card(page).boundingBox())!.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
+
+	// Every row shows its Edit, picked or not. Each opens that node's form.
+	await expect(nodeList(page).getByRole('button', { name: 'Edit Outflow gauge' })).toBeVisible();
+	await expect(nodeList(page).getByRole('button', { name: 'Edit Lower farm' })).toBeVisible();
+	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).focus();
+	await page.keyboard.press('Tab');
+	const rowEdit = nodeList(page).getByRole('button', { name: 'Edit Lower farm' });
+	await expect(rowEdit).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(new RegExp(`[?&]edit=${project.model.nodes[2]!.id}`));
+	await expect(page.getByRole('dialog', { name: 'Edit Lower farm' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expectNoViolations(page);
+
+	// A viewer's row reads Details, as the card does.
+	const viewer = await signIn('Network list viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.goto(`/projects/${project.id}?tab=network`);
+	const vList = v.getByRole('list', { name: 'All nodes' });
+	await vList.getByRole('button', { name: /^Upper farm/ }).click();
+	await vList.getByRole('button', { name: 'Details Upper farm' }).click();
+	await expect(v.getByRole('dialog', { name: 'Upper farm: details' })).toBeVisible();
 });
 
 test('the map key names only what the drawing has, in groups, drawn like the map', async ({ page, owner }) => {
@@ -246,6 +290,8 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	const area = grid.getByLabel('Orchard on Upper farm, ha');
 	await expect(area).toHaveValue('20');
 	await expect(grid.getByRole('heading', { name: 'Crop factors' })).toHaveCount(0);
+	// One heading per modal: the title names the grid, the grid has no heading of its own.
+	await expect(grid.getByRole('heading')).toHaveText(['Planted areas']);
 	await expect(grid).toContainText('No unsaved changes');
 	await expectNoViolations(page);
 
@@ -262,6 +308,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await (await gridLink(page, 'Crop factors')).click();
 	const factors = page.getByRole('dialog', { name: 'Crop factors' });
 	await expect(factors.getByLabel('Orchard crop factor, Oct')).toHaveValue('0.6');
+	await expect(factors.getByRole('heading')).toHaveText(['Crop factors']);
 	await factors.getByRole('textbox', { name: 'Reason for this change (optional)' }).fill('Block replanted');
 	await factors.getByRole('button', { name: 'Save changes' }).click();
 	await expect(factors).toContainText('No unsaved changes');
@@ -363,7 +410,7 @@ test('a pick is kept in the URL: Back steps through the picks and a reload keeps
 	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
 	// Editing a node picks it too, so closing the sheet leaves the map on it.
 	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
-	await card(page).getByRole('button', { name: 'Edit Upper farm' }).click();
+	await nodeList(page).getByRole('button', { name: 'Edit Upper farm' }).click();
 	await page.getByRole('dialog', { name: 'Edit Upper farm' }).getByRole('button', { name: 'Next node' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]node=${lower}`));
 	await closeModal(page);
@@ -464,7 +511,7 @@ test('removing a node from its sheet asks, names what goes with it, and leaves t
 	await answerConfirm(page, true);
 	await expect(page.getByRole('dialog', { name: /^Edit / })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'All nodes' })).toBeFocused();
-	await expect(nodeList(page).getByRole('button')).toHaveCount(2);
+	await expect(nodeList(page).getByRole('button', { name: /^(?!Edit |Details )/ })).toHaveCount(2);
 });
 
 test('a unit’s sheet points to its planted areas and transfers', async ({ page, owner }) => {
@@ -519,4 +566,22 @@ test('the drawing’s text and the supply tile say it in the workspace’s words
 	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
 	// The tile's tint has its band in words under it.
 	await expect(card(page).getByTestId('supply-band')).toHaveText(/supplied$/);
+});
+
+test('a double-click on a node in the drawing opens its form; a single click only picks it', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Double-click a node');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
+	await upper.click();
+	await expect(page.getByTestId('node-card')).toContainText('Upper farm');
+	await expect(page.getByRole('dialog', { name: /^Edit / })).toHaveCount(0);
+	await upper.dblclick();
+	const sheet = page.getByRole('dialog', { name: /^Edit Upper farm/ });
+	await expect(sheet).toBeVisible();
+	await expect(page).toHaveURL(/[?&]edit=/);
+	// Nothing changed: a double-click isn't a drag onto another node.
+	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 });

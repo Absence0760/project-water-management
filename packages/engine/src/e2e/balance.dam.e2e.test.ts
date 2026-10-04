@@ -26,7 +26,7 @@ function node(id: string, kind: NetworkNode['kind'], down: string | null, over: 
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -309,9 +309,9 @@ describe('daily balance closure and summaries on a 4-node network', () => {
 		const days = 120;
 		const nodes = [
 			node('OUT', 'gauge', null),
-			node('C', 'farm', 'OUT', { areaKm2: 2, damCapacityM3: 30_000, damInitialPct: 0.3, damMinPct: 0.1, damAreaFullM2: 12_000, damSeepagePerDay: 0.003, damSeepageReturnPct: 0.5, irrigationEfficiency: 0.8, lossReturnFraction: 0.5, pctUpstreamToDam: 0.5, pctRunoffToDam: 0.7, divertCapacityM3Day: 200 }),
-			node('B', 'farm', 'C', { areaKm2: 1, damCapacityM3: 8_000, damInitialPct: 1, damAreaFullM2: 4_000, irrigationEfficiency: 0.9, lossReturnFraction: 0.3 }),
-			node('A', 'farm', 'C', { areaKm2: 1, irrigationEfficiency: 0.75, lossReturnFraction: 1 })
+			node('C', 'farm', 'OUT', { areaKm2: 2, damCapacityM3: 30_000, damInitialPct: 0.3, damMinPct: 0.1, damAreaFullM2: 12_000, damSeepagePerDay: 0.003, damSeepageReturnPct: 0.5, irrigationEfficiency: 0.8, returnFlowFraction: 0.1, pctUpstreamToDam: 0.5, pctRunoffToDam: 0.7, divertCapacityM3Day: 200 }),
+			node('B', 'farm', 'C', { areaKm2: 1, damCapacityM3: 8_000, damInitialPct: 1, damAreaFullM2: 4_000, irrigationEfficiency: 0.9, returnFlowFraction: 0.03 }),
+			node('A', 'farm', 'C', { areaKm2: 1, irrigationEfficiency: 0.75, returnFlowFraction: 0.25 })
 		];
 		const rain = Array.from({ length: days }, (_, t) => (t % 11 === 3 ? 18 : 0));
 		const natural = Array.from({ length: days }, (_, t) => 400 + 3000 * Math.max(0, Math.sin(t / 9)));
@@ -334,7 +334,7 @@ describe('daily balance closure and summaries on a 4-node network', () => {
 				const resid = H[t]! + I[t]! + Pd[t]! - (G[t]! - T[t]!) - E[t]! - (Q[t]! - prev) - U[t]! - lost[t]!;
 				expect(Math.abs(resid), `${id} day ${t}`).toBeLessThan(1e-9 * Math.max(1, H[t]! + I[t]! + prev));
 				// T = β(1 − e)G
-				expect(T[t]!, `${id} T day ${t}`).toBeCloseTo(n.lossReturnFraction * (1 - n.irrigationEfficiency) * G[t]!, 9);
+				expect(T[t]!, `${id} T day ${t}`).toBeCloseTo(n.returnFlowFraction * G[t]!, 9);
 				// G ≤ D, storage within 0 … capacity
 				expect(G[t]!).toBeLessThanOrEqual(col(o, id, 'demand')[t]! * (1 + 1e-12));
 				expect(Q[t]!).toBeGreaterThanOrEqual(0);
@@ -365,8 +365,8 @@ describe('the whole pipeline with the runoff model (runModel)', () => {
 		const rain = Array.from({ length: days }, (_, t) => (t % 6 === 0 ? 12 + (t % 5) : t % 17 === 1 ? 35 : 0));
 		const nodes = [
 			node('OUT', 'gauge', null),
-			node('B', 'farm', 'OUT', { areaKm2: 3, damCapacityM3: 60_000, damInitialPct: 0.4, damAreaFullM2: 18_000, damMinPct: 0.15, damSeepagePerDay: 0.001, irrigationEfficiency: 0.85, lossReturnFraction: 0.4 }),
-			node('A', 'farm', 'B', { areaKm2: 2, damCapacityM3: 20_000, damInitialPct: 0.8, damAreaFullM2: 7_000, irrigationEfficiency: 0.9, lossReturnFraction: 0.5 })
+			node('B', 'farm', 'OUT', { areaKm2: 3, damCapacityM3: 60_000, damInitialPct: 0.4, damAreaFullM2: 18_000, damMinPct: 0.15, damSeepagePerDay: 0.001, irrigationEfficiency: 0.85, returnFlowFraction: 0.06 }),
+			node('A', 'farm', 'B', { areaKm2: 2, damCapacityM3: 20_000, damInitialPct: 0.8, damAreaFullM2: 7_000, irrigationEfficiency: 0.9, returnFlowFraction: 0.05 })
 		];
 		const i: ModelInput = {
 			...input({ nodes, days, rain, start: '2020-10-01', settings: { lakeEvapFactor: 0.75 }, need: { A: 80, B: 200 } })

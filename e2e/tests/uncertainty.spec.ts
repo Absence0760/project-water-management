@@ -18,6 +18,14 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await expect(panel.getByText('No uncertainty ensemble has been stored for this run.')).toBeVisible();
+	// The ensemble's boxes line up: the low-flow checkbox under its box doesn't lift that field's label.
+	const tops = await Promise.all(['Parameter sets', /^Lowest skill kept/, /^Largest low-flow bias kept/].map(async (l) => (await panel.getByLabel(l).boundingBox())!.y));
+	expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(2);
+	// The run button is in an action row under the fields, at the first field's left edge.
+	const first = (await panel.getByLabel('Parameter sets').boundingBox())!;
+	const runBtn = (await panel.getByRole('button', { name: 'Run ensemble' }).boundingBox())!;
+	expect(runBtn.y).toBeGreaterThan(first.y + first.height);
+	expect(Math.abs(runBtn.x - first.x)).toBeLessThan(2);
 
 	// A small, loose ensemble: 30 sets (the fewest that can show percentiles) on 120 synthetic days.
 	await panel.getByLabel('Parameter sets').fill('30');
@@ -71,6 +79,11 @@ test('sensitivity runs: a verdict per EWR site, the tornado with its table, and 
 
 	await page.goto(`/projects/${project.id}?tab=river&run=${run}`);
 	const panel = page.getByTestId('sensitivity-panel');
+	// Every analysis panel's action row starts at the same edge with the same button size, so the runs line up down the page.
+	const ens = (await page.getByTestId('uncertainty-panel').getByRole('button', { name: 'Run ensemble' }).boundingBox())!;
+	const sens = (await panel.getByRole('button', { name: 'Run sensitivity' }).boundingBox())!;
+	expect(Math.abs(sens.x - ens.x)).toBeLessThan(2);
+	expect(Math.abs(sens.height - ens.height)).toBeLessThan(2);
 	await panel.getByRole('button', { name: 'Run sensitivity' }).click();
 
 	// The worker ran the cases; one verdict per EWR site (the sample model has the outlet only).

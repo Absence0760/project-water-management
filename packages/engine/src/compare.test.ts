@@ -14,7 +14,7 @@ import {
 	type ComparableRun,
 	type RunInputsSnapshot
 } from './compare';
-import { defaultProjectSettings, type FarmSummary, type NetworkNode, type RunSummary, type ZeroRainSettings } from './project';
+import { DEFAULT_IRRIGATION_SYSTEMS, defaultProjectSettings, type FarmSummary, type NetworkNode, type RunSummary, type ZeroRainSettings } from './project';
 import { ewrAgreement } from './network/ewrAgreement';
 import { assessSite } from './reserve/assurance';
 import type { EwrRuleTable } from './reserve/rules';
@@ -70,7 +70,7 @@ function node(id: string, name: string, over: Partial<NetworkNode> = {}): Networ
 		damMinPct: 0.1,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0.5,
+		returnFlowFraction: 0.1,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -807,12 +807,12 @@ describe('diffInputs', () => {
 		const old = snapshot();
 		for (const n of old.model.nodes as unknown as Record<string, unknown>[]) {
 			delete n.irrigationEfficiency;
-			delete n.lossReturnFraction;
+			delete n.returnFlowFraction;
 			n.returnFlowPct = n.kind === 'farm' ? 0.1 : 0;
 		}
 		// r = 0.1 became e = 0.9 with every loss returning: the same model, no line.
 		const migrated = snapshot();
-		for (const n of migrated.model.nodes) Object.assign(n, n.kind === 'farm' ? { irrigationEfficiency: 0.9, lossReturnFraction: 1 } : { irrigationEfficiency: 1, lossReturnFraction: 0 });
+		for (const n of migrated.model.nodes) Object.assign(n, n.kind === 'farm' ? { irrigationEfficiency: 0.9, returnFlowFraction: 0.1 } : { irrigationEfficiency: 1, returnFlowFraction: 0 });
 		expect(texts(old, migrated)).toEqual([]);
 		// A real change since then is reported against the migrated values.
 		migrated.model.nodes[1]!.irrigationEfficiency = 0.8;
@@ -843,13 +843,32 @@ describe('diffInputs', () => {
 		b.model.crops[0]!.irrigationEfficiency = 0.9;
 		b.settings = { ...b.settings, effectiveRainFractionMonthly: [0.5, 0.5, 0.6, 0.7, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.5] as never };
 		expect(texts(a, b)).toEqual([
-			'Crop "Citrus" irrigation efficiency: the farm\'s → 90%',
+			// An engine 0.43.0–1.71.0 crop's own 90 % reads as the table's Drip (upgradeLegacyModel, as migration 198 stores it).
+			'Crop "Citrus" irrigation system: the unit\'s → Drip',
 			'Monthly effective rain fractions: the one fraction → 0.5, 0.5, 0.6, 0.7, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.5 (Oct–Sep)'
 		]);
 		// null is the same as never set: no change reported.
 		const c = structuredClone(a);
 		c.model.crops[0]!.irrigationEfficiency = null;
 		c.settings = { ...c.settings, effectiveRainFractionMonthly: null };
+		expect(texts(a, c)).toEqual([]);
+	});
+
+	it('describes the irrigation systems (engine 1.72.0): a crop’s default, a unit’s own and a row’s efficiency', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.model.crops[0]!.irrigationSystemId = 'micro';
+		b.model.cropAreas[0]!.irrigationSystemId = 'drip';
+		b.model.irrigationSystems = DEFAULT_IRRIGATION_SYSTEMS.map((s) => (s.id === 'drip' ? { ...s, efficiency: 0.95 } : { ...s }));
+		const farm = a.model.nodes.find((n) => n.id === a.model.cropAreas[0]!.nodeId)!.name;
+		expect(texts(a, b)).toEqual([
+			'Crop "Citrus" irrigation system: the unit\'s → Micro-sprinkler',
+			'Irrigation system "Drip" efficiency: 90% → 95%',
+			`${farm}: "Citrus" irrigation system the crop's default → Drip`
+		]);
+		// The defaults spelled out are the same table: no change.
+		const c = structuredClone(a);
+		c.model.irrigationSystems = DEFAULT_IRRIGATION_SYSTEMS.map((s) => ({ ...s }));
 		expect(texts(a, c)).toEqual([]);
 	});
 

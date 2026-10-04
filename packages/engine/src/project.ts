@@ -1139,11 +1139,15 @@ export interface NetworkNode {
 	 */
 	irrigationEfficiency: number;
 	/**
-	 * Share β (0–1) of the application losses, (1 − e) × supplied, that
-	 * returns to the river below the farm the same day (engine ≥ 0.16.0). The
-	 * rest leaves the catchment (evaporation, deep percolation).
+	 * Irrigation return flow r, 0 ≤ r ≤ 1 − e (engine ≥ 1.71.0): the share of
+	 * the irrigation water supplied that infiltrates the soil and returns to
+	 * the river below the farm the same day. It comes out of the application
+	 * losses (1 − e) × supplied, so it can't exceed them; the rest of the
+	 * losses leaves the catchment (evaporation, deep percolation). Engine
+	 * 0.16.0–1.70.0 stored β, a share of the losses (`lossReturnFraction`):
+	 * r = β × (1 − e) (migration 197, upgradeLegacyModel).
 	 */
-	lossReturnFraction: number;
+	returnFlowFraction: number;
 	/**
 	 * Dam surface area when full, m² (engine ≥ 0.16.0, audit N2). null = not
 	 * known: the run estimates it from the capacity (estimatedDamAreaM2, engine
@@ -1537,8 +1541,41 @@ export const IRRIGATION_SYSTEMS = [
 	{ id: 'pivot', label: 'Centre pivot / linear move', min: 0.8, max: 0.9, efficiency: 0.85 },
 	{ id: 'sprinkler', label: 'Sprinkler (permanent)', min: 0.75, max: 0.9, efficiency: 0.8 },
 	{ id: 'movable', label: 'Sprinkler (movable)', min: 0.7, max: 0.83, efficiency: 0.75 },
-	{ id: 'surface', label: 'Surface', min: 0.6, max: 0.95, efficiency: 0.7 }
+	{ id: 'surface', label: 'Flood / furrow', min: 0.6, max: 0.95, efficiency: 0.7 }
 ] as const satisfies readonly IrrigationSystem[];
+
+/**
+ * One row of a project's irrigation-systems table (engine ≥ 1.72.0, docs/model.md
+ * §2.3): a name and the application efficiency a crop on it runs at. A project
+ * starts with the SABI 2021 systems (IRRIGATION_SYSTEMS, `preset` naming the
+ * one it came from, so the table can show SABI's range beside it); the
+ * hydrologist can change any row's efficiency and add rows of their own
+ * (migration 198 and the workbook import add one per efficiency no system
+ * matched, so saved models run as before).
+ */
+export interface IrrigationSystemDef {
+	id: string;
+	name: string;
+	/** Application efficiency, 0 < e ≤ 1: a crop on this system abstracts its requirement ÷ e. */
+	efficiency: number;
+	/** The SABI system it started as (an IRRIGATION_SYSTEMS id), or null for a row of the project's own. */
+	preset?: IrrigationSystemId | null;
+	/** Display order (0-based); the model doesn't depend on it. */
+	sortOrder?: number;
+}
+
+/**
+ * The table a model without one runs on: the SABI 2021 systems, their ids the
+ * preset ids. A project's own table (ProjectModel.irrigationSystems) replaces
+ * it whole.
+ */
+export const DEFAULT_IRRIGATION_SYSTEMS: readonly IrrigationSystemDef[] = IRRIGATION_SYSTEMS.map((s, i) => ({
+	id: s.id,
+	name: s.label,
+	efficiency: s.efficiency,
+	preset: s.id,
+	sortOrder: i
+}));
 
 /** An IRRIGATION_SYSTEMS id. */
 export type IrrigationSystemId = (typeof IRRIGATION_SYSTEMS)[number]['id'];
@@ -1549,11 +1586,12 @@ export const NEW_FARM_IRRIGATION_SYSTEM: IrrigationSystemId = 'drip';
 /**
  * Irrigation settings of a new farm (audit N1): drip's efficiency (0.90,
  * NEW_FARM_IRRIGATION_SYSTEM; migration 099 sets the column default to match),
- * half of its losses returning. Only a newly created farm takes it: a saved
+ * and 10 % of the water supplied returning to the river (all of drip's
+ * losses; the client's hydrologist, 2026-10-03). Only a newly created farm takes it: a saved
  * farm keeps its stored efficiency, and the run never reads this, so it is
  * not a model change.
  */
-export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, lossReturnFraction: 0.5 } as const;
+export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, returnFlowFraction: 0.1 } as const;
 
 /**
  * A new network node with every default a newly created node takes: a gauge
@@ -1604,15 +1642,47 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 }
 
 /**
- * The efficiency and loss return that replace an engine < 0.16.0 node's
- * `returnFlowPct` r (migration 006): r = 0 → e = 1, β = 0 (bit-identical
- * results); r > 0 → e = 1 − r (at least 0.01), β = 1, so the balance
- * (consumptive use = supplied − return flow) is as before per unit supplied,
- * and the crop is now fully supplied, at 1 / (1 − r) times the abstraction.
+ * The efficiency and return flow that replace an engine < 0.16.0 node's
+ * `returnFlowPct` r (migration 006): r = 0 → e = 1, no return (bit-identical
+ * results); r > 0 → e = 1 − r (at least 0.01) and all the losses return
+ * (1 − e of the water supplied), so the balance (consumptive use = supplied −
+ * return flow) is as before per unit supplied, and the crop is now fully
+ * supplied, at 1 / (1 − r) times the abstraction.
  */
-export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: number; lossReturnFraction: number } {
-	if (!(r > 0)) return { irrigationEfficiency: 1, lossReturnFraction: 0 };
-	return { irrigationEfficiency: Math.max(1 - Math.min(r, 1), 0.01), lossReturnFraction: 1 };
+export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: number; returnFlowFraction: number } {
+	if (!(r > 0)) return { irrigationEfficiency: 1, returnFlowFraction: 0 };
+	const e = Math.max(1 - Math.min(r, 1), 0.01);
+	// r itself, all the losses (exactly, not 1 − (1 − r), which is a bit or two less); 0.99 when e was floored at 0.01.
+	return { irrigationEfficiency: e, returnFlowFraction: r > 1 - e + RETURN_FLOW_SLACK ? 1 - e : r };
+}
+
+/**
+ * The return flow a run uses (engine ≥ 1.71.0): the unit's r clamped to
+ * [0, 1 − e], e being the efficiency the run uses (its crops' blend), since
+ * only the losses can return; not a number runs as 0. run.ts irrigation warns
+ * when it clamps; the readers of a saved run (verify, the farm projection)
+ * take the same value.
+ */
+export function runReturnFlow(returnFlowFraction: number, efficiency: number): number {
+	if (!Number.isFinite(returnFlowFraction)) return 0;
+	const r = Math.max(returnFlowFraction, 0);
+	// Float noise is not over the cap: 1 − (1 − 0.1) is 0.09999999999999998, and 10 % at 90 % is all the losses.
+	return r > 1 - efficiency + RETURN_FLOW_SLACK ? 1 - efficiency : r;
+}
+
+/** How far a return flow may sit above 1 − e and still be taken as all the losses (float noise, not a value). */
+export const RETURN_FLOW_SLACK = 1e-9;
+
+/**
+ * An engine 0.16.0–1.70.0 node's return flow: β, the share of the losses
+ * returning, as a share of the water supplied, r = β × (1 − e) (migration
+ * 197). A β or e out of range is taken as the run took it (β clamped to
+ * [0, 1], e outside (0, 1] as 1).
+ */
+export function returnFlowFromLossReturn(lossReturnFraction: number, irrigationEfficiency: number): number {
+	const b = Number.isFinite(lossReturnFraction) ? Math.min(Math.max(lossReturnFraction, 0), 1) : 0;
+	const e = irrigationEfficiency > 0 && irrigationEfficiency <= 1 ? irrigationEfficiency : 1;
+	return b * (1 - e);
 }
 
 /**
@@ -1632,11 +1702,16 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 	const nodes = Array.isArray(model.nodes)
 		? model.nodes.map((raw) => {
 				if (!raw || typeof raw !== 'object') return raw;
-				const { returnFlowPct, ...n } = raw as Record<string, unknown>;
-				if (n.irrigationEfficiency === undefined || n.lossReturnFraction === undefined) {
-					const up = irrigationFromReturnFlow(typeof returnFlowPct === 'number' ? returnFlowPct : 0);
-					n.irrigationEfficiency ??= up.irrigationEfficiency;
-					n.lossReturnFraction ??= up.lossReturnFraction;
+				const { returnFlowPct, lossReturnFraction, ...n } = raw as Record<string, unknown>;
+				if (n.irrigationEfficiency === undefined || n.returnFlowFraction === undefined) {
+					// Engine 0.16.0–1.70.0: β, a share of the losses (migration 197); before that, returnFlowPct (migration 006).
+					if (n.irrigationEfficiency !== undefined && typeof lossReturnFraction === 'number') {
+						n.returnFlowFraction ??= returnFlowFromLossReturn(lossReturnFraction, n.irrigationEfficiency as number);
+					} else {
+						const up = irrigationFromReturnFlow(typeof returnFlowPct === 'number' ? returnFlowPct : 0);
+						n.irrigationEfficiency ??= up.irrigationEfficiency;
+						n.returnFlowFraction ??= up.returnFlowFraction;
+					}
 				}
 				// Dam evaporation and seepage (N2): unknown area, the default exponent, no seepage.
 				if (n.damAreaFullM2 === undefined) n.damAreaFullM2 = null;
@@ -1697,7 +1772,38 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				return out;
 			})
 		: model.transfers;
-	return { ...model, nodes, transfers };
+	return { ...model, nodes, transfers, ...upgradeCropEfficiencies(model as { crops?: unknown; irrigationSystems?: unknown }) };
+}
+
+/**
+ * Engine 0.43.0–1.71.0's crops carried their own efficiency; engine 1.72.0's
+ * name a row of the project's irrigation-systems table, as migration 198 stores
+ * them: each such crop gets the row with that efficiency as its default (a SABI
+ * one first; a row "Imported, NN %" is added when there is none), on the
+ * model's table or, without one, the defaults. A model without such a crop is
+ * left as it is. An efficiency outside (0, 1] stays, for the run to warn of.
+ */
+function upgradeCropEfficiencies(model: { crops?: unknown; irrigationSystems?: unknown }): { crops?: unknown; irrigationSystems?: IrrigationSystemDef[] } {
+	const legacy = (c: unknown): c is { irrigationEfficiency: number; irrigationSystemId?: string | null } => {
+		if (!c || typeof c !== 'object') return false;
+		const x = c as { irrigationEfficiency?: unknown; irrigationSystemId?: unknown };
+		return typeof x.irrigationEfficiency === 'number' && x.irrigationEfficiency > 0 && x.irrigationEfficiency <= 1 && x.irrigationSystemId == null;
+	};
+	if (!Array.isArray(model.crops) || !model.crops.some(legacy)) return {};
+	const table: IrrigationSystemDef[] = (Array.isArray(model.irrigationSystems) ? (model.irrigationSystems as IrrigationSystemDef[]) : DEFAULT_IRRIGATION_SYSTEMS).map((s) => ({ ...s }));
+	const rowFor = (e: number) => {
+		const hit = table.find((s) => s.efficiency === e);
+		if (hit) return hit.id;
+		const row: IrrigationSystemDef = { id: `imported-${e}`, name: `Imported, ${Math.round(e * 1000) / 10} %`, efficiency: e, preset: null, sortOrder: table.length };
+		table.push(row);
+		return row.id;
+	};
+	const crops = model.crops.map((c) => {
+		if (!legacy(c)) return c;
+		const { irrigationEfficiency, ...rest } = c;
+		return { ...rest, irrigationSystemId: rowFor(irrigationEfficiency) };
+	});
+	return { crops, irrigationSystems: table };
 }
 
 export interface CropDef {
@@ -1708,11 +1814,18 @@ export interface CropDef {
 	/** Crop factor per water-year month (Oct–Sep), 12 values. */
 	cropFactor: number[];
 	/**
-	 * This crop's irrigation application efficiency, 0 < e ≤ 1 (engine ≥
-	 * 0.43.0, issue #54): the irrigation system it is under. null / absent =
-	 * the farm's own `irrigationEfficiency`. A farm's efficiency is then its
-	 * crops' efficiencies combined, weighted by each crop's annual water
-	 * requirement (./demand.ts farmIrrigationEfficiency, docs/model.md §2.3).
+	 * The irrigation system this crop is under by default (engine ≥ 1.72.0): a
+	 * row of the project's irrigation-systems table (ProjectModel.irrigationSystems).
+	 * A planting (CropArea) may name another for its unit. null / absent = the
+	 * legacy `irrigationEfficiency`, else the unit's own.
+	 */
+	irrigationSystemId?: string | null;
+	/**
+	 * Engine 0.43.0–1.71.0: this crop's own efficiency, 0 < e ≤ 1. Still run
+	 * (a saved run's snapshot, an older document) when no system is named;
+	 * migration 198 turned each into a system. A unit's efficiency is its
+	 * plantings' combined, weighted by each one's annual water requirement
+	 * (./demand.ts unitIrrigationEfficiency, docs/model.md §2.3).
 	 */
 	irrigationEfficiency?: number | null;
 }
@@ -1721,6 +1834,12 @@ export interface CropArea {
 	nodeId: string;
 	cropId: string;
 	areaM2: number;
+	/**
+	 * The irrigation system this crop is under on this unit (engine ≥ 1.72.0):
+	 * a row of ProjectModel.irrigationSystems. null / absent = the crop's
+	 * default (CropDef.irrigationSystemId).
+	 */
+	irrigationSystemId?: string | null;
 }
 
 export interface Transfer {
@@ -1810,6 +1929,11 @@ export interface ProjectModel {
 	crops: CropDef[];
 	cropAreas: CropArea[];
 	transfers: Transfer[];
+	/**
+	 * The project's irrigation systems (engine ≥ 1.72.0): the table crops and
+	 * plantings name their system from. Absent = DEFAULT_IRRIGATION_SYSTEMS.
+	 */
+	irrigationSystems?: IrrigationSystemDef[];
 	/** Land-cover patches that reduce runoff (engine ≥ 0.24.0, WP-1.35). Absent on older documents = none. */
 	landCover?: LandCoverPatch[];
 	/**
@@ -1930,6 +2054,17 @@ export const DEMAND_OBJECT_SIZINGS = ['monthly', 'perUnit'] as const;
 export type DemandObjectSizing = (typeof DEMAND_OBJECT_SIZINGS)[number];
 
 /**
+ * The unit a 'monthly' demand object's demand is entered and shown in (engine
+ * ≥ 1.72.0), besides m³/day: litres or cubic metres a second. Display only:
+ * the model keeps `monthlyM3Day` in m³/day, and a run never reads this.
+ */
+export const DEMAND_MONTHLY_UNITS = ['ls', 'm3s'] as const;
+export type DemandMonthlyUnit = (typeof DEMAND_MONTHLY_UNITS)[number];
+/** Shown = stored m³/day × this (1 l/s = 86.4 m³/day). */
+export const DEMAND_MONTHLY_UNIT_SCALE: Record<DemandMonthlyUnit, number> = { ls: 1000 / 86_400, m3s: 1 / 86_400 };
+export const DEMAND_MONTHLY_UNIT_LABEL: Record<DemandMonthlyUnit, string> = { ls: 'l/s', m3s: 'm³/s' };
+
+/**
  * Where a demand object's number comes from (engine ≥ 1.56.0, issue #54 Q11,
  * confirmed in issue #90; docs/model.md §2.7f), best first: the client's
  * rule is meter records where they exist, else the reconciliation
@@ -2023,6 +2158,8 @@ export interface DemandObject {
 	sizing: DemandObjectSizing;
 	/** 'monthly': abstraction demand, m³/day per water-year month (Oct–Sep); null under 'perUnit'. */
 	monthlyM3Day: number[] | null;
+	/** 'monthly': the unit it is entered and shown in, l/s or m³/s (display only); null or absent = m³/day. */
+	monthlyUnit?: DemandMonthlyUnit | null;
 	/** 'perUnit': how many (people, head, stands); null under 'monthly'. */
 	count: number | null;
 	/** 'perUnit': litres per unit per day at the tap or trough; null under 'monthly'. */

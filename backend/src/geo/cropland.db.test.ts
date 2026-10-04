@@ -213,7 +213,7 @@ describe('accepting a cultivated area as a crop’s planted area', () => {
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		const after = (await editor.call('GET', at('/model'))).body;
 		expect(after.nodes.find((n: { id: string }) => n.id === farmA.id)).toMatchObject({ cropWaterSource: 'river', cropRiverPumpM3Day: 1500.25, cropRiverPoolM3: null });
-		expect(after.demandObjects).toEqual([{ ...town, rank: null, schedule: null, population: null, source: null }]);
+		expect(after.demandObjects).toEqual([{ ...town, rank: null, schedule: null, population: null, source: null, monthlyUnit: null }]);
 	});
 });
 

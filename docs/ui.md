@@ -192,6 +192,40 @@ maps `null` to 0 in its `onchange`. A revision line saved before the change
 ("750,000 m³") still matches today's diff for the History attribution
 (`backend/src/history/attribute.ts`).
 
+### Flow units
+
+A flow rate has a small unit select beside its label (or, in the node
+table, in place of the column heading's unit), at least 24 px tall: **m³/s**, **l/s** or
+**m³/day** (`network/FlowUnitSelect.svelte`, `network/flowUnit.svelte.ts`).
+One choice per kind of rate, each starting at the unit it always showed:
+**River to dam** (the node table column, the unit form and River to dam by
+month; m³/s), **pumps** (a unit's river pump, the crops' own, an other water
+user's and a demand object's river abstraction, `PumpCapacityField`, the
+borehole capacities and Combined borehole capacity; m³/day) and a
+**transfer's max rate** (one "Rates in" select in the Transfer rules
+heading, for every rule; each rule's Max rate by month title names the unit
+as text; m³/s). The unit shows once: the select replaces the bracketed unit
+beside the label, which a screen reader still hears ("River to dam (l/s)",
+the unit in a visually hidden span). Every field of that kind follows the
+pick, labels and words included ("Nov–Feb, up to 10 l/s"); the pump
+calculator's sum stays in what it computes, m³/day, with the picked unit in
+brackets ("2 × 9 m³/h × 24 h = 432 m³/day (5 l/s)."). It is
+display only: the model keeps each value in its stored unit (River to dam
+and pumps m³/day, a transfer m³/s), so a pick never changes a run, the
+History or another viewer's screen. The pick is kept in this browser
+(`localStorage` `wm.unit.riverToDam`, `wm.unit.pump`, `wm.unit.transfer`,
+read and written in `try`, so blocked storage starts at the default); since
+it changes nothing saved, a read-only viewer gets the select too. e2e:
+`flow-units.spec.ts`.
+
+A **demand object's** rate is the other pattern, on purpose: its unit
+(`DemandObjectFields.svelte`, migration 199) is stored in the model with
+the value, not picked per browser. That unit is part of how the demand was
+specified (a licence or a schedule written in l/s stays l/s), the evidence
+report states it, and a revision that changes it is a real change to the
+model; the per-browser pickers above only change how a value already
+stored in its fixed unit is read.
+
 A chart's value axis writes its ticks short (`charts/series.ts`
 `fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
 decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float
@@ -782,13 +816,14 @@ first and says it reverts every unsaved model edit, not only the modal's,
 and **Save changes**, after which the row says "Changes saved." and the
 focus stays in it, on **Done**.
 
-**Run model with unsaved edits.** A run uses the saved model, so the
-header's **Run model** (and the new-data line's **Re-run model**) with
-unsaved edits asks "Save your changes and run?" (**Save and run**), saves
-them (`saveAll`) and runs once they are saved; the button's description
-says so. While problems block that save it refuses, saying why and naming
-the first problem, with **Show the problem**, rather than run the saved
-model behind the person's back.
+**Run model with unsaved edits.** A run uses the saved model, so Runs &
+results' **Run model** and **Run forecast** (and the new-data line's
+**Re-run model**) with unsaved edits ask "Save your changes and run?"
+(**Save and run**), save them (`saveAll`) and run once they are saved: the
+page passes its `saveBeforeRun` to the Runs tab as `beforeRun`, and the run
+form's status line says so. While problems block that save it refuses,
+saying why and naming the first problem, with **Show the problem**, rather
+than run the saved model behind the person's back.
 
 **Preview unsaved edits** (issue #284, roadmap WP-1.17). With model or
 settings edits unsaved, the save bar has **Preview**, on every tab. It takes
@@ -948,16 +983,15 @@ role, freshness, Add data) and each tab's own header:
   supply's run menu and **Open in Runs**, Dams' **Open in Runs**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**), **Add data** (editors), and **Run
-  model** (editors; on the Summary, Network, Crops, Transfers and Settings).
-  Run model starts a run with no label and opens it in Runs, through the
-  same `startRun` as the new-data line's Re-run model. On Runs & results the
-  tab's own run form (**Run label**, Run forecast, Run model) takes its place,
-  last, after a plain Add data (`fillHeader({ main })`, the header slot's
-  `main` part), and on Data **Add data** is the main (primary) action. Run model is
-  disabled until there is a network and a rainfall series, and its
-  accessible description says which is missing. A tab shown inside the grid
-  modal or scenario override mode fills nothing.
+  longest waiting**) and **Add data** (editors), the primary action on
+  every section but Runs & results. A run starts from the header only on
+  Runs & results, whose run form (**Run label**, Run forecast, Run model)
+  comes last, after a plain Add data (`fillHeader({ main })`, the header
+  slot's `main` part), so every run can be named. The other sections had
+  their own unlabelled **Run model** until it was removed for that reason;
+  the new-data line's **Re-run model** still runs from any section, labelled
+  with the data's end. A tab shown inside the grid modal or scenario
+  override mode fills nothing.
 - **Notices, one slim line** under the title row, instead of full-width
   banners: the viewer's **View only** note (every section), the upload
   result with **Re-run model** / **Dismiss**, **New data since the last
@@ -967,10 +1001,10 @@ role, freshness, Add data) and each tab's own header:
   (Save changes, Discard, the reason), and the grid modal and sheets keep
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
-  controls as `actions` and the page's pair (Add data, then Run model or the
-  tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  controls as `actions` and the page's main box (Add data, then the tab's
+  `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
-  on Allocations at 1440); the pair is one box, so a wrap never splits it.
+  on Allocations at 1440); the main box is one box, so a wrap never splits it.
   The title column asks for its context's full one-line width (and no more:
   a 16rem floor made a short one wrap its controls under it in a wide font,
   Data at 1024 in DejaVu Sans), so the controls sit beside the title only while the context
@@ -982,11 +1016,9 @@ role, freshness, Add data) and each tab's own header:
 - **Phones (a header 640 px wide or less, a container query):** the same
   header after the Sections button. The pill is a line of its own (its list
   opens rightwards, on the screen); a picker (a run select) takes a full row;
-  the tab's buttons and the pair then fill full rows, every control growing to
-  fill its row, and Add data and Run model always end the header side by side
-  (Transfers fits all three on one row; Settings puts Fit the parameters on
-  one row and the pair on the next). Runs' run form is a row of its own under
-  Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
+  the tab's buttons and the main box then fill full rows, every control
+  growing to fill its row, and Add data always ends the header. Runs' run
+  form is a row of its own under Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
   on every section with a big catchment, plus the overlays' phone scans (node
   sheet, node table, Allocations' sheets, New scenario, Add data, the
   Sections menu).
@@ -1486,7 +1518,8 @@ for every workspace tab. Its own chunk.
   asks first (`confirmWords`: the unit, the old and new value, the source;
   "Use this capacity" / "Use this area"), saves that one value on the
   server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.", which
+  the register of dams (Z100/07). Run the model to see its effect.", its
+  "Run the model" a link to Runs & results, where Run model is; the notice
   takes the keyboard, since the Use button is gone) and reloads the saved
   model and the proposals. The frame is shared with land cover and
   evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
@@ -2069,8 +2102,8 @@ It used to have three layouts (Map, Table, One node); with the Tables menu
 they only made the page jump, so the other two became things the map opens:
 the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
-node's **full form** opens in a sheet over the map from its card's **Edit**
-(`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
+node's **full form** opens in a sheet over the map from its row's **Edit** in
+All nodes (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
 `view=node` becomes `edit=<node or the first>`. `node=<id>` is the picked
 node: a pick in the All nodes list or on the drawing writes it (a new
 history entry, so Back steps back through the picks; a reload or a shared
@@ -2146,15 +2179,20 @@ itself.
   - The **Tables** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
     Escape right after opening would otherwise leave it open.
-  - Beside it (one column below 900 px, the map first), two cards:
+  - Beside it (one column below 900 px, the map first), two cards, **All
+    nodes** on top and the picked node's card under it, so a pick (or the
+    card coming and going) never moves the rows. From 900 px the list takes
+    what the card leaves (at least a few rows) and scrolls inside itself; a
+    card taller than 60 % of the column scrolls in its own box, so both
+    stay in the window. A phone keeps the same order.
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes
       (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
       only when a map feature is linked to the node, issue #326 A2; which
       nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
       fetched once the page has drawn, `workspace/mapLinks.ts`, as on
-      Hydrological units and Dams) and
-      **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
+      Hydrological units and Dams); no Edit of its own since 2026-10-03 (the
+      row's, in All nodes, is the one). A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, the band in words under the % ("Under
@@ -2179,7 +2217,10 @@ itself.
       and "→ downstream" (or "outlet"). The name wraps between words; the
       downstream name takes at most 45 % of the row on one line, cut with an
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
-      on the schematic); picking on the schematic marks it here. The picked
+      on the schematic); picking on the schematic marks it here. Each row
+      also has its own **Edit** ("Edit *name*"; **Details** for a viewer),
+      which opens that node's sheet (`edit=<id>`): always shown on every
+      row (the operator's call, 2026-10-03), 44 px tall below 640 px. The picked
       row is kept in view inside the list's card, and the picked node inside
       the drawing's box (both scroll themselves by the two bounding boxes,
       `inViewDelta` in `network/scroll.ts`), on a pick, a `node=` link, and
@@ -2245,7 +2286,9 @@ itself.
   component). Editors can drag a node onto
   another to change what it drains into. Drops that would make a loop, or
   that move the outlet, are refused and the reason is shown. The "Drains
-  into" select is the keyboard route. A visually hidden list ("Drainage
+  into" select is the keyboard route. A double-click on a node opens its
+  form (the sheet, `edit=<id>`; `onopen`), the same as its card's Edit, which
+  is the keyboard route; a single click only picks it. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing. On paper (the report, below)
   the drawing is wrapped to the A4 width instead (`paper`,
   `wrappedSchematicLayout`): at most five columns, and where the branches
@@ -2616,7 +2659,11 @@ itself.
   number** (engine ≥ 1.56.0, issue #54 Q11, `demandObjectSource.ts`: Not
   recorded, the default; Meter records; Reconciliation strategy's AADD;
   Population × litres a day (a norm); Other), **Demand given as**
-  (m³/day by month, or a count × litres a day; picking meter records or an
+  (m³/day, l/s or m³/s by month, or a count × litres a day; l/s and m³/s
+  are only how it is entered and shown, engine ≥ 1.72.0: the demand stays in
+  m³/day, so switching unit never changes it, the month fields and the mean
+  line show it in the unit, "5 l/s (432 m³/day) on average", and the object
+  reopens in the unit it was given in; picking meter records or an
   AADD sets it to m³/day by month and a norm to a count × litres, and locks
   it with "Set by the source." under it; Other and Not recorded leave it to
   the modeller), **Priority** (Before the crops / With the crops, pro rata /
@@ -2807,7 +2854,10 @@ map" card) stays the schematic; this is the geography.
   opening it never moves the map; Escape closes it and gives the pill the
   focus, a click outside closes it. Its steps: **Catchment boundary** ("No
   catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
-  (WGS84)." with **Draw the boundary** and **Upload a GeoJSON file**) and
+  (WGS84)." with **Draw the boundary** and **Upload a GeoJSON file**; with a
+  DEM on the server, as the empty map does, "No catchment boundary yet.
+  Delineate it from its outlet on the river, draw it on the map, or upload
+  it …" with a primary **Delineate from the outlet** first) and
   **Rain from the boundary** (issue #326 B-rain: "No rain feed reads this
   catchment boundary yet." with **Set up the rain feed from the boundary**,
   or "The boundary changed since the rain feed took its cells." with
@@ -2834,7 +2884,12 @@ map" card) stays the schematic; this is the geography.
   a point; each puts the map in a drawing mode, below), **Delineate** (with a
   DEM on the server; its bar chooses one catchment or sub-catchments, one
   per click; pressed in either; below) and **Trace** (Trace a dam, with water
-  occurrence data on the server; below). Pressed (`aria-pressed`) while on;
+  occurrence data on the server; below). A drawing mode's bar (kind, hint,
+  Snap / Follow edges, Paste, Undo, Finish, Cancel; Delineate's and Trace's
+  too) heads the side column on a wide page (`map-draw-side`, above the
+  tabs, which stay: Layers and Key while drawing; 2026-10-03), so nothing
+  sits above or over the map; on a narrow page, where the column is below
+  the map, it stays above the map. Pressed (`aria-pressed`) while on;
   a group, so Tab goes through them in order after the header and before the
   map; each at least 46 × 62 px. Viewers get Measure alone. While a tool is
   on, a strip over the map's top middle names it and how to leave it
@@ -2843,9 +2898,10 @@ map" card) stays the schematic; this is the geography.
   assistive tech, since the bar's heading says the same), with the channels'
   note or the busy line under it. The picked feature's name over the map's
   top-left corner sits right of the column (CatchmentMap's
-  `--map-inset-left`). Over the map's corners too: **Layers** under the zoom
-  buttons (below), **Show everything** (issue #374: frames every feature)
-  and **Key** at the bottom left (below), and for owners and editors without
+  `--map-inset-left`). Over the map otherwise only small buttons: **Layers**
+  under the zoom buttons (below), **Show everything** (issue #374: frames
+  every feature) and **Key** at the bottom left (below), each opening its
+  panel in the side column on a wide page (below), and for owners and editors without
   a basemap configured a small "No basemap configured (docs/maps.md)" under
   Layers (until 2026-10-02 a full-width line above the map: it is an
   operator's matter, and a deployed site has a basemap).
@@ -2866,11 +2922,21 @@ map" card) stays the schematic; this is the geography.
   the height left below its measured top, less the 1rem gutter and the save
   bar (`--dock-h`); the map fills its card and starts right under the header
   (nothing stacks above it but a waiting proposal's line), and the page
-  doesn't scroll. The side column shows **one panel at a time** under three
+  doesn't scroll. The side column shows **one panel at a time** under its
   tabs (until 2026-10-02 the picked feature's card, the list, the layers and
   the checks line were stacked, each squeezing the others): **Details** (the
-  picked feature's card), **Features (n)** (the list) and **Checks** (with
-  the warnings' count); a tablist with the arrow keys, Home and End. A new
+  picked feature's card), **Features (n)** (the list), **Checks** (with
+  the warnings' count) and, beside the map (`panelsInSide`: the column shown,
+  something on the map, not dividing), **Layers** and **Key** (until
+  2026-10-03 boxes over the map's corners, which the operator found
+  cluttered); a tablist with the arrow keys, Home and End, wrapping onto a
+  second row when the column is narrow. The map's **Layers** and **Key**
+  buttons pick those tabs (`aria-controls` the tab's panel,
+  `aria-expanded` while it is picked); pressed again, or Escape inside the
+  panel, gives back the tab they took over from and the button the focus.
+  When the column stops showing them (narrowed, emptied, Sub-catchments
+  taking it over) a picked Layers or Key falls back to Features, and they are
+  panels over the map again. A new
   pick (on the map, in the list, from a check, a link, Back) shows Details;
   the pick going (a delete) shows the list again; with nothing picked the
   column opens on Features. The panel fills the column and scrolls in its
@@ -2881,22 +2947,31 @@ map" card) stays the schematic; this is the geography.
 - **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
   boundary (long dashes), parcels, dams, rivers, other features (dotted),
   points as 28 px buttons told apart by shape; clicking a feature picks it.
-  The **Key** (a panel over the map's bottom-left corner, from its **Key**
-  button, "Key · Days short" while a measure shows; a row under the map until
-  2026-10-02) groups **Areas** (catchment boundary, parcel, dam, other),
-  **Lines** (river) and **Points** (gauge, dam, other), listing only the
+  The **Key** (the side column's Key tab beside the map, a panel over the
+  map's bottom-left corner on a phone, an empty map or while dividing; from
+  the map's **Key** button, "Key · Days short" while a measure shows; a row
+  under the map until 2026-10-02) groups **Areas** (catchment boundary, parcel, dam, other),
+  **Lines** (river; while the elevation model's channels are drawn, first
+  "terrain channels: where your click goes; the outline follows these" and,
+  with the River network layer on, "river network: mapped rivers, for
+  reference only; they can sit off the terrain channels", each on its own
+  line, the panel then 23rem wide) and **Points** (gauge, dam, other), listing only the
   entries a feature on the map stands for (`mapList.ts` `presentKey`; a
   layer's own entry while the layer is on), each swatch drawn in the colour
   `mapStyle.ts` `overlayColours(dark)` gives the map (`mapList.ts`
   `keyGroups`; no colour is written in the tab), following the app's theme
-  (`appTheme.ts`: `data-theme` and the OS preference, live). It opens by
-  default while the areas show a run's results on a map beside the side
-  column (their colours need the legend), and starts folded otherwise (the
-  kinds' colours, a phone), the default taken once when the runs are in; its
-  box clears the tools above it and scrolls in itself (a focusable region,
-  "Map key"); Escape closes it and gives its button the focus. On a narrow map
-  opening Key folds Layers and the other way round.
-- **Results on the map** (#326 A1, at the top of the Key panel,
+  (`appTheme.ts`: `data-theme` and the OS preference, live). It starts
+  folded: beside the column the list keeps the first view (the Key's button
+  reads "Key · Days short" while a measure colours the areas, and the
+  list's card and Every feature give each unit's figure in words), and over
+  the map it covered what was under it (a phone, the kinds' colours); until
+  2026-10-03 it opened by default over a wide map while the areas showed a
+  run's results. Over the map its box
+  clears the tools above it and scrolls in itself (a focusable region, "Map
+  key"); in the column its tab panel is focusable and scrolls in the column.
+  Escape closes it and gives its button the focus. On a narrow map opening
+  Key folds Layers and the other way round.
+- **Results on the map** (#326 A1, at the top of the Key,
   `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
   (`measure=`: Days short, the default and so absent from the URL;
   `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
@@ -3061,8 +3136,17 @@ map" card) stays the schematic; this is the geography.
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
   Delineation](./maps.md#delineation)). The map's **Delineate** tool puts the
   map in the point-placing mode with the draw bar headed "Delineating a
-  catchment" ("Click the river at the catchment’s outlet, or just below a
-  dam wall."); **Delineate…** (or the bar's **Enter coordinates**) opens
+  catchment": what to click and what the result follows ("Click a terrain
+  channel at the catchment’s outlet, or just below a dam wall. The catchment
+  follows the terrain: all the land that drains to that point."; with the
+  point placed, "Drag the point onto a terrain channel if it missed, then
+  Delineate…"), then the lines on the map in words with their swatches
+  (`DelineationLines.svelte`, the Key's words, `mapList.ts`
+  `delineationLines`): **Terrain channels**: where your click goes; the
+  outline follows these, and, with the River network layer on, **River
+  network**: mapped rivers, for reference only; they can sit off the terrain
+  channels (2026-10-03: the operator saw red and blue lines with neither in
+  the Key, and asked which one a catchment follows); **Delineate…** (or the bar's **Enter coordinates**) opens
   the **Delineate a catchment** sheet (`delineate=1`): "The point is" The
   catchment’s outlet / Just below a dam wall, the clicked position (or
   Latitude and Longitude behind **Enter coordinates**), the dataset line
@@ -3114,19 +3198,39 @@ map" card) stays the schematic; this is the geography.
   coordinates) always opens the form; **Review it** and a reload with
   `delineate=1` open the waiting proposal. Closed with a proposal open, a
   slim line among the notices says "A delineated catchment (547.19 km²) is
-  drawn dashed on the map, waiting for your decision." with **Review it**.
-  Accepting saves the feature, picks it and says "Saved Catchment above the
-  outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
-  the map
-  changed.
+  drawn dashed on the map over the terrain channels it follows, waiting for
+  your decision." with **Review it**. The last caveat says the outline
+  follows the terrain channels, drawn dimmed behind it, and to close the
+  sheet to look. Accepting saves the feature and picks it; accepted as an
+  area it says "Saved Catchment above the outlet (delineated), 547.19 km² on
+  the map."; accepted as the catchment boundary, "Saved … on the map as the
+  catchment boundary. It isn’t in the model yet." with the next step as a
+  button in the toast (**Divide the model**, or **Start from the map** for an
+  empty model), and the boundary's card holds the same step while it applies
+  (below). Rejecting says nothing on the map changed.
+- **The boundary's next step** (editors; `mapList.ts` `boundaryNextStep`,
+  2026-10-03): accepting a boundary saves a map feature only, so the
+  catchment boundary's card (the side column's Details) says so under its
+  facts in a tinted box: "This boundary is on the map, not in the model
+  yet. Divide the model splits it into each unit’s area at your dams,
+  abstraction points and gauges, for you to tick." with **Divide the model**
+  (`divide=1`; **Review the proposed division** while one waits), or for an
+  empty model "… Start from the map proposes the model’s units from it: …"
+  with **Start from the map** (`start=1`). It goes once a unit has taken its
+  area from the map; without a DEM (no Divide) it doesn't show.
 - **The elevation model's channels** (while Delineate or Sub-catchments is
   on; issue #374, [maps.md § The elevation model's channels](./maps.md#the-elevation-models-channels)):
-  solid red lines over the river network, wider for a larger area, and one
-  slim status line under the bar with a red swatch ("Red lines: the
-  elevation model's channels, where a click goes. River lines can sit
-  hundreds of metres off them."; "Drawing …", "Zoom in to see …" past
-  0.35°, "… are drawn on the map, which isn't showing here." without WebGL,
-  or the refusal's sentence).
+  solid red lines (orange-red in dark) over the river network, wider for a
+  larger area, named in words in the bar and the Key (**Terrain channels**,
+  above). They stay drawn while a delineated proposal waits for a decision
+  and no other tool has the map, dimmed (`CHANNEL_OPACITY`, `channelsDim`)
+  so the outline reads first and can be checked against them, and go once
+  it is accepted or rejected (`.map-body`'s `data-channels`: `on`, `dim`).
+  A pill over the map's top says only what needs saying ("Drawing the
+  terrain channels…", "Zoom in to see the terrain channels." past 0.35°,
+  "… the terrain channels the outline follows." while reviewing, "… are
+  drawn on the map, which isn't showing here." without WebGL, or the
+  refusal's sentence).
 - **Sub-catchments** (editors, with a DEM on the server; Delineate's choice
   **Sub-catchments, one per click**, in its bar and back again with **One
   catchment, above a point**, asking first when clicks would be lost;
@@ -3137,10 +3241,10 @@ map" card) stays the schematic; this is the geography.
   drawn, and the **Sub-catchments** panel opens: in the side column in the
   picked feature's place from a 56rem page (the map keeps its fitted
   height), above the map on a narrower one (MapTab picks by the page's
-  width, so the panel is in the DOM once). It has how ("Click a red line
-  (the elevation model's channel) for each outlet, or press Enter at the
-  crosshair. Each gets the land that drains to it before any other
-  click."), a polite line for the last change ("2 sub-catchments.", "Click 3
+  width, so the panel is in the DOM once). It has how ("Click a terrain
+  channel for each outlet, or press Enter at the crosshair. Each gets the
+  land that drains to it before any other click, following the terrain.")
+  with the lines on the map in words under it (as Delineate's bar), a polite line for the last change ("2 sub-catchments.", "Click 3
   is not a piece: it …", "Took back click 3.", "Moved the click back."), and
   one line per click under its badge (`PieceBadge`, the number and tint its
   piece has on the map, so the list is the map's key): its area, where its
@@ -3203,8 +3307,14 @@ map" card) stays the schematic; this is the geography.
 - **Assisted drawing** (#326 C2; [maps.md § Assisted
   drawing](./maps.md#assisted-drawing)). The draw bar has **Snap to
   features** (on; for the rest of the tab once unticked) and, while a new
-  shape or line is drawn, **Follow edges**, with "Hold Alt to place one
-  corner exactly."; a ring on the map marks where the pointer would snap,
+  shape or line is drawn, **Follow edges**; with a mouse the Snap label adds
+  "(Alt: exact)", its tooltip and accessible name "Hold Alt to place one
+  corner exactly." (a line under the bar until 2026-10-03). The bar is one
+  line when it is at least 46rem wide (a container query on the bar: what,
+  the hint taking what's left, snapping, the buttons; the buttons drop to a
+  second line only when the hint can't keep 16rem; problems, a trace's
+  source and Delineate's lines on their own line under it) and stacks when
+  narrower; a ring on the map marks where the pointer would snap,
   and the live region names it ("…, on “Upper farm”’s corner."; "(2
   corners followed along it)"). The canvas's accessible name adds "(on the
   nearest feature’s corner or edge within reach; Alt+Enter places it
@@ -3238,9 +3348,11 @@ map" card) stays the schematic; this is the geography.
   the map or in the bar) ends it at once: a measurement has nothing to lose.
   Drawing, placing or editing ends a measurement; Measure is off while a
   drawing is open. Not in the URL.
-- **Layers** (#326 A6; a panel over the map's right edge from the
-  **Layers** button under the zoom buttons, which counts the layers on,
-  "Layers (2 on)"; a box in the side column until 2026-10-02; its open state
+- **Layers** (#326 A6; the side column's Layers tab beside the map, a panel
+  over the map's right edge on a phone, an empty map or while dividing; from
+  the **Layers** button under the zoom buttons, which counts the layers on,
+  "Layers (2 on)"; a box in the side column until 2026-10-02, a panel over
+  the map until 2026-10-03; its open state
   isn't in the URL, the layers are; it stays open through picks, a reach
   clicked on the map opens it, Escape closes it and gives its button the
   focus; it scrolls in its own box, inside the map): **Quaternary
@@ -3361,8 +3473,9 @@ map" card) stays the schematic; this is the geography.
   map's box, in Tab order, pressed, the strip, the header's one row with no
   tools; the toast leaving the map where it is; the Getting started pill
   (over the page, Escape, Draw the boundary); the tabs (a pick, the keys,
-  Back, the old `checks=1`); Layers and Key inside the map, clear of the
-  tools, Escape; a viewer; thirty units (the map under the header, the panel
+  Back, the old `checks=1`); Layers and Key as side-column tabs on a wide
+  page (the map's buttons pick them, Escape gives the tab back) and inside
+  the map, clear of the tools, on a phone; a viewer; thirty units (the map under the header, the panel
   fits the column) and the phone; axe light and dark, wide and phone, with
   the panels open and a tool on. `mapTools.test.ts`, `mapSetup.test.ts` and
   `mapList.test.ts` (`presentKey`) cover the helpers.
@@ -3420,7 +3533,8 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   members ("Other: Crop 10, Crop 11 and …", two lines at most) with their
   total area, and each member's row follows it with a hatched key and "in
   Other" instead of the group's grey.
-- **Irrigation demand by month:** the catchment's gross demand per
+- **Irrigation demand by month:** the catchment's irrigation demand (gross
+  demand ÷ each unit's irrigation efficiency, what a run abstracts) per
   water-year month, stacked by crop in the list's order, largest at the
   bottom, "Other" on top (`MonthlyBars`, drawn at the card's
   measured size so its text isn't scaled; its legend's height is measured
@@ -3494,20 +3608,78 @@ that no named crop uses. Area rather than annual demand because it is known
 before A-pan is set (demand is then zero for every crop), it is what the
 list and the unit bars show, and editing a month's evaporation doesn't
 repaint the crops. The chart's parts come from the same per-farm
-computation as the table: `farmDemands` splits each farm's engine demand
-(`grossFarmDemandM3PerDay`) by crop, `catchmentDemand` gives the totals and
+computation as the table: `farmDemands` divides each farm's engine gross demand
+(`grossFarmDemandM3PerDay`) by its irrigation efficiency (the engine's
+`farmIrrigationEfficiency`, the farm's own blended with its crops' systems,
+as a run uses it; 1 for a non-farm) and splits it by crop, `catchmentDemand` gives the totals and
 `cropStacks` the parts (the named crops, then "Other (N crops)"), which sum
-to them. It is gross demand, before the daily effective-rain reduction (and
-the soil-water store that carries rain over, engine ≥ 0.14.0). The Irrigation
+to them. It is the abstraction demand before the daily effective-rain
+reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0):
+an efficiency below 100 % raises it above the crops' requirement, as a run's
+demand series does (audit N1). The Load crop factors dialog's effect on
+demand shows both, the crop requirement and the abstraction (÷ efficiency). The Irrigation
 demand grid's chart (`CropGrids`) uses the same ranking and colours.
+
+### Irrigation systems
+
+In the grid modal (`grid=systems`, Crops & demand → **Tables** →
+**Irrigation systems**; it used to sit below the page's window-fit layout,
+out of sight), the project's irrigation systems
+(`crops/IrrigationSystemsPanel.svelte`, engine ≥ 1.72.0,
+[model.md §2.3](./model.md#23-irrigation-demand) step 6): each row's name and
+efficiency (%, 1–100), SABI's range under a row that started as a SABI 2021
+system ("SABI 90–95 %"), and what uses it ("1 crop, 2 unit plantings" or
+"Not used"). An editor changes a name or efficiency (every crop on the
+system follows), adds a system of the scheme's own (**+ Add system**, named
+"System N" at 80 % and focused), or removes one: one in use asks first,
+naming what is on it, and its crops and plantings fall back to none. Edits
+go into the model and are saved with the modal's save row; Back closes it.
+The name column stops at 20rem on a wide screen, and a container query (the
+panel's width, not the window's) lets the name shrink on a phone. Where each
+crop is on a system:
+
+- **A crop's default**, in its sheet (below).
+- **A unit's own**, in its planted areas drawer and in the Planted areas
+  grid: each planted crop has an **Irrigation system** picker, its first
+  choice the crop's default ("The crop's default (Drip, 90 %)" in the drawer,
+  "Default: Drip" in the grid); a viewer sees the name, "(default)" when it
+  is the crop's.
+- **The unit's efficiency** on the Network (form and node table) is its
+  plantings' systems blended. While every planting is on a system it is
+  text (an `<output>`, "84.6 %"), not an input. While one resolves no system
+  (a crop from before 1.72.0, or one set to none) a run uses the unit's own
+  stored efficiency for it, so the form edits it as **Efficiency for crops
+  with no system (%)** (its hint adds the blend a run uses when that
+  differs) and the node table's cell is an input
+  (`model/systems.ts` `ownEfficiencyUsed`, the `derived` flag in
+  `network/fields.ts`). The unit form groups its crops by system
+  ("Irrigation systems: Drip, 90 %: Citrus, Pasture · Flood / furrow, 70 %:
+  Lucerne", the crops on none last as "No system (its own 80 %): …";
+  `plantingSystemsLine`) with a link to its planted areas. A paste into the
+  node table leaves the Efficiency column out, saying it comes from the
+  crops' systems.
+- **A return flow above the losses** at that efficiency is flagged, not
+  refused, since the crops' systems move the losses from another screen: the
+  node table outlines the cell (the reason in its title) and the unit form
+  says what a run will return ("Only 10 % of the water supplied is lost at
+  its 90 % irrigation efficiency …"); a run caps it and warns.
+
+Labels read "Name, NN %" (`model/systems.ts` `systemLabel`), a name that
+already ends in its efficiency ("Imported, 66 %") as it is.
+`e2e/tests/irrigation-systems.spec.ts` pins the table, a crop's default, a
+unit's own in the grid and the drawer, the editable own efficiency, the
+blend as text, opening from the Tables menu and Back, and removing a system
+in use.
 
 ### Crop sheet
 
 One crop's name and 12 monthly factors in a side sheet over the page
 (`crops/CropSheet.svelte`), while the URL has `crop=<cropId>`, so it can be
 linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
-(`withoutParam`). **+ Add crop** adds "Crop N" and opens its sheet with the
-name focused. The sheet shows the factors four to a row (labelled "Orchard
+(`withoutParam`). **+ Add crop** adds "Crop N", on drip (the new-unit
+default), and opens its sheet with the name focused. Under the name, its
+default **Irrigation system** (the project's table, or none: each unit's own
+efficiency), with the units that put it on another named in the hint. The sheet shows the factors four to a row (labelled "Orchard
 crop factor, Jan", as in the grid), the high-factor warning for
 this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
 much. A factor cleared is 0 (a month the crop isn't irrigated): the field
@@ -3558,69 +3730,114 @@ tab, and scenario override mode, where it fills the scenario's crops) opens a di
 that fills the project's crop factors from a source, shows what changes and
 what it does to demand, and changes nothing until **Apply** (issue #54 item 1;
 `crops/LoadCropFactorsDialog.svelte`, its own chunk, fetched on first open;
-logic in `crops/loadFactors.ts`, data in `crops/library.ts`). Which crop set a
+logic in `crops/loadFactors.ts`, its presentation helpers in
+`crops/loadFactorsView.ts`, data in `crops/library.ts`). Which crop set a
 catchment uses is the hydrologist's call (issue #54 Q9/Q10).
 
-- **Source:** the **reference library** (ARC/SABI Irrigation Design Manual
-  ch. 4 A-pan design factors, winter rainfall area; [model.md §2.3
-  item 8](./model.md) lists the crops, sources and conversions), or **a b023
-  workbook** the user picks: its [Crop demand] factors, read by the browser
-  importer in its worker (`spreadsheet/import/`, the same reader and
-  failure messages as Import a b023 workbook; it reads the whole workbook,
-  so a large one takes a few seconds). Workbooks never leave the
-  browser.
-  **A node-based workbook** is the third source: its [Crop_Factors] and
-  [Crop_Areas] sheets, read by the same worker
-  (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
-  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
-  efficiency column isn't loaded (a crop's efficiency changes only through
-  the system select below), nor are its farm areas. For
-  either workbook, the dialog lists what the reader flagged as text under
-  the file: for a node-based workbook, a missing sheet (a b023 file picked
-  under this option), names that differ between the two sheets and cells
-  read as 0; for a b023 workbook, the import report's
-  `crop-factors-copied` and `crop-factors-suspect` warnings.
-- **Pan coefficient Kp** multiplies the source factors. It starts at the
-  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
-  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
-  b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
-  set against reference ET₀ while the engine multiplies crop factors by
-  A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
-  mid value). The field takes 0.1 to 1.5, shown beside it and in its
-  description, and the warning for a missing Kp says that range. A line under the input says which and why, linking [FAO-56
-  Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
-  re-applies the new source's default only while Kp is still the previous
-  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
-  **Use the default, N** puts the default back.
-- **Match crops:** a row per project crop with a **Load factors from**
-  select, preset by name (`matchByName`: the same name ignoring case,
-  accents, punctuation and a plural s, or the one source whose words hold the
-  crop's or the other way round, "Lucerne" → "Alfalfa (lucerne), frost
-  areas"; ambiguous or unknown names stay on **Keep current**). A library
-  vegetable (staged by portion of the season) asks for a planting month and
-  day and a season length, preset from the manual's Table 4.7 where it gives
-  one; until the month is set it has no factors, and a line under it says so
-  ("Pick a planting month: until then Onions has no factors to load into
-  Orchard", the month select's description), since the crop is left out of
-  **Apply** until then. An **irrigation system**
-  select sets the crop's own efficiency (engine ≥ 0.43.0) from the SABI 2021
-  values, default **Keep**; the library crop's typical system is shown as a
-  hint, never applied unasked.
-- **Diff:** per mapped crop, its current and new factors month by month
-  (changed cells highlighted) and the efficiency, with the source table and
-  page and the entry's notes, and an **Apply to <crop>** tick (on) to accept
-  or reject that crop.
-- **Demand difference:** for the accepted changes, the mean gross irrigation
-  demand (m³/day, before rain, at the saved A-pan) now and new per farm and
-  for the catchment with the change in %, the same ÷ each farm's irrigation
-  efficiency (its crops' blend, `farmIrrigationEfficiency`), and the
-  catchment's demand by month. The engine's own functions, so it is what a
-  run would use before effective rain.
-- **Apply** replaces the accepted crops' factors (and efficiency) in the
-  shared `ModelEditor` and closes; the save bar then saves them with the
-  optional reason, and History records the change. Cancel, Esc or unticking
-  every crop leaves the model untouched. It loads into the project's existing
-  crops only: add a crop first to load into it.
+The dialog is a full dialog laid out as the task's four numbered steps.
+Wide (its body from 64rem, 896 px), steps 1–3 scroll in the left column and
+step 4, the effect on demand, sits in its own column beside them, so the
+effect stays in view while crops are matched; every scroll box is positioned,
+so the visually hidden words inside it never grow the dialog. On a phone it
+is one column that scrolls as a whole. The action row says how many crops
+change and the catchment's change in abstraction ("8 of 30 crops will
+change. Save the model afterwards to keep it. Abstraction −21 %."), so the
+answer is beside **Apply** at every size.
+
+1. **Where the factors come from:** three choices, each with a line saying
+   what it is (`SOURCE_KINDS`' `hint`). The **reference library** (ARC/SABI
+   Irrigation Design Manual ch. 4 A-pan design factors, winter rainfall area;
+   [model.md §2.3 item 8](./model.md) lists the crops, sources and
+   conversions), or **a b023 workbook** the user picks: its [Crop demand]
+   factors, read by the browser importer in its worker
+   (`spreadsheet/import/`, the same reader and failure messages as Import a
+   b023 workbook; it reads the whole workbook, so a large one takes a few
+   seconds). Workbooks never leave the browser, and the dialog says so under
+   the file field.
+   **A node-based workbook** is the third source: its [Crop_Factors] and
+   [Crop_Areas] sheets, read by the same worker
+   (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
+   those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+   efficiency column isn't loaded (a crop's efficiency changes only through
+   the system select below), nor are its farm areas. For
+   either workbook, the dialog lists what the reader flagged as text under
+   the file (the first five, **Show all N** for the rest): for a node-based
+   workbook, a missing sheet (a b023 file picked under this option), names
+   that differ between the two sheets and cells read as 0; for a b023
+   workbook, the import report's `crop-factors-copied` and
+   `crop-factors-suspect` warnings.
+2. **Convert them to A-pan:** the **pan coefficient Kp** multiplies the
+   source factors. It starts at the source's default by the shape of its
+   factors (`SOURCE_KINDS`, `defaultKp` in `loadFactors.ts`, issue #289):
+   **1** for A-pan factors (the library, b023), **0.75** for an FAO-56 Kc
+   set (the node-based workbook), which is set against reference ET₀ while
+   the engine multiplies crop factors by A-pan (FAO-56 Table 5 gives a
+   Class A pan's Kp as 0.35–0.85; 0.75 is a mid value). The field takes 0.1
+   to 1.5, shown beside it and in its description, and the warning for a
+   missing Kp says that range. A line under the input says which and why,
+   linking [FAO-56 Table 5](https://www.fao.org/4/x0490e/x0490e08.htm).
+   Changing the source re-applies the new source's default only while Kp is
+   still the previous default (or blank); a Kp the modeller typed is kept
+   (`kpForShape`), and **Use the default, N** puts the default back.
+3. **Match your crops and check each change:** a card per project crop,
+   **largest planted area first** (the Crops page's order, `rankCrops` on
+   the units' areas; an unplanted crop says "Not planted"), with the count
+   matched by name above them ("14 of 30 crops matched by name. Check each
+   match."). Each card has:
+   - a **Load factors from** select (accessible name "Load factors from, for
+     <crop>"), preset by name (`matchByName`: the same name ignoring case,
+     accents, punctuation and a plural s, or the one source whose words hold
+     the crop's or the other way round, "Lucerne" → "Alfalfa (lucerne),
+     frost areas"; ambiguous or unknown names stay on **Keep current**,
+     which leaves the crop as it is);
+   - an **Irrigation system** select (`crops/CropSystemSelect.svelte`, one
+     self-contained control: the crop, its choice and the source crop's
+     typical system in, the chosen id out) that sets the crop's own
+     efficiency (engine ≥ 0.43.0) from the SABI 2021 values, default
+     **Keep**; the library crop's typical system is shown under it as a
+     hint, never applied unasked;
+   - its status: an **Apply** tick (on; its name "Apply to <crop>") to
+     accept or reject that crop, **No change** when the choice is what the
+     crop already has, or **No month yet** for a vegetable without one;
+   - for a library vegetable (staged by portion of the season), a planting
+     month and day and a season length, and the manual's Table 4.7 season
+     lengths for it as buttons that set the field (the one in it pressed).
+     They show as soon as the vegetable is the source, by name match as
+     much as by hand, and the season starts at that vegetable's own first
+     Table 4.7 length: picking another vegetable keeps the planting date but
+     takes the new one's season (`plantingFor` in `loadFactorsView.ts`).
+     Until the month is set it has no factors, and a line under it says so
+     ("Pick a planting month: until then Onions has no factors to load into
+     Orchard", the month select's description; without "into …" when the two
+     names are the same), since the crop is left out of **Apply** until then;
+   - once it has a change, its current and new factors month by month
+     (changed cells bold on a tint; captioned "Crop factor by month: now, and
+     from <source> × Kp <n>"), in one row of twelve or, where the card is
+     narrower than 560 px, two rows of six; the crop's default irrigation
+     system in words ("Irrigation system: none (each unit's own) → Drip, 90 %",
+     or "stays …"; the picker offers the project's table, engine ≥ 1.72.0, and
+     a unit that put the crop on its own system keeps it); and
+     the source table and page with the entry's notes, or the workbook sheet
+     and file.
+4. **Check the effect on demand**, for the ticked changes: two tiles, the
+   catchment's mean **crop requirement** (gross irrigation demand, m³/day,
+   before rain, at the saved A-pan) and its **abstraction** (the same ÷ each
+   unit's irrigation efficiency, its crops' blend,
+   `farmIrrigationEfficiency`), each as the change in % with now → new;
+   then both per hydrological unit, the biggest change in abstraction first
+   (`rowsByChange`), the first eight with **Show all N hydrological units**,
+   and the catchment as the foot row (one table with both measures, or one
+   table per measure where the column is narrower than 470 px); then the
+   catchment's abstraction by month, a row per month. The engine's own
+   functions, so it is what a run would use before effective rain. With
+   nothing to show it says why and what to do (no choice yet, every change
+   unticked, or choices that change nothing).
+
+**Apply** replaces the accepted crops' factors (and efficiency) in the
+shared `ModelEditor` and closes; the save bar then saves them with the
+optional reason, and History records the change. Cancel, Esc or unticking
+every crop leaves the model untouched. It loads into the project's existing
+crops only: add a crop first to load into it.
 
 ### Farm drawer
 
@@ -3648,8 +3865,9 @@ saves the catchment's model, and override mode there edits the scenario's
   (`plantedFirst`, taken as the drawer opens, so a row doesn't jump while its
   area is typed; with 30 crops the planted two are at the top). A cleared area
   is 0, never a blank over the old value. Then the
-  total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
-  the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
+  total, and its irrigation demand before rain from the saved A-pan, ÷ its
+  irrigation efficiency (mean m³/day, Mm³ a year, the peak month, the
+  efficiency; `farmDemands`). No crops yet, A-pan unset, nothing planted
   and a farm that is no longer in the model each say so.
 - **From land cover** (issue #326 B-landcover,
   `crops/CroplandProposalsBox.svelte`, rows in `crops/croplandProposals.ts`;
@@ -3724,6 +3942,14 @@ modal: the page leaves the parameter to the tab, and over any other tab
 the link goes to that tab with it open (`movedGridHref`;
 [§ Map](#map-tabmap)).
 
+- **One heading:** the modal's title (the dialog's name, beside its ✕) is
+  the only heading over the grid. The grid inside draws none of its own
+  (`inModal` on `CropsTab`/`CropGrids` and `TransfersTab`; the node table
+  is only ever in the modal, so it has none): what its heading line said
+  moves onto the intro line, with its ⓘ (crop factors: "Water year, October
+  → September"), and its actions stay. The same grids keep their headings
+  in scenario override mode and on the Transfers tab. Headings a grid has
+  per item (a transfer rule's title, `h3`) stay.
 - **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify
   (the #17 checklist).
@@ -4341,7 +4567,7 @@ section header, which it fills (`fillHeader`) like the other sections.
   window or the record changed; it follows the unsaved form), or "GR4J · no
   fit record: the parameters were set by hand or imported". The actions add
   **Fit the parameters** for editors (a link to `#set-fit`), or **Fit record**
-  for a viewer when there is one, before Add data and Run model. The old
+  for a viewer when there is one, before Add data. The old
   intro paragraph is gone: the header and the menu's groups say what it
   said, and the monthly tables' own Oct … Sep headers show the water year.
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
@@ -5555,10 +5781,11 @@ read it before.
 - **The page** (issue #17): a reading page with the runs list beside the
   shown run. The section header's line counts the runs and says when the
   newest ran ("20 runs · newest ran today", "No runs yet"), and for an
-  editor the **run form** sits where the other pages have Run model, last in
-  the header: a **Run label** field, **Run forecast** (with a forecast
+  editor the **run form** sits last in the header, after Add data, the only
+  place a run starts from the header: a **Run label** field, **Run forecast** (with a forecast
   series) and **Run model**. Its status (what a run still needs, flow shares
-  over 100 %, unsaved model changes, inputs changed since the latest run,
+  over 100 %, unsaved model changes (Run model asks to save them first),
+  inputs changed since the latest run,
   the progress while a run goes, else "Runs use the saved network…") is one
   slim line under the header (`#run-note`, the buttons' accessible
   description), with the progress bar under it. A viewer gets no form, and
@@ -6183,7 +6410,10 @@ read it before.
   kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
   coefficient shift (on a GR4J run with a monthly PE row, engine ≥ 0.31.0,
   the shift is 0 and the ensemble's notes say the pan coefficient is not
-  varied); **Run ensemble** asks the server to fix the rule and
+  varied), then **Run ensemble** in an action row under the fields (as
+  on every analysis panel here: the fields and hints first, the button
+  under them at the panel's edge, so the panels' buttons line up down the
+  page); it asks the server to fix the rule and
   draw the seed, runs every member in the calibration worker with a live
   count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
   server checks and stores it. A cancelled one stays in the list as never
@@ -6468,7 +6698,8 @@ link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
 with its chart `uncertainty/TornadoChart.svelte` and helpers
 `uncertainty/sensitivity.ts`.
 
-- **Anyone who can see the run** can press **Run sensitivity**: the page
+- **Anyone who can see the run** can press **Run sensitivity** (a secondary button, the ensemble's size,
+  in the same action row position): the page
   fetches the run's own inputs (`…/model-input`) and the calibration worker
   runs the central case and each factor's low and high (at most 11 model
   runs, under a second on the examples), with a count ("5 of 11 runs") and
@@ -6509,7 +6740,8 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 
 - **Starting a sweep** (editors): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
-  and **Run demand sweep** queue a [sweep](./scenarios.md#sweeps) of the
+  with its hint under the box, then **Run demand sweep** in the action
+  row under them, queue a [sweep](./scenarios.md#sweeps) of the
   shown run: one member per level, each a single `demand.scale` op on every
   farm, named "85 %" (on a full-allocation run, 85 % of each unit's
   registered volume, engine ≥ 1.70.0). Only on an ordinary run of the model (a scenario or
@@ -6592,7 +6824,8 @@ confirmed farmers see the outlook, O5, issue #90).
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and
-  the levels together are at most 6). **Run seasonal outlook** queues an
+  the levels together are at most 6). **Run seasonal outlook**, in the
+  action row under the levels, hint and plan, queues an
   [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
   the planning share are the project's settings (Settings → Seasonal
   outlook), the decision date the latest one the run's state reaches. Only
@@ -6649,7 +6882,8 @@ confirmed farmers see the outlook, O5, issue #90).
 - **Farmers** (issue #53 R5, E3): *Published to farmers: 85 % for 1 Oct
   2018 – 30 Apr 2019, on … by …, 12 hydrological units* (or *from another
   outlook*), or *No outlook is published to farmers*. Editors pick **Level
-  the WUA has set** (the levels that ran) and **Publish to farmers**,
+  the WUA has set** (the levels that ran), then, in the action row under
+  it and its hint, **Publish to farmers**,
   which replaces the one published before, or **Withdraw**. Each linked
   farmer then sees what that level gave their own hydrological unit, until
   the season ends. The app never picks the level.
@@ -7463,7 +7697,7 @@ the viewer's day, with a request's change set folded into one entry.
   when changes are recorded: "Latest change today 14:05 by Ann: Model
   changed · recorded since 3 Sep 2026"; "No changes recorded yet · recorded
   since …" (`timeline.ts` `historyContext`). No actions of its own beside
-  Add data and Run model.
+  Add data.
 - **The card** "Changes, newest first": a line on what it holds (and for
   editors "Restoring a version saves it as a new change: nothing is ever
   erased"), then the filters: **Hydrological unit** ("All hydrological units"), **Kind of change** and
@@ -7508,7 +7742,9 @@ the viewer's day, with a request's change set folded into one entry.
   with an optional reason (Enter in it restores, once the preview is in); restore buttons are disabled while there are
   unsaved model edits (a note says so), and a restored farm lists the
   farmers to re-link (a link to the Project page's Farmers list). After a
-  restore the new entry (the restore itself) is picked, in place.
+  restore the new entry (the restore itself) is picked, in place; its
+  notice's "run the model again" (and a series restore's) links to Runs &
+  results, where Run model is.
 - Viewers read everything, the differences included, with no restore
   buttons; farmers never see the tab. Empty: "No changes recorded yet.
   History starts from {date}."; a filter with none: "Nothing matches these
@@ -8984,16 +9220,14 @@ then.
   [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
   `routes/+layout.svelte` beside the other banners, on the workspace's
   pages only, English: not on the account, farm, alert or sign-in pages).
-  For a project owner, team admin or assessor without an authenticator
-  (`GET /auth/mfa` `required && !enrolled`), or after any request answers
-  `403 mfa_required`: what their role needs it for and **Set up two-step
-  sign-in**, linking to the Account page's panel (`/account#two-step`).
-  With an authenticator but a password-only session (`!sessionVerified`),
-  or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
-  to `/login?next=<this page>`. A refusal words it as "That needs …";
+  Only after a request is refused, never for the role alone (2026-10-03): a
+  `403 mfa_required` shows "That needs two-step sign-in, and you haven't set
+  it up yet…" and **Set up two-step sign-in**, linking to the Account page's
+  panel (`/account#two-step`); a `403 mfa_step_up` shows **Sign in again**,
+  which signs out and goes to `/login?next=<this page>`.
   **Dismiss** hides it until the next refusal (or until the tab closes: a
   reload keeps it hidden, `sessionStorage`) and moves focus to the page's
-  title. While the need stands, dismissed or not, the account menu's avatar
+  title. After a refusal, while the need stands, dismissed or not, the account menu's avatar
   carries a small amber "i" badge (the trigger's name adds ", two-step
   sign-in needed") and the menu's first entry is **Set up two-step
   sign-in** (to `/account#two-step`) or **Sign in again with a code**. Its own chunk, loaded only while there is something to say

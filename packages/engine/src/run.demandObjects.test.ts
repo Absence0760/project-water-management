@@ -31,7 +31,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -69,7 +69,7 @@ function model(objects: DemandObject[] | undefined, natural = [400, 100, 0]): { 
 		input: {
 			settings: { ewrPragmaticM3PerDay: flat(0) as unknown as Monthly, apanMm: flat(3100) as unknown as Monthly },
 			model: {
-				nodes: [node('A', { downstreamNodeId: 'G', pctRunoffToDam: 1, irrigationEfficiency: 0.5, lossReturnFraction: 0.5 }), node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 1 })],
+				nodes: [node('A', { downstreamNodeId: 'G', pctRunoffToDam: 1, irrigationEfficiency: 0.5, returnFlowFraction: 0.25 }), node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 1 })],
 				crops,
 				cropAreas,
 				transfers: [],

@@ -1259,7 +1259,18 @@ to a point on a river. The design, the method and its accuracy are in
   upstream area, which can then be linked to a unit and Used), or
   **Reject**. A new point replaces an open proposal. Every proposal is kept
   with its decision (the last 50 superseded or rejected per project; the
-  accepted ones all), and audited.
+  accepted ones all), and audited. The elevation model's channels stay
+  drawn behind it, dimmed, until it is decided (below).
+- **What follows the terrain.** The outline follows the elevation model
+  alone: the land that drains to the point along its own channels. Mapped
+  rivers (HydroRIVERS, the basemap's waterways) only help place the point (a
+  click near a loaded reach is moved onto the channel that matches it); they
+  never shape the outline. The bar and the Key say so in words.
+- **After accepting a boundary.** It is a map feature only: the model's
+  units, areas and order don't change. The toast and the boundary's card
+  say so and offer the step that does: **Divide the model** (a model with
+  nodes, below) or **Start from the map** (an empty model), each a sheet of
+  proposed values to tick.
 - **Pans** (delineate-9; [design/delineation.md § Pans](./design/delineation.md#pans),
   the research in [design/pans-research.md](./design/pans-research.md)).
   The fill routes every closed depression to the outlet, so in pan veld the
@@ -1322,18 +1333,29 @@ so these are the lines to click: a click on one snaps onto it.
   area at its lower end (window-local: a river entering from beyond the
   window carries less than it drains). A tile keeps the steps that start
   inside it, so tiles meet without overlapping. Simplified by half a cell.
-- **When.** Only while one of the two tools is on, and only for a view at
-  most 0.35° a side (3 × 3 tiles); wider, a line over the map says to zoom
-  in. Tiles are fetched one at a time and kept for the session; the server
+- **When.** Only while one of the two tools is on, or while a delineated
+  proposal waits for a decision (dimmed then, so the outline reads first
+  and can be checked against the channels it follows; they go once it is
+  accepted or rejected), and only for a view at most 0.35° a side
+  (3 × 3 tiles); wider, a line over the map says to zoom in (tiles already
+  fetched stay drawn). Tiles are fetched one at a time and kept for the session; the server
   keeps the last 128 in memory per instance.
 - **Cost.** A tile it computes (not one it has) counts against the account's
   elevation-model cap like a delineation (60 an hour, 2 at once;
   security.md § Map uploads); a few seconds of CPU each.
-- **What says so.** Delineate's bar and the Sub-catchments panel say "Click
-  a red line (the elevation model's channel) …"; a pill over the map's top
-  appears only when there is something to say: "Drawing the elevation
-  model's channels…", "Zoom in to see …", that there is no map to draw them
-  on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
+- **What says so.** On screen they are the **terrain channels** (the words
+  the operator understood, 2026-10-03; "red" was wrong in the dark theme,
+  where they are orange-red). Delineate's bar and the Sub-catchments panel
+  say "Click a terrain channel …" and what the result follows, then name
+  both kinds of line with their swatches: **Terrain channels**: where your
+  click goes; the outline follows these, and, with the River network layer
+  on, **River network**: mapped rivers, for reference only; they can sit off
+  the terrain channels. The Key's Lines lead with the same two entries while
+  the channels are drawn (the Key is the side column's Key tab beside the
+  map, so the bar's lines and the Key's sit side by side without covering the
+  map). A pill over the map's top appears only when there
+  is something to say: "Drawing the terrain channels…", "Zoom in to see …",
+  that there is no map to draw them on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
   309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
 
 ## Start from the map
@@ -1613,7 +1635,7 @@ the app can analyse; this layer is.
   basemap and ΔE ≥ 40 from every other stroke (`mapStyle.test.ts`). While
   the layer is on, the key's **Lines** gain "river network" with a dashed
   swatch.
-- **The list beside the map.** The Layers panel says how many reaches are
+- **The list beside the map.** The Layers panel (the side column's Layers tab on a wide page, a panel over the map on a phone) says how many reaches are
   around the catchment and where they come from ("10 reaches around the
   catchment, the biggest first, from synthetic." and, for the repo's
   network, **Synthetic test data, never real rivers.**), and lists them as

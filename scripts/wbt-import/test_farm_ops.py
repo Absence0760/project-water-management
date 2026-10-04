@@ -28,12 +28,12 @@ class OperatingRules(unittest.TestCase):
     def test_n1_return_flow_becomes_efficiency_with_every_loss_returning(self):
         ops = farm_operating_rules("Synthetic farm", {"returnFlowPct": 0.2}, [])
         self.assertAlmostEqual(ops["irrigationEfficiency"], 0.8)
-        self.assertEqual(ops["lossReturnFraction"], 1)
+        self.assertEqual(ops["returnFlowFraction"], 0.2)
         self.assertNotIn("returnFlowPct", ops)
 
     def test_n1_no_return_flow_is_full_efficiency_and_no_return(self):
         ops = farm_operating_rules("Synthetic farm", {"returnFlowPct": 0}, [])
-        self.assertEqual((ops["irrigationEfficiency"], ops["lossReturnFraction"]), (1, 0))
+        self.assertEqual((ops["irrigationEfficiency"], ops["returnFlowFraction"]), (1, 0))
 
     def test_n1_all_returning_maps_to_the_smallest_efficiency(self):
         self.assertEqual(farm_operating_rules("Synthetic farm", {"returnFlowPct": 1}, [])["irrigationEfficiency"], 0.01)

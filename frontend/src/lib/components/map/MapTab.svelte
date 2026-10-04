@@ -68,7 +68,7 @@
 	import MapChecks from './MapChecks.svelte';
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
-	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
+	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { layersOn } from './mapLayers';
@@ -142,6 +142,10 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
+	/** The step a notice offers (the accept toast's Divide the model or Start from the map), shown only while that notice is the one up. */
+	let noticeNext = $state<{ text: string; step: BoundaryNextStep } | null>(null);
+	/** The notice that changed the model, while it shows: it ends with a link to Runs & results, where Run model is. */
+	let runNotice = $state<string | null>(null);
 
 	async function load() {
 		loading = !data;
@@ -239,12 +243,17 @@
 		sideTab = 'details';
 	}
 
-	// --- the side column: one thing at a time (Details · Features · Checks), the Sub-catchments panel taking it over ---
-	type SideTab = 'details' | 'features' | 'checks';
+	// --- the side column: one thing at a time (Details · Features · Checks, and on a wide page Layers · Key), the Sub-catchments panel taking it over ---
+	type SideTab = 'details' | 'features' | 'checks' | 'layers' | 'key';
 	const SIDE_TABS: { id: SideTab; label: string }[] = [
 		{ id: 'details', label: 'Details' },
 		{ id: 'features', label: 'Features' },
 		{ id: 'checks', label: 'Checks' }
+	];
+	/** Layers and Key join the tabs while the column shows them (`panelsInSide`); otherwise they are panels over the map. */
+	const PANEL_TABS: { id: SideTab; label: string }[] = [
+		{ id: 'layers', label: 'Layers' },
+		{ id: 'key', label: 'Key' }
 	];
 	let sideTab = $state<SideTab>('features');
 	// A new pick (on the map, in the list, a link, Back) shows its details; the pick going (a delete) shows the list again.
@@ -267,12 +276,12 @@
 	const tabEls: Record<string, HTMLButtonElement | undefined> = $state({});
 	/** Arrow keys, Home and End move between the tabs (the focus and the choice together). */
 	function tabKey(e: KeyboardEvent) {
-		const i = SIDE_TABS.findIndex((t) => t.id === sideTab);
-		const n = SIDE_TABS.length;
+		const i = sideTabs.findIndex((t) => t.id === sideTab);
+		const n = sideTabs.length;
 		const to = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
 		if (to < 0) return;
 		e.preventDefault();
-		sideTab = SIDE_TABS[to]!.id;
+		sideTab = sideTabs[to]!.id;
 		tabEls[sideTab]?.focus();
 	}
 
@@ -363,7 +372,11 @@
 		await loadDelineation();
 	}
 	async function delineationAccepted(f: MapFeature, summary: string) {
-		notice = `Saved ${summary} on the map.`;
+		// A boundary is a map feature only: say so, and where the next step is (its card, which Accept picks).
+		const next = f.kind === 'catchment_boundary' ? boundaryNext : null;
+		notice = next ? `Saved ${summary} on the map as the catchment boundary. It isn’t in the model yet.` : `Saved ${summary} on the map.`;
+		// The toast carries the next step too (on a phone the card is below the map); it goes with this notice.
+		noticeNext = next ? { text: notice, step: next } : null;
 		await Promise.all([load(), loadDelineation()]);
 		await pickInPlace(f.id, 'delineate');
 		await returnToStart();
@@ -428,6 +441,12 @@
 	// --- divide a model that has nodes from the map (#326 C3's follow-up): editors, with a DEM on the server ---
 	const pendingDivide = $derived(openDivide(startInfo));
 	const canDivide = $derived(canEdit && !!startInfo && !startInfo.modelEmpty && startInfo.elevation);
+	/** The boundary's next step on its card (and named in the accept notice): Start from the map or Divide the model, whichever applies. */
+	const boundaryNext = $derived(
+		canEdit
+			? boundaryNextStep({ canStart, canDivide: !!canDivide, pendingStart: !!pendingStart, pendingDivide: !!pendingDivide, unitAreasFromMap: farms.filter((n) => n.areaSource === 'map').length })
+			: null
+	);
 	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {}, placement: emptyPlacement() });
 	async function divideApplied() {
 		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
@@ -775,9 +794,14 @@
 	}
 
 	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
+	/**
+	 * A delineated proposal waits for a decision and no other tool has the map: the channels stay drawn, dimmed, so
+	 * the outline can be checked against the terrain it follows; they go once it is accepted or rejected.
+	 */
+	const reviewingProposal = $derived(!!pendingProposal && !draft.active && !measure.active && !dividing);
 	const channels = new ChannelLayer({
 		projectId: () => projectId,
-		on: () => canEdit && !!delineation?.available && (delineating || dividing),
+		on: () => canEdit && !!delineation?.available && (delineating || dividing || reviewingProposal),
 		view: () => mapView,
 		load: api.delineation.channels
 	});
@@ -856,7 +880,7 @@
 		rowError = null;
 		try {
 			const r = await api.map.areaFromMap(projectId, nodeId, f.id, basis);
-			notice = `${n.name}’s area is now ${fmtNum(r.areaKm2, 3)} km², from the map${r.areaBasis === 'effective' ? ' (effective, without what drains into pans)' : ''}. Run the model to see its effect.`;
+			notice = runNotice = `${n.name}’s area is now ${fmtNum(r.areaKm2, 3)} km², from the map${r.areaBasis === 'effective' ? ' (effective, without what drains into pans)' : ''}.`;
 			await Promise.all([load(), onModelChanged()]);
 		} catch (err) {
 			rowError = { id: f.id, text: msg(err) };
@@ -893,7 +917,11 @@
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
 	$effect(() => watchAppTheme(() => (dark = appIsDark())));
-	const key = $derived(presentKey(keyGroups(overlayColours(dark), { riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null }), features));
+	/** While the channels are drawn, the lines on the map in words (the bars and the Key say the same). */
+	const lineItems = $derived(channels.on ? delineationLines({ channels: channelColour(dark), riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null }) : null);
+	const key = $derived(
+		presentKey(keyGroups(overlayColours(dark), { riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null, channels: channels.on ? channelColour(dark) : null }), features)
+	);
 
 	// --- results on the map (#326 A1): the measure and run from the URL, each unit's and gauge's figure, the fills ---
 	const results = new MapResults({
@@ -906,7 +934,24 @@
 		dark: () => dark
 	});
 
-	// --- on the map: the Layers and Key panels (disclosures over its corners), the tool strip, the Getting started steps ---
+	// --- Layers and Key: tabs in the side column on a wide page with features (until 2026-10-03 boxes over the map's corners);
+	// disclosures over the map otherwise (a phone, an empty map, the Sub-catchments panel taking the column over) ---
+	const panelsInSide = $derived(wide && features.length > 0 && !(canEdit && dividing));
+	const sideTabs = $derived(panelsInSide ? [...SIDE_TABS, ...PANEL_TABS] : SIDE_TABS);
+	// The column stops showing them (narrowed, emptied, dividing) while one is picked: back to the list.
+	$effect(() => {
+		if (!panelsInSide && (sideTab === 'layers' || sideTab === 'key')) untrack(() => (sideTab = 'features'));
+	});
+	// And while it shows them, the panels over the map are folded, so narrowing never brings back one opened long before.
+	$effect(() => {
+		if (!panelsInSide) return;
+		untrack(() => {
+			layersOpen = false;
+			if (keyChoice) keyChoice = false;
+		});
+	});
+	/** The tab the map's Layers or Key button took over from, for its second press (and Escape) to give back. */
+	let tabBefore: SideTab = 'features';
 	let layersOpen = $state(false);
 	/**
 	 * The Key: open by default while the areas are coloured by a run's results (their colours need the legend) and the map is
@@ -914,16 +959,27 @@
 	 */
 	let keyChoice = $state<boolean | null>(null);
 	/** On a narrow map (a window narrowed with both open, too) the Key gives way to an open Layers panel. */
-	const keyOpen = $derived((keyChoice ?? (wide && results.on)) && (wide || !layersOpen));
-	// The default is taken once, when the runs and the page's width are in: switching the measure to Kind from inside the
+	const keyOpen = $derived((keyChoice ?? (wide && results.on && !panelsInSide)) && (wide || !layersOpen));
+	/** Shown where they are now: the tab picked, or the panel open over the map. */
+	const layersShown = $derived(panelsInSide ? sideTab === 'layers' : layersOpen);
+	const keyShown = $derived(panelsInSide ? sideTab === 'key' : keyOpen);
+	// The default is taken once, when the runs, the features and the page's width are in: switching the measure to Kind from inside the
 	// open panel must not fold it under the pointer.
 	$effect(() => {
-		if (keyChoice !== null || runs === null || !pageWidth) return;
+		if (keyChoice !== null || runs === null || !pageWidth || !data) return;
 		const open = wide && results.on;
-		untrack(() => (keyChoice = open));
+		// In the column the Key is a tab the list would give way to: the column opens on the list (or a pick's Details) as ever.
+		untrack(() => (keyChoice = open && !panelsInSide));
 	});
 	/** On a narrow map the two panels would overlap: opening one folds the other. */
 	function openPanel(which: 'layers' | 'key', on = true) {
+		if (panelsInSide) {
+			if (on && sideTab !== which) {
+				if (sideTab !== 'layers' && sideTab !== 'key') tabBefore = sideTab;
+				sideTab = which;
+			} else if (!on && sideTab === which) sideTab = tabBefore;
+			return;
+		}
 		if (which === 'layers') layersOpen = on;
 		else keyChoice = on;
 		if (on && !wide) {
@@ -955,7 +1011,9 @@
 		})
 	);
 	let rainReads = $state<RainReads>(null);
-	const setupSteps = $derived(canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null }) : null);
+	const setupSteps = $derived(
+		canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null, canDelineate: !!delineation?.available }) : null
+	);
 	const rainLink = $derived(
 		boundary && (rainReads === 'none' || rainReads === 'changed')
 			? { href: '?tab=settings&rain=boundary#set-feeds', text: rainReads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again' }
@@ -980,6 +1038,25 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions, status: setupSteps ? headerStatus : undefined }));
 </script>
 
+{#snippet drawBar()}
+	<DrawBar
+		{draft}
+		mapReady={mapState === 'ready'}
+		saving={drawSaving}
+		error={drawError}
+		onsave={saveDraft}
+		onpaste={() => (pasteOpen = true)}
+		oncoords={() =>
+			tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+		onlocated={located}
+		{delineating}
+		{tracing}
+		onsubcatchments={startDividing}
+		lines={lineItems}
+		bind:minOccurrence
+	/>
+{/snippet}
+
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerStatus()}
 	{#if setupSteps}
@@ -988,6 +1065,7 @@
 			{rainLink}
 			uploadHref={withParam(page.url, 'upload', '1')}
 			ondrawboundary={draft.mode !== 'draw' ? () => startDraw('catchment_boundary') : null}
+			ondelineate={delineation?.available && !delineating ? startDelineate : null}
 		/>
 	{/if}
 {/snippet}
@@ -1134,6 +1212,13 @@
 				<dd class="file">{sourceName.get(picked.sourceId)}</dd>
 			{/if}
 		</dl>
+		{#if picked.kind === 'catchment_boundary' && boundaryNext}
+			<!-- Accepting a boundary saves a map feature only: what it is, and the step that makes it the model's units. -->
+			<div class="next-step" data-testid="map-boundary-next">
+				<p class="small">{boundaryNext.text}</p>
+				<a class="btn btn-sm btn-primary" href={withParam(page.url, boundaryNext.sheet, '1')} data-testid="map-boundary-next-open">{boundaryNext.label}</a>
+			</div>
+		{/if}
 		{@render dirtyHint()}
 		{#if rowError?.id === picked.id}<p class="err" role="alert">{rowError.text}</p>{/if}
 		{#if canEdit}
@@ -1184,20 +1269,38 @@
 	</div>
 {/snippet}
 
+{#snippet layersBody()}
+	<MapLayers
+		{quaternaries}
+		{rivers}
+		{dark}
+		{canEdit}
+		onriveradded={riverAdded}
+		onshowfeature={(id) => void selectFromList(id)}
+		relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
+	/>
+{/snippet}
+{#snippet keyBody()}
+	<MapKeyRow {results} {key} {features} {canEdit} {dark} />
+{/snippet}
+
 <div class="map-page" data-ready={data ? 'true' : undefined} bind:clientWidth={pageWidth}>
 	<!-- What the last action did (an import, a save, a split): a toast over the page's foot, so it never pushes the map down. It stays until
 	     Dismiss, the next one, or a tool starting. The live region is always there, so each new one is announced. -->
 	<div class="toast-wrap" role="status">
 		{#if notice}
 			<p class="toast" data-testid="map-notice">
-				<span>{notice}</span>
+				<span>{notice}{#if notice === runNotice}{' '}<a href="?tab=runs">Run the model</a> to see its effect.{/if}</span>
+				{#if noticeNext && noticeNext.text === notice}
+					<a class="btn btn-sm btn-ghost toast-next" href={withParam(page.url, noticeNext.step.sheet, '1')} data-testid="map-notice-next">{noticeNext.step.label}</a>
+				{/if}
 				<button type="button" class="btn btn-sm btn-ghost" onclick={() => (notice = null)}>Dismiss</button>
 			</p>
 		{/if}
 	</div>
 	{#if pendingProposal && canEdit && !delineateSheet.open}
 		<p class="alert alert-info slim" data-testid="map-delineation-pending">
-			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map, waiting for your decision.
+			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map over the terrain channels it follows, waiting for your decision.
 			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
 		</p>
 	{/if}
@@ -1219,25 +1322,12 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} />
-					{:else if canEdit && draft.active && !dividing}
-						<DrawBar
-							{draft}
-							mapReady={mapState === 'ready'}
-							saving={drawSaving}
-							error={drawError}
-							onsave={saveDraft}
-							onpaste={() => (pasteOpen = true)}
-							oncoords={() =>
-								tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
-							onlocated={located}
-							{delineating}
-							{tracing}
-							onsubcatchments={startDividing}
-							bind:minOccurrence
-						/>
+						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
+					{:else if canEdit && draft.active && !dividing && !wide}
+						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
+						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null}>
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
 							<div class="tools-at ov" bind:clientWidth={toolsW} bind:clientHeight={toolsH}>
@@ -1266,17 +1356,17 @@
 							{#if dividing && divider.busy === 'pieces'}
 								<p class="map-pill small" aria-hidden="true" data-testid="map-click-busy">Working out the sub-catchments…</p>
 							{:else if channels.on && (channels.noView || channels.zoomIn || channels.error || channels.loading)}
-								<!-- Only what needs saying: the bars already say the red lines are where a click goes. -->
+								<!-- Only what needs saying: the bars and the Key already say what the terrain channels are. -->
 								<p class="map-pill channel-note small" role="status" data-testid="map-channels-note">
 									<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
 									{#if channels.noView}
-										The elevation model’s channels are drawn on the map, which isn’t showing here.
+										The terrain channels are drawn on the map, which isn’t showing here.
 									{:else if channels.zoomIn}
-										Zoom in to see the elevation model’s channels.
+										{reviewingProposal ? 'Zoom in to see the terrain channels the outline follows.' : 'Zoom in to see the terrain channels.'}
 									{:else if channels.error}
-										<span class="err">The elevation model’s channels couldn’t be drawn: {channels.error}</span>
+										<span class="err">The terrain channels couldn’t be drawn: {channels.error}</span>
 									{:else}
-										Drawing the elevation model’s channels…
+										Drawing the terrain channels…
 									{/if}
 								</p>
 							{/if}
@@ -1284,40 +1374,36 @@
 						<!-- Layers (#326 A6, #345; a box in the side column until 2026-10-02): under the zoom buttons, its panel over the map's right edge. -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="layers-at ov" onkeydown={(e) => panelKey(e, 'layers')}>
-							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersOpen} aria-controls="{uid}-layers" bind:this={layersBtn} onclick={() => openPanel('layers', !layersOpen)} data-testid="map-layers-toggle">
+							<button type="button" class="btn btn-sm map-ctl" aria-expanded={layersShown} aria-controls={panelsInSide ? `${uid}-panel-layers` : `${uid}-layers`} bind:this={layersBtn} onclick={() => openPanel('layers', !layersShown)} data-testid="map-layers-toggle">
 								<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" class="ctl-ic"><path d="m10 3 7 3.8-7 3.8-7-3.8z" /><path d="m3 10.4 7 3.8 7-3.8" /><path d="m3 13.8 7 3.8 7-3.8" /></svg>
 								Layers{#if layersOn(params).size}<span class="ctl-count" aria-hidden="true">{layersOn(params).size}</span><span class="visually-hidden">{` (${layersOn(params).size} on)`}</span>{/if}
 							</button>
-							{#if canEdit && !tilesUrl && !layersOpen}
+							{#if canEdit && !tilesUrl && !layersShown}
 								<!-- An operator's matter (docs/maps.md says how to serve a basemap): a small note under Layers, never a line above the map. Owners and editors only. -->
 								<p class="map-chip small" data-testid="map-no-tiles">No basemap configured (docs/maps.md)</p>
 							{/if}
-							<div class="panel-over layers-panel" id="{uid}-layers" hidden={!layersOpen}>
-								<MapLayers
-									{quaternaries}
-									{rivers}
-									{dark}
-									{canEdit}
-									onriveradded={riverAdded}
-									onshowfeature={(id) => void selectFromList(id)}
-									relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
-								/>
-							</div>
+							{#if !panelsInSide}
+								<div class="panel-over layers-panel" id="{uid}-layers" hidden={!layersOpen}>
+									{@render layersBody()}
+								</div>
+							{/if}
 						</div>
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="foot-at ov" onkeydown={(e) => panelKey(e, 'key')} style:--tools-h="{toolsH}px">
 							<!-- The key (#326 E7, A1; a row under the map until 2026-10-02): what the areas are coloured by, which run, and what each colour means. -->
 							<!-- Focusable: it can scroll on a short map with nothing to focus inside (ui-playbook § 5). -->
-							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<div class="panel-over key-panel" id="{uid}-key" hidden={!keyOpen} role="region" aria-label="Map key" tabindex="0">
-								<MapKeyRow {results} {key} {features} {canEdit} {dark} />
-							</div>
+							{#if !panelsInSide}
+								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+								<div class="panel-over key-panel" id="{uid}-key" hidden={!keyOpen} role="region" aria-label="Map key" tabindex="0">
+									{@render keyBody()}
+								</div>
+							{/if}
 							<div class="foot-row">
 								{#if features.length && mapState === 'ready'}
 									<!-- On the map, not the header: the map's own view action (issue #374). -->
 									<button type="button" class="btn btn-sm map-ctl" onclick={() => mapRef?.showAll()} data-testid="map-show-everything">Show everything</button>
 								{/if}
-								<button type="button" class="btn btn-sm map-ctl" aria-expanded={keyOpen} aria-controls="{uid}-key" bind:this={keyBtn} onclick={() => openPanel('key', !keyOpen)} data-testid="map-key-toggle">
+								<button type="button" class="btn btn-sm map-ctl" aria-expanded={keyShown} aria-controls={panelsInSide ? `${uid}-panel-key` : `${uid}-key`} bind:this={keyBtn} onclick={() => openPanel('key', !keyShown)} data-testid="map-key-toggle">
 									Key{#if results.on}<span class="ctl-sub">· {viewLabel(results.view)}</span>{/if}
 								</button>
 							</div>
@@ -1340,6 +1426,7 @@
 									onquaternary={(code) => (quaternaries.picked = code)}
 									rivers={rivers.reaches}
 									channels={channels.lines}
+									channelsDim={reviewingProposal}
 									riversCredit={rivers.credited}
 									pickedReach={rivers.picked}
 									onreach={reachFromMap}
@@ -1358,11 +1445,19 @@
 				</section>
 
 				<aside class="map-side" aria-label="Features">
+					{#if canEdit && draft.active && !dividing && wide}
+						<!-- Drawing, beside the map: the drawing's controls at the column's head, so nothing sits above or over the map;
+						     the tabs stay below them (Layers and Key while drawing), and they go on Finish or Cancel (2026-10-03). -->
+						<div class="panel side-box card draw-panel" data-testid="map-draw-side">
+							{@render drawBar()}
+						</div>
+					{/if}
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} />
+							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
 						</div>
+
 					{:else if !features.length}
 						<section class="panel side-box card" aria-label="Picked feature" data-testid="map-feature-card" bind:this={cardEl}>
 							{@render emptyState()}
@@ -1371,7 +1466,7 @@
 						<!-- One thing at a time: the picked feature, every feature, or the checks (until 2026-10-02 stacked, each squeezing the others). -->
 						<div class="panel side-box side-tabs">
 							<div class="tabs" role="tablist" aria-label="Side panel" data-testid="map-side-tabs">
-								{#each SIDE_TABS as t (t.id)}
+								{#each sideTabs as t (t.id)}
 									<button
 										type="button"
 										role="tab"
@@ -1415,6 +1510,18 @@
 								</p>
 								{#if checks.length}<MapChecks {features} {nodes} onpick={pickFromCheck} heading={false} />{/if}
 							</div>
+							{#if panelsInSide}
+								<!-- Layers and Key (until 2026-10-03 boxes over the map); the map's buttons pick these tabs, Escape gives the tab back. -->
+								<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_interactive_supports_focus -->
+								<div class="tab-panel layers-tab" role="tabpanel" id="{uid}-panel-layers" aria-labelledby="{uid}-tab-layers" hidden={sideTab !== 'layers'} onkeydown={(e) => panelKey(e, 'layers')}>
+									{@render layersBody()}
+								</div>
+								<!-- Focusable: the key has nothing to focus inside while the kinds colour the areas, and it can scroll. -->
+								<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+								<div class="tab-panel key-tab" role="tabpanel" id="{uid}-panel-key" aria-labelledby="{uid}-tab-key" hidden={sideTab !== 'key'} tabindex="0" onkeydown={(e) => panelKey(e, 'key')}>
+									{@render keyBody()}
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</aside>
@@ -1774,6 +1881,10 @@
 		width: min(19rem, 100%);
 		padding: 0.5rem 0.65rem;
 	}
+	/* While the key says what each line is for (Delineate's terrain channels and mapped rivers), a little wider, so it wraps less. */
+	.key-panel:has(:global(.noted)) {
+		width: min(23rem, 100%);
+	}
 	/* An operator's note (no basemap), small, under the Layers button. */
 	.map-chip {
 		margin: 0;
@@ -1817,10 +1928,16 @@
 	.toast .btn:focus-visible {
 		outline-color: var(--bg);
 	}
+	/* The toast's next step (after accepting a boundary): outlined in the toast's text colour, so it reads as the action. */
+	.toast .toast-next {
+		border: 1px solid var(--bg);
+		font-weight: 600;
+	}
 	/* The side column's tabs: one panel at a time. */
 	.tabs {
 		display: flex;
-		gap: 0.25rem;
+		flex-wrap: wrap;
+		gap: 0 0.1rem;
 		border-bottom: 1px solid var(--border);
 		margin: -0.25rem 0 0.6rem;
 	}
@@ -1829,7 +1946,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		min-height: 36px;
-		padding: 0.3rem 0.6rem;
+		padding: 0.3rem 0.5rem;
 		margin-bottom: -1px;
 		border: 0;
 		border-bottom: 2px solid transparent;
@@ -1870,6 +1987,21 @@
 		flex: none;
 		gap: 0.4rem;
 		white-space: nowrap;
+	}
+	/* The boundary's next step (Start from the map or Divide the model): a tinted box under its facts. */
+	.next-step {
+		display: grid;
+		justify-items: start;
+		gap: 0.4rem;
+		margin: 0.6rem 0 0;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border-strong);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+	}
+	.next-step p {
+		margin: 0;
 	}
 	.channel-note {
 		display: flex;
@@ -2100,5 +2232,18 @@
 			color: var(--text-muted);
 			font-size: 0.85rem;
 		}
+	}
+	/* The drawing bar in the side column: the card is its box, so the bar drops its own border. */
+	.draw-panel :global(.draw-bar) {
+		border: 0;
+		padding: 0;
+		background: none;
+	}
+	/* Stacked in the column, the two checkboxes need the room a 24 px target asks for (WCAG 2.5.8). */
+	.draw-panel :global(label:has(> input[type='checkbox'])) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 32px;
 	}
 </style>

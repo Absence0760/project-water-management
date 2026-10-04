@@ -6,7 +6,7 @@ import type { Locator, Page } from '@playwright/test';
 import { createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { closeModal } from '../support/network.ts';
+import { closeModal, openNodeForm } from '../support/network.ts';
 
 const PHONE = { width: 390, height: 844 };
 
@@ -64,8 +64,9 @@ test.describe('phone', () => {
 		await updateSettings(page.request, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110] });
 		await page.goto(`/projects/${project.id}?tab=crops`);
 
-		// Orchard on 32 ha: Jan is the peak, 320 000 m² × 0.8 × 230 mm / 1000 / 31 days.
-		const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month, stacked by crop \(Orchard\)\. Peak in Jan at 1 899 m³\/day\./ });
+		// Orchard on 32 ha: Jan is the peak, 320 000 m² × 0.8 × 230 mm / 1000 / 31 days = 1 899 m³/day at the crop,
+		// abstracted at the units' 80 % efficiency: 1 899 / 0.8.
+		const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month, stacked by crop \(Orchard\)\. Peak in Jan at 2 374 m³\/day\./ });
 		await expect(chart).toBeVisible();
 		await expectOnScreen(chart, page);
 		// The table stays the data source, below the chart, one click away.
@@ -142,4 +143,40 @@ test('on a desktop the crop table keeps its column headers and a transfer card i
 	await expect(rule.getByText('Priority, lower first', { exact: true })).toBeVisible();
 	await expect(rule.getByText('Takes from', { exact: true })).toBeVisible();
 	await expect(rule.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
+});
+
+test.describe('phone node form', () => {
+	test.use({ viewport: PHONE });
+
+	test('the form’s section links keep their width in their scrolling row, none over the next', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Phone section links');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+		await openNodeForm(page, 'Upper farm');
+		const links = page.getByTestId('node-sheet-jump').getByRole('button');
+		expect(await links.count()).toBeGreaterThan(2);
+		const boxes = await links.evaluateAll((els) => els.map((el) => ({ left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right, clipped: el.scrollWidth > el.clientWidth + 0.5 })));
+		for (const [i, b] of boxes.entries()) {
+			expect(b.clipped, `link ${i + 1}'s text fits`).toBe(false);
+			if (i) expect(b.left, `link ${i + 1} starts after link ${i}`).toBeGreaterThanOrEqual(boxes[i - 1]!.right);
+		}
+	});
+
+	test('the node list comes before the card, and every row shows its Edit without a hover', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Phone node list');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+		const list = page.getByRole('list', { name: 'All nodes' });
+		await list.getByRole('button', { name: /^Upper farm/ }).click();
+		const listBox = (await list.boundingBox())!;
+		expect((await page.getByTestId('node-card').boundingBox())!.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
+		const edit = list.getByRole('button', { name: 'Edit Lower farm' });
+		await expect(edit).toBeVisible();
+		expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+		await edit.click();
+		await expect(page.getByRole('dialog', { name: 'Edit Lower farm' })).toBeVisible();
+		await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+	});
 });

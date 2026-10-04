@@ -18,7 +18,7 @@
 	// engine ≥ 1.65.0, issue #344). The objects are the editor's own, so edits
 	// land in the model directly.
 	import { tick } from 'svelte';
-	import {
+	import { DEMAND_MONTHLY_UNIT_LABEL, DEMAND_MONTHLY_UNIT_SCALE,
 		BASIC_NEEDS_CATEGORIES,
 		DEMAND_OBJECT_CATEGORIES,
 		DEMAND_OBJECT_CATEGORY_LABEL,
@@ -43,7 +43,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import MonthFields from './MonthFields.svelte';
 	import { floorLine, peopleHint } from './demandObjectFloor';
-	import { setSizing, setSource, sizingFixedBy, SOURCE_OPTION_LABEL } from './demandObjectSource';
+	import { givenAsOf, setGivenAs, setSource, sizingFixedBy, SOURCE_OPTION_LABEL, type GivenAs } from './demandObjectSource';
 	import { orderRows, positionChoices, PRIORITY_OPTION_LABEL, setPriority, setSupplyPosition, showsSupplyOrder, supplyOrderText } from './demandObjectOrder';
 
 	let {
@@ -80,6 +80,9 @@
 
 	/** Its mean abstraction demand over the year, m³/day (the engine's own sizing). */
 	const meanOf = (o: DemandObject) => objectMonthlyM3Day(o, []).reduce((s, v) => s + v, 0) / 12;
+	/** The unit a monthly demand is entered and shown in (engine ≥ 1.72.0; display only, stored in m³/day). */
+	const monthlyUnitOf = (o: DemandObject) =>
+		o.monthlyUnit ? { label: DEMAND_MONTHLY_UNIT_LABEL[o.monthlyUnit], scale: DEMAND_MONTHLY_UNIT_SCALE[o.monthlyUnit], decimals: o.monthlyUnit === 'm3s' ? 4 : 2 } : { label: 'm³/day', scale: 1, decimals: undefined };
 
 	/** "Town A", or "demand 2" while it has no name: in its month fields' names and its water source's. */
 	const whoOf = (o: DemandObject, i: number) => o.name.trim() || `demand ${i + 1}`;
@@ -176,11 +179,13 @@
 							<select
 								id="do-size-{o.id}"
 								disabled={readonly || sizingFixedBy(o) !== null}
-								value={o.sizing}
+								value={givenAsOf(o)}
 								aria-describedby={sizingFixedBy(o) ? `do-size-hint-${o.id}` : undefined}
-								onchange={(e) => setSizing(o, e.currentTarget.value as DemandObject['sizing'])}
+								onchange={(e) => setGivenAs(o, e.currentTarget.value as GivenAs)}
 							>
 								<option value="monthly">m³/day by month</option>
+								<option value="monthly:ls">l/s by month</option>
+								<option value="monthly:m3s">m³/s by month</option>
 								<option value="perUnit">{unitWord(o.category)} × litres a day</option>
 							</select>
 							{#if sizingFixedBy(o)}<span class="muted small" id="do-size-hint-{o.id}">Set by the source.</span>{/if}
@@ -253,10 +258,13 @@
 						</div>
 					</div>
 					{#if o.sizing === 'monthly'}
+						{@const u = monthlyUnitOf(o)}
 						<MonthFields
 							values={o.monthlyM3Day}
-							label={(m) => `Demand of ${whoOf(o, i)} in ${m}, m³/day`}
-							caption="Demand, m³/day, per month"
+							label={(m) => `Demand of ${whoOf(o, i)} in ${m}, ${u.label}`}
+							caption="Demand, {u.label}, per month"
+							scale={u.scale}
+							decimals={u.decimals}
 							fillLabel="Use October’s demand for every month"
 							{readonly}
 							onchange={(next) => (o.monthlyM3Day = next)}
@@ -278,7 +286,7 @@
 						<input id="do-note-{o.id}" maxlength="1000" placeholder="e.g. which meter and years, which strategy, which norm" readonly={readonly} bind:value={o.note} />
 					</div>
 					<p class="muted small" data-testid="demand-object-mean-{o.id}">
-						{fmtNum(meanOf(o), 0)} m³/day on average{o.enabled ? '' : ' (not modelled)'}.
+						{#if o.sizing === 'monthly' && o.monthlyUnit}{fmtNum(meanOf(o) * monthlyUnitOf(o).scale, monthlyUnitOf(o).decimals, true)} {monthlyUnitOf(o).label} ({fmtNum(meanOf(o), 0)} m³/day){:else}{fmtNum(meanOf(o), 0)} m³/day{/if} on average{o.enabled ? '' : ' (not modelled)'}.
 					</p>
 					{#if floorLine(o)}
 						<p class="muted small" data-testid="demand-object-floor-{o.id}">{floorLine(o)}</p>

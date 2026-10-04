@@ -24,7 +24,8 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	await expect(header(page).getByTestId('section-context')).toHaveText('1 transfer rule · 1 active');
 	await expect(header(page).getByRole('link', { name: 'Show on the Network', exact: true })).toHaveAttribute('href', '?tab=network');
 	await expect(header(page).getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
-	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toBeVisible();
+	// Runs start only from Runs & results, where they can be named.
+	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toHaveCount(0);
 	// The add button lives in the header only on the page.
 	await expect(rulesCard(page).getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 
@@ -242,6 +243,8 @@ test('the Transfers grid on the Network keeps its own Add transfer', async ({ pa
 	await page.goto(`/projects/${project.id}?tab=network&grid=transfers`);
 	const grid = page.getByRole('dialog', { name: 'Transfers' });
 	await expect(grid.getByLabel('Enabled, transfer 1', { exact: true })).toBeChecked();
+	// One heading per modal: the title, then each rule's own; no "Transfer rules" under it.
+	await expect(grid.getByRole('heading', { level: 2 })).toHaveText(['Transfers']);
 	await expect(grid.getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
 	await grid.getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await expect(grid.getByLabel('From, transfer 2', { exact: true })).toBeFocused();

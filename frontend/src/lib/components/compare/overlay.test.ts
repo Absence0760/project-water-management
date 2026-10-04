@@ -235,6 +235,16 @@ describe('deltaStats', () => {
 		});
 		expect(deltaStats({ startDate: '2020-01-01', values: [1, 2] }, { startDate: '2020-01-01', values: [1, 2] }).largest).toBeNull();
 	});
+
+	it('counts a difference within float rounding as no change, and a small real one as a change', () => {
+		// 954.7580362337927 vs …928: two runs that agree, the water summed in another order.
+		const a = { startDate: '2020-01-01', values: [954.7580362337927, 1358.9556892853668, 0] };
+		const same = deltaStats(a, { startDate: '2020-01-01', values: [954.7580362337928, 1358.9556892853666, 0] });
+		expect(same).toMatchObject({ daysHigher: 0, daysLower: 0, largest: null });
+		expect(summaryText(same, 'm³/day')).toContain('The two runs are identical on every one of those days.');
+		const changed = deltaStats(a, { startDate: '2020-01-01', values: [954.7590362337927, 1358.9556892853668, 1e-6] });
+		expect(changed).toMatchObject({ daysHigher: 2, daysLower: 0, largest: { date: '2020-01-01' } });
+	});
 });
 
 describe('isFlowSeries', () => {

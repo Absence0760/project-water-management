@@ -190,9 +190,9 @@ test('/methods is prerendered HTML with the engine version, the known limitation
 	expect(html).toMatch(/<h1[^>]*>How the model is checked<\/h1>/);
 	expect(html).toContain(`Engine version ${ENGINE_VERSION}`);
 	// The known limitations are the list every report prints, generated from
-	// docs/engine-audit.md (N1 is open there; limitations.test.ts pins it).
+	// docs/engine-audit.md (B3 is open there; limitations.test.ts pins it).
 	expect(html).toContain('6. Known limitations');
-	expect(html).toMatch(/<td data-label="Item"[^>]*>N1<\/td>/);
+	expect(html).toMatch(/<td data-label="Item"[^>]*>B3<\/td>/);
 	expect(html).toContain('https://github.com/Absence0760/project-water-management/blob/main/docs/engine-audit.md');
 });
 

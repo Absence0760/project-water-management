@@ -104,9 +104,9 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. Its registered volumes stay (the run lists them as on no unit) and the op's notes say how many, counting only those the caller sees (engine ≥ 1.35.0). The outflow node can't be removed. |
 | `node.move` | `nodeId, downstreamNodeId` | Makes a node drain into another (engine ≥ 1.35.0). What drains into it moves with it. The outflow node can't be moved, and a node can't drain into itself; a move that makes a loop (the new downstream node drains into this one), or makes a river off-take's destination drain into its source, is refused by the model rules, so the network stays one tree with one outlet. § Moving and inserting nodes. |
 | `node.insert` | `node, upstreamNodeIds` | A new node placed on a reach (engine ≥ 1.35.0): `node` as `node.add` takes it, and each node in `upstreamNodeIds`, which must drain into `node.downstreamNodeId` now, drains into the new node instead. So an on-channel dam or a weir goes in between existing nodes without moving anything else. § Moving and inserting nodes. |
-| `cropArea.set` | `nodeId, cropId, areaM2` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. |
-| `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its own `irrigationEfficiency`, engine ≥ 0.43.0). |
-| `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.35.0): `name` (1–100 characters on one line, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationEfficiency` (above 0 to 1, or null for the farm's). It changes the crop on every farm that grows it. |
+| `cropArea.set` | `nodeId, cropId, areaM2, irrigationSystemId?` | Sets a farm's area of one crop (m²); `0` removes the row. Replaces duplicate rows with one. `irrigationSystemId` (engine ≥ 1.72.0) puts the crop on that system on this unit (`null`: the crop's default); absent keeps the planting's own. A proposal on the applicant's own unit, such as converting to drip. |
+| `crop.add` | `crop` | Adds a crop definition (12 crop factors, and optionally its default `irrigationSystemId`, engine ≥ 1.72.0). |
+| `crop.set` | `cropId, field, value` | Changes one field of a crop definition (engine ≥ 1.35.0): `name` (1–100 characters on one line, unique ignoring case), `cropFactor` (12 values ≥ 0, Oct–Sep) or `irrigationSystemId` (a row of the model's table, or null for none; engine ≥ 1.72.0). It changes the crop on every farm that grows it, except where a unit has put it on a system of its own. A stored op from engine 0.43.0–1.71.0 setting `irrigationEfficiency` still applies: the crop takes the table's row with that efficiency (a row "Scenario, NN %" is added when there is none) and every unit's own choice for it is dropped, which is what that op meant. The systems' table itself is the project's, not a scenario's (the override editor says so). |
 | `crop.remove` | `cropId` | Removes a crop and every farm's area of it (engine ≥ 1.35.0); the note counts the areas dropped. To stop growing it on one farm, `cropArea.set` it to 0 instead. |
 | `transfer.add` | `transfer` | Adds a transfer rule. Months are stored as a sorted set. |
 | `transfer.set` | `transferId, field, value` | `fromNodeId`, `toNodeId`, `months`, `maxRateM3s`, `dailyCapM3`, `minStoragePct`, `enabled`, `priority`, `monthlyRateM3s` (engine ≥ 1.14.0: twelve m³/s rates, Oct–Sep, or null; setting it also sets `months` and `maxRateM3s` to match, and a `months` or `maxRateM3s` edit on a rule with monthly rates is skipped, since the save rules refuse the disagreement, [model.md §2.6](./model.md)), and a river off-take's `source`, `handsOffM3Day`, `handsOffEwr`, `lossPct`, `sizing`, `topUpDam` (engine ≥ 1.14.0, [model.md §2.6a](./model.md); an edit that makes an off-take's destination drain into its source is skipped with that rule as its problem), `lossReturnPct` (0–1) and `lossReturnNodeId` (a node id, or null for the source; engine ≥ 1.42.0: canal seepage back to the river, an edit to a unit that isn't the source or a farm below it on the river is skipped with that rule as its problem; in an application the unit must be the applicant's own, as the ends must). `node.remove` of a unit an off-take's seepage rejoins below leaves that off-take returning none (share 0, the source), with a note. `transfer.add` takes the same fields, each optional. |
@@ -135,8 +135,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
   from engine 1.63.0),
-  `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
-  `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
+  `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency` (the unit's own, the fallback for a planting with no system, engine ≥ 1.72.0; so that a stored op from engine ≤ 1.71.0 still means what it did, setting it also puts every planting on the unit onto the table's row with that efficiency, adding one when none matches, with a note),
+  `returnFlowFraction` (engine ≥ 1.71.0; a stored op setting 0.16.0–1.70.0's
+  `lossReturnFraction` β still applies, as r = β(1 − e) of the node it meets);
+  dam storage (WP-3.5) `damReleaseRule`,
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct`, and
   the survey curve `damCurve` (engine ≥ 1.20.0: up to 200 rows of
   `{ levelM, areaM2 ≥ 0, volumeM3 ≥ 0 }`, or null for none, the power law;
@@ -267,7 +269,7 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   multiplies the crop water requirement F (after effective rain and the
   soil-water store), so the abstraction D = F ÷ e scales with it while the
   crop area, the gross demand, the rain used, the irrigation efficiency and
-  the loss return stay as they are: 85 % means "85 % of what they'd take".
+  the return flow stay as they are: 85 % means "85 % of what they'd take".
   A unit's demand objects (engine ≥ 1.7.0, model.md §2.7f) scale with it,
   month by month. A cut (a factor below 1) never takes a domestic or
   municipal object with people below its basic-needs floor, MIN(people ×

@@ -5,7 +5,7 @@
 // unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, estimatedDamAreaM2, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	CROP_SET_FIELDS,
@@ -27,6 +27,7 @@ import {
 	isIsoDate,
 	landCoverFieldError,
 	nodeAddFieldError,
+	LEGACY_LOSS_RETURN_FIELD,
 	nodeFieldError,
 	reductions,
 	settingsValueError,
@@ -34,6 +35,7 @@ import {
 	type ScenarioOp
 } from './ops';
 import { structureIssues } from './structure';
+import { modelFarmEfficiency } from '../demand';
 import { resolveDamCurve } from '../network/dam';
 import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
 import { resizeDamCurve, resizedFullArea } from '../network/damResize';
@@ -413,6 +415,25 @@ const monthSet = (ms: readonly number[]) => [...new Set(ms)].sort((a, b) => a - 
 
 type Draft = ModelInput;
 
+/** The model's irrigation-systems table (engine ≥ 1.72.0): its own, else the defaults it runs on. */
+function systemsOf(m: ModelInput['model']): readonly IrrigationSystemDef[] {
+	return m.irrigationSystems ?? DEFAULT_IRRIGATION_SYSTEMS;
+}
+
+/**
+ * The table's row with efficiency `e`, added (as "Scenario, NN %", a stable id
+ * from the value) when there is none, for an engine 0.43.0–1.71.0 op that set
+ * a crop's own efficiency.
+ */
+function systemWithEfficiency(m: ModelInput['model'], e: number): IrrigationSystemDef {
+	const table = systemsOf(m);
+	const hit = table.find((s) => Math.abs(s.efficiency - e) < 1e-12);
+	if (hit) return hit;
+	const row: IrrigationSystemDef = { id: `scenario-efficiency-${e}`, name: `Scenario, ${Math.round(e * 1000) / 10} %`, efficiency: e, preset: null, sortOrder: table.length };
+	m.irrigationSystems = [...table.map((x) => ({ ...x })), row];
+	return row;
+}
+
 function findNode(d: Draft, nodeId: string): NetworkNode {
 	return d.model.nodes.find((n) => n.id === nodeId) ?? fail(`node ${nodeId} not found`);
 }
@@ -499,6 +520,29 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 	switch (op.op) {
 		case 'node.set': {
 			const n = findNode(d, op.nodeId);
+			// A stored engine 0.16.0–1.70.0 op setting β, a share of the losses: the return flow it meant here.
+			if ((op.field as string) === LEGACY_LOSS_RETURN_FIELD) {
+				if (n.kind !== 'farm') fail(`"${LEGACY_LOSS_RETURN_FIELD}" can't be set on a ${n.kind}`);
+				if (!(typeof op.value === 'number' && op.value >= 0 && op.value <= 1)) fail(`${LEGACY_LOSS_RETURN_FIELD} must be from 0 to 1`);
+				// β was a share of the losses at the efficiency the unit ran at: its plantings' blend since 0.43.0.
+				const e = modelFarmEfficiency(n.irrigationEfficiency, n.id, m.crops, m.cropAreas, d.settings.apanMm ?? [], m.irrigationSystems);
+				n.returnFlowFraction = returnFlowFromLossReturn(op.value as number, e);
+				break;
+			}
+			// A stored engine 0.16.0–1.71.0 op setting the unit's efficiency: what it meant then, every crop on the unit at
+			// that efficiency. Since 1.72.0 each planting runs on its system and the unit's own value is only a fallback no
+			// planting reaches, so setting it alone would change nothing: each planting on the unit gets the system row with
+			// that efficiency (one is added when the table has none) as its own.
+			if (n.kind === 'farm' && op.field === 'irrigationEfficiency' && typeof op.value === 'number' && op.value > 0 && op.value <= 1) {
+				const sys = systemWithEfficiency(m, op.value);
+				let moved = 0;
+				m.cropAreas = m.cropAreas.map((a) => {
+					if (a.nodeId !== n.id) return a;
+					moved++;
+					return { ...a, irrigationSystemId: sys.id };
+				});
+				if (moved && see.node(n.id)) notes.push(`${moved} planting(s) on ${n.name} put on ${sys.name} (${Math.round(op.value * 1000) / 10} %), the unit's efficiency`);
+			}
 			// The field written is the allowlist's own name for it, never the op's text (so never `__proto__`).
 			const settable: readonly string[] = Object.hasOwn(NODE_SET_FIELDS, n.kind) ? NODE_SET_FIELDS[n.kind] : [];
 			const field = allowed(settable, op.field) ?? fail(`"${String(op.field)}" can't be set on a ${n.kind}`);
@@ -583,9 +627,13 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (n.kind !== 'farm') fail(`crops grow on units; "${n.name}" is a ${n.kind}`);
 			if (!m.crops.some((c) => c.id === op.cropId)) fail(`crop ${op.cropId} not found`);
 			if (!(Number.isFinite(op.areaM2) && op.areaM2 >= 0)) fail('areaM2 must be a finite number ≥ 0');
+			const sys = op.irrigationSystemId;
+			if (typeof sys === 'string' && !systemsOf(m).some((s) => s.id === sys)) fail(`irrigation system ${sys} not found`);
 			const at = m.cropAreas.findIndex((a) => a.nodeId === op.nodeId && a.cropId === op.cropId);
+			// The planting's own system stays unless the op names one (engine ≥ 1.72.0).
+			const kept = sys !== undefined ? sys : (m.cropAreas[at]?.irrigationSystemId ?? null);
 			const rest = m.cropAreas.filter((a) => !(a.nodeId === op.nodeId && a.cropId === op.cropId));
-			if (op.areaM2 > 0) rest.splice(at < 0 ? rest.length : at, 0, { nodeId: op.nodeId, cropId: op.cropId, areaM2: op.areaM2 });
+			if (op.areaM2 > 0) rest.splice(at < 0 ? rest.length : at, 0, { nodeId: op.nodeId, cropId: op.cropId, areaM2: op.areaM2, ...(kept !== null ? { irrigationSystemId: kept } : {}) });
 			m.cropAreas = rest;
 			break;
 		}
@@ -604,6 +652,22 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const field = allowed(CROP_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a crop field a scenario can set`);
 			const e = cropFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);
+			if (field === 'irrigationSystemId') {
+				if (op.value !== null && !systemsOf(m).some((s) => s.id === op.value)) fail(`irrigation system ${String(op.value)} not found`);
+				// null and absent are the same (no default): only a change is written.
+				if ((c.irrigationSystemId ?? null) !== op.value) c.irrigationSystemId = op.value as string | null;
+				break;
+			}
+			if (field === 'irrigationEfficiency') {
+				// Engine 0.43.0–1.71.0: the crop's own efficiency on every unit growing it. Now the system row with that
+				// efficiency (one is added when the table has none), as its default, and no unit's own choice for it.
+				const v = op.value as number | null;
+				if (v !== null) c.irrigationSystemId = systemWithEfficiency(m, v).id;
+				else if (c.irrigationSystemId != null) c.irrigationSystemId = null;
+				delete c.irrigationEfficiency;
+				m.cropAreas = m.cropAreas.map((a) => (a.cropId === c.id && a.irrigationSystemId != null ? { nodeId: a.nodeId, cropId: a.cropId, areaM2: a.areaM2 } : a));
+				break;
+			}
 			(c as unknown as Record<string, unknown>)[field] = field === 'name' ? (op.value as string).trim() : cloneData(op.value);
 			break;
 		}

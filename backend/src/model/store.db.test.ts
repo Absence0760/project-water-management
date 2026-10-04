@@ -181,8 +181,9 @@ describe('model store', () => {
 					waterSource: 'river',
 					riverPumpM3Day: null,
 					riverPoolM3: 2500.25,
+					monthlyUnit: null,
 					note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', rank: null, destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], monthlyUnit: 'ls', count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', rank: null, destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -231,6 +232,8 @@ describe('model store', () => {
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
+		// Migration 199's CHECK keeps the unit to l/s or m³/s below the API's own check (engine 1.72.0).
+		await expect(asOwner(`UPDATE demand_object SET monthly_unit = 'gpm' WHERE id = $1`, [model.demandObjects[1]!.id])).rejects.toMatchObject({ code: '23514' });
 		// Migration 127's CHECK refuses a negative population below the API's own check (engine 1.44.0).
 		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
 		// Migration 134's CHECK keeps the source in the list below the API's own check (engine 1.56.0).
@@ -246,7 +249,7 @@ describe('model store', () => {
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});
 
-	it('round-trips a crop’s own irrigation efficiency and the monthly effective-rain fraction (engine 0.43.0, issue #54)', async () => {
+	it('round-trips a crop’s irrigation system (an older document’s own efficiency becoming one, engine 1.72.0) and the monthly effective-rain fraction (issue #54)', async () => {
 		const u = await signUp('CropDemand');
 		const projectId = await newProject(u, 'Crop demand options');
 		const outlet = node('Outlet', null);
@@ -260,13 +263,15 @@ describe('model store', () => {
 		const put = (crops: Record<string, unknown>[]) => u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops, cropAreas: areas, transfers: [] });
 		expect((await put([drip, plain])).status).toBe(200);
 		let got = await withUser(u.id, (db) => loadModel(db, projectId));
-		// A crop without one reads back without the key, so an older document is unchanged.
-		expect(got.crops).toEqual([drip, plain]);
-		expect('irrigationEfficiency' in got.crops[1]!).toBe(false);
-		expect((await u.call('GET', `/projects/${projectId}/model`)).body.crops).toEqual([drip, plain]);
+		const dripRow = got.irrigationSystems!.find((s) => s.preset === 'drip')!.id;
+		// The document's 90 % is the project's Drip row; a crop without one reads back without the key.
+		const { irrigationEfficiency: _e, ...dripCrop } = drip;
+		expect(got.crops).toEqual([{ ...dripCrop, irrigationSystemId: dripRow }, plain]);
+		expect('irrigationSystemId' in got.crops[1]!).toBe(false);
+		expect((await u.call('GET', `/projects/${projectId}/model`)).body.crops).toEqual(got.crops);
 
-		// null clears it; out of (0, 1] is refused, the stored value untouched.
-		expect((await put([{ ...drip, irrigationEfficiency: null }, plain])).status).toBe(200);
+		// null clears it; an efficiency out of (0, 1] is refused, the stored value untouched.
+		expect((await put([{ ...dripCrop, irrigationSystemId: null }, plain])).status).toBe(200);
 		got = await withUser(u.id, (db) => loadModel(db, projectId));
 		expect(got.crops[0]).toEqual({ id: drip.id, name: drip.name, sortOrder: 0, cropFactor: drip.cropFactor });
 		for (const bad of [0, 1.2, -0.5, '0.9']) expect((await put([{ ...drip, irrigationEfficiency: bad }, plain])).status, String(bad)).toBe(400);
@@ -355,7 +360,10 @@ describe('model store', () => {
 		const projectId = await newProject(u, 'Empty');
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 		const got = await withUser(u.id, (db) => loadSettingsAndModel(db, projectId));
-		expect(got.model).toEqual({ nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] });
+		// A new project's irrigation systems are the SABI rows (migration 198).
+		const { irrigationSystems, ...rest } = got.model;
+		expect(rest).toEqual({ nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] });
+		expect(irrigationSystems!.map((s) => s.preset)).toEqual(['drip', 'micro', 'pivot', 'sprinkler', 'movable', 'surface']);
 		// No boreholes key at all when there are none, so older documents read back unchanged.
 		expect('boreholes' in got.model).toBe(false);
 		expect('demandObjects' in got.model).toBe(false);
@@ -363,7 +371,7 @@ describe('model store', () => {
 		// Another user's project: nothing visible, no settings.
 		const stranger = await signUp('Stranger');
 		const hidden = await withUser(stranger.id, (db) => loadSettingsAndModel(db, projectId));
-		expect(hidden).toEqual({ settings: undefined, model: { nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [] } });
+		expect(hidden).toEqual({ settings: undefined, model: { nodes: [], crops: [], cropAreas: [], transfers: [], landCover: [], irrigationSystems: [] } });
 	});
 
 	it('saves in a fixed number of statements, whatever the size of the model', async () => {

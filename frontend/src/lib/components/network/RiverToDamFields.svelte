@@ -8,7 +8,7 @@
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MonthFields from './MonthFields.svelte';
-	import { M3S_PER_M3DAY } from './fields';
+	import { riverToDamUnit } from './flowUnit.svelte';
 	import { divertMonthsPreview, divertMonthsTicked } from './supply';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
@@ -35,9 +35,9 @@
 	{#if months !== null}
 		<MonthFields
 			values={months}
-			label={(m) => `River to dam of ${label} in ${m}, m³/s`}
-			caption="River to dam, m³/s, per month"
-			scale={M3S_PER_M3DAY}
+			label={(m) => `River to dam of ${label} in ${m}, ${riverToDamUnit.label}`}
+			caption="River to dam, {riverToDamUnit.label}, per month"
+			scale={riverToDamUnit.scale}
 			fillLabel="Use October’s capacity for every month"
 			{readonly}
 			onchange={(next) => (node.divertMonthlyM3Day = next)}

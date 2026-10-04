@@ -138,7 +138,7 @@ function toNode(u: Unit, down: string): NetworkNode {
 		damMinPct: u.minPct,
 		divertCapacityM3Day: u.divert,
 		irrigationEfficiency: u.e,
-		lossReturnFraction: u.beta,
+		returnFlowFraction: u.beta * (1 - u.e),
 		damAreaFullM2: u.Af,
 		damAreaExponent: u.b,
 		damSeepagePerDay: u.seep,
@@ -425,7 +425,7 @@ describe(`random chains of units and other water users against a re-implementati
 				},
 				model: {
 					nodes: [
-						{ id: 'OUT', name: 'OUT', kind: 'gauge', downstreamNodeId: null, sortOrder: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, pctRunoffToDam: 1, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
+						{ id: 'OUT', name: 'OUT', kind: 'gauge', downstreamNodeId: null, sortOrder: 0, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, pctRunoffToDam: 1, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 },
 						...units.map((u, k) => toNode(u, k + 1 < n ? units[k + 1]!.id : 'OUT'))
 					],
 					crops: [{ id: 'c', name: 'Crop', cropFactor: new Array(12).fill(1) }],

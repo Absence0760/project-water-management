@@ -1,8 +1,8 @@
 // The phone pass (issue #17, docs/ui.md § Section header, docs/design/ui-playbook.md § 2):
 // every workspace section at 390 × 844 on a big catchment (30 units with dams, two
 // runs, scenarios and registered volumes). The section header lays its actions out
-// in full rows under the rain pill, a picker a row of its own, with Add data and
-// Run model always ending it side by side; the pill's list opens on screen; Compare
+// in full rows under the rain pill, a picker a row of its own, with Add data
+// (and on Runs & results the run form) always ending it; the pill's list opens on screen; Compare
 // runs has one title; and the sheets, dialogs and the Sections menu the per-page
 // specs don't scan on a phone are scanned here. Synthetic data only.
 import type { Page } from '@playwright/test';
@@ -59,28 +59,28 @@ async function headerRows(page: Page) {
 	});
 }
 
-// Each section, what shows in its header once it has loaded, and whether Run model is there.
-const SECTIONS: { tab: string; ready: string | RegExp; run: boolean }[] = [
-	{ tab: 'overview', ready: 'Run model', run: true },
-	{ tab: 'network', ready: '+ Add node', run: true },
-	{ tab: 'crops', ready: '+ Add crop', run: true },
-	{ tab: 'transfers', ready: '+ Add transfer', run: true },
-	{ tab: 'settings', ready: 'Fit the parameters', run: true },
-	{ tab: 'series', ready: 'Preview all data', run: false },
-	{ tab: 'runs', ready: 'Run model', run: false },
-	{ tab: 'river', ready: 'Open in Runs & results', run: false },
-	{ tab: 'supply', ready: 'Open in Runs', run: false },
-	{ tab: 'dams', ready: 'Open in Runs', run: false },
-	{ tab: 'compare', ready: 'Add data', run: false },
-	{ tab: 'scenarios', ready: '+ New scenario', run: false },
-	{ tab: 'allocations', ready: '+ Add volume', run: false },
-	{ tab: 'project', ready: /^Download/, run: false }
+// Each section and what shows in its header once it has loaded.
+const SECTIONS: { tab: string; ready: string | RegExp }[] = [
+	{ tab: 'overview', ready: 'Add data' },
+	{ tab: 'network', ready: '+ Add node' },
+	{ tab: 'crops', ready: '+ Add crop' },
+	{ tab: 'transfers', ready: '+ Add transfer' },
+	{ tab: 'settings', ready: 'Fit the parameters' },
+	{ tab: 'series', ready: 'Preview all data' },
+	{ tab: 'runs', ready: 'Run model' },
+	{ tab: 'river', ready: 'Open in Runs & results' },
+	{ tab: 'supply', ready: 'Open in Runs' },
+	{ tab: 'dams', ready: 'Open in Runs' },
+	{ tab: 'compare', ready: 'Add data' },
+	{ tab: 'scenarios', ready: '+ New scenario' },
+	{ tab: 'allocations', ready: '+ Add volume' },
+	{ tab: 'project', ready: /^Download/ }
 ];
 
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
-	test('every section: the pill, then the controls in full rows, pickers full width, Add data and Run model last and side by side', async ({ page, owner }) => {
+	test('every section: the pill, then the controls in full rows, pickers full width, Add data last', async ({ page, owner }) => {
 		test.setTimeout(120_000);
 		void owner;
 		const p = await seedBig(page, 'Phone header big catchment');
@@ -104,20 +104,15 @@ test.describe('phone', () => {
 			for (const w of m.selects) expect(w, at).toBeGreaterThan(m.right - m.left - 2);
 			// ...with no "Run" line of its own above it (River & reserve's had one): the word is for screen readers.
 			for (const d of m.pickerDrops) expect(d, at).toBeLessThan(2);
-			// Add data and Run model: one row, in that order, ending the header.
+			// Add data ends the header; Run model is only in Runs' run form.
 			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
 			const last = m.rows.at(-1)!;
-			if (s.run) {
-				const run = (await h.getByRole('button', { name: 'Run model' }).boundingBox())!;
-				expect(Math.round(run.y), at).toBe(Math.round(add.y));
-				expect(run.x, at).toBeGreaterThan(add.x);
-				expect(Math.abs(run.x + run.width - m.right), at).toBeLessThan(2);
-				expect(last.at(-1)!.texts[0], at).toBe('Run model');
-			} else if (s.tab === 'runs') {
+			if (s.tab === 'runs') {
 				// Runs' run form (label, name, Run model) is the last row, under Add data.
 				const form = (await h.locator('form.run-form').boundingBox())!;
 				expect(form.y, at).toBeGreaterThan(add.y + add.height - 1);
 			} else {
+				await expect(h.getByRole('button', { name: 'Run model' }), at).toHaveCount(0);
 				expect(last.at(-1)!.texts[0], at).toBe('Add data');
 			}
 		}
@@ -229,7 +224,7 @@ test.describe('phone', () => {
 test.describe('desktop', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });
 
-	test('the header controls stay one row, beside the title where they fit, the pair last', async ({ page, owner }) => {
+	test('the header controls stay one row, beside the title where they fit, Add data last', async ({ page, owner }) => {
 		void owner;
 		const p = await seedBig(page, 'Desktop header row');
 		// Whether a tab's controls fit beside its title depends on its words (the seeded
@@ -263,11 +258,8 @@ test.describe('desktop', () => {
 			expect(Math.abs(mid(pill) - mid(add)), tab).toBeLessThan(4);
 			if (beside) expect(pill.x, tab).toBeGreaterThan(title.x + title.width);
 			else expect(pill.y, tab).toBeGreaterThan(title.y + title.height);
-			if (tab !== 'allocations') {
-				const run = (await h.getByRole('button', { name: 'Run model' }).boundingBox())!;
-				expect(Math.abs(mid(run) - mid(add)), tab).toBeLessThan(4);
-				expect(run.x, tab).toBeGreaterThan(add.x);
-			}
+			const buttons = await h.getByTestId('header-main').getByRole('button').allTextContents();
+			expect(buttons.map((t) => t.trim()).at(-1), tab).toBe('Add data');
 		}
 	});
 });

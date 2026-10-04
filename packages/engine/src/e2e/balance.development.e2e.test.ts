@@ -25,7 +25,7 @@ function node(id: string, kind: NetworkNode['kind'], down: string | null, over: 
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -252,7 +252,7 @@ describe('the water balance per water year (summary.waterBalance)', () => {
 		const nodes = [
 			node('G', 'gauge', null),
 			node('T', 'user', 'G', { userDemandM3Day: flat(150), userPriority: 'senior', userReturnPct: 0.3, boreholeCapacityM3Day: 40, streamDepletionFrac: 0.5, streamDepletionLagDays: 3 }),
-			node('A', 'farm', 'T', { damCapacityM3: 20_000, damInitialPct: 0.4, damMinPct: 0.1, damAreaFullM2: 9_000, damSeepagePerDay: 0.002, damSeepageReturnPct: 0.6, damSurveyDate: '2022-01-01', damSedimentPctPerYear: 0.05, irrigationEfficiency: 0.8, lossReturnFraction: 0.5, boreholeCapacityM3Day: 60, streamDepletionFrac: 1 }),
+			node('A', 'farm', 'T', { damCapacityM3: 20_000, damInitialPct: 0.4, damMinPct: 0.1, damAreaFullM2: 9_000, damSeepagePerDay: 0.002, damSeepageReturnPct: 0.6, damSurveyDate: '2022-01-01', damSedimentPctPerYear: 0.05, irrigationEfficiency: 0.8, returnFlowFraction: 0.1, boreholeCapacityM3Day: 60, streamDepletionFrac: 1 }),
 			node('B', 'farm', 'A', { damCapacityM3: 6_000, damInitialPct: 1, damAreaFullM2: 3_000, damInServiceFrom: '2021-10-15', damReleaseRule: 'fixed', damReleaseM3Day: flat(20) })
 		];
 		const natural = Array.from({ length: days }, (_, t) => (t % 9 === 0 ? 3000 : 120 + 80 * Math.sin(t / 30)));

@@ -43,6 +43,27 @@ describe('freshIds', () => {
 		expect(model.landCover![0]).toMatchObject({ id: ids.get(lc), nodeId: nb });
 	});
 
+	it('gives the irrigation systems new ids, and moves a crop’s and a planting’s system with them; a preset’s key stays (engine 1.72.0)', () => {
+		const [a, b, c, s] = [u(), u(), u(), u()];
+		const { model, ids } = freshIds({
+			nodes: [
+				{ id: a, downstreamNodeId: null },
+				{ id: b, downstreamNodeId: a }
+			] as never,
+			crops: [{ id: c, irrigationSystemId: s }] as never,
+			cropAreas: [{ nodeId: b, cropId: c, areaM2: 1, irrigationSystemId: 'drip' }],
+			transfers: [],
+			irrigationSystems: [
+				{ id: s, name: 'Our drip', efficiency: 0.93, preset: 'drip' },
+				{ id: 'workbook-1', name: 'Workbook, 100 %', efficiency: 1, preset: null }
+			]
+		});
+		expect(ids.get(s)).not.toBe(s);
+		expect(model.irrigationSystems!.map((x) => x.id)).toEqual([ids.get(s), ids.get('workbook-1')]);
+		expect(model.crops[0]!.irrigationSystemId).toBe(ids.get(s));
+		expect(model.cropAreas[0]!.irrigationSystemId).toBe('drip');
+	});
+
 	it('moves the unit an off-take’s seepage rejoins below with the nodes (engine 1.42.0), and leaves none as none', () => {
 		const [a, b, t, t2] = [u(), u(), u(), u()];
 		const { model, ids } = freshIds({
@@ -175,7 +196,7 @@ describe('a project document’s names are made one line (issue #385)', () => {
 			damMinPct: 0,
 			divertCapacityM3Day: 0,
 			irrigationEfficiency: 1,
-			lossReturnFraction: 0,
+			returnFlowFraction: 0,
 			damAreaFullM2: null,
 			damAreaExponent: 0.7,
 			damSeepagePerDay: 0

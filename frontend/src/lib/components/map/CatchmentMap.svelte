@@ -26,7 +26,8 @@
 	them, dashed, a click on one (with no feature there) picking it (`onreach`).
 	`channels` (issue #374) draws the elevation model's own channels over the
 	river network, solid red, wider for a larger area: where a Delineate or
-	Sub-catchments click goes (channelLayer.svelte.ts).
+	Sub-catchments click goes (channelLayer.svelte.ts); `channelsDim` dims
+	them behind a delineated proposal under review, so the outline reads first.
 	With a `terrainUrl` and `relief` on (the tab's Relief layer), the land is
 	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
 	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
@@ -122,6 +123,7 @@
 		onquaternary,
 		rivers = null,
 		channels = null,
+		channelsDim = false,
 		riversCredit = false,
 		pickedReach = null,
 		onreach,
@@ -163,6 +165,8 @@
 		rivers?: readonly NetworkReach[] | null;
 		/** The elevation model's channels (channelLayer.svelte.ts), drawn while Delineate or Sub-catchments is on. */
 		channels?: readonly ChannelLineData[] | null;
+		/** Dim the channels: a delineated proposal is reviewed over them (the outline reads first; the channels it follows still show). */
+		channelsDim?: boolean;
 		/** Credit the river network on the map (its licence asks it: HydroRIVERS), while its reaches are drawn. */
 		riversCredit?: boolean;
 		/** The reach picked in the tab's list, drawn heavier. */
@@ -361,7 +365,7 @@
 	const syncQuaternaries = () => setSource('quaternaries', () => quaternaryData(quaternaries, pickedQuaternary));
 	const syncProposal = () => setSource('proposal', () => proposalData(proposal));
 	const syncRivers = () => setSource('rivers', () => riverNetworkData(rivers, pickedReach));
-	const syncChannels = () => setSource('channels', () => channelData(channels));
+	const syncChannels = () => setSource('channels', () => channelData(channels, channelsDim));
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
@@ -418,7 +422,7 @@
 						glyphs,
 						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
 						rivers: riverNetworkData(rivers, pickedReach),
-						channels: channelData(channels),
+						channels: channelData(channels, channelsDim),
 						terrain: reliefUrl(),
 						riversCredit: riversCreditHtml(),
 						dataSourcesHref: `${base}/data-sources`,
@@ -577,6 +581,7 @@
 	});
 	$effect(() => {
 		void channels;
+		void channelsDim;
 		void status;
 		syncChannels();
 	});

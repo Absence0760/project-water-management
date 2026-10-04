@@ -18,7 +18,7 @@ const MODEL_JSON = `json_build_object(
 			pct_runoff_to_dam AS "pctRunoffToDam", dam_capacity_m3 AS "damCapacityM3",
 			dam_initial_pct AS "damInitialPct", dam_min_pct AS "damMinPct",
 			divert_capacity_m3_day AS "divertCapacityM3Day", irrigation_efficiency AS "irrigationEfficiency",
-			loss_return_fraction AS "lossReturnFraction", dam_area_full_m2 AS "damAreaFullM2",
+			return_flow_fraction AS "returnFlowFraction", dam_area_full_m2 AS "damAreaFullM2",
 			dam_area_exponent AS "damAreaExponent", dam_seepage_per_day AS "damSeepagePerDay",
 			user_demand_m3_day AS "userDemandM3Day", user_return_pct AS "userReturnPct", user_priority AS "userPriority",
 			borehole_capacity_m3_day AS "boreholeCapacityM3Day", borehole_rule AS "boreholeRule",
@@ -36,10 +36,13 @@ const MODEL_JSON = `json_build_object(
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
 		FROM node WHERE project_id = $1) r), '[]'),
 	'crops', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r)) ORDER BY r."sortOrder", r.name) FROM (
-		SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor", irrigation_efficiency AS "irrigationEfficiency"
+		SELECT id, name, sort_order AS "sortOrder", crop_factor AS "cropFactor", irrigation_system_id AS "irrigationSystemId"
 		FROM crop WHERE project_id = $1) r), '[]'),
-	'cropAreas', coalesce((SELECT json_agg(r) FROM (
-		SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2" FROM crop_area WHERE project_id = $1) r), '[]'),
+	'cropAreas', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r))) FROM (
+		SELECT node_id AS "nodeId", crop_id AS "cropId", area_m2 AS "areaM2", irrigation_system_id AS "irrigationSystemId"
+		FROM crop_area WHERE project_id = $1) r), '[]'),
+	'irrigationSystems', coalesce((SELECT json_agg(r ORDER BY r."sortOrder", r.name, r.id) FROM (
+		SELECT id, name, efficiency, preset, sort_order AS "sortOrder" FROM irrigation_system WHERE project_id = $1) r), '[]'),
 	'transfers', coalesce((SELECT json_agg(r ORDER BY r.priority, r.id) FROM (
 		SELECT id, from_node_id AS "fromNodeId", to_node_id AS "toNodeId", months::int[] AS months,
 			max_rate_m3s AS "maxRateM3s", daily_cap_m3 AS "dailyCapM3", min_storage_pct AS "minStoragePct", enabled, priority,
@@ -55,7 +58,7 @@ const MODEL_JSON = `json_build_object(
 			emergency_below_pct AS "emergencyBelowPct", target, depletion_factor AS "depletionFactor"
 		FROM borehole WHERE project_id = $1) r),
 	'demandObjects', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
-		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", unit_count AS "count",
+		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", monthly_unit AS "monthlyUnit", unit_count AS "count",
 			litres_per_unit_day AS "litresPerUnitDay", loss_pct AS "lossPct", monthly_factor AS "monthlyFactor",
 			return_pct AS "returnPct", priority, priority_rank AS "rank", destination, enabled, schedule, population, source,
 			water_source AS "waterSource", river_pump_m3_day AS "riverPumpM3Day", river_pool_m3 AS "riverPoolM3", note
@@ -100,6 +103,9 @@ export async function loadSettingsAndModel(db: Db, projectId: string): Promise<{
  * arrives in its stored type.
  */
 export async function saveModel(db: Db, projectId: string, m: ProjectModel): Promise<void> {
+	// The irrigation systems first (engine ≥ 1.72.0): crops and plantings name them. A model without a table keeps
+	// the project's; a reference by a SABI preset's key ('drip', from a document or the importer) is that preset's row.
+	const systemIdOf = await saveIrrigationSystems(db, projectId, m);
 	const nodeIds = m.nodes.map((n) => n.id);
 	const cropIds = m.crops.map((c) => c.id);
 	const transferIds = m.transfers.map((t) => t.id);
@@ -138,7 +144,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	await upsertAll(
 		`INSERT INTO node (id, project_id, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
-			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
+			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
@@ -148,7 +154,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
-			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
+			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
@@ -168,7 +174,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pct_runoff_to_dam = EXCLUDED.pct_runoff_to_dam, dam_capacity_m3 = EXCLUDED.dam_capacity_m3,
 			dam_initial_pct = EXCLUDED.dam_initial_pct, dam_min_pct = EXCLUDED.dam_min_pct,
 			divert_capacity_m3_day = EXCLUDED.divert_capacity_m3_day, irrigation_efficiency = EXCLUDED.irrigation_efficiency,
-			loss_return_fraction = EXCLUDED.loss_return_fraction, dam_area_full_m2 = EXCLUDED.dam_area_full_m2,
+			return_flow_fraction = EXCLUDED.return_flow_fraction, dam_area_full_m2 = EXCLUDED.dam_area_full_m2,
 			dam_area_exponent = EXCLUDED.dam_area_exponent, dam_seepage_per_day = EXCLUDED.dam_seepage_per_day,
 			user_demand_m3_day = EXCLUDED.user_demand_m3_day, user_return_pct = EXCLUDED.user_return_pct,
 			user_priority = EXCLUDED.user_priority, borehole_capacity_m3_day = EXCLUDED.borehole_capacity_m3_day,
@@ -204,7 +210,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_min_pct: n.damMinPct,
 			divert_capacity_m3_day: n.divertCapacityM3Day,
 			irrigation_efficiency: n.irrigationEfficiency,
-			loss_return_fraction: n.lossReturnFraction,
+			return_flow_fraction: n.returnFlowFraction,
 			dam_area_full_m2: n.damAreaFullM2,
 			dam_area_exponent: n.damAreaExponent,
 			dam_seepage_per_day: n.damSeepagePerDay,
@@ -253,28 +259,28 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		);
 	}
 	await upsertAll(
-		`INSERT INTO crop (id, project_id, name, sort_order, crop_factor, irrigation_efficiency)
-		 SELECT id, $1, name, sort_order, crop_factor, irrigation_efficiency FROM jsonb_populate_recordset(NULL::crop, $2::jsonb)
+		`INSERT INTO crop (id, project_id, name, sort_order, crop_factor, irrigation_system_id)
+		 SELECT id, $1, name, sort_order, crop_factor, irrigation_system_id FROM jsonb_populate_recordset(NULL::crop, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order,
-			crop_factor = EXCLUDED.crop_factor, irrigation_efficiency = EXCLUDED.irrigation_efficiency
+			crop_factor = EXCLUDED.crop_factor, irrigation_system_id = EXCLUDED.irrigation_system_id
 		 WHERE crop.project_id = EXCLUDED.project_id`,
-		// Without an explicit order, the document's order is the display order. No own
-		// irrigation efficiency (null) = the farm's, and the crop reads back without the key.
+		// Without an explicit order, the document's order is the display order. No default
+		// system (null) = the unit's own, and the crop reads back without the key.
 		m.crops.map((c, i) => ({
 			id: c.id,
 			name: c.name,
 			sort_order: c.sortOrder ?? i,
 			crop_factor: c.cropFactor,
-			irrigation_efficiency: c.irrigationEfficiency ?? null
+			irrigation_system_id: systemIdOf(c.irrigationSystemId)
 		})),
 		'crop'
 	);
 	const areas = m.cropAreas.filter((a) => a.areaM2 > 0);
 	if (areas.length) {
 		await db.query(
-			`INSERT INTO crop_area (project_id, node_id, crop_id, area_m2)
-			 SELECT $1, * FROM unnest($2::uuid[], $3::uuid[], $4::float8[])`,
-			[projectId, areas.map((a) => a.nodeId), areas.map((a) => a.cropId), areas.map((a) => a.areaM2)]
+			`INSERT INTO crop_area (project_id, node_id, crop_id, area_m2, irrigation_system_id)
+			 SELECT $1, * FROM unnest($2::uuid[], $3::uuid[], $4::float8[], $5::uuid[])`,
+			[projectId, areas.map((a) => a.nodeId), areas.map((a) => a.cropId), areas.map((a) => a.areaM2), areas.map((a) => systemIdOf(a.irrigationSystemId))]
 		);
 	}
 	await upsertAll(
@@ -351,10 +357,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		'borehole'
 	);
 	await upsertAll(
-		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
+		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, monthly_unit, unit_count, litres_per_unit_day,
 			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source,
 			water_source, river_pump_m3_day, river_pool_m3, note)
-		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
+		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, monthly_unit, unit_count, litres_per_unit_day,
 			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source,
 			water_source, river_pump_m3_day, river_pool_m3, note
 		 FROM jsonb_populate_recordset(NULL::demand_object, $2::jsonb)
@@ -366,6 +372,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			category: o.category,
 			sizing: o.sizing,
 			monthly_m3_day: o.monthlyM3Day,
+			// The unit it is shown in (199, display only); absent and null alike = m³/day.
+			monthly_unit: o.monthlyUnit ?? null,
 			unit_count: o.count,
 			litres_per_unit_day: o.litresPerUnitDay,
 			loss_pct: o.lossPct,
@@ -392,3 +400,59 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	);
 	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);
 }
+
+/**
+ * Write the project's irrigation-systems table (engine ≥ 1.72.0) when `table` is
+ * given: rows upserted by id, rows missing from it deleted (a crop or planting on
+ * one falls back to none, ON DELETE SET NULL). Returns how a reference is stored:
+ * a row id as it is (the foreign key and the same-project trigger hold it to
+ * this project), a SABI preset's key ('drip', …) or a document's own key as the
+ * project's row for it, null as null; a key with no row is a 400. At most three
+ * statements whatever the table's size, none when nothing needs one.
+ */
+async function saveIrrigationSystems(db: Db, projectId: string, m: ProjectModel): Promise<(ref: string | null | undefined) => string | null> {
+	const table = m.irrigationSystems;
+	const refs = [...m.crops.map((c) => c.irrigationSystemId), ...m.cropAreas.map((a) => a.irrigationSystemId)];
+	// The project's row for each preset, read once and only when a key needs it.
+	let presets: Map<string, string> | null = null;
+	const presetRows = async () => {
+		if (!presets) {
+			const { rows } = await db.query<{ id: string; preset: string }>(`SELECT id, preset FROM irrigation_system WHERE project_id = $1 AND preset IS NOT NULL ORDER BY sort_order, id`, [projectId]);
+			presets = new Map();
+			for (const r of rows) if (!presets.has(r.preset)) presets.set(r.preset, r.id);
+		}
+		return presets;
+	};
+	const keyed = new Map<string, string>();
+	if (table) {
+		// A row named by a preset key (a document's default table) is the project's row for that preset; a new row gets its id here.
+		const known = table.some((x) => !UUID.test(x.id)) ? await presetRows() : new Map<string, string>();
+		const rows = table.map((x, i) => {
+			const id = UUID.test(x.id) ? x.id : (known.get(x.id) ?? crypto.randomUUID());
+			if (id !== x.id) keyed.set(x.id, id);
+			if (x.preset && !keyed.has(x.preset)) keyed.set(x.preset, id);
+			return { id, name: x.name, efficiency: x.efficiency, preset: x.preset ?? null, sort_order: x.sortOrder ?? i };
+		});
+		await db.query(`DELETE FROM irrigation_system WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))`, [projectId, rows.map((r) => r.id)]);
+		const { rowCount } = await db.query(
+			`INSERT INTO irrigation_system (id, project_id, name, efficiency, preset, sort_order)
+			 SELECT id, $1, name, efficiency, preset, sort_order FROM jsonb_populate_recordset(NULL::irrigation_system, $2::jsonb)
+			 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, efficiency = EXCLUDED.efficiency, preset = EXCLUDED.preset,
+				sort_order = EXCLUDED.sort_order
+			 WHERE irrigation_system.project_id = EXCLUDED.project_id`,
+			[projectId, JSON.stringify(rows)]
+		);
+		if (rowCount !== rows.length) throw new ApiError(409, 'irrigation system id already used by another project');
+	} else if (refs.some((r) => r != null && !UUID.test(r))) {
+		for (const [k, id] of await presetRows()) keyed.set(k, id);
+	}
+	return (ref) => {
+		if (ref == null) return null;
+		const k = keyed.get(ref);
+		if (k) return k;
+		if (UUID.test(ref)) return ref;
+		throw new ApiError(400, `irrigation system ${ref} is not in the project's table`);
+	};
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

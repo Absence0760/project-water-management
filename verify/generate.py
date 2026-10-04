@@ -111,7 +111,7 @@ def random_input(seed: int, dense: bool = False) -> dict:
         base = {
             "areaKm2": 0, "areaHiKm2": 0, "areaLoKm2": 0, "flowShareManual": None, "pctUpstreamToDam": 0,
             "pctRunoffToDam": 0, "damCapacityM3": 0, "damInitialPct": 0, "damMinPct": 0, "divertCapacityM3Day": 0,
-            "irrigationEfficiency": 1, "lossReturnFraction": 0, "damAreaFullM2": None, "damAreaExponent": 0.7,
+            "irrigationEfficiency": 1, "returnFlowFraction": 0, "damAreaFullM2": None, "damAreaExponent": 0.7,
             "damSeepagePerDay": 0,
         }
         for k2, v in base.items():
@@ -122,15 +122,21 @@ def random_input(seed: int, dense: bool = False) -> dict:
             continue
         area = round(rng.uniform(0.5, 60), 2) if rng.random() > 0.05 else 0
         hi = round(area * rng.uniform(0.2, 0.8), 2)
+        # The same draws, in the same order, as before engine 1.71.0: β, a share of the losses, is
+        # stored as the return flow r = β(1 − e), a share of the water supplied.
+        up = rng.choice([0, 0, 1, round(rng.random(), 2)])
+        ro = rng.choice([0, 1, 1, round(rng.random(), 2)])
+        e = rng.choice([1, 0.9, 0.85, 0.01, round(rng.uniform(0.5, 1), 2)])
+        beta = rng.choice([0, 0.5, 1, round(rng.random(), 2)])
         n.update(
             areaKm2=area,
             areaHiKm2=hi,
             areaLoKm2=round(area - hi, 2),
             flowShareManual=math.floor(manual[farms.index(n)] / tot * 1e4) / 1e4 if method == "manual" else None,
-            pctUpstreamToDam=rng.choice([0, 0, 1, round(rng.random(), 2)]),
-            pctRunoffToDam=rng.choice([0, 1, 1, round(rng.random(), 2)]),
-            irrigationEfficiency=rng.choice([1, 0.9, 0.85, 0.01, round(rng.uniform(0.5, 1), 2)]),
-            lossReturnFraction=rng.choice([0, 0.5, 1, round(rng.random(), 2)]),
+            pctUpstreamToDam=up,
+            pctRunoffToDam=ro,
+            irrigationEfficiency=e,
+            returnFlowFraction=beta * (1 - e),
         )
         if rng.random() < 0.75:
             cap = rng.choice([0.4, 500, 5_000, 50_000, 300_000, 2_000_000]) * rng.uniform(0.5, 1.5)
@@ -248,7 +254,40 @@ def random_input(seed: int, dense: bool = False) -> dict:
 
     doc = {"settings": settings, "model": {"nodes": nodes, "crops": crops, "cropAreas": crop_areas, "transfers": transfers}, "series": series}
     add_phase_two(rng, doc, start, days, dense)
+    add_irrigation_systems(random.Random(seed * 104729 + 3), doc, dense)
     return doc
+
+
+SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]
+
+
+def add_irrigation_systems(rng: random.Random, doc: dict, dense: bool = False) -> None:
+    """Irrigation systems (§2.3 item 6, engine >= 1.72.0), from their own
+    stream so the rest of a network is unchanged: in 40 % of networks (70 %
+    dense), the SABI table as given (no table) or edited with rows of the
+    project's own, a default system on some crops and a system of the unit's
+    own on some plantings, now and then one the table lacks. Efficiencies in
+    (0, 1]."""
+    if rng.random() >= (0.7 if dense else 0.4):
+        return
+    m = doc["model"]
+    ids = [i for i, _, _ in SABI_SYSTEMS]
+    if rng.random() < 0.5:
+        table = [{"id": i, "name": nm, "efficiency": rng.choice([e, 1, round(rng.uniform(0.5, 1), 2)]), "preset": i, "sortOrder": k} for k, (i, nm, e) in enumerate(SABI_SYSTEMS)]
+        for k in range(rng.randint(0, 2)):
+            table.append({"id": f"own-{k}", "name": f"Own {k}", "efficiency": rng.choice([1, round(rng.uniform(0.3, 1), 2)]), "preset": None, "sortOrder": len(table)})
+        m["irrigationSystems"] = table
+        ids = [t["id"] for t in table]
+
+    def pick() -> str:
+        return "no-such-system" if rng.random() < 0.05 else rng.choice(ids)
+
+    for crop in m["crops"]:
+        if rng.random() < 0.4:
+            crop["irrigationSystemId"] = pick()
+    for a in m["cropAreas"]:
+        if rng.random() < 0.3:
+            a["irrigationSystemId"] = pick()
 
 
 def _day(rng, start: dt.date, days: int) -> str:
@@ -277,7 +316,7 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                 "id": _uuid(rng), "name": f"user {k}", "kind": "user", "downstreamNodeId": child["downstreamNodeId"],
                 "sortOrder": len(nodes), "areaKm2": 0, "areaHiKm2": 0, "areaLoKm2": 0, "flowShareManual": None,
                 "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0, "damInitialPct": 0, "damMinPct": 0,
-                "divertCapacityM3Day": 0, "irrigationEfficiency": 1, "lossReturnFraction": 0, "damAreaFullM2": None,
+                "divertCapacityM3Day": 0, "irrigationEfficiency": 1, "returnFlowFraction": 0, "damAreaFullM2": None,
                 "damAreaExponent": 0.7, "damSeepagePerDay": 0,
                 "userDemandM3Day": None if rng.random() < 0.1 else _monthly(rng, 0, rng.choice([200, 3000, 30000]), 0),
                 "userReturnPct": rng.choice([0, 0, 0.5, round(rng.random(), 2)]),

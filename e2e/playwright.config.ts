@@ -9,7 +9,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
 import { DEM_FIXTURE } from './support/dem.ts';
 import { WATER_FIXTURE } from './support/water.ts';
-import { API_PORT, API_URL, APP_E2E_URL, WEB_PORT, WEB_URL } from './support/env.ts';
+import { API_PORT, API_URL, APP_E2E_URL, MFA_API_PORT, MFA_API_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 // The site under test is `vite build` output with the e2e API URL baked in
 // (support/build-site.ts), served with the SPA fallback like CloudFront. Not
@@ -102,6 +102,26 @@ export default defineConfig({
 				DEM_URL: DEM_FIXTURE,
 				// Tracing a dam on, against the committed synthetic water occurrence raster (invented water; map-assisted.spec.ts).
 				WATER_URL: WATER_FIXTURE
+			}
+		},
+		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the
+		// same database: mfa-required.spec.ts sends the browser's API calls here, so a real server refuses an
+		// owner's action and the page meets the real 403 (the requirement itself: backend/src/auth/stepUp.db.test.ts).
+		{
+			command: 'pnpm -C ../backend exec tsx src/server.ts',
+			url: `${MFA_API_URL}/health`,
+			reuseExistingServer: false,
+			timeout: 60_000,
+			stdout: 'pipe',
+			env: {
+				PORT: String(MFA_API_PORT),
+				DATABASE_URL: APP_E2E_URL,
+				ALLOWED_ORIGINS: WEB_URL,
+				SITE_URL: WEB_URL,
+				MAIL_TRANSPORT: 'log',
+				PASSWORD_HASH_FAST: '1',
+				SIGNUP_THROTTLE: 'off',
+				REGISTRATION_CHECK_REQUIRED: 'false'
 			}
 		},
 		DEV_SERVER

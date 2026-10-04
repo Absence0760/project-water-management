@@ -6,11 +6,12 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { seedRunnableProject, showAllSections } from '../support/api.ts';
+import { putModel, seedRunnableProject, showAllSections } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Load crop factors' });
 // The seeded Orchard, Oct … Sep, and the library's citrus (ARC Table 4.13 in water-year order).
@@ -43,7 +44,7 @@ async function openAndMapToCitrus(page: Page, projectId: string) {
 	const d = dialog(page);
 	await expect(d).toBeVisible();
 	// "Orchard" matches no library crop by name, so it starts on Keep current and nothing would change.
-	const from = d.getByLabel('Load factors for Orchard from');
+	const from = d.getByLabel('Load factors from, for Orchard');
 	await expect(from).toHaveValue('');
 	await expect(d.getByRole('button', { name: 'Apply 0 crops' })).toBeDisabled();
 	await from.selectOption({ label: 'Citrus' });
@@ -95,10 +96,11 @@ test('a staged vegetable needs a planting date; its season comes from Table 4.7'
 	await page.goto(`/projects/${project.id}?tab=crops`);
 	await openLoad(page);
 	const d = dialog(page);
-	await d.getByLabel('Load factors for Orchard from').selectOption({ label: 'Onions' });
+	await d.getByLabel('Load factors from, for Orchard').selectOption({ label: 'Onions' });
 	// No planting month yet, so no new factors to apply.
 	await expect(d.getByLabel('Orchard season, days')).toHaveValue('160');
-	await expect(d).toContainText('Table 4.7: Autumn transplant 160');
+	// The season lengths Table 4.7 gives are buttons that set the field; the one in it is pressed.
+	await expect(d.getByRole('button', { name: 'Autumn transplant, 160 days' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(d.getByRole('region', { name: 'Orchard: changes' })).toHaveCount(0);
 	await expect(d.getByRole('button', { name: 'Apply 0 crops' })).toBeDisabled();
 	// It says why, tied to the month it needs.
@@ -136,8 +138,8 @@ test('from a b023 workbook: matched by name, times a pan coefficient', async ({ 
 	// A b023 set is A-pan factors: Kp stays 1.
 	await expect(d.getByLabel('Pan coefficient Kp')).toHaveValue('1');
 	// "Orchard" is in exactly one workbook crop's name, "Orchard A" (invented fixture: Oct 0.45).
-	await expect(d.getByLabel('Load factors for Orchard from')).toHaveValue(/^wb:/);
-	await expect(d.getByRole('region', { name: 'Orchard: changes' })).toContainText('← Orchard A');
+	await expect(d.getByLabel('Load factors from, for Orchard')).toHaveValue(/^wb:/);
+	await expect(d.getByRole('region', { name: 'Orchard: changes' })).toContainText('from Orchard A');
 	await d.getByLabel('Pan coefficient Kp').fill('0.75');
 	await d.getByLabel('Pan coefficient Kp').press('Tab');
 	await expect(d.getByRole('region', { name: 'Orchard: changes' })).toContainText('× Kp 0.75');
@@ -195,7 +197,7 @@ test('Load crop factors opens from the Crops header and from a crop’s sheet', 
 	await page.goto(`/projects/${project.id}?tab=crops`);
 	await page.getByRole('button', { name: 'Load crop factors…' }).click();
 	await expect(dialog(page)).toBeVisible();
-	await expect(dialog(page).getByLabel('Load factors for Orchard from')).toBeVisible();
+	await expect(dialog(page).getByLabel('Load factors from, for Orchard')).toBeVisible();
 	await dialog(page).getByRole('button', { name: 'Cancel' }).click();
 	await expect(dialog(page)).toHaveCount(0);
 
@@ -217,7 +219,7 @@ test('from a node-based workbook: FAO-56 Kc, so Kp starts at 0.75 with why, and 
 	await openLoad(page);
 	const d = dialog(page);
 	const kp = d.getByLabel('Pan coefficient Kp');
-	await d.getByRole('radio', { name: 'A node-based workbook (FAO-56 Kc)' }).check();
+	await d.getByRole('radio', { name: 'A node-based workbook' }).check();
 	// FAO-56 Kc against ET₀: Kp switches from the library's 1 to 0.75, and the line under it says why.
 	await expect(kp).toHaveValue('0.75');
 	const why = d.getByTestId('kp-why');
@@ -232,9 +234,9 @@ test('from a node-based workbook: FAO-56 Kc, so Kp starts at 0.75 with why, and 
 	await expect(d.getByRole('group', { name: 'Check this in the workbook' }).getByRole('listitem')).toHaveText([/not a number \(n\/a\); read as 0\. \(\[Crop_Factors\] C9\)$/]);
 
 	// Orchard matches none of Lucerne, Olives, Wine grapes; Olives' Oct Kc 0.55 × 0.75 = 0.4125.
-	await d.getByLabel('Load factors for Orchard from').selectOption({ label: 'Olives' });
+	await d.getByLabel('Load factors from, for Orchard').selectOption({ label: 'Olives' });
 	const diff = d.getByRole('region', { name: 'Orchard: changes' });
-	await expect(diff).toContainText('← Olives × Kp 0.75');
+	await expect(diff).toContainText('from Olives × Kp 0.75');
 	await expect(diff).toContainText('From [Crop_Factors] in node-based.xlsx.');
 	await expectNoViolations(page);
 	await d.getByRole('button', { name: 'Apply 1 crop' }).click();
@@ -248,7 +250,7 @@ test('a node-based workbook with many problems lists the first five, and all on 
 	await page.goto(`/projects/${project.id}?tab=crops`);
 	await openLoad(page);
 	const d = dialog(page);
-	await d.getByRole('radio', { name: 'A node-based workbook (FAO-56 Kc)' }).check();
+	await d.getByRole('radio', { name: 'A node-based workbook' }).check();
 	// Seven of Lucerne's months are text: seven warnings.
 	const b = syntheticNodeBased();
 	for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H']) b.set('Crop_Factors', `${col}8`, 'x');
@@ -277,4 +279,135 @@ test('rejecting the change, or cancelling, leaves the factors as they were', asy
 	await expect(page.getByLabel('Orchard crop factor, Mar')).toHaveValue('0.7');
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 	expect(await savedFactors(page, project.id)).toEqual(ORCHARD);
+});
+
+test('a vegetable matched by name asks for its planting; another vegetable brings its own season', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Crop library matched vegetable');
+	// The project's crop is called Onions, so the name match picks the library's Onions as the dialog opens.
+	project.model.crops[0]!.name = 'Onions';
+	await putModel(page.request, project.id, project.model);
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.getByRole('button', { name: 'Load crop factors…' }).click();
+	const d = dialog(page);
+	await expect(d.getByLabel('Load factors from, for Onions')).toHaveValue('onions');
+	// Its planting fields show without picking it again, with Table 4.7's season, and the why line names it once.
+	await expect(d.getByLabel('Onions season, days')).toHaveValue('160');
+	await expect(d.getByTestId('planting-month-why')).toHaveText('Pick a planting month: until then Onions has no factors to load.');
+	await d.getByLabel('Onions planting month').selectOption({ label: 'May' });
+	await expect(d.getByRole('button', { name: 'Apply 1 crop' })).toBeEnabled();
+
+	// Another vegetable keeps the planting date but takes its own season length, not the onions' 160 days.
+	await d.getByLabel('Load factors from, for Onions').selectOption({ label: 'Beans' });
+	await expect(d.getByLabel('Onions planting month')).toHaveValue('5');
+	await expect(d.getByLabel('Onions season, days')).toHaveValue('100');
+	await d.getByRole('button', { name: 'Green, spring/summer, 90 days' }).click();
+	await expect(d.getByLabel('Onions season, days')).toHaveValue('90');
+	await expect(d.getByRole('button', { name: 'Green, spring/summer, 90 days' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+/**
+ * A big synthetic catchment for the dialog: 30 crops on 20 units (areas falling off from 400 ha, so the order is known),
+ * twelve of them named like a library crop. Names and numbers are invented.
+ */
+const BIG_NAMES = ['Citrus', 'Table grapes', 'Lucerne', 'Pecans', 'Guavas', 'Wheat', 'Mealies', 'Peas', 'Brassicas', 'Cucurbits', 'Tomatoes', 'Beans'];
+async function seedBig(page: Page) {
+	const project = await seedRunnableProject(page.request, 'Crop library big');
+	const m = project.model;
+	const [gauge, unit] = [m.nodes[0]!, m.nodes[1]!];
+	const units = Array.from({ length: 20 }, (_, u) => ({ ...unit, id: crypto.randomUUID(), name: `Unit ${u + 1}`, sortOrder: u + 2, downstreamNodeId: gauge.id }));
+	m.nodes = [gauge, ...units];
+	m.transfers = [];
+	// Crop 30 is first in the table but smallest, so the dialog's area order shows.
+	m.crops = Array.from({ length: 30 }, (_, i) => ({
+		id: crypto.randomUUID(),
+		name: BIG_NAMES[i] ?? `Crop ${String(i + 1).padStart(2, '0')}`,
+		cropFactor: Array.from({ length: 12 }, (_, mo) => Math.round((0.3 + 0.5 * Math.abs(Math.sin((mo + i) / 3))) * 100) / 100)
+	}));
+	m.cropAreas = m.crops.flatMap((c, i) => {
+		const k = 1 + (i % 4);
+		const total = Math.round(4_000_000 / (i + 1) ** 1.3);
+		return Array.from({ length: k }, (_, j) => ({ nodeId: units[(i * 3 + j * 7) % 20]!.id as string, cropId: c.id, areaM2: Math.round(total / k) }));
+	});
+	m.crops.unshift(m.crops.pop()!);
+	await putModel(page.request, project.id, m);
+	return project;
+}
+
+test.describe('a big catchment', () => {
+	test('wide: crops largest first, the effect on demand beside them in view, units folded, the dialog itself never scrolls', async ({ page, owner }) => {
+		void owner;
+		const project = await seedBig(page);
+		await page.setViewportSize({ width: 1440, height: 960 });
+		await page.goto(`/projects/${project.id}?tab=crops`);
+		await page.getByRole('button', { name: 'Load crop factors…' }).click();
+		const d = dialog(page);
+		await expect(d.getByRole('button', { name: /^Apply \d+ crops$/ })).toBeEnabled();
+		// Largest planted area first: Citrus (400 ha) leads, Crop 30 (first in the table, smallest) is last.
+		const names = d.locator('.crop .name');
+		await expect(names).toHaveCount(30);
+		await expect(names.first()).toHaveText('Citrus');
+		await expect(names.last()).toHaveText('Crop 30');
+		await expect(d.locator('.crop .area').first()).toHaveText('400 ha');
+		// The effect on demand and the actions are on the first screen; the steps scroll in their own column.
+		const review = d.getByRole('region', { name: 'Check the effect on demand' });
+		await expect(review.getByTestId('abstraction-change')).toBeInViewport();
+		await expect(d.getByRole('button', { name: 'Cancel' })).toBeInViewport();
+		const boxes = await d.evaluate((el) => {
+			const steps = el.querySelector<HTMLElement>('.steps')!;
+			return { dialog: el.scrollHeight - el.clientHeight, steps: steps.scrollHeight - steps.clientHeight };
+		});
+		expect(boxes.dialog).toBeLessThanOrEqual(0);
+		expect(boxes.steps).toBeGreaterThan(0);
+		// Twenty units: the eight biggest changes, the rest on request.
+		const unitRows = d.getByTestId('demand-difference').locator('tbody tr');
+		await expect(unitRows).toHaveCount(8);
+		const more = d.getByRole('button', { name: 'Show all 20 hydrological units' });
+		await expect(more).toHaveAttribute('aria-expanded', 'false');
+		await more.click();
+		await expect(unitRows).toHaveCount(20);
+		await expect(d.getByRole('button', { name: 'Show the 8 biggest changes' })).toHaveAttribute('aria-expanded', 'true');
+		// Sorted by the size of the change in abstraction.
+		const changes = await d.getByTestId('demand-difference').locator('tbody tr').evaluateAll((rows) =>
+			rows.map((r) => {
+				const c = r.querySelectorAll('td');
+				const n = (i: number) => Number((c[i]?.textContent ?? '').replace(/\s/g, ''));
+				return Math.abs(n(4) - n(3));
+			})
+		);
+		expect(changes).toEqual([...changes].sort((a, b) => b - a));
+	});
+
+	test('phone: one column, months in two rows of six, both measures as tables of their own, no sideways scroll', async ({ page, owner }) => {
+		void owner;
+		const project = await seedBig(page);
+		await resizeTo(page, { width: 390, height: 844 });
+		await page.goto(`/projects/${project.id}?tab=crops`);
+		await page.getByRole('button', { name: 'Load crop factors…' }).click();
+		const d = dialog(page);
+		const diff = d.getByRole('region', { name: 'Citrus: changes' });
+		await expect(diff.getByRole('row', { name: /^Current/ })).toHaveCount(2);
+		await expect(d.getByTestId('demand-difference').locator('table')).toHaveCount(2);
+		await expectNoSidewaysScroll(page);
+		// Nothing in the dialog scrolls sideways inside itself either: the month tables and the unit tables fit.
+		const wide = await d.evaluate((el) => [...el.querySelectorAll<HTMLElement>('.table-wrap')].filter((w) => w.scrollWidth > w.clientWidth + 1).length);
+		expect(wide).toBe(0);
+	});
+});
+
+test('the effect on demand says what to do while there is nothing to show; a11y at desktop and phone', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Crop library empty review');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await openLoad(page);
+	const d = dialog(page);
+	const review = d.getByRole('region', { name: 'Check the effect on demand' });
+	await expect(review).toContainText('Choose where at least one crop’s factors come from (step 3)');
+	await expect(d.getByText('Nothing to apply yet.')).toBeVisible();
+	await expectNoViolations(page);
+	await d.getByLabel('Load factors from, for Orchard').selectOption({ label: 'Citrus' });
+	await expect(d.getByText('1 of 1 crop will change. Save the model afterwards to keep it. Abstraction −40 %.')).toBeVisible();
+	await expect(review.getByTestId('abstraction-change')).toHaveText('−40 %');
+	await resizeTo(page, { width: 390, height: 844 });
+	await expectNoViolations(page);
 });

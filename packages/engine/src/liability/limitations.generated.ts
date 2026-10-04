@@ -4,13 +4,6 @@ import type { Limitation } from './limitations';
 
 export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 	{
-		"id": "N1",
-		"source": "finding",
-		"severity": "Medium",
-		"title": "Irrigation efficiency and return flow don't add up",
-		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
-	},
-	{
 		"id": "N2",
 		"source": "finding",
 		"severity": "High (dam-dominated farms)",

@@ -3,6 +3,7 @@
 // their ops, and the "Add a change" form's draft turned into a ScenarioOp.
 // The engine owns the rules (applyScenario, validateScenarioOps); this only
 // reads and builds its data. No Svelte, no API.
+import { findSystem, systemLabel } from '$lib/model/systems';
 import {
 	blankEwrRuleTable,
 	DEMAND_OBJECT_CATEGORY_LABEL,
@@ -221,7 +222,12 @@ const change = (spec: ValueSpec, was: unknown, now: unknown, name: (id: string) 
  */
 export function describeOp(op: ScenarioOp, before: ModelInput | null, names: ReadonlyMap<string, string> = new Map()): string {
 	const m = before?.model;
-	const nodeName = (id: string) => m?.nodes.find((n) => n.id === id)?.name ?? names.get(id) ?? UNKNOWN_NODE;
+	// A system's row, by id or (a document's) preset key (engine ≥ 1.72.0), shown as "Drip, 90 %".
+	const systemName = (id: string) => {
+		const s = m ? findSystem(m, id) : null;
+		return s ? systemLabel(s) : (names.get(id) ?? 'an irrigation system the base run doesn’t have');
+	};
+	const nodeName = (id: string) => m?.nodes.find((n) => n.id === id)?.name ?? names.get(id) ?? (m && findSystem(m, id) ? systemName(id) : UNKNOWN_NODE);
 	const cropName = (id: string) => m?.crops.find((c) => c.id === id)?.name ?? names.get(id) ?? UNKNOWN_CROP;
 	const transferName = (id: string) => {
 		const t = m?.transfers.find((x) => x.id === id);
@@ -255,7 +261,9 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'cropArea.set': {
 			const was = m?.cropAreas.filter((a) => a.nodeId === op.nodeId && a.cropId === op.cropId).reduce((s, a) => s + a.areaM2, 0);
 			const from = m ? `${ha(was ?? 0)} → ` : '→ ';
-			return `${nodeName(op.nodeId)}: ${cropName(op.cropId)} ${from}${op.areaM2 > 0 ? ha(op.areaM2) : 'none'}`;
+			// Its system on the unit (engine ≥ 1.72.0), when the op names one.
+			const sys = op.irrigationSystemId === undefined ? '' : op.irrigationSystemId === null ? ", on the crop's default system" : `, on ${systemName(op.irrigationSystemId)}`;
+			return `${nodeName(op.nodeId)}: ${cropName(op.cropId)} ${from}${op.areaM2 > 0 ? ha(op.areaM2) : 'none'}${sys}`;
 		}
 		case 'crop.add':
 			return `Add the crop “${op.crop.name}”`;
@@ -455,6 +463,8 @@ export interface OpDraft {
 	restriction: DroughtRestrictionRule | null;
 	cropId: string;
 	areaHa: string;
+	/** cropArea.set's system on the unit (engine ≥ 1.72.0): '' keeps its own, 'default' is the crop's, else a row id. */
+	systemId: string;
 	transferId: string;
 	patchId: string;
 	newKind: 'farm' | 'user';
@@ -534,6 +544,7 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		restriction: null,
 		cropId: '',
 		areaHa: '',
+		systemId: '',
 		transferId: '',
 		patchId: '',
 		newKind: 'farm',
@@ -717,7 +728,13 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				break;
 			}
 			case 'cropArea.set':
-				op = { op: 'cropArea.set', nodeId: need(d.nodeId, 'a hydrological unit'), cropId: need(d.cropId, 'a crop'), areaM2: number(d.areaHa, 'the area', { scale: 1 / 10_000 })! };
+				op = {
+					op: 'cropArea.set',
+					nodeId: need(d.nodeId, 'a hydrological unit'),
+					cropId: need(d.cropId, 'a crop'),
+					areaM2: number(d.areaHa, 'the area', { scale: 1 / 10_000 })!,
+					...(d.systemId === '' ? {} : { irrigationSystemId: d.systemId === 'default' ? null : d.systemId })
+				};
 				break;
 			case 'crop.add': {
 				const name = d.cropName.trim();

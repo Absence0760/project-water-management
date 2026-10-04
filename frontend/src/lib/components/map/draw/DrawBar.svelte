@@ -21,6 +21,8 @@
 	import { cutText, type Draft } from './draft.svelte';
 	import { draftProblem, DRAW_CHOICES } from './shape';
 	import DelineateChoice from '../DelineateChoice.svelte';
+	import DelineationLines from '../DelineationLines.svelte';
+	import type { KeyItem } from '../mapList';
 
 	let {
 		draft,
@@ -34,6 +36,7 @@
 		delineating = false,
 		tracing = false,
 		onsubcatchments,
+		lines = null,
 		minOccurrence = $bindable(25)
 	}: {
 		draft: Draft;
@@ -52,6 +55,8 @@
 		tracing?: boolean;
 		/** Delineating: switch to sub-catchments, one per click (the choice in the bar; issue #374). */
 		onsubcatchments?: () => void;
+		/** Delineating: the lines on the map in words (mapList.ts delineationLines): the terrain channels, and the river network while it is on. */
+		lines?: KeyItem[] | null;
 		/** Tracing: the share of observations (%) a cell must be water in. */
 		minOccurrence?: MinOccurrence;
 	} = $props();
@@ -71,6 +76,8 @@
 	// Use my location: on a phone (a coarse pointer or a narrow window) with geolocation, asked only when tapped.
 	const phone = typeof matchMedia === 'function' && (matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 700px)').matches);
 	const canLocate = phone && typeof navigator !== 'undefined' && 'geolocation' in navigator;
+	/** Snapping with a mouse: Alt places one corner exactly (said on the Snap label, its tooltip and read with it). */
+	const altTip = $derived(draft.snapOn && !phone ? `Hold Alt to place one ${draft.shape === 'point' ? 'point' : corner.one} exactly.` : null);
 	let locating = $state(false);
 	let locateError = $state<string | null>(null);
 	function locate() {
@@ -107,8 +114,8 @@
 		}
 		if (draft.shape === 'point' && delineating) {
 			return draft.coords.length
-				? `Drag the point onto the river if it missed, then Delineate…`
-				: `${phone ? 'Tap' : 'Click'} a red line (the elevation model’s channel) at the catchment’s outlet, or just below a dam wall.`;
+				? `Drag the point onto a terrain channel if it missed, then Delineate…`
+				: `${phone ? 'Tap' : 'Click'} a terrain channel at the catchment’s outlet, or just below a dam wall. The catchment follows the terrain: all the land that drains to that point.`;
 		}
 		if (draft.shape === 'point') {
 			return draft.coords.length
@@ -117,8 +124,8 @@
 		}
 		if (draft.phase === 'drawing') {
 			return draft.shape === 'polygon'
-				? `${phone ? 'Tap' : 'Click'} the map to add each corner; ${phone ? 'tap' : 'click'} the first corner (or Finish) to close the shape.`
-				: `${phone ? 'Tap' : 'Click'} the map to add each point along it; ${phone ? 'tap' : 'click'} the last point again (or Finish) to end the line.`;
+				? `${phone ? 'Tap' : 'Click'} to add each corner; ${phone ? 'tap' : 'click'} the first one (or Finish) to close the shape.`
+				: `${phone ? 'Tap' : 'Click'} to add each point; ${phone ? 'tap' : 'click'} the last one again (or Finish) to end the line.`;
 		}
 		return `Drag a ${corner.one} to move it, ${phone ? 'tap' : 'click'} an edge’s middle to add one, pick a ${corner.one} and press Delete to remove it.`;
 	});
@@ -133,6 +140,8 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Escape cancels from any control inside; each control is itself interactive) -->
 <section class="draw-bar" aria-labelledby="{uid}-h" data-testid="map-draw-bar" data-phase={draft.phase} {onkeydown}>
+	<!-- The bar's width (a container), not the window's, decides whether it fits on one line. -->
+	<div class="bar-in">
 	<div class="bar-head">
 		{#if draft.mode === 'draw'}
 			<h2 class="bar-h" id="{uid}-h"><label for="{uid}-what">Drawing</label></h2>
@@ -163,27 +172,30 @@
 		{/if}
 	</div>
 	<p class="how small" data-testid="map-draw-how">{howTo}</p>
+	{#if delineating && lines?.length && mapReady}<div class="row-full"><DelineationLines {lines} /></div>{/if}
 	<p class="said small muted" role="status" data-testid="map-draw-said">{draft.said}</p>
 	{#if draft.traced}
-		<p class="small" data-testid="map-trace-source">
+		<p class="small row-full" data-testid="map-trace-source">
 			Traced from {draft.traced.dataset}: water in at least {draft.traced.minOccurrence} % of the observations, about {areaText(draft.traced.areaM2)}{draft.tracedEdited ? ', then adjusted' : ''}.
 			{#if draft.traced.attribution && draft.traced.attribution !== 'synthetic'}{draft.traced.attribution}{/if}
 			A proposal: check it against the map before you save it.
 		</p>
 	{/if}
 	{#if split && 'parts' in split}
-		<p class="small" data-testid="map-split-parts">Cut in two: {cutText(split.parts)}.</p>
+		<p class="small row-full" data-testid="map-split-parts">Cut in two: {cutText(split.parts)}.</p>
 	{/if}
 	{#if canSnap}
 		<div class="snap small">
-			<label><input type="checkbox" bind:checked={draft.snapOn} data-testid="map-snap" /> Snap to features</label>
+			<!-- The Alt tip (mouse only) rides on the label (its tooltip, and read with it) so the bar keeps to one line. -->
+			<label title={altTip}
+				><input type="checkbox" bind:checked={draft.snapOn} data-testid="map-snap" /> Snap to features{#if altTip}<span class="alt-tip muted" data-testid="map-snap-alt"><span aria-hidden="true">(Alt: exact)</span><span class="visually-hidden">{altTip}</span></span>{/if}</label
+			>
 			{#if canFollow}<label><input type="checkbox" bind:checked={draft.follow} disabled={!draft.snapOn} data-testid="map-follow" /> Follow edges</label>{/if}
-			{#if draft.snapOn && !phone}<span class="muted">Hold Alt to place one {draft.shape === 'point' ? 'point' : corner.one} exactly.</span>{/if}
 		</div>
 	{/if}
-	{#if problem && (draft.phase === 'review' || draft.coords.length)}<p class="problem small" data-testid="map-draw-problem">{problem}</p>{/if}
-	{#if locateError}<p class="problem small" role="alert">{locateError}</p>{/if}
-	{#if error}<p class="problem small" role="alert" data-testid="map-draw-error">{error}</p>{/if}
+	{#if problem && (draft.phase === 'review' || draft.coords.length)}<p class="problem small row-full" data-testid="map-draw-problem">{problem}</p>{/if}
+	{#if locateError}<p class="problem small row-full" role="alert">{locateError}</p>{/if}
+	{#if error}<p class="problem small row-full" role="alert" data-testid="map-draw-error">{error}</p>{/if}
 	<div class="bar-actions">
 		{#if canLocate && draft.mode === 'place'}
 			<button type="button" class="btn btn-sm" onclick={locate} disabled={locating} data-testid="map-use-location">{locating ? 'Finding you…' : 'Use my location'}</button>
@@ -221,16 +233,44 @@
 			</button>
 		{/if}
 	</div>
+	</div>
 </section>
 
 <style>
 	.draw-bar {
-		display: grid;
-		gap: 0.3rem;
+		container: draw-bar / inline-size;
 		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-sm);
 		background: var(--surface);
+	}
+	.bar-in {
+		display: grid;
+		gap: 0.3rem;
+	}
+	/* Wide enough (a desktop map card), one line: what, how, snapping, the buttons; the hint takes what's left and wraps
+	   within it; the buttons drop to a second line only when the hint can't keep 16rem. Notes (problems, a trace's source,
+	   the delineation's lines) take their own line under it. */
+	@container draw-bar (min-width: 46rem) {
+		.bar-in {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 0.3rem 0.75rem;
+		}
+		.how {
+			flex: 1 1 16rem;
+		}
+		.row-full {
+			order: 1;
+			flex-basis: 100%;
+		}
+		.bar-actions {
+			margin-left: auto;
+		}
+	}
+	.alt-tip {
+		margin-left: 0.3rem;
 	}
 	.bar-head {
 		display: flex;

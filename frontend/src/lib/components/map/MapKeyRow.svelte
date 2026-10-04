@@ -64,7 +64,11 @@
 			<span class="key-group">
 				<span class="key-h">{g.label}</span>
 				{#each g.items as k (g.label + k.label)}
-					<span class="key-item"><span class="sw sw-{k.swatch}" style:--c={k.colour} aria-hidden="true"></span>{k.label}</span>
+					<span class="key-item" class:noted={!!k.note} data-key-item={k.label}
+						><span class="sw sw-{k.swatch}" style:--c={k.colour} aria-hidden="true"></span><span
+							>{k.label}{#if k.note}<span class="muted">: {k.note}</span>{/if}</span
+						></span
+					>
 				{/each}
 			</span>
 		{/each}
@@ -200,6 +204,14 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
+	}
+	/* An entry that says what it is for (the terrain channels, the river network beside them) takes its own line. */
+	.key-item.noted {
+		flex-basis: 100%;
+		align-items: baseline;
+	}
+	.key-item.noted .sw {
+		align-self: center;
 	}
 	/* Each swatch drawn as the map draws its kind, in the colour mapStyle gives it (--c). */
 	.sw {

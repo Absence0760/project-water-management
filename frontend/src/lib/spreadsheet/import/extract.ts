@@ -6,7 +6,7 @@
 // Python's project.json key for key and value for value, and `notes` are its
 // `note:` / `WARNING:` lines, same text, same order (the parity tests check
 // both). `unmapped` is TypeScript-only (plan.md 1b).
-import type { CalibrationParams, DemandObject, FlowShareMethod, NetworkNode, ProjectModel, ProjectSettings } from '@water-management/engine';
+import { DEFAULT_IRRIGATION_SYSTEMS, type CalibrationParams, type DemandObject, type FlowShareMethod, type IrrigationSystemDef, type NetworkNode, type ProjectModel, type ProjectSettings } from '@water-management/engine';
 import type { WorkbookSource } from './source';
 import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
@@ -215,6 +215,9 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 			cropAreas.push({ nodeId: node, cropId: id, areaM2: a });
 		}
 	}
+	// Each planting on its unit's irrigation system (engine ≥ 1.72.0): the workbook has one efficiency per farm,
+	// 1 − its return flow (N1), so a SABI system when one has it, else a "Workbook, NN %" row of the project's own.
+	const irrigationSystems = plantingSystems(cropAreas, new Map(nodes.map((n) => [n.id, n.irrigationEfficiency])));
 	const { gross, days } = readFarmGross(wb);
 	const demandObjects: DemandObject[] = [];
 	if (days !== null && days.length === 12 && days.every((d) => d > 0)) {
@@ -347,7 +350,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		name,
 		description: `Imported from ${opts.fileName.split('/').pop()}`,
 		settings: settings as ImportedSettings,
-		model: { nodes, crops: cropDefs, cropAreas, transfers: modelTransfers, ...(demandObjects.length ? { demandObjects } : {}) },
+		model: { nodes, crops: cropDefs, cropAreas, transfers: modelTransfers, ...(demandObjects.length ? { demandObjects } : {}), ...(irrigationSystems ? { irrigationSystems } : {}) },
 		series: flow.series
 	};
 	return { project, notes: report.notes, unmapped: report.unmapped };
@@ -361,4 +364,26 @@ function februaryDays(wb: B023Workbook): number {
 	if (i < 0) return 28.25;
 	if (i >= days.length) throw new InvalidWorkbookError('AppSettings has fewer month days than month labels', 'AppSettings');
 	return days[i]!;
+}
+
+/**
+ * The irrigation systems a workbook's plantings run on (engine ≥ 1.72.0), as
+ * extract_project.py's planting_systems: the SABI table (its preset keys as
+ * ids, the project's rows once saved) plus a row "Workbook, NN %" for each
+ * farm efficiency none of them has, in the order the plantings first need
+ * them. Sets each planting's system to its farm's; undefined without plantings.
+ */
+export function plantingSystems(cropAreas: ProjectModel['cropAreas'], efficiencyOf: ReadonlyMap<string, number>): IrrigationSystemDef[] | undefined {
+	if (!cropAreas.length) return undefined;
+	const table: IrrigationSystemDef[] = DEFAULT_IRRIGATION_SYSTEMS.map((s) => ({ ...s }));
+	for (const a of cropAreas) {
+		const e = efficiencyOf.get(a.nodeId) ?? 1;
+		let row = table.find((s) => s.efficiency === e);
+		if (!row) {
+			row = { id: `workbook-${e}`, name: `Workbook, ${Math.round(e * 1000) / 10} %`, efficiency: e, preset: null, sortOrder: table.length };
+			table.push(row);
+		}
+		a.irrigationSystemId = row.id;
+	}
+	return table;
 }

@@ -1714,6 +1714,8 @@ function demandObjectSection(b: EvidenceRunInput, a: EvidenceInput['application'
 			enabled: o.enabled,
 			sizing: o.sizing,
 			monthlyM3Day: o.sizing === 'monthly' && Array.isArray(o.monthlyM3Day) ? [...o.monthlyM3Day] : null,
+			// Its entry unit (engine ≥ 1.72.0), only when not m³/day, so a pack without one reads as it did.
+			...(o.sizing === 'monthly' && o.monthlyUnit ? { monthlyUnit: o.monthlyUnit } : {}),
 			count: o.sizing === 'perUnit' ? o.count : null,
 			litresPerUnitDay: o.sizing === 'perUnit' ? o.litresPerUnitDay : null,
 			lossPct: o.sizing === 'perUnit' ? o.lossPct : 0,

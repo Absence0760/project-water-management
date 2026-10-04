@@ -104,8 +104,8 @@ export interface PlanNode {
 	deadStorageM3: number;
 	/** Irrigation application efficiency e, 0 < e ≤ 1 (audit N1): abstraction demand D = F / e. */
 	irrigationEfficiency: number;
-	/** Share β of the application losses (1 − e)·G that returns to the river the same day (audit N1). */
-	lossReturnFraction: number;
+	/** Share r of the water supplied G that returns to the river the same day, at most the losses' 1 − e (engine ≥ 1.71.0). */
+	returnFlowFraction: number;
 	/**
 	 * Dam surface area when full (m²), as entered or estimated (7.2 × capacity^0.77,
 	 * engine ≥ 1.63.0; capacity ÷ 3 m before); the area on a day is A = full × (Q[t−1] / capacity)^b
@@ -1495,7 +1495,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const P = avail - Gs;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
-			// The crop gets e·G; of the losses (1 − e)·G, the share β returns below the farm (audit N1).
+			// The crop gets e·G; r·G of the water supplied returns below the farm, out of the losses (1 − e)·G (engine ≥ 1.71.0).
 			// With demand objects (engine ≥ 1.7.0) G is split between the crops and the objects
 			// first, and each object returns its share of its own part.
 			let T: number;
@@ -1504,15 +1504,15 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const got = r.objectSupplied!;
 				const cropAsk = riv.cropsOnRiver ? 0 : rp ? rF![i]! / node.irrigationEfficiency : Dc;
 				const Gc = splitSupply(G, cropAsk, rp ? rDamObjs![i]! : damObjs[i]!, t, got);
-				T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * Gc;
+				T = node.returnFlowFraction * Gc;
 				for (let k = 0; k < got.length; k++) T += objs.returnShare[k]! * got[k]![t]!;
 			} else if (objs) {
 				const got = r.objectSupplied!;
 				// Split against the restricted demands when the rule is on (engine ≥ 1.54.0).
 				const Gc = rp ? splitSupply(G, rF![i]! / node.irrigationEfficiency, rObjs![i]!, t, got) : splitSupply(G, Dc, objs, t, got);
-				T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * Gc;
+				T = node.returnFlowFraction * Gc;
 				for (let k = 0; k < got.length; k++) T += objs.returnShare[k]! * got[k]![t]!;
-			} else T = node.lossReturnFraction * (1 - node.irrigationEfficiency) * G;
+			} else T = node.returnFlowFraction * G;
 			// Seepage leaves the dam below the wall and joins the outflow the same
 			// day (N2), all of it unless a share is set to be lost (WP-3.5).
 			const SpRet = node.seepageReturn === undefined ? Sp : Sp * node.seepageReturn;
@@ -1557,7 +1557,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					const pl = rt.pumpLimited[a];
 					if (pl) pl[t] = td.pumpLimited[a]!;
 					Griver += v;
-					if (x.obj < 0) back += node.lossReturnFraction * (1 - node.irrigationEfficiency) * v;
+					if (x.obj < 0) back += node.returnFlowFraction * v;
 					else {
 						r.objectSupplied![x.obj]![t] = v;
 						back += objs!.returnShare[x.obj]! * v;

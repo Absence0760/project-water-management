@@ -23,6 +23,7 @@ import {
 	DEVELOPMENT_DEFAULTS,
 	ENGINE_VERSION,
 	IRRIGATION_SYSTEMS,
+	NEW_FARM_IRRIGATION_SYSTEM,
 	NEW_FARM_IRRIGATION,
 	USER_DEFAULTS,
 	BOREHOLE_DEFAULTS,
@@ -85,7 +86,7 @@ const waterYearOfDay = (i: number) => {
 const FITTED_AT = '2025-01-15T09:00:00.000Z';
 
 // Crop factors per water-year month (Oct … Sep). Indicative values for demos.
-const CROPS: Record<string, number[]> = {
+export const CROPS: Record<string, number[]> = {
 	Citrus: [0.65, 0.7, 0.7, 0.7, 0.7, 0.65, 0.6, 0.55, 0.55, 0.55, 0.6, 0.65],
 	Apples: [0.45, 0.65, 0.85, 0.95, 0.95, 0.8, 0.55, 0.3, 0.25, 0.25, 0.3, 0.35],
 	'Wine grapes': [0.3, 0.45, 0.6, 0.65, 0.6, 0.45, 0.3, 0.2, 0.2, 0.2, 0.2, 0.25],
@@ -97,9 +98,9 @@ const CROPS: Record<string, number[]> = {
 
 // A-pan evaporation, mm per water-year month (Oct … Sep).
 const APAN_WINTER_RAIN = [160, 210, 250, 260, 210, 180, 110, 70, 50, 50, 70, 110];
-const APAN_SUMMER_RAIN = [190, 200, 210, 200, 170, 160, 120, 90, 70, 80, 120, 170];
+export const APAN_SUMMER_RAIN = [190, 200, 210, 200, 170, 160, 120, 90, 70, 80, 120, 170];
 
-const panPreset = (id: string) => [...PAN_COEFFICIENT_PRESETS.find((p) => p.id === id)!.values] as ProjectSettings['panCoefficient'];
+export const panPreset = (id: string) => [...PAN_COEFFICIENT_PRESETS.find((p) => p.id === id)!.values] as ProjectSettings['panCoefficient'];
 
 type IrrigationSystem = (typeof IRRIGATION_SYSTEMS)[number]['id'];
 
@@ -127,8 +128,8 @@ interface FarmSpec {
 	divertM3Day?: number;
 	/** Irrigation system: its SABI 2021 efficiency (IRRIGATION_SYSTEMS) is the farm's (audit N1). Default NEW_FARM_IRRIGATION. */
 	system?: IrrigationSystem;
-	/** Share of the application losses returning to the river. Default NEW_FARM_IRRIGATION's. */
-	lossReturn?: number;
+	/** Share of the water supplied returning to the river the same day, at most 1 − efficiency (engine ≥ 1.71.0). Default NEW_FARM_IRRIGATION's, capped there. */
+	returnFlow?: number;
 	/** hectares per crop */
 	crops?: Record<string, number>;
 	/** The crops from a river abstraction of their own beside the dam (engine ≥ 1.65.0, docs/model.md §2.7j), not the dam. */
@@ -174,7 +175,7 @@ interface TransferSpec {
 
 type Period = [start: string, end: string];
 
-interface CatchmentSpec {
+export interface CatchmentSpec {
 	key: string;
 	name: string;
 	description: string;
@@ -232,7 +233,7 @@ export function inputOf(ex: ExampleProject): ModelInput {
 	};
 }
 
-function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
+export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 	const nodeId = (name: string) => id(spec.key, `node:${name}`);
 	const cropNames = [...new Set(spec.farms.flatMap((f) => Object.keys(f.crops ?? {})))];
 	const crops: CropDef[] = cropNames.map((name) => ({ id: id(spec.key, `crop:${name}`), name, cropFactor: CROPS[name]! }));
@@ -259,7 +260,7 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			damMinPct: f.damMin ?? 0.15,
 			divertCapacityM3Day: f.divertM3Day ?? 0,
 			irrigationEfficiency: f.system ? efficiencyOf(f.system) : NEW_FARM_IRRIGATION.irrigationEfficiency,
-			lossReturnFraction: f.lossReturn ?? NEW_FARM_IRRIGATION.lossReturnFraction,
+			returnFlowFraction: f.returnFlow ?? Math.min(NEW_FARM_IRRIGATION.returnFlowFraction, 1 - (f.system ? efficiencyOf(f.system) : NEW_FARM_IRRIGATION.irrigationEfficiency)),
 			// Full-supply area from a surveyed mean depth (audit N2); drives dam evaporation and rain on the dam.
 			damAreaFullM2: cap > 0 && depth !== null ? Math.round(cap / depth) : null,
 			damAreaExponent: DAM_AREA_EXPONENT,
@@ -281,7 +282,8 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 		};
 	});
 	const cropAreas = spec.farms.flatMap((f) =>
-		Object.entries(f.crops ?? {}).map(([crop, ha]) => ({ nodeId: nodeId(f.name), cropId: id(spec.key, `crop:${crop}`), areaM2: ha * 10_000 }))
+		// Each planting on its farm's irrigation system (engine ≥ 1.72.0), named by its SABI preset key: the project's row for it.
+		Object.entries(f.crops ?? {}).map(([crop, ha]) => ({ nodeId: nodeId(f.name), cropId: id(spec.key, `crop:${crop}`), areaM2: ha * 10_000, irrigationSystemId: f.system ?? NEW_FARM_IRRIGATION_SYSTEM }))
 	);
 	const transfers: Transfer[] = (spec.transfers ?? []).map((t, i) => ({
 		id: id(spec.key, `transfer:${i}`),
@@ -511,10 +513,10 @@ const KLEINBERG: CatchmentSpec = {
 	fit: { budget: 300, seed: 7 },
 	farms: [
 		{ name: 'Kleinberg Weir', kind: 'gauge', into: null },
-		{ name: 'Rustenvrede', into: 'Kleinberg Weir', areaKm2: 14, damM3: 250_000, damDepthM: 4, system: 'micro', lossReturn: 0.3, crops: ha({ Citrus: 45, Pasture: 20 }) },
-		{ name: 'Bergwater', into: 'Rustenvrede', areaKm2: 18, damM3: 400_000, damDepthM: 5, system: 'drip', lossReturn: 0.3, crops: ha({ Apples: 60, 'Wine grapes': 25 }) },
-		{ name: 'Rooikloof', into: 'Bergwater', areaKm2: 22, damM3: 600_000, damDepthM: 6, upstreamToDam: 0, divertM3Day: 5000, system: 'micro', lossReturn: 0.3, crops: ha({ Apples: 40 }) },
-		{ name: 'Doornhoek', into: 'Rustenvrede', areaKm2: 16, damM3: 180_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2500, system: 'drip', lossReturn: 0.3, crops: ha({ 'Wine grapes': 50, Vegetables: 10 }) }
+		{ name: 'Rustenvrede', into: 'Kleinberg Weir', areaKm2: 14, damM3: 250_000, damDepthM: 4, system: 'micro', returnFlow: 0.05, crops: ha({ Citrus: 45, Pasture: 20 }) },
+		{ name: 'Bergwater', into: 'Rustenvrede', areaKm2: 18, damM3: 400_000, damDepthM: 5, system: 'drip', returnFlow: 0.03, crops: ha({ Apples: 60, 'Wine grapes': 25 }) },
+		{ name: 'Rooikloof', into: 'Bergwater', areaKm2: 22, damM3: 600_000, damDepthM: 6, upstreamToDam: 0, divertM3Day: 5000, system: 'micro', returnFlow: 0.05, crops: ha({ Apples: 40 }) },
+		{ name: 'Doornhoek', into: 'Rustenvrede', areaKm2: 16, damM3: 180_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2500, system: 'drip', returnFlow: 0.03, crops: ha({ 'Wine grapes': 50, Vegetables: 10 }) }
 	],
 	transfers: [
 		// Doornhoek first; Rustenvrede gets what the upper dam can still spare.
@@ -551,7 +553,7 @@ const DROEVLEI: CatchmentSpec = {
 	farms: [
 		{ name: 'Droëvlei Gauge', kind: 'gauge', into: null },
 		{ name: 'Kareebos', into: 'Droëvlei Gauge', areaKm2: 12, damM3: 60_000, damDepthM: 2.5, system: 'movable', crops: ha({ Citrus: 110, Lucerne: 40 }) },
-		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, system: 'surface', lossReturn: 0.6, crops: ha({ Lucerne: 80 }) },
+		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, system: 'surface', returnFlow: 0.18, crops: ha({ Lucerne: 80 }) },
 		{ name: 'Brakfontein', into: 'Sandkraal', areaKm2: 9, damM3: 80_000, damDepthM: 3, upstreamToDam: 0, divertM3Day: 1000, system: 'micro', crops: ha({ Citrus: 70 }) }
 	]
 };

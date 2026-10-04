@@ -1,16 +1,14 @@
 // The app-wide two-step sign-in prompt (issue #282; docs/security.md §
-// Two-step sign-in, docs/ui.md § Invitations, the two-step sign-in banner). A project owner,
-// team admin or assessor without an authenticator, or with one but signed in
-// with a password only, is told so on every workspace page, not only on the
-// Account page or by the 403 of the action they tried. Two sources:
-//
-// - GET /auth/mfa, read once per signed-in account on the workspace (and fed
-//   by the Account page's own read): `required && !enrolled` → set it up;
-//   `required && enrolled && !sessionVerified` → sign in again.
-// - A `403 mfa_required` / `403 mfa_step_up` from any request (the API
-//   client's onError, wired in routes/+layout.svelte): the same two prompts,
-//   for whoever met one (an editor publishing to farmers needs it too,
-//   without `required`).
+// Two-step sign-in, docs/ui.md § Invitations, the two-step sign-in banner).
+// It shows only once an action was refused for want of a second factor (a
+// `403 mfa_required` / `403 mfa_step_up` from any request, the API client's
+// onError, wired in routes/+layout.svelte): set it up, or sign in again with
+// a code. A role that needs it (owner, team admin, assessor) is not told so
+// up front any more (the operator's decision, 2026-10-03): a project that
+// never does a protected action is never prompted, and one that does meets
+// the prompt at that action, which the API still refuses. GET /auth/mfa
+// (read by the layout and the Account page) only clears a refusal the status
+// now resolves.
 //
 // The banner itself (layout/MfaBanner.svelte) is its own chunk, loaded only
 // when there is something to say. Dismissing it lasts until the next refusal
@@ -39,12 +37,7 @@ export const mfaPrompt = $state<MfaPromptState>({ user: null, status: null, refu
 /** What the person still needs to do (dismissed or not), or nothing: the account menu's badge. Pure. */
 export function pendingKind(p: MfaPromptState, user: string | null): MfaPromptKind | null {
 	if (!user || p.user !== user) return null;
-	if (p.refused) return p.refused;
-	const s = p.status;
-	if (!s?.required) return null;
-	if (!s.enrolled) return 'setup';
-	if (!s.sessionVerified) return 'step-up';
-	return null;
+	return p.refused;
 }
 
 /** Which banner to show for this state, or none: the pending prompt unless it was dismissed. Pure. */

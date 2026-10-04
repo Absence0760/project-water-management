@@ -160,7 +160,7 @@ pnpm import:evaporation     # load the synthetic evaporation grid Settings → E
                              # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
                              # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
-pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
+pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]

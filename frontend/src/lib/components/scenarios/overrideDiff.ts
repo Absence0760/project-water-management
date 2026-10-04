@@ -49,6 +49,13 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 const sortedMonths = (ms: readonly number[]) => [...new Set(ms)].sort((a, b) => a - b);
 const label = (n: { name: string }) => `“${n.name || 'unnamed node'}”`;
 
+/** Each planting's own irrigation system (engine ≥ 1.72.0), per farm and crop; absent = the crop's default. */
+function systemMap(rows: readonly CropArea[]): Map<string, string> {
+	const m = new Map<string, string>();
+	for (const a of rows) if (a.irrigationSystemId != null && a.areaM2 > 0) m.set(`${a.nodeId} ${a.cropId}`, a.irrigationSystemId);
+	return m;
+}
+
 /** Crop areas summed per farm and crop (the editor keeps one row each; an old document may have duplicates). */
 function areaMap(rows: readonly CropArea[], keep: (a: CropArea) => boolean = () => true): Map<string, number> {
 	const m = new Map<string, number>();
@@ -77,12 +84,29 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		const now = aCrops.get(c.id);
 		if (!now) continue;
 		for (const f of CROP_SET_FIELDS) {
-			const was = f === 'irrigationEfficiency' ? (c[f] ?? null) : c[f];
-			const v = f === 'irrigationEfficiency' ? (now[f] ?? null) : now[f];
+			// Absent and null are the same for a crop's system (engine ≥ 1.72.0) and its own efficiency (before).
+			const optional = f === 'irrigationEfficiency' || f === 'irrigationSystemId';
+			const was = optional ? (c[f] ?? null) : c[f];
+			const v = optional ? (now[f] ?? null) : now[f];
 			if (!same(was, v)) ops.push({ op: 'crop.set', cropId: c.id, field: f, value: plain(v) } as ScenarioOp);
 		}
 	}
-	for (const c of after.crops) if (!bCrops.has(c.id)) ops.push({ op: 'crop.add', crop: { id: c.id, name: c.name, cropFactor: [...c.cropFactor], ...(c.irrigationEfficiency != null ? { irrigationEfficiency: c.irrigationEfficiency } : {}) } });
+	for (const c of after.crops)
+		if (!bCrops.has(c.id))
+			ops.push({
+				op: 'crop.add',
+				crop: {
+					id: c.id,
+					name: c.name,
+					cropFactor: [...c.cropFactor],
+					...(c.irrigationSystemId != null ? { irrigationSystemId: c.irrigationSystemId } : {}),
+					...(c.irrigationEfficiency != null ? { irrigationEfficiency: c.irrigationEfficiency } : {})
+				}
+			});
+
+	// --- the irrigation-systems table (engine ≥ 1.72.0): the project's, not a scenario's to change
+	if (JSON.stringify(b.irrigationSystems ?? null) !== JSON.stringify(after.irrigationSystems ?? b.irrigationSystems ?? null))
+		unsupported.push("The irrigation systems' table: a scenario can't change it. Put a crop or a unit's crop on another system instead, or change the table in the project.");
 
 	// --- nodes removed: node.remove (the engine re-links what drained into them, as the editor does)
 	const removed = new Set(b.nodes.filter((n) => !aNodes.has(n.id)).map((n) => n.id));
@@ -183,11 +207,16 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	const gone = (a: CropArea) => removed.has(a.nodeId) || removedCrops.has(a.cropId);
 	const wasArea = areaMap(b.cropAreas, (a) => !gone(a));
 	const nowArea = areaMap(after.cropAreas, (a) => !removedCrops.has(a.cropId));
+	// A planting's own irrigation system (engine ≥ 1.72.0) goes with its area in the one op.
+	const wasSystem = systemMap(b.cropAreas);
+	const nowSystem = systemMap(after.cropAreas);
 	for (const key of new Set([...wasArea.keys(), ...nowArea.keys()])) {
 		const areaM2 = nowArea.get(key) ?? 0;
-		if (areaM2 === (wasArea.get(key) ?? 0)) continue;
+		const sys = nowSystem.get(key) ?? null;
+		const sysChanged = areaM2 > 0 && sys !== (wasSystem.get(key) ?? null);
+		if (areaM2 === (wasArea.get(key) ?? 0) && !sysChanged) continue;
 		const [nodeId, cropId] = key.split(' ') as [string, string];
-		ops.push({ op: 'cropArea.set', nodeId, cropId, areaM2 });
+		ops.push({ op: 'cropArea.set', nodeId, cropId, areaM2, ...(sysChanged ? { irrigationSystemId: sys } : {}) });
 	}
 
 	// --- transfers: remove, add, then each changed field
@@ -350,8 +379,9 @@ function sameModel(x: ProjectModel, y: ProjectModel): boolean {
 		};
 		return JSON.stringify({
 			nodes: byId(m.nodes, node),
-			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor, c.irrigationEfficiency ?? null]),
+			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor, c.irrigationSystemId ?? null, c.irrigationEfficiency ?? null]),
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
+			systems: [...systemMap(m.cropAreas)].sort(),
 			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam, t.lossReturnPct ?? 0, t.lossReturnNodeId ?? null]),
 			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),
 			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1))),

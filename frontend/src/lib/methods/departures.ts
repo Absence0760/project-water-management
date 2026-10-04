@@ -38,7 +38,7 @@ export const DEPARTURES: readonly Departure[] = [
 	{
 		ids: ['N1'],
 		was: 'Water that returned to the river from irrigation was taken off the crop’s own requirement, so a crop reported as fully supplied was short.',
-		now: 'Each hydrological unit has an irrigation efficiency: abstraction is the crop’s requirement divided by it, and a set share of the losses returns to the river.'
+		now: 'Each hydrological unit has an irrigation efficiency: abstraction is the crop’s requirement divided by it, and a set share of the water supplied, at most the losses, returns to the river.'
 	},
 	{
 		ids: ['N2'],

@@ -27,7 +27,7 @@ const Kp = defaultProjectSettings().panCoefficient;
  * calibration problem scores the whole run.
  */
 function catchment(settings: ModelInput['settings'] = {}, evap?: DailySeries): ModelInput {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0.5, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, lossReturnFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0.5, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 0.8, returnFlowFraction: 0, damAreaFullM2: 0, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const rain = Array.from({ length: DAYS }, (_, i) => (i % 17 === 0 ? 40 : i % 5 === 0 ? 1 : 0));
 	return {
 		settings: { runoffModel: 'gr4j', apanMm: apan as never, ...settings },

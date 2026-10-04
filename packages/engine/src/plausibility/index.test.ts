@@ -27,7 +27,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -39,7 +39,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 function input(observed: (sim: number[]) => (number | null)[] | null, series: Partial<ModelInput['series']> = {}): { input: ModelInput; natural: number[] } {
 	const natural = Array.from({ length: days }, (_, t) => 2000 + 1500 * Math.sin((2 * Math.PI * t) / 365));
 	const nodes = [
-		node('A', { downstreamNodeId: 'B', pctRunoffToDam: 1, damCapacityM3: 50_000, damInitialPct: 0.5, damAreaFullM2: 10_000, irrigationEfficiency: 0.5, lossReturnFraction: 0.5 }),
+		node('A', { downstreamNodeId: 'B', pctRunoffToDam: 1, damCapacityM3: 50_000, damInitialPct: 0.5, damAreaFullM2: 10_000, irrigationEfficiency: 0.5, returnFlowFraction: 0.25 }),
 		node('B', { downstreamNodeId: 'G', sortOrder: 1 }),
 		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
 	];

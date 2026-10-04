@@ -35,6 +35,7 @@
 		transfers = [],
 		selectedId = null,
 		onselect,
+		onopen,
 		editable = false,
 		onreparent,
 		colouring = null,
@@ -45,6 +46,8 @@
 		transfers?: Transfer[];
 		selectedId?: string | null;
 		onselect?: (id: string) => void;
+		/** A double-click on a node: open its form (the keyboard way is the node card's Edit). */
+		onopen?: (id: string) => void;
 		/** Allow dragging a node onto another to re-point "drains into". */
 		editable?: boolean;
 		onreparent?: (id: string, drainsInto: string) => void;
@@ -446,6 +449,7 @@
 				data-supply={sup?.band}
 				transform="translate({p.x},{p.y})"
 				onclick={() => !editable && onselect?.(n.id)}
+				ondblclick={() => onopen?.(n.id)}
 				onpointerdown={(e) => onDown(e, n.id)}
 				onpointermove={onMove}
 				onpointerup={onUp}

@@ -35,7 +35,7 @@ function farm(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -303,7 +303,7 @@ describe('fixed in 1.69.0, item 8: a run scoring years an automated fit left out
 // have no such guard.
 // Fix: in run.ts buildNetworkPlan (~line 1545), clamp each node fraction
 // (pctUpstreamToDam, pctRunoffToDam, damInitialPct, damMinPct, flowShareManual,
-// lossReturnFraction) to [0, 1] with a warning naming the unit and field, as
+// returnFlowFraction) to [0, 1] with a warning naming the unit and field, as
 // §2.2 does for settings; and extend §2.2 to say so.
 describe('fixed in 1.69.0, item 9: percent-style dam fractions ran as given, creating water', () => {
 	const run = (pct: number, init: number) => {

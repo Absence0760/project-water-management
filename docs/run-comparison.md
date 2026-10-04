@@ -392,7 +392,11 @@ bottom:
    series share nothing. Under the overlay a sentence reads the pair out over
    the days both runs have a value: mean A, mean B, mean B − A, the days B is
    higher and lower, and the day of the largest change (three significant
-   figures, so a small daily change doesn't round to 0). The charts behave
+   figures, so a small daily change doesn't round to 0). A day whose two
+   values differ by no more than float rounding (a relative 1e-9,
+   `SAME_VALUE_TOLERANCE`: the same water summed in another order) counts as
+   no change, so two runs that agree read "identical", not "higher on 10
+   days" with a largest change of 0. The charts behave
    like every daily chart: Earlier / Later and Shift+drag pan through the
    record, the last three years or the full period, and on a flow series the
    log scale and the m³/s ↔ m³/day switch (the read-out follows the unit). A
@@ -520,6 +524,13 @@ name**:
   *and* copied can't be matched, so it appears under "Only in run A / B".
 - **Reserve compliance** sites: the outlet with the outlet, a gauge by id,
   then by name.
+- **Irrigation systems** (engine ≥ 1.72.0, `diffModel` in `compare.ts`): the
+  project's table is matched by id, then by name, and a row is reported added,
+  removed, renamed or with its efficiency changed. A crop's default system is
+  a crop line ("irrigation system: … → …", replacing the old per-crop
+  irrigation efficiency line), and each planting's own system is compared per
+  (farm name, crop name). A unit's return flow reads "return flow (share of
+  water supplied)" (engine ≥ 1.71.0).
 - **Crop areas** are matched by (farm name, crop name). **Transfers** are
   matched by id, then by their "from → to" route. **Individual boreholes**
   (engine ≥ 0.36.0, WP-3.9) are matched by id, then by (node name, borehole
@@ -622,8 +633,10 @@ The fit record's "Forcing changed since fit" row reads the same label
 (model.md §2.10b).
 A model from a run saved before engine 0.16.0 is read as migration 006 stored
 it (`upgradeLegacyModel`: return flow % r becomes irrigation efficiency
-1 − r with every loss returning), so a project that only went through the
-migration shows no network line; the engine version line flags the change.
+1 − r with every loss returning; from engine 0.16.0 to 1.70.0 the share of
+the losses β becomes r = β(1 − e), and a crop's own efficiency becomes a
+system row "Imported, NN %"), so a project that only went through the
+migrations shows no network line; the engine version line flags the change.
 Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting

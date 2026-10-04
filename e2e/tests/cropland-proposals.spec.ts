@@ -77,6 +77,8 @@ test('an editor uses the parcels’ cultivated area as a crop’s planted area; 
 	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().endsWith(`/projects/${project.id}/model`));
 	await answerConfirm(page, true, /Set Orchard’s planted area on Upper farm from land cover\?\s*Orchard on Upper farm changes from 20 ha to [\d.,]+ ha, the cultivated area the land cover \(synthetic, synthetic 1\) shows in Upper farm’s parcels\./);
 	await expect(panel(page).getByTestId('cropland-notice')).toHaveText(/^Orchard’s planted area on Upper farm is now [\d.,]+ ha, from land cover\. Run the model to see its effect\.$/);
+	// Run model lives on Runs & results: the notice links there.
+	await expect(panel(page).getByTestId('cropland-notice').getByRole('link', { name: 'Run the model' })).toHaveAttribute('href', '?tab=runs');
 	await expect(row.getByRole('cell').last()).toHaveText('Saved');
 	// The Use button is gone: the keyboard lands on what happened (ProposalPanel's notice), not the top of the page.
 	await expect(panel(page).getByTestId('cropland-notice')).toBeFocused();
