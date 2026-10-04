@@ -3967,12 +3967,30 @@ user's demand could only be read one node form at a time.
   closing the modal); the crops' **Edit** opens the unit's
   [farm drawer](#farm-drawer) on Crops & demand. Edits go into the shared
   `ModelEditor` and are saved with the modal's save row.
+- **Paste from a spreadsheet and CSV** (`network/demandsPaste.ts`, the
+  [grid modal's paste](#grid-modal)): a block pasted into a month cell, or
+  **Paste from a spreadsheet…** under the table (editors), opens **Paste
+  demands**: rows matched by name (the demand's own name, or "Name (Unit)"
+  where two rows share it, "Crops (Upper farm)", `pasteNames`), months by
+  heading ("Oct", "October", "Oct (m³/day)") or by position from the cell,
+  so one copied row of 12 months fills a demand. Only a monthly object's and
+  a user's months take a paste: values on the crops or a per-unit object
+  are left out with a note naming them; a value below 0 stops the paste.
+  **Download the table as CSV** (everyone; `demands.csv`, `demandsCsv`) is
+  the table as shown: demand, unit, kind, water from, supply order, the
+  months and the mean in m³/day, Mm³/a, names defused. Its read-only
+  columns paste back without a note. The display unit is one pair of
+  constants in the table (`PASTE_SCALE`, `PASTE_UNIT`), what a unit picker
+  would set.
 - The months are before schedules, daily A-pan, rain, demand factors and
   restrictions, which a run applies day by day; the note under the table
   says so.
 - Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
+  `network/demandsPaste.test.ts` (names, matching, computed rows, the unit,
+  the CSV),
   `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
-  reloaded, Edit to the node form, a phone, axe).
+  reloaded, a paste previewed, applied and saved, the CSV download, Edit
+  to the node form, a phone, axe).
 
 ### Grid modal
 
@@ -4016,8 +4034,9 @@ the link goes to that tab with it open (`movedGridHref`;
   the same save row as the farm drawer (`ModelSaveRow`): status, reason,
   **Discard** (the save bar's), **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
   and **Close**.
-- **Paste from a spreadsheet** (issue #285): the node table and the
-  planted-areas grid take a block copied from Excel. Pasting more than one
+- **Paste from a spreadsheet** (issue #285): the node table, the
+  planted-areas and crop-factor grids and the [Demands grid](#demands-grid)
+  take a block copied from Excel. Pasting more than one
   cell into any of their inputs (a tab or a line break in it; one value stays
   the input's own paste) opens **Paste into the node table** / **Paste
   planted areas** (`model/GridPasteDialog.svelte`) with the block in its box;
@@ -4038,7 +4057,9 @@ the link goes to that tab with it open (`movedGridHref`;
   `paste/grid.ts` `mapPaste` places it: a heading row puts each column where
   its heading says (case and a last bracket, the unit, ignored: "Dam
   capacity (m³)", "Maize (white) (ha)"; a heading the grid hasn't got, such
-  as Total, is left out with a note); names in the first column put each row
+  as Total, is left out with a note, except the grid's own read-only
+  columns its CSV has, `mapPaste`'s `ignoreHeadings`, left out quietly so its
+  own CSV pastes back clean); names in the first column put each row
   on the row of that name, in any order, ignoring case but not brackets, so
   "Farm A (east)" and "Farm A (west)" stay apart (a name the grid hasn't got,
   or two rows share, is left out with a note; a name that is only a number
