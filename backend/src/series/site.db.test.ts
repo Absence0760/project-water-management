@@ -82,13 +82,13 @@ describe('a flow record’s site (084_gauge_records)', () => {
 	});
 
 	it('refuses a site that is not a gauge above the outlet, a rain series, or another project’s node (positive control above)', async () => {
-		expect((await site(owner, p.id, p.gaugeRecord, p.farm.id)).body.error).toMatch(/a record's site is a gauge node/);
+		expect((await site(owner, p.id, p.gaugeRecord, p.farm.id)).body.error).toMatch(/a record's site is a gauge$/);
 		expect((await site(owner, p.id, p.gaugeRecord, p.outlet.id)).body.error).toMatch(/that gauge is the outlet/);
 		expect((await site(owner, p.id, p.rainId, p.upper.id)).body.error).toMatch(/only an observed or logger flow record has a site/);
 		const other = await gaugedProject(owner, 'Other');
 		const cross = await site(owner, p.id, p.gaugeRecord, other.upper.id);
 		expect(cross.status).toBe(400);
-		expect(cross.body.error).toMatch(/no such node in this project/);
+		expect(cross.body.error).toMatch(/no such hydrological unit in this project/);
 		// Rain may still be told it is at the outlet (null): nothing to refuse.
 		expect((await site(owner, p.id, p.rainId, null)).status).toBe(200);
 		// The database holds both rules on its own (CHECK and the same-project trigger).

@@ -66,7 +66,7 @@ export function projectFileProblems(data: ProjectFile): string[] {
 			const site = data.model.nodes.find((n) => n.id === s.siteNodeId);
 			const what = `series ${s.kind}${s.name ? ` "${s.name}"` : ''}`;
 			if (s.kind !== 'flow_observed_m3s' && s.kind !== 'flow_logger_m3s') problems.push(`${what}: only a flow record has a site`);
-			else if (!site) problems.push(`${what}: its site is not a node of the model`);
+			else if (!site) problems.push(`${what}: its site is not a hydrological unit of the model`);
 			else if (site.kind !== 'gauge' || site.downstreamNodeId === null) problems.push(`${what}: its site "${site.name}" is not a gauge above the outlet`);
 		}
 	}

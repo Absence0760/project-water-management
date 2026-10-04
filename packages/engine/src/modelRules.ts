@@ -26,16 +26,17 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	const byId = new Map(m.nodes.map((n) => [n.id, n]));
 	const cropIds = new Set(m.crops.map((c) => c.id));
 
-	const dupes = (kind: string, xs: string[], show: (x: string) => string = (x) => x) => {
+	// `kind` keys the issue (dup:<kind>:<value>, stable); `label` is the words users read.
+	const dupes = (kind: string, xs: string[], show: (x: string) => string = (x) => x, label = kind) => {
 		const seen = new Set<string>();
 		for (const x of xs) {
-			if (seen.has(x)) add(`dup:${kind}:${x}`, `duplicate ${kind} ${show(x)}`);
+			if (seen.has(x)) add(`dup:${kind}:${x}`, `duplicate ${label} ${show(x)}`);
 			seen.add(x);
 		}
 	};
 	// Names compare case-insensitively (run comparison matches copies by name).
-	dupes('node id', m.nodes.map((n) => n.id));
-	dupes('node name', m.nodes.map((n) => n.name.trim().toLowerCase()), (x) => `"${x}"`);
+	dupes('node id', m.nodes.map((n) => n.id), undefined, 'hydrological unit id');
+	dupes('node name', m.nodes.map((n) => n.name.trim().toLowerCase()), (x) => `"${x}"`, 'hydrological unit name');
 	dupes('crop id', m.crops.map((c) => c.id));
 	dupes('crop name', m.crops.map((c) => c.name.trim().toLowerCase()), (x) => `"${x}"`);
 	dupes('transfer id', m.transfers.map((t) => t.id));
@@ -44,7 +45,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 
 	for (const p of m.landCover ?? []) {
 		const n = byId.get(p.nodeId);
-		if (!n) add(`lcNode:${p.id}`, `land cover ${p.id} references an unknown node`);
+		if (!n) add(`lcNode:${p.id}`, `land cover ${p.id} references an unknown hydrological unit`);
 		else if (n.kind !== 'farm')
 			add(`lcKind:${p.id}`, `land cover on "${n.name}": land cover lies on a unit, not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
 	}
@@ -52,7 +53,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	dupes('borehole id', (m.boreholes ?? []).map((b) => b.id));
 	for (const b of m.boreholes ?? []) {
 		const n = byId.get(b.nodeId);
-		if (!n) add(`bhNode:${b.id}`, `borehole ${b.id} references an unknown node`);
+		if (!n) add(`bhNode:${b.id}`, `borehole ${b.id} references an unknown hydrological unit`);
 		else if (n.kind === 'gauge') add(`bhGauge:${b.id}`, `borehole "${b.name}" is on gauge "${n.name}": a gauge can't have boreholes`);
 		else if (b.mode !== 'none' && !(n.kind === 'farm' && n.damCapacityM3 > 0)) {
 			if (b.mode === 'emergency') add(`bhEmergency:${b.id}`, `borehole "${b.name}" on "${n.name}": emergency mode needs a farm dam to trigger on`);
@@ -63,7 +64,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	dupes('demand object id', (m.demandObjects ?? []).map((o) => o.id));
 	for (const o of m.demandObjects ?? []) {
 		const n = byId.get(o.nodeId);
-		if (!n) add(`doNode:${o.id}`, `demand object ${o.id} references an unknown node`);
+		if (!n) add(`doNode:${o.id}`, `demand object ${o.id} references an unknown hydrological unit`);
 		else if (n.kind !== 'farm') add(`doKind:${o.id}`, `demand object "${o.name}" is on ${n.kind === 'user' ? 'other water user' : 'gauge'} "${n.name}": only a unit has demand objects`);
 		if (o.sizing === 'monthly' && !(Array.isArray(o.monthlyM3Day) && o.monthlyM3Day.length === 12))
 			add(`doMonthly:${o.id}`, `demand object "${o.name}": a monthly demand needs 12 values (m³/day, Oct–Sep)`);
@@ -109,7 +110,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		add
 	);
 	for (const n of m.nodes) {
-		if (n.downstreamNodeId && !byId.has(n.downstreamNodeId)) add(`down:${n.id}`, `"${n.name}" drains into an unknown node`);
+		if (n.downstreamNodeId && !byId.has(n.downstreamNodeId)) add(`down:${n.id}`, `"${n.name}" drains into an unknown hydrological unit`);
 		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.
 		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.kind === 'gauge') add(`bhGauge:${n.id}`, `gauge "${n.name}" can't have boreholes`);
 		if ((n.boreholeCapacityM3Day ?? 0) > 0 && n.boreholeRule === 'drought' && !(n.kind === 'farm' && n.damCapacityM3 > 0))
@@ -152,7 +153,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	}
 	for (const a of m.cropAreas) {
 		const n = byId.get(a.nodeId);
-		if (!n) add(`caNode:${a.nodeId}/${a.cropId}`, `crop area references unknown node ${a.nodeId}`);
+		if (!n) add(`caNode:${a.nodeId}/${a.cropId}`, `crop area references unknown hydrological unit ${a.nodeId}`);
 		else if (n.kind === 'user') add(`caUser:${a.nodeId}`, `crop area on other water user "${n.name}": a user's demand is its monthly demand, not crops`);
 		if (!cropIds.has(a.cropId)) add(`caCrop:${a.nodeId}/${a.cropId}`, `crop area references unknown crop ${a.cropId}`);
 	}
@@ -170,11 +171,11 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 	}
 	const nodeIndex = new Map(m.nodes.map((n, i) => [n.id, i]));
 	for (const t of m.transfers) {
-		if (!byId.has(t.fromNodeId) || !byId.has(t.toNodeId)) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown node`);
+		if (!byId.has(t.fromNodeId) || !byId.has(t.toNodeId)) add(`trNode:${t.id}`, `transfer ${t.id} references an unknown hydrological unit`);
 		// A user has no dam to send from or fill (WP-1.33).
 		if (byId.get(t.fromNodeId)?.kind === 'user' || byId.get(t.toNodeId)?.kind === 'user')
 			add(`trUser:${t.id}`, `transfer ${t.id} involves an other water user: transfers run between farm dams`);
-		if (t.fromNodeId === t.toNodeId) add(`trSelf:${t.id}`, `transfer ${t.id} goes from a node to itself`);
+		if (t.fromNodeId === t.toNodeId) add(`trSelf:${t.id}`, `transfer ${t.id} goes from a hydrological unit to itself`);
 		// Monthly rates (engine ≥ 1.14.0): what runs, so the months and max rate kept beside them must agree.
 		const monthly = monthlyRatesMismatch(t);
 		if (monthly) add(`trMonthly:${t.id}`, `transfer ${t.id}: ${monthly}`);
@@ -200,7 +201,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 
 	if (m.nodes.length) {
 		const outlets = m.nodes.filter((n) => n.downstreamNodeId === null);
-		if (outlets.length !== 1) add('outlets', `the network needs exactly one outflow node (drains into nothing); found ${outlets.length}`);
+		if (outlets.length !== 1) add('outlets', `the network needs exactly one outflow hydrological unit (drains into nothing); found ${outlets.length}`);
 		// Cycle check: follow downstream pointers from each node.
 		const next = new Map(m.nodes.map((n) => [n.id, n.downstreamNodeId]));
 		for (const n of m.nodes) {

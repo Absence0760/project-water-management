@@ -223,7 +223,7 @@ describe('applyScenario: each op', () => {
 	});
 
 	it('node.set rejects a missing node, a field the kind lacks and an out-of-range value', () => {
-		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): node nope not found/);
+		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): hydrological unit nope not found/);
 		expect(one({ op: 'node.set', nodeId: 'G', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/can't be set on a gauge/);
 		expect(one({ op: 'node.set', nodeId: 'A', field: 'damInitialPct', value: 1.5 }).problems[0]).toMatch(/at most 1/);
 		// No basin has a dam area exponent above 1 (engine ≥ 1.63.0, issue #90); 1 itself is allowed.
@@ -237,7 +237,7 @@ describe('applyScenario: each op', () => {
 
 	it('node.set refuses a duplicate name (compare matches by name across copies)', () => {
 		const r = one({ op: 'node.set', nodeId: 'A', field: 'name', value: 'farm b' });
-		expect(r.problems[0]).toMatch(/duplicate node name/);
+		expect(r.problems[0]).toMatch(/duplicate hydrological unit name/);
 		expect(nodeOf(r.input, 'A')!.name).toBe('Farm A');
 	});
 
@@ -386,8 +386,8 @@ describe('applyScenario: each op', () => {
 
 	it('node.add rejects a used id, an unknown downstream node and a duplicate name', () => {
 		expect(one({ op: 'node.add', node: node('A', { name: 'X', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/already in use/);
-		expect(one({ op: 'node.add', node: node('N', { downstreamNodeId: 'nowhere' }) }).problems[0]).toMatch(/unknown node nowhere/);
-		expect(one({ op: 'node.add', node: node('N', { name: 'Farm A', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/duplicate node name/);
+		expect(one({ op: 'node.add', node: node('N', { downstreamNodeId: 'nowhere' }) }).problems[0]).toMatch(/unknown hydrological unit nowhere/);
+		expect(one({ op: 'node.add', node: node('N', { name: 'Farm A', downstreamNodeId: 'G' }) }).problems[0]).toMatch(/duplicate hydrological unit name/);
 	});
 
 	it('node.remove re-links upstream nodes and drops every reference to the node', () => {
@@ -405,7 +405,7 @@ describe('applyScenario: each op', () => {
 
 	it('node.remove drops land cover on the node, and refuses the outflow node and a missing one', () => {
 		expect(one({ op: 'node.remove', nodeId: 'B' }).input.model.landCover).toEqual([]);
-		expect(one({ op: 'node.remove', nodeId: 'G' }).problems[0]).toMatch(/outflow node and can't be removed/);
+		expect(one({ op: 'node.remove', nodeId: 'G' }).problems[0]).toMatch(/outflow hydrological unit and can't be removed/);
 		expect(one({ op: 'node.remove', nodeId: 'nope' }).problems[0]).toMatch(/not found/);
 	});
 
@@ -441,7 +441,7 @@ describe('applyScenario: each op', () => {
 		const t = { id: 't2', fromNodeId: 'A', toNodeId: 'B', months: [12, 1, 1], maxRateM3s: 0.1, dailyCapM3: 500, minStoragePct: 0.3, enabled: true, priority: 1 };
 		const added = one({ op: 'transfer.add', transfer: t });
 		expect(added.input.model.transfers[1]!.months).toEqual([1, 12]);
-		expect(one({ op: 'transfer.add', transfer: { ...t, toNodeId: 'A' } }).problems[0]).toMatch(/from a node to itself/);
+		expect(one({ op: 'transfer.add', transfer: { ...t, toNodeId: 'A' } }).problems[0]).toMatch(/from a hydrological unit to itself/);
 		expect(one({ op: 'transfer.add', transfer: { ...t, toNodeId: 'zz' } }).problems[0]).toMatch(/toNodeId zz not found/);
 		expect(one({ op: 'transfer.add', transfer: { ...t, id: 't1' } }).problems[0]).toMatch(/already in use/);
 
@@ -615,7 +615,7 @@ describe('hostile op names and fields (a worker message or request body is untru
 			{ op: 'node.add', node: { id: 'N', name: 'New', kind: 'farm', downstreamNodeId: 'G', [name]: 1 } }
 		]);
 		expect(r.errors.slice(0, 3)).toEqual([
-			'ops[0].field: is not a node field a scenario can set',
+			'ops[0].field: is not a hydrological unit field a scenario can set',
 			'ops[1].field: is not a transfer field a scenario can set',
 			'ops[2].path: is not a setting a scenario can change'
 		]);
@@ -812,7 +812,7 @@ describe('applyScenario: the whole list', () => {
 			{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 1 }
 		]);
 		expect(r.applied.map((a) => a.index)).toEqual([0, 1, 3]);
-		expect(r.problems).toEqual(['op 3 (cropArea.set): node C not found']);
+		expect(r.problems).toEqual(['op 3 (cropArea.set): hydrological unit C not found']);
 	});
 
 	it('an empty list returns an equal input', () => {
@@ -1016,7 +1016,7 @@ describe('demand.scale (issue #53 R1)', () => {
 	});
 
 	it('refuses a missing node, a node of another category and a category the model has none of', () => {
-		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['A', 'Z'] }).problems).toEqual(['op 1 (demand.scale): node Z not found']);
+		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['A', 'Z'] }).problems).toEqual(['op 1 (demand.scale): hydrological unit Z not found']);
 		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['G'] }).problems).toEqual(['op 1 (demand.scale): "Outlet gauge" is a gauge, not a farm']);
 		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['U'] }, withUser()).problems).toEqual(['op 1 (demand.scale): "Town" is an other water user, not a farm']);
 		expect(one({ op: 'demand.scale', factor: 0.8, nodeIds: ['A'], category: 'user' }, withUser()).problems).toEqual(['op 1 (demand.scale): "Farm A" is a farm, not an other water user']);
@@ -1115,7 +1115,7 @@ describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 	it('refuses a site that isn’t the outlet or a gauge marked as an EWR site, and a table Settings wouldn’t save', () => {
 		const b = withWeir();
 		expect(one(set(table('A')), b).problems).toEqual(['op 1 (ewrRule.set): an EWR site is the outlet or a gauge; "Farm A" is a farm']);
-		expect(one(set(table('Z')), b).problems).toEqual(['op 1 (ewrRule.set): node Z not found']);
+		expect(one(set(table('Z')), b).problems).toEqual(['op 1 (ewrRule.set): hydrological unit Z not found']);
 		nodeOf(b, 'W')!.ewrSite = false;
 		expect(one(set(table('W')), b).problems).toEqual(['op 1 (ewrRule.set): "Weir" is not marked as an EWR site: set its EWR site flag first']);
 		// Flag it first in the same scenario, and the table applies.
@@ -1181,10 +1181,10 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		const loop = one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'C' });
 		expect(loop.problems).toEqual(['op 1 (node.move): the network has a loop through "Farm A"; the network has a loop through "Farm C"']);
 		expect(loop.input.model).toEqual(base().model);
-		expect(one({ op: 'node.move', nodeId: 'G', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): "Outlet gauge" is the outflow node and can\'t be moved']);
+		expect(one({ op: 'node.move', nodeId: 'G', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): "Outlet gauge" is the outflow hydrological unit and can\'t be moved']);
 		expect(one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): "Farm A" can\'t drain into itself']);
-		expect(one({ op: 'node.move', nodeId: 'Z', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): node Z not found']);
-		expect(one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'Z' }).problems).toEqual(['op 1 (node.move): node Z not found']);
+		expect(one({ op: 'node.move', nodeId: 'Z', downstreamNodeId: 'A' }).problems).toEqual(['op 1 (node.move): hydrological unit Z not found']);
+		expect(one({ op: 'node.move', nodeId: 'A', downstreamNodeId: 'Z' }).problems).toEqual(['op 1 (node.move): hydrological unit Z not found']);
 		// A river off-take whose destination would drain into its source is refused too (a model rule).
 		const b = base();
 		b.model.transfers = [{ id: 'r1', fromNodeId: 'B', toNodeId: 'C', months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' }];
@@ -1202,7 +1202,7 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(ok.input.model.transfers[0]).toMatchObject({ lossReturnPct: 0.5, lossReturnNodeId: 'A' });
 		// B is not below C on the river: skipped, with the rule as its problem.
 		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'B' }]).problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: its seepage can rejoin the river only below "Farm C" or a unit downstream of it/);
-		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'Z' }]).problems[0]).toMatch(/node Z not found/);
+		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'Z' }]).problems[0]).toMatch(/hydrological unit Z not found/);
 		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnPct', value: 1.5 }]).problems[0]).toMatch(/lossReturnPct/);
 		const gone = applyScenario(ok.input, [{ op: 'node.remove', nodeId: 'A' }]);
 		expect(gone.problems).toEqual([]);
@@ -1235,14 +1235,14 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 	it('node.insert refuses a node that doesn’t drain there, an empty or repeating list, and what node.add refuses, changing nothing', () => {
 		const n = node('D', { name: 'New dam', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
 		const r = one({ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'C'] });
-		expect(r.problems).toEqual(['op 1 (node.insert): "Farm C" doesn\'t drain into the node the new one drains into, so the new node can\'t sit between them']);
+		expect(r.problems).toEqual(['op 1 (node.insert): "Farm C" doesn\'t drain into what the new hydrological unit drains into, so the new one can\'t sit between them']);
 		expect(r.input.model).toEqual(base().model);
-		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: [] }).problems).toEqual(['op 1 (node.insert): upstreamNodeIds names no node: with none, add the node instead']);
-		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'A'] }).problems).toEqual(['op 1 (node.insert): upstreamNodeIds names a node more than once']);
-		expect(one({ op: 'node.insert', node: { ...n, id: 'A' }, upstreamNodeIds: ['B'] }).problems).toEqual(['op 1 (node.insert): node id A is already in use']);
-		expect(one({ op: 'node.insert', node: { ...n, name: 'farm b' }, upstreamNodeIds: ['B'] }).problems).toEqual(['op 1 (node.insert): duplicate node name "farm b"']);
+		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: [] }).problems).toEqual(['op 1 (node.insert): upstreamNodeIds names no hydrological unit: with none, add the new one instead']);
+		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: ['A', 'A'] }).problems).toEqual(['op 1 (node.insert): upstreamNodeIds names a hydrological unit more than once']);
+		expect(one({ op: 'node.insert', node: { ...n, id: 'A' }, upstreamNodeIds: ['B'] }).problems).toEqual(['op 1 (node.insert): hydrological unit id A is already in use']);
+		expect(one({ op: 'node.insert', node: { ...n, name: 'farm b' }, upstreamNodeIds: ['B'] }).problems).toEqual(['op 1 (node.insert): duplicate hydrological unit name "farm b"']);
 		// The outflow drains into nothing, so nothing can be inserted below it.
-		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: ['G'] }).problems[0]).toMatch(/"Outlet gauge" doesn't drain into the node the new one drains into/);
+		expect(one({ op: 'node.insert', node: n, upstreamNodeIds: ['G'] }).problems[0]).toMatch(/"Outlet gauge" doesn't drain into what the new hydrological unit drains into/);
 	});
 
 	it('classifies a move of the own land-free leaf as the proposal, any other move as baseline; an insert as node.add', () => {
@@ -1441,7 +1441,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		expect(one({ op: 'ewrRule.remove', siteNodeId: 'G' }).input.settings.ewrRules).toEqual([blankEwrRuleTable('A')]);
 		// Removed once, it's gone: a second remove is a problem, and so is a site with none.
 		expect(applyScenario(base(), [{ op: 'ewrRule.remove', siteNodeId: null }, { op: 'ewrRule.remove', siteNodeId: 'G' }]).problems).toEqual(['op 2 (ewrRule.remove): there is no EWR rule table at the outlet']);
-		expect(one({ op: 'ewrRule.remove', siteNodeId: 'B' }).problems).toEqual(['op 1 (ewrRule.remove): there is no EWR rule table at node B']);
+		expect(one({ op: 'ewrRule.remove', siteNodeId: 'B' }).problems).toEqual(['op 1 (ewrRule.remove): there is no EWR rule table at hydrological unit B']);
 		expect(classifyOp({ op: 'ewrRule.remove', siteNodeId: null }, ['A', 'B', 'C', 'G'], base())).toBe('baseline');
 	});
 
@@ -1483,7 +1483,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 
 	it('allocation.set refuses a gauge, a missing node, a bad entry; allocation.remove a missing id', () => {
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a unit or other water user; "Outlet gauge" is a gauge']);
-		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): node Z not found']);
+		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): hydrological unit Z not found']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: -1 }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be a number of m³ from 0 to below 10¹²"]);
 		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (2022-01-01)"]);
 		expect(one({ op: 'allocation.remove', allocationId: 'al9' }).problems).toEqual(['op 1 (allocation.remove): registered volume al9 not found']);
@@ -1557,7 +1557,7 @@ describe('demand-object ops (engine ≥ 1.45.0)', () => {
 		expect(r.problems).toEqual([]);
 		expect(r.input.model.demandObjects).toEqual([{ ...o, name: 'Stock' }]);
 		expect(one({ op: 'demandObject.add', demandObject: { ...o, nodeId: 'G' } }).problems).toEqual(['op 1 (demandObject.add): a demand object is on a hydrological unit; "Outlet gauge" is a gauge']);
-		expect(one({ op: 'demandObject.add', demandObject: { ...o, nodeId: 'zz' } }).problems).toEqual(['op 1 (demandObject.add): node zz not found']);
+		expect(one({ op: 'demandObject.add', demandObject: { ...o, nodeId: 'zz' } }).problems).toEqual(['op 1 (demandObject.add): hydrological unit zz not found']);
 		expect(one({ op: 'demandObject.add', demandObject: o }, withObject()).problems).toEqual([]);
 		expect(one({ op: 'demandObject.add', demandObject: { ...o, id: 'do1' } }, withObject()).problems).toEqual(['op 1 (demandObject.add): demand object id do1 is already in use']);
 		// A model rule the new object breaks (a demand per unit with no count) is a problem, and nothing is added.
@@ -1818,8 +1818,8 @@ describe('validateScenarioOps', () => {
 		expect(bad.ops).toEqual([]);
 		expect(bad.errors).toEqual([
 			'ops[0].downstreamNodeId: missing',
-			'ops[1].upstreamNodeIds: must be a list of at least one node id (the nodes that will drain into the new one; with none, add the node instead)',
-			'ops[2].upstreamNodeIds: names a node more than once',
+			'ops[1].upstreamNodeIds: must be a list of at least one hydrological unit id (the ones that will drain into the new one; with none, add it instead)',
+			'ops[2].upstreamNodeIds: names a hydrological unit more than once',
 			'ops[3].field: is not a crop field a scenario can set',
 			'ops[4].value: must be a name of 1–100 characters',
 			'ops[5].value: must be { mar, lowFlow }, each 0–1',
@@ -1897,9 +1897,9 @@ describe('validateScenarioOps', () => {
 			'ops[0].factor: must be at most 2',
 			'ops[1].factor: must be at least 0',
 			'ops[2].factor: missing',
-			'ops[3].nodeIds: must be a list of at least one node id (leave it out for every node of the category)',
-			'ops[4].nodeIds: names a node more than once',
-			'ops[5].nodeIds: must be a list of at least one node id (leave it out for every node of the category)',
+			'ops[3].nodeIds: must be a list of at least one hydrological unit id (leave it out for every hydrological unit of the category)',
+			'ops[4].nodeIds: names a hydrological unit more than once',
+			'ops[5].nodeIds: must be a list of at least one hydrological unit id (leave it out for every hydrological unit of the category)',
 			'ops[6].months: must be a list of at least one calendar month (leave it out for every month)',
 			'ops[7].months: months must be whole numbers 1–12',
 			'ops[8].months: names a month more than once',
@@ -1943,7 +1943,7 @@ describe('validateScenarioOps', () => {
 		]);
 		expect(ops).toEqual([{ op: 'node.remove', nodeId: 'A' }]);
 		expect(errors).toEqual([
-			'ops[0].field: is not a node field a scenario can set',
+			'ops[0].field: is not a hydrological unit field a scenario can set',
 			'ops[1].value: must be at most 1',
 			'ops[2].value: must be an ISO date (YYYY-MM-DD)',
 			'ops[3].kind: must be one of rain_catchment_mm, rain_chirps_mm, rain_forecast_mm, rain_catchment_alt_mm, rain_reanalysis_mm, evap_apan_mm',
@@ -1984,7 +1984,7 @@ describe('mask: names (an application judged in its applicant’s namespace, WP-
 		expect(nodeOf(r.input, 'B')!.name).toBe('Farm B (3)');
 		expect(r.renamed).toEqual([{ kind: 'node', id: 'B', name: 'Farm B', as: 'Farm B (3)' }]);
 		// Unmasked, the same rename is refused.
-		expect(applyScenario(base(), [rename('A', 'farm b')]).problems).toEqual(['op 1 (node.set): duplicate node name "farm b"']);
+		expect(applyScenario(base(), [rename('A', 'farm b')]).problems).toEqual(['op 1 (node.set): duplicate hydrological unit name "farm b"']);
 	});
 
 	it('quotes the mask name, never the real one, in what it says about a hidden node', () => {

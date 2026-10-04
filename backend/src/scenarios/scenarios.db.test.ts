@@ -389,7 +389,7 @@ describe('rebase', () => {
 
 		const preview = await u.call('POST', `/projects/${c.projectId}/scenarios/${sid}/rebase`, { baseRunId: newer, dryRun: true });
 		expect(preview.status).toBe(200);
-		expect(preview.body.problems).toEqual([`op 2 (node.set): node ${c.other.id} not found`]);
+		expect(preview.body.problems).toEqual([`op 2 (node.set): hydrological unit ${c.other.id} not found`]);
 		expect(preview.body.applied.map((a: { index: number }) => a.index)).toEqual([0]);
 		expect(preview.body.scenario.baseRunId).toBe(old);
 
@@ -410,7 +410,7 @@ describe('rebase', () => {
 		const refused = await u.call('POST', `/projects/${c.projectId}/scenarios/${sid}/runs`, {});
 		expect(refused.status).toBe(422);
 		expect(refused.body.error).toBe("an op of this scenario doesn't apply to its base run");
-		expect(refused.body.details.problems).toEqual([`op 2 (node.set): node ${c.other.id} not found`]);
+		expect(refused.body.details.problems).toEqual([`op 2 (node.set): hydrological unit ${c.other.id} not found`]);
 		// The old base is no longer cited, so it can be deleted (positive control: the new one can't).
 		expect((await u.call('DELETE', `/projects/${c.projectId}/runs/${old}`)).status).toBe(204);
 		expect((await u.call('DELETE', `/projects/${c.projectId}/runs/${newer}`)).status).toBe(409);
@@ -620,7 +620,7 @@ describe('status', () => {
 
 		const ops = await patch({ ops: [] });
 		expect(ops.status).toBe(409);
-		expect(ops.body.error).toBe("this scenario is submitted, so its ops, owned nodes and base run can't change");
+		expect(ops.body.error).toBe("this scenario is submitted, so its ops, owned hydrological units and base run can't change");
 		expect((await patch({ ownedNodeIds: [c.farm.id] })).status).toBe(409);
 		expect((await u.call('POST', `/projects/${c.projectId}/scenarios/${sid}/rebase`, { baseRunId: base })).status).toBe(409);
 		expect((await u.call('DELETE', `/projects/${c.projectId}/scenarios/${sid}`)).status).toBe(409);

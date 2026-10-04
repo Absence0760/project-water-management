@@ -302,7 +302,7 @@ describe('farmProjection', () => {
 	});
 
 	it('refuses a node that is not a farm, and a run missing a series', () => {
-		expect(() => farmProjection(run, 'outlet', a)).toThrow(/not a farm/);
+		expect(() => farmProjection(run, 'outlet', a)).toThrow(/not a unit with land/);
 		const old: ProjectionRun = { ...run, series: (n, k) => (k === 'ewr_charge_irrigation' ? undefined : run.series(n, k)) };
 		expect(() => analyseSeason(old)).toThrow(/no ewr_charge_irrigation series/);
 	});

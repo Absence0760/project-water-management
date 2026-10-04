@@ -134,7 +134,7 @@ async function assertFarms(db: Db, projectId: string, nodeIds: string[]) {
 		`SELECT count(*)::int AS n FROM node WHERE project_id = $1 AND kind = 'farm' AND id = ANY($2::uuid[])`,
 		[projectId, unique]
 	);
-	if (rows[0]!.n !== unique.length) throw new ApiError(400, 'every node must be a hydrological unit in this project');
+	if (rows[0]!.n !== unique.length) throw new ApiError(400, 'every one must be a hydrological unit with land in this project');
 	return unique;
 }
 

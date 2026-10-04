@@ -1280,7 +1280,7 @@ describe('runModel — validation and window', () => {
 	it('rejects a network with a cycle', () => {
 		expect(() =>
 			run({ nodes: [node('A', { downstreamNodeId: 'B' }), node('B', { downstreamNodeId: 'A' })], natural: [0] })
-		).toThrow(/outflow node|cycle/);
+		).toThrow(/outflow hydrological unit|cycle/);
 	});
 
 	it('rejects a network with more than one outflow node, whatever the array order', () => {
@@ -1288,8 +1288,8 @@ describe('runModel — validation and window', () => {
 		// gauge), and the other root's water silently left the balance.
 		const nodes = [node('A', { downstreamNodeId: 'G' }), node('G', { kind: 'gauge', areaKm2: 0 }), node('Lost', { sortOrder: 1 })];
 		for (const order of [nodes, [...nodes].reverse()]) {
-			expect(() => run({ nodes: order, natural: [0] })).toThrow(/2 outflow nodes \((G, Lost|Lost, G)\).*exactly one/);
-			expect(() => buildTopology(order)).toThrow(/outflow nodes/);
+			expect(() => run({ nodes: order, natural: [0] })).toThrow(/2 outflow hydrological units \((G, Lost|Lost, G)\).*exactly one/);
+			expect(() => buildTopology(order)).toThrow(/outflow hydrological units/);
 		}
 		// One root is fine; so is an empty network (no outlet at all).
 		expect(buildTopology(nodes.slice(0, 2)).outflow).toBe(1);
@@ -1297,7 +1297,7 @@ describe('runModel — validation and window', () => {
 	});
 
 	it('rejects a link to an unknown node', () => {
-		expect(() => run({ nodes: [node('A', { downstreamNodeId: 'nope' })], natural: [0] })).toThrow(/unknown node/);
+		expect(() => run({ nodes: [node('A', { downstreamNodeId: 'nope' })], natural: [0] })).toThrow(/unknown hydrological unit/);
 	});
 
 	it('needs a rainfall series to define the period', () => {

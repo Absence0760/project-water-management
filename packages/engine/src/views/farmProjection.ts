@@ -288,7 +288,7 @@ export interface SeasonAnalysis {
 
 function need(run: ProjectionRun, nodeId: string | null, key: string, days: number): Float64Array {
 	const v = run.series(nodeId, key);
-	if (!v) throw new ProjectionInputError(`the run has no ${key} series${nodeId ? ` for node ${nodeId}` : ''}: run the model again to publish it`);
+	if (!v) throw new ProjectionInputError(`the run has no ${key} series${nodeId ? ` for hydrological unit ${nodeId}` : ''}: run the model again to publish it`);
 	if (v.length !== days) throw new ProjectionInputError(`the run's ${key} series has ${v.length} days, expected ${days}`);
 	return Float64Array.from({ length: days }, (_, t) => val(v[t]));
 }
@@ -801,7 +801,7 @@ const clamp01 = (x: number) => Math.min(Math.max(x, 0), 1);
  */
 export function farmProjection(run: ProjectionRun, nodeId: string, analysis: SeasonAnalysis = analyseSeason(run)): FarmProjection {
 	const node = run.nodes.find((n) => n.id === nodeId);
-	if (!node || node.kind !== 'farm') throw new ProjectionInputError(`node ${nodeId} is not a farm of the run`);
+	if (!node || node.kind !== 'farm') throw new ProjectionInputError(`hydrological unit ${nodeId} is not a unit with land in the run`);
 	const cf: CurtailmentFarm | undefined = analysis.curtailment.farms.find((f) => f.nodeId === nodeId);
 	if (!cf) throw new ProjectionInputError(`no curtailment row for farm ${nodeId}`);
 	const d0 = toEpochDay(run.startDate);

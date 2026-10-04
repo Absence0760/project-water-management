@@ -23,12 +23,12 @@ describe('modelProblems', () => {
 		a.downstreamNodeId = b.id;
 		const c = node('C', null);
 		expect(modelProblems(model([a, b, c])).join()).toMatch(/loop/);
-		expect(modelProblems(model([c, node('D', crypto.randomUUID())])).join()).toMatch(/unknown node/);
+		expect(modelProblems(model([c, node('D', crypto.randomUUID())])).join()).toMatch(/unknown hydrological unit/);
 	});
 
 	it('rejects duplicate names case-insensitively', () => {
 		const g = node('Gauge', null);
-		expect(modelProblems(model([g, node('Farm', g.id), node('farm', g.id)])).join()).toMatch(/duplicate node name/);
+		expect(modelProblems(model([g, node('Farm', g.id), node('farm', g.id)])).join()).toMatch(/duplicate hydrological unit name/);
 	});
 });
 
@@ -295,7 +295,7 @@ describe('land cover (WP-1.35)', () => {
 		const m = { ...model([out, farm]), landCover: [patch] };
 		expect(modelProblems(m)).toEqual([]);
 		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: out.id }] }).join()).toMatch(/land cover lies on a unit/);
-		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }).join()).toMatch(/unknown node/);
+		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }).join()).toMatch(/unknown hydrological unit/);
 		expect(modelProblems({ ...m, landCover: [patch, patch] }).join()).toMatch(/duplicate land-cover id/);
 		for (const bad of [{ coverClass: 'bamboo' }, { densityPct: 2 }, { areaKm2: -1 }, { factors: { mar: 1.2, lowFlow: 0 } }]) {
 			expect(ModelBody.safeParse({ nodes: [out, farm], crops: [], cropAreas: [], transfers: [], landCover: [{ ...patch, ...bad }] }).success, JSON.stringify(bad)).toBe(false);

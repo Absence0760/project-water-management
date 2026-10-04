@@ -122,7 +122,7 @@ export async function checkOutcomeSite(db: Db, projectId: string, siteNodeId: st
 		[projectId, siteNodeId]
 	);
 	const n = rows[0];
-	if (!n) throw new ApiError(400, 'outcomes.siteNodeId: no such node in this project');
+	if (!n) throw new ApiError(400, 'outcomes.siteNodeId: no such hydrological unit in this project');
 	if (n.kind !== 'gauge' || n.downstream_node_id === null) throw new ApiError(400, 'outcomes.siteNodeId: the site is the outlet (null) or a gauge above it');
 	const tables = Array.isArray(ewrRules) ? (ewrRules as unknown[]) : [];
 	if (!tables.some((t) => isObj(t) && t.siteNodeId === siteNodeId)) throw new ApiError(400, 'outcomes.siteNodeId: that gauge has no Reserve rule table');

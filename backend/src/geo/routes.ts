@@ -89,6 +89,10 @@ const KIND_LABEL: Record<MapFeatureKind, string> = {
 };
 
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
+/** A hydrological unit's kind in words (the model's `farm` is a unit with land). */
+export const NODE_KIND_WORD: Record<string, string> = { farm: 'a unit with land', user: 'an other water user', gauge: 'a gauge' };
+const kindWord = (k: string) => NODE_KIND_WORD[k] ?? `a ${k}`;
+const kindsWord = (ks: readonly string[]) => ks.map(kindWord).join(' or ');
 
 const uuid = z.string().regex(UUID, 'not a valid id');
 /** A feature name typed into a route: one line (issue #385; the Map draws it as a label), at most FEATURE_NAME_MAX characters. */
@@ -303,9 +307,9 @@ function assertKindFits(kind: MapFeatureKind, g: Geometry) {
 async function assertNodeFits(db: Db, projectId: string, kind: MapFeatureKind, nodeId: string | null | undefined) {
 	if (!nodeId) return;
 	const { rows } = await db.query<{ kind: string }>('SELECT kind::text AS kind FROM node WHERE id = $1 AND project_id = $2', [nodeId, projectId]);
-	if (!rows[0]) throw new ApiError(400, 'That node is not in this project.');
+	if (!rows[0]) throw new ApiError(400, 'That hydrological unit is not in this project.');
 	if (!KIND_NODES[kind].includes(rows[0].kind)) {
-		throw new ApiError(400, KIND_NODES[kind].length ? `${cap(KIND_LABEL[kind])} can stand for a ${KIND_NODES[kind].join(' or ')} node, not a ${rows[0].kind}.` : `${cap(KIND_LABEL[kind])} stands for no node.`);
+		throw new ApiError(400, KIND_NODES[kind].length ? `${cap(KIND_LABEL[kind])} can stand for ${kindsWord(KIND_NODES[kind])}, not ${kindWord(rows[0].kind)}.` : `${cap(KIND_LABEL[kind])} stands for no hydrological unit.`);
 	}
 }
 
@@ -412,9 +416,9 @@ async function reviewedFeatures(db: Db, projectId: string, parsed: ParsedFeature
 		if (r.nodeId) {
 			const k = nodeKind.get(r.nodeId);
 			// Not a choice the review offers: a request naming another project's node is refused outright, as placing a feature is.
-			if (!k) throw new ApiError(400, `Feature ${f.index} stands for a node that is not in this project.`);
+			if (!k) throw new ApiError(400, `Feature ${f.index} stands for a hydrological unit that is not in this project.`);
 			if (!KIND_NODES[r.kind].includes(k)) {
-				problems.push({ feature: f.index, message: KIND_NODES[r.kind].length ? `is ${KIND_LABEL[r.kind]}, which can stand for a ${KIND_NODES[r.kind].join(' or ')} node, not a ${k}` : `is ${KIND_LABEL[r.kind]}, which stands for no node` });
+				problems.push({ feature: f.index, message: KIND_NODES[r.kind].length ? `is ${KIND_LABEL[r.kind]}, which can stand for ${kindsWord(KIND_NODES[r.kind])}, not ${kindWord(k)}` : `is ${KIND_LABEL[r.kind]}, which stands for no hydrological unit` });
 			}
 		}
 		const name = r.name ?? f.name;
@@ -787,7 +791,7 @@ export const mapRoutes = new Hono<AuthEnv>()
 			if (!UUID.test(nodeId)) throw notFound();
 			const { rows: n } = await db.query<{ name: string; kind: string }>('SELECT name, kind::text AS kind FROM node WHERE id = $1 AND project_id = $2', [nodeId, id]);
 			if (!n[0]) throw notFound();
-			if (n[0].kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit (a farm node) has a catchment area to set from the map.');
+			if (n[0].kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit with land (not a gauge or other water user) has a catchment area to set from the map.');
 			const f = await loadFeature(db, id, body.featureId);
 			if (f.area_m2 === null || f.area_m2 <= 0) throw new ApiError(400, 'That feature is not a polygon with an area.');
 			if (!AREA_KINDS.includes(f.kind)) throw new ApiError(400, `${cap(KIND_LABEL[f.kind])}’s area is not a hydrological unit’s catchment area; use a farm parcel.`);

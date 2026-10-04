@@ -664,7 +664,7 @@ function runNetwork(
 		// A dam whose capacity changes over the run (engine ≥ 1.30.0, ./network/development.ts): the day's capacity.
 		const ks = plan.nodes[i]!.capacityScale;
 		if (ks) push(node.id, DAM_CAPACITY_SERIES.key, DAM_CAPACITY_SERIES.label, DAM_CAPACITY_SERIES.unit, Float64Array.from(ks, (k) => k * node.damCapacityM3));
-		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
+		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this hydrological unit', 'm³/day', r.seniorRequirement);
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.

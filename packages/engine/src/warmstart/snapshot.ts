@@ -276,7 +276,7 @@ export function openSnapshot(snapshot: ModelStateSnapshot, input: ModelInput): M
 		throw new ModelStateMismatchError('history', `the input's series before ${snapshot.date} differ from the ones the snapshot was captured from: leave the history out, or capture the snapshot again`);
 	const state = decodePlain<ModelState>(snapshot.state);
 	const ids = input.model.nodes.map((n) => n.id);
-	if (state.nodes.length !== ids.length || state.nodes.some((n, i) => n.id !== ids[i])) throw new ModelStateMismatchError('input', 'the snapshot’s nodes are not the model’s');
+	if (state.nodes.length !== ids.length || state.nodes.some((n, i) => n.id !== ids[i])) throw new ModelStateMismatchError('input', 'the snapshot’s hydrological units are not the model’s');
 	return state;
 }
 
