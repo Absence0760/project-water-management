@@ -148,4 +148,13 @@
 		width: 2.5rem;
 		text-align: right;
 	}
+	/* A phone: the name takes what the efficiency, use and remove leave, so the table fits without scrolling sideways. */
+	@media (max-width: 640px) {
+		.name {
+			min-width: 0;
+		}
+		.use {
+			font-size: 0.8rem;
+		}
+	}
 </style>

@@ -64,8 +64,9 @@ test.describe('phone', () => {
 		await updateSettings(page.request, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110] });
 		await page.goto(`/projects/${project.id}?tab=crops`);
 
-		// Orchard on 32 ha: Jan is the peak, 320 000 m² × 0.8 × 230 mm / 1000 / 31 days.
-		const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month, stacked by crop \(Orchard\)\. Peak in Jan at 1 899 m³\/day\./ });
+		// Orchard on 32 ha: Jan is the peak, 320 000 m² × 0.8 × 230 mm / 1000 / 31 days = 1 899 m³/day at the crop,
+		// abstracted at the units' 80 % efficiency: 1 899 / 0.8.
+		const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month, stacked by crop \(Orchard\)\. Peak in Jan at 2 374 m³\/day\./ });
 		await expect(chart).toBeVisible();
 		await expectOnScreen(chart, page);
 		// The table stays the data source, below the chart, one click away.
