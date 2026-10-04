@@ -2885,9 +2885,10 @@ map" card) stays the schematic; this is the geography.
   assistive tech, since the bar's heading says the same), with the channels'
   note or the busy line under it. The picked feature's name over the map's
   top-left corner sits right of the column (CatchmentMap's
-  `--map-inset-left`). Over the map's corners too: **Layers** under the zoom
-  buttons (below), **Show everything** (issue #374: frames every feature)
-  and **Key** at the bottom left (below), and for owners and editors without
+  `--map-inset-left`). Over the map otherwise only small buttons: **Layers**
+  under the zoom buttons (below), **Show everything** (issue #374: frames
+  every feature) and **Key** at the bottom left (below), each opening its
+  panel in the side column on a wide page (below), and for owners and editors without
   a basemap configured a small "No basemap configured (docs/maps.md)" under
   Layers (until 2026-10-02 a full-width line above the map: it is an
   operator's matter, and a deployed site has a basemap).
@@ -2908,11 +2909,21 @@ map" card) stays the schematic; this is the geography.
   the height left below its measured top, less the 1rem gutter and the save
   bar (`--dock-h`); the map fills its card and starts right under the header
   (nothing stacks above it but a waiting proposal's line), and the page
-  doesn't scroll. The side column shows **one panel at a time** under three
+  doesn't scroll. The side column shows **one panel at a time** under its
   tabs (until 2026-10-02 the picked feature's card, the list, the layers and
   the checks line were stacked, each squeezing the others): **Details** (the
-  picked feature's card), **Features (n)** (the list) and **Checks** (with
-  the warnings' count); a tablist with the arrow keys, Home and End. A new
+  picked feature's card), **Features (n)** (the list), **Checks** (with
+  the warnings' count) and, beside the map (`panelsInSide`: the column shown,
+  something on the map, not dividing), **Layers** and **Key** (until
+  2026-10-03 boxes over the map's corners, which the operator found
+  cluttered); a tablist with the arrow keys, Home and End, wrapping onto a
+  second row when the column is narrow. The map's **Layers** and **Key**
+  buttons pick those tabs (`aria-controls` the tab's panel,
+  `aria-expanded` while it is picked); pressed again, or Escape inside the
+  panel, gives back the tab they took over from and the button the focus.
+  When the column stops showing them (narrowed, emptied, Sub-catchments
+  taking it over) a picked Layers or Key falls back to Features, and they are
+  panels over the map again. A new
   pick (on the map, in the list, from a check, a link, Back) shows Details;
   the pick going (a delete) shows the list again; with nothing picked the
   column opens on Features. The panel fills the column and scrolls in its
@@ -2923,9 +2934,10 @@ map" card) stays the schematic; this is the geography.
 - **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
   boundary (long dashes), parcels, dams, rivers, other features (dotted),
   points as 28 px buttons told apart by shape; clicking a feature picks it.
-  The **Key** (a panel over the map's bottom-left corner, from its **Key**
-  button, "Key · Days short" while a measure shows; a row under the map until
-  2026-10-02) groups **Areas** (catchment boundary, parcel, dam, other),
+  The **Key** (the side column's Key tab beside the map, a panel over the
+  map's bottom-left corner on a phone, an empty map or while dividing; from
+  the map's **Key** button, "Key · Days short" while a measure shows; a row
+  under the map until 2026-10-02) groups **Areas** (catchment boundary, parcel, dam, other),
   **Lines** (river; while the elevation model's channels are drawn, first
   "terrain channels: where your click goes; the outline follows these" and,
   with the River network layer on, "river network: mapped rivers, for
@@ -2935,14 +2947,18 @@ map" card) stays the schematic; this is the geography.
   layer's own entry while the layer is on), each swatch drawn in the colour
   `mapStyle.ts` `overlayColours(dark)` gives the map (`mapList.ts`
   `keyGroups`; no colour is written in the tab), following the app's theme
-  (`appTheme.ts`: `data-theme` and the OS preference, live). It opens by
-  default while the areas show a run's results on a map beside the side
-  column (their colours need the legend), and starts folded otherwise (the
-  kinds' colours, a phone), the default taken once when the runs are in; its
-  box clears the tools above it and scrolls in itself (a focusable region,
-  "Map key"); Escape closes it and gives its button the focus. On a narrow map
-  opening Key folds Layers and the other way round.
-- **Results on the map** (#326 A1, at the top of the Key panel,
+  (`appTheme.ts`: `data-theme` and the OS preference, live). It starts
+  folded: beside the column the list keeps the first view (the Key's button
+  reads "Key · Days short" while a measure colours the areas, and the
+  list's card and Every feature give each unit's figure in words), and over
+  the map it covered what was under it (a phone, the kinds' colours); until
+  2026-10-03 it opened by default over a wide map while the areas showed a
+  run's results. Over the map its box
+  clears the tools above it and scrolls in itself (a focusable region, "Map
+  key"); in the column its tab panel is focusable and scrolls in the column.
+  Escape closes it and gives its button the focus. On a narrow map opening
+  Key folds Layers and the other way round.
+- **Results on the map** (#326 A1, at the top of the Key,
   `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
   (`measure=`: Days short, the default and so absent from the URL;
   `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
@@ -3278,8 +3294,14 @@ map" card) stays the schematic; this is the geography.
 - **Assisted drawing** (#326 C2; [maps.md § Assisted
   drawing](./maps.md#assisted-drawing)). The draw bar has **Snap to
   features** (on; for the rest of the tab once unticked) and, while a new
-  shape or line is drawn, **Follow edges**, with "Hold Alt to place one
-  corner exactly."; a ring on the map marks where the pointer would snap,
+  shape or line is drawn, **Follow edges**; with a mouse the Snap label adds
+  "(Alt: exact)", its tooltip and accessible name "Hold Alt to place one
+  corner exactly." (a line under the bar until 2026-10-03). The bar is one
+  line when it is at least 46rem wide (a container query on the bar: what,
+  the hint taking what's left, snapping, the buttons; the buttons drop to a
+  second line only when the hint can't keep 16rem; problems, a trace's
+  source and Delineate's lines on their own line under it) and stacks when
+  narrower; a ring on the map marks where the pointer would snap,
   and the live region names it ("…, on “Upper farm”’s corner."; "(2
   corners followed along it)"). The canvas's accessible name adds "(on the
   nearest feature’s corner or edge within reach; Alt+Enter places it
@@ -3313,9 +3335,11 @@ map" card) stays the schematic; this is the geography.
   the map or in the bar) ends it at once: a measurement has nothing to lose.
   Drawing, placing or editing ends a measurement; Measure is off while a
   drawing is open. Not in the URL.
-- **Layers** (#326 A6; a panel over the map's right edge from the
-  **Layers** button under the zoom buttons, which counts the layers on,
-  "Layers (2 on)"; a box in the side column until 2026-10-02; its open state
+- **Layers** (#326 A6; the side column's Layers tab beside the map, a panel
+  over the map's right edge on a phone, an empty map or while dividing; from
+  the **Layers** button under the zoom buttons, which counts the layers on,
+  "Layers (2 on)"; a box in the side column until 2026-10-02, a panel over
+  the map until 2026-10-03; its open state
   isn't in the URL, the layers are; it stays open through picks, a reach
   clicked on the map opens it, Escape closes it and gives its button the
   focus; it scrolls in its own box, inside the map): **Quaternary
@@ -3436,8 +3460,9 @@ map" card) stays the schematic; this is the geography.
   map's box, in Tab order, pressed, the strip, the header's one row with no
   tools; the toast leaving the map where it is; the Getting started pill
   (over the page, Escape, Draw the boundary); the tabs (a pick, the keys,
-  Back, the old `checks=1`); Layers and Key inside the map, clear of the
-  tools, Escape; a viewer; thirty units (the map under the header, the panel
+  Back, the old `checks=1`); Layers and Key as side-column tabs on a wide
+  page (the map's buttons pick them, Escape gives the tab back) and inside
+  the map, clear of the tools, on a phone; a viewer; thirty units (the map under the header, the panel
   fits the column) and the phone; axe light and dark, wide and phone, with
   the panels open and a tool on. `mapTools.test.ts`, `mapSetup.test.ts` and
   `mapList.test.ts` (`presentKey`) cover the helpers.
