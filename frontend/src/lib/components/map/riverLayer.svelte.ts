@@ -9,7 +9,7 @@
 import { untrack } from 'svelte';
 import type { MapFeature, RiverLayer as Answer, RiverReach } from '$lib/api/types';
 import { creditedReach, reachKey, reachRef, riverBbox, riverViewBbox } from './mapLayers';
-import type { NetworkReach } from './mapStyle';
+import { riverSetOf, type NetworkReach } from './mapStyle';
 
 export interface RiverLayerDeps {
 	projectId: () => string;
@@ -90,9 +90,9 @@ export class RiverLayer {
 		return this.#deps.on() && !this.#deps.features().length && !riverViewBbox(this.#deps.view?.() ?? null);
 	}
 
-	/** What the map draws (empty while off or loading). */
+	/** What the map draws (empty while off or loading), each reach with its dataset's colour. */
 	get reaches(): NetworkReach[] {
-		return this.on && this.answer ? this.answer.reaches.map((r) => ({ key: reachKey(r), strahler: r.strahler, geometry: r.geometry })) : [];
+		return this.on && this.answer ? this.answer.reaches.map((r) => ({ key: reachKey(r), strahler: r.strahler, geometry: r.geometry, set: riverSetOf(this.answer!.datasets, r.dataset) })) : [];
 	}
 
 	/** Whether the map credits HydroRIVERS: while it draws any of its reaches. */

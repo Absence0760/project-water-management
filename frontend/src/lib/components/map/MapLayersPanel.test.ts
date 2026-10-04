@@ -13,6 +13,7 @@ import MapLayers from './MapLayers.svelte';
 import type { RiverReach } from '$lib/api';
 import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
+import { riverNetworkColours } from './mapStyle';
 import type { RiverLayer } from './riverLayer.svelte';
 
 const quaternaries = { on: false } as unknown as QuaternaryLayer;
@@ -125,6 +126,18 @@ describe('the Layers box’s River network', () => {
 		expect(added).toContain('On the map as a river.');
 		expect(added).toContain('data-testid="map-reach-show"');
 		expect(added).toMatch(/>Reach 90000002<span[^>]*> · order 3<\/span><span[^>]*> · 655 km²<\/span><span[^>]*> · on the map<\/span>/);
+	});
+
+	it('keys each dataset in view to its map colour when there is more than one, and not for one', () => {
+		expect(riverHtml(riversOn([reach(1, 3)], null), true)).not.toContain('map-rivers-key');
+		const datasets = [{ dataset: 'DWS-rivs500k', count: 1 }, { dataset: 'HydroRIVERS-v10', count: 1 }];
+		const two = { ...riversOn([], null), answer: { bbox: [21, -34, 22, -33], reaches: [reach(1, 3, { dataset: 'HydroRIVERS-v10', synthetic: false }), reach(2, 2, { dataset: 'DWS-rivs500k', synthetic: false })], truncated: false, datasets } } as unknown as RiverLayer;
+		const b = riverHtml(two, true);
+		const key = b.slice(b.indexOf('data-testid="map-rivers-key"'), b.indexOf('</ul>', b.indexOf('data-testid="map-rivers-key"')));
+		expect(b).toMatch(/<ul[^>]*aria-label="River network colours"[^>]*data-testid="map-rivers-key"/);
+		const [first, second] = riverNetworkColours(false);
+		// In the answer's order, each with the colour its place among the loaded datasets gives it.
+		expect(key).toMatch(new RegExp(`--rn: ${second}[^>]*></span>HydroRIVERS-v10</li>.*--rn: ${first}[^>]*></span>DWS-rivs500k</li>`));
 	});
 
 	it('says when no network is loaded', () => {

@@ -19,7 +19,7 @@
 	import type { MapFeature } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import { type MapLayer, layersStatus, reachFacts, reachKey, reachLabel, RIVER_BBOX_MAX_DEG, withLayer } from './mapLayers';
-	import { quaternaryColour, riverNetworkColour } from './mapStyle';
+	import { quaternaryColour, riverNetworkColour, riverNetworkColours, riverSetOf } from './mapStyle';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
 
@@ -68,6 +68,8 @@
 		const sets = [...new Set(rv?.reaches.map((r) => r.dataset) ?? [])];
 		return `${n} ${n === 1 ? 'reach' : 'reaches'} around the catchment, the biggest first${rv?.truncated ? ' (the smallest streams left out; there are more)' : ''}, from ${sets.join(', ')}.`;
 	});
+	// The datasets in view, each in its map colour: a key, shown only when there is more than one to tell apart.
+	const rvSets = $derived(rv ? [...new Set(rv.reaches.map((r) => r.dataset))].map((d) => ({ dataset: d, colour: riverNetworkColours(dark)[riverSetOf(rv.datasets, d, dark)]! })) : []);
 	const shownReaches = $derived(rv ? (allReaches ? rv.reaches : rv.reaches.slice(0, REACHES_SHOWN)) : []);
 	const pickedReach = $derived(rivers.pickedReach);
 	const pickedFeature = $derived(pickedReach ? rivers.featureFor(pickedReach) : null);
@@ -138,6 +140,11 @@
 				</p>
 			{:else}
 				<p class="muted" data-testid="map-rivers-summary">{rvSummary}{#if rvSynthetic}{' '}<strong>Synthetic test data, never real rivers.</strong>{/if}</p>
+				{#if rvSets.length > 1}
+					<ul class="rn-key" aria-label="River network colours" data-testid="map-rivers-key">
+						{#each rvSets as s (s.dataset)}<li><span class="swatch rn-swatch" style:--rn={s.colour} aria-hidden="true"></span>{s.dataset}</li>{/each}
+					</ul>
+				{/if}
 				{#if pickedReach}
 					<div class="reach" data-testid="map-reach-picked">
 						<p class="reach-h"><strong>{reachLabel(pickedReach)}</strong>{#if reachFacts(pickedReach).length}: {reachFacts(pickedReach).join(', ')}{/if}.</p>
@@ -214,6 +221,19 @@
 	/* The river network as the map draws it: a dashed line in its colour (mapStyle.ts riverNetworkColour). */
 	.rn-swatch {
 		border-top: 2px dashed var(--rn);
+	}
+	.rn-key {
+		list-style: none;
+		margin: 0.25rem 0;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.9rem;
+	}
+	.rn-key li {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 	.reach {
 		display: grid;

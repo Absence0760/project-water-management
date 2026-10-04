@@ -1635,6 +1635,18 @@ the app can analyse; this layer is.
   basemap and ΔE ≥ 40 from every other stroke (`mapStyle.test.ts`). While
   the layer is on, the key's **Lines** gain "river network" with a dashed
   swatch.
+- **More than one dataset loaded** (HydroRIVERS beside a national network,
+  to compare them): each dataset is drawn in its own colour, by its place
+  among the loaded datasets in name order (`riverNetworkColours`,
+  `riverSetOf`): the first in the cyan-blue above, the second violet
+  (`#6a3fc1` light, `#c39bff` dark), the third orange (`#a64b00`, `#ffa04d`),
+  a fourth starting again. Each at least 3:1 on the basemap, ΔE ≥ 40 from the
+  others and ≥ 25 from the selection pink and the channels' red
+  (`mapStyle.test.ts`). With reaches from more than one dataset in view, the
+  Layers panel keys each dataset to its colour under the reach count
+  ("River network colours", `MapLayersPanel.test.ts`). The datasets share the
+  layer's 1,000-reach cut (biggest first), so a dense view may show more of
+  one than the other; zoom in to compare.
 - **The list beside the map.** The Layers panel (the side column's Layers tab on a wide page, a panel over the map on a phone) says how many reaches are
   around the catchment and where they come from ("10 reaches around the
   catchment, the biggest first, from synthetic." and, for the repo's

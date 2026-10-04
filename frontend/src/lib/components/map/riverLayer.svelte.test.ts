@@ -176,6 +176,22 @@ describe('RiverLayer', () => {
 		expect(layer.featureFor(r)?.id).toBe('rv');
 	});
 
+	it('hands each reach the colour of its dataset, by its place among the loaded datasets', async () => {
+		const real = reach(3, { dataset: 'HydroRIVERS-v10', source: 'HydroRIVERS v1.0', synthetic: false });
+		const datasets = [{ dataset: 'DWS-rivs500k', count: 1 }, { dataset: 'HydroRIVERS-v10', count: 1 }, { dataset: 'synthetic', count: 1 }];
+		const load = vi.fn<RiverLayerDeps['load']>().mockResolvedValueOnce({ ...answer(reach(1, { dataset: 'DWS-rivs500k' }), real, reach(2)), datasets });
+		const { deps, layer } = setup(load);
+		deps.on = true;
+		deps.features = [square('b', 28, -26)];
+		flushSync();
+		await vi.waitFor(() => expect(layer.reaches).toHaveLength(3));
+		expect(layer.reaches.map((r) => [r.key, r.set])).toEqual([
+			['DWS-rivs500k:1', 0],
+			['HydroRIVERS-v10:3', 1],
+			['synthetic:2', 2]
+		]);
+	});
+
 	it('credits HydroRIVERS while it draws any of its reaches, never the synthetic network', async () => {
 		const real = reach(3, { dataset: 'HydroRIVERS-v10', source: 'HydroRIVERS v1.0', synthetic: false });
 		const load = vi.fn<RiverLayerDeps['load']>().mockResolvedValueOnce(answer(reach(1))).mockResolvedValueOnce(answer(reach(1), real));

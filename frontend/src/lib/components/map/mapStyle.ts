@@ -393,18 +393,34 @@ export function proposalLayers(dark: boolean): Layer[] {
  */
 export const riverNetworkColour = (dark: boolean) => (dark ? '#3ec1f0' : '#006b9e');
 
-/** A reach the River network layer draws (GET …/map/rivers): its key, Strahler order and line. */
+/**
+ * One colour per loaded river dataset, so two networks (HydroRIVERS and a
+ * national one, say) can be told apart and compared on the map: the first
+ * dataset by name in the network's cyan-blue, then violet, then orange; a
+ * fourth starts again. Each at least 3:1 on the basemap and clear of the
+ * selection pink and the channels' red.
+ */
+export const riverNetworkColours = (dark: boolean): readonly string[] => (dark ? ['#3ec1f0', '#c39bff', '#ffa04d'] : ['#006b9e', '#6a3fc1', '#a64b00']);
+
+/** A dataset's place in `riverNetworkColours`: its index among the loaded datasets (by name), wrapping; 0 when it isn't listed. */
+export function riverSetOf(datasets: readonly { dataset: string }[], dataset: string, dark = false): number {
+	const i = datasets.findIndex((d) => d.dataset === dataset);
+	return i < 0 ? 0 : i % riverNetworkColours(dark).length;
+}
+
+/** A reach the River network layer draws (GET …/map/rivers): its key, Strahler order and line, and its dataset's colour (`riverSetOf`; 0 when not given). */
 export interface NetworkReach {
 	key: string;
 	strahler: number | null;
 	geometry: MapGeometry;
+	set?: number;
 }
 
 /** The `rivers` source's data: each reach with its key, order (1 when not given) and whether it is the one picked. */
 export function riverNetworkData(reaches: readonly NetworkReach[] | null | undefined, picked: string | null = null) {
 	return {
 		type: 'FeatureCollection' as const,
-		features: (reaches ?? []).map((r) => ({ type: 'Feature' as const, properties: { key: r.key, order: r.strahler ?? 1, picked: r.key === picked }, geometry: r.geometry }))
+		features: (reaches ?? []).map((r) => ({ type: 'Feature' as const, properties: { key: r.key, order: r.strahler ?? 1, set: r.set ?? 0, picked: r.key === picked }, geometry: r.geometry }))
 	};
 }
 
@@ -412,8 +428,8 @@ export function riverNetworkData(reaches: readonly NetworkReach[] | null | undef
 export const RIVER_NETWORK_HIT_LAYER = 'rn-hit';
 
 /**
- * The river network: dashed, wider for a higher order; over the quaternaries,
- * under the features. The picked reach is drawn again on top of the others,
+ * The river network: dashed, wider for a higher order, each dataset in its
+ * own colour (`riverNetworkColours`); over the quaternaries, under the features. The picked reach is drawn again on top of the others,
  * solid in the map's selection colour on a casing, so it stands out even
  * among bigger rivers.
  */
@@ -421,6 +437,7 @@ export function riverNetworkLayers(dark: boolean): Layer[] {
 	const src = { source: 'rivers' };
 	const picked = ['==', ['get', 'picked'], true];
 	const c = overlayColours(dark);
+	const [first, second, third] = riverNetworkColours(dark);
 	return [
 		{ id: RIVER_NETWORK_HIT_LAYER, type: 'line', ...src, paint: { 'line-color': riverNetworkColour(dark), 'line-width': 12, 'line-opacity': 0.01 } },
 		{
@@ -429,7 +446,7 @@ export function riverNetworkLayers(dark: boolean): Layer[] {
 			...src,
 			layout: { 'line-cap': 'round' },
 			paint: {
-				'line-color': riverNetworkColour(dark),
+				'line-color': ['match', ['get', 'set'], 1, second, 2, third, first],
 				'line-width': ['interpolate', ['linear'], ['get', 'order'], 1, 1.25, 6, 3],
 				'line-dasharray': [3, 1.5]
 			}

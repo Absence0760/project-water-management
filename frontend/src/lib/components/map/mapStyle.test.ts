@@ -34,6 +34,8 @@ import {
 	quaternaryLayers,
 	RIVER_NETWORK_HIT_LAYER,
 	riverNetworkColour,
+	riverNetworkColours,
+	riverSetOf,
 	CHANNEL_OPACITY,
 	channelColour,
 	channelData,
@@ -330,11 +332,11 @@ describe('the river network (#345)', () => {
 		expect((credited.sources.rivers as Record<string, unknown>).attribution).toBeUndefined();
 	});
 
-	it('feeds each reach with its key and order (1 when not given), marking the picked one', () => {
-		const d = riverNetworkData([{ key: 'synthetic:1', strahler: 3, geometry: line }, { key: 'synthetic:2', strahler: null, geometry: line }], 'synthetic:2');
+	it('feeds each reach with its key, order (1 when not given) and dataset colour (0 when not given), marking the picked one', () => {
+		const d = riverNetworkData([{ key: 'synthetic:1', strahler: 3, geometry: line, set: 1 }, { key: 'synthetic:2', strahler: null, geometry: line }], 'synthetic:2');
 		expect(d.features.map((f) => f.properties)).toEqual([
-			{ key: 'synthetic:1', order: 3, picked: false },
-			{ key: 'synthetic:2', order: 1, picked: true }
+			{ key: 'synthetic:1', order: 3, set: 1, picked: false },
+			{ key: 'synthetic:2', order: 1, set: 0, picked: true }
 		]);
 		expect(riverNetworkData(null).features).toEqual([]);
 	});
@@ -348,6 +350,38 @@ describe('the river network (#345)', () => {
 			for (const s of [c.boundary, c.parcel, c.other, c.selected, quaternaryColour(dark)]) expect(deltaE(r, s), `${r} vs ${s}`).toBeGreaterThanOrEqual(40);
 			// Both are water: a different blue, told apart by the dash and width as well (WCAG 1.4.1).
 			expect(deltaE(r, c.water)).toBeGreaterThanOrEqual(25);
+		}
+	});
+});
+
+describe('the river network’s datasets in their own colours', () => {
+	const sets = [{ dataset: 'A-national' }, { dataset: 'HydroRIVERS-v10' }, { dataset: 'synthetic' }, { dataset: 'Z-fourth' }];
+
+	it('gives each loaded dataset its place by name, wrapping after the third, and 0 to one not listed', () => {
+		expect(sets.map((s) => riverSetOf(sets, s.dataset))).toEqual([0, 1, 2, 0]);
+		expect(riverSetOf(sets, 'not-loaded')).toBe(0);
+		expect(riverSetOf([], 'HydroRIVERS-v10')).toBe(0);
+	});
+
+	it('colours the line by the reach’s dataset, the first in the network’s own colour', () => {
+		for (const dark of [false, true]) {
+			const [first, second, third] = riverNetworkColours(dark);
+			expect(first).toBe(riverNetworkColour(dark));
+			const paint = riverNetworkLayers(dark).find((l) => l.id === 'rn-line')!.paint as Record<string, unknown>;
+			expect(paint['line-color']).toEqual(['match', ['get', 'set'], 1, second, 2, third, first]);
+		}
+	});
+
+	it('keeps every dataset colour at least 3:1 on the basemap and apart from each other, the selection and the channels', () => {
+		for (const dark of [false, true]) {
+			const cs = riverNetworkColours(dark);
+			const b = basemapColours(dark);
+			const c = overlayColours(dark);
+			for (const r of cs) {
+				for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(r, g), `${r} on ${g}, ${dark ? 'dark' : 'light'}`).toBeGreaterThanOrEqual(3);
+				for (const s of [c.selected, channelColour(dark)]) expect(deltaE(r, s), `${r} vs ${s}, ${dark ? 'dark' : 'light'}`).toBeGreaterThanOrEqual(25);
+			}
+			for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) expect(deltaE(cs[i]!, cs[j]!), `${cs[i]} vs ${cs[j]}, ${dark ? 'dark' : 'light'}`).toBeGreaterThanOrEqual(40);
 		}
 	});
 });
