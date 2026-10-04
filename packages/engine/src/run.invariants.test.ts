@@ -32,6 +32,10 @@ describe('engine invariants on random networks', () => {
 		// own stream, the rest of the seed unchanged); they are taken off so it still shows the property.
 		const input = randomInput(25);
 		for (const n of input.model.nodes) Object.assign(n, OPERATING_DEFAULTS);
+		// Engine 1.72.0's generator gives it irrigation systems too (their own stream); they are taken off the same way.
+		delete input.model.irrigationSystems;
+		for (const c of input.model.crops) delete c.irrigationSystemId;
+		for (const a of input.model.cropAreas) delete a.irrigationSystemId;
 		const frac = (x: ModelInput) => {
 			const t = runModel(x).summary.farms.reduce((a, f) => [a[0]! + f.avgDemandM3Day, a[1]! + f.avgSuppliedM3Day], [0, 0]);
 			return t[1]! / t[0]!;
