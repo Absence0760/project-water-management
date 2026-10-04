@@ -49,7 +49,7 @@ describe('validateModel', () => {
 
 	it('flags duplicate names case-insensitively', () => {
 		const m = model([node('g', 'Gauge', null), node('a', 'Farm', 'g'), node('b', ' farm ', 'g')]);
-		expect(messages(m)).toEqual(['Node name "Farm" is used 2 times.']);
+		expect(messages(m)).toEqual(['Hydrological unit name "Farm" is used 2 times.']);
 	});
 
 	it('flags a line break or control character in a name or schedule label, as the API refuses it (issue #385)', () => {
@@ -72,13 +72,13 @@ describe('validateModel', () => {
 	});
 
 	it('flags blank names', () => {
-		expect(messages(model([node('g', '  ', null)]))).toContain('Every node needs a name.');
+		expect(messages(model([node('g', '  ', null)]))).toContain('Every hydrological unit needs a name.');
 	});
 
 	it('requires exactly one outlet', () => {
 		expect(messages(model([node('a', 'A', null), node('b', 'B', null)]))[0]).toMatch(/2 outlets/);
 		expect(messages(model([node('a', 'A', 'b'), node('b', 'B', 'a')]))).toContain(
-			'The network needs one outlet (a node that drains nowhere).'
+			'The network needs one outlet (a hydrological unit that drains nowhere).'
 		);
 	});
 
@@ -91,7 +91,7 @@ describe('validateModel', () => {
 
 	it('detects self-drainage and dangling references', () => {
 		const m = model([node('g', 'G', null), node('a', 'A', 'a'), node('b', 'B', 'zzz')]);
-		expect(messages(m)).toEqual(['"A" drains into itself.', '"B" drains into a node that no longer exists.']);
+		expect(messages(m)).toEqual(['"A" drains into itself.', '"B" drains into a hydrological unit that no longer exists.']);
 	});
 
 	it('checks crop and transfer references', () => {
@@ -147,7 +147,7 @@ describe('validateModel', () => {
 		expect(messages(model([g, f, h, town], { transfers: [{ ...t, fromNodeId: 'g' }] }))).toEqual(['Transfer 1: "Gauge" is a gauge, which can\'t send or receive water; choose a hydrological unit.']);
 		expect(messages(model([g, f, h, town], { transfers: [{ ...t, toNodeId: 'u' }] }))).toEqual(['Transfer 1: "Town" is an other water user; transfers run between hydrological units’ dams.']);
 		// The same node at both ends says that, not twice that it is a gauge.
-		expect(messages(model([g, f, h, town], { transfers: [{ ...t, fromNodeId: 'g', toNodeId: 'g' }] }))).toEqual(['Transfer 1: source and destination are the same node.']);
+		expect(messages(model([g, f, h, town], { transfers: [{ ...t, fromNodeId: 'g', toNodeId: 'g' }] }))).toEqual(['Transfer 1: source and destination are the same hydrological unit.']);
 	});
 
 	it('names the item each issue is about, and links it to where it is fixed', () => {
@@ -291,7 +291,7 @@ describe('validateModel', () => {
 		const nodes = [g, node('a', 'A', 'g')];
 		expect(messages(model(nodes, { boreholes: [b] }))).toEqual([]);
 		expect(messages(model(nodes, { boreholes: [{ ...b, nodeId: 'g' }] }))).toEqual(['Borehole "BH1" on "Gauge": a gauge can\'t have boreholes.']);
-		expect(messages(model(nodes, { boreholes: [{ ...b, nodeId: 'x' }] }))).toEqual(['A borehole refers to a deleted node.']);
+		expect(messages(model(nodes, { boreholes: [{ ...b, nodeId: 'x' }] }))).toEqual(['A borehole refers to a deleted hydrological unit.']);
 		expect(messages(model(nodes, { boreholes: [{ ...b, depletionFactor: 2 }] }))).toEqual([
 			'Borehole "BH1" on "A": capacity and annual cap can\'t be negative; the emergency level and depletion are 0–100%.'
 		]);

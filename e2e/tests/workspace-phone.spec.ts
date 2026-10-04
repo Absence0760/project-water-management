@@ -172,7 +172,7 @@ test.describe('phone', () => {
 		await page.goto(`/projects/${p.id}?tab=network&edit=${unit.id}`);
 		await within(`Edit ${unit.name}`, true);
 		await page.goto(`/projects/${p.id}?tab=network&grid=nodes`);
-		await within('Node table', true);
+		await within('Hydrological unit table', true);
 		// Allocations' two sheets: full screen.
 		await page.goto(`/projects/${p.id}?tab=allocations&import=1`);
 		await within('Import registered volumes', true);

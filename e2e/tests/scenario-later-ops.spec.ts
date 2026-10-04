@@ -31,8 +31,8 @@ test('an editor moves and inserts nodes, changes a crop and sets a registered vo
 	const add = () => form.getByRole('button', { name: 'Add change' }).click();
 
 	// Move Lower farm to drain into Upper farm: "Now" says where it drains.
-	await form.getByLabel('Kind of change').selectOption({ label: 'Move what a unit, gauge or user drains into' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Lower farm' });
+	await form.getByLabel('Kind of change').selectOption({ label: 'Move what a hydrological unit drains into' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Lower farm' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: drains into Outflow gauge');
 	await add();
 	await expect(form.getByRole('alert')).toHaveText('Pick what it will drain into');
@@ -43,7 +43,7 @@ test('an editor moves and inserts nodes, changes a crop and sets a registered vo
 	await expect(changes.nth(0)).toContainText('Baseline assumption');
 
 	// Insert a dam above the gauge: Upper farm (with Lower farm behind it now) drains into it.
-	await form.getByLabel('Kind of change').selectOption({ label: 'Insert a hydrological unit or user on a reach' });
+	await form.getByLabel('Kind of change').selectOption({ label: 'Insert a hydrological unit on a reach' });
 	await form.getByLabel('Name', { exact: true }).fill('Weir dam');
 	await form.getByLabel('Drains into').selectOption({ label: 'Outflow gauge' });
 	const ups = form.getByRole('group', { name: /^What drains into it/ });

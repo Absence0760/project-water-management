@@ -269,7 +269,7 @@
 
 		{#if d.kind === 'node.set' || d.kind === 'node.remove' || d.kind === 'node.move'}
 			<div class="field">
-				<label for="op-node">Hydrological unit, gauge or user</label>
+				<label for="op-node">Hydrological unit</label>
 				<select id="op-node" value={d.nodeId} onchange={(e) => pickNode(e.currentTarget.value)}>
 					<option value="" disabled>Pick one</option>
 					{#each d.kind === 'node.set' ? nodes : nodes.filter((n) => n.downstreamNodeId !== null) as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
@@ -423,7 +423,7 @@
 						prefill();
 					}}
 				>
-					<option value="" disabled>{d.kind === 'node.set' && !node ? 'Pick a node first' : 'Pick one'}</option>
+					<option value="" disabled>{d.kind === 'node.set' && !node ? 'Pick a hydrological unit first' : 'Pick one'}</option>
 					{#each fieldOptions as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
 				</select>
 			</div>
@@ -501,9 +501,9 @@
 					<span class="hint">Pick what it drains into first.</span>
 				{/each}
 			</fieldset>
-			<p class="hint">The new unit or user sits on the river between the ticked ones and what they drained into, with no land of its own; change its other values with “Change a hydrological unit, gauge or user” once it is added.</p>
+			<p class="hint">The new hydrological unit sits on the river between the ticked ones and what they drained into, with no land of its own; change its other values with “Change a hydrological unit” once it is added.</p>
 		{:else}
-			<p class="hint">A new unit or user is a leaf, with no land of its own; change its other values with “Change a hydrological unit, gauge or user” once it is added.</p>
+			<p class="hint">A new hydrological unit is a leaf, with no land of its own; change its other values with “Change a hydrological unit” once it is added.</p>
 		{/if}
 	{:else if d.kind === 'node.move'}
 		<p class="hint">Whatever drains into it moves with it. Moving one that isn't the proposer's own new structure, or one others drain into, is a <strong>baseline assumption</strong>: it redraws the river as modelled.</p>

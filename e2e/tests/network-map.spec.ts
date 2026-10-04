@@ -107,7 +107,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	// There are no layouts to switch any more; old links still land somewhere sensible.
 	await expect(page.getByRole('group', { name: 'Layout' })).toHaveCount(0);
 	await page.goto(`/projects/${project.id}?tab=network&view=table`);
-	await expect(page.getByRole('dialog', { name: 'Node table' })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Hydrological unit table' })).toBeVisible();
 	await expect(page).toHaveURL(/\?tab=network&grid=nodes$/);
 	await page.goto(`/projects/${project.id}?tab=network&view=node`);
 	await expect(page.getByRole('dialog', { name: /^Edit / })).toBeVisible();

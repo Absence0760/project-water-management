@@ -68,7 +68,7 @@ export function seriesGroups(
 	if (groups.has(null)) out.push({ nodeId: null, label: 'Catchment (outflow gauge)', options: groups.get(null)! });
 	const nodeIds = [...groups.keys()].filter((k): k is string => k !== null);
 	nodeIds.sort((a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9) || (names.get(a) ?? '').localeCompare(names.get(b) ?? ''));
-	for (const id of nodeIds) out.push({ nodeId: id, label: names.get(id) ?? 'Unknown node', options: groups.get(id)! });
+	for (const id of nodeIds) out.push({ nodeId: id, label: names.get(id) ?? 'Unknown hydrological unit', options: groups.get(id)! });
 	return out;
 }
 

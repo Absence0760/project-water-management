@@ -53,7 +53,7 @@ export function parseProjectFileText(text: string): ParsedImport {
 	if (doc.format !== undefined && doc.format !== FORMAT) throw new ImportFileError(notAProject);
 	const model = doc.model as Record<string, unknown> | undefined;
 	if (!model || typeof model !== 'object' || !['nodes', 'crops', 'cropAreas', 'transfers'].every((k) => Array.isArray(model[k]))) {
-		throw new ImportFileError(`${notAProject} It has no model (nodes, crops, crop areas and transfers).`);
+		throw new ImportFileError(`${notAProject} It has no model (hydrological units, crops, crop areas and transfers).`);
 	}
 	if (doc.series !== undefined && !Array.isArray(doc.series)) throw new ImportFileError(`${notAProject} Its series aren't a list.`);
 	const file = { ...doc, name: typeof doc.name === 'string' ? doc.name : '' } as ProjectFile;

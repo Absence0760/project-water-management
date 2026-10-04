@@ -141,7 +141,7 @@ function nodesWithSeries(series: Map<string | null, SeriesRefLike[]>, nodes: rea
 	for (const id of series.keys()) {
 		if (id === null) continue;
 		const k = known.get(id);
-		out.push({ id, name: k?.n.name ?? 'Unknown node', order: k ? (k.n.sortOrder ?? k.i) : 1e9, named: !!k, kind: k?.n.kind });
+		out.push({ id, name: k?.n.name ?? 'Unknown hydrological unit', order: k ? (k.n.sortOrder ?? k.i) : 1e9, named: !!k, kind: k?.n.kind });
 	}
 	return out.sort((x, y) => x.order - y.order || x.name.localeCompare(y.name));
 }

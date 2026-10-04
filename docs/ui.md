@@ -3936,7 +3936,7 @@ saves the catchment's model, and override mode there edits the scenario's
 An existing model grid, unchanged, full screen over whichever tab is open
 (`model/GridModal.svelte`; issue #17: the simpler screens keep every grid one
 click away). It opens while the workspace URL has `grid=<id>`
-(`lib/workspace/overlays.ts`): `nodes` (the Network's node table, `NetworkTab`
+(`lib/workspace/overlays.ts`): `nodes` (the Network's node table, titled **Hydrological unit table** since 2026-10-04, `NetworkTab`
 with `only="table"`: every column, reordering, Add node / other user, Sort by
 flow path, the other water users and the field guide; with no nodes, **Add
 outflow gauge**), `crop-factors` and `planted-areas` (the
@@ -7220,11 +7220,12 @@ closing, and **Discard edits** puts it back. **Edits to record**
   planting is changed with **Set a hydrological unit's crop area** (its
   area and irrigation system). (Until 2026-10-04 it was "The proposer's
   nodes", every node of the base, gauges included; the form's node ops read
-  "Change a node's value", "Add a node" and so on, and now name the kinds:
-  **Change a hydrological unit, gauge or user**, **Add a hydrological unit
-  or user**, **Remove a hydrological unit, gauge or user**, **Move what a
-  unit, gauge or user drains into**, **Insert a hydrological unit or user
-  on a reach**, the picker **Hydrological unit, gauge or user**.)
+  "Change a node's value", "Add a node" and so on, and now say
+  hydrological unit, as the whole app does for any node, gauges and other
+  water users included: **Change a hydrological unit**, **Add a
+  hydrological unit**, **Remove a hydrological unit**, **Move what a
+  hydrological unit drains into**, **Insert a hydrological unit on a
+  reach**, the picker **Hydrological unit**.)
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
   application's too): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and

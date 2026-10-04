@@ -202,7 +202,7 @@
 	const gaugeInUse = $derived(gaugeRecordsInUse(list, gauges));
 	// The gauge calibration scores at (settings.calibrationSiteNodeId, engine ≥ 1.41.0); null = the outlet.
 	const calibrationSite = $derived(settings?.calibrationSiteNodeId ?? null);
-	const siteName = (id: string) => gauges.find((g) => g.id === id)?.name ?? 'a node no longer in the model';
+	const siteName = (id: string) => gauges.find((g) => g.id === id)?.name ?? 'a hydrological unit no longer in the model';
 	const gaugeIds = $derived(new Set(gauges.map((g) => g.id)));
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
@@ -664,7 +664,7 @@
 											<option value="">At the outlet</option>
 											{#each gauges as g (g.id)}<option value={g.id}>At gauge {g.name}</option>{/each}
 											{#if s.siteNodeId && !gauges.some((g) => g.id === s.siteNodeId)}
-												<option value={s.siteNodeId} disabled>At a node no longer in the model</option>
+												<option value={s.siteNodeId} disabled>At a hydrological unit no longer in the model</option>
 											{/if}
 										</select>
 										{@render saveStatus(saveId(s, 'site'))}

@@ -14,7 +14,7 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	const project = await createProject(page.request, 'Model build');
 	// The node table, as a grid over the (empty) map.
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 
 	// --- network: outflow gauge + two farms ---------------------------------
 	await grid.getByRole('button', { name: 'Add outflow gauge' }).click();
@@ -24,7 +24,7 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(names).toHaveCount(3);
 	await expect(names.nth(0)).toHaveValue('Outflow gauge');
 	// One heading per modal: the title names the table, the table has none of its own.
-	await expect(grid.getByRole('heading')).toHaveText(['Node table']);
+	await expect(grid.getByRole('heading')).toHaveText(['Hydrological unit table']);
 	// A new node is a "Unit N", as the workspace calls it (operator decision, 2026-10-01).
 	await expect(names.nth(1)).toHaveValue('Unit 1');
 	await expect(names.nth(2)).toHaveValue('Unit 2');
@@ -133,14 +133,14 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	const project = await createProject(page.request, 'Model validation');
 	await putModel(page.request, project.id, sampleModel());
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	const problems = grid.getByRole('status').filter({ hasText: 'Fix before saving:' });
 	const save = grid.getByRole('button', { name: 'Save changes' });
 
 	// Second outlet.
 	await page.getByLabel('Lower farm drains into').selectOption({ label: '— Outlet (none) —' });
 	await expect(problems).toContainText(
-		'The network has 2 outlets ("Outflow gauge", "Lower farm"); exactly one node may drain nowhere.'
+		'The network has 2 outlets ("Outflow gauge", "Lower farm"); exactly one hydrological unit may drain nowhere.'
 	);
 	await expect(saveBar(page)).toContainText('1 problem to fix before saving');
 	await expect(save).toBeDisabled();
@@ -181,11 +181,11 @@ test('the node sheet’s save row lists its problems as links to where they are 
 	await sheet.getByLabel('Name', { exact: true }).fill('Lower farm');
 	// The page's list is behind the modal: the row names the problem, as a link to the node's sheet.
 	await expect(sheet).toContainText('1 problem to fix before saving');
-	const link = sheet.getByRole('link', { name: 'Node name "Lower farm" is used 2 times.' });
+	const link = sheet.getByRole('link', { name: 'Hydrological unit name "Lower farm" is used 2 times.' });
 	await expect(link).toHaveAttribute('href', /^\?tab=network&edit=/);
 	const save = sheet.getByRole('button', { name: 'Save changes' });
 	await expect(save).toBeDisabled();
-	await expect(save).toHaveAccessibleDescription(/Node name "Lower farm" is used 2 times\./);
+	await expect(save).toHaveAccessibleDescription(/Hydrological unit name "Lower farm" is used 2 times\./);
 	// Discard model changes asks first (it reverts every unsaved model edit, not only this sheet's).
 	await sheet.getByRole('button', { name: 'Discard model changes' }).click();
 	await answerConfirm(page, false, 'including any made on other pages');

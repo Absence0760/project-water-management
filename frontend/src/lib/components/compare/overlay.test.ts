@@ -84,7 +84,7 @@ describe('matchOverlay', () => {
 	it('matches a node missing from the model snapshot by id only, never by its placeholder name', () => {
 		const m = matchOverlay([ref('u1', 'outflow'), ref('u2', 'outflow')], [ref('u1', 'outflow'), ref('u3', 'outflow')], [], []);
 		expect(m.groups.map((g) => g.id)).toEqual(['u1|u1']);
-		expect(m.groups[0]!.label).toBe('Unknown node');
+		expect(m.groups[0]!.label).toBe('Unknown hydrological unit');
 		expect(m.onlyA.map((n) => n.nodeId)).toEqual(['u2']);
 		expect(m.onlyB.map((n) => n.nodeId)).toEqual(['u3']);
 	});

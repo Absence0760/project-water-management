@@ -50,10 +50,10 @@ test('an applicant submits an application on the published baseline, and the ass
 
 	// Their own farm with its values; the other farm only as "Farm 1", with none.
 	const form = a.getByRole('form', { name: 'Add a change' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: 150\u202f000 m³');
-	await expect(form.getByLabel('Hydrological unit, gauge or user').getByRole('option', { name: 'Farm 1' })).toHaveCount(1);
+	await expect(form.getByLabel('Hydrological unit').getByRole('option', { name: 'Farm 1' })).toHaveCount(1);
 	await expect(a.getByText('Lower farm')).toHaveCount(0);
 	await form.getByLabel('Dam capacity (m³)').fill('200000');
 	await form.getByRole('button', { name: 'Add change' }).click();

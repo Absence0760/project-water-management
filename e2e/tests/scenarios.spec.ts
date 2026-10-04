@@ -70,7 +70,7 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	// Raise the Upper farm dam from 150 000 to 180 000 m³ (20 %): the form shows the value it replaces.
 	const form = page.getByRole('form', { name: 'Add a change' });
 	await expect(form.getByLabel('Kind of change')).toHaveValue('node.set');
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: 150\u202f000 m³');
 	await expect(form.getByLabel('Dam capacity (m³)')).toHaveValue('150000');
@@ -91,8 +91,8 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);
 
 	// A second edit, undone.
-	await form.getByLabel('Kind of change').selectOption({ label: 'Remove a hydrological unit, gauge or user' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Lower farm' });
+	await form.getByLabel('Kind of change').selectOption({ label: 'Remove a hydrological unit' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Lower farm' });
 	await form.getByRole('button', { name: 'Add change' }).click();
 	await expect(changes(page).getByRole('listitem')).toHaveCount(2);
 	await expect(changes(page).getByRole('listitem').nth(1)).toContainText('Remove “Lower farm”');
@@ -120,8 +120,8 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);
 
 	// A bad value is refused in the form, in the units typed, before anything is saved.
-	await form.getByLabel('Kind of change').selectOption({ label: 'Change a hydrological unit, gauge or user' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Kind of change').selectOption({ label: 'Change a hydrological unit' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam minimum operating level' });
 	await form.getByLabel('Dam minimum operating level (%)').fill('150');
 	await form.getByRole('button', { name: 'Add change' }).click();
@@ -138,7 +138,7 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await expect(headline.getByRole('heading', { name: 'Calibration against observed flow' })).toHaveCount(0);
 	await expect(headline.getByRole('heading', { name: /^WR2012 check/ })).toHaveCount(0);
 	const overlay = compare.getByRole('region', { name: 'Daily series' });
-	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await overlay.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await overlay.getByLabel('Series').selectOption('dam_storage');
 	// The bigger dam stores more: B is above A on some day and never below it.
 	await expect(overlay.getByTestId('overlay-summary')).toHaveText(/B is higher on [1-9]\d* days? and lower on 0 days; the largest change is \+[\d.\u202f]+ m³ on \d{4}-\d\d-\d\d\.$/);
@@ -222,7 +222,7 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 
 	// The supply rule, in run comparison's words, with the value it replaces.
 	const form = page.getByRole('form', { name: 'Add a change' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: dam only');
 	await form.getByLabel('Supply rule').selectOption({ label: 'river first' });
@@ -231,7 +231,7 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	await expect(list.getByRole('listitem')).toContainText('Upper farm: Supply rule dam only → river first');
 
 	// The pump, in m³/day; blank would be no limit.
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'River pump capacity' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: no limit');
 	await expect(form.getByLabel('River pump capacity (m³/day)')).toHaveAttribute('placeholder', 'empty for no limit');
@@ -262,7 +262,7 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	await expect(assurance.getByRole('row', { name: /^Upper farm/ })).toContainText(/\d+%/);
 	// …and the daily overlay offers the farm's river pumping, the base drawn as zeros and said so.
 	const overlay = compare.getByRole('region', { name: 'Daily series' });
-	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await overlay.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	const series = overlay.getByLabel('Series');
 	await expect(series.locator('option[value="river_abstraction"]')).toHaveText('Pumped from the river below the dam (part of supplied) (m³/day) · run B only');
 	await series.selectOption('river_abstraction');
@@ -284,7 +284,7 @@ test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Ne
 	await expect(changes(page).getByRole('listitem')).toContainText(RAISE);
 
 	const form = page.getByRole('form', { name: 'Add a change' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: none (power law)');
 	const rows = form.getByLabel('Dam survey curve');
@@ -299,7 +299,7 @@ test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Ne
 	await expect(changes(page).getByRole('listitem')).toHaveCount(2);
 	await expect(changes(page).getByRole('listitem').nth(1)).toContainText('Upper farm: Dam survey curve none (power law) → 3 survey rows, 180\u202f000 m³ at the top');
 	// The form with the paste box open (the next change starts from the curve now set) passes axe.
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
 	await expect(rows).toHaveValue('0, 0, 0\n3, 35000, 60000\n6.5, 52000, 180000');
 	await expect(rows).toHaveAccessibleDescription(/^Level \(m\), area \(m²\), volume \(m³\), one row per line/);
@@ -321,7 +321,7 @@ test('the survey curve paste box fits a phone, with no sideways scroll, and pass
 	const { project, scenarioId } = await seedScenario(page, 'Scenario survey on a phone');
 	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
 	const form = page.getByRole('form', { name: 'Add a change' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
 	await expect(form.getByLabel('Dam survey curve')).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -347,7 +347,7 @@ test('a trigger farm goes straight to run of river, one change at a time: the ha
 	// The rule alone: run of river has no dam, and Upper farm still has one. It follows the trigger change on the
 	// same farm, so the two are one edit, skipped whole until it fits: both say why.
 	const form = page.getByRole('form', { name: 'Add a change' });
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
 	await form.getByLabel('Supply rule').selectOption({ label: 'run of river' });
 	await form.getByRole('button', { name: 'Add change' }).click();
@@ -358,7 +358,7 @@ test('a trigger farm goes straight to run of river, one change at a time: the ha
 	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeDisabled();
 
 	// The form builds on the half-made edit (the farm reads as run of river); emptying the dam next completes it.
-	await form.getByLabel('Hydrological unit, gauge or user').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Supply rule' });
 	await expect(form.getByTestId('op-current')).toHaveText('Now: run of river');
 	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
@@ -416,7 +416,7 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	// An edit no change can express is named, and holds the rest back until it is undone.
 	await mode.getByRole('button', { name: 'Network', exact: true }).click();
 	await page.getByLabel('Kind of Lower farm').selectOption('user');
-	await expect(record.getByRole('status').first()).toContainText("Changing “Lower farm” from a farm to a user: a scenario can't change a node's kind.");
+	await expect(record.getByRole('status').first()).toContainText("Changing “Lower farm” from a farm to a user: a scenario can't change a hydrological unit's kind.");
 	await expect(record.getByRole('button', { name: /^Record/ })).toBeDisabled();
 	await page.getByLabel('Kind of Lower farm').selectOption('farm');
 

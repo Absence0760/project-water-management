@@ -47,7 +47,7 @@ const IGNORED_NODE_KEYS = new Set(['id', 'sortOrder']);
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const sortedMonths = (ms: readonly number[]) => [...new Set(ms)].sort((a, b) => a - b);
-const label = (n: { name: string }) => `“${n.name || 'unnamed node'}”`;
+const label = (n: { name: string }) => `“${n.name || 'unnamed hydrological unit'}”`;
 
 /** Each planting's own irrigation system (engine ≥ 1.72.0), per farm and crop; absent = the crop's default. */
 function systemMap(rows: readonly CropArea[]): Map<string, string> {
@@ -133,12 +133,12 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		const was = bNodes.get(n.id);
 		if (!was) continue;
 		if (n.kind !== was.kind) {
-			unsupported.push(`Changing ${label(was)} from a ${was.kind} to a ${n.kind}: a scenario can't change a node's kind. Remove it and add a new node.`);
+			unsupported.push(`Changing ${label(was)} from a ${was.kind} to a ${n.kind}: a scenario can't change a hydrological unit's kind. Remove it and add a new one.`);
 			continue;
 		}
 		if (n.downstreamNodeId !== relinked(was.downstreamNodeId)) {
 			if (n.downstreamNodeId === null || relinked(was.downstreamNodeId) === null)
-				unsupported.push(`Making ${label(n)} ${n.downstreamNodeId === null ? 'drain nowhere' : 'drain into another node'}: the catchment keeps its outflow node, which a scenario can't move.`);
+				unsupported.push(`Making ${label(n)} ${n.downstreamNodeId === null ? 'drain nowhere' : 'drain into another hydrological unit'}: the catchment keeps its outflow, which a scenario can't move.`);
 			else moved.set(n.id, relinked(was.downstreamNodeId));
 		}
 		const settable = new Set<string>(NODE_SET_FIELDS[n.kind]);
@@ -190,8 +190,8 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	for (const n of pending)
 		unsupported.push(
 			n.downstreamNodeId === null
-				? `The new node ${label(n)} drains nowhere: a scenario's new node drains into an existing one (the catchment keeps its outflow gauge).`
-				: `The new node ${label(n)} drains into a node that isn't in the network.`
+				? `The new hydrological unit ${label(n)} drains nowhere: a scenario's new unit drains into an existing one (the catchment keeps its outflow gauge).`
+				: `The new hydrological unit ${label(n)} drains into one that isn't in the network.`
 		);
 
 	// --- the other moves: node.move, nearest the outlet first, so each lands on a reach already where it
@@ -343,7 +343,7 @@ function whereOf(op: ScenarioOp, names: ReadonlyMap<string, string>): string {
 			return `${nm(op.nodeId)}, ${NODE_FIELD_SPECS[op.field as NodeSetField]?.label ?? op.field}`;
 		case 'node.add':
 		case 'node.insert':
-			return `The new node ${nm(op.node.id)}`;
+			return `The new hydrological unit ${nm(op.node.id)}`;
 		case 'node.move':
 			return `${nm(op.nodeId)}, what it drains into`;
 		case 'cropArea.set':

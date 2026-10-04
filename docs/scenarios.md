@@ -965,12 +965,12 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (Gazetted Reserve), total flow, 10 % points", so the compare page's
   Scenario overrides show the changed table, in red, with both confidence
   lines.
-- **The later ops in the form** (engine ≥ 1.35.0). **Move what a unit,
-  gauge or user drains into**: the node (not the outlet) and the node it will drain
+- **The later ops in the form** (engine ≥ 1.35.0). **Move what a
+  hydrological unit drains into**: the hydrological unit (not the outlet) and the one it will drain
   into, with "Now: drains into …"; it reads "Move “Lower farm”: drains into
-  Outflow gauge → Upper farm". **Insert a hydrological unit or user on a reach**: as **Add a
-  hydrological unit or user** (kind, name, dam or demand), the node it drains into (only nodes
-  something drains into), and a checkbox per node draining there now, at
+  Outflow gauge → Upper farm". **Insert a hydrological unit on a reach**: as **Add a
+  hydrological unit** (kind, name, dam or demand), the hydrological unit it drains into (only
+  ones something drains into), and a checkbox per hydrological unit draining there now, at
   least one ticked; "Insert the hydrological unit “Weir dam” above Outflow
   gauge, taking what Upper farm drains, dam 50 000 m³". **Change a crop**:
   the crop, the field (name, crop factors, irrigation efficiency), the value

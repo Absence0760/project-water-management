@@ -50,7 +50,7 @@ describe('siteOptions', () => {
 		]);
 	});
 	it('keeps an option for a stored site whose node is gone', () => {
-		expect(siteOptions(nodes, [null, 'gone']).at(-1)).toEqual({ id: 'gone', label: 'A node no longer in the network' });
+		expect(siteOptions(nodes, [null, 'gone']).at(-1)).toEqual({ id: 'gone', label: 'A hydrological unit no longer in the network' });
 	});
 	it('offers a new table at the first site without one', () => {
 		const opts = siteOptions(nodes);

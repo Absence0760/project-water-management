@@ -129,7 +129,7 @@ describe('field specs cover the engine’s op catalogue', () => {
 		expect(parseValue(spec, '')).toEqual({ ok: true, value: null });
 		expect(formatValue(spec, null)).toBe('the source');
 		expect(transferFieldError('lossReturnNodeId', null)).toBeNull();
-		expect(parseValue(TRANSFER_FIELD_SPECS.toNodeId.spec, '')).toEqual({ ok: false, error: 'pick a unit, gauge or user' });
+		expect(parseValue(TRANSFER_FIELD_SPECS.toNodeId.spec, '')).toEqual({ ok: false, error: 'pick a hydrological unit' });
 	});
 });
 

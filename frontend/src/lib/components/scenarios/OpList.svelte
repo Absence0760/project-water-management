@@ -33,7 +33,7 @@
 		<strong>Baseline assumptions changed</strong>
 		<span>
 			{baseline === 1 ? '1 change alters' : `${baseline} changes alter`} what the base run assumes (settings, rain, the Reserve, the catchment's split of runoff, or
-			someone else's node), not just the proposal. An assessor will want to see why.
+			someone else's hydrological unit), not just the proposal. An assessor will want to see why.
 		</span>
 	</div>
 {/if}

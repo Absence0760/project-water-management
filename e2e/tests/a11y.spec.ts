@@ -174,7 +174,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				const project = await seedRunnableProject(page.request, 'A11y save bar');
 				await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 				await page.getByLabel('Lower farm drains into').selectOption({ label: '— Outlet (none) —' });
-				await expect(page.getByRole('dialog', { name: 'Node table' }).getByText('Fix before saving:')).toBeVisible();
+				await expect(page.getByRole('dialog', { name: 'Hydrological unit table' }).getByText('Fix before saving:')).toBeVisible();
 				await expectNoViolations(page);
 			});
 
