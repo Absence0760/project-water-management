@@ -7,11 +7,15 @@
 	// sheet its row's Edit opens, and the crops' demand comes from their
 	// planted areas (the farm drawer). Edits go into the shared ModelEditor.
 	import type { ProjectSettings } from '@water-management/engine';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { withoutParam, withParam } from '$lib/workspace/overlays';
 	import { demandRows, demandShares, demandTotal, type DemandRow } from './demands';
+	import { DEMANDS_UNIT_CHOICES, demandsUnitView, parseDemandsUnit, UNIT_PARAM } from './demandUnits';
 
 	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
 
@@ -21,6 +25,15 @@
 	const peak = $derived(Math.max(1e-9, ...rows.filter((r) => r.enabled).flatMap((r) => r.monthlyM3Day)));
 	const shade = (v: number) => `--i: ${Math.round((v / peak) * 100)}%`;
 	const scheduled = $derived(rows.some((r) => r.scheduled));
+
+	// The display unit (`unit=` in the URL, m³/day without it): cells, mean and the catchment row; the model keeps m³/day.
+	const unit = $derived(parseDemandsUnit(page.url.searchParams.get(UNIT_PARAM)));
+	const uv = $derived(demandsUnitView(unit));
+	const show = (m3Day: number) => fmtNum(m3Day * uv.scale, uv.decimals);
+	function pickUnit(v: string) {
+		const next = parseDemandsUnit(v);
+		void goto(next ? withParam(page.url, UNIT_PARAM, next) : withoutParam(page.url, UNIT_PARAM), { noScroll: true, keepFocus: true });
+	}
 
 	/** Where the rest of a row is set: a unit's crops in its farm drawer on Crops & demand, anything else in its node's sheet. */
 	const editHref = (r: DemandRow) => (r.kind === 'crops' ? `?tab=crops&farm=${encodeURIComponent(r.nodeId)}` : `?tab=network&edit=${encodeURIComponent(r.nodeId)}`);
@@ -48,7 +61,7 @@
 <section class="demands" aria-label="Demands" data-testid="demands-grid">
 	<p class="muted small intro">
 		Every demand in the catchment: each unit's crops (their irrigation requirement ÷ the unit's efficiency, before rain), its
-		demand objects in the order the unit supplies them, and each other water user, in m³/day by water-year month.
+		demand objects in the order the unit supplies them, and each other water user, by water-year month.
 		{#if !readonly}Type a monthly demand here; a per-person or per-head demand, a schedule, the water source and the supply order are set in the node's form (Edit).{/if}
 	</p>
 	{#if shares.length}
@@ -56,6 +69,14 @@
 			{#each shares as s, i (s.what)}{i ? ', ' : ''}<span class="share"><strong>{s.what}</strong> {fmtPct(s.share, 0)}</span>{/each}
 			of {fmtQty(total.annualMm3, 3)} Mm³/a.
 		</p>
+	{/if}
+	{#if rows.length}
+		<div class="unit-pick">
+			<label for="demands-unit">Show demands in</label>
+			<select id="demands-unit" value={unit ?? ''} onchange={(e) => pickUnit(e.currentTarget.value)} data-testid="demands-unit">
+				{#each DEMANDS_UNIT_CHOICES as c (c.label)}<option value={c.value ?? ''}>{c.label}</option>{/each}
+			</select>
+		</div>
 	{/if}
 	{#if !rows.length}
 		<p class="muted" data-testid="demands-empty">No demands yet: plant crops on a unit, add a demand object in a unit's form, or add another water user.</p>
@@ -71,8 +92,8 @@
 						<th scope="col">Kind</th>
 						<th scope="col">Water from</th>
 						<th scope="col">Supply order</th>
-						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">m³/day</span></th>{/each}
-						<th scope="col" class="num">Mean<br /><span class="u">m³/day</span></th>
+						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">{uv.label}</span></th>{/each}
+						<th scope="col" class="num">Mean<br /><span class="u">{uv.label}</span></th>
 						<th scope="col" class="num">Annual<br /><span class="u">Mm³/a</span></th>
 						<th scope="col"><span class="visually-hidden">Edit</span></th>
 					</tr>
@@ -94,13 +115,13 @@
 							{#each r.monthlyM3Day as v, m (m)}
 								{#if r.editable && !readonly}
 									<td class="num cell">
-										<NumberInput label="{r.name}, {WATER_YEAR_MONTHS[m]}, m³/day" min={0} grouped value={v} onchange={(x) => setMonth(r, m, x)} />
+										<NumberInput label="{r.name}, {WATER_YEAR_MONTHS[m]}, {uv.label}" min={0} grouped={!unit} scale={uv.scale} decimals={unit ? uv.decimals : undefined} value={v} onchange={(x) => setMonth(r, m, x)} />
 									</td>
 								{:else}
-									<td class="num heat" style={r.enabled ? shade(v) : undefined}>{fmtNum(v)}</td>
+									<td class="num heat" style={r.enabled ? shade(v) : undefined}>{show(v)}</td>
 								{/if}
 							{/each}
-							<td class="num">{fmtNum(r.meanM3Day)}</td>
+							<td class="num">{show(r.meanM3Day)}</td>
 							<td class="num strong">{fmtQty(r.annualMm3, 3)}</td>
 							<td class="edit">
 								<a href={editHref(r)} aria-label="{readonly ? 'View' : 'Edit'} {r.name}{r.kind === 'user' ? '' : ` on ${r.unit}`}">{readonly ? 'View' : 'Edit'}</a>
@@ -112,8 +133,8 @@
 					<tr>
 						<th scope="row" class="sticky">Catchment</th>
 						<td colspan="4"></td>
-						{#each total.monthly as v, m (m)}<td class="num">{fmtNum(v)}</td>{/each}
-						<td class="num">{fmtNum(total.meanM3Day)}</td>
+						{#each total.monthly as v, m (m)}<td class="num">{show(v)}</td>{/each}
+						<td class="num">{show(total.meanM3Day)}</td>
 						<td class="num strong">{fmtQty(total.annualMm3, 3)}</td>
 						<td></td>
 					</tr>
@@ -132,6 +153,15 @@
 	.intro {
 		margin: 0 0 0.5rem;
 		max-width: 80ch;
+	}
+	.unit-pick {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0 0 0.75rem;
+	}
+	.unit-pick select {
+		width: auto;
 	}
 	.shares {
 		margin: 0 0 0.75rem;

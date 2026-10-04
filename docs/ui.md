@@ -3967,12 +3967,25 @@ user's demand could only be read one node form at a time.
   closing the modal); the crops' **Edit** opens the unit's
   [farm drawer](#farm-drawer) on Crops & demand. Edits go into the shared
   `ModelEditor` and are saved with the modal's save row.
+- **Show demands in** (above the table, `network/demandUnits.ts`): the unit
+  the month cells, the mean and the Catchment row read and take, m³/day (the
+  default), l/s or m³/s, from the engine's `DEMAND_MONTHLY_UNIT_SCALE` (1 l/s
+  = 86.4 m³/day), the headers and each input's label naming it. The model
+  keeps m³/day: a value typed in l/s is stored ÷ the scale. In l/s or m³/s an
+  input is plain text at 2 or 4 decimals (m³/day groups its thousands). The
+  annual column stays Mm³/a. The choice is in the URL (`unit=ls|m3s`, none
+  for m³/day), so Back and a reload keep it. It always starts at m³/day, not
+  at the unit a demand object was entered in: rows can disagree (a town in
+  l/s, a mine in m³/day), the crops' and users' demand has no unit of its
+  own, and a table whose unit depended on its rows would change under the
+  reader as objects were added.
 - The months are before schedules, daily A-pan, rain, demand factors and
   restrictions, which a run applies day by day; the note under the table
   says so.
 - Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
+  `network/demandUnits.test.ts` (the unit param and scales),
   `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
-  reloaded, Edit to the node form, a phone, axe).
+  reloaded, Edit to the node form, the display unit, a phone, axe).
 
 ### Grid modal
 

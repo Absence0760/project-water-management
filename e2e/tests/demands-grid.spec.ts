@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putModel, sampleModel } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveModelChanges } from '../support/network.ts';
 
@@ -96,6 +97,40 @@ test('every demand in one table: the supply order, a monthly demand typed in pla
 	await expect(page).toHaveURL(new RegExp(`[?&]edit=${upper.id}`));
 	await expect(page).not.toHaveURL(/grid=/);
 	await expect(page.getByRole('dialog', { name: /Upper farm/ })).toBeVisible();
+});
+
+test('the display unit: l/s in the URL, a value typed in l/s stored as m³/day, kept on reload', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Demands grid unit');
+	await putModel(page.request, project.id, demandsModel());
+	await page.goto(`/projects/${project.id}?tab=network&grid=demands`);
+	await expect(page.getByRole('dialog', { name: 'Demands' })).toBeVisible();
+
+	// 100 m³/day is 1.16 l/s (100 ÷ 86.4); the headers and labels name the unit.
+	await page.getByLabel('Show demands in').selectOption({ label: 'l/s' });
+	await expect(page).toHaveURL(/[?&]unit=ls/);
+	await expect(grid(page).locator('thead')).toContainText('l/s');
+	await expect(page.getByLabel('Town, Oct, l/s')).toHaveValue('1.16');
+	// The user's 40 m³/day is 0.46 l/s, as text in its cell's input.
+	await expect(page.getByLabel('Quarry, Oct, l/s')).toHaveValue('0.46');
+
+	// 2 l/s typed is 172.8 m³/day in the model.
+	await page.getByLabel('Town, Oct, l/s').fill('2');
+	await page.getByLabel('Town, Oct, l/s').press('Tab');
+	expect((await saveModelChanges(page)).status()).toBe(200);
+	const res = await page.request.get(`${API_URL}/projects/${project.id}/model`);
+	const saved = (await res.json()) as { demandObjects: { name: string; monthlyM3Day: number[] }[] };
+	expect(saved.demandObjects.find((o) => o.name === 'Town')!.monthlyM3Day[0]).toBeCloseTo(172.8, 6);
+
+	// A reload keeps the unit; back to m³/day reads the stored value.
+	await page.reload();
+	await expect(page.getByLabel('Show demands in')).toHaveValue('ls');
+	await expect(page.getByLabel('Town, Oct, l/s')).toHaveValue('2');
+	await page.getByLabel('Show demands in').selectOption({ label: 'm³/day' });
+	await expect(page).not.toHaveURL(/unit=/);
+	await expect(page.getByLabel('Town, Oct, m³/day')).toHaveValue('172.8');
+	await expect(page.getByRole('dialog', { name: 'Demands' })).toBeVisible();
 });
 
 test('a phone: the table scrolls inside its region, the page itself never sideways', async ({ page, owner }) => {
