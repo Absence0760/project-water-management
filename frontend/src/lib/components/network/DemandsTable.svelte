@@ -19,18 +19,23 @@
 	import { demandRows, demandShares, demandTotal, type DemandRow } from './demands';
 	import { DEMANDS_UNIT_CHOICES, demandsUnitView, parseDemandsUnit, UNIT_PARAM } from './demandUnits';
 	import { nodeSpans, registeredCells, registeredTotal } from './demandsRegistered';
+	import DemandsRunCaption from './DemandsRunCaption.svelte';
+	import { latestRunFigures } from './demandsRunLoad.svelte';
+	import type { RunMeta } from '$lib/api';
 
 	let {
 		editor,
 		settings,
 		readonly,
-		projectId = null
+		projectId = null,
+		runs = null
 	}: {
 		editor: ModelEditor;
 		settings: ProjectSettings;
 		readonly: boolean;
-		/** Reads the project's registered volumes (docs/allocations.md) for the Registered column; none without it. */
+		/** With the project's runs, the latest run's supplied and short-fall columns (demandsRun.ts). */
 		projectId?: string | null;
+		runs?: RunMeta[] | null;
 	} = $props();
 
 	const rows = $derived(demandRows(editor.model, settings.apanMm, settings.februaryDays));
@@ -39,6 +44,8 @@
 	const peak = $derived(Math.max(1e-9, ...rows.filter((r) => r.enabled).flatMap((r) => r.monthlyM3Day)));
 	const shade = (v: number) => `--i: ${Math.round((v / peak) * 100)}%`;
 	const scheduled = $derived(rows.some((r) => r.scheduled));
+	// --- the latest run's supplied and short-fall (demandsRun.ts) ---
+	const run = latestRunFigures(() => projectId, () => runs, () => rows);
 
 	// The display unit (`unit=` in the URL, m³/day without it): cells, mean and the catchment row; the model keeps m³/day.
 	const unit = $derived(parseDemandsUnit(page.url.searchParams.get(UNIT_PARAM)));
@@ -95,7 +102,7 @@
 	<p class="muted small intro">
 		Every demand in the catchment: each unit's crops (their irrigation requirement ÷ the unit's efficiency, before rain), its
 		demand objects in the order the unit supplies them, and each other water user, by water-year month.
-		{#if !readonly}Type a monthly demand here; a per-person or per-head demand, a schedule, the water source and the supply order are set in the node's form (Edit).{/if}
+		{#if !readonly}Type a monthly demand here; a per-person or per-head demand, a schedule, the water source and the supply order are set in the hydrological unit's form (Edit).{/if}
 	</p>
 	{#if shares.length}
 		<p class="small shares" data-testid="demands-shares">
@@ -111,6 +118,7 @@
 			</select>
 		</div>
 	{/if}
+	<DemandsRunCaption {run} dirty={editor.dirty} />
 	{#if !rows.length}
 		<p class="muted" data-testid="demands-empty">No demands yet: plant crops on a unit, add a demand object in a unit's form, or add another water user.</p>
 	{:else}
@@ -129,6 +137,11 @@
 						<th scope="col" class="num">Mean<br /><span class="u">{uv.label}</span></th>
 						<th scope="col" class="num">Annual<br /><span class="u">Mm³/a</span></th>
 						{#if cells}<th scope="col" class="num">Registered<br /><span class="u">Mm³/a</span></th>{/if}
+						{#if run.figures}
+							<th scope="col" class="num run">Supplied<br /><span class="u">{uv.label}</span></th>
+							<th scope="col" class="num">Short<br /><span class="u">{uv.label}</span></th>
+							<th scope="col" class="num">Short<br /><span class="u">%</span></th>
+						{/if}
 						<th scope="col"><span class="visually-hidden">Edit</span></th>
 					</tr>
 				</thead>
@@ -168,6 +181,12 @@
 									{/if}
 								</td>
 							{/if}
+							{#if run.figures}
+								{@const x = run.figures.get(r.key)}
+								<td class="num run" data-run="supplied">{x ? show(x.suppliedM3Day) : '–'}</td>
+								<td class="num" class:short={!!x && x.shortM3Day > 0} data-run="short">{x ? show(x.shortM3Day) : '–'}</td>
+								<td class="num" class:short={!!x && x.shortM3Day > 0} data-run="short-pct">{x && x.shortShare !== null ? fmtPct(x.shortShare, 0) : '–'}</td>
+							{/if}
 							<td class="edit">
 								<a href={editHref(r)} aria-label="{readonly ? 'View' : 'Edit'} {r.name}{r.kind === 'user' ? '' : ` on ${r.unit}`}">{readonly ? 'View' : 'Edit'}</a>
 							</td>
@@ -182,6 +201,11 @@
 						<td class="num">{show(total.meanM3Day)}</td>
 						<td class="num strong">{fmtQty(total.annualMm3, 3)}</td>
 						{#if regTotal}<td class="num strong">{fmtQty(regTotal.registeredM3 / 1e6, 3)}</td>{/if}
+						{#if run.figures}
+							<td class="num run">{run.total ? show(run.total.suppliedM3Day) : '–'}</td>
+							<td class="num">{run.total ? show(run.total.shortM3Day) : '–'}</td>
+							<td class="num">{run.total && run.total.shortShare !== null ? fmtPct(run.total.shortShare, 0) : '–'}</td>
+						{/if}
 						<td></td>
 					</tr>
 				</tfoot>
@@ -292,6 +316,13 @@
 	}
 	.reg-status.over {
 		color: var(--danger);
+	}
+	/* The run's columns: set off from the demand's own by a rule. */
+	.run {
+		border-left: 2px solid var(--border);
+	}
+	td.short {
+		color: var(--danger, var(--text));
 		font-weight: 600;
 	}
 	.after {

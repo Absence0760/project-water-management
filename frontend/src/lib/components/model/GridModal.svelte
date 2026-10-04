@@ -58,7 +58,7 @@
 		{:else if grid === 'transfers'}
 			<TransfersTab {editor} {readonly} inModal />
 		{:else if grid === 'demands'}
-			<DemandsTable {editor} {settings} {readonly} {projectId} />
+			<DemandsTable {editor} {settings} {readonly} {projectId} {runs} />
 		{:else if grid === 'systems'}
 			<IrrigationSystemsPanel {editor} {readonly} />
 		{:else}

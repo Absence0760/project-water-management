@@ -4003,11 +4003,27 @@ user's demand could only be read one node form at a time.
   gets the column only while the owners let viewers see each unit's
   volumes, otherwise a note ("aren't shown to viewers"); a project with no
   registered volumes says so; a refused read shows nothing.
+- **Run columns** (`network/demandsRun.ts`, loaded by
+  `demandsRunLoad.svelte.ts`): with a run, three columns after Annual (and
+  Registered), before **Edit**, set off by a rule: **Supplied** and
+  **Short** (the mean over the run, in the table's display unit) and **Short %** (short ÷ the run's demand), short-falls in the danger
+  colour, and the Catchment row's sums. The run is the latest (`runs[0]`, as
+  the Network's supply colouring takes it), its summary from the Runs cache
+  or one fetch. A demand object reads its own `DemandObjectSummary`, another
+  water user its `UserSummary`, and a unit's crops the unit's figures less
+  its objects' (the summary's rule: the irrigation part is the unit's demand
+  less its objects'). A row the run doesn't have (added since, or an object
+  that was off) reads "–". A caption above the table names the run ("…
+  over run “Dry year”, ran …"), and with unsaved changes says they aren't in
+  it; a failed load says so with **Retry**. No run: no columns, no caption.
 - Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
   `network/demandUnits.test.ts` (the unit param and scales),
   `network/demandsRegistered.test.ts` (in force, the per-node sums, the
   band, the spans), `e2e/tests/demands-grid-registered.spec.ts` (none, the
   column and its flags, a viewer without per-unit volumes),
+  `network/demandsRun.test.ts` (each kind's run figure, the crops less the
+  objects, rows the run lacks, the total), `e2e/tests/demands-grid-run.spec.ts`
+  (the columns and caption, "–" for a demand added since, unsaved edits, no run),
   `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
   reloaded, Edit to the node form, the display unit, a phone, axe).
 
