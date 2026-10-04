@@ -1,7 +1,7 @@
 // The app-wide two-step sign-in prompt (issue #282; docs/ui.md § Invitations,
-// the two-step sign-in banner; frontend lib/auth/mfaPrompt.svelte.ts): a project owner
-// without an authenticator is told on the workspace, with a link to set it
-// up, and a request refused with 403 mfa_step_up offers "Sign in again".
+// the two-step sign-in banner; frontend lib/auth/mfaPrompt.svelte.ts): only a
+// refused action prompts (2026-10-03), never the role alone: 403
+// mfa_required links to set it up, 403 mfa_step_up offers "Sign in again".
 //
 // The requirement is off on the e2e server (MFA_REQUIRED=false,
 // playwright.config.ts: hundreds of owner fixtures sign in with a password),
@@ -26,52 +26,53 @@ async function mfaStatusAs(page: Page, patch: Record<string, boolean>) {
 	});
 }
 
-test('an owner without an authenticator sees the banner on the workspace, and it leads to the Account page’s panel', async ({ page, owner }) => {
-	void owner;
-	await createProject(page.request, 'Banner farm');
+/** Answers this project's DELETE with a 403 carrying `code`, as production would for a session without the second factor. */
+async function refuseDelete(page: Page, projectId: string, origin: string, code: 'mfa_required' | 'mfa_step_up') {
+	await page.route(`${API_URL}/projects/${projectId}`, (route: Route) => {
+		if (route.request().method() !== 'DELETE') return route.fallback();
+		return route.fulfill({
+			status: 403,
+			contentType: 'application/json',
+			headers: { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true' },
+			body: JSON.stringify({ error: 'this needs two-step sign-in', code })
+		});
+	});
+}
+
+test('an owner without an authenticator is not prompted for the role alone; a refused action prompts, and leads to the Account page’s panel', async ({ page, owner, baseURL }) => {
+	const project = await createProject(page.request, 'Banner farm');
+	// Production's answer for an owner: required, not enrolled. No banner, no badge (the operator's decision, 2026-10-03).
 	await mfaStatusAs(page, { required: true });
+	await refuseDelete(page, project.id, new URL(baseURL!).origin, 'mfa_required');
 	await page.goto('/');
+	await expect(row(page, 'Banner farm')).toBeVisible();
+	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
+	await expect(page.locator('[data-mfa-badge]')).toHaveCount(0);
+
+	// The protected action is refused: now the banner and the badge.
+	await openRowMenu(page, 'Banner farm');
+	await row(page, 'Banner farm').getByRole('button', { name: 'Delete Banner farm' }).click();
+	await answerConfirm(page, true, 'Delete project “Banner farm”?');
 	const banner = page.getByRole('region', { name: 'Two-step sign-in' });
 	await expect(banner).toHaveAttribute('data-mfa-prompt', 'setup');
-	await expect(banner).toContainText('As a project owner, team admin or assessor, you need two-step sign-in');
-	await expect(row(page, 'Banner farm')).toBeVisible();
+	await expect(banner).toContainText('That needs two-step sign-in, and you haven’t set it up yet.');
+	const menu = page.getByRole('button', { name: `Account menu for ${owner.displayName}, two-step sign-in needed` });
+	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
 	await expectNoViolations(page);
 
-	await banner.getByRole('link', { name: 'Set up two-step sign-in' }).click();
+	// Dismiss hides the banner; the badge stays while the need stands.
+	await banner.getByRole('button', { name: 'Dismiss' }).click();
+	await expect(banner).toHaveCount(0);
+	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
+
+	await menu.click();
+	await page.getByRole('link', { name: 'Set up two-step sign-in' }).click();
 	await expect(page).toHaveURL('/account#two-step');
 	const panel = page.locator('#two-step');
 	await expect(panel).toHaveAttribute('data-two-step', 'off');
 	await expect(panel.getByRole('button', { name: 'Set up two-step sign-in' })).toBeVisible();
 	// The Account page is translated and says it in its own panel: no English banner over it.
 	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
-});
-
-test('Dismiss hides the banner, a reload keeps it hidden, and the account menu’s badge stays; a role that doesn’t need it sees neither', async ({ page, owner }) => {
-	await page.goto('/');
-	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
-	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
-	await expect(page.locator('[data-mfa-badge]')).toHaveCount(0);
-
-	await mfaStatusAs(page, { required: true });
-	await page.reload();
-	const banner = page.getByRole('region', { name: 'Two-step sign-in' });
-	await expect(banner).toBeVisible();
-	const menu = page.getByRole('button', { name: `Account menu for ${owner.displayName}, two-step sign-in needed` });
-	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
-	await banner.getByRole('button', { name: 'Dismiss' }).click();
-	await expect(banner).toHaveCount(0);
-	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeFocused();
-
-	await page.reload();
-	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
-	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
-	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
-	await expectNoViolations(page);
-
-	await menu.click();
-	await page.getByRole('link', { name: 'Set up two-step sign-in' }).click();
-	await expect(page).toHaveURL('/account#two-step');
-	await expect(page.locator('#two-step')).toHaveAttribute('data-two-step', 'off');
 });
 
 test('a delete refused with 403 mfa_step_up offers “Sign in again”, which signs out and comes back after', async ({ page, owner, baseURL }) => {

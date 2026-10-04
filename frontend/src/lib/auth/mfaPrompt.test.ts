@@ -17,14 +17,12 @@ const state = (over: Partial<MfaPromptState> = {}): MfaPromptState => ({ user: '
 const status = (required: boolean, enrolled: boolean, sessionVerified: boolean) => ({ required, enrolled, sessionVerified });
 
 describe('promptKind', () => {
-	it('a role that needs it, no authenticator: set it up', () => {
-		expect(promptKind(state({ status: status(true, false, false) }), 'u1')).toBe('setup');
-	});
-	it('a role that needs it, an authenticator, a password-only session: sign in again', () => {
-		expect(promptKind(state({ status: status(true, true, false) }), 'u1')).toBe('step-up');
-	});
-	it('a role that needs it, signed in with a code: nothing (positive control for the two above)', () => {
-		expect(promptKind(state({ status: status(true, true, true) }), 'u1')).toBeNull();
+	// The operator's decision, 2026-10-03: only a refused action prompts, never the role alone.
+	it('a role that needs it is not prompted up front, enrolled or not, until an action is refused', () => {
+		expect(promptKind(state({ status: status(true, false, false) }), 'u1')).toBeNull();
+		expect(promptKind(state({ status: status(true, true, false) }), 'u1')).toBeNull();
+		expect(promptKind(state({ status: status(true, false, false), refused: 'setup' }), 'u1')).toBe('setup');
+		expect(promptKind(state({ status: status(true, true, false), refused: 'step-up' }), 'u1')).toBe('step-up');
 	});
 	it('a role that does not need it: nothing, enrolled or not', () => {
 		expect(promptKind(state({ status: status(false, false, false) }), 'u1')).toBeNull();
@@ -36,17 +34,17 @@ describe('promptKind', () => {
 	});
 	it('nothing before the status is known, when dismissed, signed out, or for another account', () => {
 		expect(promptKind(state(), 'u1')).toBeNull();
-		expect(promptKind(state({ status: status(true, false, false), dismissed: 'setup' }), 'u1')).toBeNull();
-		expect(promptKind(state({ status: status(true, false, false) }), null)).toBeNull();
-		expect(promptKind(state({ status: status(true, false, false) }), 'u2')).toBeNull();
+		expect(promptKind(state({ refused: 'setup', dismissed: 'setup' }), 'u1')).toBeNull();
+		expect(promptKind(state({ refused: 'setup' }), null)).toBeNull();
+		expect(promptKind(state({ refused: 'setup' }), 'u2')).toBeNull();
 	});
 });
 
 describe('pendingKind (the account menu’s badge)', () => {
-	it('stays while the need stands, dismissed or not', () => {
-		expect(pendingKind(state({ status: status(true, false, false), dismissed: 'setup' }), 'u1')).toBe('setup');
-		expect(pendingKind(state({ status: status(true, true, false), dismissed: 'step-up' }), 'u1')).toBe('step-up');
-		expect(pendingKind(state({ status: status(false, false, false), refused: 'setup', dismissed: 'setup' }), 'u1')).toBe('setup');
+	it('stays after a refusal, dismissed or not; no badge for the role alone', () => {
+		expect(pendingKind(state({ refused: 'setup', dismissed: 'setup' }), 'u1')).toBe('setup');
+		expect(pendingKind(state({ refused: 'step-up', dismissed: 'step-up' }), 'u1')).toBe('step-up');
+		expect(pendingKind(state({ status: status(true, false, false) }), 'u1')).toBeNull();
 	});
 	it('goes once it is resolved, and is never another account’s (positive control above)', () => {
 		expect(pendingKind(state({ status: status(true, true, true) }), 'u1')).toBeNull();
@@ -55,7 +53,7 @@ describe('pendingKind (the account menu’s badge)', () => {
 		expect(pendingKind(state({ status: status(true, false, false) }), null)).toBeNull();
 	});
 	it('a dismissed set-up prompt doesn’t hide a step-up one', () => {
-		expect(promptKind(state({ status: status(true, true, false), dismissed: 'setup' }), 'u1')).toBe('step-up');
+		expect(promptKind(state({ refused: 'step-up', dismissed: 'setup' }), 'u1')).toBe('step-up');
 	});
 });
 
@@ -112,7 +110,8 @@ describe('the shared state', () => {
 		await Promise.all([loadMfaPrompt('u1', read), loadMfaPrompt('u1', read)]);
 		await loadMfaPrompt('u1', read);
 		expect(read).toHaveBeenCalledTimes(1);
-		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
+		expect(promptKind(mfaPrompt, 'u1')).toBeNull();
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		await loadMfaPrompt('u1', async () => {
 			throw new Error('offline');
 		}, true);
@@ -150,38 +149,37 @@ describe('the dismissal outlasts a reload of the tab', () => {
 	const reload = () => Object.assign(mfaPrompt, { user: null, status: null, refused: null, dismissed: null });
 
 	it('a dismissed banner stays hidden after a reload, and the badge stays', () => {
-		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		dismissMfaPrompt();
 		reload();
+		noteMfaRefusal('u1', null);
 		mfaStatusSeen('u1', status(true, false, false));
 		expect(promptKind(mfaPrompt, 'u1')).toBeNull();
-		expect(pendingKind(mfaPrompt, 'u1')).toBe('setup');
+		expect(mfaPrompt.dismissed).toBe('setup');
 	});
 
-	it('without a dismissal, a reload shows it (positive control)', () => {
-		mfaStatusSeen('u1', status(true, false, false));
+	it('without a dismissal, a refusal after a reload shows it (positive control)', () => {
 		reload();
 		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
 	});
 
 	it('a refusal, signing out, or another account brings it back', () => {
-		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		dismissMfaPrompt();
 		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
-		reload();
-		mfaStatusSeen('u1', status(true, false, false));
 		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
 
 		dismissMfaPrompt();
 		reload();
-		mfaStatusSeen('u2', status(true, false, false));
+		noteMfaRefusal('u2', new ApiError(403, 'x', undefined, 'mfa_required'));
 		expect(promptKind(mfaPrompt, 'u2')).toBe('setup');
 
-		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		dismissMfaPrompt();
 		resetMfaPrompt();
-		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
 	});
 
@@ -197,11 +195,11 @@ describe('the dismissal outlasts a reload of the tab', () => {
 				throw new Error('blocked');
 			}
 		});
-		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		dismissMfaPrompt();
 		expect(promptKind(mfaPrompt, 'u1')).toBeNull();
 		reload();
-		mfaStatusSeen('u1', status(true, false, false));
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
 		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
 	});
 });

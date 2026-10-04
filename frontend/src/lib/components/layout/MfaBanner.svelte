@@ -39,12 +39,8 @@
 <section class="mfa-banner" aria-label="Two-step sign-in" data-mfa-prompt={kind}>
 	{#if kind === 'setup'}
 		<p>
-			{#if refused}
-				That needs two-step sign-in, and you haven’t set it up yet. Add an authenticator app on your Account page, then try again.
-			{:else}
-				As a project owner, team admin or assessor, you need two-step sign-in to manage members and share links, publish to farmers
-				and decide applications. Add an authenticator app on your Account page.
-			{/if}
+			<!-- Only a refused action brings it up (2026-10-03), never the role alone. -->
+			That needs two-step sign-in, and you haven’t set it up yet. Add an authenticator app on your Account page, then try again.
 		</p>
 		<div class="actions">
 			<a class="btn btn-sm" href="{base}/account#two-step">Set up two-step sign-in</a>

@@ -9167,16 +9167,14 @@ then.
   [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
   `routes/+layout.svelte` beside the other banners, on the workspace's
   pages only, English: not on the account, farm, alert or sign-in pages).
-  For a project owner, team admin or assessor without an authenticator
-  (`GET /auth/mfa` `required && !enrolled`), or after any request answers
-  `403 mfa_required`: what their role needs it for and **Set up two-step
-  sign-in**, linking to the Account page's panel (`/account#two-step`).
-  With an authenticator but a password-only session (`!sessionVerified`),
-  or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
-  to `/login?next=<this page>`. A refusal words it as "That needs …";
+  Only after a request is refused, never for the role alone (2026-10-03): a
+  `403 mfa_required` shows "That needs two-step sign-in, and you haven't set
+  it up yet…" and **Set up two-step sign-in**, linking to the Account page's
+  panel (`/account#two-step`); a `403 mfa_step_up` shows **Sign in again**,
+  which signs out and goes to `/login?next=<this page>`.
   **Dismiss** hides it until the next refusal (or until the tab closes: a
   reload keeps it hidden, `sessionStorage`) and moves focus to the page's
-  title. While the need stands, dismissed or not, the account menu's avatar
+  title. After a refusal, while the need stands, dismissed or not, the account menu's avatar
   carries a small amber "i" badge (the trigger's name adds ", two-step
   sign-in needed") and the menu's first entry is **Set up two-step
   sign-in** (to `/account#two-step`) or **Sign in again with a code**. Its own chunk, loaded only while there is something to say
