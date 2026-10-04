@@ -9,7 +9,8 @@ export const GRIDS = {
 	'crop-factors': 'Crop factors',
 	'planted-areas': 'Planted areas',
 	systems: 'Irrigation systems',
-	transfers: 'Transfers'
+	transfers: 'Transfers',
+	demands: 'Demands'
 } as const;
 
 export type GridId = keyof typeof GRIDS;
@@ -23,14 +24,16 @@ export function isGridId(v: string | null): v is GridId {
  * (the grid is already on the page); null: only ever in the modal (the node
  * table, since the Network became a map, and the crop grids, since Crops &
  * demand became cards and bars, issue #17, and the irrigation systems, which
- * sat below that page's window-fit layout).
+ * sat below that page's window-fit layout, and the Demands table, which
+ * gathers every unit's demands).
  */
 export const GRID_TAB: Record<GridId, string | null> = {
 	nodes: null,
 	'crop-factors': null,
 	'planted-areas': null,
 	systems: null,
-	transfers: 'transfers'
+	transfers: 'transfers',
+	demands: null
 };
 
 /** The id of the Crops & demand page's in-place demand table (its Show table), for a link that opens it. */
