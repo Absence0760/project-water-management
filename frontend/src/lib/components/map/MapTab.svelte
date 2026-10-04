@@ -1038,6 +1038,25 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions, status: setupSteps ? headerStatus : undefined }));
 </script>
 
+{#snippet drawBar()}
+	<DrawBar
+		{draft}
+		mapReady={mapState === 'ready'}
+		saving={drawSaving}
+		error={drawError}
+		onsave={saveDraft}
+		onpaste={() => (pasteOpen = true)}
+		oncoords={() =>
+			tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+		onlocated={located}
+		{delineating}
+		{tracing}
+		onsubcatchments={startDividing}
+		lines={lineItems}
+		bind:minOccurrence
+	/>
+{/snippet}
+
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerStatus()}
 	{#if setupSteps}
@@ -1304,23 +1323,9 @@
 					{/if}
 					{#if canEdit && dividing && !wide}
 						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
-					{:else if canEdit && draft.active && !dividing}
-						<DrawBar
-							{draft}
-							mapReady={mapState === 'ready'}
-							saving={drawSaving}
-							error={drawError}
-							onsave={saveDraft}
-							onpaste={() => (pasteOpen = true)}
-							oncoords={() =>
-								tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
-							onlocated={located}
-							{delineating}
-							{tracing}
-							onsubcatchments={startDividing}
-							lines={lineItems}
-							bind:minOccurrence
-						/>
+					{:else if canEdit && draft.active && !dividing && !wide}
+						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
+						{@render drawBar()}
 					{/if}
 					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null}>
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
@@ -1440,11 +1445,19 @@
 				</section>
 
 				<aside class="map-side" aria-label="Features">
+					{#if canEdit && draft.active && !dividing && wide}
+						<!-- Drawing, beside the map: the drawing's controls at the column's head, so nothing sits above or over the map;
+						     the tabs stay below them (Layers and Key while drawing), and they go on Finish or Cancel (2026-10-03). -->
+						<div class="panel side-box card draw-panel" data-testid="map-draw-side">
+							{@render drawBar()}
+						</div>
+					{/if}
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
 							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
 						</div>
+
 					{:else if !features.length}
 						<section class="panel side-box card" aria-label="Picked feature" data-testid="map-feature-card" bind:this={cardEl}>
 							{@render emptyState()}
@@ -2219,5 +2232,18 @@
 			color: var(--text-muted);
 			font-size: 0.85rem;
 		}
+	}
+	/* The drawing bar in the side column: the card is its box, so the bar drops its own border. */
+	.draw-panel :global(.draw-bar) {
+		border: 0;
+		padding: 0;
+		background: none;
+	}
+	/* Stacked in the column, the two checkboxes need the room a 24 px target asks for (WCAG 2.5.8). */
+	.draw-panel :global(label:has(> input[type='checkbox'])) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 32px;
 	}
 </style>

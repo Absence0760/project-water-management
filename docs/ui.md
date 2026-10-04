@@ -2876,7 +2876,12 @@ map" card) stays the schematic; this is the geography.
   a point; each puts the map in a drawing mode, below), **Delineate** (with a
   DEM on the server; its bar chooses one catchment or sub-catchments, one
   per click; pressed in either; below) and **Trace** (Trace a dam, with water
-  occurrence data on the server; below). Pressed (`aria-pressed`) while on;
+  occurrence data on the server; below). A drawing mode's bar (kind, hint,
+  Snap / Follow edges, Paste, Undo, Finish, Cancel; Delineate's and Trace's
+  too) heads the side column on a wide page (`map-draw-side`, above the
+  tabs, which stay: Layers and Key while drawing; 2026-10-03), so nothing
+  sits above or over the map; on a narrow page, where the column is below
+  the map, it stays above the map. Pressed (`aria-pressed`) while on;
   a group, so Tab goes through them in order after the header and before the
   map; each at least 46 × 62 px. Viewers get Measure alone. While a tool is
   on, a strip over the map's top middle names it and how to leave it

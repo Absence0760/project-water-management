@@ -92,6 +92,12 @@ test('a parcel drawn with the keyboard: the crosshair, Enter adds a corner, Back
 	await page.keyboard.press('Enter');
 	await expect(bar(page).getByLabel('Drawing')).toHaveValue('farm_parcel');
 	await expect(canvas(page)).toBeFocused();
+	// On a wide page the drawing's controls head the side column, not a bar above the map; the tabs stay below them.
+	await expect(page.getByTestId('map-draw-side').getByTestId('map-draw-bar')).toBeVisible();
+	await expect(page.getByTestId('map-side-tabs')).toBeVisible();
+	const drawBox = (await bar(page).boundingBox())!;
+	const mapBox = (await canvas(page).boundingBox())!;
+	expect(drawBox.x, 'beside the map, not above it').toBeGreaterThanOrEqual(mapBox.x + mapBox.width - 1);
 	await expect(page.getByTestId('map-crosshair')).toBeVisible();
 	await expect(canvas(page)).toHaveAttribute('aria-label', /drawing: the arrow keys move the map under the crosshair, Enter adds a corner there/);
 
