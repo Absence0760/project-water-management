@@ -1490,6 +1490,14 @@ In short:
   covered automatically; the owner's positive controls prove they aren't
   vacuous. The two layers are tested apart: `requireRole` answers 404 at
   the route, and RLS alone must hold if a route forgets it.
+- **Irrigation systems** (`198_irrigation_systems.sql`,
+  `200_irrigation_system_seed_invoker.sql`). `irrigation_system` is read by
+  anyone with a role on the project, farmer and up (it holds nothing
+  personal, and a farmer's farm view names its crops' systems), and written
+  by editors. A new project gets its six SABI rows from an insert trigger;
+  the seed function it calls runs with its caller's rights and `water_app`
+  can't execute it, so it can't be used to write rows into a project the
+  caller has no role on (`irrigationSystems.db.test.ts`).
 - **Accounts under RLS** (`068_app_user_rls.sql`). `app_user` had no RLS
   (sign-in reads it before anyone is signed in), so any `water_app`
   transaction, an API key's or the job tick's included, could read every

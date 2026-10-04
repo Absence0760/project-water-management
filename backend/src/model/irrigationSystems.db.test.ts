@@ -88,6 +88,11 @@ describe('irrigation systems (migration 198)', () => {
 		expect(await read(stranger)).toBe(0);
 		const changed = await withUser(viewer.id, async (db) => (await db.query('UPDATE irrigation_system SET efficiency = 0.5 WHERE project_id = $1', [id])).rowCount);
 		expect(changed).toBe(0);
-		await expect(withUser(stranger.id, (db) => db.query(`INSERT INTO irrigation_system (project_id, name, efficiency) VALUES ($1, 'Mine', 0.5)`, [id]))).rejects.toThrow(/row-level security/);
+		await expect(withUser(stranger.id, (db) => db.query(`INSERT INTO irrigation_system (project_id, name, efficiency) VALUES ($1, 'Mine', 0.5)`, [id]))).rejects.toThrow(/row-level security/);		// The seed (198) is not the app's to call (200): an outsider can't use it to write into someone else's project,
+		await expect(withUser(stranger.id, (db) => db.query('SELECT irrigation_system_seed($1)', [id]))).rejects.toThrow(/permission denied/);
+		expect(await read(owner)).toBe(6);
+		// while a new project is still seeded by its trigger (the positive control).
+		const fresh = (await owner.call('POST', '/projects', { name: 'Seeded after 200' })).body.project.id as string;
+		expect(await withUser(owner.id, async (db) => (await db.query('SELECT id FROM irrigation_system WHERE project_id = $1', [fresh])).rowCount)).toBe(6);
 	});
 });
