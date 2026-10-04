@@ -111,7 +111,7 @@ describe('blank stretches in the run (ACC_MAX_BLANK_DAYS)', () => {
 	});
 
 	it('a long outage before the reading with ≥ 3 days after it: the window is only those days and the reading day', () => {
-		const { c, h, r } = rec([...rep(20, B), 0, B, 0], 60, 10);
+		const { c, h } = rec([...rep(20, B), 0, B, 0], 60, 10);
 		// The run's days are r-3 … r-1; CHIRPS on r-3 and r-2 (the day before left out) = 20 mm ≥ 30? No: 20 < 30.
 		expect(detect(c, h)).toEqual([]);
 		const big = rec([...rep(20, B), 0, B, 0], 30, 10); // 20 ≥ 15
