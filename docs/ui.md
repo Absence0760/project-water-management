@@ -2118,6 +2118,7 @@ itself.
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
     "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
     as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    *Demands*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
     it) and, for editors, **+ Add node** and (once there is one outlet)
     **+ Add other user**, each opening the new node's form in the sheet with
@@ -3515,8 +3516,9 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   hydrological units · water year October to September", `cropsSummary`; the
   workspace says unit, not farm), and on the right
-  a **Tables** menu (Crop factors, Planted areas → the
-  [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
+  a **Tables** menu (Crop factors, Planted areas, Irrigation systems,
+  Demands → the [grid modal](#grid-modal),
+  `grid=crop-factors|planted-areas|systems|demands`; Escape
   or a click outside closes it), then for editors **Load crop factors…**
   (once there is a crop; the [same dialog](#load-crop-factors), its own
   chunk) and **+ Add crop**. The header shows with no crops too, over an
@@ -3931,6 +3933,47 @@ saves the catchment's model, and override mode there edits the scenario's
   area. Its save row is `model/ModelSaveRow.svelte`, shared with the grid
   modal.
 
+### Demands grid
+
+Every demand in the catchment in one table (`network/DemandsTable.svelte`,
+rows from `network/demands.ts` `demandRows`), in the
+[grid modal](#grid-modal) as `grid=demands`, from the Network's and Crops &
+demand's **Tables** menus. Before it a demand object or another water
+user's demand could only be read one node form at a time.
+
+- **Rows**, in the network's node order: each unit's **Crops** (its
+  irrigation demand, the number Crops & demand's demand table shows:
+  requirement ÷ the unit's efficiency, before rain; only on a unit with
+  something planted), then its **demand objects**, the crops and objects in
+  the unit's supply order (`supplyOrder`, equal places keeping the crops
+  first), an object that isn't modelled after them, greyed, "not modelled",
+  with no place in the order; then each **other water user**. Gauges and
+  units with no demand have no row.
+- **Columns:** the demand (a per-unit object's "200 × 50 l a day, losses
+  20 %" under its name; *piped out* and *scheduled* tags), its unit, its
+  kind (Irrigation (crops), the object's category, Other water user), where
+  its water comes from (dam side, river abstraction, the crop supply
+  table's shares), its place in the supply order ("1 of 3"; a user's senior
+  or junior; – when the unit has one place), m³/day for each water-year
+  month (shaded by size, as the crop demand table), the mean and Mm³/a, and
+  **Edit** (viewers: **View**). The **Catchment** row sums the modelled
+  rows, and a line above the table splits the annual total by kind,
+  largest first (`demandShares`).
+- **Editing:** a monthly object's and a user's months are inputs (m³/day,
+  whatever unit the object's form shows); a per-unit object's and the
+  crops' are made from other values, so they are text. Everything else (the
+  sizing, the schedule, the water source, the priority and rank) stays in
+  the node form, which a row's **Edit** opens (`?tab=network&edit=<node>`,
+  closing the modal); the crops' **Edit** opens the unit's
+  [farm drawer](#farm-drawer) on Crops & demand. Edits go into the shared
+  `ModelEditor` and are saved with the modal's save row.
+- The months are before schedules, daily A-pan, rain, demand factors and
+  restrictions, which a run applies day by day; the note under the table
+  says so.
+- Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
+  `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
+  reloaded, Edit to the node form, a phone, axe).
+
 ### Grid modal
 
 An existing model grid, unchanged, full screen over whichever tab is open
@@ -3940,8 +3983,9 @@ click away). It opens while the workspace URL has `grid=<id>`
 with `only="table"`: every column, reordering, Add node / other user, Sort by
 flow path, the other water users and the field guide; with no nodes, **Add
 outflow gauge**), `crop-factors` and `planted-areas` (the
-[crop grids](#crop-grids), through `CropsTab`'s `sections` prop) and
-`transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
+[crop grids](#crop-grids), through `CropsTab`'s `sections` prop),
+`transfers` (the Transfers tab) and `demands` (the [Demands
+grid](#demands-grid)). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
 The node table and the crop grids have no such tab (`GRID_TAB` null: the
