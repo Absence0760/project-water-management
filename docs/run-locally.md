@@ -117,10 +117,10 @@ user starts with no projects.
 ## Example catchments
 
 ```bash
-pnpm seed:examples          # needs dev:db:up; about 10 s
+pnpm seed:examples          # needs dev:db:up; about a minute with the showcase
 ```
 
-This loads four invented catchments, each with one run (published by its
+This loads four invented catchments and the **showcase** (below), each with one run (published by its
 owner, WP-2.3; Sandspruit's with an advisory notice in English and
 Afrikaans), for two local demo
 users: `demo@example.com` and `analyst@example.com`, password `demo-password`
@@ -141,8 +141,8 @@ evidence report passes the river checks, [evidence-pack.md](./evidence-pack.md#w
 `backend/scripts/examples/application.ts`): sign in as them for the Applicant view, or as
 analyst@ for Sandspruit's **Applications** tab to decide it. To try a **share link** (WP-2.3 phase 2), sign in as the owner
 (analyst@ for Sandspruit, demo@ for the team's catchments), make one on the
-Overview's Share links panel and open it in a private window; none is seeded,
-since the URL is shown only when it is made. Every name and
+Overview's Share links panel and open it in a private window; the showcase
+has one already, but its URL was shown only when it was made, so make your own. Every name and
 number is synthetic, so the examples are committed
 (`backend/scripts/examples/`) and work on any clone. Re-seeding gives the same
 projects. Kleinberg also ships in the frontend as the example a new user can
@@ -169,6 +169,35 @@ short of the invented weir record's volume (model.md §2.10d). `backend/scripts/
 warning appears, if a self-check fails, or if an example stops parsing as a
 project document. So an engine or schema change that leaves the examples
 behind shows up in `pnpm test`.
+
+### The showcase
+
+**Example · Showcase (every feature)**, owned by `demo@example.com` in the
+demo team (so analyst@ edits it), exists so you can click on anything and
+find an example of it. Sign in as demo@ (password `demo-password`); owner
+pages ask for two-step sign-in unless `MFA_REQUIRED=false` is in
+`backend/.env.development.local` ([Two-step sign-in](#two-step-sign-in)).
+farmer2@ farms two of its units and applicant@ is a contributor on a third.
+It is seeded after the others, through the app's own API
+(`backend/scripts/examples/showcaseSeed.ts`, the model in `showcase.ts`, its
+map in `showcaseMap.ts`), and every run is the engine's. An existing showcase
+is left alone; a seed that stopped part way is deleted and made again (or set
+aside by name, once its evidence nomination keeps it for good).
+`SEED_SHOWCASE=0` leaves it out (the e2e suite does). What each tab shows:
+
+| Tab | In the showcase |
+| --- | --- |
+| **Network / Hydrological units / Dams** | Three units with dams on one river, a mid-catchment gauge, an **other water user** (a town's water works with a pump capacity, returning 40 %), two **boreholes** (one supplemental to the crops, one filling a dam in a drought, with an annual cap), a **river abstraction** with a pool for Rivieroewer's crops, two **EWR sites** (the gauges), and **land cover** (a pine plantation and invasive riparian trees). The Kransdal dam has a firm-**yield** result. |
+| **Crops & demand** | Five crops, each with a default irrigation system; the project's own **irrigation systems** table has micro-sprinkler's efficiency edited (0.78) and a row of its own (*Subsurface drip (farm trial)*), which Vleiplaas's lucerne uses as a per-unit override. Demand objects in **m³/day** (a packhouse that rests at weekends), in **l/s** (a school and clinic) and **per unit** (a village per person with a holiday peak, a dairy herd per head). |
+| **Transfers** | Kransdal → Vleiplaas in four months, and Kransdal → Rivieroewer with a **rate per month**. |
+| **Data / Settings** | Catchment rain with a blank spell CHIRPS fills, an observed weir and a logger that drifts in 2022/23, a reference gauge, a 10-day forecast; a calibration window with one excluded year, a stored GR4J **fit**, a reporting window, a WR2012-style check, a declared uncertainty rule (Settings › Evidence). **Data feeds**: a CHIRPS feed over the map's boundary and a DWS gauge feed, both switched off (their synthetic fixtures are recent days, which would leave a gap after this 2010–2024 record). A weekly **scheduled report**. |
+| **Map** | The boundary, a parcel and a dam for each unit, both gauges, the town's works, the river, the boreholes, the river pump and the plantation, on the synthetic reference data's footprint, so the quaternary lookup, cultivated area from land cover and evaporation from the map all answer. |
+| **Runs & results / Compare** | *Before calibration (GR4J defaults)*, *Calibrated baseline* (pinned, with notes, **published** with a 20 % restriction notice in English and Afrikaans, nominated as **evidence**, with an uncertainty **ensemble**) and *Forecast (next 10 days)*: compare the first two to see the fit's effect. A **sensitivity sweep** and a **seasonal outlook** (demand at 100, 90 and 80 %). |
+| **Scenarios** | Five on the calibrated baseline, each with its run: a bigger dam, a new feedlot (a new demand), WUA **drought restrictions**, a crop change, and a drier climate (−15 % rain); and a cumulative **assessment** of the dam raise and the feedlot together. |
+| **Applications** | applicant@'s submitted *Raise the Vleiplaas dam*, run, with its prompts answered, for demo@ or analyst@ to assess. |
+| **Allocations** | Five registered water uses: a licence with months and a condition, an existing lawful use, a registration, a groundwater general authorisation and a dam's storage (21b); shown to viewers by unit. |
+| **Report / Evidence pack** | The evidence report of the calibrated baseline, and an evidence **pack** left a draft (signing and issuing need two-step sign-in). |
+| **Notes / History / Alerts / Share** | Notes on the project, a unit, a run and a scenario; the history of everything above; alert rules (a dam below 30 %, an EWR forecast failure, farms short) and demo@'s own subscription; a share link to the published baseline. |
 
 ## Email
 
