@@ -15,8 +15,8 @@
 	// drawer; Edit areas opens the planted-areas grid). From 1100 px of page
 	// width the list is a column that scrolls in itself and the chart and bars
 	// fill the window beside it, so they stay on the first screen whatever the
-	// number of crops or units. The full grids open from the Tables menu in the
-	// grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
+	// number of crops or units. The full grids, and the irrigation systems'
+	// table (`grid=systems`), open from the Tables menu in the grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
 	// through `sections` (CropGrids); scenario override mode shows all three
 	// inline the same way.
 	import { tick, untrack } from 'svelte';
@@ -49,7 +49,6 @@
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
-	import IrrigationSystemsPanel from './IrrigationSystemsPanel.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	let {
@@ -208,7 +207,8 @@
 	// --- the Tables menu (as the Network's): each full grid in the grid modal ---
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
-		['planted-areas', 'Planted areas']
+		['planted-areas', 'Planted areas'],
+		['systems', 'Irrigation systems']
 	];
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();
@@ -398,8 +398,6 @@
 				</section>
 			</div>
 		</div>
-		<!-- Below the window-fit layout, full width: the systems table scrolls with the page (engine ≥ 1.72.0). -->
-		<div class="systems-row"><IrrigationSystemsPanel {editor} {readonly} /></div>
 	</div>
 
 	{#if sheetCrop && onsave}
@@ -416,9 +414,6 @@
 {/if}
 
 <style>
-	.systems-row {
-		margin-top: 1rem;
-	}
 	.grids-menu {
 		position: relative;
 	}

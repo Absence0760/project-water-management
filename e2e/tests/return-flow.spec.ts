@@ -23,9 +23,9 @@ test('the return flow is a share of the water supplied; above the losses it is f
 	const grid = await openNodeTable(page);
 	await expect(grid.getByRole('columnheader', { name: /^Return flow/ })).toContainText('% of supply');
 
-	const efficiency = grid.getByLabel(/^Irrigation efficiency of Upper farm, %/);
-	await expect(efficiency).not.toBeEditable();
-	await expect(efficiency).toHaveValue('90');
+	// Every planting is on a system, so the efficiency is text (an output), not an input.
+	const efficiency = grid.getByRole('status', { name: /^Irrigation efficiency of Upper farm, %/ });
+	await expect(efficiency).toHaveText('90 %');
 	const returnFlow = grid.getByLabel('Irrigation return flow at Upper farm, % of the water supplied');
 	await returnFlow.fill('20');
 	await returnFlow.press('Tab');
@@ -43,7 +43,7 @@ test('the return flow is a share of the water supplied; above the losses it is f
 	await page.reload();
 	const again = await openNodeTable(page);
 	await expect(again.getByLabel('Irrigation return flow at Upper farm, % of the water supplied')).toHaveValue('10');
-	await expect(again.getByLabel(/^Irrigation efficiency of Upper farm, %/)).toHaveValue('90');
+	await expect(again.getByRole('status', { name: /^Irrigation efficiency of Upper farm, %/ })).toHaveText('90 %');
 	await closeModal(page);
 
 	// Above the losses in the unit form: the warning says what a run will return.

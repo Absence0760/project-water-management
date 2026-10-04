@@ -164,6 +164,8 @@
 			<div class="rules-head">
 				<h2 id="tr-h">Transfer rules</h2>
 				<span class="muted small">Water moved from one hydrological unit’s dam, or from the river there, to another hydrological unit, up to each month’s rate. Lower priorities move first.</span>
+				<!-- One unit for every rule's rates (display only, so a viewer has it too); each rule's title names it. -->
+				<span class="rate-unit"><span aria-hidden="true">Rates in</span> <FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" /></span>
 			</div>
 			<ol class="rule-list" data-testid="transfer-rules">
 				{#each transfers as t, i (t.id)}
@@ -222,7 +224,7 @@
 						<div class="rule-body">
 							<div class="grp g-rates">
 								<MonthRates rule={t} {label} disabled={readonly}>
-									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> {#if readonly}<span class="u">{transferUnit.label}</span>{:else}<FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" />{/if} <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
+									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">{transferUnit.label}</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
 								</MonthRates>
 							</div>
 
@@ -335,6 +337,15 @@
 	}
 	.rules-head h2 {
 		margin: 0;
+	}
+	.rate-unit {
+		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.8rem;
+		color: var(--text-2);
+		white-space: nowrap;
 	}
 	.rules-head .small {
 		font-size: 0.8rem;

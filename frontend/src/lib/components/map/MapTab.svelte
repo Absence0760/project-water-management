@@ -142,6 +142,8 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
+	/** The notice that changed the model, while it shows: it ends with a link to Runs & results, where Run model is. */
+	let runNotice = $state<string | null>(null);
 
 	async function load() {
 		loading = !data;
@@ -856,7 +858,7 @@
 		rowError = null;
 		try {
 			const r = await api.map.areaFromMap(projectId, nodeId, f.id, basis);
-			notice = `${n.name}’s area is now ${fmtNum(r.areaKm2, 3)} km², from the map${r.areaBasis === 'effective' ? ' (effective, without what drains into pans)' : ''}. Run the model to see its effect.`;
+			notice = runNotice = `${n.name}’s area is now ${fmtNum(r.areaKm2, 3)} km², from the map${r.areaBasis === 'effective' ? ' (effective, without what drains into pans)' : ''}.`;
 			await Promise.all([load(), onModelChanged()]);
 		} catch (err) {
 			rowError = { id: f.id, text: msg(err) };
@@ -1190,7 +1192,7 @@
 	<div class="toast-wrap" role="status">
 		{#if notice}
 			<p class="toast" data-testid="map-notice">
-				<span>{notice}</span>
+				<span>{notice}{#if notice === runNotice}{' '}<a href="?tab=runs">Run the model</a> to see its effect.{/if}</span>
 				<button type="button" class="btn btn-sm btn-ghost" onclick={() => (notice = null)}>Dismiss</button>
 			</p>
 		{/if}

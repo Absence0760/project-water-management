@@ -1,27 +1,39 @@
 // A project's irrigation systems (engine 1.72.0, docs/ui.md § Irrigation
-// systems): the table on Crops & demand starts as SABI 2021's systems, whose
+// systems): the table (Crops & demand → Tables → Irrigation systems, the grid
+// modal's `grid=systems`) starts as SABI 2021's systems, whose
 // efficiencies the hydrologist can change and to which a system of their own
 // can be added; a crop's default is set in its sheet, a unit's own in its
-// planted areas or the Planted areas table; the unit form shows its
-// efficiency read-only, its crops' systems blended, with each crop's system
-// in words. Every choice survives a save and a reload. Synthetic data only.
+// planted areas or the Planted areas table; the unit form edits its own
+// efficiency while a crop is on no system, and otherwise shows its crops'
+// systems blended as text, with its crops grouped by system in words. Every choice survives a save and a reload. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
 
 const panel = (page: Page) => page.getByTestId('irrigation-systems');
-const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
 test('the systems table, a crop’s default and a unit’s own system, and the unit’s blended efficiency', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Irrigation systems');
 	await putModel(page.request, project.id, sampleModel());
-	await page.goto(`/projects/${project.id}?tab=crops`);
 
-	// The SABI systems, each with SABI's range; nothing on them yet (the sample's Orchard predates systems).
+	// The sample's Orchard predates systems, so a run uses each unit's own efficiency for it: the form edits it.
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const before = await openNodeForm(page, 'Lower farm');
+	await expect(before.getByLabel('Efficiency for crops with no system (%)')).toBeEditable();
+	await expect(before.getByTestId('node-systems')).toContainText('Irrigation systems: No system (its own ');
+
+	// The table opens from the Tables menu, in the grid modal, not below the page's fold.
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.locator('details.grids-menu summary').click();
+	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: 'Irrigation systems' }).click();
+	await expect(page).toHaveURL(/grid=systems/);
+	await expect(page.getByRole('dialog', { name: 'Irrigation systems' })).toBeVisible();
+
+	// The SABI systems, each with SABI's range; nothing on them yet.
 	const sys = panel(page);
 	await expect(sys.getByRole('rowheader')).toHaveCount(6);
 	await expect(sys.getByLabel('Name of irrigation system 6')).toHaveValue('Flood / furrow');
@@ -36,6 +48,10 @@ test('the systems table, a crop’s default and a unit’s own system, and the u
 	await sys.getByLabel('Name of irrigation system 7').fill('Old furrows');
 	await sys.getByLabel('Efficiency of Old furrows, %').fill('60');
 	await sys.getByLabel('Efficiency of Old furrows, %').press('Tab');
+	expect((await saveModelChanges(page)).status()).toBe(200);
+	// Back closes the modal.
+	await page.goBack();
+	await expect(page.getByRole('dialog', { name: 'Irrigation systems' })).toBeHidden();
 
 	// Orchard's default: drip, in its sheet.
 	await page.getByRole('button', { name: 'Edit Orchard' }).click();
@@ -55,21 +71,22 @@ test('the systems table, a crop’s default and a unit’s own system, and the u
 	expect((await saveModelChanges(page)).status()).toBe(200);
 
 	// After a reload: the table, the crop's default and the unit's own are as saved.
-	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.goto(`/projects/${project.id}?tab=crops&grid=systems`);
 	await expect(panel(page).getByLabel('Efficiency of Drip, %')).toHaveValue('93');
 	await expect(panel(page).getByRole('row', { name: /Old furrows/ })).toContainText('1 unit planting');
 	await expect(panel(page).getByRole('row', { name: /Drip/ })).toContainText('1 crop');
+	await closeModal(page);
 	await page.getByRole('button', { name: 'Edit Orchard' }).click();
 	await expect(page.getByRole('dialog', { name: 'Edit Orchard' }).getByTestId('crop-system-hint')).toHaveText(
 		'The system it is under wherever it grows, except on Lower farm (Old furrows). A unit can put it on another in its planted areas.'
 	);
 
-	// The unit form: the efficiency is its crops' systems, read-only, with each crop's system in words.
+	// The unit form: every crop is on a system, so the efficiency is theirs, as text, with its crops grouped by system.
 	await page.goto(`/projects/${project.id}?tab=network`);
 	const lower = await openNodeForm(page, 'Lower farm');
-	await expect(lower.getByLabel('Efficiency (%)')).not.toBeEditable();
-	await expect(lower.getByLabel('Efficiency (%)')).toHaveValue('60');
-	await expect(lower.getByTestId('node-systems')).toContainText('Irrigation systems: Orchard on Old furrows, 60 %.');
+	await expect(lower.getByTestId('node-efficiency')).toHaveText('60 %');
+	await expect(lower.getByLabel('Efficiency (%)')).toHaveJSProperty('tagName', 'OUTPUT');
+	await expect(lower.getByTestId('node-systems')).toContainText('Irrigation systems: Old furrows, 60 %: Orchard.');
 	await expectNoViolations(page);
 });
 
@@ -91,14 +108,13 @@ test('the unit’s planted areas put a crop on a system of its own; removing a s
 	await drawer.getByRole('button', { name: 'Done' }).click();
 
 	// Removing the pivot row asks, naming what is on it; Remove leaves the planting on the crop's default.
-	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.goto(`/projects/${project.id}?tab=crops&grid=systems`);
 	await panel(page).getByRole('button', { name: 'Remove Centre pivot / linear move' }).click();
 	const confirm = page.getByRole('alertdialog');
 	await expect(confirm).toContainText('1 unit planting is on it.');
 	await confirm.getByRole('button', { name: 'Remove system' }).click();
 	await expect(panel(page).getByRole('rowheader')).toHaveCount(5);
-	await saveBar(page).getByRole('button', { name: 'Save changes' }).click();
-	await expect(saveBar(page)).toBeHidden();
+	expect((await saveModelChanges(page)).status()).toBe(200);
 	await page.goto(`/projects/${project.id}?tab=crops&farm=${lower}`);
 	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' }).getByLabel('Irrigation system of Orchard on Lower farm')).toHaveValue('');
 });

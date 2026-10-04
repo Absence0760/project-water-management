@@ -53,3 +53,48 @@ export function unitEfficiency(m: ProjectModel, nodeId: string, apanMm: readonly
 	const own = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
 	return modelFarmEfficiency(own, nodeId, m.crops, m.cropAreas, apanMm, m.irrigationSystems);
 }
+
+/** A unit's planted crops (area > 0), each with the system it is on: its own on the unit, else the crop's default; null when none. */
+function plantingSystems(m: ProjectModel, nodeId: string): { crop: string; system: IrrigationSystemDef | null }[] {
+	return m.cropAreas
+		.filter((a) => a.nodeId === nodeId && a.areaM2 > 0)
+		.map((a) => {
+			const crop = m.crops.find((c) => c.id === a.cropId);
+			return { crop: crop?.name || 'unnamed crop', system: findSystem(m, a.irrigationSystemId ?? crop?.irrigationSystemId ?? null) };
+		});
+}
+
+/**
+ * Whether a run uses the unit's own stored efficiency: some planting resolves
+ * no system (a crop from before engine 1.72.0, or one set to none), and a run
+ * takes the unit's own for it. Then the unit form and the node table let it be
+ * edited ("Efficiency for crops with no system"); otherwise the efficiency is
+ * only its crops' systems blended, shown as text.
+ */
+export function ownEfficiencyUsed(m: ProjectModel, nodeId: string): boolean {
+	return plantingSystems(m, nodeId).some((p) => p.system === null);
+}
+
+/**
+ * A unit's crops grouped by their system, in the order first planted: "Drip,
+ * 90 %: Citrus, Pasture · Flood / furrow, 70 %: Lucerne", the crops on none
+ * last as "No system (its own NN %): …". Null when nothing is planted.
+ */
+export function plantingSystemsLine(m: ProjectModel, nodeId: string): string | null {
+	const rows = plantingSystems(m, nodeId);
+	if (!rows.length) return null;
+	const groups = new Map<string, { label: string; crops: string[] }>();
+	for (const r of rows) {
+		const key = r.system?.id ?? '';
+		const g = groups.get(key) ?? { label: r.system ? systemLabel(r.system) : '', crops: [] };
+		if (!g.crops.includes(r.crop)) g.crops.push(r.crop);
+		groups.set(key, g);
+	}
+	const none = groups.get('');
+	groups.delete('');
+	const n = m.nodes.find((x) => x.id === nodeId);
+	const own = n && n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
+	const parts = [...groups.values()].map((g) => `${g.label}: ${g.crops.join(', ')}`);
+	if (none) parts.push(`No system (its own ${pctText(own)}): ${none.crops.join(', ')}`);
+	return parts.join(' · ');
+}

@@ -79,7 +79,7 @@
 						</div>
 						<div class="field">
 							<span class="lbl"
-								><label for="bh-cap-{b.id}">Capacity <span class="u">({pumpUnit.label})</span></label>{#if !readonly}<FlowUnitSelect unit={pumpUnit} label="Unit of borehole capacities" />{/if}<HelpTip key="borehole" label="About a borehole’s capacity and annual cap" /></span
+								><label for="bh-cap-{b.id}">Capacity{' '}<span class="visually-hidden">({pumpUnit.label})</span></label><FlowUnitSelect unit={pumpUnit} label="Unit of borehole capacities" /><HelpTip key="borehole" label="About a borehole’s capacity and annual cap" /></span
 							>
 							<NumberInput id="bh-cap-{b.id}" min={0} scale={pumpUnit.scale} grouped disabled={readonly} value={b.capacityM3Day} onchange={(v) => (b.capacityM3Day = v ?? 0)} />
 						</div>

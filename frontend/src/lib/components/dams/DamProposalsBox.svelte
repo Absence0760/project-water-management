@@ -102,10 +102,10 @@
 		try {
 			if (r.kind === 'capacity') {
 				const res = await api.damProposals.capacityFromRegister(projectId, d.nodeId, r.registerNo);
-				notice = `${d.nodeName}’s dam capacity is now ${fmtVolume(res.damCapacityM3)}, from the register of dams (${res.registerNo}). Run the model to see its effect.`;
+				notice = `${d.nodeName}’s dam capacity is now ${fmtVolume(res.damCapacityM3)}, from the register of dams (${res.registerNo}).`;
 			} else {
 				const res = await api.damProposals.areaFromMap(projectId, d.nodeId, r.featureId);
-				notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map. Run the model to see its effect.`;
+				notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map.`;
 			}
 			await Promise.all([load(d.nodeId), onModelChanged()]);
 			await frame?.focusNotice();

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_IRRIGATION_SYSTEMS, newNetworkNode, type ProjectModel } from '@water-management/engine';
 import { ModelEditor } from './editor.svelte';
-import { findSystem, sabiRange, systemLabel, systemsOf, systemUse, unitEfficiency } from './systems';
+import { findSystem, ownEfficiencyUsed, plantingSystemsLine, sabiRange, systemLabel, systemsOf, systemUse, unitEfficiency } from './systems';
 import { validateModel } from './validate';
 import { returnFlowHint } from '$lib/components/network/fields';
 
@@ -48,6 +48,23 @@ describe('systems', () => {
 		// Equal weights: e = 2 ÷ (1/0.9 + 1/0.7).
 		expect(unitEfficiency(m, 'u', new Array(12).fill(150))).toBeCloseTo(2 / (1 / 0.9 + 1 / 0.7), 12);
 		expect(unitEfficiency(m, 'g', [])).toBe(1);
+	});
+
+	it('groups a unit’s crops by system, and says when its own efficiency is still used (a crop on no system)', () => {
+		const m = model();
+		m.crops.push({ id: 'c', name: 'Lucerne', cropFactor: new Array(12).fill(1), irrigationSystemId: 'drip' });
+		m.cropAreas.push({ nodeId: 'u', cropId: 'c', areaM2: 500 });
+		expect(plantingSystemsLine(m, 'u')).toBe('Drip, 90 %: Citrus, Lucerne · Flood / furrow, 70 %: Pasture');
+		expect(ownEfficiencyUsed(m, 'u')).toBe(false);
+		expect(plantingSystemsLine(m, 'g')).toBeNull();
+		expect(ownEfficiencyUsed(m, 'g')).toBe(false);
+		// Pasture back on its default, which is none: the unit's own 80 % is used for it.
+		delete m.cropAreas[1]!.irrigationSystemId;
+		expect(ownEfficiencyUsed(m, 'u')).toBe(true);
+		expect(plantingSystemsLine(m, 'u')).toBe('Drip, 90 %: Citrus, Lucerne · No system (its own 80 %): Pasture');
+		// An unplanted row (area 0) counts for neither.
+		m.cropAreas[1]!.areaM2 = 0;
+		expect(ownEfficiencyUsed(m, 'u')).toBe(false);
 	});
 
 	it('warns of a return flow above the losses at the blend, without refusing the model (a run caps it)', () => {

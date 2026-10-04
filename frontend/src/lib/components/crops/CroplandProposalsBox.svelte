@@ -105,7 +105,7 @@
 				dataset: d.dataset!.dataset,
 				...(c.featureId ? { featureId: c.featureId } : {})
 			});
-			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from land cover. Run the model to see its effect.`;
+			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from land cover.`;
 			await Promise.all([load(d.nodeId), onModelChanged()]);
 			await frame?.focusNotice();
 		} catch (e) {

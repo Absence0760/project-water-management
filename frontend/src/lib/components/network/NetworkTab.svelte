@@ -20,7 +20,7 @@
 	import { refocusMover, RowReorder } from '$lib/components/model/rowReorder.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { findSystem, systemLabel, unitEfficiency } from '$lib/model/systems';
+	import { ownEfficiencyUsed, pctText, plantingSystemsLine, unitEfficiency } from '$lib/model/systems';
 	import { divertMonthsCell } from './supply';
 	import { cardLabel, fieldScale, fieldUnused, GROUPS, hasDam, isPct, isVolume, KIND_WORD, NODE_FIELDS, returnFlowHint, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import { nodeSections, SECTION_SHORT, sectionId, type NodeSection } from './nodeSections';
@@ -72,18 +72,6 @@
 	} = $props();
 
 	const nodes = $derived(editor.model.nodes);
-	/** Each crop a unit plants, on its irrigation system (engine ≥ 1.72.0): "Citrus on Drip, 90 %; Pasture on Flood / furrow, 70 %". */
-	function plantingSystemsLine(nodeId: string): string | null {
-		const rows = editor.model.cropAreas.filter((a) => a.nodeId === nodeId && a.areaM2 > 0);
-		if (!rows.length) return null;
-		return rows
-			.map((a) => {
-				const crop = editor.model.crops.find((c) => c.id === a.cropId);
-				const s = findSystem(editor.model, a.irrigationSystemId ?? crop?.irrigationSystemId ?? null);
-				return `${crop?.name || 'unnamed crop'} on ${s ? systemLabel(s) : "the unit's own efficiency"}`;
-			})
-			.join('; ');
-	}
 	const outletCount = $derived(nodes.filter((n) => n.downstreamNodeId === null).length);
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));
 	const users = $derived(nodes.filter((n) => n.kind === 'user'));
@@ -730,21 +718,27 @@
 												<span aria-hidden="true" title="Set by month: the one value isn’t used.">{c.text}</span><span class="visually-hidden">{c.aria}</span>
 											{/if}
 										</td>
+									{:else if f.derived && !ownEfficiencyUsed(editor.model, node.id)}
+										<!-- Every crop here is on a system (engine ≥ 1.72.0): the efficiency is theirs blended, text, not an input. -->
+										<td class="num derived pct">
+											<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
+											<output aria-label={f.aria(label)}>{pctText(unitEfficiency(editor.model, node.id, editor.apanMm))}</output>
+										</td>
 									{:else}
 									{@const unused = fieldUnused(f, node)}
 									{@const over = f.key === 'returnFlowFraction' && node.kind === 'farm' ? returnFlowHint(node.returnFlowFraction, unitEfficiency(editor.model, node.id, editor.apanMm)) : null}
 									<td class:pct={isPct(f)} class:vol={isVolume(f)} class:unused={unused !== null} class:over={over !== null} data-paste-col={fi} title={unused ?? over ?? undefined}>
 										<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 										<NumberInput
-											label={unused ? `${f.aria(label)}: ${unused}` : f.aria(label)}
+											label={unused ? `${f.aria(label)}: ${unused}` : f.derived ? `Irrigation efficiency of ${label} for crops with no system, %` : f.aria(label)}
 											min={0}
 											max={isPct(f) ? 100 : undefined}
 											scale={fieldScale(f)}
 											nullable={f.nullable}
 											grouped={readonly && !isPct(f)}
 											placeholder={f.nullable ? '–' : undefined}
-											disabled={readonly || unused !== null || f.derived}
-											value={f.derived ? unitEfficiency(editor.model, node.id, editor.apanMm) : (node[f.key] ?? null)}
+											disabled={readonly || unused !== null}
+											value={node[f.key] ?? null}
 								onchange={(v) => setNodeField(node, f.key, v)}
 										/>
 									</td>
@@ -958,7 +952,8 @@
 					{method}
 					planting={editing.kind === 'farm' ? farmPlanting(editor.model, editing.id) : null}
 					efficiency={editing.kind === 'farm' ? unitEfficiency(editor.model, editing.id, editor.apanMm) : null}
-					systemsLine={editing.kind === 'farm' ? plantingSystemsLine(editing.id) : null}
+					systemsLine={editing.kind === 'farm' ? plantingSystemsLine(editor.model, editing.id) : null}
+					ownEfficiency={editing.kind === 'farm' && ownEfficiencyUsed(editor.model, editing.id)}
 					plantedHref={editing.kind === 'farm' ? plantedHref(editing.id) : null}
 					transfersLine={editingTransfers}
 					transfersHref={editing.kind === 'farm' ? '?tab=transfers' : null}
@@ -1120,6 +1115,13 @@
 	}
 	.net td.na {
 		color: var(--text-muted);
+	}
+	/* The efficiency from the crops' systems: text, lined up with the inputs' digits. */
+	.net td.derived {
+		text-align: right;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		padding-right: calc(0.35rem + 1px + 0.35rem);
 	}
 	/* River to dam set by month: read-only, lined up with the inputs' digits. */
 	.net td.by-month {

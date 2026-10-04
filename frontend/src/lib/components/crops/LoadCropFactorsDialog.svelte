@@ -226,7 +226,7 @@
 	// A crop's default system in words (engine ≥ 1.72.0).
 	const sysText = (id: string | null) => {
 		const s = findSystem(editor.model, id);
-		return s ? systemLabel(s) : 'none (each unit’s own)';
+		return s ? systemLabel(s) : 'none (the unit’s efficiency for crops with no system)';
 	};
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 1, true);
 

@@ -27,7 +27,7 @@
 	const uid = $props.id();
 	const name = $derived(crop.name || 'unnamed crop');
 	const current = $derived(findSystem({ irrigationSystems: [...systems] }, crop.irrigationSystemId));
-	const keep = $derived(current ? systemLabel(current) : 'none: each unit’s own');
+	const keep = $derived(current ? systemLabel(current) : 'none: the unit’s efficiency for crops with no system');
 	const typicalRow = $derived(typical ? (systems.find((s) => s.preset === typical) ?? null) : null);
 	const typicalLabel = $derived(typicalRow ? typicalRow.name.toLowerCase() : null);
 </script>

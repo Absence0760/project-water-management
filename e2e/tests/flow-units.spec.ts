@@ -23,6 +23,10 @@ test('River to dam, a river pump and a transfer entered in l/s are stored in the
 	await page.goto(`/projects/${project.id}?tab=network`);
 	const sheet = await openNodeForm(page, 'Upper farm');
 	await expect(sheet.getByLabel('River to dam (m³/s)')).toBeVisible();
+	// The unit shows once, in the select (the label keeps it for a screen reader), and the select is a 24 px target.
+	await expect(sheet.locator('label[for^="nd-divertCapacityM3Day-"]')).toHaveText('River to dam (m³/s)');
+	await expect(sheet.locator('label[for^="nd-divertCapacityM3Day-"] .u')).toHaveCount(0);
+	expect((await sheet.getByLabel('Unit of river to dam').boundingBox())!.height).toBeGreaterThanOrEqual(24);
 	await sheet.getByLabel('Unit of river to dam').selectOption('ls');
 	await sheet.getByLabel('River to dam (l/s)').fill('200');
 	await sheet.getByLabel('River to dam (l/s)').press('Tab');
@@ -32,7 +36,7 @@ test('River to dam, a river pump and a transfer entered in l/s are stored in the
 	await supply.getByLabel('Unit of river pump capacity').selectOption('ls');
 	await supply.getByLabel('Number of pumps').fill('2');
 	await supply.getByLabel('m³/h per pump').fill('9');
-	await expect(supply.getByTestId('pump-note')).toHaveText('2 × 9 m³/h × 24 h = 5 l/s.');
+	await expect(supply.getByTestId('pump-note')).toHaveText('2 × 9 m³/h × 24 h = 432 m³/day (5 l/s).');
 	await expect(supply.getByLabel('River pump capacity (l/s)')).toHaveValue('5');
 	await expectNoViolations(page, { include: '.detail' });
 	await saveModelChanges(page);
@@ -47,7 +51,10 @@ test('River to dam, a river pump and a transfer entered in l/s are stored in the
 
 	// A transfer's rate: the sample's 0.01 m³/s reads 10 l/s; Oct at 20 l/s is 0.02 m³/s.
 	await openTransfers(page, project.id);
-	await page.getByLabel('Unit of transfer rates').first().selectOption('ls');
+	// One picker for every rule, in the Transfer rules heading; each rule's title names the unit.
+	await expect(page.getByLabel('Unit of transfer rates')).toHaveCount(1);
+	await page.getByLabel('Unit of transfer rates').selectOption('ls');
+	await expect(page.getByTestId('transfer-rule').first().locator('.g-rates .grp-t')).toContainText('l/s');
 	await expect(page.getByLabel('Max rate of transfer 1 in Nov, l/s', { exact: true })).toHaveValue('10');
 	await expect(page.getByRole('group', { name: /^Max rate of transfer 1 by month/ })).toContainText('up to 10 l/s');
 	await page.getByLabel('Max rate of transfer 1 in Oct, l/s', { exact: true }).fill('20');

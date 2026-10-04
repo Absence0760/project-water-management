@@ -8,6 +8,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { pctText } from '$lib/model/systems';
 	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
 	import { damHints, fieldScale, fieldUnused, hasDam, hiLoHint, isPct, NODE_FIELDS, returnFlowHint, setNodeField, type NodeField } from './fields';
 	import { fieldShows, nodeSections, SECTION_TITLE, sectionId } from './nodeSections';
@@ -46,6 +47,7 @@
 		plantedHref = null,
 		efficiency = null,
 		systemsLine = null,
+		ownEfficiency = false,
 		transfersLine = null,
 		transfersHref = null
 	}: {
@@ -82,6 +84,8 @@
 		efficiency?: number | null;
 		/** Each crop it plants on its system, in words; null when it plants none. */
 		systemsLine?: string | null;
+		/** Some crop here is on no system, so a run uses the unit's own efficiency for it, which is then edited here (model/systems.ts ownEfficiencyUsed). */
+		ownEfficiency?: boolean;
 		/** Opens the unit's planted areas (the farm drawer). */
 		plantedHref?: string | null;
 		/** "2 transfers, from Dam A, to Dam B": the unit's transfers, for the same pointer; null with none. */
@@ -228,8 +232,14 @@
 					{#each fields as f (f.key)}
 						{@const unused = fieldUnused(f, node, method)}
 						<div class="field">
+							{#if f.derived && !ownEfficiency}
+								<!-- Every crop here is on a system (engine ≥ 1.72.0): the efficiency is theirs blended, text, not an input. -->
+								<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
+								<output id={id(f.key)} class="derived" aria-describedby="{id(f.key)}-h" data-testid="node-efficiency">{efficiency === null ? '–' : pctText(efficiency)}</output>
+							{:else}
+							<!-- A flow rate's unit is the select beside it, for everyone (display only); the label keeps it for a screen reader. -->
 							<span class="lbl"
-								><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label>{#if f.flowUnit && !readonly}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{/if}<HelpTip key={`node.${f.key}`} /></span
+								><label for={id(f.key)}>{f.derived ? 'Efficiency for crops with no system' : f.label}{#if f.flowUnit}{' '}<span class="visually-hidden">({f.unit})</span>{:else}{' '}<span class="u">({f.unit})</span>{/if}</label>{#if f.flowUnit}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{/if}<HelpTip key={`node.${f.key}`} /></span
 							>
 							<NumberInput
 								id={id(f.key)}
@@ -239,12 +249,15 @@
 								nullable={f.nullable}
 								grouped={!isPct(f)}
 								placeholder={f.nullable ? 'not set' : undefined}
-								disabled={readonly || unused !== null || divertByMonth(f) || f.derived}
+								disabled={readonly || unused !== null || divertByMonth(f)}
 								aria-describedby="{id(f.key)}-h"
-								value={f.derived ? (efficiency ?? node[f.key] ?? null) : (node[f.key] ?? null)}
+								value={node[f.key] ?? null}
 								onchange={(v) => setNodeField(node, f.key, v)}
 							/>
-							<span class="hint" id="{id(f.key)}-h">{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}</span>
+							{/if}
+							<span class="hint" id="{id(f.key)}-h"
+								>{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}{#if f.derived && ownEfficiency && efficiency !== null && Math.abs(efficiency - (node.irrigationEfficiency ?? 0)) > 0.0005}{' '}With its crops' systems, a run uses {pctText(efficiency)}.{/if}</span
+							>
 							{#if f.key === 'returnFlowFraction' && efficiency !== null}
 								{@const over = returnFlowHint(node.returnFlowFraction, efficiency)}
 								{#if over}<span class="alert alert-warning small" role="status" data-testid="return-flow-over">{over}</span>{/if}
@@ -341,6 +354,13 @@
 	.field :global(input),
 	.field select {
 		width: 100%;
+	}
+	/* The efficiency from the crops' systems: a value, not a field. */
+	.field output.derived {
+		display: block;
+		padding: 0.3rem 0;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 	}
 	/* Each section is a card with its title in a tinted header band, so one
 	   section's fields don't run into the next's. The legend floats so it sits

@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A flow rate's unit as a small select beside it: m³/s, l/s or m³/day, the
-	// same choice for every field of its kind (./flowUnit.svelte.ts).
+	// same choice for every field of its kind (./flowUnit.svelte.ts). Display
+	// only, so a viewer gets it too. At least 24 px tall (WCAG 2.5.8).
 	import { FLOW_UNITS, type FlowUnit, type FlowUnitId } from './flowUnit.svelte';
 
 	let { unit, label }: { unit: FlowUnit; label: string } = $props();
@@ -13,8 +14,8 @@
 <style>
 	.flow-unit {
 		font-size: 0.75rem;
-		padding: 0 0.15rem;
-		min-height: 0;
+		padding: 0 0.2rem;
+		min-height: 24px;
 		width: auto;
 		color: var(--text-muted);
 		background: transparent;

@@ -446,6 +446,8 @@
 		margin-top: 0.2rem;
 		font-size: 0.75rem;
 		padding: 0.1rem 0.2rem;
+		/* WCAG 2.5.8's 24 px target. */
+		min-height: 24px;
 	}
 	.areas .sys-text {
 		display: block;

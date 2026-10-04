@@ -194,24 +194,37 @@ maps `null` to 0 in its `onchange`. A revision line saved before the change
 
 ### Flow units
 
-A flow rate an editor types has a small unit select beside its label (or, in
-the node table, in place of the column heading's unit): **m³/s**, **l/s** or
+A flow rate has a small unit select beside its label (or, in the node
+table, in place of the column heading's unit), at least 24 px tall: **m³/s**, **l/s** or
 **m³/day** (`network/FlowUnitSelect.svelte`, `network/flowUnit.svelte.ts`).
 One choice per kind of rate, each starting at the unit it always showed:
 **River to dam** (the node table column, the unit form and River to dam by
 month; m³/s), **pumps** (a unit's river pump, the crops' own, an other water
 user's and a demand object's river abstraction, `PumpCapacityField`, the
 borehole capacities and Combined borehole capacity; m³/day) and a
-**transfer's max rate** (the Max rate by month title on Transfers; m³/s).
-Every field of that kind follows the pick, labels and words included ("River
-to dam (l/s)", "2 × 9 m³/h × 24 h = 5 l/s.", "Nov–Feb, up to 10 l/s"). It is
+**transfer's max rate** (one "Rates in" select in the Transfer rules
+heading, for every rule; each rule's Max rate by month title names the unit
+as text; m³/s). The unit shows once: the select replaces the bracketed unit
+beside the label, which a screen reader still hears ("River to dam (l/s)",
+the unit in a visually hidden span). Every field of that kind follows the
+pick, labels and words included ("Nov–Feb, up to 10 l/s"); the pump
+calculator's sum stays in what it computes, m³/day, with the picked unit in
+brackets ("2 × 9 m³/h × 24 h = 432 m³/day (5 l/s)."). It is
 display only: the model keeps each value in its stored unit (River to dam
 and pumps m³/day, a transfer m³/s), so a pick never changes a run, the
 History or another viewer's screen. The pick is kept in this browser
 (`localStorage` `wm.unit.riverToDam`, `wm.unit.pump`, `wm.unit.transfer`,
-read and written in `try`, so blocked storage starts at the default); a
-read-only viewer sees the unit without the select. e2e:
+read and written in `try`, so blocked storage starts at the default); since
+it changes nothing saved, a read-only viewer gets the select too. e2e:
 `flow-units.spec.ts`.
+
+A **demand object's** rate is the other pattern, on purpose: its unit
+(`DemandObjectFields.svelte`, migration 199) is stored in the model with
+the value, not picked per browser. That unit is part of how the demand was
+specified (a licence or a schedule written in l/s stays l/s), the evidence
+report states it, and a revision that changes it is a real change to the
+model; the per-browser pickers above only change how a value already
+stored in its fixed unit is read.
 
 A chart's value axis writes its ticks short (`charts/series.ts`
 `fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
@@ -1505,7 +1518,8 @@ for every workspace tab. Its own chunk.
   asks first (`confirmWords`: the unit, the old and new value, the source;
   "Use this capacity" / "Use this area"), saves that one value on the
   server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.", which
+  the register of dams (Z100/07). Run the model to see its effect.", its
+  "Run the model" a link to Runs & results, where Run model is; the notice
   takes the keyboard, since the Use button is gone) and reloads the saved
   model and the proposals. The frame is shared with land cover and
   evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
@@ -3534,8 +3548,10 @@ demand grid's chart (`CropGrids`) uses the same ranking and colours.
 
 ### Irrigation systems
 
-Below the Crops page's window-fit layout, full width, the project's
-irrigation systems (`crops/IrrigationSystemsPanel.svelte`, engine ≥ 1.72.0,
+In the grid modal (`grid=systems`, Crops & demand → **Tables** →
+**Irrigation systems**; it used to sit below the page's window-fit layout,
+out of sight), the project's irrigation systems
+(`crops/IrrigationSystemsPanel.svelte`, engine ≥ 1.72.0,
 [model.md §2.3](./model.md#23-irrigation-demand) step 6): each row's name and
 efficiency (%, 1–100), SABI's range under a row that started as a SABI 2021
 system ("SABI 90–95 %"), and what uses it ("1 crop, 2 unit plantings" or
@@ -3543,7 +3559,10 @@ system ("SABI 90–95 %"), and what uses it ("1 crop, 2 unit plantings" or
 system follows), adds a system of the scheme's own (**+ Add system**, named
 "System N" at 80 % and focused), or removes one: one in use asks first,
 naming what is on it, and its crops and plantings fall back to none. Edits
-go into the model and are saved with it. Where each crop is on a system:
+go into the model and are saved with the modal's save row; Back closes it.
+The name column stops at 20rem on a wide screen, and a container query (the
+panel's width, not the window's) lets the name shrink on a phone. Where each
+crop is on a system:
 
 - **A crop's default**, in its sheet (below).
 - **A unit's own**, in its planted areas drawer and in the Planted areas
@@ -3552,10 +3571,19 @@ go into the model and are saved with it. Where each crop is on a system:
   "Default: Drip" in the grid); a viewer sees the name, "(default)" when it
   is the crop's.
 - **The unit's efficiency** on the Network (form and node table) is its
-  plantings' systems blended, shown read-only; the unit form lists each crop
-  on its system ("Irrigation systems: Citrus on Drip, 90 %; …") with a link
-  to its planted areas. A paste into the node table leaves the Efficiency
-  column out, saying it comes from the crops' systems.
+  plantings' systems blended. While every planting is on a system it is
+  text (an `<output>`, "84.6 %"), not an input. While one resolves no system
+  (a crop from before 1.72.0, or one set to none) a run uses the unit's own
+  stored efficiency for it, so the form edits it as **Efficiency for crops
+  with no system (%)** (its hint adds the blend a run uses when that
+  differs) and the node table's cell is an input
+  (`model/systems.ts` `ownEfficiencyUsed`, the `derived` flag in
+  `network/fields.ts`). The unit form groups its crops by system
+  ("Irrigation systems: Drip, 90 %: Citrus, Pasture · Flood / furrow, 70 %:
+  Lucerne", the crops on none last as "No system (its own 80 %): …";
+  `plantingSystemsLine`) with a link to its planted areas. A paste into the
+  node table leaves the Efficiency column out, saying it comes from the
+  crops' systems.
 - **A return flow above the losses** at that efficiency is flagged, not
   refused, since the crops' systems move the losses from another screen: the
   node table outlines the cell (the reason in its title) and the unit form
@@ -3565,8 +3593,9 @@ go into the model and are saved with it. Where each crop is on a system:
 Labels read "Name, NN %" (`model/systems.ts` `systemLabel`), a name that
 already ends in its efficiency ("Imported, 66 %") as it is.
 `e2e/tests/irrigation-systems.spec.ts` pins the table, a crop's default, a
-unit's own in the grid and the drawer, the read-only blend and removing a
-system in use.
+unit's own in the grid and the drawer, the editable own efficiency, the
+blend as text, opening from the Tables menu and Back, and removing a system
+in use.
 
 ### Crop sheet
 
@@ -7624,7 +7653,9 @@ the viewer's day, with a request's change set folded into one entry.
   with an optional reason (Enter in it restores, once the preview is in); restore buttons are disabled while there are
   unsaved model edits (a note says so), and a restored farm lists the
   farmers to re-link (a link to the Project page's Farmers list). After a
-  restore the new entry (the restore itself) is picked, in place.
+  restore the new entry (the restore itself) is picked, in place; its
+  notice's "run the model again" (and a series restore's) links to Runs &
+  results, where Run model is.
 - Viewers read everything, the differences included, with no restore
   buttons; farmers never see the tab. Empty: "No changes recorded yet.
   History starts from {date}."; a filter with none: "Nothing matches these
