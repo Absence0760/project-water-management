@@ -25,7 +25,7 @@ export function buildTopology(nodes: readonly NetworkNode[]): Topology {
 	const n = nodes.length;
 	const indexById = new Map<string, number>();
 	nodes.forEach((node, i) => {
-		if (indexById.has(node.id)) throw new Error(`duplicate node id ${node.id}`);
+		if (indexById.has(node.id)) throw new Error(`duplicate hydrological unit id ${node.id}`);
 		indexById.set(node.id, i);
 	});
 
@@ -39,14 +39,14 @@ export function buildTopology(nodes: readonly NetworkNode[]): Topology {
 		}
 		const d = indexById.get(node.downstreamNodeId);
 		if (d === undefined) {
-			throw new Error(`node "${node.name}" drains into unknown node ${node.downstreamNodeId}`);
+			throw new Error(`hydrological unit "${node.name}" drains into unknown hydrological unit ${node.downstreamNodeId}`);
 		}
-		if (d === i) throw new Error(`node "${node.name}" drains into itself`);
+		if (d === i) throw new Error(`hydrological unit "${node.name}" drains into itself`);
 		downstream[i] = d;
 		upstreamLists[d]!.push(i);
 	});
 
-	if (n > 0 && roots.length === 0) throw new Error('network has no outflow node (every node drains somewhere: a cycle)');
+	if (n > 0 && roots.length === 0) throw new Error('network has no outflow hydrological unit (every hydrological unit drains somewhere: a cycle)');
 
 	// Keep a stable, user-meaningful order among siblings: sortOrder, then input order.
 	const bySort = (a: number, b: number) => nodes[a]!.sortOrder - nodes[b]!.sortOrder || a - b;
@@ -86,8 +86,8 @@ export function buildTopology(nodes: readonly NetworkNode[]): Topology {
 	// does too, so a direct caller can't get a quietly wrong result.
 	if (roots.length > 1) {
 		throw new Error(
-			`network has ${roots.length} outflow nodes (${roots.map((r) => nodes[r]!.name).join(', ')}); ` +
-				'exactly one node may drain into nothing — point the others downstream'
+			`network has ${roots.length} outflow hydrological units (${roots.map((r) => nodes[r]!.name).join(', ')}); ` +
+				'exactly one hydrological unit may drain into nothing — point the others downstream'
 		);
 	}
 	const outflow = roots[0] ?? -1;

@@ -574,13 +574,13 @@ export const DEMAND_SCALE_MAX = 2;
 
 /** A demand.scale op's list of node ids: at least one, no repeats. */
 const nodeIdList: Check = (v) => {
-	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one node id (leave it out for every node of the category)';
-	if (v.length > SCENARIO_OPS_MAX) return `must be at most ${SCENARIO_OPS_MAX} node ids`;
+	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one hydrological unit id (leave it out for every hydrological unit of the category)';
+	if (v.length > SCENARIO_OPS_MAX) return `must be at most ${SCENARIO_OPS_MAX} hydrological unit ids`;
 	for (const x of v) {
 		const e = id(x);
 		if (e) return `each ${e}`;
 	}
-	return new Set(v).size === v.length ? null : 'names a node more than once';
+	return new Set(v).size === v.length ? null : 'names a hydrological unit more than once';
 };
 /** A demand.scale op's months: calendar months 1–12, at least one, no repeats. */
 const demandMonths: Check = (v) => {
@@ -911,13 +911,13 @@ export function demandObjectOpIssues(raw: unknown): { demandObject: DemandObject
 
 /** node.insert's nodes re-pointed into the new one: at least one, no repeats. */
 const upstreamList: Check = (v) => {
-	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one node id (the nodes that will drain into the new one; with none, add the node instead)';
-	if (v.length > SCENARIO_OPS_MAX) return `must be at most ${SCENARIO_OPS_MAX} node ids`;
+	if (!Array.isArray(v) || v.length === 0) return 'must be a list of at least one hydrological unit id (the ones that will drain into the new one; with none, add it instead)';
+	if (v.length > SCENARIO_OPS_MAX) return `must be at most ${SCENARIO_OPS_MAX} hydrological unit ids`;
 	for (const x of v) {
 		const e = id(x);
 		if (e) return `each ${e}`;
 	}
-	return new Set(v).size === v.length ? null : 'names a node more than once';
+	return new Set(v).size === v.length ? null : 'names a hydrological unit more than once';
 };
 
 // ---------------------------------------------------------------------------
@@ -1110,7 +1110,7 @@ export const LEGACY_LOSS_RETURN_FIELD = 'lossReturnFraction';
 const NODE_FIELD_ADD_CHECK = checksOf(NODE_FIELDS);
 export function nodeAddFieldError(field: string, value: unknown): string | null {
 	const c = checkFor(NODE_FIELD_ADD_CHECK, field);
-	return c ? c(value) : `"${field}" is not a node field`;
+	return c ? c(value) : `"${field}" is not a hydrological unit field`;
 }
 /** A new node's fields that may be left out: they take the engine's defaults (upgradeLegacyModel). */
 const NODE_OPTIONAL = new Set<string>([
@@ -1207,7 +1207,7 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 		case 'node.set': {
 			const nodeId = need('nodeId', id);
 			const legacy = raw.field === LEGACY_LOSS_RETURN_FIELD;
-			const field = need('field', (v) => (typeof v === 'string' && (NODE_FIELD_CHECK.byName.has(v) || legacy) ? null : 'is not a node field a scenario can set'));
+			const field = need('field', (v) => (typeof v === 'string' && (NODE_FIELD_CHECK.byName.has(v) || legacy) ? null : 'is not a hydrological unit field a scenario can set'));
 			if (legacy) need('value', frac);
 			else if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
 			op = { op: 'node.set', nodeId, field, value: cloneValue(raw.value) } as ScenarioOp;

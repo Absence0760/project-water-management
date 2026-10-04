@@ -20,7 +20,7 @@ describe('modelRuleIssues', () => {
 		const m = { nodes: [n('g', 'Gauge', null), n('a', 'Farm', 'g'), n('b', ' farm ', 'g'), n('c', 'Other', null)], crops: [], cropAreas: [], transfers: [] } as unknown as ProjectModel;
 		const issues = modelRuleIssues(m);
 		expect([...issues.keys()].sort()).toEqual(['dup:node name:farm', 'outlets']);
-		expect(modelRuleProblems(m)).toEqual(['duplicate node name "farm"', 'the network needs exactly one outflow node (drains into nothing); found 2']);
+		expect(modelRuleProblems(m)).toEqual(['duplicate hydrological unit name "farm"', 'the network needs exactly one outflow hydrological unit (drains into nothing); found 2']);
 	});
 
 	it('individual boreholes (WP-3.9): on a farm or user, and emergency mode or pumping into a dam only on a farm with a dam', () => {
