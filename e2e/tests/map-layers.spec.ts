@@ -122,37 +122,32 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await expect(page.getByTestId('map-rivers')).toHaveCount(0);
 });
 
-/** The fit with the Layers panel open: the page doesn't scroll, the panel ends inside the map, the side column's panel inside the column. */
+/** The fit with the Layers tab picked: the page doesn't scroll, the tab's panel ends inside the side column and scrolls in its box. */
 const fitWithLayers = (page: Page) =>
 	page.evaluate(() => {
 		const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
 		const map = r('.map-body');
-		const panel = r('.layers-panel');
+		const panel = document.querySelector('.layers-tab') as HTMLElement;
 		const side = r('.map-side');
-		const shown = [...document.querySelectorAll('.map-side .tab-panel')].find((e) => !(e as HTMLElement).hidden)!.getBoundingClientRect();
-		const reaches = document.querySelector('.layers-panel') as HTMLElement;
 		return {
 			scroll: document.documentElement.scrollHeight,
 			inner: window.innerHeight,
-			panelBottom: panel.bottom,
-			mapBottom: map.bottom,
-			panelRight: panel.right,
-			mapRight: map.right,
-			panelScrolls: reaches.scrollHeight > reaches.clientHeight ? getComputedStyle(reaches).overflowY : 'fits',
-			shownBottom: shown.bottom,
+			panelBottom: panel.getBoundingClientRect().bottom,
+			panelScrolls: panel.scrollHeight > panel.clientHeight ? getComputedStyle(panel).overflowY : 'fits',
 			sideBottom: side.bottom,
 			mapHeight: map.height
 		};
 	});
 
 // Until 2026-10-02 the layers were a box in the side column, squeezing the list and the picked feature's card (PR #348 found the
-// column running past a 1280×800 window). They are a panel over the map now: with both layers on, a reach and a feature picked, the
-// panel stays inside the map (scrolling in its own box), the page doesn't scroll, and the side column keeps its one panel whole.
+// column running past a 1280×800 window); until 2026-10-03 a panel over the map. They are a tab of the side column now: one panel
+// at a time, so with both layers on and a reach picked the tab's panel fits the column (scrolling in its own box), the page doesn't
+// scroll, and a feature picked from the list shows its Details, the map's Layers button bringing the tab back with the reach kept.
 for (const [width, height] of [
 	[1440, 960],
 	[1280, 800]
 ] as const) {
-	test(`with both layers on, a reach and a feature picked, the Layers panel stays inside the map at ${width}×${height}`, async ({ page, owner }) => {
+	test(`with both layers on and a reach picked, the Layers tab fits the side column at ${width}×${height}`, async ({ page, owner }) => {
 		void owner;
 		await page.setViewportSize({ width, height });
 		await loadSyntheticQuaternaries();
@@ -163,24 +158,25 @@ for (const [width, height] of [
 		await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
 		await openMap(page, project.id, '&layers=quaternaries,rivers');
 		await openLayers(page);
+		await expect(page.getByTestId('map-tab-layers')).toHaveAttribute('aria-selected', 'true');
 		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
 		await page.getByTestId('map-reach-list').getByRole('button').first().click();
 		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
-		await showTab(page, 'features');
-		await page.getByTestId('map-feature-list').getByRole('button', { name: /Upper farm/ }).first().click();
-		await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
-		// The pick leaves the Layers panel open: it is the map's, not the column's.
-		await expect(layers(page)).toBeVisible();
 		await layoutSettled(page);
 		const fit = await fitWithLayers(page);
 		expect(fit.scroll).toBeLessThanOrEqual(fit.inner);
-		expect(fit.panelBottom).toBeLessThanOrEqual(fit.mapBottom);
-		expect(fit.panelRight).toBeLessThanOrEqual(fit.mapRight);
+		expect(fit.panelBottom).toBeLessThanOrEqual(fit.sideBottom + 0.5);
 		expect(['fits', 'auto']).toContain(fit.panelScrolls);
-		expect(fit.shownBottom).toBeLessThanOrEqual(fit.sideBottom + 0.5);
 		expect(fit.sideBottom).toBeLessThanOrEqual(fit.inner);
 		// The map keeps the window's height: nothing stacks above it but the header.
 		expect(fit.mapHeight).toBeGreaterThanOrEqual(height - 260);
+		// A pick from the list shows its Details; the map's Layers button brings the tab back, the reach still picked.
+		await showTab(page, 'features');
+		await page.getByTestId('map-feature-list').getByRole('button', { name: /Upper farm/ }).first().click();
+		await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
+		await expect(page.getByTestId('map-layers-toggle')).toHaveAttribute('aria-expanded', 'false');
+		await openLayers(page);
+		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
 	});
 }
 
