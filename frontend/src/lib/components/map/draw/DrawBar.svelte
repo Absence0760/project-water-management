@@ -21,6 +21,8 @@
 	import { cutText, type Draft } from './draft.svelte';
 	import { draftProblem, DRAW_CHOICES } from './shape';
 	import DelineateChoice from '../DelineateChoice.svelte';
+	import DelineationLines from '../DelineationLines.svelte';
+	import type { KeyItem } from '../mapList';
 
 	let {
 		draft,
@@ -34,6 +36,7 @@
 		delineating = false,
 		tracing = false,
 		onsubcatchments,
+		lines = null,
 		minOccurrence = $bindable(25)
 	}: {
 		draft: Draft;
@@ -52,6 +55,8 @@
 		tracing?: boolean;
 		/** Delineating: switch to sub-catchments, one per click (the choice in the bar; issue #374). */
 		onsubcatchments?: () => void;
+		/** Delineating: the lines on the map in words (mapList.ts delineationLines): the terrain channels, and the river network while it is on. */
+		lines?: KeyItem[] | null;
 		/** Tracing: the share of observations (%) a cell must be water in. */
 		minOccurrence?: MinOccurrence;
 	} = $props();
@@ -107,8 +112,8 @@
 		}
 		if (draft.shape === 'point' && delineating) {
 			return draft.coords.length
-				? `Drag the point onto the river if it missed, then Delineate…`
-				: `${phone ? 'Tap' : 'Click'} a red line (the elevation model’s channel) at the catchment’s outlet, or just below a dam wall.`;
+				? `Drag the point onto a terrain channel if it missed, then Delineate…`
+				: `${phone ? 'Tap' : 'Click'} a terrain channel at the catchment’s outlet, or just below a dam wall. The catchment follows the terrain: all the land that drains to that point.`;
 		}
 		if (draft.shape === 'point') {
 			return draft.coords.length
@@ -163,6 +168,7 @@
 		{/if}
 	</div>
 	<p class="how small" data-testid="map-draw-how">{howTo}</p>
+	{#if delineating && lines?.length && mapReady}<DelineationLines {lines} />{/if}
 	<p class="said small muted" role="status" data-testid="map-draw-said">{draft.said}</p>
 	{#if draft.traced}
 		<p class="small" data-testid="map-trace-source">

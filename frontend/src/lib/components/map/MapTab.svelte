@@ -68,7 +68,7 @@
 	import MapChecks from './MapChecks.svelte';
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
-	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
+	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { layersOn } from './mapLayers';
@@ -142,6 +142,8 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
+	/** The step a notice offers (the accept toast's Divide the model or Start from the map), shown only while that notice is the one up. */
+	let noticeNext = $state<{ text: string; step: BoundaryNextStep } | null>(null);
 
 	async function load() {
 		loading = !data;
@@ -363,7 +365,11 @@
 		await loadDelineation();
 	}
 	async function delineationAccepted(f: MapFeature, summary: string) {
-		notice = `Saved ${summary} on the map.`;
+		// A boundary is a map feature only: say so, and where the next step is (its card, which Accept picks).
+		const next = f.kind === 'catchment_boundary' ? boundaryNext : null;
+		notice = next ? `Saved ${summary} on the map as the catchment boundary. It isn’t in the model yet.` : `Saved ${summary} on the map.`;
+		// The toast carries the next step too (on a phone the card is below the map); it goes with this notice.
+		noticeNext = next ? { text: notice, step: next } : null;
 		await Promise.all([load(), loadDelineation()]);
 		await pickInPlace(f.id, 'delineate');
 		await returnToStart();
@@ -428,6 +434,12 @@
 	// --- divide a model that has nodes from the map (#326 C3's follow-up): editors, with a DEM on the server ---
 	const pendingDivide = $derived(openDivide(startInfo));
 	const canDivide = $derived(canEdit && !!startInfo && !startInfo.modelEmpty && startInfo.elevation);
+	/** The boundary's next step on its card (and named in the accept notice): Start from the map or Divide the model, whichever applies. */
+	const boundaryNext = $derived(
+		canEdit
+			? boundaryNextStep({ canStart, canDivide: !!canDivide, pendingStart: !!pendingStart, pendingDivide: !!pendingDivide, unitAreasFromMap: farms.filter((n) => n.areaSource === 'map').length })
+			: null
+	);
 	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {}, placement: emptyPlacement() });
 	async function divideApplied() {
 		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
@@ -775,9 +787,14 @@
 	}
 
 	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
+	/**
+	 * A delineated proposal waits for a decision and no other tool has the map: the channels stay drawn, dimmed, so
+	 * the outline can be checked against the terrain it follows; they go once it is accepted or rejected.
+	 */
+	const reviewingProposal = $derived(!!pendingProposal && !draft.active && !measure.active && !dividing);
 	const channels = new ChannelLayer({
 		projectId: () => projectId,
-		on: () => canEdit && !!delineation?.available && (delineating || dividing),
+		on: () => canEdit && !!delineation?.available && (delineating || dividing || reviewingProposal),
 		view: () => mapView,
 		load: api.delineation.channels
 	});
@@ -893,7 +910,11 @@
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
 	$effect(() => watchAppTheme(() => (dark = appIsDark())));
-	const key = $derived(presentKey(keyGroups(overlayColours(dark), { riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null }), features));
+	/** While the channels are drawn, the lines on the map in words (the bars and the Key say the same). */
+	const lineItems = $derived(channels.on ? delineationLines({ channels: channelColour(dark), riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null }) : null);
+	const key = $derived(
+		presentKey(keyGroups(overlayColours(dark), { riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null, channels: channels.on ? channelColour(dark) : null }), features)
+	);
 
 	// --- results on the map (#326 A1): the measure and run from the URL, each unit's and gauge's figure, the fills ---
 	const results = new MapResults({
@@ -955,7 +976,9 @@
 		})
 	);
 	let rainReads = $state<RainReads>(null);
-	const setupSteps = $derived(canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null }) : null);
+	const setupSteps = $derived(
+		canEdit && data ? mapSetupSteps({ boundaryName: boundary ? featureName(boundary) : null, rain: boundary ? rainReads : null, canDelineate: !!delineation?.available }) : null
+	);
 	const rainLink = $derived(
 		boundary && (rainReads === 'none' || rainReads === 'changed')
 			? { href: '?tab=settings&rain=boundary#set-feeds', text: rainReads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again' }
@@ -988,6 +1011,7 @@
 			{rainLink}
 			uploadHref={withParam(page.url, 'upload', '1')}
 			ondrawboundary={draft.mode !== 'draw' ? () => startDraw('catchment_boundary') : null}
+			ondelineate={delineation?.available && !delineating ? startDelineate : null}
 		/>
 	{/if}
 {/snippet}
@@ -1134,6 +1158,13 @@
 				<dd class="file">{sourceName.get(picked.sourceId)}</dd>
 			{/if}
 		</dl>
+		{#if picked.kind === 'catchment_boundary' && boundaryNext}
+			<!-- Accepting a boundary saves a map feature only: what it is, and the step that makes it the model's units. -->
+			<div class="next-step" data-testid="map-boundary-next">
+				<p class="small">{boundaryNext.text}</p>
+				<a class="btn btn-sm btn-primary" href={withParam(page.url, boundaryNext.sheet, '1')} data-testid="map-boundary-next-open">{boundaryNext.label}</a>
+			</div>
+		{/if}
 		{@render dirtyHint()}
 		{#if rowError?.id === picked.id}<p class="err" role="alert">{rowError.text}</p>{/if}
 		{#if canEdit}
@@ -1191,13 +1222,16 @@
 		{#if notice}
 			<p class="toast" data-testid="map-notice">
 				<span>{notice}</span>
+				{#if noticeNext && noticeNext.text === notice}
+					<a class="btn btn-sm btn-ghost toast-next" href={withParam(page.url, noticeNext.step.sheet, '1')} data-testid="map-notice-next">{noticeNext.step.label}</a>
+				{/if}
 				<button type="button" class="btn btn-sm btn-ghost" onclick={() => (notice = null)}>Dismiss</button>
 			</p>
 		{/if}
 	</div>
 	{#if pendingProposal && canEdit && !delineateSheet.open}
 		<p class="alert alert-info slim" data-testid="map-delineation-pending">
-			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map, waiting for your decision.
+			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map over the terrain channels it follows, waiting for your decision.
 			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
 		</p>
 	{/if}
@@ -1219,7 +1253,7 @@
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
 					{#if canEdit && dividing && !wide}
-						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} />
+						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
 					{:else if canEdit && draft.active && !dividing}
 						<DrawBar
 							{draft}
@@ -1234,10 +1268,11 @@
 							{delineating}
 							{tracing}
 							onsubcatchments={startDividing}
+							lines={lineItems}
 							bind:minOccurrence
 						/>
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null}>
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
 							<div class="tools-at ov" bind:clientWidth={toolsW} bind:clientHeight={toolsH}>
@@ -1266,17 +1301,17 @@
 							{#if dividing && divider.busy === 'pieces'}
 								<p class="map-pill small" aria-hidden="true" data-testid="map-click-busy">Working out the sub-catchments…</p>
 							{:else if channels.on && (channels.noView || channels.zoomIn || channels.error || channels.loading)}
-								<!-- Only what needs saying: the bars already say the red lines are where a click goes. -->
+								<!-- Only what needs saying: the bars and the Key already say what the terrain channels are. -->
 								<p class="map-pill channel-note small" role="status" data-testid="map-channels-note">
 									<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
 									{#if channels.noView}
-										The elevation model’s channels are drawn on the map, which isn’t showing here.
+										The terrain channels are drawn on the map, which isn’t showing here.
 									{:else if channels.zoomIn}
-										Zoom in to see the elevation model’s channels.
+										{reviewingProposal ? 'Zoom in to see the terrain channels the outline follows.' : 'Zoom in to see the terrain channels.'}
 									{:else if channels.error}
-										<span class="err">The elevation model’s channels couldn’t be drawn: {channels.error}</span>
+										<span class="err">The terrain channels couldn’t be drawn: {channels.error}</span>
 									{:else}
-										Drawing the elevation model’s channels…
+										Drawing the terrain channels…
 									{/if}
 								</p>
 							{/if}
@@ -1340,6 +1375,7 @@
 									onquaternary={(code) => (quaternaries.picked = code)}
 									rivers={rivers.reaches}
 									channels={channels.lines}
+									channelsDim={reviewingProposal}
 									riversCredit={rivers.credited}
 									pickedReach={rivers.picked}
 									onreach={reachFromMap}
@@ -1361,7 +1397,7 @@
 					{#if canEdit && dividing && wide}
 						<!-- Beside the map: the clicks' key takes the column over, so the map keeps its height. -->
 						<div class="panel side-box card click-panel">
-							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} />
+							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} lines={lineItems} />
 						</div>
 					{:else if !features.length}
 						<section class="panel side-box card" aria-label="Picked feature" data-testid="map-feature-card" bind:this={cardEl}>
@@ -1774,6 +1810,10 @@
 		width: min(19rem, 100%);
 		padding: 0.5rem 0.65rem;
 	}
+	/* While the key says what each line is for (Delineate's terrain channels and mapped rivers), a little wider, so it wraps less. */
+	.key-panel:has(:global(.noted)) {
+		width: min(23rem, 100%);
+	}
 	/* An operator's note (no basemap), small, under the Layers button. */
 	.map-chip {
 		margin: 0;
@@ -1816,6 +1856,11 @@
 	}
 	.toast .btn:focus-visible {
 		outline-color: var(--bg);
+	}
+	/* The toast's next step (after accepting a boundary): outlined in the toast's text colour, so it reads as the action. */
+	.toast .toast-next {
+		border: 1px solid var(--bg);
+		font-weight: 600;
 	}
 	/* The side column's tabs: one panel at a time. */
 	.tabs {
@@ -1870,6 +1915,21 @@
 		flex: none;
 		gap: 0.4rem;
 		white-space: nowrap;
+	}
+	/* The boundary's next step (Start from the map or Divide the model): a tinted box under its facts. */
+	.next-step {
+		display: grid;
+		justify-items: start;
+		gap: 0.4rem;
+		margin: 0.6rem 0 0;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border-strong);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+	}
+	.next-step p {
+		margin: 0;
 	}
 	.channel-note {
 		display: flex;
