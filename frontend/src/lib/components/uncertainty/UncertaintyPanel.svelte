@@ -408,7 +408,7 @@
 						<input id="{uid}-p" type="number" min="0" max="0.3" step="0.01" bind:value={panOffset} disabled={busy} />
 					</div>
 				</div>
-				<div class="actions">
+				<div class="action-row">
 					<button type="submit" class="btn btn-primary" disabled={busy}>{phase === 'starting' ? 'Starting…' : phase === 'storing' ? 'Checking and storing…' : 'Run ensemble'}</button>
 					{#if phase === 'running' || phase === 'reproducing'}<button type="button" class="btn" onclick={cancel}>Cancel</button>{/if}
 				</div>
