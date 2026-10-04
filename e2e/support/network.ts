@@ -13,7 +13,7 @@ export async function openNodeTable(page: Page) {
 	}
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
-	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: 'Node table', exact: true }).click();
+	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: 'Hydrological unit table', exact: true }).click();
 	return page.getByRole('dialog', { name: 'Hydrological unit table' });
 }
 
@@ -26,7 +26,7 @@ export async function openNodeForm(page: Page, name?: string) {
 		await open.waitFor();
 		return open;
 	}
-	const list = page.getByRole('list', { name: 'All nodes' });
+	const list = page.getByRole('list', { name: 'All hydrological units' });
 	// The row's own Edit (the card has none since 2026-10-03).
 	await (name ? list.getByRole('button', { name: new RegExp(`^(Edit|Details) ${name}`) }) : list.getByRole('button', { name: /^(Edit|Details) / }).first()).click();
 	return page.getByRole('dialog', { name: /^Edit |: details$/ });

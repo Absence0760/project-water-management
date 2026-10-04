@@ -16,7 +16,7 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	const project = await seedRunnableProject(page.request, 'Invaded');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const cover = page.getByRole('group', { name: 'Land cover' });
 	await expect(cover.getByText('No land cover on Upper farm.')).toBeVisible();
@@ -32,7 +32,7 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	await expect(page.getByRole('group', { name: 'Land cover' }).getByLabel('Area (km²)')).toHaveValue('3');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);

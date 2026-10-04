@@ -23,7 +23,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	await page.goto(`/projects/${project.id}?tab=network`);
 
 	// On the map, picking the farm in the node list shows its card, whose irrigated area opens the drawer.
-	await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: /^Upper farm/ }).click();
+	await page.getByRole('list', { name: 'All hydrological units' }).getByRole('button', { name: /^Upper farm/ }).click();
 	const card = page.getByTestId('node-card');
 	await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await card.getByRole('link', { name: '20.00 ha, 1 crop' }).click();
@@ -53,7 +53,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 
 	// Reopened from the card, now with the unsaved 35 ha, it saves through the page's save, with the reason.
 	await nav.getByRole('link', { name: 'Network' }).click();
-	await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: /^Upper farm/ }).click();
+	await page.getByRole('list', { name: 'All hydrological units' }).getByRole('button', { name: /^Upper farm/ }).click();
 	await card.getByRole('link', { name: '35.00 ha, 1 crop' }).click();
 	const again = drawer(page, 'Upper farm');
 	await expect(again.getByLabel('Orchard on Upper farm, ha')).toHaveValue('35');

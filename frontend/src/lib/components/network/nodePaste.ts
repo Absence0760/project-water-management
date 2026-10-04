@@ -99,7 +99,7 @@ export function planNodePaste(text: string, nodes: readonly NetworkNode[], ancho
 		if (sameValue(from, v.value)) plan.unchanged++;
 		else plan.changes.push({ rowId: n.id, rowName: name, key: f.key, column: cardLabel(f), unit: f.unit, from, to: v.value });
 	}
-	if (skipped.length) plan.notes.push(`Left out values for fields these nodes don't use: ${skipped.join('; ')}.`);
+	if (skipped.length) plan.notes.push(`Left out values for fields these hydrological units don't use: ${skipped.join('; ')}.`);
 	return plan;
 }
 

@@ -15,7 +15,7 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 /** Opens the one-node form on the seeded project's upper farm (by its name, whatever the option's suffix). */
 async function openUpperFarm(page: Page) {
 	await openNodeForm(page);
-	const picker = page.getByLabel('Node to edit');
+	const picker = page.getByLabel('Hydrological unit to edit');
 	const value = await picker.locator('option', { hasText: 'Upper farm' }).getAttribute('value');
 	await picker.selectOption(value!);
 	return page.getByRole('group', { name: 'Demand objects', exact: true });

@@ -17,7 +17,7 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	const project = await seedRunnableProject(page.request, 'Demand objects');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const group = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(group.getByText('No demand objects on Upper farm.')).toBeVisible();
@@ -57,14 +57,14 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(again.getByLabel('Name')).toHaveValue('Town');
 	await expect(again.getByLabel('Demand of Town in Mar, m³/day')).toHaveValue('400');
 	await expect(again.getByLabel('Share returned (%)')).toHaveValue('40');
 	await expect(again.getByLabel('People served')).toHaveValue(/^2\D?000$/);
 	// A gauge has none.
-	await page.getByLabel('Node to edit').selectOption({ label: '1. Outflow gauge · gauge' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '1. Outflow gauge · gauge' });
 	await expect(page.getByRole('group', { name: 'Demand objects', exact: true })).toHaveCount(0);
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
@@ -131,7 +131,7 @@ test('a town demand given in l/s or m³/s by month is kept in m³/day and reopen
 	const project = await seedRunnableProject(page.request, 'Demand in l/s');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const group = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await group.getByLabel('Category of the new demand object').selectOption('municipal');
 	await group.getByRole('button', { name: '+ Add demand' }).click();
@@ -153,7 +153,7 @@ test('a town demand given in l/s or m³/s by month is kept in m³/day and reopen
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(again.getByLabel('Demand given as')).toHaveValue('monthly:ls');
 	await expect(again.getByLabel('Demand of Town in Mar, l/s')).toHaveValue('5');

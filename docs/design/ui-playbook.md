@@ -806,7 +806,7 @@ Interaction details that bit:
   standalone `/compare` keeps its `h1`. Count *all* headings with the
   title's name, not just `h1`s, when checking "one page title".
 - **One heading per modal.** A grid opened from a Tables menu showed the
-  modal's title ("Node table", "Crop factors") and then its panel's own
+  modal's title ("Hydrological unit table", "Crop factors") and then its panel's own
   heading ("Network nodes", "Crop factors" with an ⓘ) right under it. The
   modal's title stays (it names the dialog and holds the ✕); the panel takes
   an `inModal` prop and drops its heading there, moving its subtitle and ⓘ

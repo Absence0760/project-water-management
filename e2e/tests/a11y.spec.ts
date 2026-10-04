@@ -183,7 +183,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				const project = await seedRunnableProject(page.request, 'A11y one node');
 				await page.goto(`/projects/${project.id}?tab=network`);
 				await openNodeForm(page);
-				await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+				await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 				await expect(page.getByLabel('Capacity (m³)')).toHaveValue('150\u202f000');
 				await expectNoViolations(page);
 				await closeModal(page);

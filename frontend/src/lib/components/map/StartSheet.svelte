@@ -239,7 +239,7 @@
 
 		{#if step === 'closed'}
 			<p data-testid="start-closed">
-				The model has nodes already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (under the map, at the end of the key row, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
+				The model has hydrological units already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (under the map, at the end of the key row, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
 			</p>
 		{:else if step === 'boundary'}
 			<h3 class="sub">Put the catchment’s boundary on the map</h3>
@@ -321,7 +321,7 @@
 					<button type="button" class="btn btn-sm" onclick={() => pending && (draft.ticks[pending.id] = tickAll(pending.plan, ticks))} data-testid="start-tick-all">Tick every value</button>
 					<span class="hint">{p.units.length} {p.units.length === 1 ? 'unit' : 'units'}, upstream first.</span>
 				</p>
-				{#if dup || blank}<p class="err" role="alert" id="{uid}-names">{dup ? `Two nodes would be called “${dup}”: give each its own name.` : 'Every node needs a name: fill in the empty one.'}</p>{/if}
+				{#if dup || blank}<p class="err" role="alert" id="{uid}-names">{dup ? `Two hydrological units would be called “${dup}”: give each its own name.` : 'Every hydrological unit needs a name: fill in the empty one.'}</p>{/if}
 				<ul class="units">
 					{#each ticks.units as t, i (t.key)}
 						{@const u = p.units[i]!}

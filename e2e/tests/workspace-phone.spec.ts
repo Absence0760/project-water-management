@@ -62,7 +62,7 @@ async function headerRows(page: Page) {
 // Each section and what shows in its header once it has loaded.
 const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'overview', ready: 'Add data' },
-	{ tab: 'network', ready: '+ Add node' },
+	{ tab: 'network', ready: '+ Add hydrological unit' },
 	{ tab: 'crops', ready: '+ Add crop' },
 	{ tab: 'transfers', ready: '+ Add transfer' },
 	{ tab: 'settings', ready: 'Fit the parameters' },

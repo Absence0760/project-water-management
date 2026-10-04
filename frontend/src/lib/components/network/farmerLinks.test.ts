@@ -49,8 +49,8 @@ describe('removeMessage', () => {
 
 	it('asks when nodes drain into it, saying where they will drain', () => {
 		expect(removeMessage({ ...base, upstream: 2, into: 'Outflow gauge' })).toBe(
-			'The 2 nodes that drain into it will drain into “Outflow gauge”. Until you save, Discard brings it back.'
+			'The 2 hydrological units that drain into it will drain into “Outflow gauge”. Until you save, Discard brings it back.'
 		);
-		expect(removeMessage({ ...base, upstream: 1, into: null })).toMatch(/^The node that drains into it will have nowhere to drain/);
+		expect(removeMessage({ ...base, upstream: 1, into: null })).toMatch(/^The hydrological unit that drains into it will have nowhere to drain/);
 	});
 });

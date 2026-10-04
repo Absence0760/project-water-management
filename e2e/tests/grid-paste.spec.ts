@@ -41,7 +41,7 @@ test('node table: a pasted block is previewed, applied and saved', async ({ page
 
 	// Names and headings (an SA-locale copy: decimal commas), pasted into any cell, rows in any order.
 	await pasteInto(grid.getByLabel('Area of Upper farm, km²', { exact: true }), 'Name\tArea (km²)\tEfficiency (%)\tReturn flow (% of supply)\tTotal\nLower farm\t9,5\t75\t15\t1\nNowhere farm\t1\t1\t1\t1\n');
-	const dlg = page.getByRole('dialog', { name: 'Paste into the node table' });
+	const dlg = page.getByRole('dialog', { name: 'Paste into the hydrological unit table' });
 	await expect(dlg.getByTestId('paste-summary')).toHaveText('2 values change.');
 	await expect(dlg.getByRole('row', { name: /Lower farm Area km² 8 9\.5/ })).toBeVisible();
 	await expect(dlg.getByRole('row', { name: /Lower farm Return flow % of supply 10 15/ })).toBeVisible();
@@ -159,7 +159,7 @@ test('thirty nodes: the whole table pasted back changed scrolls in its own list,
 	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	const open = grid.getByRole('button', { name: 'Paste from a spreadsheet…' });
 	await open.click();
-	const dlg = page.getByRole('dialog', { name: 'Paste into the node table' });
+	const dlg = page.getByRole('dialog', { name: 'Paste into the hydrological unit table' });
 	await expect(dlg.getByTestId('paste-where')).toHaveText("A block without names or headings starts at the table's first row and column.");
 	// The template, every unit's area 12 → 13 km².
 	const csv = (await templateCsv(dlg)).replace(/^\ufeff/, '').replace(/^(Unit \d+),12,/gm, '$1,13,');
@@ -186,7 +186,7 @@ test('thirty nodes: the whole table pasted back changed scrolls in its own list,
 	await expect(vGrid.getByLabel('Area of Unit 1, km²', { exact: true })).toBeVisible();
 	await expect(vGrid.getByRole('button', { name: 'Paste from a spreadsheet…' })).toHaveCount(0);
 	await pasteInto(vGrid.getByLabel('Area of Unit 1, km²', { exact: true }), '1\t2\n');
-	await expect(v.getByRole('dialog', { name: 'Paste into the node table' })).toHaveCount(0);
+	await expect(v.getByRole('dialog', { name: 'Paste into the hydrological unit table' })).toHaveCount(0);
 });
 
 test.describe('phone', () => {

@@ -57,7 +57,7 @@ export function removeMessage(o: {
 	const sentences: string[] = [];
 	if (parts.length) sentences.push(`Its ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]} ${parts.length === 1 && /^1 /.test(parts[0]!) ? 'goes' : 'go'} with it.`);
 	if (upstream) {
-		const nodes = upstream === 1 ? 'The node that drains into it' : `The ${upstream} nodes that drain into it`;
+		const nodes = upstream === 1 ? 'The hydrological unit that drains into it' : `The ${upstream} hydrological units that drain into it`;
 		sentences.push(o.into ? `${nodes} will drain into “${o.into}”.` : `${nodes} will have nowhere to drain: make one of them the outflow gauge.`);
 	}
 	if (farmers) sentences.push(`${n(farmers, 'farmer linked to it loses', 'farmers linked to it lose')} access when you save.`);

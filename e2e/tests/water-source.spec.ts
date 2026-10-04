@@ -16,7 +16,7 @@ test('put a demand object and the crops on river abstractions beside the dam: sa
 	const project = await seedRunnableProject(page.request, 'Water source');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: unit });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: unit });
 
 	const objects = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await objects.getByLabel('Category of the new demand object').selectOption('industrial');
@@ -43,7 +43,7 @@ test('put a demand object and the crops on river abstractions beside the dam: sa
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: unit });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: unit });
 	const again = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(again.getByLabel('Water for Mill')).toHaveValue('river');
 	await expect(again.getByLabel('River pump capacity for Mill (m³/day)')).toHaveValue('480');

@@ -153,14 +153,14 @@
 			<span class="hint">
 				{node.downstreamNodeId === null
 					? 'This is the outflow gauge: the catchment outlet where simulated outflow is compared with observed flow and the EWR.'
-					: 'The node directly downstream. Its outflow joins that node’s upstream inflow.'}
+					: 'The hydrological unit directly downstream. Its outflow joins that unit’s upstream inflow.'}
 			</span>
 			<FieldHistoryLine field="node:{node.id}:downstreamNodeId" {unit} />
 		</div>
 	</div>
 
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
-	{#if mapHref}<p class="hint gauge-note"><a href={mapHref} data-testid="node-detail-map">Show on map</a>: the features linked to this node on the catchment map.</p>{/if}
+	{#if mapHref}<p class="hint gauge-note"><a href={mapHref} data-testid="node-detail-map">Show on map</a>: the features linked to this hydrological unit on the catchment map.</p>{/if}
 	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this hydrological unit’s page in the farmer view, as its farmer sees it, from the current publication.</p>{/if}
 	{#if showEwrSite}
 		<div class="field ewr-site">
@@ -224,7 +224,7 @@
 				{@const fields = groupFields.get(g) ?? []}
 				{#if g === 'groundwater'}
 					<p class="hint section-note">
-						One daily capacity for all of {node.name || 'this node'}’s boreholes, under one rule: use it when only the total is known. List
+						One daily capacity for all of {node.name || 'this hydrological unit'}’s boreholes, under one rule: use it when only the total is known. List
 						boreholes under Individual boreholes below when each has its own yield, annual cap or mode. If both are set, both run.
 					</p>
 				{/if}
@@ -333,13 +333,13 @@
 	{#if !readonly}
 		<div class="actions">
 			{#if onmakeoutlet && node.downstreamNodeId !== null}
-				<button type="button" class="btn" onclick={onmakeoutlet} title="This node drains nowhere; the current outflow gauge drains into it">
+				<button type="button" class="btn" onclick={onmakeoutlet} title="This hydrological unit drains nowhere; the current outflow gauge drains into it">
 					Make outflow gauge
 				</button>
 			{/if}
 			<span class="spacer"></span>
 			{#if onremove}
-				<button type="button" class="btn btn-danger" onclick={onremove}>Remove {node.name || 'this node'}</button>
+				<button type="button" class="btn btn-danger" onclick={onremove}>Remove {node.name || 'this hydrological unit'}</button>
 			{/if}
 		</div>
 	{/if}

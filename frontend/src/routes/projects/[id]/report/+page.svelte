@@ -423,7 +423,7 @@
 								</tbody>
 							</table>
 						</div>
-						{@render table('Hydrological units, gauges and other users', ['Node', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model, settings.apanMm))}
+						{@render table('Hydrological units', ['Hydrological unit', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model, settings.apanMm))}
 						{@render table('Crops and planted areas', ['Hydrological unit', 'Crop', 'Area (ha)', 'Irrigation system'], [2], cropAreaRows(model))}
 						{@render table('Transfers', ['From', 'To', 'Months', 'Max rate (m³/s)', 'Daily cap (m³)', 'Losses on the way', 'Seeping back to the river', 'On'], [3, 4], transferRows(model))}
 						{@render table(

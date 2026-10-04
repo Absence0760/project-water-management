@@ -15,7 +15,7 @@ test('record where a demand comes from: the source sets the sizing, is saved, an
 	const project = await seedRunnableProject(page.request, 'Demand source');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const group = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await group.getByLabel('Category of the new demand object').selectOption('domestic');
@@ -46,7 +46,7 @@ test('record where a demand comes from: the source sets the sizing, is saved, an
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(again.getByLabel('Source of the number')).toHaveValue('perCapita');
 	await expect(again.getByLabel('Demand given as')).toBeDisabled();

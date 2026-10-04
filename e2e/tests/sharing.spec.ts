@@ -74,7 +74,7 @@ test('an owner shares a project read-only with a viewer, who joins by accepting 
 	await expect(names.first()).not.toBeEditable();
 	await expect(v.getByLabel('Area of Upper farm, km²', { exact: true })).not.toBeEditable();
 	await expect(v.getByLabel('Kind of Upper farm')).toBeDisabled();
-	await expect(v.getByRole('button', { name: '+ Add node' })).toHaveCount(0);
+	await expect(v.getByRole('button', { name: '+ Add hydrological unit' })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: /^Remove/ })).toHaveCount(0);
 	await closeModal(v);
 
@@ -132,7 +132,7 @@ test('an editor can change the shared model but cannot manage members', async ({
 	await e.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network' }).click();
 	const grid = await openNodeTable(e);
 	await expect(grid.getByLabel('Area of Upper farm, km²', { exact: true })).toBeEditable();
-	await expect(grid.getByRole('button', { name: '+ Add node' })).toBeVisible();
+	await expect(grid.getByRole('button', { name: '+ Add hydrological unit' })).toBeVisible();
 });
 
 test('an owner invites an address with no account, sees it pending, and revokes it', async ({ page, owner }) => {

@@ -35,7 +35,7 @@ describe('planNodePaste', () => {
 	it('leaves out a field the node does not use, and says so', () => {
 		const p = plan(planNodePaste('Name\tArea\tDam capacity\nOutflow gauge\t3\t5000', sample()));
 		expect(p.changes.map((c) => [c.rowId, c.key])).toEqual([['g', 'areaKm2']]);
-		expect(p.notes.at(-1)).toBe("Left out values for fields these nodes don't use: Outflow gauge dam capacity (a gauge).");
+		expect(p.notes.at(-1)).toBe("Left out values for fields these hydrological units don't use: Outflow gauge dam capacity (a gauge).");
 	});
 
 	it('leaves out River to dam on a node that sets it by month', () => {

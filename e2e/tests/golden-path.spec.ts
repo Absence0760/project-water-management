@@ -116,7 +116,7 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 	// This path builds the network in the node table (Tables → Node table).
 	const grid = await openNodeTable(page);
 	await grid.getByRole('button', { name: 'Add outflow gauge' }).click();
-	for (let i = 0; i < 3; i++) await grid.getByRole('button', { name: '+ Add node' }).click();
+	for (let i = 0; i < 3; i++) await grid.getByRole('button', { name: '+ Add hydrological unit' }).click();
 	const names = page.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(4);
 	await names.nth(0).fill('D outlet weir');

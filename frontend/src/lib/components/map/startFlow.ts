@@ -161,7 +161,7 @@ export function applySummary(t: StartTicks): string {
 	const orders = t.units.filter((u) => u.drainsInto).length;
 	const effective = [...t.units.filter((u) => u.area && u.areaBasis === 'effective').map((u) => u.name.trim()), ...(t.rest.include && t.rest.area && t.rest.areaBasis === 'effective' ? [t.rest.name.trim()] : [])];
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-	return `The empty model gets ${s(nodes, 'node')}, with ${s(areas, 'area')} (each saved as its unit’s parcel${effective.length ? `; ${effective.join(', ')} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
+	return `The empty model gets ${s(nodes, 'hydrological unit')}, with ${s(areas, 'area')} (each saved as its unit’s parcel${effective.length ? `; ${effective.join(', ')} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
 }
 
 /** The body apply sends: an area's basis only with its area ticked (the server refuses an effective area not taken), else gross. */

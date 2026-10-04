@@ -11,7 +11,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeForm, openNodeTable } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
-const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
+const nodeList = (page: Page) => page.getByRole('list', { name: 'All hydrological units' });
 const card = (page: Page) => page.getByTestId('node-card');
 /** Opens the header's Tables menu (a disclosure) and returns one of its links. */
 async function gridLink(page: Page, name: string) {
@@ -55,7 +55,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	expect(await box.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 	const drawn = (await page.locator('.map-card svg.schematic').boundingBox())!;
 	expect(drawn.width).toBeGreaterThan((await box.boundingBox())!.width * 0.6);
-	await expect(page.getByText('Select a node on the map or in the list to see it here.')).toBeVisible();
+	await expect(page.getByText('Select a hydrological unit on the map or in the list to see it here.')).toBeVisible();
 	// The table isn't on the page in this layout.
 	await expect(page.locator('table.net')).toHaveCount(0);
 	await expect(nodeList(page).getByRole('button', { name: /^(?!Edit |Details )/ })).toHaveCount(3);
@@ -88,10 +88,10 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await nodeList(page).getByRole('button', { name: 'Edit Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]edit=${project.model.nodes[2]!.id}`));
 	const sheet = page.getByRole('dialog', { name: 'Edit Lower farm' });
-	await expect(sheet.getByLabel('Node to edit')).toHaveValue(String(project.model.nodes[2]!.id));
+	await expect(sheet.getByLabel('Hydrological unit to edit')).toHaveValue(String(project.model.nodes[2]!.id));
 	await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Lower farm');
 	await expectNoViolations(page);
-	await sheet.getByRole('button', { name: 'Previous node' }).click();
+	await sheet.getByRole('button', { name: 'Previous hydrological unit' }).click();
 	await expect(page.getByRole('dialog', { name: 'Edit Upper farm' })).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -150,7 +150,7 @@ test('the card opens under the list, so a pick never moves the rows; each row ha
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	const v = viewer.page;
 	await v.goto(`/projects/${project.id}?tab=network`);
-	const vList = v.getByRole('list', { name: 'All nodes' });
+	const vList = v.getByRole('list', { name: 'All hydrological units' });
 	await vList.getByRole('button', { name: /^Upper farm/ }).click();
 	await vList.getByRole('button', { name: 'Details Upper farm' }).click();
 	await expect(v.getByRole('dialog', { name: 'Upper farm: details' })).toBeVisible();
@@ -172,7 +172,7 @@ test('the map key names only what the drawing has, in groups, drawn like the map
 	await expect(key.locator('li', { hasText: 'with a dam' }).locator('path.dam-water')).toHaveCount(1);
 
 	// Shapes, lines and colours are separate, headed groups.
-	await expect(key.locator('.key-h')).toHaveText(['Nodes', 'Lines', 'Colour: supply']);
+	await expect(key.locator('.key-h')).toHaveText(['Hydrological units', 'Lines', 'Colour: supply']);
 	await expect(key.getByText('River, thicker with more area upstream')).toBeVisible();
 	// A colour band fills both unit shapes, so it matches the squares on the map too.
 	const band = key.locator('li[data-supply]').first();
@@ -411,7 +411,7 @@ test('a pick is kept in the URL: Back steps through the picks and a reload keeps
 	// Editing a node picks it too, so closing the sheet leaves the map on it.
 	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
 	await nodeList(page).getByRole('button', { name: 'Edit Upper farm' }).click();
-	await page.getByRole('dialog', { name: 'Edit Upper farm' }).getByRole('button', { name: 'Next node' }).click();
+	await page.getByRole('dialog', { name: 'Edit Upper farm' }).getByRole('button', { name: 'Next hydrological unit' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]node=${lower}`));
 	await closeModal(page);
 	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
@@ -486,7 +486,7 @@ test('fields only another set-up reads show read-only, saying what would use the
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network unused fields');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await page.getByTestId('section-header').getByRole('button', { name: '+ Add node' }).click();
+	await page.getByTestId('section-header').getByRole('button', { name: '+ Add hydrological unit' }).click();
 	const sheet = page.getByRole('dialog', { name: /^Edit Unit/ });
 	const minimum = sheet.getByLabel('Minimum level (%)');
 	await expect(minimum).toHaveAttribute('readonly', '');
@@ -510,7 +510,7 @@ test('removing a node from its sheet asks, names what goes with it, and leaves t
 	await expect(box.getByRole('button', { name: 'Remove hydrological unit' })).toBeVisible();
 	await answerConfirm(page, true);
 	await expect(page.getByRole('dialog', { name: /^Edit / })).toHaveCount(0);
-	await expect(page.getByRole('heading', { name: 'All nodes' })).toBeFocused();
+	await expect(page.getByRole('heading', { name: 'All hydrological units' })).toBeFocused();
 	await expect(nodeList(page).getByRole('button', { name: /^(?!Edit |Details )/ })).toHaveCount(2);
 });
 
@@ -550,7 +550,7 @@ test('an empty network offers the map as a start to an editor, and tells a viewe
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.goto(`/projects/${project.id}?tab=network`);
 	const vEmpty = viewer.page.getByTestId('network-empty');
-	await expect(vEmpty).toHaveText('No nodes yet. An editor builds the network here or from the Map.');
+	await expect(vEmpty).toHaveText('No hydrological units yet. An editor builds the network here or from the Map.');
 	await expect(vEmpty.getByRole('button')).toHaveCount(0);
 	await expect(vEmpty.getByRole('link')).toHaveCount(0);
 });
