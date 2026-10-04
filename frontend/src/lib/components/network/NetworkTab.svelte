@@ -604,6 +604,7 @@
 		transfers={editor.model.transfers}
 		{selectedId}
 		onselect={select}
+		onopen={(id) => void openEdit(id)}
 		editable={!readonly}
 		onreparent={reparent}
 		{colouring}

@@ -2264,7 +2264,9 @@ itself.
   component). Editors can drag a node onto
   another to change what it drains into. Drops that would make a loop, or
   that move the outlet, are refused and the reason is shown. The "Drains
-  into" select is the keyboard route. A visually hidden list ("Drainage
+  into" select is the keyboard route. A double-click on a node opens its
+  form (the sheet, `edit=<id>`; `onopen`), the same as its card's Edit, which
+  is the keyboard route; a single click only picks it. A visually hidden list ("Drainage
   tree") is the text equivalent of the drawing. On paper (the report, below)
   the drawing is wrapped to the A4 width instead (`paper`,
   `wrappedSchematicLayout`): at most five columns, and where the branches

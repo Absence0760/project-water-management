@@ -520,3 +520,21 @@ test('the drawing’s text and the supply tile say it in the workspace’s words
 	// The tile's tint has its band in words under it.
 	await expect(card(page).getByTestId('supply-band')).toHaveText(/supplied$/);
 });
+
+test('a double-click on a node in the drawing opens its form; a single click only picks it', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Double-click a node');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
+	await upper.click();
+	await expect(page.getByTestId('node-card')).toContainText('Upper farm');
+	await expect(page.getByRole('dialog', { name: /^Edit / })).toHaveCount(0);
+	await upper.dblclick();
+	const sheet = page.getByRole('dialog', { name: /^Edit Upper farm/ });
+	await expect(sheet).toBeVisible();
+	await expect(page).toHaveURL(/[?&]edit=/);
+	// Nothing changed: a double-click isn't a drag onto another node.
+	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
+});
