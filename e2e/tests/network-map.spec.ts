@@ -58,7 +58,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page.getByText('Select a node on the map or in the list to see it here.')).toBeVisible();
 	// The table isn't on the page in this layout.
 	await expect(page.locator('table.net')).toHaveCount(0);
-	await expect(nodeList(page).getByRole('button')).toHaveCount(3);
+	await expect(nodeList(page).getByRole('button', { name: /^(?!Edit |Details )/ })).toHaveCount(3);
 	await expect(nodeList(page).getByRole('button').first()).toContainText('Outflow gauge');
 	await expect(nodeList(page).getByRole('button').first()).toContainText('outlet');
 
@@ -81,9 +81,11 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(c).toContainText('Selected · outflow gauge');
 	await expect(c).not.toContainText('Supplied');
 
-	// Edit opens the node's full form in a sheet over the map; ‹ › and the picker move it to another node.
+	// A row's Edit opens the node's full form in a sheet over the map; ‹ › and the picker move it to another node.
+	// The card has no Edit of its own (2026-10-03): the row's is the one.
 	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).click();
-	await c.getByRole('button', { name: 'Edit Lower farm' }).click();
+	await expect(c.getByRole('button', { name: /^(Edit|Details) / })).toHaveCount(0);
+	await nodeList(page).getByRole('button', { name: 'Edit Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]edit=${project.model.nodes[2]!.id}`));
 	const sheet = page.getByRole('dialog', { name: 'Edit Lower farm' });
 	await expect(sheet.getByLabel('Node to edit')).toHaveValue(String(project.model.nodes[2]!.id));
@@ -129,9 +131,9 @@ test('the card opens under the list, so a pick never moves the rows; each row ha
 	const listBox = (await nodeList(page).boundingBox())!;
 	expect((await card(page).boundingBox())!.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
 
-	// The picked row shows its Edit; another row's shows on hover or focus. Each opens that node's form.
+	// Every row shows its Edit, picked or not. Each opens that node's form.
 	await expect(nodeList(page).getByRole('button', { name: 'Edit Outflow gauge' })).toBeVisible();
-	await expect(nodeList(page).getByRole('button', { name: 'Edit Lower farm' })).toBeHidden();
+	await expect(nodeList(page).getByRole('button', { name: 'Edit Lower farm' })).toBeVisible();
 	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).focus();
 	await page.keyboard.press('Tab');
 	const rowEdit = nodeList(page).getByRole('button', { name: 'Edit Lower farm' });
@@ -408,7 +410,7 @@ test('a pick is kept in the URL: Back steps through the picks and a reload keeps
 	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
 	// Editing a node picks it too, so closing the sheet leaves the map on it.
 	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
-	await card(page).getByRole('button', { name: 'Edit Upper farm' }).click();
+	await nodeList(page).getByRole('button', { name: 'Edit Upper farm' }).click();
 	await page.getByRole('dialog', { name: 'Edit Upper farm' }).getByRole('button', { name: 'Next node' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]node=${lower}`));
 	await closeModal(page);
@@ -509,7 +511,7 @@ test('removing a node from its sheet asks, names what goes with it, and leaves t
 	await answerConfirm(page, true);
 	await expect(page.getByRole('dialog', { name: /^Edit / })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'All nodes' })).toBeFocused();
-	await expect(nodeList(page).getByRole('button')).toHaveCount(2);
+	await expect(nodeList(page).getByRole('button', { name: /^(?!Edit |Details )/ })).toHaveCount(2);
 });
 
 test('a unit’s sheet points to its planted areas and transfers', async ({ page, owner }) => {

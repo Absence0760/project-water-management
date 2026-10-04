@@ -348,8 +348,8 @@ test.describe('network layout', () => {
 			const card = page.getByTestId('node-card');
 			await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 
-			// Edit opens the full form in a sheet the width of the screen.
-			await card.getByRole('button', { name: 'Edit Upper farm' }).click();
+			// The row's Edit (the card has none) opens the full form in a sheet the width of the screen.
+			await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: 'Edit Upper farm' }).click();
 			const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
 			const picker = sheet.getByLabel('Node to edit');
 			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · hydrological unit');

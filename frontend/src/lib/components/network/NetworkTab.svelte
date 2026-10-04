@@ -900,7 +900,6 @@
 						farmHref={withParam(page.url, 'farm', picked.id)}
 						mapHref={mapped.has(picked.id) ? mapNodeHref(picked.id) : null}
 						{readonly}
-						onedit={() => openEdit(picked.id)}
 					/>
 				{:else}
 					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
@@ -1438,18 +1437,10 @@
 	.node-list li.on {
 		background: var(--accent-soft);
 	}
+	/* Every row's Edit always shows (the operator's call, 2026-10-03): the form is one press from the list. */
 	.row-edit {
 		flex: none;
 		margin-right: 0.25rem;
-		visibility: hidden;
-	}
-	.node-list li:is(.on, :hover, :focus-within) .row-edit {
-		visibility: visible;
-	}
-	@media (hover: none), (max-width: 640px) {
-		.row-edit {
-			visibility: visible;
-		}
 	}
 	.node-row {
 		flex: 1;

@@ -20,7 +20,6 @@
 		planting,
 		runName,
 		readonly,
-		onedit,
 		projectId = '',
 		saved = false,
 		farmHref,
@@ -38,7 +37,6 @@
 		/** The latest run's label, for the supply tile. */
 		runName: string | null;
 		readonly: boolean;
-		onedit: () => void;
 		projectId?: string;
 		/** The node is saved, so it can carry notes (a node added since the last save has none yet). */
 		saved?: boolean;
@@ -66,7 +64,6 @@
 				<NotesDrawer {projectId} compact target={{ kind: 'node', nodeId: node.id, name: node.name, isFarm: node.kind === 'farm' }} />
 			{/if}
 			{#if mapHref}<a class="btn btn-sm" href={mapHref} data-testid="node-card-map">Show on map<span class="visually-hidden"> ({name})</span></a>{/if}
-			<button type="button" class="btn btn-sm" onclick={onedit}>{readonly ? 'Details' : 'Edit'}<span class="visually-hidden"> {name}</span></button>
 		</div>
 	</div>
 

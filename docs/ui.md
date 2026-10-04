@@ -2102,8 +2102,8 @@ It used to have three layouts (Map, Table, One node); with the Tables menu
 they only made the page jump, so the other two became things the map opens:
 the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
-node's **full form** opens in a sheet over the map from its card's **Edit**
-(`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
+node's **full form** opens in a sheet over the map from its row's **Edit** in
+All nodes (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
 `view=node` becomes `edit=<node or the first>`. `node=<id>` is the picked
 node: a pick in the All nodes list or on the drawing writes it (a new
 history entry, so Back steps back through the picks; a reload or a shared
@@ -2191,8 +2191,8 @@ itself.
       only when a map feature is linked to the node, issue #326 A2; which
       nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
       fetched once the page has drawn, `workspace/mapLinks.ts`, as on
-      Hydrological units and Dams) and
-      **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
+      Hydrological units and Dams); no Edit of its own since 2026-10-03 (the
+      row's, in All nodes, is the one). A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, the band in words under the % ("Under
@@ -2219,9 +2219,8 @@ itself.
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
       on the schematic); picking on the schematic marks it here. Each row
       also has its own **Edit** ("Edit *name*"; **Details** for a viewer),
-      which opens that node's sheet (`edit=<id>`) as the card's does: shown
-      on the picked row and on hover or keyboard focus within a row, and
-      always where there is no hover or below 640 px (44 px tall there). The picked
+      which opens that node's sheet (`edit=<id>`): always shown on every
+      row (the operator's call, 2026-10-03), 44 px tall below 640 px. The picked
       row is kept in view inside the list's card, and the picked node inside
       the drawing's box (both scroll themselves by the two bounding boxes,
       `inViewDelta` in `network/scroll.ts`), on a pick, a `node=` link, and
