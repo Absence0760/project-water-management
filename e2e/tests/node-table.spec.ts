@@ -150,7 +150,7 @@ test.describe('phone', () => {
 		await expect(grid.getByRole('columnheader', { name: /In use/ })).toBeHidden();
 		// The ⓘ buttons were in the headers; the intro sends a phone to the field guide.
 		await expect(grid.getByText('The field guide below explains', { exact: true })).toBeVisible();
-		await expect(grid.getByText('The ⓘ buttons and the field guide below explain', { exact: true })).toBeHidden();
+		await expect(grid.getByText('The help buttons beside each heading and the field guide below explain', { exact: true })).toBeHidden();
 		const upper = nodeRow(grid, model, 'Upper farm');
 		for (const label of ['Kind', 'Drains into', 'Area km²', 'Dam capacity m³', 'Dam initial storage %', 'Upstream inflow to dam %', 'Manual flow share %'])
 			await expect(upper.getByText(label, { exact: true })).toBeVisible();
