@@ -2579,6 +2579,19 @@ itself.
   kept when the source goes back to the unit's supply, unused. The unit's
   pump, an other water user's and each abstraction's share one
   `PumpCapacityField.svelte` (the pumps × m³/h × 24 calculator).
+  Above the water source, **Split the crops’ water between sources**
+  (engine ≥ 1.73.0, issue #408, [model.md §2.7k](./model.md),
+  `CropSupplyFields.svelte`): ticked, the crop supply table replaces the
+  water source. Ticking starts it from the crops' source (100 % on the dam,
+  or on the river), so the run is unchanged until a share moves; unticking
+  clears it. Three sources, each a share in % with its history line: **This
+  unit’s dam** (under the supply rule, named in its hint), **The river at
+  this unit** (with a share above 0, the crops' pump calculator, capacity
+  and pool, as above) and **Another unit’s dam** (with a share above 0,
+  **Which unit’s dam**, a list of the other units with a dam, and **Pipe
+  capacity** in m³/day, blank = no limit). Under them the **Total** and the
+  save rules' problems in words (shares not adding up to 100 %, no unit
+  chosen, a unit this one drains into), the same the save bar lists.
 - **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
   every twelve-month row of the one-node form (the dam release, a demand
   object's demand or profile, an other water user's demand, the hands-off flow

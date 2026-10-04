@@ -4906,6 +4906,116 @@ no water source set the engine is the workbook's, so it is no deviation and
 the client catchment regression suite is unchanged. The decisions above are
 open question R2 in [engine-audit.md](./engine-audit.md#open-questions-for-the-hydrologist).
 
+### 2.7k Crop supply table: the crops' demand in shares of three sources (engine ≥ 1.73.0, issue #408)
+
+`packages/engine/src/network/cropSupply.ts`.
+
+**Why.** The client estimates each unit's crop demand from its crop data,
+but the water comes from several places, listed in a table per unit: the
+dam in the same unit, the river flow at the end of the unit, and a dam in
+another unit (whose demand from these crops is then generated from this
+unit's crop data). Before 1.73.0 a unit's crops had one water source
+(§2.7j): the dam side or a river abstraction, never both, and another
+unit's dam could only fill this unit's dam through a transfer rule (§2.6),
+settled from yesterday's storage before that unit's own users. **Off by
+default**: a unit without a table runs to the bit as before, and a table
+all on one of the unit's own sources runs to the bit as its water source
+(100 % dam as `cropWaterSource` 'dam', 100 % river as 'river'); a test
+asserts both on random networks.
+
+**Fields** (farm node, migration 202):
+
+| Field | Meaning |
+| --- | --- |
+| `cropShareDam` | share of the crop demand asked of the unit's own dam side, 0–1 |
+| `cropShareRiver` | share asked of the river at the unit, through the crops' river abstraction (its pump `cropRiverPumpM3Day` and pool `cropRiverPoolM3`, §2.7j) |
+| `cropShareRemote` | share asked of another unit's dam |
+| `cropRemoteNodeId` | that unit: a farm with a dam, not this one, and not one this unit drains into |
+| `cropRemoteCapM3Day` | the pipe or canal's capacity from it, m³/day; null = no limit (the run warns); 0 = nothing |
+
+The shares add up to 100 %. All three null = no table: the crops take
+`cropWaterSource`. A table replaces `cropWaterSource`.
+
+**Each day,** with Dc′ = F′ ÷ e the crops' abstraction demand after the
+drought restriction's cut (§2.7i), F′ = F without the rule:
+
+```
+dam share     the dam side's crop demand is sd × Dc′, beside the dam-sourced demand objects (§2.7f, §2.7j), and
+              the dam side supplies it as §2.7 supplies D: the supply rule, boreholes, off-take water, transfers in
+              (whose room, §2.6, and whose demand-sized off-takes, §2.6a, read this share only)
+river share   the crops' river abstraction (§2.7j) asks sr × Dc′: after the dam side, from the flow past the
+              dam above what must pass, at the crops' supply level, its pump and pool
+remote share  ask = MIN(sx × Dc′, pipe capacity), and under an allocation cap MIN(ask, the unit's surface room at
+              the start of the day): all known before any unit runs. At the supplying unit, in its own step:
+                  free = MAX(P − dead storage, 0)     P = its interim storage after its own dam side and release
+                  given = MIN(Σ asks, free), each receiver ask × given ÷ Σ asks (pro rata, receivers summed in id order)
+                  P −= given; then storage MIN(P, capacity) and spill MAX(P − capacity, 0) as §2.7
+              At the receiving unit, simulated after it: supplied += what arrived (remote_dam_in), the return flow
+              r × it joins the outflow, and the unit's own sources share its surface room less it
+G             = the dam side + the river abstraction + what arrived, at most D (shares of D each supplied
+              up to their own share can add up to an ulp above it)
+deficit       = D − G: a share a source can't give is a deficit, never passed to another source
+```
+
+The supplying unit's balance gains an outflow (`remote_dam_out`), the
+receiving unit's an inflow (`remote_dam_in`, part of `supplied`):
+`H + I + J + Pd + … + in = (G − T) + E + ΔQ + U + … + out`.
+
+**Decisions** (operator, 2026-10-04, issue #408; pending the client's
+hydrologist, #90):
+
+- *Fixed shares.* Each source is asked for its share only. The client named
+  the sources first, second and third; a cascade (the river covering what the
+  dam can't, then the other dam) was considered and set aside for fixed
+  shares, which is how the table states each source's part.
+- *The other unit's own users first, the same day.* The remote share draws
+  in the supplying unit's own step, after its dam side (its crops, its
+  dam-sourced objects, its supply rule, boreholes) and its release, from the
+  storage above its dead storage, before its spill: water it gives would
+  otherwise have spilled first, so a spilling dam supplies other units out of
+  its spill. A transfer rule (§2.6) is the other way to move dam water, from
+  yesterday's storage ahead of the source's own users.
+- *Upstream or on another branch only.* The supplying unit is simulated
+  before the receiving unit each day (`offtakeOrder`, as a river off-take's
+  source is). A unit that drains into the dam it draws on, along the river or
+  through the river off-takes, would need tomorrow's water today: the run
+  skips the remote share with a warning (the share is then a deficit) and
+  the API refuses it on save (`cropRemoteLoop`). Whether the client has such
+  a case (a dam downstream pumping up to a unit above it) is open.
+- *No conveyance losses* on the remote share, unlike a river off-take
+  (§2.6a). Open for the hydrologist.
+- *Crops only.* Demand objects keep their single water source (§2.7j).
+- *A dam with no capacity today* (§2.7g) gives nothing.
+- *Firm yield* (§2.13) drafts the whole draft on the dam: the dam's own
+  table goes, as its river abstractions do. Other units' remote shares from
+  the dam stay, as transfers out of it do.
+
+**Outputs.** On the receiving unit `remote_dam_in` (m³/day, part of
+`supplied`), on the supplying unit `remote_dam_out` (m³/day, out of its
+storage). The EWR attribution (§2.7b) counts the remote share as a transfer
+from the supplying unit to the receiving one. The farm view's dam days left
+(farmProjection.ts `damDraw`) take `remote_dam_in` off the dam's own draw
+and add `remote_dam_out` to it.
+
+**Checks.** `checkBalance` closes both units' balances with the two
+columns; `checkWorkings` replays the dam side against its share, holds
+`remote_dam_in` to [0, sx × Dc′], replays the supplying dam's interim
+storage with `remote_dam_out` taken out and keeps it above dead storage;
+`checkEwrAttribution` counts the remote legs as transfers. The fuzz
+generator (`addCropSupply`) gives a quarter of networks tables on 40 % of
+their units (two or three sources, now and then one, now and then not adding
+up, a remote unit of any kind including one the unit drains into, pipes from
+none to more than any dam), and every invariant holds on them (balance,
+self-checks, order invariance, resume, doubled crop areas, the water
+account, firm yield). Hand examples: `run.cropSupply.test.ts`. The Excel
+audit workbook refuses a unit with a table that splits the crops, and a dam
+that supplies other units, by name. The independent Python cross-check
+(`verify/model.py`) models the table, from this section.
+
+**Not in the workbook.** b023 has no crop supply table; without one the
+engine is the workbook's, so it is no deviation and the client catchment
+regression suite is unchanged.
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |
