@@ -394,6 +394,20 @@ textarea {
 	gap: 0.75rem;
 	align-items: flex-end;
 }
+/* A form's buttons: one row under its fields, hints and checkboxes, at the content edge, the main
+   run first (ui-playbook.md § 3, Action rows). The same gap above it whatever comes before, so the
+   panels of a page line their buttons up. */
+.action-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	align-items: center;
+	margin: 0.75rem 0 0;
+}
+:is(.form-row, .field, p, fieldset):has(+ .action-row),
+.form-row:has(+ .action-row) > .field {
+	margin-bottom: 0;
+}
 
 /* ---- Panels ----------------------------------------------------------- */
 .panel {

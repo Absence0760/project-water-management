@@ -425,6 +425,20 @@ section it belongs to, with the example that taught it.
   `workspace-phone.spec.ts`). A popover anchored to the right edge (the
   rain pill's list) must open from the left once its trigger starts the
   row, or it runs off the screen.
+- **A form's buttons go in one action row under it, the same on every
+  panel of a page.** River & reserve's analysis panels each placed their
+  run differently (the ensemble's under six fields, Sensitivity's a small
+  secondary, the demand sweep's and the outlook's beside their levels box),
+  so the buttons zig-zagged down the page. Fields, hints, checkboxes (and
+  an expanding sub-form such as the outlook's monthly plan) come first,
+  then `<div class="action-row">` (`app.css`): at the content edge, the
+  same 0.75rem above it whatever precedes it, the main run first, default
+  size (not `btn-sm`), primary for the panel's main run and secondary for a
+  lesser one, Cancel after it. Focus order stays fields then button. Pin it
+  with each button's left edge equal to its first field's (or the other
+  panels' buttons') and below the fields (`uncertainty.spec.ts`,
+  `outcome-matrix.spec.ts`, `seasonal-outlook.spec.ts`). A one-field lookup
+  inside a table toolbar (Self-checks' Trace) is not this shape.
 - **A map's tools go on the map; the header keeps the page's actions.**
   The Map's header carried Measure, Draw a shape, Place a point, Delineate,
   Trace a dam, Upload GeoJSON and Add data as seven identical buttons that
@@ -681,6 +695,7 @@ section it belongs to, with the example that taught it.
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
+| A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
 | A number field | `common/NumberInput.svelte` (`min`/`max` in displayed units, `scale`, `nullable`, `grouped`, `invalidMessage`): reads a decimal comma everywhere, keeps invalid text with its message and counts it in `common/invalidFields.svelte.ts` (ui.md § Number fields); prefer it to a bare `<input type="number">`, which leaves a decimal comma to the browser |

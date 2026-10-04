@@ -78,9 +78,9 @@
 		range crosses the threshold is not determinable with current data. Nothing is stored.
 	</p>
 
-	<div class="actions">
-		<button type="button" class="btn btn-sm" onclick={run} disabled={running}>{running ? 'Running…' : result ? 'Run again' : 'Run sensitivity'}</button>
-		{#if running}<button type="button" class="btn btn-sm" onclick={() => handle?.cancel()}>Cancel</button>{/if}
+	<div class="action-row">
+		<button type="button" class="btn" onclick={run} disabled={running}>{running ? 'Running…' : result ? 'Run again' : 'Run sensitivity'}</button>
+		{#if running}<button type="button" class="btn" onclick={() => handle?.cancel()}>Cancel</button>{/if}
 		{#if progress}
 			<span role="status" aria-live="polite" class="small" data-testid="sensitivity-progress">{fmtNum(progress.done)} of {fmtNum(progress.total)} runs</span>
 		{/if}
@@ -182,13 +182,6 @@
 <style>
 	.small {
 		font-size: 0.85rem;
-	}
-	.actions {
-		display: flex;
-		gap: 0.75rem;
-		align-items: center;
-		flex-wrap: wrap;
-		margin: 0.75rem 0;
 	}
 	.verdicts {
 		list-style: none;

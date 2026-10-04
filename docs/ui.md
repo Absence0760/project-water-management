@@ -6402,7 +6402,10 @@ read it before.
   kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
   coefficient shift (on a GR4J run with a monthly PE row, engine ≥ 0.31.0,
   the shift is 0 and the ensemble's notes say the pan coefficient is not
-  varied); **Run ensemble** asks the server to fix the rule and
+  varied), then **Run ensemble** in an action row under the fields (as
+  on every analysis panel here: the fields and hints first, the button
+  under them at the panel's edge, so the panels' buttons line up down the
+  page); it asks the server to fix the rule and
   draw the seed, runs every member in the calibration worker with a live
   count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
   server checks and stores it. A cancelled one stays in the list as never
@@ -6687,7 +6690,8 @@ link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
 with its chart `uncertainty/TornadoChart.svelte` and helpers
 `uncertainty/sensitivity.ts`.
 
-- **Anyone who can see the run** can press **Run sensitivity**: the page
+- **Anyone who can see the run** can press **Run sensitivity** (a secondary button, the ensemble's size,
+  in the same action row position): the page
   fetches the run's own inputs (`…/model-input`) and the calibration worker
   runs the central case and each factor's low and high (at most 11 model
   runs, under a second on the examples), with a count ("5 of 11 runs") and
@@ -6728,7 +6732,8 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 
 - **Starting a sweep** (editors): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
-  and **Run demand sweep** queue a [sweep](./scenarios.md#sweeps) of the
+  with its hint under the box, then **Run demand sweep** in the action
+  row under them, queue a [sweep](./scenarios.md#sweeps) of the
   shown run: one member per level, each a single `demand.scale` op on every
   farm, named "85 %" (on a full-allocation run, 85 % of each unit's
   registered volume, engine ≥ 1.70.0). Only on an ordinary run of the model (a scenario or
@@ -6811,7 +6816,8 @@ confirmed farmers see the outlook, O5, issue #90).
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and
-  the levels together are at most 6). **Run seasonal outlook** queues an
+  the levels together are at most 6). **Run seasonal outlook**, in the
+  action row under the levels, hint and plan, queues an
   [outlook](./api.md#seasonal-outlooks) of the shown run; the season and
   the planning share are the project's settings (Settings → Seasonal
   outlook), the decision date the latest one the run's state reaches. Only
@@ -6868,7 +6874,8 @@ confirmed farmers see the outlook, O5, issue #90).
 - **Farmers** (issue #53 R5, E3): *Published to farmers: 85 % for 1 Oct
   2018 – 30 Apr 2019, on … by …, 12 hydrological units* (or *from another
   outlook*), or *No outlook is published to farmers*. Editors pick **Level
-  the WUA has set** (the levels that ran) and **Publish to farmers**,
+  the WUA has set** (the levels that ran), then, in the action row under
+  it and its hint, **Publish to farmers**,
   which replaces the one published before, or **Withdraw**. Each linked
   farmer then sees what that level gave their own hydrological unit, until
   the season ends. The app never picks the level.
