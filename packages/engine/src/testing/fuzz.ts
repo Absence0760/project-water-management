@@ -391,6 +391,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addRiverSources(new Rng(seed ^ 0x2545f491), nodes, demandObjects);
 	// Irrigation systems (engine ≥ 1.72.0), from their own stream, last of all.
 	const irrigationSystems = addIrrigationSystems(new Rng(seed ^ 0x1f83d9ab), crops, cropAreas);
+	// Crop supply tables (engine ≥ 1.73.0, issue #408), from their own stream, last of all.
+	addCropSupply(new Rng(seed ^ 0x5bd1e995), nodes);
 	return {
 		settings,
 		model: {
@@ -672,7 +674,11 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
  * don't move it. Changes `input` in place and returns it.
  */
 export function withoutRiverSources(input: ModelInput): ModelInput {
-	for (const n of input.model.nodes) n.cropWaterSource = 'dam';
+	for (const n of input.model.nodes) {
+		n.cropWaterSource = 'dam';
+		// A crop supply table (engine ≥ 1.73.0) gives the river a share too.
+		n.cropShareDam = n.cropShareRiver = n.cropShareRemote = null;
+	}
 	for (const o of input.model.demandObjects ?? []) o.waterSource = null;
 	return input;
 }
@@ -701,6 +707,42 @@ function addRiverSources(g: Rng, nodes: NetworkNode[], objects: DemandObject[]):
 		o.waterSource = g.bool(0.9) ? 'river' : 'dam';
 		o.riverPumpM3Day = pump();
 		o.riverPoolM3 = pool();
+	}
+}
+
+/**
+ * The input with no crop supply tables (engine ≥ 1.73.0): every unit's crops on
+ * their water source, as before addCropSupply, so a seed pinned for another
+ * feature keeps the network it was found on. Changes `input` in place and returns it.
+ */
+export function withoutCropSupply(input: ModelInput): ModelInput {
+	for (const n of input.model.nodes) n.cropShareDam = n.cropShareRiver = n.cropShareRemote = null;
+	return input;
+}
+
+/**
+ * Crop supply tables (engine ≥ 1.73.0, issue #408, docs/model.md §2.7k) in
+ * 25 % of seeds, on each unit 40 % of the time: shares over two or three of
+ * the sources (now and then all on one, which runs as the water source, or
+ * not adding up to 100 %, which the run scales), the remote share from any
+ * other node (a unit with or without a dam, one it drains into, a gauge,
+ * none: the run skips what it can't supply), through a pipe of none (no
+ * limit), 0, a trickle or more than any dam. A river share's pump and pool
+ * are the crops' (addRiverSources may have set them).
+ */
+function addCropSupply(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.25)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || !g.bool(0.4)) continue;
+		const w = [g.bool(0.8) ? g.float(0, 1) : 0, g.bool(0.6) ? g.float(0, 1) : 0, g.bool(0.7) ? g.float(0, 1) : 0];
+		const sum = w[0]! + w[1]! + w[2]!;
+		const k = sum > 0 && g.bool(0.9) ? 1 / sum : 1;
+		n.cropShareDam = w[0]! * k;
+		n.cropShareRiver = g.bool(0.1) ? null : w[1]! * k;
+		n.cropShareRemote = w[2]! * k;
+		const other = nodes.filter((m) => m !== n);
+		n.cropRemoteNodeId = other.length && g.bool(0.95) ? g.pick(other).id : null;
+		n.cropRemoteCapM3Day = g.pick([null, 0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
 	}
 }
 

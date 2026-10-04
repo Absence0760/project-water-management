@@ -38,6 +38,7 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOffta
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
+import { cropSharesOf, planRemoteSupply, REMOTE_SERIES } from './network/cropSupply';
 import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
@@ -564,7 +565,12 @@ function runNetwork(
 		...(resume && warm.continued ? { storageBefore: resume.nodes.map((r) => r.setFromM3 ?? r.storageM3) } : {}),
 		// A river off-take (engine ≥ 1.14.0) counts like a transfer, with what it took at both ends: its conveyance
 		// losses are charged to its destination, for which the water was taken.
-		transfers: [...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })), ...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! }))],
+		// A crop supply table's remote share (engine ≥ 1.73.0) moves water from the supplying dam to the receiving unit, as a transfer does.
+		transfers: [
+			...plan.transfers.map((tr, k) => ({ from: tr.from, to: tr.to, volume: sim.transfers[k]! })),
+			...(plan.offtakes ?? []).map((o, k) => ({ from: o.from, to: o.to, volume: sim.offtakes![k]! })),
+			...plan.nodes.flatMap((n, i) => (n.remote ? [{ from: n.remote.from, to: i, volume: sim.nodes[i]!.remoteIn! }] : []))
+		],
 		// The share of its losses that seeps back (engine ≥ 1.42.0) is credited where the losses were charged.
 		...(plan.offtakes?.some((o) => o.lossReturn > 0) ? { returns: offtakeReturns(plan.offtakes, sim.offtakes!) } : {}),
 		sites: chargeSites.map((c) => ({ node: c.node, shortfall: c.shortfall }))
@@ -603,7 +609,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -692,6 +698,9 @@ function runNetwork(
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
 		if (r.offtakeOut) push(node.id, OFFTAKE_SERIES.out.key, OFFTAKE_SERIES.out.label, 'm³/day', r.offtakeOut);
 		if (r.offtakeIn) push(node.id, OFFTAKE_SERIES.in.key, OFFTAKE_SERIES.in.label, 'm³/day', r.offtakeIn);
+		// A crop supply table's remote share (engine ≥ 1.73.0): what the crops got from another unit's dam, and what a dam gave.
+		if (r.remoteIn) push(node.id, REMOTE_SERIES.in.key, REMOTE_SERIES.in.label, REMOTE_SERIES.in.unit, r.remoteIn);
+		if (r.remoteOut) push(node.id, REMOTE_SERIES.out.key, REMOTE_SERIES.out.label, REMOTE_SERIES.out.unit, r.remoteOut);
 		// Canal seepage back to the river (engine ≥ 1.42.0): only on a farm an off-take returns seepage below.
 		if (r.offtakeReturn) push(node.id, OFFTAKE_SERIES.returned.key, OFFTAKE_SERIES.returned.label, 'm³/day', r.offtakeReturn);
 		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
@@ -1574,11 +1583,21 @@ export function buildNetworkPlan(
 
 	// River off-takes (engine ≥ 1.14.0, ./network/offtake.ts): each destination after its source.
 	const offtakes = planOfftakes(model.transfers, nodes, warnings, (tr) => (canMove(tr) ? transferRuleKey(tr.id) : undefined));
+	// The crop supply tables (engine ≥ 1.73.0, ./network/cropSupply.ts): each unit's shares, and the other unit's dam each
+	// draws a share on, which is simulated before it, as an off-take's source is.
+	const tables = nodes.map((n) => cropSharesOf(n, warnings));
+	const remotes = planRemoteSupply(
+		nodes,
+		tables.map((x) => x.shares),
+		offtakes,
+		warnings
+	);
+	const remoteLinks = remotes.flatMap((x, i) => (x ? [{ from: x.from, to: i }] : []));
 
 	const plan: NetworkPlan = {
 		days,
 		...(historyDays < days ? { historyDays } : {}),
-		order: offtakeOrder(topo.order, topo.upstream, offtakes),
+		order: offtakeOrder(topo.order, topo.upstream, remoteLinks.length ? [...offtakes, ...remoteLinks] : offtakes),
 		...(offtakes.length ? { offtakes } : {}),
 		lakeEvapMmDay,
 		...(damRainMm ? { damRainMm } : {}),
@@ -1618,7 +1637,9 @@ export function buildNetworkPlan(
 				...supplyOf(n, warnings, start === undefined ? undefined : { start, end: start + days - 1 }),
 				...operatingOf(n, warnings),
 				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
-				...riverSourcesOf(n, objectsBy.get(n.id), warnings),
+				...riverSourcesOf(n, objectsBy.get(n.id), warnings, tables[i]),
+				...(tables[i]!.shares ? { cropDamShare: tables[i]!.shares!.dam } : {}),
+				...(remotes[i] ? { remote: remotes[i] } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})

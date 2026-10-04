@@ -25,6 +25,7 @@
 // The same recompute over any window, other water users included, is
 // curtailmentOverWindow (below): the Runs tab's reporting-window picker
 // (issue #44) and the season here share it.
+import { cropDamShareOf, cropRiverShareOf, plannedRemoteLegs, REMOTE_SERIES } from '../network/cropSupply';
 import { damCapacityOn } from '../network/development';
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { attributeEwrShortfall, bindingSite, type AttributionResult } from '../network/attribution';
@@ -72,7 +73,9 @@ export const PROJECTION_SERIES = {
 	// basic_needs: only on a unit with a basic-needs floor (engine ≥ 1.44.0); read when present.
 	// groundwater_used and the river takes (NOT_FROM_DAM_SERIES, riverTakeKey): the parts of supplied the dam never
 	// has to give, read when present, so the dam's days left follow what it would carry with nothing flowing in.
-	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs', 'groundwater_used'],
+	// remote_dam_in and remote_dam_out (engine ≥ 1.73.0): another unit's dam's share of the crops (not this dam's), and
+	// what this dam gives other units' crops (a draw on it), read when present.
+	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs', 'groundwater_used', 'remote_dam_in', 'remote_dam_out'],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
 	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
 	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
@@ -82,13 +85,14 @@ export const PROJECTION_SERIES = {
 /**
  * The series on a farm that are part of `supplied` but that its dam never
  * has to give, even when nothing flows in: the boreholes to the crop
- * (WP-1.34), which don't depend on the river. The river abstractions beside
+ * (WP-1.34), which don't depend on the river, and what another unit's dam
+ * gives the crops (engine ≥ 1.73.0, §2.7k). The river abstractions beside
  * the dam (§2.7j, `river_take@<key>`) are the other part, read per
  * abstraction: the dam never serves those demands. The supply rule's river
  * pump (§2.7e) and off-take water (§2.6a) stay in: they serve the dam's own
  * demand from river flow, and once nothing flows in the dam carries it.
  */
-export const NOT_FROM_DAM_SERIES = ['groundwater_used'] as const;
+export const NOT_FROM_DAM_SERIES = ['groundwater_used', 'remote_dam_in'] as const;
 
 /** The prefixes of the per-abstraction series a projection reads too (the loader reads `key LIKE prefix%`). */
 export const PROJECTION_SERIES_PREFIXES = [RIVER_TAKE_SERIES.take.prefix] as const;
@@ -150,7 +154,7 @@ const hasFloor = (objects: readonly ProjectionDemandObject[] | undefined, nodeId
  */
 function riverTakeKeys(run: ProjectionRun, node: NetworkNode): string[] {
 	const keys: string[] = [];
-	if (onRiver(node.cropWaterSource)) keys.push(CROPS_TAKE_KEY);
+	if (cropRiverShareOf(node) > 0) keys.push(CROPS_TAKE_KEY);
 	for (const o of run.demandObjects ?? []) if (o.nodeId === node.id && o.enabled !== false && o.id && onRiver(o.waterSource)) keys.push(o.id);
 	return keys;
 }
@@ -163,16 +167,19 @@ function riverTakeKeys(run: ProjectionRun, node: NetworkNode): string[] {
 function servesOnlyRiver(run: ProjectionRun, node: NetworkNode): boolean {
 	const objects = (run.demandObjects ?? []).filter((o) => o.nodeId === node.id && o.enabled !== false);
 	const hasCrops = run.cropAreas ? run.cropAreas.some((a) => a.nodeId === node.id && a.areaM2 > 0) : true;
-	if (hasCrops && !onRiver(node.cropWaterSource)) return false;
+	// Under a crop supply table (engine ≥ 1.73.0) the dam serves the crops only for its share.
+	const damServesCrops = cropDamShareOf(node) > 0;
+	if (hasCrops && damServesCrops) return false;
 	if (objects.some((o) => !onRiver(o.waterSource))) return false;
-	return (hasCrops && onRiver(node.cropWaterSource)) || objects.length > 0;
+	return (hasCrops && !damServesCrops) || objects.length > 0;
 }
 
 /**
  * What a farm's dam would have to give each day with nothing flowing in:
  * `supplied` less the boreholes and the river abstractions beside it
  * (NOT_FROM_DAM_SERIES, river_take@), each read when the run has it, never
- * below 0. The dam's days left divide by this: a crop pumping from the river
+ * below 0, plus what it gives other units' crops (`remote_dam_out`, engine ≥
+ * 1.73.0). The dam's days left divide by this: a crop pumping from the river
  * through its own abstraction doesn't empty the dam. The supply rule's pump
  * and off-take water stay in, since without inflow the dam meets that demand.
  */
@@ -186,6 +193,11 @@ export function damDraw(run: ProjectionRun, node: NetworkNode, supplied: Float64
 		for (let t = 0; t < out.length; t++) out[t] = out[t]! - val(v[t]);
 	}
 	for (let t = 0; t < out.length; t++) if (!(out[t]! > NOISE_M3)) out[t] = 0;
+	const given = run.series(node.id, 'remote_dam_out');
+	if (given) {
+		if (given.length !== out.length) throw new ProjectionInputError(`the run's remote_dam_out series has ${given.length} days, expected ${out.length}`);
+		for (let t = 0; t < out.length; t++) out[t] = out[t]! + Math.max(0, val(given[t]));
+	}
 	return out;
 }
 
@@ -369,6 +381,11 @@ function transferVolumes(
 	return { rules, approximate };
 }
 
+/** A crop supply table's remote shares (engine ≥ 1.73.0): from the supplying unit to the receiving one, what arrived (remote_dam_in), as runModel planned them. */
+function remoteLegs(run: ProjectionRun, days: number): { from: number; to: number; volume: Float64Array }[] {
+	return plannedRemoteLegs(run.nodes, run.transfers).map((x) => ({ ...x, volume: need(run, run.nodes[x.to]!.id, REMOTE_SERIES.in.key, days) }));
+}
+
 /** The run's farm-to-farm rules and their stored daily volumes (engine ≥ 1.6.0); null for an older run, read from the nets. */
 function storedRules(run: CurtailmentRun, days: number): { rules: CurtailmentRun['transfers'][number][]; volumes: Float64Array[] } | null {
 	const rules = farmRules(run.transfers, run.nodes);
@@ -398,7 +415,9 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 	const runoff = nodes.map((n) => (n.kind === 'farm' ? need(run, n.id, 'runoff', days) : zeros()));
 	const supplied = nodes.map((n) => (n.kind === 'gauge' ? zeros() : need(run, n.id, 'supplied', days)));
 	const storage = nodes.map((n) => (n.kind === 'farm' ? need(run, n.id, 'dam_storage', days) : zeros()));
-	const { rules, approximate } = transferVolumes(run, index, days);
+	const { rules: moved, approximate } = transferVolumes(run, index, days);
+	// A crop supply table's remote share (engine ≥ 1.73.0) moves water from the supplying dam to the unit, as runModel counts it.
+	const rules = [...moved, ...remoteLegs(run, days)];
 	// The run's EWR sites, as runModel picked them (engine ≥ 1.5.0 honours each gauge's ewrSite flag; absent = a site).
 	const siteNodes = ewrSiteNodes(nodes, topo.outflow);
 	const order = canonicalOrder(nodes, topo);
@@ -583,6 +602,7 @@ export function curtailmentSeriesKeys(
 	// (A network whose rules can never move water needs neither: every rule is 0.)
 	const perRule = !stored && rules.length > 0 && (ruleKeys.length === 0 || (!!has && ruleKeys.every((k) => has(k.nodeId, k.key))));
 	const sites = new Set(siteNodes);
+	const remoteTo = new Set(plannedRemoteLegs(nodes, transfers).map((x) => x.to));
 	nodes.forEach((n, i) => {
 		if (!stored) add(n.id, 'inflow_upstream', 'outflow');
 		if (n.kind === 'farm') {
@@ -592,6 +612,8 @@ export function curtailmentSeriesKeys(
 			if (hasFloor(options.demandObjects, n.id) && (!has || has(n.id, BASIC_NEEDS_SERIES.key))) add(n.id, BASIC_NEEDS_SERIES.key);
 			if (!stored) add(n.id, 'runoff', 'dam_storage');
 			if (!stored && !perRule && inRule.has(n.id)) add(n.id, 'transfer');
+			// A remote share's volume (engine ≥ 1.73.0), which the recompute counts as a transfer.
+			if (!stored && remoteTo.has(i)) add(n.id, REMOTE_SERIES.in.key);
 		} else if (n.kind === 'user') {
 			if (!stored || options.otherUsers !== false) add(n.id, 'supplied');
 			if (options.otherUsers !== false) add(n.id, 'demand', 'return_flow', 'ewr_charge');

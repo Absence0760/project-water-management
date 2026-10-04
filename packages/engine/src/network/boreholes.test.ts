@@ -6,7 +6,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import { damDrawnFor, ga538Warnings, groundwaterAnnualUse, groundwaterDay, twelveMonthsStart, type PlanBorehole } from './boreholes';
 import { runModelWith, withVerification } from '../run';
 import { checkGroundwater, checkInvariants } from '../verify/checks';
-import { randomInput, withoutRiverSources } from '../testing/fuzz';
+import { randomInput, withoutCropSupply, withoutRiverSources } from '../testing/fuzz';
 import { checkDoubledCropAreas, droughtBoreholesAsSupplemental } from '../testing/invariants';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
@@ -234,7 +234,8 @@ describe('boreholes (WP-1.34)', () => {
 	});
 
 	it('a drought rule can legitimately raise the supply fraction when demand grows (seed 4536; was 4623 before a dam on the river lost River to dam, engine 1.68.0, and 1450 before the fuzz generator drew rule tables), so the doubled-crop-area law is checked without it', () => {
-		const input = randomInput(4536);
+		// Engine 1.73.0's crop supply tables are taken off, so the case is the one found.
+		const input = withoutCropSupply(randomInput(4536));
 		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n8's supply fraction/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
 	});
@@ -260,7 +261,8 @@ describe('boreholes (WP-1.34)', () => {
 		// doubled demand kept it filled from groundwater every day, 720 000 m³/day seeping on down to n13
 		// (0.781 → 0.852). 20 000-case soak on engine 1.20.0, #164.
 		for (const [seed, id] of [[4536, 'n12'], [10028, 'n16']] as const) {
-			const input = randomInput(seed);
+			// Engine 1.73.0's crop supply tables are taken off, so each case is the one found.
+			const input = withoutCropSupply(randomInput(seed));
 			expect(input.model.boreholes!.some((b) => b.nodeId === id && b.mode === 'primary' && b.target === 'dam'), `seed ${seed}`).toBe(true);
 			// The rest of the helper, with the primary dam-target units left as they are.
 			const rules = droughtBoreholesAsSupplemental(input);

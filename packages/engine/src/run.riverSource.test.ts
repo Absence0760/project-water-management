@@ -105,6 +105,10 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 				delete n.cropWaterSource;
 				delete n.cropRiverPumpM3Day;
 				delete n.cropRiverPoolM3;
+				// A crop supply table (engine ≥ 1.73.0) would replace the crops' water source.
+				delete n.cropShareDam;
+				delete n.cropShareRiver;
+				delete n.cropShareRemote;
 			}
 			for (const o of base.model.demandObjects ?? []) {
 				delete o.waterSource;

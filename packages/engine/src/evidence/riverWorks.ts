@@ -4,6 +4,7 @@
 // application's own new or changed river abstraction keeps a hands-off flow or
 // the EWR. Exploring stays unrestricted: nothing here gates a model save or a
 // run, only what a pack may be issued on. Pure; reads the runs' stored models.
+import { cropRiverShareOf } from '../network/cropSupply';
 import type { NetworkNode, ProjectModel, Transfer } from '../project';
 import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
@@ -109,7 +110,8 @@ export function nodeRiverWorks(n: NetworkNode, model: Pick<ProjectModel, 'cropAr
 	const take = (key: string, label: string, pump: unknown) => {
 		if (pump !== 0) out.push({ kind: 'abstraction', id: `${n.id}/${key}`, nodeId: n.id, name: `${n.name}: ${label}`, bounded: size(pump), protectsEwr: handsOffCovers(n, null) });
 	};
-	if (n.cropWaterSource === 'river' && (model.cropAreas ?? []).some((a) => a.nodeId === n.id && a.areaM2 > 0)) take('crops', 'crops', n.cropRiverPumpM3Day);
+	// Under a crop supply table (engine ≥ 1.73.0) the crops take from the river when the table gives it a share.
+	if (cropRiverShareOf(n) > 0 && (model.cropAreas ?? []).some((a) => a.nodeId === n.id && a.areaM2 > 0)) take('crops', 'crops', n.cropRiverPumpM3Day);
 	for (const o of model.demandObjects ?? []) if (o.nodeId === n.id && o.enabled !== false && o.waterSource === 'river') take(o.id, o.name, o.riverPumpM3Day);
 	return out;
 }

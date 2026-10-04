@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, ModelOutput, NetworkNode, Transfer } from '../project';
 import { runModel } from '../run';
-import { randomInput } from '../testing/fuzz';
+import { randomInput, withoutCropSupply } from '../testing/fuzz';
 
 const opt = (out: ModelOutput, id: string, key: string) => out.series.find((x) => x.nodeId === id && x.key === key)?.values ?? null;
 
@@ -160,7 +160,8 @@ describe('deep: the off-take bands on the engine’s own random networks (§2.6a
 		let checked = 0;
 		let positive = 0;
 		for (let seed = 1; runs < 600 && seed < 20000; seed++) {
-			const input = randomInput(seed, { maxNodes: 12, maxDays: 400 });
+			// Without crop supply tables (engine ≥ 1.73.0): a destination's need is then its whole dam-side demand, as replay reads it.
+			const input = withoutCropSupply(randomInput(seed, { maxNodes: 12, maxDays: 400 }));
 			if (!input.model.transfers.some((tr) => tr.enabled && tr.source === 'river')) continue;
 			runs++;
 			const out = runModel(input);

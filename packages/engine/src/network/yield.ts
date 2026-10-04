@@ -174,7 +174,9 @@ function supplyNetwork(plan: NetworkPlan, i: number): { plan: NetworkPlan; at: n
 			stack.push(u);
 		}
 	}
-	if (keep.size === plan.nodes.length || plan.transfers.some((tr) => keep.has(tr.from) || keep.has(tr.to)) || plan.offtakes?.some((o) => keep.has(o.from) || keep.has(o.to))) return { plan, at: i };
+	// A crop supply table's remote share (engine ≥ 1.73.0) links two units as a transfer does.
+	const remoteTouches = plan.nodes.some((n, k) => n.remote && (keep.has(k) || keep.has(n.remote.from)));
+	if (keep.size === plan.nodes.length || remoteTouches || plan.transfers.some((tr) => keep.has(tr.from) || keep.has(tr.to)) || plan.offtakes?.some((o) => keep.has(o.from) || keep.has(o.to))) return { plan, at: i };
 	const old = [...keep].sort((a, b) => a - b);
 	const idx = new Map(old.map((o, k) => [o, k]));
 	return {
@@ -210,8 +212,9 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	// The draft is the node's whole demand, so its demand objects (engine ≥ 1.7.0) go too. An allocation
 	// cap on it goes as well (engine ≥ 1.18.0): a yield is what the dam can give, not what is registered;
 	// the other units keep theirs, so a capped farm upstream leaves the dam more.
-	// Its river abstractions (engine ≥ 1.65.0) go with the demands they serve: the draft is on the dam.
-	const { borehole: _borehole, damCurve: _curve, objects: _objects, allocationCap: _cap, river: _river, initialPoolM3: _pools, ...rest } = base;
+	// Its river abstractions (engine ≥ 1.65.0) go with the demands they serve: the draft is on the dam. So does a crop
+	// supply table (engine ≥ 1.73.0): the whole draft is asked of the dam, none of the river or another unit's dam.
+	const { borehole: _borehole, damCurve: _curve, objects: _objects, allocationCap: _cap, river: _river, initialPoolM3: _pools, cropDamShare: _share, remote: _remote, ...rest } = base;
 	const node: PlanNode = {
 		...rest,
 		damCapacityM3: cap,

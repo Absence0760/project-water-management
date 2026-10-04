@@ -4,8 +4,9 @@
 // floor, abstraction date), the split of the unit's supply over its supply
 // levels, and the unit's return flow, against a re-derivation written from
 // model.md alone. Drought restrictions (§2.7i, their own file), full
-// allocations and river abstractions (§2.7j) are taken out, since each
-// changes what the split is taken against. Synthetic data only.
+// allocations, river abstractions (§2.7j) and crop supply tables (§2.7k)
+// are taken out, since each changes what the split is taken against.
+// Synthetic data only.
 import { describe, expect, it } from 'vitest';
 import type { DemandObject, DemandScheduleWindow, ModelInput, ModelOutput, NetworkNode } from '../project';
 import { runModelWithoutChecks } from '../run';
@@ -96,7 +97,7 @@ function prepared(seed: number): ModelInput {
 	if (rain && rng.bool(0.3)) settings.demandFactorFrom = iso(epoch(rain.startDate) + rng.int(-10, rain.values.length + 10));
 	const parts = ['domestic', 'municipal', 'industrial', 'livestock', 'other'] as const;
 	const nodes = input.model.nodes.map((n): NetworkNode => {
-		const base: NetworkNode = { ...n, cropWaterSource: 'dam' };
+		const base: NetworkNode = { ...n, cropWaterSource: 'dam', cropShareDam: null, cropShareRiver: null, cropShareRemote: null };
 		if (n.kind !== 'farm' || !rng.bool(0.5)) return base;
 		const f = () => Array.from({ length: 12 }, () => (rng.bool(0.3) ? 1 : rng.pick([0, rng.float(0, 1), rng.float(1, 1.5)])));
 		const p = rng.pick(parts);

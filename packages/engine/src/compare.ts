@@ -1240,6 +1240,11 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['cropWaterSource', 'crops’ water source', (v) => (v === 'river' ? 'its own river abstraction' : 'the unit’s supply')],
 	['cropRiverPumpM3Day', 'crops’ river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v)} m³/day`)],
 	['cropRiverPoolM3', 'crops’ pool at the river pump', (v) => (v === null || v === undefined ? 'none' : `${fmtValue(v)} m³`)],
+	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k): each source's share of the crops, the other unit, the pipe.
+	['cropShareDam', 'crops’ share from the dam', (v) => (v === null || v === undefined ? 'no table' : pct(v))],
+	['cropShareRiver', 'crops’ share from the river', (v) => (v === null || v === undefined ? 'no table' : pct(v))],
+	['cropShareRemote', 'crops’ share from another unit’s dam', (v) => (v === null || v === undefined ? 'no table' : pct(v))],
+	['cropRemoteCapM3Day', 'pipe capacity from the other unit’s dam', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v)} m³/day`)],
 	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
 	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
@@ -1323,6 +1328,10 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [k, label, fmt] of NODE_FIELDS) {
 			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
 		}
+		// The unit whose dam supplies the crops' remote share (engine ≥ 1.73.0), by name: matched by name when the ids differ.
+		const ra = na.node(x.cropRemoteNodeId ?? null);
+		const rb = nb.node(y.cropRemoteNodeId ?? null);
+		if (ra !== rb) parts.push(`unit whose dam supplies the crops’ share ${ra ? `"${ra}"` : 'none'} → ${rb ? `"${rb}"` : 'none'}`);
 		if (x.kind === 'user' || y.kind === 'user') {
 			const d = monthlyChange(x.userDemandM3Day ?? [], y.userDemandM3Day ?? [], 'm³/day');
 			if (d) parts.push(`demand ${d}`);
@@ -1845,6 +1854,8 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		['hands-off flow', 'handsOffM3Day'],
 		['River to dam by month', 'divertMonthlyM3Day'],
 		['dam survey curve', 'damCurve'],
+		// The crop supply table's other unit (engine ≥ 1.73.0), worded by name in diffModel.
+		['unit whose dam supplies the crops’ share', 'cropRemoteNodeId'],
 		['drains into', 'downstreamNodeId']
 	];
 }

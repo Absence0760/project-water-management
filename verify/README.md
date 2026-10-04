@@ -159,6 +159,13 @@ the ranks within one (engine ≥ 1.64.0),
   Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
   model doesn't write it, so the comparison notes it as engine-only; the
   engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
+- **The crop supply table** (§2.7k, engine ≥ 1.73.0): the crops' demand
+  in shares of the unit's dam side, the crops' river abstraction and another
+  unit's dam; the remote share settled in the supplying unit's step before
+  its spill, pro rata between receivers, through a pipe; the receiving unit
+  after its source in the network order, and a remote share the unit drains
+  into skipped; the remote share counted as a transfer in the EWR
+  attribution (`remote_dam_in`, `remote_dam_out`).
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent

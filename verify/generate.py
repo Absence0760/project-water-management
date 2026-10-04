@@ -545,6 +545,22 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                 ob["riverPumpM3Day"] = pump()
                 ob["riverPoolM3"] = pool()
 
+    # The crop supply table (§2.7k): the crops' demand in shares of the unit's dam, the river and another
+    # unit's dam (any other unit: with a dam or not, upstream, downstream or on another branch, which the
+    # run skips with a warning), through a pipe of no limit to tight; drawn last of all.
+    if rng.random() < gate(0.3):
+        for f in farms:
+            if rng.random() >= 0.5:
+                continue
+            w = [rng.choice([0, rng.random()]), rng.choice([0, rng.random()]), rng.random()]
+            tot = sum(w)
+            f["cropShareDam"], f["cropShareRiver"], f["cropShareRemote"] = (v / tot for v in w)
+            others = [g for g in farms if g is not f]
+            f["cropRemoteNodeId"] = rng.choice(others)["id"] if others else None
+            f["cropRemoteCapM3Day"] = rng.choice([None, 0, round(rng.uniform(10, 500)), round(rng.uniform(500, 50000))])
+            if f.get("cropRiverPumpM3Day") is None and rng.random() < 0.5:
+                f["cropRiverPumpM3Day"] = round(rng.uniform(50, 5000))
+
 
 def _window(rng, start: dt.date, days: int) -> dict:
     span = rng.choice(["always", "yearly", "range", "easter"])

@@ -151,6 +151,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Needs hydrologist (engine 1.65.0, issue #344)"
 	},
 	{
+		"id": "R3",
+		"source": "finding",
+		"severity": "Low (units with a crop supply table, engine 1.73.0)",
+		"title": "A unit's crop demand split by share between its dam, the river and another unit's dam runs on choices the hydrologist hasn't confirmed",
+		"status": "Needs hydrologist (engine 1.73.0, issue #408)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,
