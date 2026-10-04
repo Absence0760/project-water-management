@@ -672,8 +672,11 @@ section it belongs to, with the example that taught it.
 - **Say what a colour means in words too** (a band label, "below 70%"), and
   name a segment on hover and focus: colour alone fails colour-blind users
   and axe.
-- **Wording:** the modeller workspace says **unit** for a farm node (#54);
-  the farmer view, API and CSV say farm. Farmer-facing pages (farm view,
+- **Wording:** a node of the network is a **hydrological unit** (or
+  **unit**) in everything users read, whatever its kind (2026-10-04;
+  model.md § 7 Glossary): name the kind where it matters ("a unit with
+  land", "a gauge", "an other water user"), never "node". The code, API
+  fields, URL parameters and CSV say node and farm. Farmer-facing pages (farm view,
   sign-in, account, alerts, `/share`) go through `t()` (ui.md § Language):
   changing their English invalidates the Afrikaans.
 - **Honest numbers:** a figure on an outcome page comes from the same helper
