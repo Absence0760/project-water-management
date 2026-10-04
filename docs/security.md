@@ -241,7 +241,9 @@ decide a licence application.
   the page after the password and the code. The action's own error message
   stays where the page shows it. `GET /auth/mfa` (read once per account, and
   again when the tab comes back into view) only clears a refusal it shows
-  resolved; its `required` still tells the Account page which roles need it. The banner is English
+  resolved; its `required` still tells the Account page which roles need it.
+  End to end against a server with the requirement on:
+  `e2e/tests/mfa-required.spec.ts` (a second e2e API, `MFA_API_URL`). The banner is English
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal
   (every refused action brings it back, operator's decision, 2026-10-01), and

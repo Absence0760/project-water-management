@@ -58,6 +58,9 @@ export const E2E_SLOT = slotFor(checkout, isWorktree, process.env.E2E_SLOT);
 export const API_PORT = 3101 + E2E_SLOT;
 export const WEB_PORT = 7801 + E2E_SLOT;
 export const API_URL = `http://localhost:${API_PORT}`;
+/** A second API with the two-step sign-in requirement on (playwright.config.ts; mfa-required.spec.ts), on the same database. */
+export const MFA_API_PORT = 3201 + E2E_SLOT;
+export const MFA_API_URL = `http://localhost:${MFA_API_PORT}`;
 export const WEB_URL = `http://localhost:${WEB_PORT}`;
 
 /**

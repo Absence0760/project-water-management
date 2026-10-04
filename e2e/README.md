@@ -26,7 +26,11 @@ pnpm -C e2e e2e:list      # list the tests without running them
    Every run starts from an empty schema.
 2. **Servers.** Playwright's `webServer` starts the backend on **:3101** (as the
    RLS-bound `water_app` role, against the e2e database) and the frontend on
-   **:7801** (in the main checkout). The frontend is a **production build**, not
+   **:7801** (in the main checkout). A second backend on **:3201** runs with
+   the two-step sign-in requirement on (`MFA_REQUIRED` unset, as in
+   production; the first has it off) against the same database:
+   `mfa-required.spec.ts` sends the browser's API calls there, so a real
+   server refuses an owner's action. The frontend is a **production build**, not
    the Vite dev server: `support/build-site.ts` runs `vite build` with the
    checkout's API URL (`http://localhost:3101`) baked in as `PUBLIC_API_URL` (it
    is `$env/static/public`), written to `frontend/build-e2e/` (with
@@ -57,8 +61,8 @@ in two worktrees at the same time:
 
 | Checkout | Slot | API | Site | Database |
 | --- | --- | --- | --- | --- |
-| Main checkout (`.git` is a directory), and CI | 0 | :3101 | :7801 | `water_e2e` |
-| A git worktree (`.git` is a file) | 1–98, from the slot registry | :3101 + slot | :7801 + slot | `water_e2e_w<tag>_<slot>` |
+| Main checkout (`.git` is a directory), and CI | 0 | :3101 (:3201 with the MFA requirement) | :7801 | `water_e2e` |
+| A git worktree (`.git` is a file) | 1–98, from the slot registry | :3101 + slot (:3201 + slot) | :7801 + slot | `water_e2e_w<tag>_<slot>` |
 
 A worktree's slot comes from a registry in the repo's shared git directory,
 the main checkout's `.git/water-e2e-slots/` (`support/slots.ts`): one file per
