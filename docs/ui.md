@@ -2179,7 +2179,12 @@ itself.
   - The **Tables** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
     Escape right after opening would otherwise leave it open.
-  - Beside it (one column below 900 px, the map first), two cards:
+  - Beside it (one column below 900 px, the map first), two cards, **All
+    nodes** on top and the picked node's card under it, so a pick (or the
+    card coming and going) never moves the rows. From 900 px the list takes
+    what the card leaves (at least a few rows) and scrolls inside itself; a
+    card taller than 60 % of the column scrolls in its own box, so both
+    stay in the window. A phone keeps the same order.
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes
       (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
@@ -2212,7 +2217,11 @@ itself.
       and "→ downstream" (or "outlet"). The name wraps between words; the
       downstream name takes at most 45 % of the row on one line, cut with an
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
-      on the schematic); picking on the schematic marks it here. The picked
+      on the schematic); picking on the schematic marks it here. Each row
+      also has its own **Edit** ("Edit *name*"; **Details** for a viewer),
+      which opens that node's sheet (`edit=<id>`) as the card's does: shown
+      on the picked row and on hover or keyboard focus within a row, and
+      always where there is no hover or below 640 px (44 px tall there). The picked
       row is kept in view inside the list's card, and the picked node inside
       the drawing's box (both scroll themselves by the two bounding boxes,
       `inViewDelta` in `network/scroll.ts`), on a pick, a `node=` link, and

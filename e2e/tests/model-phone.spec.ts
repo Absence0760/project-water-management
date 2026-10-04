@@ -162,4 +162,21 @@ test.describe('phone node form', () => {
 			if (i) expect(b.left, `link ${i + 1} starts after link ${i}`).toBeGreaterThanOrEqual(boxes[i - 1]!.right);
 		}
 	});
+
+	test('the node list comes before the card, and every row shows its Edit without a hover', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Phone node list');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+		const list = page.getByRole('list', { name: 'All nodes' });
+		await list.getByRole('button', { name: /^Upper farm/ }).click();
+		const listBox = (await list.boundingBox())!;
+		expect((await page.getByTestId('node-card').boundingBox())!.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
+		const edit = list.getByRole('button', { name: 'Edit Lower farm' });
+		await expect(edit).toBeVisible();
+		expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+		await edit.click();
+		await expect(page.getByRole('dialog', { name: 'Edit Lower farm' })).toBeVisible();
+		await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+	});
 });
