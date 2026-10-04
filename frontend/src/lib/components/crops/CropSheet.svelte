@@ -120,7 +120,7 @@
 					value={crop.irrigationSystemId ?? ''}
 					onchange={(e) => (crop.irrigationSystemId = e.currentTarget.value || null)}
 				>
-					<option value="">None (each unit's own efficiency)</option>
+					<option value="">None (the unit's efficiency for crops with no system)</option>
 					{#each systems as s (s.id)}<option value={s.id}>{systemLabel(s)}</option>{/each}
 				</select>
 				<span class="muted small hint" id="crop-system-{crop.id}-h" data-testid="crop-system-hint">

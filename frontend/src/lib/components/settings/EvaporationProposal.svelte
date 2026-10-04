@@ -93,7 +93,7 @@
 		useError = null;
 		try {
 			await api.evaporation.fromMap(projectId, d.dataset);
-			notice = `${what[0]!.toUpperCase()}${what.slice(1)} is now the map’s ${fmtNum(ready.annualMm)} mm a year, saved as a settings revision citing ${d.source} (${d.version}). Run the model to see its effect.`;
+			notice = `${what[0]!.toUpperCase()}${what.slice(1)} is now the map’s ${fmtNum(ready.annualMm)} mm a year, saved as a settings revision citing ${d.source} (${d.version}).`;
 			await Promise.all([load(d.dataset), onApplied()]);
 			// The Use button is gone (the settings hold the values now): keep the keyboard here, on what happened.
 			await frame?.focusNotice();

@@ -48,7 +48,11 @@ export interface NodeField {
 	detailOnly?: boolean;
 	/** A flow rate whose unit is picked beside it (./flowUnit.svelte.ts): `unit` and `scale` follow it. */
 	flowUnit?: FlowUnit;
-	/** Shown, not edited: worked out from elsewhere (the efficiency from the unit's crops' irrigation systems, engine ≥ 1.72.0); never pasted. */
+	/**
+	 * Worked out from elsewhere: the efficiency, from the unit's crops' irrigation systems (engine ≥ 1.72.0). Shown as text
+	 * while every planting is on a system; editable, as the efficiency for crops with no system, while one isn't
+	 * (model/systems.ts ownEfficiencyUsed). Never pasted.
+	 */
 	derived?: boolean;
 }
 
@@ -210,7 +214,7 @@ export const NODE_FIELDS: NodeField[] = [
 		farmOnly: true,
 		derived: true,
 		aria: (n) => `Irrigation efficiency of ${n}, %, from its crops' irrigation systems`,
-		help: "Share of the water abstracted that reaches the crop: the unit's crops' irrigation systems combined, each weighted by its yearly water requirement. The hydrological unit abstracts crop requirement ÷ efficiency. Set each crop's system in the unit's crops, or a crop's default in its sheet; the systems' efficiencies are on Crops & demand."
+		help: "Share of the water abstracted that reaches the crop: the unit's crops' irrigation systems combined, each weighted by its yearly water requirement. The hydrological unit abstracts crop requirement ÷ efficiency. Set each crop's system in the unit's crops, or a crop's default in its sheet; the systems' efficiencies are on Crops & demand (Tables, Irrigation systems). A crop on no system uses the efficiency entered here."
 	},
 	{
 		key: 'returnFlowFraction',

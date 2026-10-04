@@ -10,6 +10,8 @@ describe('overlays', () => {
 		// The crop grids live only in the modal since Crops & demand became cards and bars; Transfers is still its tab's page.
 		expect(GRID_TAB['crop-factors']).toBeNull();
 		expect(GRID_TAB['planted-areas']).toBeNull();
+		expect(GRID_TAB.systems).toBeNull();
+		expect(isGridId('systems')).toBe(true);
 		expect(GRID_TAB.transfers).toBe('transfers');
 		// The Irrigation demand preview left the modal (issue #174): the Crops & demand page shows it in place.
 		expect(isGridId('demand')).toBe(false);

@@ -8,6 +8,7 @@
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import CropsTab from '$lib/components/crops/CropsTab.svelte';
+	import IrrigationSystemsPanel from '$lib/components/crops/IrrigationSystemsPanel.svelte';
 	import NetworkTab from '$lib/components/network/NetworkTab.svelte';
 	import type { RunMeta } from '$lib/api';
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
@@ -55,6 +56,8 @@
 			<NetworkTab {editor} {settings} {readonly} {projectId} {runs} only="table" />
 		{:else if grid === 'transfers'}
 			<TransfersTab {editor} {readonly} />
+		{:else if grid === 'systems'}
+			<IrrigationSystemsPanel {editor} {readonly} />
 		{:else}
 			<CropsTab {editor} {settings} {readonly} sections={[CROP_SECTION[grid]]} {apanDaily} />
 		{/if}

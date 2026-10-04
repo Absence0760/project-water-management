@@ -77,7 +77,8 @@
 
 	{@render controls?.()}
 	<!-- Always in the page, so a screen reader announces the text when it arrives. -->
-	<p class={notice ? 'alert alert-info slim' : 'visually-hidden'} role="status" tabindex="-1" bind:this={noticeEl} data-testid="{prefix}-notice">{notice ?? ''}</p>
+	<!-- Every notice is a saved model or settings change: Run model lives on Runs & results, so the notice links there. -->
+	<p class={notice ? 'alert alert-info slim' : 'visually-hidden'} role="status" tabindex="-1" bind:this={noticeEl} data-testid="{prefix}-notice">{#if notice}{notice} <a href="?tab=runs">Run the model</a> to see its effect.{/if}</p>
 	<div class="body" class:grid={bodyGrid} aria-busy={loading} data-ready={!loading && (loaded || error !== null) ? 'true' : undefined} data-testid="{prefix}-body">
 		{#if error}
 			<p class="err" role="alert">The {what} couldn’t be loaded ({error}). <button type="button" class="btn btn-sm" onclick={onretry}>Try again</button></p>

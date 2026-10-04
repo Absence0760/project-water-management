@@ -67,7 +67,7 @@
 	{/if}
 	<div class="field">
 		<span class="lbl"
-			><label for={id('cap')}>{label}{forWhom} <span class="u">({pumpUnit.label})</span></label>{#if !readonly}<FlowUnitSelect unit={pumpUnit} label="Unit of {label.toLowerCase()}{forWhom}" />{/if}{#if helpKey}<HelpTip key={helpKey} />{/if}</span
+			><label for={id('cap')}>{label}{forWhom}{' '}<span class="visually-hidden">({pumpUnit.label})</span></label><FlowUnitSelect unit={pumpUnit} label="Unit of {label.toLowerCase()}{forWhom}" />{#if helpKey}<HelpTip key={helpKey} />{/if}</span
 		>
 		<NumberInput
 			id={id('cap')}
@@ -89,7 +89,8 @@
 		/>
 		<span class="hint" id="{id('cap')}-h" data-testid={noteTestId}>
 			{#if pumpM3Day(pumps, rate) !== null}
-				{fmtNum(pumps, 0, true)} × {fmtNum(rate, 2, true)} m³/h × 24 h = {fmtNum(pumpM3Day(pumps, rate)! * pumpUnit.scale, pumpUnit.id === 'm3day' ? 0 : 3, true)} {pumpUnit.label}.
+				<!-- The sum is always in m³/day (m³/h × 24 h); the picked unit follows in brackets. -->
+				{fmtNum(pumps, 0, true)} × {fmtNum(rate, 2, true)} m³/h × 24 h = {fmtNum(pumpM3Day(pumps, rate)!, 0, true)} m³/day{#if pumpUnit.id !== 'm3day'}{' '}({fmtNum(pumpM3Day(pumps, rate)! * pumpUnit.scale, 3, true)} {pumpUnit.label}){/if}.
 			{:else}
 				{note}
 			{/if}

@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "UI review fixes: irrigation systems in the grid modal, efficiency output/edit branch, grouped systems line, run links on proposal notices, one transfer unit picker; measured 1696 KB vs 1694 KB after build:frontend"
+}
