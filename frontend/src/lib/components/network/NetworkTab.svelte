@@ -388,7 +388,8 @@
 		}
 		return spans;
 	});
-	// --- the Map layout: the picked node's card and the list of every node ---
+	// --- the Map layout: the list of every node, and the picked node's card below it ---
+	// (The card sits under the list so a pick, or the card coming and going, never moves the rows.)
 	const picked = $derived(nodes.find((n) => n.id === selectedId) ?? null);
 	// The picked node's row in All nodes stays in view inside its card: on a pick (from the drawing
 	// or a node= link too) and whenever the list's box changes size (playbook § 4).
@@ -865,7 +866,26 @@
 			<div class="map-body">{@render colourStatus()}{@render drawing(true)}</div>
 		</section>
 		<aside class="map-side" aria-label="Nodes">
-			<section class="panel side-box" aria-label="Selected node">
+			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
+				<!-- tabindex: where the focus lands after a node is removed from its sheet. -->
+				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All nodes</h3>
+				<ul class="node-list" aria-labelledby="all-nodes-h" bind:this={listEl} bind:clientHeight={listH}>
+					{#each nodes as n (n.id)}
+						{@const band = dotBand(n.id)}
+						<li class:on={n.id === selectedId}>
+							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => pick(n.id)}>
+								<span class="dot {n.kind}" data-band={band} aria-hidden="true"></span>
+								<span class="nm">{n.name || '(unnamed)'}</span>
+								<span class="meta muted">{n.downstreamNodeId === null ? 'outlet' : `→ ${labelOf(n.downstreamNodeId)}`}</span>
+							</button>
+							<!-- The node's form straight from its row (as the card's Edit); shown on the picked row and on
+							     hover or focus, always where there is no hover (a phone). -->
+							<button type="button" class="btn btn-sm row-edit" onclick={() => openEdit(n.id)}>{readonly ? 'Details' : 'Edit'}<span class="visually-hidden"> {n.name || '(unnamed)'}</span></button>
+						</li>
+					{/each}
+				</ul>
+			</section>
+			<section class="panel side-box card-box" aria-label="Selected node">
 				{#if picked}
 					<NodeCard
 						node={picked}
@@ -885,22 +905,6 @@
 				{:else}
 					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
 				{/if}
-			</section>
-			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
-				<!-- tabindex: where the focus lands after a node is removed from its sheet. -->
-				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All nodes</h3>
-				<ul class="node-list" aria-labelledby="all-nodes-h" bind:this={listEl} bind:clientHeight={listH}>
-					{#each nodes as n (n.id)}
-						{@const band = dotBand(n.id)}
-						<li>
-							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => pick(n.id)}>
-								<span class="dot {n.kind}" data-band={band} aria-hidden="true"></span>
-								<span class="nm">{n.name || '(unnamed)'}</span>
-								<span class="meta muted">{n.downstreamNodeId === null ? 'outlet' : `→ ${labelOf(n.downstreamNodeId)}`}</span>
-							</button>
-						</li>
-					{/each}
-				</ul>
 			</section>
 		</aside>
 	</div>
@@ -1422,7 +1426,34 @@
 		max-height: 24rem;
 		overflow-y: auto;
 	}
+	.node-list li {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		border-radius: var(--radius-sm);
+	}
+	.node-list li:hover {
+		background: var(--surface-2);
+	}
+	.node-list li.on {
+		background: var(--accent-soft);
+	}
+	.row-edit {
+		flex: none;
+		margin-right: 0.25rem;
+		visibility: hidden;
+	}
+	.node-list li:is(.on, :hover, :focus-within) .row-edit {
+		visibility: visible;
+	}
+	@media (hover: none), (max-width: 640px) {
+		.row-edit {
+			visibility: visible;
+		}
+	}
 	.node-row {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -1438,11 +1469,7 @@
 		text-align: left;
 		cursor: pointer;
 	}
-	.node-row:hover {
-		background: var(--surface-2);
-	}
 	.node-row[aria-pressed='true'] {
-		background: var(--accent-soft);
 		font-weight: 600;
 	}
 	/* The name takes what the row has left and wraps between words; what it
@@ -1503,7 +1530,8 @@
 		.map-layout {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.node-row {
+		.node-row,
+		.row-edit {
 			min-height: 44px;
 		}
 	}
@@ -1534,6 +1562,15 @@
 			min-height: 0;
 			display: flex;
 			flex-direction: column;
+		}
+		/* The list takes what the card under it leaves (at least a few rows); a tall card scrolls in its own box. */
+		.nodes-box {
+			min-height: 9rem;
+		}
+		.card-box {
+			flex: none;
+			max-height: 60%;
+			overflow-y: auto;
 		}
 		.nodes-box .node-list {
 			flex: 1;

@@ -112,6 +112,48 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page).toHaveURL(/[?&]edit=/);
 });
 
+test('the card opens under the list, so a pick never moves the rows; each row has its own Edit', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network list order');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await waitForMapFit(page);
+	const rowY = async (name: string) => (await nodeList(page).getByRole('button', { name: new RegExp(`^${name}`) }).boundingBox())!.y;
+	// Nothing picked yet: the hint sits where the card will, below the list.
+	const before = await rowY('Lower farm');
+	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
+	await expect(card(page)).toBeVisible();
+	expect(await rowY('Lower farm')).toBe(before);
+	await nodeList(page).getByRole('button', { name: /^Outflow gauge/ }).click();
+	await expect(card(page)).toContainText('Selected · outflow gauge');
+	expect(await rowY('Lower farm')).toBe(before);
+	const listBox = (await nodeList(page).boundingBox())!;
+	expect((await card(page).boundingBox())!.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
+
+	// The picked row shows its Edit; another row's shows on hover or focus. Each opens that node's form.
+	await expect(nodeList(page).getByRole('button', { name: 'Edit Outflow gauge' })).toBeVisible();
+	await expect(nodeList(page).getByRole('button', { name: 'Edit Lower farm' })).toBeHidden();
+	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).focus();
+	await page.keyboard.press('Tab');
+	const rowEdit = nodeList(page).getByRole('button', { name: 'Edit Lower farm' });
+	await expect(rowEdit).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(new RegExp(`[?&]edit=${project.model.nodes[2]!.id}`));
+	await expect(page.getByRole('dialog', { name: 'Edit Lower farm' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expectNoViolations(page);
+
+	// A viewer's row reads Details, as the card does.
+	const viewer = await signIn('Network list viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.goto(`/projects/${project.id}?tab=network`);
+	const vList = v.getByRole('list', { name: 'All nodes' });
+	await vList.getByRole('button', { name: /^Upper farm/ }).click();
+	await vList.getByRole('button', { name: 'Details Upper farm' }).click();
+	await expect(v.getByRole('dialog', { name: 'Upper farm: details' })).toBeVisible();
+});
+
 test('the map key names only what the drawing has, in groups, drawn like the map', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map key');
