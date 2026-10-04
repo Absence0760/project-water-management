@@ -610,9 +610,10 @@ def farm_efficiency(node: dict, rows: list[tuple[dict, float, dict]], apan: list
         return e if isinstance(e, (int, float)) and 0 < e <= 1 else None
 
     def own(crop, planting):
-        sid = planting.get("irrigationSystemId") or crop.get("irrigationSystemId")
-        if sid is not None and valid(systems.get(sid)) is not None:
-            return systems[sid]
+        # The planting's system, then the crop's: one the table lacks is skipped for the next.
+        for sid in (planting.get("irrigationSystemId"), crop.get("irrigationSystemId")):
+            if sid is not None and valid(systems.get(sid)) is not None:
+                return systems[sid]
         return valid(crop.get("irrigationEfficiency"))
 
     if not any(own(c, p) is not None for c, a, p in rows if a > 0):
