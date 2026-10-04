@@ -280,6 +280,17 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   `data-fit` through `waitForMapFit` in `support/diagrams.ts`). Never use
   `networkidle`, never `waitForTimeout`, and never inflate a timeout to get past
   a slow step. Fix whatever is slow.
+- **Don't branch on a one-off look at the page.** `isVisible()`,
+  `isChecked()` and the other `is…()` calls answer once, never retried, so
+  "open it unless it's open" races a page still in motion: a lazily loaded
+  sheet shows a moment after its URL param, and `uploadThroughSheet` clicked
+  the header's link again just as the Upload sheet opened over it (the click
+  timed out on the dialog intercepting it). Decide from a signal the app
+  gives (the sheet is open while the URL names it: `openUploadSheet` in
+  `support/map.ts`), or wait with a web-first `expect`. Where the state truly
+  can't be changing, say why in a `// settled:` comment on the line or the
+  one above; `support/snapshotChecks.test.ts` (`pnpm test`) fails on a use
+  without one.
 - **Measure layout (page height, box positions) only after the page's
   readiness attribute** (the Summary's `data-ready`, a section's
   `data-notes-ready`, a chart's `data-ready`): a region that is visible while

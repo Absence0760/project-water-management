@@ -114,6 +114,7 @@ test('the flagged-days rule: its checkbox sits beside its words, and off and on 
 	expect(box.width).toBeLessThanOrEqual(24);
 	expect(wordsX - (box.x + box.width)).toBeLessThan(12);
 
+	// settled: the rules card is drawn and measured above, and nothing changes the tick since.
 	if (!(await leaveOut.isChecked())) await leaveOut.check();
 	const share = rules.getByLabel(/^When more than this share of its observed days are flagged/);
 	await share.fill('35');

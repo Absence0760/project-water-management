@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { createProject, node, putModel } from './api.ts';
 import { withSetupLock } from './db.ts';
 import { API_URL, OWNER_E2E_URL } from './env.ts';
@@ -148,17 +148,30 @@ export async function openMap(page: Page, projectId: string, query = ''): Promis
 export const geoFile = (name: string, text: string) => ({ name, mimeType: 'application/geo+json', buffer: Buffer.from(text) });
 
 /**
+ * The Upload GeoJSON sheet, open. The URL decides, not a look at the page: the sheet is open while the URL
+ * names it (`upload=1`), but it is a lazily loaded component, so it shows a moment after the URL changes.
+ * Checking `isVisible()` in that moment and clicking the header's link again hit the sheet that had just
+ * opened over it (a modal dialog intercepts the click), and the click timed out.
+ */
+export async function openUploadSheet(page: Page): Promise<Locator> {
+	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
+	if (new URL(page.url()).searchParams.get('upload') !== '1') {
+		await page.getByTestId('section-header').getByRole('link', { name: 'Upload GeoJSON' }).click();
+		await expect(page).toHaveURL(/[?&]upload=1/);
+	}
+	await expect(sheet).toBeVisible();
+	return sheet;
+}
+
+/**
  * Upload a file through the header's Upload GeoJSON sheet (issue #326 D2): choose it, Review, optionally
  * set every row's kind, then Import. `expectImported` waits for the notice (the sheet closes); without it
  * the review stays open (a refused file lists its problems and offers no import).
  */
 export async function uploadThroughSheet(page: Page, kind: string | null, name: string, text: string, expectImported = true): Promise<void> {
-	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
-	if (!(await sheet.isVisible())) {
-		await page.getByTestId('section-header').getByRole('link', { name: 'Upload GeoJSON' }).click();
-		await expect(sheet).toBeVisible();
-	}
+	const sheet = await openUploadSheet(page);
 	const another = sheet.getByRole('button', { name: 'Choose another file' });
+	// settled: the sheet is open and the caller's last step (a refused review, or none) has been awaited.
 	if (await another.isVisible()) await another.click();
 	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
 	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
@@ -168,6 +181,8 @@ export async function uploadThroughSheet(page: Page, kind: string | null, name: 
 		await sheet.getByRole('button', { name: /^Import \d+ features?$/ }).click();
 		await expect(page.getByTestId('map-notice')).toContainText(`from ${name}.`);
 		await expect(sheet).toBeHidden();
+		// Closing drops `upload=1` from the URL a moment later: wait for it, so the next call sees the sheet closed.
+		await expect(page).not.toHaveURL(/[?&]upload=1/);
 	}
 }
 

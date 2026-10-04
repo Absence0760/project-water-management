@@ -12,7 +12,7 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, box, geoFile, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, box, geoFile, openMap, openUploadSheet, showTab, uploadThroughSheet } from '../support/map.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 const poly = (name: string, ring: [number, number][]) => ({ type: 'Feature', properties: { name }, geometry: { type: 'Polygon', coordinates: [ring] } });
@@ -33,11 +33,9 @@ const halfRefused = JSON.stringify({
 	features: [poly('Fine parcel', box(21.32, -33.66, 0.01)), { type: 'Feature', properties: { name: 'Projected' }, geometry: { type: 'Point', coordinates: [-45_000, 3_700_000] } }]
 });
 
-const sheetOf = (page: Page) => page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
 
 async function review(page: Page, name: string, text: string) {
-	const sheet = sheetOf(page);
-	if (!(await sheet.isVisible())) await page.getByTestId('section-header').getByRole('link', { name: 'Upload GeoJSON' }).click();
+	const sheet = await openUploadSheet(page);
 	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
 	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
 	await expect(sheet.getByTestId('map-review-table')).toBeVisible();
