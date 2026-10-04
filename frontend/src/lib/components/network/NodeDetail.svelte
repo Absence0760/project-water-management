@@ -4,6 +4,7 @@
 	// through a unit (nodeSections.ts), each a fieldset the sheet's jump row
 	// can scroll to.
 	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
@@ -227,7 +228,9 @@
 					{#each fields as f (f.key)}
 						{@const unused = fieldUnused(f, node, method)}
 						<div class="field">
-							<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
+							<span class="lbl"
+								><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label>{#if f.flowUnit && !readonly}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{/if}<HelpTip key={`node.${f.key}`} /></span
+							>
 							<NumberInput
 								id={id(f.key)}
 								min={0}

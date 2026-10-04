@@ -192,6 +192,27 @@ maps `null` to 0 in its `onchange`. A revision line saved before the change
 ("750,000 m³") still matches today's diff for the History attribution
 (`backend/src/history/attribute.ts`).
 
+### Flow units
+
+A flow rate an editor types has a small unit select beside its label (or, in
+the node table, in place of the column heading's unit): **m³/s**, **l/s** or
+**m³/day** (`network/FlowUnitSelect.svelte`, `network/flowUnit.svelte.ts`).
+One choice per kind of rate, each starting at the unit it always showed:
+**River to dam** (the node table column, the unit form and River to dam by
+month; m³/s), **pumps** (a unit's river pump, the crops' own, an other water
+user's and a demand object's river abstraction, `PumpCapacityField`, the
+borehole capacities and Combined borehole capacity; m³/day) and a
+**transfer's max rate** (the Max rate by month title on Transfers; m³/s).
+Every field of that kind follows the pick, labels and words included ("River
+to dam (l/s)", "2 × 9 m³/h × 24 h = 5 l/s.", "Nov–Feb, up to 10 l/s"). It is
+display only: the model keeps each value in its stored unit (River to dam
+and pumps m³/day, a transfer m³/s), so a pick never changes a run, the
+History or another viewer's screen. The pick is kept in this browser
+(`localStorage` `wm.unit.riverToDam`, `wm.unit.pump`, `wm.unit.transfer`,
+read and written in `try`, so blocked storage starts at the default); a
+read-only viewer sees the unit without the select. e2e:
+`flow-units.spec.ts`.
+
 A chart's value axis writes its ticks short (`charts/series.ts`
 `fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
 decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float

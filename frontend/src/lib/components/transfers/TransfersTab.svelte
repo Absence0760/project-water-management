@@ -22,6 +22,8 @@
 	// Every field's accessible name starts with its visible label, then the
 	// rule ("From, transfer 3"), so speech input can say what it sees (WCAG
 	// 2.5.3).
+	import FlowUnitSelect from '$lib/components/network/FlowUnitSelect.svelte';
+	import { transferUnit } from '$lib/components/network/flowUnit.svelte';
 	import { onDestroy, tick } from 'svelte';
 	import { page as appPage } from '$app/state';
 	import { hashId, holdAnchor } from '$lib/help/anchor';
@@ -220,7 +222,7 @@
 						<div class="rule-body">
 							<div class="grp g-rates">
 								<MonthRates rule={t} {label} disabled={readonly}>
-									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">m³/s</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
+									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> {#if readonly}<span class="u">{transferUnit.label}</span>{:else}<FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" />{/if} <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
 								</MonthRates>
 							</div>
 

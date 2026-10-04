@@ -13,6 +13,7 @@
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode } from './supplyColour';
 	import { damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
+	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
@@ -649,7 +650,7 @@
 								     unit and its ⓘ on one bottom line, the same in every column. -->
 								<th scope="col" class="num fh">
 									<span class="fh-l">{f.label.replace(/-/g, '\u2011')}</span>
-									<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
+									<span class="fh-u">{#if f.flowUnit}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{:else}<span class="u">{f.unit}</span>{/if}<HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
 								</th>
 							{/each}
 							<!-- Computed, not a field, so it isn't in TABLE_FIELDS: its ⓘ is the flow-share glossary entry. -->

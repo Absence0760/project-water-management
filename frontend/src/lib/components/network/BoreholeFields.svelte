@@ -7,6 +7,8 @@
 	import { tick } from 'svelte';
 	import { BOREHOLE_MODES, ga538VolumeM3, type Borehole, type BoreholeMode, type BoreholeTarget, type NetworkNode } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import FlowUnitSelect from './FlowUnitSelect.svelte';
+	import { pumpUnit } from './flowUnit.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -76,8 +78,10 @@
 							<input id="bh-name-{b.id}" maxlength="200" readonly={readonly} bind:value={b.name} />
 						</div>
 						<div class="field">
-							<span class="lbl"><label for="bh-cap-{b.id}">Capacity <span class="u">(m³/day)</span></label><HelpTip key="borehole" label="About a borehole’s capacity and annual cap" /></span>
-							<NumberInput id="bh-cap-{b.id}" min={0} grouped disabled={readonly} value={b.capacityM3Day} onchange={(v) => (b.capacityM3Day = v ?? 0)} />
+							<span class="lbl"
+								><label for="bh-cap-{b.id}">Capacity <span class="u">({pumpUnit.label})</span></label>{#if !readonly}<FlowUnitSelect unit={pumpUnit} label="Unit of borehole capacities" />{/if}<HelpTip key="borehole" label="About a borehole’s capacity and annual cap" /></span
+							>
+							<NumberInput id="bh-cap-{b.id}" min={0} scale={pumpUnit.scale} grouped disabled={readonly} value={b.capacityM3Day} onchange={(v) => (b.capacityM3Day = v ?? 0)} />
 						</div>
 						<div class="field">
 							<label for="bh-annual-{b.id}">Annual cap <span class="u">(m³/a)</span></label>

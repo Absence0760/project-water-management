@@ -13,6 +13,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
+	import { transferUnit } from '$lib/components/network/flowUnit.svelte';
 
 	let {
 		rule,
@@ -23,7 +24,10 @@
 
 	const rates = $derived(transferRatesM3s(rule));
 	const top = $derived(Math.max(0, ...rates));
-	const summary = $derived(rule.months.length ? `${describeMonths(rule.months)}, up to ${fmtNum(top, 4, true)} m³/s` : 'Off every month');
+	// Shown in the unit picked on the group's title (m³/s, l/s or m³/day); the rule keeps m³/s.
+	const k = $derived(transferUnit.scaleFromM3s);
+	const dp = $derived(transferUnit.id === 'm3s' ? 4 : transferUnit.id === 'ls' ? 2 : 0);
+	const summary = $derived(rule.months.length ? `${describeMonths(rule.months)}, up to ${fmtNum(top * k, dp, true)} ${transferUnit.label}` : 'Off every month');
 
 	function set(k: number, v: number | null) {
 		const next = transferRatesM3s(rule);
@@ -33,31 +37,32 @@
 </script>
 
 <fieldset class="rates" data-testid="month-rates">
-	<legend class="visually-hidden">Max rate of {label} by month, m³/s (blank = off)</legend>
+	<legend class="visually-hidden">Max rate of {label} by month, {transferUnit.label} (blank = off)</legend>
 	<div class="head">
 		{@render title?.()}
 		<div class="sum">
 			<span class="summary muted">{summary}</span>
 			{#if !disabled && top > 0 && rates.some((r) => r !== top)}
 				<button type="button" class="btn btn-sm btn-ghost all" onclick={() => Object.assign(rule, withMonthlyRates(new Array(12).fill(top)))}>
-					{fmtNum(top, 4, true)} in every month
+					{fmtNum(top * k, dp, true)} in every month
 				</button>
 			{/if}
 		</div>
 	</div>
 	<div class="cells">
-		{#each WATER_YEAR_MONTHS as m, k (m)}
-			<div class="cell" class:on={rates[k]! > 0}>
+		{#each WATER_YEAR_MONTHS as m, i (m)}
+			<div class="cell" class:on={rates[i]! > 0}>
 				<span class="m" aria-hidden="true">{m}</span>
 				<NumberInput
-					label="Max rate of {label} in {m}, m³/s"
+					label="Max rate of {label} in {m}, {transferUnit.label}"
 					min={0}
-					step={0.001}
+					step={transferUnit.id === 'm3s' ? 0.001 : 1}
+					scale={k}
 					nullable
 					placeholder="off"
 					{disabled}
-					value={rates[k]! > 0 ? rates[k]! : null}
-					onchange={(v) => set(k, v)}
+					value={rates[i]! > 0 ? rates[i]! : null}
+					onchange={(v) => set(i, v)}
 				/>
 			</div>
 		{/each}

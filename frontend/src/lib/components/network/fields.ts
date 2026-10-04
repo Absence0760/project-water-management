@@ -1,5 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
+import { pumpUnit, riverToDamUnit, type FlowUnit } from './flowUnit.svelte';
 import { areaMismatches, estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type FlowShareMethod, type NetworkNode, type NodeKind } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
@@ -31,7 +32,7 @@ export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | '×' | 'days' | 'ha';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | 'l/s' | '×' | 'days' | 'ha';
 	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
 	scale?: number;
 	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
@@ -45,6 +46,8 @@ export interface NodeField {
 	nullable?: boolean;
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
+	/** A flow rate whose unit is picked beside it (./flowUnit.svelte.ts): `unit` and `scale` follow it. */
+	flowUnit?: FlowUnit;
 	/** Shown, not edited: worked out from elsewhere (the efficiency from the unit's crops' irrigation systems, engine ≥ 1.72.0); never pasted. */
 	derived?: boolean;
 }
@@ -186,12 +189,18 @@ export const NODE_FIELDS: NodeField[] = [
 	{
 		key: 'divertCapacityM3Day',
 		label: 'River to dam',
-		unit: 'm³/s',
-		scale: M3S_PER_M3DAY,
+		// The unit picked in the heading or the form (m³/s, l/s or m³/day; stored m³/day either way).
+		flowUnit: riverToDamUnit,
+		get unit() {
+			return riverToDamUnit.label;
+		},
+		get scale() {
+			return riverToDamUnit.scale;
+		},
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `River to dam at ${n}, m³/s`,
-		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in m³/s (0.2 m³/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
+		aria: (n) => `River to dam at ${n}, ${riverToDamUnit.label}`,
+		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in the unit picked beside it (0.2 m³/s = 200 l/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
 	},
 	{
 		key: 'irrigationEfficiency',
@@ -227,10 +236,17 @@ export const NODE_FIELDS: NodeField[] = [
 		detailOnly: true,
 		notGauge: true,
 		label: 'Combined borehole capacity',
-		unit: 'm³/day',
+		// The pumps' unit, picked beside it (m³/day until changed; stored m³/day either way).
+		flowUnit: pumpUnit,
+		get unit() {
+			return pumpUnit.label;
+		},
+		get scale() {
+			return pumpUnit.scale;
+		},
 		group: 'groundwater',
 		nullable: true,
-		aria: (n) => `Combined borehole capacity of ${n}, m³/day`,
+		aria: (n) => `Combined borehole capacity of ${n}, ${pumpUnit.label}`,
 		help: 'Most that all the boreholes together can pump in a day. Empty (or 0) means none here. Groundwater counts as supply; the rule below says when it is used.'
 	},
 	{
