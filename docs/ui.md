@@ -3970,7 +3970,31 @@ user's demand could only be read one node form at a time.
 - The months are before schedules, daily A-pan, rain, demand factors and
   restrictions, which a run applies day by day; the note under the table
   says so.
+- **Registered** (Mm³/a, after Annual; `network/demandsRegistered.ts`,
+  [allocations.md](./allocations.md)): an allocation is matched to a
+  hydrological unit or another water user, never to one demand on it, so
+  each node's registered volume shows **once**, on its first row and
+  spanning its rows, beside the sum of its modelled demands: every take
+  (s21a) in force today, surface and groundwater summed (a storage-only
+  s21b row and lapsed or future ones are left out). Under the volume, in
+  words, the comparison's status on that sum with the project's band
+  (Settings › Registered volumes, ±10 % unless set; engine
+  `allocationStatus`): *Above registered*, *Within band*, *Below
+  registered*, *No registered volume* (the first and last in bold red),
+  with the node's demand total when it has several rows ("Above
+  registered: 0.040 for the unit"). The footer sums the volumes, and a note
+  under the table says what the column is, how many are above, and that a
+  registered volume isn't an entitlement and a run's use is what the
+  Allocations page compares. The grid reads the volumes as the Allocations
+  page does (`GET /projects/:id/allocations`), so the
+  [who sees what](./allocations.md#who-sees-what) rules hold: a viewer
+  gets the column only while the owners let viewers see each unit's
+  volumes, otherwise a note ("aren't shown to viewers"); a project with no
+  registered volumes says so; a refused read shows nothing.
 - Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
+  `network/demandsRegistered.test.ts` (in force, the per-node sums, the
+  band, the spans), `e2e/tests/demands-grid-registered.spec.ts` (none, the
+  column and its flags, a viewer without per-unit volumes),
   `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
   reloaded, Edit to the node form, a phone, axe).
 
