@@ -6,7 +6,7 @@ import type { Locator, Page } from '@playwright/test';
 import { createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { closeModal } from '../support/network.ts';
+import { closeModal, openNodeForm } from '../support/network.ts';
 
 const PHONE = { width: 390, height: 844 };
 
@@ -143,4 +143,23 @@ test('on a desktop the crop table keeps its column headers and a transfer card i
 	await expect(rule.getByText('Priority, lower first', { exact: true })).toBeVisible();
 	await expect(rule.getByText('Takes from', { exact: true })).toBeVisible();
 	await expect(rule.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
+});
+
+test.describe('phone node form', () => {
+	test.use({ viewport: PHONE });
+
+	test('the form’s section links keep their width in their scrolling row, none over the next', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Phone section links');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}?tab=network`);
+		await openNodeForm(page, 'Upper farm');
+		const links = page.getByTestId('node-sheet-jump').getByRole('button');
+		expect(await links.count()).toBeGreaterThan(2);
+		const boxes = await links.evaluateAll((els) => els.map((el) => ({ left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right, clipped: el.scrollWidth > el.clientWidth + 0.5 })));
+		for (const [i, b] of boxes.entries()) {
+			expect(b.clipped, `link ${i + 1}'s text fits`).toBe(false);
+			if (i) expect(b.left, `link ${i + 1} starts after link ${i}`).toBeGreaterThanOrEqual(boxes[i - 1]!.right);
+		}
+	});
 });

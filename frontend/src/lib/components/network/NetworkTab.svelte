@@ -1276,6 +1276,9 @@
 		}
 		.jump-link {
 			min-height: 44px;
+			/* One scrolling row: each link keeps its width rather than shrinking into the next ("CatchFlowDam"). */
+			flex: none;
+			white-space: nowrap;
 		}
 	}
 	/* A control scrolled to by Tab stops below the sticky picker too, not
