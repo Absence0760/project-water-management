@@ -3970,7 +3970,23 @@ user's demand could only be read one node form at a time.
 - The months are before schedules, daily A-pan, rain, demand factors and
   restrictions, which a run applies day by day; the note under the table
   says so.
+- **Run columns** (`network/demandsRun.ts`, loaded by
+  `demandsRunLoad.svelte.ts`): with a run, three columns after **Edit**,
+  set off by a rule: **Supplied** and **Short** (the mean m³/day over the
+  run) and **Short %** (short ÷ the run's demand), short-falls in the danger
+  colour, and the Catchment row's sums. The run is the latest (`runs[0]`, as
+  the Network's supply colouring takes it), its summary from the Runs cache
+  or one fetch. A demand object reads its own `DemandObjectSummary`, another
+  water user its `UserSummary`, and a unit's crops the unit's figures less
+  its objects' (the summary's rule: the irrigation part is the unit's demand
+  less its objects'). A row the run doesn't have (added since, or an object
+  that was off) reads "–". A caption above the table names the run ("…
+  over run “Dry year”, ran …"), and with unsaved changes says they aren't in
+  it; a failed load says so with **Retry**. No run: no columns, no caption.
 - Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
+  `network/demandsRun.test.ts` (each kind's run figure, the crops less the
+  objects, rows the run lacks, the total), `e2e/tests/demands-grid-run.spec.ts`
+  (the columns and caption, "–" for a demand added since, unsaved edits, no run),
   `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
   reloaded, Edit to the node form, a phone, axe).
 
