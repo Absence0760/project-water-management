@@ -493,7 +493,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 	const catEwr = get.get('null|ewr')!;
 	const catShort = get.get('null|ewr_shortfall')!;
 	for (let t = 0; t < out.days; t++) {
-		if (sim[t] !== outletU[t]) return `day ${t}: simulated outflow ≠ outlet node outflow`;
+		if (sim[t] !== outletU[t]) return `day ${t}: simulated outflow ≠ the outlet's outflow`;
 		totOut += sim[t]!;
 		let Jsum = 0;
 		for (const a of farmJ) Jsum += a[t]!;
@@ -1202,8 +1202,8 @@ function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, f
 	const close = (a: number, b: number) => Math.abs(a - b) <= 1e-12 * Math.max(Math.abs(a), Math.abs(b)) + 1e-12;
 	const us = out.summary.users;
 	const rows = out.summary.curtailment?.otherUsers;
-	if (!users.length) return us || rows ? 'user summaries without user nodes' : null;
-	if (!us || !rows || us.length !== users.length || rows.length !== users.length) return 'user summaries missing for the user nodes';
+	if (!users.length) return us || rows ? 'user summaries without other water users' : null;
+	if (!us || !rows || us.length !== users.length || rows.length !== users.length) return 'user summaries missing for the other water users';
 	const n = to - from + 1;
 	for (const u of users) {
 		const s = us.find((x) => x.nodeId === u.id);
@@ -1370,7 +1370,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const DEP = g('baseflow_depletion');
 		if (bore && (!GW || !DEP)) return `${n.id}: groundwater columns missing for a farm with boreholes`;
 		if (!!GD !== !!bore?.units.some((u) => u.toDam)) return `${n.id}: groundwater_to_dam ${GD ? 'without' : 'missing for'} a borehole that pumps into the dam`;
-		if (ZS && upZS.some((a) => !a)) return `${n.id}: an upstream node has no senior_requirement series`;
+		if (ZS && upZS.some((a) => !a)) return `${n.id}: an upstream hydrological unit has no senior_requirement series`;
 		// The dam's area–storage relation, as runModel resolves it (audit N2).
 		const { areaFull, b, seep, seepReturn: seepRet } = damWorkings(n);
 		// Survey curve, release and seepage destination (WP-3.5).
@@ -1939,11 +1939,11 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
 				sum += u.abstractionM3;
 				byBorehole += unit.depletionFrac * u.abstractionM3;
 			}
-			if (Math.abs(sum - r.abstractionM3) > tol(r.abstractionM3)) return `${where}: the boreholes' ${sum} ≠ the node's ${r.abstractionM3}`;
+			if (Math.abs(sum - r.abstractionM3) > tol(r.abstractionM3)) return `${where}: the boreholes' ${sum} ≠ the unit's ${r.abstractionM3}`;
 		}
 		if (Math.abs(byBorehole - infeed) > 1e-9 * Math.max(1, infeed)) return `${n.id}: Σ d × each borehole's volume ${byBorehole} ≠ the depletion infeed ${infeed}`;
 	}
-	for (const r of annual) if (!input.model.nodes.some((n) => n.id === r.nodeId)) return `groundwater annual use for unknown node ${r.nodeId}`;
+	for (const r of annual) if (!input.model.nodes.some((n) => n.id === r.nodeId)) return `groundwater annual use for unknown hydrological unit ${r.nodeId}`;
 	return null;
 }
 
@@ -3031,7 +3031,7 @@ export function checkSupplyAssurance(input: ModelInput, out: ModelOutput): strin
 		const node = demandIds.find((n) => n.id === r.nodeId);
 		if (!node || seen.has(r.nodeId)) return `${w}: not a farm or water user of the model, or listed twice`;
 		seen.add(r.nodeId);
-		if (r.kind !== node.kind) return `${w}: kind ${r.kind}, the node is a ${node.kind}`;
+		if (r.kind !== node.kind) return `${w}: kind ${r.kind}, the hydrological unit is a ${node.kind}`;
 		const { D, G } = series.get(r.nodeId)!;
 		const k = assuranceTally(D, G, col, row, from, to, Math.max(rows, 0));
 		const { dm, gm, abs, days, met, mD, mG, mAbs, mDays, mMet } = k;
@@ -3118,7 +3118,7 @@ export function checkSupplyAssurance(input: ModelInput, out: ModelOutput): strin
 			}
 		}
 	}
-	if (st.nodes.length !== demandIds.length) return `assurance stress grid: ${st.nodes.length} node grids, the model has ${demandIds.length} farms and water users`;
+	if (st.nodes.length !== demandIds.length) return `assurance stress grid: ${st.nodes.length} unit grids, the model has ${demandIds.length} farms and water users`;
 	for (const g of st.nodes) {
 		const p = g.nodeId === null ? undefined : perNode.get(g.nodeId);
 		if (!p) return `assurance stress grid for ${g.nodeId}, which is not a farm or water user of the model`;

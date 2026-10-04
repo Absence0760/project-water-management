@@ -156,7 +156,7 @@ describe('a flow record’s site (084_gauge_records)', () => {
 		expect(res.status).toBe(201);
 		const summary = (await u.call('GET', `/projects/${q.id}/runs/${res.body.run.id}`)).body.run.summary;
 		expect(summary.plausibility.gauges).toBeUndefined();
-		expect(summary.warnings).toContainEqual(expect.stringMatching(/record is attached to a node that is no longer in the model/));
+		expect(summary.warnings).toContainEqual(expect.stringMatching(/record is attached to a hydrological unit that is no longer in the model/));
 		// And it can be moved back to the outlet.
 		expect((await site(u, q.id, q.gaugeRecord, null)).body.siteNodeId).toBeNull();
 	});

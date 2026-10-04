@@ -127,20 +127,20 @@ describe('combineScenarios: conflicts are refused, never merged', () => {
 	it('the same field of one node', () => {
 		const [c, ...rest] = conflictOf(raiseA, [{ op: 'node.set', nodeId: 'A', field: 'damCapacityM3', value: 250_000 }]);
 		expect(rest).toEqual([]);
-		expect(c).toMatchObject({ reason: 'same_target', target: 'node "Farm A": damCapacityM3', a: { scenarioId: 'a', opIndex: 0 }, b: { scenarioId: 'b', opIndex: 0 } });
-		expect(c!.message).toBe('"App A" op 1 (node.set) and "App B" op 1 (node.set) both change node "Farm A": damCapacityM3');
+		expect(c).toMatchObject({ reason: 'same_target', target: 'hydrological unit "Farm A": damCapacityM3', a: { scenarioId: 'a', opIndex: 0 }, b: { scenarioId: 'b', opIndex: 0 } });
+		expect(c!.message).toBe('"App A" op 1 (node.set) and "App B" op 1 (node.set) both change hydrological unit "Farm A": damCapacityM3');
 	});
 
 	it('a node removed that another scenario adds a farm below', () => {
 		const add: ScenarioOp = { op: 'node.add', node: node('N', { name: 'New farm', downstreamNodeId: 'B' }) };
 		const [c] = conflictOf([{ op: 'node.remove', nodeId: 'B' }], [add]);
-		expect(c).toMatchObject({ reason: 'removed_in_use', target: 'node "Farm B"' });
-		expect(c!.message).toBe('"App A" op 1 (node.remove) removes node "Farm B", which "App B" op 1 (node.add) changes or uses');
+		expect(c).toMatchObject({ reason: 'removed_in_use', target: 'hydrological unit "Farm B"' });
+		expect(c!.message).toBe('"App A" op 1 (node.remove) removes hydrological unit "Farm B", which "App B" op 1 (node.add) changes or uses');
 	});
 
 	it('a node removed whose upstream node another scenario moves (the removal re-links it)', () => {
 		const [c] = conflictOf([{ op: 'node.remove', nodeId: 'A' }], [{ op: 'node.move', nodeId: 'C', downstreamNodeId: 'B' }]);
-		expect(c).toMatchObject({ reason: 'same_target', target: 'node "Farm C": downstreamNodeId' });
+		expect(c).toMatchObject({ reason: 'same_target', target: 'hydrological unit "Farm C": downstreamNodeId' });
 	});
 
 	it('a crop removed that another scenario plants', () => {
@@ -161,7 +161,7 @@ describe('combineScenarios: conflicts are refused, never merged', () => {
 
 	it("a transfer changed whose end another scenario removes", () => {
 		const cs = conflictOf([{ op: 'transfer.set', transferId: 't1', field: 'maxRateM3s', value: 0.1 }], [{ op: 'node.remove', nodeId: 'C' }]);
-		expect(cs.map((c) => [c.reason, c.target, c.a.scenarioId])).toContainEqual(['removed_in_use', 'node "Farm C"', 'b']);
+		expect(cs.map((c) => [c.reason, c.target, c.a.scenarioId])).toContainEqual(['removed_in_use', 'hydrological unit "Farm C"', 'b']);
 	});
 
 	it('the same settings path, the same Reserve table, a global and a named demand cut', () => {

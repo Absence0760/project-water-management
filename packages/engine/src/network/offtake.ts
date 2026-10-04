@@ -180,7 +180,7 @@ export function planOfftakes(
 		const from = index.get(tr.fromNodeId);
 		const to = index.get(tr.toNodeId);
 		if (from === undefined || to === undefined) {
-			warnings.push(`river off-take ${tr.id} references a node that does not exist; skipped`);
+			warnings.push(`river off-take ${tr.id} references a hydrological unit that does not exist; skipped`);
 			continue;
 		}
 		const a = nodes[from]!;

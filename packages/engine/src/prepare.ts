@@ -583,7 +583,7 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	s.calibrationFlowKind ??= null;
 	// The calibration site (engine ≥ 1.41.0): a node id, or null for the outlet. Whether it is a gauge with a record is calibrate()'s to say.
 	if (s.calibrationSiteNodeId != null && (typeof s.calibrationSiteNodeId !== 'string' || !s.calibrationSiteNodeId)) {
-		warnings.push(`calibration site ${JSON.stringify(s.calibrationSiteNodeId)} is not a node id; calibrating at the outlet`);
+		warnings.push(`calibration site ${JSON.stringify(s.calibrationSiteNodeId)} is not a hydrological unit id; calibrating at the outlet`);
 		s.calibrationSiteNodeId = null;
 	}
 	s.calibrationSiteNodeId ??= null;

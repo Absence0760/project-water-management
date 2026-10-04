@@ -822,7 +822,7 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   in one order and not the other, combine fuzz seed 35). Conservative by design: what can't be told apart is
   a conflict the assessor sees. One conflict per pair of scenarios and
   target, with a readable message naming both ops (`"App A" op 1 (node.set)
-  and "App B" op 1 (node.set) both change node "Upper farm":
+  and "App B" op 1 (node.set) both change hydrological unit "Upper farm":
   damCapacityM3`). Ops within one scenario never conflict: they apply in
   their own order, as alone.
 - **Then in order.** Without conflicts each scenario's ops apply to the

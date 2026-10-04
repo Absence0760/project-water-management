@@ -1338,9 +1338,9 @@ function gaugeSites(
 	for (const [id, recs] of [...records].sort(([a], [b]) => cmpStr(a, b))) {
 		const i = indexOf.get(id);
 		const what = Object.keys(recs).map((k) => OBSERVED_SERIES_LABEL[k as CalibrationFlowKind].toLowerCase()).join(' and ');
-		if (i === undefined) warnings.push(`An ${what} record is attached to a node that is no longer in the model: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
+		if (i === undefined) warnings.push(`An ${what} record is attached to a hydrological unit that is no longer in the model: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
 		else if (nodes[i]!.kind !== 'gauge') warnings.push(`An ${what} record is attached to "${nodes[i]!.name}", which is not a gauge: the plausibility checks leave it out. Attach it to a gauge, or to the outlet, on the Data page.`);
-		else if (i === r.outflow) warnings.push(`An ${what} record is attached to the outlet node "${nodes[i]!.name}": the plausibility checks leave it out. The outlet's records are the ones with no site; move it there on the Data page.`);
+		else if (i === r.outflow) warnings.push(`An ${what} record is attached to the outlet, "${nodes[i]!.name}": the plausibility checks leave it out. The outlet's records are the ones with no site; move it there on the Data page.`);
 	}
 	const sites: GaugePlausibilityInput[] = [];
 	const hasCover = r.coverTotal.length > 0;
@@ -1450,7 +1450,7 @@ export function buildNetworkPlan(
 		const from = indexById.get(tr.fromNodeId);
 		const to = indexById.get(tr.toNodeId);
 		if (from === undefined || to === undefined) {
-			warnings.push(`transfer ${tr.id} references a node that does not exist; skipped`);
+			warnings.push(`transfer ${tr.id} references a hydrological unit that does not exist; skipped`);
 			continue;
 		}
 		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
