@@ -2979,7 +2979,8 @@ map" card) stays the schematic; this is the geography.
   list's card and Every feature give each unit's figure in words), and over
   the map it covered what was under it (a phone, the kinds' colours); until
   2026-10-03 it opened by default over a wide map while the areas showed a
-  run's results. Over the map its box
+  run's results, and until 2026-10-04 still over a wide empty map or while
+  dividing. Over the map its box
   clears the tools above it and scrolls in itself (a focusable region, "Map
   key"); in the column its tab panel is focusable and scrolls in the column.
   Escape closes it and gives its button the focus. On a narrow map opening
