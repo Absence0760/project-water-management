@@ -1,9 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, RETURN_FLOW_SLACK, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
-
-/** A share as a percentage to one decimal, the way this file's messages write them ("10%", "5.4%"). */
-const fmtShare = (v: number) => `${Math.round(v * 1000) / 10}%`;
+import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -112,6 +109,12 @@ export function developmentIssue(n: Pick<NetworkNode, 'kind' | 'damSurveyDate' |
 	return p === null ? null : `${p.replace('only a unit has a dam', 'only a hydrological unit has a dam; clear its dam dates and sediment rate')}.`;
 }
 
+/**
+ * Every problem the API would refuse the model for. (A return flow above a
+ * unit's losses isn't one: its crops' systems can move the losses from another
+ * screen, so the unit form warns and a run caps it, engine ≥ 1.72.0;
+ * returnFlowHint in network/fields.ts.)
+ */
 export function validateModel(model: ProjectModel): ModelIssue[] {
 	const issues: ModelIssue[] = [];
 	const { nodes, crops, cropAreas, transfers } = model;
@@ -155,9 +158,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
 		if (badFrac) issues.push({ area: 'network', itemId: n.id, message: `${label}: percentages must be between 0% and 100%.` });
 		else if (!(n.irrigationEfficiency > 0)) issues.push({ area: 'network', itemId: n.id, message: `${label}: irrigation efficiency must be above 0%.` });
-		// The return flow comes out of the losses (engine ≥ 1.71.0), as the API checks it.
-		else if (n.returnFlowFraction > 1 - n.irrigationEfficiency + RETURN_FLOW_SLACK)
-			issues.push({ area: 'network', itemId: n.id, message: `${label}: the return flow (${fmtShare(n.returnFlowFraction)} of the water supplied) is more than the losses at ${fmtShare(n.irrigationEfficiency)} irrigation efficiency: at most ${fmtShare(1 - n.irrigationEfficiency)} can return.` });
+
 		// At most 1 (engine ≥ 1.63.0): no basin's surface grows faster than its volume (model.md §2.7a).
 		if (!(n.damAreaExponent > 0 && n.damAreaExponent <= DAM_AREA_EXPONENT_MAX)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the dam area exponent must be above 0 and at most ${DAM_AREA_EXPONENT_MAX}.` });
 		if (n.damAreaFullM2 !== null && !inRange(n.damAreaFullM2, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the dam area can't be negative.` });

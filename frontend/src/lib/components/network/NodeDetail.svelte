@@ -3,12 +3,12 @@
 	// form (NetworkTab.svelte). Its sections run in the order water moves
 	// through a unit (nodeSections.ts), each a fieldset the sheet's jump row
 	// can scroll to.
-	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, IRRIGATION_SYSTEMS, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
-	import { damHints, fieldScale, fieldUnused, hasDam, hiLoHint, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import { damHints, fieldScale, fieldUnused, hasDam, hiLoHint, isPct, NODE_FIELDS, returnFlowHint, setNodeField, type NodeField } from './fields';
 	import { fieldShows, nodeSections, SECTION_TITLE, sectionId } from './nodeSections';
 	import DamStorageFields from './DamStorageFields.svelte';
 	import DevelopmentFields from './DevelopmentFields.svelte';
@@ -43,6 +43,8 @@
 		method = 'area',
 		planting = null,
 		plantedHref = null,
+		efficiency = null,
+		systemsLine = null,
 		transfersLine = null,
 		transfersHref = null
 	}: {
@@ -75,6 +77,10 @@
 		method?: FlowShareMethod;
 		/** A unit's planted areas (Crops), for the Irrigation section's pointer to them; null for other nodes. */
 		planting?: FarmPlanting | null;
+		/** The unit's efficiency as a run takes it: its crops' irrigation systems blended (engine ≥ 1.72.0); farms only. */
+		efficiency?: number | null;
+		/** Each crop it plants on its system, in words; null when it plants none. */
+		systemsLine?: string | null;
 		/** Opens the unit's planted areas (the farm drawer). */
 		plantedHref?: string | null;
 		/** "2 transfers, from Dam A, to Dam B": the unit's transfers, for the same pointer; null with none. */
@@ -230,35 +236,25 @@
 								nullable={f.nullable}
 								grouped={!isPct(f)}
 								placeholder={f.nullable ? 'not set' : undefined}
-								disabled={readonly || unused !== null || divertByMonth(f)}
+								disabled={readonly || unused !== null || divertByMonth(f) || f.derived}
 								aria-describedby="{id(f.key)}-h"
-								value={node[f.key] ?? null}
+								value={f.derived ? (efficiency ?? node[f.key] ?? null) : (node[f.key] ?? null)}
 								onchange={(v) => setNodeField(node, f.key, v)}
 							/>
 							<span class="hint" id="{id(f.key)}-h">{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}</span>
+							{#if f.key === 'returnFlowFraction' && efficiency !== null}
+								{@const over = returnFlowHint(node.returnFlowFraction, efficiency)}
+								{#if over}<span class="alert alert-warning small" role="status" data-testid="return-flow-over">{over}</span>{/if}
+							{/if}
 							<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
 						</div>
 					{/each}
-					{#if g === 'irrigation'}
-						<div class="field">
-							<span class="lbl"><label for={id('system')}>Irrigation system</label><HelpTip key="node.irrigationEfficiency" /></span>
-							<select
-								id={id('system')}
-								disabled={readonly}
-								value={systemOf(node.irrigationEfficiency) ?? ''}
-								aria-describedby="{id('system')}-h"
-								onchange={(e) => {
-									const s = IRRIGATION_SYSTEMS.find((x) => x.id === e.currentTarget.value);
-									if (s) node.irrigationEfficiency = s.efficiency;
-								}}
-							>
-								<option value="">Other (efficiency as entered)</option>
-								{#each IRRIGATION_SYSTEMS as s (s.id)}
-									<option value={s.id}>{s.label}: {Math.round(s.efficiency * 100)} % (indicative)</option>
-								{/each}
-							</select>
-							<span class="hint" id="{id('system')}-h">Sets an indicative efficiency for the system; a scheme's own measurement is better.</span>
-						</div>
+					{#if g === 'irrigation' && node.kind === 'farm'}
+						<!-- Each crop's irrigation system on this unit (engine ≥ 1.72.0): set in its crops, so the efficiency above is theirs. -->
+						<p class="hint systems-line" data-testid="node-systems">
+							{#if systemsLine}Irrigation systems: {systemsLine}.{:else}No crops planted, so no irrigation system yet.{/if}
+							{#if plantedHref}{' '}<a href={plantedHref}>Change them in its crops</a>.{/if}
+						</p>
 					{/if}
 					{#if g === 'groundwater'}
 						<div class="field">

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { damCapacityOn, modelFarmEfficiency, runReturnFlow, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary, isIsoDate } from '@water-management/engine';
+import { damCapacityOn, modelFarmEfficiency, runReturnFlow, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type IrrigationSystemDef, type NetworkNode, type RunoffBalance, type RunSummary, isIsoDate } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -217,11 +217,12 @@ export const runRoutes = new Hono<AuthEnv>()
 				node: Record<string, unknown> | null;
 				crops: CropDef[] | null;
 				crop_areas: CropArea[] | null;
+				irrigation_systems: IrrigationSystemDef[] | null;
 				apan_mm: unknown;
 			}>(
 				`SELECT ($3::date - r.start_date) AS index, (r.end_date - r.start_date + 1) AS days,
 					(SELECT n FROM jsonb_array_elements(r.inputs->'model'->'nodes') n WHERE n->>'id' = $4) AS node,
-					r.inputs->'model'->'crops' AS crops, r.inputs->'model'->'cropAreas' AS crop_areas, r.inputs->'settings'->'apanMm' AS apan_mm
+					r.inputs->'model'->'crops' AS crops, r.inputs->'model'->'cropAreas' AS crop_areas, r.inputs->'model'->'irrigationSystems' AS irrigation_systems, r.inputs->'settings'->'apanMm' AS apan_mm
 				 FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
 				[id, runId, q.date, q.nodeId]
 			);
@@ -257,7 +258,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				previousStorageM3,
 				previousSoilWaterMm,
 				// A run saved before engine 0.16.0 reads as migration 006 stored its model (return flow % → efficiency).
-				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.node, r.crops ?? [], r.crop_areas ?? [], r.apan_mm, q.date),
+				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.node, r.crops ?? [], r.crop_areas ?? [], r.apan_mm, q.date, r.irrigation_systems),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});
 		});
@@ -434,8 +435,9 @@ const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]):
 
 /**
  * The day trace's parameters. `irrigationEfficiency` is the one the run used
- * (D = F ÷ e): a farm whose crops carry their own (engine ≥ 0.43.0) runs on
- * them combined (engine demand.ts modelFarmEfficiency), else its own.
+ * (D = F ÷ e): a farm whose plantings carry their own system (engine ≥ 1.72.0;
+ * a crop's own efficiency from 0.43.0) runs on them combined (engine demand.ts
+ * modelFarmEfficiency, with the snapshot's irrigation systems), else its own.
  * `divertCapacityM3Day` is the day's: a farm with River to dam by month
  * (engine ≥ 1.32.0) ran on that month's value. `returnFlowFraction` is the
  * share of the water supplied the run returned: its r capped at 1 − e
@@ -448,13 +450,14 @@ function dayParams(
 	crops: readonly CropDef[],
 	cropAreas: readonly CropArea[],
 	apanMm: unknown,
-	date: string
+	date: string,
+	systems: readonly IrrigationSystemDef[] | null
 ): Record<(typeof DAY_PARAMS)[number], unknown> {
 	const p = pick(n as unknown as Record<string, unknown>, DAY_PARAMS);
 	if (n.kind === 'farm' && Array.isArray(n.divertMonthlyM3Day) && n.divertMonthlyM3Day.length === 12)
 		p.divertCapacityM3Day = n.divertMonthlyM3Day[waterYearIndex(Number(date.slice(5, 7)))] ?? null;
 	if (n.kind === 'farm' && typeof n.irrigationEfficiency === 'number' && n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1) {
-		const e = modelFarmEfficiency(n.irrigationEfficiency, n.id, crops, cropAreas, Array.isArray(apanMm) ? apanMm : []);
+		const e = modelFarmEfficiency(n.irrigationEfficiency, n.id, crops, cropAreas, Array.isArray(apanMm) ? apanMm : [], systems);
 		p.irrigationEfficiency = e;
 		const beta = raw && typeof raw === 'object' ? (raw as { lossReturnFraction?: unknown }).lossReturnFraction : undefined;
 		p.returnFlowFraction = typeof beta === 'number' ? Math.min(Math.max(beta, 0), 1) * (1 - e) : runReturnFlow(n.returnFlowFraction, e);

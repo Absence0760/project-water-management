@@ -1,32 +1,35 @@
 <script lang="ts">
-	// One project crop's irrigation system in Load crop factors (docs/ui.md §
-	// Load crop factors): a select of the SABI 2021 systems that sets the
-	// crop's own efficiency, '' keeping the one it has. Self-contained, so the
-	// system choice can change shape without touching the dialog's layout: the
-	// dialog passes the crop, the current choice and a typical system to hint,
-	// and turns the chosen id into what Apply writes.
-	import type { CropDef, IrrigationSystemId } from '@water-management/engine';
-	import { fmtPct } from '$lib/format/number';
-	import { LIBRARY_SYSTEMS } from './library';
+	// One project crop's default irrigation system in Load crop factors
+	// (docs/ui.md § Load crop factors; engine ≥ 1.72.0): a select of the
+	// project's irrigation systems, '' keeping the one it has. Self-contained:
+	// the dialog passes the crop, the project's table, the current choice and a
+	// typical SABI system to hint, and takes the chosen row id.
+	import type { CropDef, IrrigationSystemDef, IrrigationSystemId } from '@water-management/engine';
+	import { findSystem, systemLabel } from '$lib/model/systems';
 
 	let {
 		crop,
+		systems,
 		value,
 		typical = null,
 		onchange
 	}: {
 		crop: CropDef;
-		/** The chosen system's id; '' keeps the crop's efficiency. */
+		/** The project's irrigation systems (the model's table). */
+		systems: readonly IrrigationSystemDef[];
+		/** The chosen row's id; '' keeps the crop's system. */
 		value: string;
-		/** A typical system for the source crop (a hint, never applied unasked). */
+		/** A typical SABI system for the source crop (a hint, never applied unasked). */
 		typical?: IrrigationSystemId | null;
 		onchange: (id: string) => void;
 	} = $props();
 
 	const uid = $props.id();
 	const name = $derived(crop.name || 'unnamed crop');
-	const keep = $derived(crop.irrigationEfficiency == null ? 'hydrological unit’s' : fmtPct(crop.irrigationEfficiency, 0));
-	const typicalLabel = $derived(typical ? (LIBRARY_SYSTEMS.find((s) => s.id === typical)?.label.toLowerCase() ?? typical) : null);
+	const current = $derived(findSystem({ irrigationSystems: [...systems] }, crop.irrigationSystemId));
+	const keep = $derived(current ? systemLabel(current) : 'none: each unit’s own');
+	const typicalRow = $derived(typical ? (systems.find((s) => s.preset === typical) ?? null) : null);
+	const typicalLabel = $derived(typicalRow ? typicalRow.name.toLowerCase() : null);
 </script>
 
 <div class="sys">
@@ -38,7 +41,7 @@
 		onchange={(e) => onchange(e.currentTarget.value)}
 	>
 		<option value="">Keep ({keep})</option>
-		{#each LIBRARY_SYSTEMS as s (s.id)}<option value={s.id}>{s.label}, {fmtPct(s.efficiency, 0)}</option>{/each}
+		{#each systems as s (s.id)}<option value={s.id}>{systemLabel(s)}</option>{/each}
 	</select>
 	{#if typicalLabel}<span class="hint" id="{uid}-typ">Typical: {typicalLabel}</span>{/if}
 </div>

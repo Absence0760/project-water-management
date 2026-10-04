@@ -346,24 +346,39 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    sprinkler losses partly evaporation and drift that doesn't; it is per farm
    and the hydrologist sets it.
 
-6. **Irrigation efficiency per crop (engine ≥ 0.43.0, issue #54 item 1).**
-   A crop may carry its own `irrigationEfficiency` (0 < e ≤ 1), for the
-   system it is under (drip, micro-sprinkler, pivot …). A crop without one uses the farm's own `e[f]`;
-   the crop's value **overrides** the farm's, never multiplies it. The farm
-   then runs on its crops' efficiencies combined, the harmonic mean weighted
-   by each crop's annual gross requirement at the monthly A-pan
-   (`farmIrrigationEfficiency` in `packages/engine/src/demand.ts`):
+6. **Irrigation systems per crop and unit (engine ≥ 1.72.0, migration 198; per crop from 0.43.0, issue #54 item 1).**
+   The project keeps a table of irrigation systems (`irrigationSystems`: a
+   name and an efficiency 0 < e ≤ 1 each), starting as SABI's Agricultural
+   Design Norms 2021, Table 4 (drip 0.90, micro-sprinkler 0.82, centre pivot
+   0.85, permanent sprinkler 0.80, movable sprinkler 0.75, flood / furrow
+   0.70, each inside SABI's range; the hydrologist may change any and add
+   rows; a model without a table runs on these, `DEFAULT_IRRIGATION_SYSTEMS`).
+   A crop has a default system (`CropDef.irrigationSystemId`); a unit that
+   waters it differently names its own (`CropArea.irrigationSystemId`). Each
+   planting's efficiency e[p] is resolved in that order (the unit's own, the
+   crop's default), then a crop's own `irrigationEfficiency` from engine
+   0.43.0–1.71.0 (a snapshot or older document), else the unit's own `e[f]`
+   (`plantingEfficiencyResolver`); a system the table lacks is skipped with a
+   warning. The unit then runs on its plantings' efficiencies combined, the
+   harmonic mean weighted by each one's annual gross requirement at the
+   monthly A-pan (`unitIrrigationEfficiency` in `packages/engine/src/demand.ts`):
 
    ```
-   w[c]  = area[f][c] × Σm MAX(0, cropFactor[c][m]) × MAX(0, apanMm[m])
-   e*[f] = Σc w[c] ÷ Σc (w[c] ÷ e[c])        e[c] = the crop's own, else e[f]
+   w[p]  = area[p] × Σm MAX(0, cropFactor[c(p)][m]) × MAX(0, apanMm[m])
+   e*[f] = Σp w[p] ÷ Σp (w[p] ÷ e[p])        e[p] = its system's, else e[f]
    D     = F ÷ e*[f]
    ```
+
+   The app shows e*[f] on the unit, read-only; `e[f]` is only the fallback.
+   Migration 198 gave every planting the system it ran at (a crop's own
+   efficiency as its default; a crop without one its farms' when they all
+   agreed, else each planting its farm's), adding a row "Imported, NN %"
+   for a value no SABI row matched, so saved models run as before.
 
    The harmonic mean is the one that keeps both halves of the balance exact
    when F is shared among the crops by their gross: the abstraction is
    Σ F[c] ÷ e[c], and the application losses (1 − e*)·G are each crop's
-   (1 − e[c])·G[c] summed, so the return flow β(1 − e*)G and the consumptive
+   (1 − e[c])·G[c] summed, so the return flow (at most (1 − e*)G) and the consumptive
    use are right too. e* always lies between the smallest and largest
    efficiency it combines, and lowering any crop's efficiency never lowers
    the farm's demand (both tested). With no A-pan in any month the weights are

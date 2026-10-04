@@ -4,7 +4,7 @@
 // The workbook rounds crop mm to 2 dp, farm demand to 0.1 m³/day and net demand
 // to whole m³; the engine keeps full precision (docs/engine-audit.md R1).
 import { daysPerMonth, toEpochDay, type Monthly } from './calendar';
-import type { DemandPart, NetworkNode } from './project';
+import { DEFAULT_IRRIGATION_SYSTEMS, RETURN_FLOW_SLACK, type DemandPart, type IrrigationSystemDef, type NetworkNode } from './project';
 
 export interface Crop {
 	id: string;
@@ -28,23 +28,11 @@ export function ownCropEfficiency(e: unknown): number | undefined {
 }
 
 /**
- * A farm's irrigation efficiency from its crops' (engine ≥ 0.43.0, issue #54,
- * docs/model.md §2.3). Each crop uses its own efficiency e_c when it has one,
- * else the farm's e_f, and the farm's efficiency is their harmonic mean
- * weighted by each crop's annual gross requirement:
- *
- *   w_c = area_c × Σ_m MAX(0, cropFactor_c[m]) × MAX(0, A-pan[m])
- *   e   = Σ w_c ÷ Σ (w_c ÷ e_c)
- *
- * so the abstraction D = F ÷ e is Σ F_c ÷ e_c when each crop's share F_c of
- * the requirement F is its share of the gross, and the application losses
- * (1 − e)·G are each crop's losses summed. One number per farm, not per
- * month: the network step keeps one efficiency per farm (model.md §2.3 says
- * what that leaves out). With no A-pan anywhere the weights are area ×
- * Σ crop factor. A farm none of whose cropped crops carries its own
- * efficiency returns e_f untouched, so absent fields give bit-identical runs.
- *
- * Crops are summed in id order, as buildDemand sums them (order invariance).
+ * A unit's efficiency from per-crop efficiencies and areas (engine ≥ 0.43.0,
+ * issue #54): unitIrrigationEfficiency with one planting per crop, each at its
+ * own efficiency (CropEfficiencyInput.irrigationEfficiency, else the farm's).
+ * A convenience for callers holding per-crop values; the run resolves each
+ * planting's system (plantingEfficiencyResolver) and blends those.
  */
 export function farmIrrigationEfficiency(
 	farmEfficiency: number,
@@ -52,55 +40,151 @@ export function farmIrrigationEfficiency(
 	areaM2ByCropId: ReadonlyMap<string, number>,
 	apanMm: ArrayLike<unknown>
 ): number {
-	const grown = crops.filter((c) => (areaM2ByCropId.get(c.id) ?? 0) > 0);
-	if (!grown.some((c) => ownCropEfficiency(c.irrigationEfficiency) !== undefined)) return farmEfficiency;
-	grown.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	const plantings = [...crops]
+		.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+		.map((c) => {
+			const e = ownCropEfficiency(c.irrigationEfficiency);
+			return { cropId: c.id, areaM2: areaM2ByCropId.get(c.id) ?? 0, ...(e !== undefined ? { efficiency: e } : {}) };
+		});
+	return unitIrrigationEfficiency(farmEfficiency, crops, plantings, apanMm);
+}
+
+/** A crop as a planting's efficiency is resolved from: its default system, and the legacy efficiency of engine < 1.72.0. */
+export interface CropSystemInput {
+	id: string;
+	name?: string;
+	irrigationSystemId?: string | null;
+	irrigationEfficiency?: number | null;
+}
+
+/** A planting (a crop area) as its efficiency is resolved: its crop and its own system on this unit. */
+export interface PlantingSystemInput {
+	cropId: string;
+	irrigationSystemId?: string | null;
+}
+
+/**
+ * Resolves each planting's application efficiency (engine ≥ 1.72.0, docs/model.md
+ * §2.3): its own system on the unit, else its crop's default system, from the
+ * project's table (`systems`; absent = DEFAULT_IRRIGATION_SYSTEMS); with no
+ * system named, the crop's legacy efficiency (engine 0.43.0–1.71.0); else
+ * undefined, the unit's own. A system id the table doesn't have, or a row with
+ * an efficiency outside (0, 1], is skipped with a warning (once each).
+ */
+export function plantingEfficiencyResolver(
+	crops: readonly CropSystemInput[],
+	systems: readonly IrrigationSystemDef[] | null | undefined,
+	warnings?: string[]
+): (planting: PlantingSystemInput) => number | undefined {
+	const table = new Map((systems ?? DEFAULT_IRRIGATION_SYSTEMS).map((s) => [s.id, s]));
+	const byCrop = new Map(crops.map((c) => [c.id, c]));
+	const warned = new Set<string>();
+	const warn = (key: string, msg: string) => {
+		if (warnings && !warned.has(key)) {
+			warned.add(key);
+			warnings.push(msg);
+		}
+	};
+	return (p) => {
+		const crop = byCrop.get(p.cropId);
+		const id = p.irrigationSystemId ?? crop?.irrigationSystemId ?? null;
+		if (id !== null) {
+			const s = table.get(id);
+			const e = s ? ownCropEfficiency(s.efficiency) : undefined;
+			if (e !== undefined) return e;
+			if (!s) warn(`missing:${id}`, `crop "${crop?.name ?? p.cropId}": irrigation system ${id} is not in the project's table; using the unit's efficiency`);
+			else warn(`bad:${id}`, `irrigation system "${s.name}": efficiency ${String(s.efficiency)} is not in (0, 1]; using the unit's`);
+		}
+		return ownCropEfficiency(crop?.irrigationEfficiency);
+	};
+}
+
+/** One planting of a unit and the efficiency it resolved to (undefined = the unit's own). */
+export interface PlantingEfficiency {
+	cropId: string;
+	areaM2: number;
+	efficiency?: number;
+}
+
+/**
+ * A unit's irrigation efficiency from its plantings' (engine ≥ 1.72.0; per crop
+ * from 0.43.0): the harmonic mean of each planting's efficiency (the unit's own
+ * where it has none), weighted by its annual gross requirement,
+ * w = area × Σ_m MAX(0, cropFactor[m]) × MAX(0, A-pan[m]) (area × Σ cropFactor
+ * with no A-pan), so the abstraction D = F ÷ e is the sum of each planting's
+ * requirement ÷ its own efficiency. A unit none of whose plantings resolved
+ * an efficiency returns `farmEfficiency` untouched (bit-identical runs).
+ * Plantings are summed in the order given: crop id, then area (order invariance).
+ */
+export function unitIrrigationEfficiency(
+	farmEfficiency: number,
+	crops: readonly { id: string; cropFactor: ArrayLike<unknown> }[],
+	plantings: readonly PlantingEfficiency[],
+	apanMm: ArrayLike<unknown>
+): number {
+	const grown = plantings.filter((p) => p.areaM2 > 0);
+	if (!grown.some((p) => p.efficiency !== undefined)) return farmEfficiency;
+	const byId = new Map(crops.map((c) => [c.id, c]));
 	const num = (v: unknown) => {
 		const x = Number(v);
 		return Number.isFinite(x) && x > 0 ? x : 0;
 	};
 	let w = 0, wOverE = 0, k = 0, kOverE = 0;
-	for (const c of grown) {
-		const area = areaM2ByCropId.get(c.id)!;
-		const e = ownCropEfficiency(c.irrigationEfficiency) ?? farmEfficiency;
+	for (const p of grown) {
+		const c = byId.get(p.cropId);
+		if (!c) continue;
+		const e = p.efficiency ?? farmEfficiency;
 		let byApan = 0, byFactor = 0;
 		for (let m = 0; m < 12; m++) {
 			const f = num(c.cropFactor[m]);
 			byApan += f * num(apanMm[m]);
 			byFactor += f;
 		}
-		w += area * byApan;
-		wOverE += (area * byApan) / e;
-		k += area * byFactor;
-		kOverE += (area * byFactor) / e;
+		w += p.areaM2 * byApan;
+		wOverE += (p.areaM2 * byApan) / e;
+		k += p.areaM2 * byFactor;
+		kOverE += (p.areaM2 * byFactor) / e;
 	}
 	if (w > 0) return w / wOverE;
 	if (k > 0) return k / kOverE;
 	return farmEfficiency;
 }
 
+/** A unit's plantings in the order the run sums them (crop id, then area), crops the model knows only, each with its resolved efficiency. */
+export function unitPlantings(
+	nodeId: string,
+	crops: readonly CropSystemInput[],
+	cropAreas: readonly (PlantingSystemInput & { nodeId: string; areaM2: number })[],
+	resolve: (planting: PlantingSystemInput) => number | undefined
+): PlantingEfficiency[] {
+	const known = new Set(crops.map((c) => c.id));
+	return cropAreas
+		.filter((a) => a.nodeId === nodeId && known.has(a.cropId))
+		.sort((a, b) => (a.cropId < b.cropId ? -1 : a.cropId > b.cropId ? 1 : a.areaM2 - b.areaM2))
+		.map((a) => {
+			const e = resolve(a);
+			return { cropId: a.cropId, areaM2: a.areaM2, ...(e !== undefined ? { efficiency: e } : {}) };
+		});
+}
+
 /**
- * farmIrrigationEfficiency straight from a model document: the farm's crop
- * areas (crops the model knows, summed per crop) and its A-pan. For readers
- * of a saved run (verify/checks.ts, views/farmProjection.ts) that need the
- * efficiency runModel used. `farmEfficiency` should already be the one the
- * run used (a value outside (0, 1] runs as 1).
+ * unitIrrigationEfficiency straight from a model document: the unit's
+ * plantings (crops the model knows), their systems from `systems` (the
+ * model's table; absent = the defaults) and the A-pan. For readers of a saved
+ * run (verify, the farm projection, the day trace) that need the efficiency
+ * runModel used. `farmEfficiency` should already be the one the run used (a
+ * value outside (0, 1] runs as 1).
  */
 export function modelFarmEfficiency(
 	farmEfficiency: number,
 	nodeId: string,
-	crops: readonly CropEfficiencyInput[],
-	cropAreas: readonly { nodeId: string; cropId: string; areaM2: number }[],
-	apanMm: ArrayLike<unknown>
+	crops: readonly (CropSystemInput & { cropFactor: ArrayLike<unknown> })[],
+	cropAreas: readonly (PlantingSystemInput & { nodeId: string; areaM2: number })[],
+	apanMm: ArrayLike<unknown>,
+	systems?: readonly IrrigationSystemDef[] | null
 ): number {
-	if (!crops.some((c) => ownCropEfficiency(c.irrigationEfficiency) !== undefined)) return farmEfficiency;
-	const known = new Set(crops.map((c) => c.id));
-	const areas = new Map<string, number>();
-	const rows = cropAreas.filter((a) => a.nodeId === nodeId && known.has(a.cropId));
-	// The same order buildDemand sums them in: crop id, then area.
-	rows.sort((a, b) => (a.cropId < b.cropId ? -1 : a.cropId > b.cropId ? 1 : a.areaM2 - b.areaM2));
-	for (const a of rows) areas.set(a.cropId, (areas.get(a.cropId) ?? 0) + a.areaM2);
-	return farmIrrigationEfficiency(farmEfficiency, crops, areas, apanMm);
+	const plantings = unitPlantings(nodeId, crops, cropAreas, plantingEfficiencyResolver(crops, systems));
+	return unitIrrigationEfficiency(farmEfficiency, crops, plantings, apanMm);
 }
 
 /**
@@ -321,4 +405,31 @@ export function unitPartFactor(n: NetworkNode, part: DemandPart, warnings: strin
 export function demandFactorStart(from: string | null | undefined, start: number, days: number): number {
 	if (from === null || from === undefined) return 0;
 	return Math.min(Math.max(toEpochDay(from) - start, 0), days);
+}
+
+/**
+ * Units whose return flow is more than their losses (engine ≥ 1.71.0): r above
+ * 1 − e, e being the efficiency a run gives the unit (its plantings' systems
+ * blended, else its own; unitIrrigationEfficiency at `apanMm`). The API refuses
+ * a model with one and the editor lists it; a run caps r at 1 − e. Only farms
+ * irrigate; a value outside (0, 1] runs as 1.
+ */
+export function returnFlowProblems(
+	model: {
+		nodes: readonly { id: string; name: string; kind: string; irrigationEfficiency: number; returnFlowFraction: number }[];
+		crops: readonly (CropSystemInput & { cropFactor: ArrayLike<unknown> })[];
+		cropAreas: readonly (PlantingSystemInput & { nodeId: string; areaM2: number })[];
+		irrigationSystems?: readonly IrrigationSystemDef[] | null;
+	},
+	apanMm: ArrayLike<unknown>
+): { nodeId: string; returnFlow: number; efficiency: number }[] {
+	const resolve = plantingEfficiencyResolver(model.crops, model.irrigationSystems);
+	const out: { nodeId: string; returnFlow: number; efficiency: number }[] = [];
+	for (const n of model.nodes) {
+		if (n.kind !== 'farm') continue;
+		const own = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
+		const e = unitIrrigationEfficiency(own, model.crops, unitPlantings(n.id, model.crops, model.cropAreas, resolve), apanMm);
+		if (n.returnFlowFraction > 1 - e + RETURN_FLOW_SLACK) out.push({ nodeId: n.id, returnFlow: n.returnFlowFraction, efficiency: e });
+	}
+	return out;
 }

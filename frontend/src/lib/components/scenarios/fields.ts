@@ -74,6 +74,8 @@ export type ValueSpec =
 	| { t: 'date'; nullLabel: string }
 	/** A node of the model, by id; with `nullLabel`, empty is null (shown as that). */
 	| { t: 'node'; nullLabel?: string }
+	/** A row of the model's irrigation-systems table, by id (engine ≥ 1.72.0); with `nullLabel`, empty is null. */
+	| { t: 'system'; nullLabel?: string }
 	/**
 	 * GR4J's potential-evaporation input (settings.pe, issue #39): pan
 	 * coefficient × A-pan, or a monthly row in mm with a required source.
@@ -224,10 +226,14 @@ export const TRANSFER_FIELDS = TRANSFER_SET_FIELDS.map((field) => ({ field, labe
 export const CROP_FIELD_SPECS: Record<CropSetField, FieldSpec> = {
 	name: { label: 'Name', spec: { t: 'text' } },
 	cropFactor: { label: 'Crop factors', spec: { t: 'monthly', unit: '', scale: 1, nullable: false } },
+	// The crop's default irrigation system (engine ≥ 1.72.0); a unit may put it on another (cropArea.set).
+	irrigationSystemId: { label: 'Irrigation system', spec: { t: 'system', nullLabel: "none (each unit's own)" } },
+	// Engine 0.43.0–1.71.0's own efficiency: still described in a stored scenario, no longer offered.
 	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct(true, "the hydrological unit's") }
 };
 
-export const CROP_FIELDS = CROP_SET_FIELDS.map((field) => ({ field, label: CROP_FIELD_SPECS[field].label }));
+/** The fields the form offers: a crop's efficiency is its system's now (engine ≥ 1.72.0). */
+export const CROP_FIELDS = CROP_SET_FIELDS.filter((field) => field !== 'irrigationEfficiency').map((field) => ({ field, label: CROP_FIELD_SPECS[field].label }));
 
 export const LAND_COVER_FIELD_SPECS: Record<LandCoverSetField, FieldSpec> = {
 	coverClass: { label: 'Land cover', spec: { t: 'enum', options: LAND_COVER_CLASSES.map((c) => ({ value: c.id, label: c.label })) } },
@@ -427,6 +433,8 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
 		case 'node':
 			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick a node' };
+		case 'system':
+			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick an irrigation system' };
 		case 'reductions': {
 			if (text === '') return { ok: true, value: null };
 			const parts = text.replace(/%/g, ' ').split(/\s*;\s*|,\s+|\s+/).filter(Boolean);
@@ -543,6 +551,7 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 		case 'date':
 			return typeof v === 'string' && v ? v : spec.nullLabel;
 		case 'node':
+		case 'system':
 			return typeof v === 'string' ? nodeName(v) : (spec.nullLabel ?? '–');
 		case 'text':
 			return typeof v === 'string' ? `“${v}”` : String(v);

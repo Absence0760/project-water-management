@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, RETURN_FLOW_SLACK, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -22,6 +22,9 @@ export const nameText = (min: number, max: number) => z.string().trim().min(min)
  * before) the return flow β(1 − e), missing dam fields get their defaults and a
  * transfer without a priority gets its list position (upgradeLegacyModel).
  */
+/** A reference to an irrigation system: a row's uuid, a SABI preset's key ('drip', …) or a document's own key for a row it carries. */
+const systemRef = z.string().min(1).max(100);
+
 export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgradeLegacyModel(v as { nodes?: unknown }) : v), z.object({
 	nodes: z
 		.array(
@@ -105,9 +108,6 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 					.refine(isGa538Rate, { message: `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}` })
 					.nullable()
 					.default(null)
-			}).refine((n) => n.returnFlowFraction <= 1 - n.irrigationEfficiency + RETURN_FLOW_SLACK, {
-				path: ['returnFlowFraction'],
-				message: 'return flow is more than the losses: at most 100 % − the irrigation efficiency of the water supplied can return'
 			})
 		)
 		.max(500),
@@ -118,13 +118,30 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				name: nameText(1, 100),
 				sortOrder: z.number().int().optional(),
 				cropFactor: z.array(z.number().finite().min(0)).length(12),
-				// The crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54): 0 < e ≤ 1,
-				// as the farm's; null / absent = the farm's.
+				// The crop's default irrigation system (engine ≥ 1.72.0): a row of the table (its id, or a SABI preset's
+				// key); null / absent = none. A document's own efficiency (0.43.0–1.71.0) arrives here as a system
+				// (upgradeLegacyModel).
+				irrigationSystemId: systemRef.nullable().optional(),
+				// A document's own efficiency the upgrade couldn't place (outside 0 < e ≤ 1) is refused, as before.
 				irrigationEfficiency: z.number().gt(0).max(1).nullable().optional()
 			})
 		)
 		.max(200),
-	cropAreas: z.array(z.object({ nodeId: uuid, cropId: uuid, areaM2: nonNeg })).max(20_000),
+	// A planting's own irrigation system on its unit (engine ≥ 1.72.0); null / absent = the crop's default.
+	cropAreas: z.array(z.object({ nodeId: uuid, cropId: uuid, areaM2: nonNeg, irrigationSystemId: systemRef.nullable().optional() })).max(20_000),
+	// The project's irrigation-systems table (engine ≥ 1.72.0); absent = keep the project's.
+	irrigationSystems: z
+		.array(
+			z.object({
+				id: systemRef,
+				name: nameText(1, 100),
+				efficiency: z.number().gt(0).max(1),
+				preset: z.enum(IRRIGATION_SYSTEMS.map((s) => s.id) as [IrrigationSystemId, ...IrrigationSystemId[]]).nullable().optional(),
+				sortOrder: z.number().int().optional()
+			})
+		)
+		.max(50)
+		.optional(),
 	transfers: z
 		.array(
 			z.object({

@@ -18,12 +18,13 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { describeFailure, WORKBOOK_ACCEPT } from '$lib/components/import/workbookFile';
 	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
-	import { fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { ARC4_URL, citation, CROP_LIBRARY, LIBRARY_SYSTEMS, libraryCropFactor, type LibraryCrop } from './library';
+	import { ARC4_URL, citation, CROP_LIBRARY, libraryCropFactor, type LibraryCrop } from './library';
 	import { cropAreaTotals, rankCrops } from './cards';
 	import CropSystemSelect from './CropSystemSelect.svelte';
+	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 	import { applyLine, matchedLine, plantingFor, rowsByChange, type PlantingDraft } from './loadFactorsView';
 	import {
 		applyChanges,
@@ -137,8 +138,8 @@
 			const p = plant[c.id];
 			const planting = p && p.month && p.day && p.days ? { month: p.month, day: p.day, days: p.days } : null;
 			const raw = s ? (s.lib ? libraryCropFactor(s.lib, planting) : (s.factors ?? null)) : null;
-			const sys = LIBRARY_SYSTEMS.find((x) => x.id === system[c.id]);
-			out.set(c.id, { factors: raw && kp !== null && kp > 0 ? withKp(raw, kp) : null, ...(sys ? { efficiency: sys.efficiency } : {}) });
+			const sys = system[c.id] ? findSystem(editor.model, system[c.id]) : null;
+			out.set(c.id, { factors: raw && kp !== null && kp > 0 ? withKp(raw, kp) : null, ...(sys ? { systemId: sys.id } : {}) });
 		}
 		return out;
 	});
@@ -222,7 +223,11 @@
 	}
 
 	const f2 = (v: number) => fmtNum(v, 2);
-	const eff = (e: number | null) => (e === null ? 'hydrological unit’s' : fmtPct(e, 0));
+	// A crop's default system in words (engine ≥ 1.72.0).
+	const sysText = (id: string | null) => {
+		const s = findSystem(editor.model, id);
+		return s ? systemLabel(s) : 'none (each unit’s own)';
+	};
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 1, true);
 
 	// The crops by planted area, largest first (the Crops page's order), so the crops that make the demand come first.
@@ -380,8 +385,8 @@
 					{:else}
 						<p class="muted small intro">
 							{matchedLine(matched, crops.length)} Largest planted area first; <strong>Keep current</strong> leaves a crop as it is. An irrigation
-							system sets the crop’s own efficiency <HelpTip key="crop.irrigationEfficiency" /> (SABI Agricultural Design Norms 2021, Table 4, mid-range
-							values): confirm which ones the hydrological units use.
+							system is the crop’s default <HelpTip key="crop.irrigationSystemId" />, from the project’s table on Crops &amp; demand; a unit that
+							puts the crop on its own system keeps it. Confirm which ones the hydrological units use.
 						</p>
 						<ul class="crops" bind:clientWidth={listWidth}>
 							{#each ordered as c (c.id)}
@@ -404,7 +409,7 @@
 												{#each sources as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
 											</select>
 										</div>
-										<CropSystemSelect crop={c} value={system[c.id] ?? ''} typical={src?.lib?.system ?? null} onchange={(v) => (system[c.id] = v)} />
+										<CropSystemSelect crop={c} systems={systemsOf(editor.model)} value={system[c.id] ?? ''} typical={src?.lib?.system ?? null} onchange={(v) => (system[c.id] = v)} />
 										<div class="status">
 											{#if ch?.differs}
 												<label class="apply"><input type="checkbox" checked={!reject[c.id]} onchange={(e) => (reject[c.id] = !e.currentTarget.checked)} /> Apply<span class="visually-hidden">{' '}to {name}</span></label>
@@ -449,7 +454,7 @@
 										{/if}
 									{/if}
 									{#if ch}
-										{@const effChanged = ch.nextEfficiency !== ch.currentEfficiency}
+										{@const effChanged = ch.nextSystemId !== ch.currentSystemId}
 										<div class="diff" role="region" aria-label="{ch.name}: changes">
 											<div class="table-wrap">
 												<table class="data compact months">
@@ -476,9 +481,9 @@
 											</div>
 											<p class="small eff">
 												{#if effChanged}
-													Irrigation efficiency: {eff(ch.currentEfficiency)} → <strong>{eff(ch.nextEfficiency)}</strong>
+													Irrigation system: {sysText(ch.currentSystemId)} → <strong>{sysText(ch.nextSystemId)}</strong>
 												{:else}
-													Irrigation efficiency stays {eff(ch.currentEfficiency)}.
+													Irrigation system stays {sysText(ch.currentSystemId)}.
 												{/if}
 											</p>
 											{#if src?.lib}<p class="muted small">{citation(src.lib)}. {src.lib.notes}</p>{:else if src && wb}<p class="muted small">From [{wb.sheet}] in {wb.file}.</p>{/if}

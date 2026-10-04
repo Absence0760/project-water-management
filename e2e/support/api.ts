@@ -180,9 +180,11 @@ export async function copyProject(request: APIRequestContext, projectId: string,
 
 export interface Model {
 	nodes: Record<string, unknown>[];
-	crops: { id: string; name: string; cropFactor: number[] }[];
-	cropAreas: { nodeId: string; cropId: string; areaM2: number }[];
+	/** `irrigationSystemId` (engine ≥ 1.72.0): a row of the project's table, or a SABI preset's key ('drip'). */
+	crops: { id: string; name: string; cropFactor: number[]; irrigationSystemId?: string | null }[];
+	cropAreas: { nodeId: string; cropId: string; areaM2: number; irrigationSystemId?: string | null }[];
 	transfers: Record<string, unknown>[];
+	irrigationSystems?: { id: string; name: string; efficiency: number; preset?: string | null }[];
 }
 
 export function node(name: string, kind: 'farm' | 'gauge', downstreamNodeId: string | null, sortOrder: number, extra: Record<string, unknown> = {}) {

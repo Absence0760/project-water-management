@@ -3505,13 +3505,51 @@ demand series does (audit N1). The Load crop factors dialog's effect on
 demand shows both, the crop requirement and the abstraction (÷ efficiency). The Irrigation
 demand grid's chart (`CropGrids`) uses the same ranking and colours.
 
+### Irrigation systems
+
+Below the Crops page's window-fit layout, full width, the project's
+irrigation systems (`crops/IrrigationSystemsPanel.svelte`, engine ≥ 1.72.0,
+[model.md §2.3](./model.md#23-irrigation-demand) step 6): each row's name and
+efficiency (%, 1–100), SABI's range under a row that started as a SABI 2021
+system ("SABI 90–95 %"), and what uses it ("1 crop, 2 unit plantings" or
+"Not used"). An editor changes a name or efficiency (every crop on the
+system follows), adds a system of the scheme's own (**+ Add system**, named
+"System N" at 80 % and focused), or removes one: one in use asks first,
+naming what is on it, and its crops and plantings fall back to none. Edits
+go into the model and are saved with it. Where each crop is on a system:
+
+- **A crop's default**, in its sheet (below).
+- **A unit's own**, in its planted areas drawer and in the Planted areas
+  grid: each planted crop has an **Irrigation system** picker, its first
+  choice the crop's default ("The crop's default (Drip, 90 %)" in the drawer,
+  "Default: Drip" in the grid); a viewer sees the name, "(default)" when it
+  is the crop's.
+- **The unit's efficiency** on the Network (form and node table) is its
+  plantings' systems blended, shown read-only; the unit form lists each crop
+  on its system ("Irrigation systems: Citrus on Drip, 90 %; …") with a link
+  to its planted areas. A paste into the node table leaves the Efficiency
+  column out, saying it comes from the crops' systems.
+- **A return flow above the losses** at that efficiency is flagged, not
+  refused, since the crops' systems move the losses from another screen: the
+  node table outlines the cell (the reason in its title) and the unit form
+  says what a run will return ("Only 10 % of the water supplied is lost at
+  its 90 % irrigation efficiency …"); a run caps it and warns.
+
+Labels read "Name, NN %" (`model/systems.ts` `systemLabel`), a name that
+already ends in its efficiency ("Imported, 66 %") as it is.
+`e2e/tests/irrigation-systems.spec.ts` pins the table, a crop's default, a
+unit's own in the grid and the drawer, the read-only blend and removing a
+system in use.
+
 ### Crop sheet
 
 One crop's name and 12 monthly factors in a side sheet over the page
 (`crops/CropSheet.svelte`), while the URL has `crop=<cropId>`, so it can be
 linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
-(`withoutParam`). **+ Add crop** adds "Crop N" and opens its sheet with the
-name focused. The sheet shows the factors four to a row (labelled "Orchard
+(`withoutParam`). **+ Add crop** adds "Crop N", on drip (the new-unit
+default), and opens its sheet with the name focused. Under the name, its
+default **Irrigation system** (the project's table, or none: each unit's own
+efficiency), with the units that put it on another named in the hint. The sheet shows the factors four to a row (labelled "Orchard
 crop factor, Jan", as in the grid), the high-factor warning for
 this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
 much. A factor cleared is 0 (a month the crop isn't irrigated): the field
@@ -3645,8 +3683,10 @@ answer is beside **Apply** at every size.
    - once it has a change, its current and new factors month by month
      (changed cells bold on a tint; captioned "Crop factor by month: now, and
      from <source> × Kp <n>"), in one row of twelve or, where the card is
-     narrower than 560 px, two rows of six; the efficiency in words
-     ("Irrigation efficiency: hydrological unit's → 90 %", or "stays …"); and
+     narrower than 560 px, two rows of six; the crop's default irrigation
+     system in words ("Irrigation system: none (each unit's own) → Drip, 90 %",
+     or "stays …"; the picker offers the project's table, engine ≥ 1.72.0, and
+     a unit that put the crop on its own system keeps it); and
      the source table and page with the entry's notes, or the workbook sheet
      and file.
 4. **Check the effect on demand**, for the ticked changes: two tiles, the

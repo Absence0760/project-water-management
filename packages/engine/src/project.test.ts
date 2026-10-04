@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	DAM_AREA_EXPONENT,
+	DEFAULT_IRRIGATION_SYSTEMS,
 	defaultProjectSettings,
 	estimatedDamAreaForEngine,
 	estimatedDamAreaM2,
@@ -115,6 +116,25 @@ describe('the return flow, a share of the water supplied (engine ≥ 1.71.0)', (
 		expect('lossReturnFraction' in b!).toBe(false);
 		expect([p!.irrigationEfficiency, p!.returnFlowFraction]).toEqual([0.9, 0.1]);
 		expect(irrigationFromReturnFlow(1)).toEqual({ irrigationEfficiency: 0.01, returnFlowFraction: 0.99 });
+	});
+});
+
+describe('upgradeLegacyModel: a crop’s own efficiency becomes an irrigation system (engine 1.72.0, as migration 198)', () => {
+	it('names the SABI row with that efficiency, adds an "Imported" row for one no row has, and leaves a model without one alone', () => {
+		const up = upgradeLegacyModel({
+			nodes: [],
+			crops: [
+				{ id: 'a', name: 'A', cropFactor: [], irrigationEfficiency: 0.9 },
+				{ id: 'b', name: 'B', cropFactor: [], irrigationEfficiency: 0.66 },
+				{ id: 'c', name: 'C', cropFactor: [] }
+			]
+		}) as unknown as { crops: Record<string, unknown>[]; irrigationSystems: { id: string; name: string; efficiency: number }[] };
+		expect(up.crops.map((c) => c.irrigationSystemId)).toEqual(['drip', 'imported-0.66', undefined]);
+		expect(up.crops.some((c) => 'irrigationEfficiency' in c)).toBe(false);
+		expect(up.irrigationSystems.at(-1)).toMatchObject({ id: 'imported-0.66', name: 'Imported, 66 %', efficiency: 0.66 });
+		expect(up.irrigationSystems).toHaveLength(DEFAULT_IRRIGATION_SYSTEMS.length + 1);
+		const plain = upgradeLegacyModel({ nodes: [], crops: [{ id: 'c', name: 'C', cropFactor: [] }] });
+		expect(plain).not.toHaveProperty('irrigationSystems');
 	});
 });
 

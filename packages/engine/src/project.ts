@@ -1541,8 +1541,41 @@ export const IRRIGATION_SYSTEMS = [
 	{ id: 'pivot', label: 'Centre pivot / linear move', min: 0.8, max: 0.9, efficiency: 0.85 },
 	{ id: 'sprinkler', label: 'Sprinkler (permanent)', min: 0.75, max: 0.9, efficiency: 0.8 },
 	{ id: 'movable', label: 'Sprinkler (movable)', min: 0.7, max: 0.83, efficiency: 0.75 },
-	{ id: 'surface', label: 'Surface', min: 0.6, max: 0.95, efficiency: 0.7 }
+	{ id: 'surface', label: 'Flood / furrow', min: 0.6, max: 0.95, efficiency: 0.7 }
 ] as const satisfies readonly IrrigationSystem[];
+
+/**
+ * One row of a project's irrigation-systems table (engine ≥ 1.72.0, docs/model.md
+ * §2.3): a name and the application efficiency a crop on it runs at. A project
+ * starts with the SABI 2021 systems (IRRIGATION_SYSTEMS, `preset` naming the
+ * one it came from, so the table can show SABI's range beside it); the
+ * hydrologist can change any row's efficiency and add rows of their own
+ * (migration 198 and the workbook import add one per efficiency no system
+ * matched, so saved models run as before).
+ */
+export interface IrrigationSystemDef {
+	id: string;
+	name: string;
+	/** Application efficiency, 0 < e ≤ 1: a crop on this system abstracts its requirement ÷ e. */
+	efficiency: number;
+	/** The SABI system it started as (an IRRIGATION_SYSTEMS id), or null for a row of the project's own. */
+	preset?: IrrigationSystemId | null;
+	/** Display order (0-based); the model doesn't depend on it. */
+	sortOrder?: number;
+}
+
+/**
+ * The table a model without one runs on: the SABI 2021 systems, their ids the
+ * preset ids. A project's own table (ProjectModel.irrigationSystems) replaces
+ * it whole.
+ */
+export const DEFAULT_IRRIGATION_SYSTEMS: readonly IrrigationSystemDef[] = IRRIGATION_SYSTEMS.map((s, i) => ({
+	id: s.id,
+	name: s.label,
+	efficiency: s.efficiency,
+	preset: s.id,
+	sortOrder: i
+}));
 
 /** An IRRIGATION_SYSTEMS id. */
 export type IrrigationSystemId = (typeof IRRIGATION_SYSTEMS)[number]['id'];
@@ -1739,7 +1772,38 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				return out;
 			})
 		: model.transfers;
-	return { ...model, nodes, transfers };
+	return { ...model, nodes, transfers, ...upgradeCropEfficiencies(model as { crops?: unknown; irrigationSystems?: unknown }) };
+}
+
+/**
+ * Engine 0.43.0–1.71.0's crops carried their own efficiency; engine 1.72.0's
+ * name a row of the project's irrigation-systems table, as migration 198 stores
+ * them: each such crop gets the row with that efficiency as its default (a SABI
+ * one first; a row "Imported, NN %" is added when there is none), on the
+ * model's table or, without one, the defaults. A model without such a crop is
+ * left as it is. An efficiency outside (0, 1] stays, for the run to warn of.
+ */
+function upgradeCropEfficiencies(model: { crops?: unknown; irrigationSystems?: unknown }): { crops?: unknown; irrigationSystems?: IrrigationSystemDef[] } {
+	const legacy = (c: unknown): c is { irrigationEfficiency: number; irrigationSystemId?: string | null } => {
+		if (!c || typeof c !== 'object') return false;
+		const x = c as { irrigationEfficiency?: unknown; irrigationSystemId?: unknown };
+		return typeof x.irrigationEfficiency === 'number' && x.irrigationEfficiency > 0 && x.irrigationEfficiency <= 1 && x.irrigationSystemId == null;
+	};
+	if (!Array.isArray(model.crops) || !model.crops.some(legacy)) return {};
+	const table: IrrigationSystemDef[] = (Array.isArray(model.irrigationSystems) ? (model.irrigationSystems as IrrigationSystemDef[]) : DEFAULT_IRRIGATION_SYSTEMS).map((s) => ({ ...s }));
+	const rowFor = (e: number) => {
+		const hit = table.find((s) => s.efficiency === e);
+		if (hit) return hit.id;
+		const row: IrrigationSystemDef = { id: `imported-${e}`, name: `Imported, ${Math.round(e * 1000) / 10} %`, efficiency: e, preset: null, sortOrder: table.length };
+		table.push(row);
+		return row.id;
+	};
+	const crops = model.crops.map((c) => {
+		if (!legacy(c)) return c;
+		const { irrigationEfficiency, ...rest } = c;
+		return { ...rest, irrigationSystemId: rowFor(irrigationEfficiency) };
+	});
+	return { crops, irrigationSystems: table };
 }
 
 export interface CropDef {
@@ -1750,11 +1814,18 @@ export interface CropDef {
 	/** Crop factor per water-year month (Oct–Sep), 12 values. */
 	cropFactor: number[];
 	/**
-	 * This crop's irrigation application efficiency, 0 < e ≤ 1 (engine ≥
-	 * 0.43.0, issue #54): the irrigation system it is under. null / absent =
-	 * the farm's own `irrigationEfficiency`. A farm's efficiency is then its
-	 * crops' efficiencies combined, weighted by each crop's annual water
-	 * requirement (./demand.ts farmIrrigationEfficiency, docs/model.md §2.3).
+	 * The irrigation system this crop is under by default (engine ≥ 1.72.0): a
+	 * row of the project's irrigation-systems table (ProjectModel.irrigationSystems).
+	 * A planting (CropArea) may name another for its unit. null / absent = the
+	 * legacy `irrigationEfficiency`, else the unit's own.
+	 */
+	irrigationSystemId?: string | null;
+	/**
+	 * Engine 0.43.0–1.71.0: this crop's own efficiency, 0 < e ≤ 1. Still run
+	 * (a saved run's snapshot, an older document) when no system is named;
+	 * migration 198 turned each into a system. A unit's efficiency is its
+	 * plantings' combined, weighted by each one's annual water requirement
+	 * (./demand.ts unitIrrigationEfficiency, docs/model.md §2.3).
 	 */
 	irrigationEfficiency?: number | null;
 }
@@ -1763,6 +1834,12 @@ export interface CropArea {
 	nodeId: string;
 	cropId: string;
 	areaM2: number;
+	/**
+	 * The irrigation system this crop is under on this unit (engine ≥ 1.72.0):
+	 * a row of ProjectModel.irrigationSystems. null / absent = the crop's
+	 * default (CropDef.irrigationSystemId).
+	 */
+	irrigationSystemId?: string | null;
 }
 
 export interface Transfer {
@@ -1852,6 +1929,11 @@ export interface ProjectModel {
 	crops: CropDef[];
 	cropAreas: CropArea[];
 	transfers: Transfer[];
+	/**
+	 * The project's irrigation systems (engine ≥ 1.72.0): the table crops and
+	 * plantings name their system from. Absent = DEFAULT_IRRIGATION_SYSTEMS.
+	 */
+	irrigationSystems?: IrrigationSystemDef[];
 	/** Land-cover patches that reduce runoff (engine ≥ 0.24.0, WP-1.35). Absent on older documents = none. */
 	landCover?: LandCoverPatch[];
 	/**

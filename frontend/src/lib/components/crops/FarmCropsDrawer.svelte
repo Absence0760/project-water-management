@@ -19,6 +19,7 @@
 	import CroplandProposalsBox from './CroplandProposalsBox.svelte';
 	import { farmDemands } from './demand';
 	import { farmPlanting, inOrder, plantedFirst } from './farmDrawer';
+	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 
 	let {
 		open = $bindable(false),
@@ -63,6 +64,13 @@
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
 	const peak = $derived(demand ? demand.monthlyM3Day.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0) : 0);
 	const ha = (m2: number) => fmtNum(m2 / 10_000, 2);
+	// Each crop's irrigation system on this unit (engine ≥ 1.72.0): its own here, else the crop's default.
+	const systems = $derived(systemsOf(editor.model));
+	const ownSystem = (cropId: string) => editor.model.cropAreas.find((a) => a.nodeId === nodeId && a.cropId === cropId)?.irrigationSystemId ?? '';
+	const defaultLabel = (cropId: string) => {
+		const s = findSystem(editor.model, editor.model.crops.find((c) => c.id === cropId)?.irrigationSystemId);
+		return s ? `The crop's default (${systemLabel(s)})` : "The crop's default (none: the unit's own)";
+	};
 </script>
 
 <Dialog bind:open title={node ? `${name}: planted areas` : 'Hydrological unit not found'} side>
@@ -73,7 +81,7 @@
 	{:else}
 		<table class="data compact areas">
 			<thead>
-				<tr><th scope="col">Crop</th><th scope="col" class="num">Area <span class="u">ha</span></th></tr>
+				<tr><th scope="col">Crop</th><th scope="col" class="num">Area <span class="u">ha</span></th><th scope="col">Irrigation system</th></tr>
 			</thead>
 			<tbody>
 				{#each rows as r (r.cropId)}
@@ -91,17 +99,30 @@
 								bind:value={() => editor.cropArea(nodeId, r.cropId), (n) => editor.setCropArea(nodeId, r.cropId, n ?? 0)}
 							/>
 						</td>
+						<td class="sys">
+							<!-- Only a planted crop has a system on the unit: plant it first. -->
+							<select
+								aria-label="Irrigation system of {r.name || 'crop'} on {name}"
+								disabled={readonly || editor.cropArea(nodeId, r.cropId) <= 0}
+								value={ownSystem(r.cropId)}
+								onchange={(e) => editor.setPlantingSystem(nodeId, r.cropId, e.currentTarget.value || null)}
+							>
+								<option value="">{defaultLabel(r.cropId)}</option>
+								{#each systems as s (s.id)}<option value={s.id}>{systemLabel(s)}</option>{/each}
+							</select>
+						</td>
 					</tr>
 				{/each}
 			</tbody>
 			<tfoot>
-				<tr><th scope="row">Total</th><td class="num" data-testid="farm-total">{ha(planting.totalM2)} ha</td></tr>
+				<tr><th scope="row">Total</th><td class="num" data-testid="farm-total">{ha(planting.totalM2)} ha</td><td></td></tr>
 			</tfoot>
 		</table>
 		<!-- After the table, so opening the sheet focuses the first area, not this link. -->
 		<p class="muted small">
-			Irrigated area of each crop on this hydrological unit, in hectares. The same values as this hydrological unit's row on
-			<a href="?tab=crops">Crops &amp; demand</a>, where the crop factors are set.
+			Irrigated area of each crop on this hydrological unit, in hectares, and the irrigation system it is under here. The same
+			values as this hydrological unit's row on <a href="?tab=crops">Crops &amp; demand</a>, where the crop factors, each crop's
+			default system and the systems' efficiencies are set.
 		</p>
 		{#if !apanSet}
 			<p class="muted small">A-pan evaporation isn't set yet, so this hydrological unit's demand is zero (<a href="?tab=settings#set-demand">Settings &amp; calibration, Demand</a>).</p>
@@ -138,6 +159,13 @@
 	}
 	.areas td {
 		width: 9rem;
+	}
+	.areas td.sys {
+		width: auto;
+	}
+	.sys select {
+		width: 100%;
+		min-width: 0;
 	}
 	.areas th[scope='row'] {
 		text-align: left;

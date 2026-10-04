@@ -94,12 +94,13 @@ export function damWorkings(n: NetworkNode, engineVersion?: string): DamWorkings
 /**
  * The irrigation efficiency runModel used for farm `n` (run.ts irrigation):
  * its own, 1 when that is outside (0, 1], combined with its crops' own
- * efficiencies (engine ≥ 0.43.0, ../demand.ts farmIrrigationEfficiency).
+ * efficiencies (engine ≥ 0.43.0), or each planting's system (engine ≥ 1.72.0,
+ * ../demand.ts unitIrrigationEfficiency).
  */
 export function runEfficiency(input: Pick<ModelInput, 'settings' | 'model'>, n: NetworkNode): number {
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
 	const apan = input.settings?.apanMm;
-	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : []);
+	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : [], input.model.irrigationSystems);
 }
 
 /**

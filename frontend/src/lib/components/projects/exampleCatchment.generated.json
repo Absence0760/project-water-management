@@ -41,7 +41,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.71.0",
+			"engineVersion": "1.72.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -216,7 +216,7 @@
 					},
 					"kgeLowHigh": {
 						"lo": 0.9341959012459352,
-						"hi": 0.9431907313672846
+						"hi": 0.9431907313672844
 					}
 				},
 				"benchmarks": {
@@ -268,7 +268,7 @@
 					"volumeErrorPct": 8.491141963801585,
 					"fdcHighPct": 1.8083595569254935,
 					"fdcMidSlopePct": 0.21960025193536942,
-					"fdcLowPct": 19.790936240050492
+					"fdcLowPct": 19.790936240050513
 				},
 				"wr2012Fit": {
 					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
@@ -293,16 +293,16 @@
 						{
 							"key": "sd",
 							"observed": 7.129015757319639,
-							"simulated": 7.452402326918237,
-							"diffPct": 4.536202199673414,
+							"simulated": 7.452402326918238,
+							"diffPct": 4.536202199673427,
 							"bandPct": 6,
 							"withinBand": true
 						},
 						{
 							"key": "logSd",
 							"observed": 0.10551704211890882,
-							"simulated": 0.10227812109776521,
-							"diffPct": -3.0695714702593873,
+							"simulated": 0.10227812109776525,
+							"diffPct": -3.0695714702593477,
 							"bandPct": 6,
 							"withinBand": true
 						},
@@ -608,7 +608,7 @@
 						"years": 8,
 						"kgePrime": {
 							"lo": 0.904734215250939,
-							"hi": 0.9279803021812477
+							"hi": 0.9279803021812476
 						},
 						"nse": {
 							"lo": 0.8165425139241436,
@@ -616,7 +616,7 @@
 						},
 						"kgeLowHigh": {
 							"lo": 0.9140548166506617,
-							"hi": 0.9333448849958326
+							"hi": 0.9333448849958328
 						}
 					},
 					"benchmarks": {
@@ -676,7 +676,7 @@
 						"volumeErrorPct": -0.564273965080783,
 						"fdcHighPct": -3.654448197295276,
 						"fdcMidSlopePct": 0.8569287960810764,
-						"fdcLowPct": 43.02531281728144
+						"fdcLowPct": 43.02531281728146
 					},
 					"wr2012Fit": {
 						"waterYears": [2012,2016,2022,2023],
@@ -685,16 +685,16 @@
 							{
 								"key": "mar",
 								"observed": 25.677587618677833,
-								"simulated": 25.453859509503488,
-								"diffPct": -0.8712972281383865,
+								"simulated": 25.453859509503484,
+								"diffPct": -0.8712972281384004,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "meanLog",
 								"observed": 1.403456777435582,
-								"simulated": 1.398102223019287,
-								"diffPct": -0.3815261362076914,
+								"simulated": 1.3981022230192868,
+								"diffPct": -0.3815261362077072,
 								"bandPct": 4,
 								"withinBand": true
 							},
@@ -709,8 +709,8 @@
 							{
 								"key": "logSd",
 								"observed": 0.08504563024467414,
-								"simulated": 0.09601622123360257,
-								"diffPct": 12.899652759778855,
+								"simulated": 0.09601622123360254,
+								"diffPct": 12.89965275977882,
 								"bandPct": 6,
 								"withinBand": false
 							},
@@ -855,7 +855,7 @@
 							"hi": 0.8816327010436903
 						},
 						"kgeLowHigh": {
-							"lo": 0.9286441219345084,
+							"lo": 0.9286441219345083,
 							"hi": 0.9369075267145737
 						}
 					},
@@ -1199,37 +1199,44 @@
 			{
 				"nodeId": "b1698e42-171c-582b-a4f9-37112f856949",
 				"cropId": "778c530c-4ca9-5d06-aa83-1c3706950182",
-				"areaM2": 450000
+				"areaM2": 450000,
+				"irrigationSystemId": "micro"
 			},
 			{
 				"nodeId": "b1698e42-171c-582b-a4f9-37112f856949",
 				"cropId": "40625f05-9e2b-55a0-b302-d00190c07127",
-				"areaM2": 200000
+				"areaM2": 200000,
+				"irrigationSystemId": "micro"
 			},
 			{
 				"nodeId": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
 				"cropId": "9c3981b4-30d8-59d1-8ea0-241520809047",
-				"areaM2": 600000
+				"areaM2": 600000,
+				"irrigationSystemId": "drip"
 			},
 			{
 				"nodeId": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
 				"cropId": "9ad0128f-a416-510a-b6dd-2de98c47bcf6",
-				"areaM2": 250000
+				"areaM2": 250000,
+				"irrigationSystemId": "drip"
 			},
 			{
 				"nodeId": "df715b3b-864b-544f-ad00-6af5247c77d4",
 				"cropId": "9c3981b4-30d8-59d1-8ea0-241520809047",
-				"areaM2": 400000
+				"areaM2": 400000,
+				"irrigationSystemId": "micro"
 			},
 			{
 				"nodeId": "47a6d503-82fd-5e8e-bcde-178635fc039b",
 				"cropId": "9ad0128f-a416-510a-b6dd-2de98c47bcf6",
-				"areaM2": 500000
+				"areaM2": 500000,
+				"irrigationSystemId": "drip"
 			},
 			{
 				"nodeId": "47a6d503-82fd-5e8e-bcde-178635fc039b",
 				"cropId": "ca3971cb-0829-57fd-b42b-ac4c76bb77a0",
-				"areaM2": 100000
+				"areaM2": 100000,
+				"irrigationSystemId": "drip"
 			}
 		],
 		"transfers": [

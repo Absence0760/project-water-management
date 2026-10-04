@@ -49,6 +49,7 @@
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
+	import IrrigationSystemsPanel from './IrrigationSystemsPanel.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	let {
@@ -397,6 +398,8 @@
 				</section>
 			</div>
 		</div>
+		<!-- Below the window-fit layout, full width: the systems table scrolls with the page (engine ≥ 1.72.0). -->
+		<div class="systems-row"><IrrigationSystemsPanel {editor} {readonly} /></div>
 	</div>
 
 	{#if sheetCrop && onsave}
@@ -413,6 +416,9 @@
 {/if}
 
 <style>
+	.systems-row {
+		margin-top: 1rem;
+	}
 	.grids-menu {
 		position: relative;
 	}

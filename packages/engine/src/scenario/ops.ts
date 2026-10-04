@@ -648,18 +648,22 @@ export function ewrRuleTableOpIssues(raw: unknown): { table: EwrRuleTable | null
 // ---------------------------------------------------------------------------
 
 /**
- * The fields `crop.set` may change: the name, the 12 crop factors and the
- * crop's own irrigation efficiency (null = the farm's). Never `id`, and not
- * `sortOrder` (display only).
+ * The fields `crop.set` may change: the name, the 12 crop factors, its default
+ * irrigation system (engine ≥ 1.72.0, a row of the model's table; null = none)
+ * and, from engine 0.43.0–1.71.0's scenarios, its own irrigation efficiency
+ * (applied as the system row with that efficiency on every unit growing it,
+ * overrides.ts). Never `id`, and not `sortOrder` (display only).
  */
-export const CROP_SET_FIELDS = ['name', 'cropFactor', 'irrigationEfficiency'] as const;
+export const CROP_SET_FIELDS = ['name', 'cropFactor', 'irrigationSystemId', 'irrigationEfficiency'] as const;
 export type CropSetField = (typeof CROP_SET_FIELDS)[number];
 
 const cropFactors: Check = (v) => (Array.isArray(v) && v.length === 12 && v.every((x) => isNum(x) && x >= 0) ? null : 'must be 12 crop factors ≥ 0');
 const CROP_FIELD_CHECKS: Record<CropSetField, Check> = {
 	name,
 	cropFactor: cropFactors,
-	// The crop's own irrigation efficiency (engine ≥ 0.43.0); null = the farm's.
+	// The crop's default irrigation system (engine ≥ 1.72.0): an id in the model's table, checked when it applies.
+	irrigationSystemId: nullable(id),
+	// The crop's own irrigation efficiency (engine 0.43.0–1.71.0's scenarios); null = the unit's.
 	irrigationEfficiency: nullable(range(0, 1, { loOpen: true }))
 };
 
@@ -927,8 +931,12 @@ export type ScenarioOp =
 	| { op: 'node.move'; nodeId: string; downstreamNodeId: string }
 	/** A new node on a reach (engine ≥ 1.35.0): `upstreamNodeIds`, each draining into the new node's downstream node, drain into it instead. */
 	| NodeInsertOp
-	/** Set a farm's area of one crop; 0 removes the row. */
-	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number }
+	/**
+	 * Set a farm's area of one crop; 0 removes the row. `irrigationSystemId`
+	 * (engine ≥ 1.72.0) puts the crop on that system on this unit (null: the
+	 * crop's default); absent keeps the planting's own.
+	 */
+	| { op: 'cropArea.set'; nodeId: string; cropId: string; areaM2: number; irrigationSystemId?: string | null }
 	| { op: 'crop.add'; crop: CropDef }
 	/** Change one field of a crop definition (engine ≥ 1.35.0): its name, crop factors or own irrigation efficiency. */
 	| CropSetOp
@@ -1111,6 +1119,7 @@ const CROP_FIELDS: Record<string, Check> = {
 	name,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
 	cropFactor: CROP_FIELD_CHECKS.cropFactor,
+	irrigationSystemId: CROP_FIELD_CHECKS.irrigationSystemId,
 	irrigationEfficiency: CROP_FIELD_CHECKS.irrigationEfficiency
 };
 const TRANSFER_FIELDS: Record<string, Check> = { id, ...TRANSFER_FIELD_CHECKS };
@@ -1196,11 +1205,19 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 			op = { op: 'node.insert', node, upstreamNodeIds: Array.isArray(ups) ? (cloneValue(ups) as string[]) : [] };
 			break;
 		}
-		case 'cropArea.set':
-			op = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
+		case 'cropArea.set': {
+			const a: Extract<ScenarioOp, { op: 'cropArea.set' }> = { op: 'cropArea.set', nodeId: need('nodeId', id) as string, cropId: need('cropId', id) as string, areaM2: need('areaM2', nonNeg) as number };
+			// Kept only when given, so an older op's stored form (and its hash) is what was sent.
+			if (raw.irrigationSystemId !== undefined) {
+				const e = nullable(id)(raw.irrigationSystemId);
+				if (e) errors.push(`${where}.irrigationSystemId: ${e}`);
+				else a.irrigationSystemId = raw.irrigationSystemId as string | null;
+			}
+			op = a;
 			break;
+		}
 		case 'crop.add':
-			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationEfficiency'])) as unknown as CropDef };
+			op = { op: 'crop.add', crop: sub('crop', CROP_FIELDS, new Set(['sortOrder', 'irrigationSystemId', 'irrigationEfficiency'])) as unknown as CropDef };
 			break;
 		case 'crop.set': {
 			const cropId = need('cropId', id);

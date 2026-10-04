@@ -93,8 +93,8 @@ MUTANTS = [
     ("rain equal to the threshold offsets demand", "v if v > thr else 0.0", "v if v >= thr else 0.0"),
     ("the warm-up cycles the forecast tail too", "            hist = tail[0]\n", "            pass\n"),
     (
-        "crop efficiencies are ignored (farm e only)",
-        "if not any(own(c) is not None for c, a in rows if a > 0):",
+        "planting efficiencies are ignored (farm e only)",
+        "if not any(own(c, p) is not None for c, a, p in rows if a > 0):",
         "if True:",
     ),
     ("GR4J's PE uses the 28.25-day February", "pet.append(monthly / calendar_days_in_month(o))", "pet.append(monthly / mdays[m])"),

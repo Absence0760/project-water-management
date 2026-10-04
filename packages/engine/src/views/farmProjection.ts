@@ -40,10 +40,10 @@ import {
 	type ReportWindow
 } from '../network/curtailment';
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
-import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type NetworkNode, type Transfer } from '../project';
+import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type IrrigationSystemDef, type NetworkNode, type Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
 import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverTakeKey } from '../network/riverSource';
-import { modelFarmEfficiency, type CropEfficiencyInput } from '../demand';
+import { modelFarmEfficiency, type CropEfficiencyInput, type CropSystemInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
 
 /** A stored daily series: run_series.values, where a missing (non-finite) day is null. */
@@ -109,15 +109,16 @@ export interface ProjectionRun {
 	nodes: readonly NetworkNode[];
 	transfers: readonly Transfer[];
 	/**
-	 * The snapshot's crops and crop areas and the run's monthly A-pan
-	 * (settings.apanMm): a farm whose crops carry their own irrigation
-	 * efficiency runs on a combined one (engine ≥ 0.43.0, ../demand.ts
-	 * farmIrrigationEfficiency), which its consumptive share follows. Absent
-	 * = each farm's own irrigationEfficiency, right for any run whose crops
-	 * carry none.
+	 * The snapshot's crops, crop areas and irrigation systems and the run's
+	 * monthly A-pan (settings.apanMm): a farm whose plantings carry their own
+	 * irrigation system (engine ≥ 1.72.0; a crop's own efficiency from 0.43.0)
+	 * runs on a combined efficiency (../demand.ts unitIrrigationEfficiency),
+	 * which its consumptive share follows. Absent = each farm's own
+	 * irrigationEfficiency, right for any run whose crops carry none.
 	 */
-	crops?: readonly CropEfficiencyInput[];
+	crops?: readonly (CropEfficiencyInput & CropSystemInput)[];
 	cropAreas?: readonly CropArea[];
+	irrigationSystems?: readonly IrrigationSystemDef[] | null;
 	apanMm?: ArrayLike<unknown>;
 	/**
 	 * The snapshot's demand objects (engine ≥ 1.7.0, docs/model.md §2.7f): a
@@ -424,9 +425,9 @@ function reattribute(run: ProjectionRun, days: number): { res: AttributionResult
 }
 
 /** The farm's irrigation efficiency as runModel ran it: its own (1 outside (0, 1]), combined with its crops' own (engine ≥ 0.43.0). */
-function runEfficiency(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm'>): number {
+function runEfficiency(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm' | 'irrigationSystems'>): number {
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
-	return run.crops && run.cropAreas ? modelFarmEfficiency(e, n.id, run.crops, run.cropAreas, run.apanMm ?? []) : e;
+	return run.crops && run.cropAreas ? modelFarmEfficiency(e, n.id, run.crops, run.cropAreas, run.apanMm ?? [], run.irrigationSystems) : e;
 }
 
 /** k = 1 − r for a farm (r at most 1 − e), 1 − r for another water user, 1 for a gauge; clamped as runModel clamps them (run.ts irrigation, otherUsers). */

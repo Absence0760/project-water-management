@@ -2,7 +2,8 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
+import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
+import { findSystem, systemLabel } from '$lib/model/systems';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
@@ -87,7 +88,7 @@ export function monthlyRows(s: RunSettings): { label: string; values: string[] }
 const KIND: Record<string, string> = { farm: 'Hydrological unit', gauge: 'Gauge', user: 'Other water user' };
 
 /** Every node in network order: kind, what it drains into, area, dam and irrigation efficiency. */
-export function nodeRows(model: Partial<ProjectModel>): string[][] {
+export function nodeRows(model: Partial<ProjectModel>, apanMm: readonly number[] = []): string[][] {
 	const nodes = [...(model.nodes ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
 	const name = new Map(nodes.map((n) => [n.id, n.name || '(unnamed)']));
 	return nodes.map((n) => [
@@ -96,11 +97,29 @@ export function nodeRows(model: Partial<ProjectModel>): string[][] {
 		n.downstreamNodeId ? (name.get(n.downstreamNodeId) ?? '–') : 'outlet',
 		n.kind === 'user' ? '–' : fmtNum(n.areaKm2, 2),
 		n.damCapacityM3 >= 1 ? fmtNum(n.damCapacityM3) : '–',
-		n.kind === 'farm' ? fmtPct(n.irrigationEfficiency, 0) : '–'
+		// As the run used it: its crops' irrigation systems blended (engine ≥ 1.72.0), else its own.
+		n.kind === 'farm'
+			? fmtPct(
+					modelFarmEfficiency(n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1, n.id, model.crops ?? [], model.cropAreas ?? [], apanMm, upgradeLegacyModel({ nodes: [], crops: model.crops ?? [], irrigationSystems: model.irrigationSystems }).irrigationSystems),
+					0
+				)
+			: '–'
 	]);
 }
 
 /** Planted area per farm and crop, in hectares, in network then crop order. */
+/**
+ * A planting's irrigation system as the run had it (engine ≥ 1.72.0): its own on
+ * the unit, else its crop's default, "Drip, 90 %"; a crop's own efficiency
+ * (a run before 1.72.0) as a percentage; else the unit's own.
+ */
+function plantingSystemText(model: Partial<ProjectModel>, a: { cropId: string; irrigationSystemId?: string | null }): string {
+	const up = upgradeLegacyModel({ nodes: [], crops: model.crops ?? [], irrigationSystems: model.irrigationSystems });
+	const c = (up.crops ?? []).find((x) => x.id === a.cropId);
+	const s = findSystem({ irrigationSystems: up.irrigationSystems }, a.irrigationSystemId ?? c?.irrigationSystemId ?? null);
+	return s ? systemLabel(s) : "the unit's own";
+}
+
 export function cropAreaRows(model: Partial<ProjectModel>): string[][] {
 	const order = new Map((model.nodes ?? []).map((n) => [n.id, n.sortOrder]));
 	const farm = new Map((model.nodes ?? []).map((n) => [n.id, n.name || '(unnamed)']));
@@ -110,7 +129,7 @@ export function cropAreaRows(model: Partial<ProjectModel>): string[][] {
 	return (model.cropAreas ?? [])
 		.filter((a) => a.areaM2 > 0)
 		.sort((a, b) => (order.get(a.nodeId) ?? 1e9) - (order.get(b.nodeId) ?? 1e9) || (cropOrder.get(a.cropId) ?? 1e9) - (cropOrder.get(b.cropId) ?? 1e9))
-		.map((a) => [farm.get(a.nodeId) ?? '(removed)', crop.get(a.cropId) ?? '(removed)', fmtNum(a.areaM2 / 10_000, 2)]);
+		.map((a) => [farm.get(a.nodeId) ?? '(removed)', crop.get(a.cropId) ?? '(removed)', fmtNum(a.areaM2 / 10_000, 2), plantingSystemText(model, a)]);
 }
 
 /**

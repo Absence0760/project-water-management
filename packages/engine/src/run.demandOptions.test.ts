@@ -246,3 +246,52 @@ describe('the invariants hold with both options on', () => {
 		expect(tested).toBe(12);
 	});
 });
+
+describe('irrigation systems per crop and per unit (engine 1.72.0)', () => {
+	const crop = (over: Partial<CropDef> = {}): CropDef => ({ id: 'a', name: 'Crop a', cropFactor: [...flat(1)], ...over });
+	const one = (c: CropDef, area: Partial<CropArea> = {}, systems?: NonNullable<ModelInput['model']['irrigationSystems']>): ModelInput => {
+		const x = input({ crops: [c], cropAreas: [{ nodeId: 'F', cropId: 'a', areaM2: 1000, ...area }], startDate: '2020-10-01', rain: [0] });
+		if (systems) x.model.irrigationSystems = systems;
+		return x;
+	};
+
+	it('runs a crop at its default system’s efficiency from the default table, and a unit’s own system over it', () => {
+		// 100 m³/day of requirement: Flood / furrow (70 %) abstracts 100 / 0.7, Drip (90 %) 100 / 0.9.
+		const flood = run(one(crop({ irrigationSystemId: 'surface' })));
+		expect(get(flood, 'demand')[0]).toBeCloseTo(100 / 0.7, 9);
+		const drip = run(one(crop({ irrigationSystemId: 'surface' }), { irrigationSystemId: 'drip' }));
+		expect(get(drip, 'demand')[0]).toBeCloseTo(100 / 0.9, 9);
+		expect(drip.summary.warnings.filter((w) => w.includes('irrigation system'))).toEqual([]);
+		// The unit's 20 % return flow is more than drip's 10 % of losses: the run caps it there and says so.
+		expect(drip.summary.warnings).toContain('unit "F": return flow 20 % of the water supplied is more than its losses at 90 % irrigation efficiency; using 10 %');
+	});
+
+	it('takes the project’s own table: a row’s efficiency moves every crop on it', () => {
+		const table = [{ id: 's1', name: 'Our drip', efficiency: 0.95, preset: 'drip' as const }];
+		expect(get(run(one(crop({ irrigationSystemId: 's1' }), {}, table)), 'demand')[0]).toBeCloseTo(100 / 0.95, 9);
+	});
+
+	it('the same crop on two units runs at each unit’s own system', () => {
+		const x = input({
+			crops: [crop({ irrigationSystemId: 'drip' })],
+			cropAreas: [
+				{ nodeId: 'F', cropId: 'a', areaM2: 1000 },
+				{ nodeId: 'G', cropId: 'a', areaM2: 1000, irrigationSystemId: 'surface' }
+			],
+			startDate: '2020-10-01',
+			rain: [0]
+		});
+		x.model.nodes.push(farm({ id: 'G', name: 'G', sortOrder: 1, downstreamNodeId: 'F' }));
+		const out = run(x);
+		expect(get(out, 'demand', 'F')[0]).toBeCloseTo(100 / 0.9, 9);
+		expect(get(out, 'demand', 'G')[0]).toBeCloseTo(100 / 0.7, 9);
+	});
+
+	it('falls back to the crop’s legacy efficiency, then the unit’s, and warns once for a system the table lacks', () => {
+		expect(get(run(one(crop({ irrigationEfficiency: 0.5 }))), 'demand')[0]).toBeCloseTo(200, 9);
+		expect(get(run(one(crop())), 'demand')[0]).toBeCloseTo(125, 9); // the unit's 0.8
+		const missing = run(one(crop({ irrigationSystemId: 'gone' })));
+		expect(get(missing, 'demand')[0]).toBeCloseTo(125, 9);
+		expect(missing.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; using the unit's efficiency"]);
+	});
+});

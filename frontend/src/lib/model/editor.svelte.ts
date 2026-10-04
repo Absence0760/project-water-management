@@ -1,9 +1,10 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { newNetworkNode, OFFTAKE_DEFAULTS, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { NEW_FARM_IRRIGATION_SYSTEM, newNetworkNode, OFFTAKE_DEFAULTS, type IrrigationSystemDef, transferRatesM3s, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
+import { systemsOf } from './systems';
 import { validateModel, type ModelIssue } from './validate';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -74,6 +75,11 @@ export class ModelEditor {
 	dirty = $derived(JSON.stringify(this.model) !== this.#saved);
 	/** Nodes as last loaded or saved: the ones the server knows, so notes (WP-2.7) can be kept on them. */
 	savedNodeIds = $derived(new Set((JSON.parse(this.#saved) as ProjectModel).nodes.map((n) => n.id)));
+	/**
+	 * The project's monthly A-pan (settings.apanMm), set by the page: a unit's efficiency is its plantings'
+	 * systems blended by their requirement at it (engine ≥ 1.72.0), which the unit form shows.
+	 */
+	apanMm = $state<readonly number[]>([]);
 	issues = $derived<ModelIssue[]>(validateModel(this.model));
 
 	load(m: ProjectModel) {
@@ -88,7 +94,9 @@ export class ModelEditor {
 			// Individual boreholes (WP-3.9): in the document only when there are any, as the API returns it.
 			...(m.boreholes?.length ? { boreholes: m.boreholes } : {}),
 			// Demand objects (engine ≥ 1.7.0): likewise only when there are any.
-			...(m.demandObjects?.length ? { demandObjects: m.demandObjects } : {})
+			...(m.demandObjects?.length ? { demandObjects: m.demandObjects } : {}),
+			// The project's irrigation systems (engine ≥ 1.72.0); an older API or document has none (the defaults).
+			...(m.irrigationSystems ? { irrigationSystems: m.irrigationSystems } : {})
 		};
 		this.model = clone(normalised);
 		this.#saved = JSON.stringify(this.model);
@@ -242,8 +250,35 @@ export class ModelEditor {
 		const c = newCrop();
 		c.name = `Crop ${this.model.crops.length + 1}`;
 		c.sortOrder = this.model.crops.reduce((m, x, i) => Math.max(m, (x.sortOrder ?? i) + 1), 0);
+		// A new crop starts on drip (the new-unit default, issue #90), the project's row for it if it still has one.
+		const drip = systemsOf(this.model).find((x) => x.preset === NEW_FARM_IRRIGATION_SYSTEM) ?? systemsOf(this.model)[0];
+		if (drip) c.irrigationSystemId = drip.id;
 		this.model.crops.push(c);
 		return c;
+	}
+
+	// --- irrigation systems (engine ≥ 1.72.0) -----------------------------
+	/** A new row of the project's own, at the end of the table. */
+	addIrrigationSystem() {
+		const table = (this.model.irrigationSystems ??= systemsOf(this.model).map((x) => ({ ...x })));
+		const row: IrrigationSystemDef = { id: crypto.randomUUID(), name: nextFreeName('System', table, table.length + 1), efficiency: 0.8, preset: null, sortOrder: table.length };
+		table.push(row);
+		return row;
+	}
+
+	/** Remove a row; a crop or planting on it falls back to none (the page asks first when one is). */
+	removeIrrigationSystem(id: string) {
+		this.model.irrigationSystems = systemsOf(this.model).filter((x) => x.id !== id);
+		for (const c of this.model.crops) if (c.irrigationSystemId === id) c.irrigationSystemId = null;
+		for (const a of this.model.cropAreas) if (a.irrigationSystemId === id) delete a.irrigationSystemId;
+	}
+
+	/** A unit's own system for a crop it plants; null = the crop's default. */
+	setPlantingSystem(nodeId: string, cropId: string, systemId: string | null) {
+		const a = this.model.cropAreas.find((x) => x.nodeId === nodeId && x.cropId === cropId);
+		if (!a) return;
+		if (systemId === null) delete a.irrigationSystemId;
+		else a.irrigationSystemId = systemId;
 	}
 
 	removeCrop(id: string) {

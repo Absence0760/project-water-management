@@ -226,6 +226,8 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `tests/model.spec.ts` | Build gauge + farms, crops, planted areas, a transfer; save; reload. Second outlet and loop block saving; unsaved-changes guard; thousands separators in the one-node form and the view-only table |
 | `tests/model-phone.spec.ts` | On a phone, crop factors, planted areas and a transfer rule render as cards with every field on screen; a desktop keeps the crop and transfer tables' column headers |
 | `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard (asks first); date validation |
+| `tests/irrigation-systems.spec.ts` | The project's irrigation systems (engine 1.72.0): the table on Crops & demand (an efficiency changed, a system added, one in use removed after asking), a crop's default in its sheet, a unit's own in the Planted areas grid and its drawer, and the unit's blended efficiency read-only on the Network |
+| `tests/return-flow.spec.ts` | A unit's return flow as a share of the water supplied (engine 1.71.0): the column, the read-only efficiency, a value above the losses flagged in the table and the unit form, and the most that fits saved |
 | `tests/save-bar.spec.ts` | The one save bar for the model, project details and settings: problems listed as links to their fields, Discard asks and names what goes, Save and run, focus and the "Changes saved" announcement |
 | `tests/month-picker.spec.ts` | The month toggles: at least 24 px, two rows of six on a phone, All months / No months named for their picker |
 | `tests/viewer-drop.spec.ts` | A viewer dropping a file on the workspace is told it's view only, and the browser doesn't open the file |

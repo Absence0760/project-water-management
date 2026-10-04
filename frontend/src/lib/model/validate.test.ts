@@ -121,13 +121,12 @@ describe('validateModel', () => {
 		expect(messages(model([a]))).toEqual(['"A": irrigation efficiency must be above 0%.']);
 	});
 
-	it('needs a return flow no more than the losses, 100% − efficiency of the water supplied (engine 1.71.0)', () => {
-		const a = node('a', 'A', null);
+	it('doesn’t refuse a return flow above the losses: the unit form warns and a run caps it (engine 1.72.0, systems.test.ts)', () => {
+		const g = node('g', 'G', null);
+		const a = node('a', 'A', 'g');
 		a.irrigationEfficiency = 0.9;
-		a.returnFlowFraction = 0.1; // all the losses (1 − 0.9 is 0.0999…98): fine
-		expect(messages(model([a]))).toEqual([]);
 		a.returnFlowFraction = 0.2;
-		expect(messages(model([a]))).toEqual(['"A": the return flow (20% of the water supplied) is more than the losses at 90% irrigation efficiency: at most 10% can return.']);
+		expect(messages(model([g, a]))).toEqual([]);
 	});
 
 	it('needs a whole-number transfer priority (Q18)', () => {

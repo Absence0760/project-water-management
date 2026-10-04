@@ -23,6 +23,7 @@ import {
 	DEVELOPMENT_DEFAULTS,
 	ENGINE_VERSION,
 	IRRIGATION_SYSTEMS,
+	NEW_FARM_IRRIGATION_SYSTEM,
 	NEW_FARM_IRRIGATION,
 	USER_DEFAULTS,
 	BOREHOLE_DEFAULTS,
@@ -281,7 +282,8 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 		};
 	});
 	const cropAreas = spec.farms.flatMap((f) =>
-		Object.entries(f.crops ?? {}).map(([crop, ha]) => ({ nodeId: nodeId(f.name), cropId: id(spec.key, `crop:${crop}`), areaM2: ha * 10_000 }))
+		// Each planting on its farm's irrigation system (engine ≥ 1.72.0), named by its SABI preset key: the project's row for it.
+		Object.entries(f.crops ?? {}).map(([crop, ha]) => ({ nodeId: nodeId(f.name), cropId: id(spec.key, `crop:${crop}`), areaM2: ha * 10_000, irrigationSystemId: f.system ?? NEW_FARM_IRRIGATION_SYSTEM }))
 	);
 	const transfers: Transfer[] = (spec.transfers ?? []).map((t, i) => ({
 		id: id(spec.key, `transfer:${i}`),

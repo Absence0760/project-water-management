@@ -15,6 +15,7 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { applyFactorPaste, cropFactorsCsv, planFactorPaste } from './areaPaste';
+	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 	import { joinNames } from './demand';
 
 	let {
@@ -49,6 +50,16 @@
 		farms.flatMap((f) => {
 			const m2 = editor.cropArea(f.id, cropId);
 			return m2 > 0 ? [`${f.name || '(unnamed)'} (${fmtNum(m2 / 10_000, 2)} ha)`] : [];
+		})
+	);
+
+	// Its default irrigation system (engine ≥ 1.72.0), and the units that put it on another.
+	const systems = $derived(systemsOf(editor.model));
+	const ownOn = $derived(
+		farms.flatMap((f) => {
+			const a = editor.model.cropAreas.find((x) => x.nodeId === f.id && x.cropId === cropId && x.areaM2 > 0);
+			const s = a?.irrigationSystemId ? findSystem(editor.model, a.irrigationSystemId) : null;
+			return s ? [`${f.name || '(unnamed)'} (${s.name})`] : [];
 		})
 	);
 
@@ -100,6 +111,22 @@
 				<span>Crop name</span>
 				<input id="crop-name-{crop.id}" maxlength="100" readonly={readonly} bind:value={crop.name} />
 			</label>
+			<div class="name">
+				<span class="lbl"><label for="crop-system-{crop.id}">Irrigation system</label> <HelpTip key="crop.irrigationSystemId" /></span>
+				<select
+					id="crop-system-{crop.id}"
+					disabled={readonly}
+					aria-describedby="crop-system-{crop.id}-h"
+					value={crop.irrigationSystemId ?? ''}
+					onchange={(e) => (crop.irrigationSystemId = e.currentTarget.value || null)}
+				>
+					<option value="">None (each unit's own efficiency)</option>
+					{#each systems as s (s.id)}<option value={s.id}>{systemLabel(s)}</option>{/each}
+				</select>
+				<span class="muted small hint" id="crop-system-{crop.id}-h" data-testid="crop-system-hint">
+					The system it is under wherever it grows{ownOn.length ? `, except on ${joinNames(ownOn)}` : ''}. A unit can put it on another in its planted areas.
+				</span>
+			</div>
 			<fieldset>
 				<legend>Crop factor by month <HelpTip key="crop.cropFactor" /></legend>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -187,6 +214,9 @@
 		gap: 0.25rem;
 		font-weight: 600;
 		font-size: 0.9rem;
+	}
+	.name .hint {
+		font-weight: 400;
 	}
 	fieldset {
 		margin: 0;

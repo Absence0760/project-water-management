@@ -25,7 +25,7 @@ import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
+import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -2757,16 +2757,13 @@ function buildDemand(
 ): { net: Float64Array; netBase?: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => {
-		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
-		const e = ownCropEfficiency(c.irrigationEfficiency);
-		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the unit's`);
-		return {
-			id: c.id,
-			name: c.name,
-			cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings),
-			...(e !== undefined ? { irrigationEfficiency: e } : {})
-		};
+		// A crop's legacy own efficiency (engine 0.43.0–1.71.0, a snapshot or older document); one outside (0, 1] falls back to the farm's.
+		if (c.irrigationSystemId == null && c.irrigationEfficiency != null && ownCropEfficiency(c.irrigationEfficiency) === undefined)
+			warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the unit's`);
+		return { id: c.id, name: c.name, cropFactor: monthly(c.cropFactor, `crop factors for "${c.name}"`, warnings) };
 	});
+	// Each planting's efficiency (engine ≥ 1.72.0): its system on the unit, else its crop's, from the project's table.
+	const plantingEfficiency = plantingEfficiencyResolver(cropDefs, input.model.irrigationSystems, warnings);
 	const cropIds = new Set(crops.map((c) => c.id));
 	// Crops and crop areas are summed in id order (crop id, then area), not
 	// list order, so a farm's demand is the same to the last bit however the
@@ -2806,6 +2803,7 @@ function buildDemand(
 		const d = { net: new Float64Array(days), gross: new Float64Array(days), rainOffset: new Float64Array(days), soilWater: new Float64Array(days), efficiency: farmOnly };
 		if (node.kind !== 'farm') return d;
 		const areas = new Map<string, number>();
+		const plantings: PlantingEfficiency[] = [];
 		let cropped = 0;
 		for (const ca of sortedAreas) {
 			if (ca.nodeId !== node.id) continue;
@@ -2814,6 +2812,8 @@ function buildDemand(
 				continue;
 			}
 			areas.set(ca.cropId, (areas.get(ca.cropId) ?? 0) + ca.areaM2);
+			const e = plantingEfficiency(ca);
+			plantings.push({ cropId: ca.cropId, areaM2: ca.areaM2, ...(e !== undefined ? { efficiency: e } : {}) });
 			cropped += ca.areaM2;
 		}
 		if (cropped === 0) return d;
@@ -2839,8 +2839,8 @@ function buildDemand(
 		// The requirement before the factor (engine ≥ 1.70.0): a full allocation fits its factor on it (§2.12a).
 		const netBase = factor && factorFrom < days ? Float64Array.from(f.net) : undefined;
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
-		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
-		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);
+		// Plantings under their own irrigation system (engine ≥ 0.43.0 per crop, 1.72.0 per unit): weighted by their annual requirement at the monthly A-pan.
+		const efficiency = (e: number) => unitIrrigationEfficiency(e, crops, plantings, settings.apanMm);
 		return { net: f.net, ...(netBase ? { netBase } : {}), gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.

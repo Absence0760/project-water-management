@@ -1464,11 +1464,25 @@ engine's `developmentProblem`, through `modelRuleProblems`); `GET` returns
 them as stored. A scenario's `node.set` may change them (the dam fields on a
 farm, `abstractionFrom` on a farm or user; [scenarios.md](./scenarios.md)).
 
-Crop demand options (engine ≥ 0.43.0, migration 061, issue #54,
-[model.md §2.3](./model.md#23-irrigation-demand) steps 6–7): a crop may carry
-`irrigationEfficiency` (0 < e ≤ 1, or `null` / absent = the farm's own). `GET`
-leaves the key out for a crop without one, so an older document reads back
-unchanged; `PUT` with `null` clears it and refuses anything outside (0, 1].
+Irrigation systems (engine ≥ 1.72.0, migration 198,
+[model.md §2.3](./model.md#23-irrigation-demand) step 6): the model carries
+`irrigationSystems`, the project's table (`{ id, name, efficiency, preset,
+sortOrder }`, efficiency 0 < e ≤ 1; a new project starts with the six SABI
+rows); a crop carries `irrigationSystemId`, its default (or `null` / absent:
+none), and a crop area `irrigationSystemId`, that unit's own (absent: the
+crop's default). A reference is a row's id, or a SABI preset's key (`drip`,
+`micro`, `pivot`, `sprinkler`, `movable`, `surface`) for the project's row
+for it; a document may also carry rows with ids of its own (`workbook-1`),
+which the save gives new ids. `PUT` without `irrigationSystems` keeps the
+project's table; with one, it replaces it (a row gone leaves its crops and
+plantings on none). A reference to a row the table lacks is a 400. `GET`
+leaves the keys out where there is none. A document from engine
+0.43.0–1.71.0 with a crop's own `irrigationEfficiency` reads as the system
+with that efficiency (a SABI row, else an added "Imported, NN %" row); one
+outside (0, 1] is refused, as before. The unit's own `irrigationEfficiency`
+is only the fallback for a planting with no system. A `returnFlowFraction`
+above the unit's losses at its blended efficiency is accepted (a run caps it
+and says so).
 Settings gain `effectiveRainFractionMonthly` (12 numbers 0–1, water-year
 months, or `null` = `effectiveRainFraction` every month; `PATCH` refuses
 anything else). A row of zeros is accepted (the run warns that rain then never

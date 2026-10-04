@@ -10,6 +10,7 @@
 	// (scenarios/OverrideEditor.svelte). The Crops page itself (CropsTab) is
 	// cards and bars over the same editor.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { prefetch } from '$lib/components/common/lazy';
@@ -188,6 +189,20 @@
 
 	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
 	const farmReorder = new RowReorder(() => farms.map((f) => f.id), (from, to) => moveFarm(from, to));
+	// Each planting's irrigation system (engine ≥ 1.72.0): its own on the unit, else its crop's default.
+	const systems = $derived(systemsOf(editor.model));
+	const ownSystem = (nodeId: string, cropId: string) => editor.model.cropAreas.find((a) => a.nodeId === nodeId && a.cropId === cropId)?.irrigationSystemId ?? '';
+	const cropDefault = (cropId: string) => findSystem(editor.model, editor.model.crops.find((c) => c.id === cropId)?.irrigationSystemId);
+	const defaultText = (cropId: string) => {
+		const d = cropDefault(cropId);
+		return d ? `Default: ${d.name}` : "Default: the unit's own";
+	};
+	const systemText = (nodeId: string, cropId: string) => {
+		const own = findSystem(editor.model, ownSystem(nodeId, cropId) || null);
+		const s = own ?? cropDefault(cropId);
+		return s ? `${s.name}${own ? '' : ' (default)'}` : "the unit's own";
+	};
+
 </script>
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
@@ -296,7 +311,7 @@
 <section class="panel" aria-labelledby="areas-h">
 	<div class="panel-head">
 		<h2 id="areas-h">Planted areas</h2>
-		<span class="muted small">Irrigated area per hydrological unit and crop, hectares · rows follow the network order</span>
+		<span class="muted small">Irrigated area per hydrological unit and crop, hectares, and its irrigation system there · rows follow the network order</span>
 	</div>
 	{#if farms.length === 0 || crops.length === 0}
 		<p class="muted">
@@ -337,6 +352,22 @@
 										nullable
 										bind:value={() => editor.cropArea(f.id, c.id), (n) => editor.setCropArea(f.id, c.id, n ?? 0)}
 									/>
+									<!-- Its irrigation system on this unit (engine ≥ 1.72.0), once planted: the crop's default unless the unit has its own. -->
+									{#if editor.cropArea(f.id, c.id) > 0}
+										{#if readonly}
+											<span class="sys-text" data-testid="area-system">{systemText(f.id, c.id)}</span>
+										{:else}
+											<select
+												class="sys"
+												aria-label="Irrigation system of {c.name || 'crop'} on {f.name || 'unit'}"
+												value={ownSystem(f.id, c.id)}
+												onchange={(e) => editor.setPlantingSystem(f.id, c.id, e.currentTarget.value || null)}
+											>
+												<option value="">{defaultText(c.id)}</option>
+												{#each systems as x (x.id)}<option value={x.id}>{systemLabel(x)}</option>{/each}
+											</select>
+										{/if}
+									{/if}
 								</td>
 							{/each}
 							<td class="num total"><span class="cell-label">Total{' '}</span>{ha(rowTotal(f.id))}<span class="cell-label">{' '}ha</span></td>
@@ -408,6 +439,21 @@
 </div>
 
 <style>
+	.areas .sys {
+		display: block;
+		width: 100%;
+		min-width: 0;
+		margin-top: 0.2rem;
+		font-size: 0.75rem;
+		padding: 0.1rem 0.2rem;
+	}
+	.areas .sys-text {
+		display: block;
+		margin-top: 0.15rem;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		text-align: right;
+	}
 	.crop-grids {
 		container: crop-grids / inline-size;
 	}

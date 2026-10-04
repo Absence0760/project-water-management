@@ -485,6 +485,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.irrigationEfficiency', 'crop.irrigationEfficiency']
 	},
 	{
+		id: 'irrigation-system',
+		term: 'Irrigation system',
+		short: 'How a crop is watered on a unit (drip, pivot, flood…): its efficiency comes from the project’s table on Crops & demand.',
+		units: 'a row of the project’s table',
+		category: 'farm',
+		fields: ['crop.irrigationSystemId', 'cropArea.irrigationSystemId']
+	},
+	{
 		id: 'demand-factor',
 		term: 'Demand factor',
 		short: 'A scenario’s multiplier on what a unit or water user would take, per month (0.85 = 85 %); on a unit also per part (crops, a category).',

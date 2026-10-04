@@ -42,6 +42,8 @@ interface World {
 	/** A farm with no crop area, farmer link or alert rule, for rows that are unique per farm. */
 	farm2Id: string;
 	cropId: string;
+	/** One of the project's irrigation systems (migration 198 seeds six). */
+	irrigationSystemId: string;
 	runId: string;
 	run2Id: string;
 	revisionId: string;
@@ -225,6 +227,7 @@ async function world(name: string): Promise<World> {
 		farmId: farm.id,
 		farm2Id: farm2.id,
 		cropId: crop.id,
+		irrigationSystemId: ((await asOwner(`SELECT id::text FROM irrigation_system WHERE project_id = $1 ORDER BY sort_order LIMIT 1`, [projectId])) as { id: string }[])[0]!.id,
 		runId,
 		run2Id,
 		revisionId: rev!.id as string,
@@ -364,6 +367,15 @@ const CASES: Record<string, Case> = {
 	'node.downstream_node_id': {
 		ref: (w) => w.outletId,
 		insert: (h, ref) => [`INSERT INTO node (id, project_id, name, kind, downstream_node_id) VALUES ($1, $2, $3, 'farm', $4)`, [randomUUID(), h.projectId, `N ${randomUUID()}`, ref]]
+	},
+	// A crop's default and a unit's own irrigation system (198): a row of the crop's own project only.
+	'crop.irrigation_system_id': {
+		ref: (w) => w.irrigationSystemId,
+		insert: (h, ref) => [`INSERT INTO crop (project_id, name, crop_factor, irrigation_system_id) VALUES ($1, $2, array_fill(0.5::float8, ARRAY[12]), $3)`, [h.projectId, `C ${randomUUID()}`, ref]]
+	},
+	'crop_area.irrigation_system_id': {
+		ref: (w) => w.irrigationSystemId,
+		insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2, irrigation_system_id) VALUES ($1, $2, $3, 1, $4)', [h.projectId, h.farm2Id, h.cropId, ref]]
 	},
 	'crop_area.crop_id': { ref: (w) => w.cropId, insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2) VALUES ($1, $2, $3, 1)', [h.projectId, h.farm2Id, ref]] },
 	'crop_area.node_id': { ref: (w) => w.farm2Id, insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2) VALUES ($1, $2, $3, 1)', [h.projectId, ref, h.cropId]] },

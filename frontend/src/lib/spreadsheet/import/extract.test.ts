@@ -40,9 +40,20 @@ describe('extractProject on a small synthetic workbook', () => {
 		// A gauge takes the Python's defaults and no flow share.
 		expect(outlet).toMatchObject({ kind: 'gauge', downstreamNodeId: null, areaKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, sortOrder: 2 });
 		expect(project.model.crops.map((c) => c.id)).toEqual([uid('crop:Maize'), uid('crop:Wheat')]);
+		// Each planting on its farm's efficiency (engine 1.72.0): Farm A's 80 % is SABI's permanent sprinkler; Farm B,
+		// with no return flow, runs at 100 %, which no SABI system has, so a "Workbook, 100 %" row is added.
 		expect(project.model.cropAreas).toEqual([
-			{ nodeId: uid('node:Farm A'), cropId: uid('crop:Maize'), areaM2: 10000 },
-			{ nodeId: uid('node:Farm B'), cropId: uid('crop:Wheat'), areaM2: 5000 }
+			{ nodeId: uid('node:Farm A'), cropId: uid('crop:Maize'), areaM2: 10000, irrigationSystemId: 'sprinkler' },
+			{ nodeId: uid('node:Farm B'), cropId: uid('crop:Wheat'), areaM2: 5000, irrigationSystemId: 'workbook-1' }
+		]);
+		expect(project.model.irrigationSystems!.map((s) => [s.id, s.name, s.efficiency])).toEqual([
+			['drip', 'Drip', 0.9],
+			['micro', 'Micro-sprinkler', 0.82],
+			['pivot', 'Centre pivot / linear move', 0.85],
+			['sprinkler', 'Sprinkler (permanent)', 0.8],
+			['movable', 'Sprinkler (movable)', 0.75],
+			['surface', 'Flood / furrow', 0.7],
+			['workbook-1', 'Workbook, 100 %', 1]
 		]);
 		expect(project.model.transfers).toEqual([
 			{

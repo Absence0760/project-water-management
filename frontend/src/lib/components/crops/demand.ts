@@ -5,7 +5,7 @@
 // (audit N1, docs/model.md §2.3).
 import {
 	daysPerMonth,
-	farmIrrigationEfficiency,
+	modelFarmEfficiency,
 	grossFarmDemandM3PerDay,
 	ownCropEfficiency,
 	type Crop,
@@ -57,10 +57,10 @@ export function farmDemands(
 			areaM2 += a.areaM2;
 		}
 		const apan = apanMm as unknown as Monthly;
-		// One efficiency per unit, as a run uses: a farm's own (a value outside (0, 1] runs as 1) blended
-		// with its crops' systems; a non-farm with crop areas abstracts its requirement (e = 1).
+		// One efficiency per unit, as a run uses: its plantings' irrigation systems (engine ≥ 1.72.0) blended,
+		// its own where one has none (a value outside (0, 1] runs as 1); a non-farm with crop areas abstracts its requirement (e = 1).
 		const node = byId.get(nodeId);
-		const e = node?.kind === 'farm' ? farmIrrigationEfficiency(ownCropEfficiency(node.irrigationEfficiency) ?? 1, model.crops, areas, apan) : 1;
+		const e = node?.kind === 'farm' ? modelFarmEfficiency(ownCropEfficiency(node.irrigationEfficiency) ?? 1, nodeId, model.crops, model.cropAreas, apan, model.irrigationSystems) : 1;
 		const monthly = grossFarmDemandM3PerDay(apan, crops, areas, februaryDays).map((v) => v / e);
 		// The engine sums area × gross over crops, so one crop at a time splits it exactly.
 		const byCrop = new Map<string, number[]>();

@@ -105,26 +105,26 @@ describe('the workbook warnings the dialog lists', () => {
 const crop = (id: string, f: number, extra: Partial<CropDef> = {}): CropDef => ({ id, name: id.toUpperCase(), cropFactor: new Array(12).fill(f), ...extra });
 
 describe('cropChanges and applyChanges', () => {
-	const crops = [crop('a', 0.5), crop('b', 0.4, { irrigationEfficiency: 0.8 }), crop('c', 0.3)];
+	const crops = [crop('a', 0.5), crop('b', 0.4, { irrigationSystemId: 'sprinkler' }), crop('c', 0.3)];
 
-	it('diffs month by month, and the efficiency, for crops with a choice only', () => {
+	it('diffs month by month, and the default irrigation system, for crops with a choice only', () => {
 		const next = [...new Array(11).fill(0.5), 0.6];
 		const changes = cropChanges(
 			crops,
 			new Map([
 				['a', { factors: next }],
-				['b', { factors: null, efficiency: 0.9 }]
+				['b', { factors: null, systemId: 'drip' }]
 			])
 		);
 		expect(changes.map((c) => c.cropId)).toEqual(['a', 'b']);
 		expect(changes[0]!.changed).toEqual([...new Array(11).fill(false), true]);
-		expect(changes[0]!).toMatchObject({ currentEfficiency: null, nextEfficiency: null, differs: true });
-		expect(changes[1]!).toMatchObject({ next: new Array(12).fill(0.4), currentEfficiency: 0.8, nextEfficiency: 0.9, differs: true });
+		expect(changes[0]!).toMatchObject({ currentSystemId: null, nextSystemId: null, differs: true });
+		expect(changes[1]!).toMatchObject({ next: new Array(12).fill(0.4), currentSystemId: 'sprinkler', nextSystemId: 'drip', differs: true });
 		expect(changes[1]!.changed.some(Boolean)).toBe(false);
 	});
 
 	it('says when a choice changes nothing', () => {
-		const [c] = cropChanges(crops, new Map([['b', { factors: new Array(12).fill(0.4), efficiency: 0.8 }]]));
+		const [c] = cropChanges(crops, new Map([['b', { factors: new Array(12).fill(0.4), systemId: 'sprinkler' }]]));
 		expect(c!.differs).toBe(false);
 	});
 
@@ -132,12 +132,12 @@ describe('cropChanges and applyChanges', () => {
 		const changes = cropChanges(
 			crops,
 			new Map([
-				['a', { factors: new Array(12).fill(0.25), efficiency: 0.9 }],
+				['a', { factors: new Array(12).fill(0.25), systemId: 'drip' }],
 				['c', { factors: new Array(12).fill(0.1) }]
 			])
 		);
 		const out = applyChanges(crops, changes.filter((c) => c.cropId === 'a'));
-		expect(out[0]).toEqual({ id: 'a', name: 'A', cropFactor: new Array(12).fill(0.25), irrigationEfficiency: 0.9 });
+		expect(out[0]).toEqual({ id: 'a', name: 'A', cropFactor: new Array(12).fill(0.25), irrigationSystemId: 'drip' });
 		expect(out[1]).toBe(crops[1]);
 		expect(out[2]).toBe(crops[2]);
 		expect(crops[0]!.cropFactor[0]).toBe(0.5); // the input isn't mutated
@@ -154,8 +154,9 @@ describe('demandDifference', () => {
 	};
 	const apan = new Array(12).fill(100);
 
-	it('recomputes a small case by hand: half the factor is half the demand; a crop efficiency changes the abstraction', () => {
-		const next = applyChanges(model.crops, cropChanges(model.crops, new Map([['a', { factors: new Array(12).fill(0.25), efficiency: 0.9 }]])));
+	it('recomputes a small case by hand: half the factor is half the demand; a crop’s system changes the abstraction', () => {
+		// Drip, the default table's 90 % (engine 1.72.0): the crop's default, which its planting takes.
+		const next = applyChanges(model.crops, cropChanges(model.crops, new Map([['a', { factors: new Array(12).fill(0.25), systemId: 'drip' }]])));
 		const d = demandDifference(model, next, apan, 28.25, ['f1', 'f2']);
 		// 10 ha × 100 mm × 0.5 = 5 000 m³ a month, 60 000 m³ a year over 365.25 days.
 		const now = 60_000 / 365.25;

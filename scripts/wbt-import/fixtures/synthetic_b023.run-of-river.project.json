@@ -410,57 +410,68 @@
       {
         "nodeId": "605e2d96-790e-5532-bd56-09f52da50315",
         "cropId": "1d8d35b3-7ea6-5dd8-84ac-077b93164692",
-        "areaM2": 120000.0
+        "areaM2": 120000.0,
+        "irrigationSystemId": "sprinkler"
       },
       {
         "nodeId": "605e2d96-790e-5532-bd56-09f52da50315",
         "cropId": "82bd0600-aa03-523d-9be7-9bbe5eaa5c9c",
-        "areaM2": 80000.0
+        "areaM2": 80000.0,
+        "irrigationSystemId": "sprinkler"
       },
       {
         "nodeId": "02853ac6-a18f-5a85-9699-4b8480956e4a",
         "cropId": "7847a2d6-0582-584f-9ca1-cc3bd572d95d",
-        "areaM2": 150000.0
+        "areaM2": 150000.0,
+        "irrigationSystemId": "sprinkler"
       },
       {
         "nodeId": "02853ac6-a18f-5a85-9699-4b8480956e4a",
         "cropId": "2c21dda6-5238-5f8d-9d3e-0a4f45b6efaa",
-        "areaM2": 60000.0
+        "areaM2": 60000.0,
+        "irrigationSystemId": "sprinkler"
       },
       {
         "nodeId": "48f381c6-9c12-5464-8af7-7a99d6536dde",
         "cropId": "1d8d35b3-7ea6-5dd8-84ac-077b93164692",
-        "areaM2": 200000.0
+        "areaM2": 200000.0,
+        "irrigationSystemId": "pivot"
       },
       {
         "nodeId": "48f381c6-9c12-5464-8af7-7a99d6536dde",
         "cropId": "7847a2d6-0582-584f-9ca1-cc3bd572d95d",
-        "areaM2": 50000.0
+        "areaM2": 50000.0,
+        "irrigationSystemId": "pivot"
       },
       {
         "nodeId": "97858e33-c69b-5a4f-ad5c-14913924752c",
         "cropId": "82bd0600-aa03-523d-9be7-9bbe5eaa5c9c",
-        "areaM2": 90000.0
+        "areaM2": 90000.0,
+        "irrigationSystemId": "workbook-1"
       },
       {
         "nodeId": "380c81d6-4d89-5d87-89ef-4d90acdd117e",
         "cropId": "1d8d35b3-7ea6-5dd8-84ac-077b93164692",
-        "areaM2": 30000.0
+        "areaM2": 30000.0,
+        "irrigationSystemId": "surface"
       },
       {
         "nodeId": "380c81d6-4d89-5d87-89ef-4d90acdd117e",
         "cropId": "2c21dda6-5238-5f8d-9d3e-0a4f45b6efaa",
-        "areaM2": 45000.0
+        "areaM2": 45000.0,
+        "irrigationSystemId": "surface"
       },
       {
         "nodeId": "755ff2cf-a0ab-58ea-beea-b3a9707013c5",
         "cropId": "7847a2d6-0582-584f-9ca1-cc3bd572d95d",
-        "areaM2": 70000.0
+        "areaM2": 70000.0,
+        "irrigationSystemId": "drip"
       },
       {
         "nodeId": "eabb0b83-489b-5085-8098-556fe7ffeab5",
         "cropId": "2c21dda6-5238-5f8d-9d3e-0a4f45b6efaa",
-        "areaM2": 40000.0
+        "areaM2": 40000.0,
+        "irrigationSystemId": "drip"
       }
     ],
     "transfers": [
@@ -598,6 +609,57 @@
         "enabled": true,
         "source": "other",
         "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)"
+      }
+    ],
+    "irrigationSystems": [
+      {
+        "id": "drip",
+        "name": "Drip",
+        "efficiency": 0.9,
+        "preset": "drip",
+        "sortOrder": 0
+      },
+      {
+        "id": "micro",
+        "name": "Micro-sprinkler",
+        "efficiency": 0.82,
+        "preset": "micro",
+        "sortOrder": 1
+      },
+      {
+        "id": "pivot",
+        "name": "Centre pivot / linear move",
+        "efficiency": 0.85,
+        "preset": "pivot",
+        "sortOrder": 2
+      },
+      {
+        "id": "sprinkler",
+        "name": "Sprinkler (permanent)",
+        "efficiency": 0.8,
+        "preset": "sprinkler",
+        "sortOrder": 3
+      },
+      {
+        "id": "movable",
+        "name": "Sprinkler (movable)",
+        "efficiency": 0.75,
+        "preset": "movable",
+        "sortOrder": 4
+      },
+      {
+        "id": "surface",
+        "name": "Flood / furrow",
+        "efficiency": 0.7,
+        "preset": "surface",
+        "sortOrder": 5
+      },
+      {
+        "id": "workbook-1",
+        "name": "Workbook, 100 %",
+        "efficiency": 1,
+        "preset": null,
+        "sortOrder": 6
       }
     ]
   },

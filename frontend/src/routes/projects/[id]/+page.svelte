@@ -261,6 +261,10 @@
 	});
 	const behindRun = $derived(newDataSinceRun(series ?? [], runs?.[0] ?? null));
 	// Automatic runs (WP-2.11): with a re-run queued, the banners say when instead of offering the button.
+	// A unit's efficiency is its plantings' systems blended at the saved A-pan (engine ≥ 1.72.0): the editor's return-flow check needs it.
+	$effect(() => {
+		editor.apanMm = project?.settings?.apanMm ?? [];
+	});
 	const rerunQueued = $derived(resolveAutoRun(project?.settings).enabled && !!project?.rerunQueuedFor);
 	const queuedSentence = $derived.by(() => {
 		const t = rerunQueuedText(project?.rerunQueuedFor);

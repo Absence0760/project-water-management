@@ -14,6 +14,7 @@ import {
 	type CropArea,
 	type DemandObject,
 	type CropDef,
+	type IrrigationSystemDef,
 	type FarmProjection,
 	type ForecastSummary,
 	type NetworkNode,
@@ -267,7 +268,7 @@ async function loadProjectionRun(
 		start_date: string;
 		end_date: string;
 		engine_version: string;
-		model: { nodes?: NetworkNode[]; transfers?: Transfer[]; crops?: CropDef[]; cropAreas?: CropArea[]; demandObjects?: DemandObject[] } | null;
+		model: { nodes?: NetworkNode[]; transfers?: Transfer[]; crops?: CropDef[]; cropAreas?: CropArea[]; demandObjects?: DemandObject[]; irrigationSystems?: IrrigationSystemDef[] } | null;
 		apan_mm: unknown;
 		runoff_model: string;
 		calibration: { nse?: number | null; pbias?: number | null; kge?: number | null } | null;
@@ -314,6 +315,7 @@ async function loadProjectionRun(
 			// Crops under their own irrigation efficiency (engine ≥ 0.43.0) set the farm's efficiency and consumptive share.
 			crops: (model.crops ?? []) as CropDef[],
 			cropAreas: (model.cropAreas ?? []) as CropArea[],
+			irrigationSystems: model.irrigationSystems ?? null,
 			apanMm: Array.isArray(r.apan_mm) ? r.apan_mm : [],
 			// A unit with demand objects (engine ≥ 1.7.0) takes its consumptive share from its return flow.
 			...(model.demandObjects?.length ? { demandObjects: model.demandObjects as DemandObject[] } : {}),

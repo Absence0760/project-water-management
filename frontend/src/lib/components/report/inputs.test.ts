@@ -147,12 +147,19 @@ describe('nodeRows', () => {
 });
 
 describe('cropAreaRows', () => {
-	it('lists planted areas in hectares by farm then crop, leaving out empty ones', () => {
+	it('lists planted areas in hectares by farm then crop, leaving out empty ones, with each one’s irrigation system', () => {
 		expect(cropAreaRows(model)).toEqual([
-			['Upper farm', 'Citrus', '5.00'],
-			['Upper farm', 'Lucerne', '10.00'],
-			['Lower farm', 'Citrus', '25.00']
+			['Upper farm', 'Citrus', '5.00', "the unit's own"],
+			['Upper farm', 'Lucerne', '10.00', "the unit's own"],
+			['Lower farm', 'Citrus', '25.00', "the unit's own"]
 		]);
+		// A crop's default system, a unit's own over it (engine 1.72.0), and a run's crop with its own efficiency (before 1.72.0).
+		const withSystems: typeof model = {
+			...model,
+			crops: model.crops!.map((c) => (c.name === 'Citrus' ? { ...c, irrigationSystemId: 'micro' } : { ...c, irrigationEfficiency: 0.66 })),
+			cropAreas: model.cropAreas!.map((a, i) => (i === 0 ? { ...a, irrigationSystemId: 'drip' } : a))
+		};
+		expect(cropAreaRows(withSystems).map((r) => r[3])).toEqual(['Micro-sprinkler, 82 %', 'Imported, 66 %', 'Drip, 90 %']);
 	});
 });
 

@@ -111,10 +111,11 @@ export function withKp(factors: readonly number[], kp: number): number[] {
 	return factors.map((f) => Math.round(f * kp * 10_000) / 10_000);
 }
 
-/** What the dialog would set on one project crop: new factors and/or an efficiency (undefined = keep the crop's). */
+/** What the dialog would set on one project crop: new factors and/or a default irrigation system (undefined = keep the crop's). */
 export interface CropChoice {
 	factors: number[] | null;
-	efficiency?: number;
+	/** A row of the project's irrigation-systems table (engine ≥ 1.72.0). */
+	systemId?: string;
 }
 
 export interface CropChange {
@@ -124,9 +125,10 @@ export interface CropChange {
 	next: number[];
 	/** Per water-year month: the factor changes. */
 	changed: boolean[];
-	currentEfficiency: number | null;
-	nextEfficiency: number | null;
-	/** Anything differs: a factor or the efficiency. */
+	/** The crop's default irrigation system now and with the change (null = none). */
+	currentSystemId: string | null;
+	nextSystemId: string | null;
+	/** Anything differs: a factor or the system. */
 	differs: boolean;
 }
 
@@ -134,14 +136,13 @@ export interface CropChange {
 export function cropChanges(crops: readonly CropDef[], choices: ReadonlyMap<string, CropChoice>): CropChange[] {
 	return crops.flatMap((c) => {
 		const ch = choices.get(c.id);
-		if (!ch || (!ch.factors && ch.efficiency === undefined)) return [];
+		if (!ch || (!ch.factors && ch.systemId === undefined)) return [];
 		const current = Array.from({ length: 12 }, (_v, m) => c.cropFactor[m] ?? 0);
 		const next = ch.factors ? [...ch.factors] : current;
-		const currentEfficiency = c.irrigationEfficiency ?? null;
-		const nextEfficiency = ch.efficiency ?? currentEfficiency;
+		const currentSystemId = c.irrigationSystemId ?? null;
+		const nextSystemId = ch.systemId ?? currentSystemId;
 		const changed = current.map((v, m) => !same(v, next[m]!));
-		const effDiffers = nextEfficiency !== currentEfficiency && !(nextEfficiency !== null && currentEfficiency !== null && same(nextEfficiency, currentEfficiency));
-		return [{ cropId: c.id, name: c.name, current, next, changed, currentEfficiency, nextEfficiency, differs: changed.some(Boolean) || effDiffers }];
+		return [{ cropId: c.id, name: c.name, current, next, changed, currentSystemId, nextSystemId, differs: changed.some(Boolean) || nextSystemId !== currentSystemId }];
 	});
 }
 
@@ -152,7 +153,10 @@ export function applyChanges(crops: readonly CropDef[], accepted: readonly CropC
 		const a = by.get(c.id);
 		if (!a) return c;
 		const out: CropDef = { ...c, cropFactor: [...a.next] };
-		if (a.nextEfficiency !== null) out.irrigationEfficiency = a.nextEfficiency;
+		if (a.nextSystemId !== a.currentSystemId) {
+			out.irrigationSystemId = a.nextSystemId;
+			delete out.irrigationEfficiency;
+		}
 		return out;
 	});
 }

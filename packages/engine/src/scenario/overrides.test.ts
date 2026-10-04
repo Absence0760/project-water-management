@@ -1303,13 +1303,37 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 			{ op: 'crop.set', cropId: 'c1', field: 'name', value: '  Drip lucerne ' }
 		]);
 		expect(r.problems).toEqual([]);
-		expect(r.input.model.crops).toEqual([{ id: 'c1', name: 'Drip lucerne', cropFactor: factors, irrigationEfficiency: 0.9 }]);
+		// An engine 0.43.0–1.71.0 op's 90 % is the table's Drip row (engine ≥ 1.72.0): the crop's default system.
+		expect(r.input.model.crops).toEqual([{ id: 'c1', name: 'Drip lucerne', cropFactor: factors, irrigationSystemId: 'drip' }]);
 		expect(b.model.crops[0]!.name).toBe('Lucerne');
-		expect(texts(b, r.input)).toEqual(expect.arrayContaining([expect.stringMatching(/Drip lucerne/), expect.stringMatching(/irrigation efficiency: the farm's → 90/)]));
+		expect(texts(b, r.input)).toEqual(expect.arrayContaining([expect.stringMatching(/Drip lucerne/), expect.stringMatching(/irrigation system: the unit's → Drip/)]));
 		// The run: a lower crop factor lowers the farms' demand for it.
 		const lower = applyScenario(base(), [{ op: 'crop.set', cropId: 'c1', field: 'cropFactor', value: new Array(12).fill(0.1) }]).input;
 		const d = (x: ModelInput) => runModel(x).series.find((s) => s.nodeId === 'A' && s.key === 'demand')!.values.reduce((s, v) => s + v, 0);
 		expect(d(lower)).toBeLessThan(d(base()));
+	});
+
+	it('irrigation systems (engine 1.72.0): crop.set sets a crop’s default, cropArea.set one unit’s, and an old efficiency op adds a row when none matches', () => {
+		const b = deepFreeze(base());
+		const r = applyScenario(b, [
+			{ op: 'crop.set', cropId: 'c1', field: 'irrigationSystemId', value: 'surface' },
+			{ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: b.model.cropAreas[0]!.areaM2, irrigationSystemId: 'drip' }
+		]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.crops[0]!.irrigationSystemId).toBe('surface');
+		expect(r.input.model.cropAreas[0]!.irrigationSystemId).toBe('drip');
+		expect(texts(b, r.input)).toEqual(expect.arrayContaining(['Crop "Lucerne" irrigation system: the unit\'s → Flood / furrow', expect.stringMatching(/"Lucerne" irrigation system the crop's default → Drip/)]));
+		// A later area change keeps the unit's own system.
+		const kept = applyScenario(r.input, [{ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 5000 }]).input;
+		expect(kept.model.cropAreas[0]).toMatchObject({ areaM2: 5000, irrigationSystemId: 'drip' });
+		// A system the table lacks is refused.
+		expect(one({ op: 'crop.set', cropId: 'c1', field: 'irrigationSystemId', value: 'nope' }).problems).toEqual(['op 1 (crop.set): irrigation system nope not found']);
+		// 0.66 matches no row: the op adds "Scenario, 66 %" and the crop takes it, every unit's own choice for it dropped.
+		const odd = applyScenario(r.input, [{ op: 'crop.set', cropId: 'c1', field: 'irrigationEfficiency', value: 0.66 }]).input;
+		const row = odd.model.irrigationSystems!.find((s) => s.efficiency === 0.66)!;
+		expect(row).toMatchObject({ name: 'Scenario, 66 %', preset: null });
+		expect(odd.model.crops[0]!.irrigationSystemId).toBe(row.id);
+		expect(odd.model.cropAreas[0]!.irrigationSystemId).toBeUndefined();
 	});
 
 	it('crop.set refuses a missing crop, a bad value, a field it can’t set and a duplicate name', () => {

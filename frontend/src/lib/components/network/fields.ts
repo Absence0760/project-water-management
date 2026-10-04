@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { areaMismatches, estimatedDamAreaM2, IRRIGATION_SYSTEMS, onRiverDam, type FlowShareMethod, type IrrigationSystemId, type NetworkNode, type NodeKind } from '@water-management/engine';
+import { areaMismatches, estimatedDamAreaM2, onRiverDam, RETURN_FLOW_SLACK, type FlowShareMethod, type NetworkNode, type NodeKind } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -45,6 +45,8 @@ export interface NodeField {
 	nullable?: boolean;
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
+	/** Shown, not edited: worked out from elsewhere (the efficiency from the unit's crops' irrigation systems, engine ≥ 1.72.0); never pasted. */
+	derived?: boolean;
 }
 
 /** m³/day → m³/s: River to dam is entered in m³/s and stored in m³/day. */
@@ -197,8 +199,9 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: '%',
 		group: 'irrigation',
 		farmOnly: true,
-		aria: (n) => `Irrigation efficiency of ${n}, %`,
-		help: 'Share of the water abstracted that reaches the crop. The hydrological unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
+		derived: true,
+		aria: (n) => `Irrigation efficiency of ${n}, %, from its crops' irrigation systems`,
+		help: "Share of the water abstracted that reaches the crop: the unit's crops' irrigation systems combined, each weighted by its yearly water requirement. The hydrological unit abstracts crop requirement ÷ efficiency. Set each crop's system in the unit's crops, or a crop's default in its sheet; the systems' efficiencies are on Crops & demand."
 	},
 	{
 		key: 'returnFlowFraction',
@@ -355,16 +358,6 @@ export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMin
 }
 
 /**
- * The irrigation system whose SABI 2021 efficiency (IRRIGATION_SYSTEMS) this
- * value is, for the node form's helper; null for any other value (a farm
- * saved with an efficiency from before the table was unified, 0.65 say,
- * shows "Other" and keeps its value).
- */
-export function systemOf(efficiency: number): IrrigationSystemId | null {
-	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
-}
-
-/**
  * Whether a node carries any of a dam's development fields (engine ≥ 1.30.0:
  * survey date, sediment rate, in-service date), so the one-node form still
  * shows them on a node without a dam, or one turned into a gauge or user,
@@ -385,4 +378,17 @@ function fmtArea(m2: number): string {
 export function fmtVolume(m3: number): string {
 	if (m3 >= 100_000) return `${(m3 / 1e6).toFixed(2)} Mm³`;
 	return `${fmtNum(m3)} m³`;
+}
+
+/**
+ * Under a unit's return flow when it is more than its losses (engine ≥ 1.71.0):
+ * the efficiency `e` is its crops' irrigation systems blended (1.72.0), which a
+ * crop's system or the systems' table can move from another screen, so this is
+ * a warning, not a refusal; a run returns the losses, 1 − e, and says so. Null
+ * when the return flow fits.
+ */
+export function returnFlowHint(returnFlow: number, e: number): string | null {
+	if (!(returnFlow > 1 - e + RETURN_FLOW_SLACK)) return null;
+	const pct = (v: number) => `${Math.round(v * 1000) / 10} %`;
+	return `Only ${pct(1 - e)} of the water supplied is lost at its ${pct(e)} irrigation efficiency (its crops' systems), so runs return ${pct(1 - e)}, not ${pct(returnFlow)}. Lower it to match, or check its crops' systems.`;
 }
