@@ -154,7 +154,7 @@ describe('individual boreholes (WP-3.9)', () => {
 			expect(JSON.stringify(res.body)).toMatch(pattern);
 		};
 		await bad({ ...model, boreholes: [bh({ nodeId: outlet.id })] }, /a gauge can't have boreholes/);
-		await bad({ ...model, boreholes: [bh({ nodeId: crypto.randomUUID() })] }, /unknown node/);
+		await bad({ ...model, boreholes: [bh({ nodeId: crypto.randomUUID() })] }, /unknown hydrological unit/);
 		await bad({ ...model, nodes: [outlet, { ...farm, damCapacityM3: 0 }], boreholes: [bh({ target: 'dam' })] }, /pumps into a dam, and there is none/);
 		await bad({ ...model, boreholes: [bh({ mode: 'sometimes' })] }, /mode/);
 		await bad({ ...model, boreholes: [bh({ depletionFactor: 1.5 })] }, /depletionFactor/);
@@ -227,7 +227,7 @@ describe('land cover (WP-1.35)', () => {
 			expect(JSON.stringify(res.body)).toMatch(pattern);
 		};
 		await bad({ ...model, landCover: [{ ...patch, nodeId: outlet.id }] }, /land cover lies on a unit/);
-		await bad({ ...model, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }, /unknown node/);
+		await bad({ ...model, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }, /unknown hydrological unit/);
 		await bad({ ...model, landCover: [{ ...patch, coverClass: 'bamboo' }] }, /coverClass/);
 		await bad({ ...model, landCover: [{ ...patch, densityPct: 1.5 }] }, /densityPct/);
 		await bad({ ...model, landCover: [{ ...patch, factors: { mar: 2, lowFlow: 0 } }] }, /factors/);

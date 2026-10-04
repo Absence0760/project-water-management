@@ -18,7 +18,7 @@ export async function checkCalibrationSite(db: Db, projectId: string, siteNodeId
 		[projectId, siteNodeId, [...CALIBRATION_FLOW_KINDS]]
 	);
 	const n = rows[0];
-	if (!n) throw new ApiError(400, 'calibrationSiteNodeId: no such node in this project');
+	if (!n) throw new ApiError(400, 'calibrationSiteNodeId: no such hydrological unit in this project');
 	if (n.kind !== 'gauge' || n.downstream_node_id === null) throw new ApiError(400, 'calibrationSiteNodeId: the site is the outlet (null) or a gauge above it');
 	if (n.records === 0) throw new ApiError(400, 'calibrationSiteNodeId: that gauge has no observed flow record attached');
 }

@@ -203,7 +203,7 @@ describe('with the synthetic DEM', () => {
 		expect((await owner.call('POST', url, { outletName: 'Valley weir', units: units.slice(0, 1), rest: { include: false, name: 'Rest', area: false } })).status).toBe(400);
 		const dup = await owner.call('POST', url, { outletName: 'Valley dam', units, rest: { include: false, name: 'Rest', area: false } });
 		expect(dup.status).toBe(400);
-		expect(dup.body.error).toMatch(/Two nodes would be called/);
+		expect(dup.body.error).toMatch(/Two hydrological units would be called/);
 		// runoffToDam is a dam unit's only.
 		expect((await owner.call('POST', url, { outletName: 'Valley weir', units: [{ ...units[0], runoffToDam: true }, units[1]], rest: { include: false, name: 'Rest', area: false } })).status).toBe(400);
 
@@ -245,7 +245,7 @@ describe('with the synthetic DEM', () => {
 		const revs = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND id > $2 AND source <> 'baseline'`, [p.id, rev]);
 		expect(revs).toHaveLength(1);
 		// Both areas gross, the default (195): the reason says so.
-		expect(revs[0]!.reason).toMatch(/^Started from the map: 4 nodes; 2 areas \(gross\) and 1 drains-into from Synthetic DEM/);
+		expect(revs[0]!.reason).toMatch(/^Started from the map: 4 hydrological units; 2 areas \(gross\) and 1 drains-into from Synthetic DEM/);
 		expect(ok.body.proposal).toMatchObject({ status: 'applied', decidedBy: expect.any(String) });
 		expect(ok.body.proposal.decision.units.map((u: { name: string; area: boolean; drainsInto: boolean }) => [u.name, u.area, u.drainsInto])).toEqual([
 			['Top pump', true, false],
@@ -257,7 +257,7 @@ describe('with the synthetic DEM', () => {
 		expect((await owner.call('POST', url, { outletName: 'X', units, rest: { include: false, name: 'R', area: false } })).status).toBe(409);
 		const again = await owner.call('POST', p.at('/map/start'), { points: [] });
 		expect(again.status).toBe(409);
-		expect(again.body.error).toMatch(/nodes already/);
+		expect(again.body.error).toMatch(/hydrological units already/);
 		expect((await viewer.call('GET', p.at('/map/start'))).body.modelEmpty).toBe(false);
 	});
 
@@ -320,7 +320,7 @@ describe('with the synthetic DEM', () => {
 		]);
 		expect(ok.body.proposal.decision.rest.areaBasis).toBe('gross');
 		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 1`, [q.id]);
-		expect(rev!.reason).toMatch(/^Started from the map: 4 nodes; 3 areas \(gross; effective, without what drains into pans: Valley dam\) and 2 drains-into/);
+		expect(rev!.reason).toMatch(/^Started from the map: 4 hydrological units; 3 areas \(gross; effective, without what drains into pans: Valley dam\) and 2 drains-into/);
 		// The map lists the parcel's pans figure and the node's basis, so it can tell the area is still this parcel's.
 		const map = await viewer.call('GET', q.at('/map/features'));
 		expect(map.status).toBe(200);
@@ -345,7 +345,7 @@ describe('with the synthetic DEM', () => {
 		expect((await owner.call('PUT', q.at('/model'), { nodes: [weir], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
 		const apply = await owner.call('POST', q.at(`/map/start/${r.body.proposal.id}/apply`), { outletName: 'Weir', units: [], rest: { include: true, name: 'Rest', area: true } });
 		expect(apply.status).toBe(409);
-		expect(apply.body.error).toMatch(/nodes already/);
+		expect(apply.body.error).toMatch(/hydrological units already/);
 		// Nothing changed: the typed node is the model.
 		expect((await owner.call('GET', q.at('/model'))).body.nodes.map((n: { name: string }) => n.name)).toEqual(['Typed weir']);
 		expect((await owner.call('POST', q.at(`/map/start/${r.body.proposal.id}/discard`))).status).toBe(200);

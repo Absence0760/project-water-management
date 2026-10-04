@@ -263,7 +263,7 @@ export async function nodeCount(db: Db, projectId: string): Promise<number> {
 	return rows[0]!.n;
 }
 
-const NOT_EMPTY = 'The model has nodes already. Starting from the map only fills an empty model; change this one on the Network, or use the map’s per-feature tools.';
+const NOT_EMPTY = 'The model has hydrological units already. Starting from the map only fills an empty model; change this one on the Network, or use the map’s per-feature tools.';
 export const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
 const DEFAULT_ROLE_NAME: Record<UnitRole, string> = { dam: 'Dam unit', abstraction: 'Abstraction unit', user: 'Water user', gauge: 'Gauge' };
 const REST_NAME = 'Rest of the catchment';
@@ -318,7 +318,7 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 		}
 		if (!['dam', 'gauge', 'other'].includes(f.kind)) throw new ApiError(400, `“${f.name || 'A feature'}” can’t be a unit.`);
 		// A gauge node stands for a gauge on the map (map_feature's KIND_NODES), so only a gauge point is one.
-		if (p.role === 'gauge' && !(f.kind === 'gauge' && f.geometry.type === 'Point')) throw new ApiError(400, `“${f.name || 'A feature'}” is not a gauge point, so it can’t be a gauge node.`);
+		if (p.role === 'gauge' && !(f.kind === 'gauge' && f.geometry.type === 'Point')) throw new ApiError(400, `“${f.name || 'A feature'}” is not a gauge point, so it can’t be a gauge.`);
 		return { featureId: f.id, name: oneLineName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry, damPosition: f.dam_position };
 	});
 	return { boundary, outlet, points };
@@ -608,7 +608,7 @@ export const startRoutes = new Hono<AuthEnv>()
 			const seen = new Set<string>();
 			for (const n of names) {
 				const k = n.trim().toLowerCase();
-				if (seen.has(k)) throw new ApiError(400, `Two nodes would be called “${n.trim()}”; give each a name of its own.`);
+				if (seen.has(k)) throw new ApiError(400, `Two hydrological units would be called “${n.trim()}”; give each a name of its own.`);
 				seen.add(k);
 			}
 			for (const u of plan.units) {
@@ -690,7 +690,7 @@ export const startRoutes = new Hono<AuthEnv>()
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Started from the map: ${nodes.length} nodes; ${areas} ${areas === 1 ? 'area' : 'areas'}${areaBasisNote(areas, effective)} and ${orders} drains-into from ${p.dataset ? `${p.dataset}, ${p.method_version}` : 'the points as placed'}`.slice(0, 500)
+				reason: `Started from the map: ${nodes.length} hydrological units; ${areas} ${areas === 1 ? 'area' : 'areas'}${areaBasisNote(areas, effective)} and ${orders} drains-into from ${p.dataset ? `${p.dataset}, ${p.method_version}` : 'the points as placed'}`.slice(0, 500)
 			});
 			const decision: StartDecision = {
 				outlet: { name: outlet.name, nodeId: outlet.id },

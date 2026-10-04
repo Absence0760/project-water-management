@@ -128,7 +128,7 @@ export function ewrOutletTableError(ewrRules: unknown, outletIds: readonly strin
 	const tables = Array.isArray(ewrRules) ? ewrRules.filter(isObj) : [];
 	const byNull = tables.some((t) => t.siteNodeId === null || t.siteNodeId === undefined);
 	const byId = tables.some((t) => typeof t.siteNodeId === 'string' && outletIds.includes(t.siteNodeId));
-	return byNull && byId ? 'ewrRules: two Reserve rule tables for the outlet (one for "the outlet" and one keyed by the outlet node): keep one' : null;
+	return byNull && byId ? 'ewrRules: two Reserve rule tables for the outlet (one for "the outlet" and one keyed by the outlet hydrological unit): keep one' : null;
 }
 
 /**

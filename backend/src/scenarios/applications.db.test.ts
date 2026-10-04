@@ -255,7 +255,7 @@ describe('an application', () => {
 		expect((await asA('PUT', `${P()}/model`, { nodes: [], crops: [], cropAreas: [], transfers: [] })).status).toBe(403);
 		// Positive control: an editor can.
 		expect((await assessor.call('GET', `${P()}/model`)).status).toBe(200);
-		// An applicant's own nodes are their links, not what they claim.
+		// An applicant's own hydrological units are their links, not what they claim.
 		expect((await asA('POST', `${P()}/scenarios`, { name: 'Claim', baseRunId: published, ownedNodeIds: [kalkoenkrans.id] })).status).toBe(403);
 		// A team scenario is not theirs to read.
 		expect((await asA('GET', `${P()}/scenarios`)).body.scenarios.every((s: { origin: string }) => s.origin === 'applicant')).toBe(true);

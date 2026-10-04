@@ -212,7 +212,7 @@ describe('applicationMask', () => {
 
 	it('answers a rename to a hidden name exactly as a rename to a free one (the oracle closed)', () => {
 		// Positive control: unmasked (an editor's own scenario), the collision is a problem.
-		expect(applyScenario(base, [rename('WATERVAL')]).problems).toEqual(['op 1 (node.set): duplicate node name "waterval"']);
+		expect(applyScenario(base, [rename('WATERVAL')]).problems).toEqual(['op 1 (node.set): duplicate hydrological unit name "waterval"']);
 		const hidden = apply([rename('WATERVAL')]);
 		const free = apply([rename('Somewhere else')]);
 		expect(hidden.problems).toEqual([]);
@@ -228,8 +228,8 @@ describe('applicationMask', () => {
 	});
 
 	it('collides with the anonymous names the applicant does see, as they would expect', () => {
-		expect(apply([rename('farm 1')]).problems).toEqual(['op 1 (node.set): duplicate node name "farm 1"']);
-		expect(apply([rename('Gauge')]).problems).toEqual(['op 1 (node.set): duplicate node name "gauge"']);
+		expect(apply([rename('farm 1')]).problems).toEqual(['op 1 (node.set): duplicate hydrological unit name "farm 1"']);
+		expect(apply([rename('Gauge')]).problems).toEqual(['op 1 (node.set): duplicate hydrological unit name "gauge"']);
 	});
 
 	it('answers a new crop named like a hidden one as it does a free name', () => {

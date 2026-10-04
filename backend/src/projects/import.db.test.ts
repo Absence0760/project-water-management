@@ -224,7 +224,7 @@ describe('POST /projects/import', () => {
 		expect(r1.status).toBe(400);
 		expect(r1.body.error).toBe('invalid project file');
 		expect(r1.body.details.map((d: { message: string }) => d.message)).toContain(
-			'the network needs exactly one outflow node (drains into nothing); found 2'
+			'the network needs exactly one outflow hydrological unit (drains into nothing); found 2'
 		);
 
 		// Two series of one kind and name: the database keeps one, so it's refused up front.

@@ -45,7 +45,7 @@ async function unitNode(db: Db, projectId: string, nodeId: string): Promise<Unit
 	const { rows } = await db.query<{ name: string; kind: string }>('SELECT name, kind::text AS kind FROM node WHERE id = $1 AND project_id = $2', [nodeId, projectId]);
 	const n = rows[0];
 	if (!n) throw notFound();
-	if (n.kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit (a farm node) has planted areas to propose.');
+	if (n.kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit with land (not a gauge or other water user) has planted areas to propose.');
 	return n;
 }
 

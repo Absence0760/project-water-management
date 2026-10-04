@@ -205,7 +205,7 @@ describe('a file mixing kinds, reviewed before it is saved (issue #326 D2)', () 
 		expect(res.status).toBe(422);
 		expect(res.body.details).toEqual([
 			{ feature: null, message: 'A file holds at most one catchment boundary; features 2, 3 are each marked as one.' },
-			{ feature: 1, message: 'is a farm parcel, which can stand for a farm or user node, not a gauge' },
+			{ feature: 1, message: 'is a farm parcel, which can stand for a unit with land or an other water user, not a gauge' },
 			{ feature: 4, message: 'is a LineString; a gauge is a Point' }
 		]);
 		const missing = await editor.call('POST', mixAt('/import'), { fileName: 'mixed.geojson', text: mixed, features: [{ index: 1, kind: 'farm_parcel' }] });
@@ -337,7 +337,7 @@ describe('placing and editing features', () => {
 		gaugeId = res.body.feature.id;
 		const bad = await editor.call('POST', at('/features'), { kind: 'gauge', lon: 21.3, lat: -33.6, nodeId: farmA.id });
 		expect(bad.status).toBe(400);
-		expect(bad.body.error).toMatch(/A gauge can stand for a gauge node, not a farm/);
+		expect(bad.body.error).toMatch(/A gauge can stand for a gauge, not a unit with land/);
 		expect((await viewer.call('POST', at('/features'), { kind: 'gauge', lon: 21.3, lat: -33.6 })).status).toBe(403);
 	});
 

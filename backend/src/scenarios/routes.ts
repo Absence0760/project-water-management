@@ -102,7 +102,7 @@ const PG_RESTRICT = '23001';
 const signedKept = () =>
 	new ApiError(409, 'this scenario has a signed-off run or an evidence pack, so it is kept: the run stays the scenario run that was signed or packed');
 const commentsKept = () => new ApiError(409, 'this application drew public comments, so it is kept: they are the record of its public participation');
-const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
+const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned hydrological units and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
 
 /** Change a scenario's ops, name, base or status: an editor on a team scenario, the owner on an application. */
@@ -182,7 +182,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// A viewer reads scenarios but makes none; a contributor makes applications.
 			if (role === 'viewer') throw new ApiError(403, 'requires editor role');
 			const applicant = role === 'contributor';
-			if (applicant && body.ownedNodeIds.length) throw new ApiError(403, "an applicant's own nodes are their farm links");
+			if (applicant && body.ownedNodeIds.length) throw new ApiError(403, "an applicant's own hydrological units are their farm links");
 			// Citing a run: not while a trim or delete of this project's runs is under way (it would miss the citation).
 			await lockProjectRuns(db, id);
 			const base = await loadBaseInput(db, id, body.baseRunId, role);
@@ -275,7 +275,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// Checked against the stored ops: a name from before issue #385 they hold may stay (parsePatchOps).
 			const ops = body.ops === undefined ? undefined : parsePatchOps(body.ops, s.ops);
 			if (isApplication(s)) {
-				if (body.ownedNodeIds !== undefined) throw new ApiError(403, "an application's own nodes are its owner's farm links");
+				if (body.ownedNodeIds !== undefined) throw new ApiError(403, "an application's own hydrological units are its owner's farm links");
 				if (body.status !== undefined && body.status !== s.status)
 					throw new ApiError(409, 'an application moves through …/submit, …/withdraw, …/reopen and (for the assessor) …/decide');
 			}

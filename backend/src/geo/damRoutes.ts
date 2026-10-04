@@ -38,7 +38,7 @@ async function damNode(db: Db, projectId: string, nodeId: string): Promise<DamNo
 	);
 	const n = rows[0];
 	if (!n) throw notFound();
-	if (n.kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit (a farm node) has a dam to propose values for.');
+	if (n.kind !== 'farm') throw new ApiError(400, 'Only a hydrological unit with land (not a gauge or other water user) has a dam to propose values for.');
 	return n;
 }
 

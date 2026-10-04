@@ -180,7 +180,7 @@ test('a broken file is refused and nothing is created', async ({ page, owner }) 
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
 	const alert = dialog.getByRole('alert');
 	await expect(alert).toContainText('The import failed.');
-	await expect(alert).toContainText(`the network needs exactly one outflow node (drains into nothing); found ${broken.model.nodes.length}`);
+	await expect(alert).toContainText(`the network needs exactly one outflow hydrological unit (drains into nothing); found ${broken.model.nodes.length}`);
 	await expect(alert).toContainText('Nothing was created.');
 	await expect(dialog.getByRole('button', { name: 'Back to the preview' })).toBeFocused();
 	// Nothing is left to cancel, so the way out is Close.
