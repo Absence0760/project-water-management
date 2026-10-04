@@ -12,8 +12,24 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { demandRows, demandShares, demandTotal, type DemandRow } from './demands';
+	import DemandsRunCaption from './DemandsRunCaption.svelte';
+	import { latestRunFigures } from './demandsRunLoad.svelte';
+	import type { RunMeta } from '$lib/api';
 
-	let { editor, settings, readonly }: { editor: ModelEditor; settings: ProjectSettings; readonly: boolean } = $props();
+	let {
+		editor,
+		settings,
+		readonly,
+		projectId = null,
+		runs = null
+	}: {
+		editor: ModelEditor;
+		settings: ProjectSettings;
+		readonly: boolean;
+		/** With the project's runs, the latest run's supplied and short-fall columns (demandsRun.ts). */
+		projectId?: string | null;
+		runs?: RunMeta[] | null;
+	} = $props();
 
 	const rows = $derived(demandRows(editor.model, settings.apanMm, settings.februaryDays));
 	const total = $derived(demandTotal(rows, settings.februaryDays));
@@ -21,6 +37,8 @@
 	const peak = $derived(Math.max(1e-9, ...rows.filter((r) => r.enabled).flatMap((r) => r.monthlyM3Day)));
 	const shade = (v: number) => `--i: ${Math.round((v / peak) * 100)}%`;
 	const scheduled = $derived(rows.some((r) => r.scheduled));
+	// --- the latest run's supplied and short-fall (demandsRun.ts) ---
+	const run = latestRunFigures(() => projectId, () => runs, () => rows);
 
 	/** Where the rest of a row is set: a unit's crops in its farm drawer on Crops & demand, anything else in its node's sheet. */
 	const editHref = (r: DemandRow) => (r.kind === 'crops' ? `?tab=crops&farm=${encodeURIComponent(r.nodeId)}` : `?tab=network&edit=${encodeURIComponent(r.nodeId)}`);
@@ -57,6 +75,7 @@
 			of {fmtQty(total.annualMm3, 3)} Mm³/a.
 		</p>
 	{/if}
+	<DemandsRunCaption {run} dirty={editor.dirty} />
 	{#if !rows.length}
 		<p class="muted" data-testid="demands-empty">No demands yet: plant crops on a unit, add a demand object in a unit's form, or add another water user.</p>
 	{:else}
@@ -75,6 +94,11 @@
 						<th scope="col" class="num">Mean<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Annual<br /><span class="u">Mm³/a</span></th>
 						<th scope="col"><span class="visually-hidden">Edit</span></th>
+						{#if run.figures}
+							<th scope="col" class="num run">Supplied<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Short<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Short<br /><span class="u">%</span></th>
+						{/if}
 					</tr>
 				</thead>
 				<tbody>
@@ -105,6 +129,12 @@
 							<td class="edit">
 								<a href={editHref(r)} aria-label="{readonly ? 'View' : 'Edit'} {r.name}{r.kind === 'user' ? '' : ` on ${r.unit}`}">{readonly ? 'View' : 'Edit'}</a>
 							</td>
+							{#if run.figures}
+								{@const x = run.figures.get(r.key)}
+								<td class="num run" data-run="supplied">{x ? fmtNum(x.suppliedM3Day) : '–'}</td>
+								<td class="num" class:short={!!x && x.shortM3Day > 0} data-run="short">{x ? fmtNum(x.shortM3Day) : '–'}</td>
+								<td class="num" class:short={!!x && x.shortM3Day > 0} data-run="short-pct">{x && x.shortShare !== null ? fmtPct(x.shortShare, 0) : '–'}</td>
+							{/if}
 						</tr>
 					{/each}
 				</tbody>
@@ -116,6 +146,11 @@
 						<td class="num">{fmtNum(total.meanM3Day)}</td>
 						<td class="num strong">{fmtQty(total.annualMm3, 3)}</td>
 						<td></td>
+						{#if run.figures}
+							<td class="num run">{run.total ? fmtNum(run.total.suppliedM3Day) : '–'}</td>
+							<td class="num">{run.total ? fmtNum(run.total.shortM3Day) : '–'}</td>
+							<td class="num">{run.total && run.total.shortShare !== null ? fmtPct(run.total.shortShare, 0) : '–'}</td>
+						{/if}
 					</tr>
 				</tfoot>
 			</table>
@@ -188,6 +223,14 @@
 		background: color-mix(in srgb, color-mix(in srgb, var(--brand-outlet) 45%, transparent) var(--i), transparent);
 	}
 	.strong {
+		font-weight: 600;
+	}
+	/* The run's columns: set off from the demand's own by a rule. */
+	.run {
+		border-left: 2px solid var(--border);
+	}
+	td.short {
+		color: var(--danger, var(--text));
 		font-weight: 600;
 	}
 	.after {
