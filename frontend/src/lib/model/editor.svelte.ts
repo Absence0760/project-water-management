@@ -163,6 +163,9 @@ export class ModelEditor {
 			t.lossReturnNodeId = null;
 			t.lossReturnPct = 0;
 		}
+		// A crop supply table that drew a share on its dam (engine ≥ 1.73.0) keeps the share and loses the unit: the
+		// form and the save bar ask for another unit (or the share moved), never a silent move of the water.
+		for (const n of m.nodes) if (n.cropRemoteNodeId === id) n.cropRemoteNodeId = null;
 		m.landCover = (m.landCover ?? []).filter((p) => p.nodeId !== id);
 		if (m.boreholes) m.boreholes = m.boreholes.filter((b) => b.nodeId !== id);
 		if (m.demandObjects) m.demandObjects = m.demandObjects.filter((o) => o.nodeId !== id);

@@ -30,6 +30,7 @@ import {
 	OPERATING_DEFAULTS,
 	SUPPLY_DEFAULTS,
 	WATER_SOURCE_DEFAULTS,
+	CROP_SUPPLY_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -134,6 +135,11 @@ interface FarmSpec {
 	crops?: Record<string, number>;
 	/** The crops from a river abstraction of their own beside the dam (engine ≥ 1.65.0, docs/model.md §2.7j), not the dam. */
 	cropRiver?: RiverTakeSpec;
+	/**
+	 * The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k): the crops' shares from the unit's dam, the
+	 * river (through `cropRiver`'s pump and pool) and the dam of the unit named `from`, through a pipe (m³/day).
+	 */
+	cropSupply?: { dam: number; river: number; remote: number; from: string; pipeM3Day: number | null };
 }
 
 /** A river abstraction's pump (m³/day) and optional pool (m³, starts full). */
@@ -276,6 +282,17 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			// The crops on the dam (engine ≥ 1.65.0), unless they have a river abstraction of their own.
 			...WATER_SOURCE_DEFAULTS,
 			...(f.cropRiver ? { cropWaterSource: 'river' as const, cropRiverPumpM3Day: f.cropRiver.pumpM3Day, cropRiverPoolM3: f.cropRiver.poolM3 ?? null } : {}),
+			// No crop supply table (engine ≥ 1.73.0) unless the spec gives one.
+			...CROP_SUPPLY_DEFAULTS,
+			...(f.cropSupply
+				? {
+						cropShareDam: f.cropSupply.dam,
+						cropShareRiver: f.cropSupply.river,
+						cropShareRemote: f.cropSupply.remote,
+						cropRemoteNodeId: nodeId(f.cropSupply.from),
+						cropRemoteCapM3Day: f.cropSupply.pipeM3Day
+					}
+				: {}),
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null

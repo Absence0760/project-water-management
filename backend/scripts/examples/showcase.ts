@@ -62,7 +62,7 @@ export const SHOWCASE: CatchmentSpec = {
 	key: KEY,
 	name: SHOWCASE_NAME,
 	description:
-		'Invented demo catchment with every feature switched on, for clicking around. Three units and an other water user on one river: dams, a mid-catchment gauge, boreholes, two transfers (one by months, one with a rate per month), demands sized in m³/day, in l/s and per person or head, a river abstraction with a pool, the project’s own irrigation systems with a per-unit override, plantations and invasive trees, a calibrated GR4J fit, a forecast and a WR2012-style check. It has named runs, scenarios with their runs, a map, registered water use, an evidence pack draft, notes, alerts and data feeds.',
+		'Invented demo catchment with every feature switched on, for clicking around. Three units and an other water user on one river: dams, a mid-catchment gauge, boreholes, two transfers (one by months, one with a rate per month), demands sized in m³/day, in l/s and per person or head, a river abstraction with a pool, a crop supply table splitting a unit’s crops between its dam, the river and an upstream dam, the project’s own irrigation systems with a per-unit override, plantations and invasive trees, a calibrated GR4J fit, a forecast and a WR2012-style check. It has named runs, scenarios with their runs, a map, registered water use, an evidence pack draft, notes, alerts and data feeds.',
 	climate: SUMMER_RAIN,
 	rainScale: 1.05,
 	seed: 505,
@@ -100,7 +100,9 @@ export const SHOWCASE: CatchmentSpec = {
 			damDepthM: 3.5,
 			system: 'pivot',
 			crops: { Lucerne: 40, Vegetables: 15 },
-			cropRiver: { pumpM3Day: 3000, poolM3: 2000 }
+			cropRiver: { pumpM3Day: 3000, poolM3: 2000 },
+			// The crop supply table (engine ≥ 1.73.0): 40 % from its own dam, 40 % from the river, 20 % piped from the upper dam.
+			cropSupply: { dam: 0.4, river: 0.4, remote: 0.2, from: UNITS.upper, pipeM3Day: 2500 }
 		},
 		{ name: UNITS.gauge, kind: 'gauge', into: UNITS.lower },
 		{ name: UNITS.middle, into: UNITS.gauge, areaKm2: 25, damM3: 300_000, damDepthM: 4, system: 'pivot', returnFlow: 0.05, crops: { Lucerne: 50, Maize: 40 } },

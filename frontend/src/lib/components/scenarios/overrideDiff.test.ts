@@ -426,6 +426,34 @@ describe('diffModel', () => {
 		]);
 	});
 
+	it('records a unit’s efficiency as node.set, and a scenario reopened after it (the engine’s table row in it) diffs clean (engine ≥ 1.72.0)', () => {
+		const b = base();
+		const e = editing(b);
+		node(e, UP).irrigationEfficiency = 0.6543;
+		const ops = roundTrips(b, e.snapshot());
+		expect(ops).toEqual([{ op: 'node.set', nodeId: UP, field: 'irrigationEfficiency', value: 0.6543 }]);
+		// Recorded: the engine puts the unit's plantings on a "Scenario, 65.4 %" row. Reopened, the editor starts from that model.
+		const applied = applyScenario(b, ops).input;
+		expect(applied.model.irrigationSystems?.some((x) => x.efficiency === 0.6543)).toBe(true);
+		const e2 = editing(applied);
+		node(e2, UP).divertCapacityM3Day = 9000;
+		const d = diffModel(applied, e2.snapshot());
+		expect(d.unsupported).toEqual([]);
+		expect(d.problems).toEqual([]);
+		expect(d.ops).toEqual([{ op: 'node.set', nodeId: UP, field: 'divertCapacityM3Day', value: 9000 }]);
+	});
+
+	it('keeps a planting’s own system edited beside its unit’s efficiency: the unit’s op comes first, the planting’s after', () => {
+		const b = base();
+		const e = editing(b);
+		node(e, UP).irrigationEfficiency = 0.6543;
+		e.model.cropAreas.find((a) => a.nodeId === UP)!.irrigationSystemId = 'drip';
+		const ops = roundTrips(b, e.snapshot());
+		const applied = applyScenario(b, ops).input;
+		expect(applied.model.cropAreas.find((a) => a.nodeId === UP)!.irrigationSystemId).toBe('drip');
+		expect(applied.model.nodes.find((n) => n.id === UP)!.irrigationEfficiency).toBe(0.6543);
+	});
+
 	it('turns individual boreholes into borehole.add and .remove; one edited in place is removed and added again', () => {
 		const b = base();
 		const e = editing(b);
@@ -470,8 +498,14 @@ describe('diffModel', () => {
 	it('round-trips any model edit the engine’s own random ops make (fuzz)', () => {
 		for (let seed = 1; seed <= 150; seed++) {
 			const input = randomInput(seed);
-			// Settings, series and demand factors aren't the model editor's: only model ops.
-			const ops = randomOps(input, seed).filter((o) => o.op !== 'settings.set' && o.op !== 'series.scale' && o.op !== 'demand.scale');
+			// Settings, series and demand factors aren't the model editor's: only model ops. Nor is the result of an
+			// efficiency op (engine ≥ 1.72.0): applying node.set or crop.set irrigationEfficiency puts plantings on a
+			// table row the engine adds ("Scenario, NN %"), a table change the editor never makes. It records a unit's
+			// efficiency as the op and diffs a reopened scenario against the model holding the row ("records a unit’s
+			// efficiency as node.set", above); a crop's it doesn't offer (CROP_FIELDS).
+			const ops = randomOps(input, seed).filter(
+				(o) => o.op !== 'settings.set' && o.op !== 'series.scale' && o.op !== 'demand.scale' && !((o.op === 'node.set' || o.op === 'crop.set') && o.field === 'irrigationEfficiency')
+			);
 			const after = applyScenario(input, ops).input.model;
 			const d = diffModel(input, after);
 			expect(d.unsupported, `seed ${seed}`).toEqual([]);

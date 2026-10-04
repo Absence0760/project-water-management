@@ -502,3 +502,31 @@ describe('names are one line (issue #385)', () => {
 		}
 	});
 });
+
+describe('crop supply table (engine 1.73.0, issue #408)', () => {
+	const out = node('Gauge', null, { kind: 'gauge' });
+	const dam = node('Dam', out.id, { damCapacityM3: 50_000 });
+	const nodam = node('No dam', out.id, { damCapacityM3: 0 });
+	const unit = (o: Record<string, unknown>) => node('Unit', out.id, o);
+	const shares = (d: number, r: number, x: number, from: string | null = dam.id) => ({ cropShareDam: d, cropShareRiver: r, cropShareRemote: x, cropRemoteNodeId: from });
+
+	it('takes a table that adds up to 100 % with another unit’s dam (positive control), and no table by default', () => {
+		expect(modelProblems(model([out, dam, unit(shares(0.5, 0.3, 0.2))]))).toEqual([]);
+		const parsed = ModelBody.parse({ nodes: [out, dam], crops: [], cropAreas: [], transfers: [] });
+		expect(parsed.nodes[1]).toMatchObject({ cropShareDam: null, cropShareRiver: null, cropShareRemote: null, cropRemoteNodeId: null, cropRemoteCapM3Day: null });
+	});
+
+	it('refuses shares that don’t add up, a remote share without another unit with a dam, and a dam the unit drains into', () => {
+		expect(modelProblems(model([out, dam, unit(shares(0.5, 0.3, 0.1))]))).toEqual(['"Unit": the crop supply shares add up to 90 %, not 100 %']);
+		expect(modelProblems(model([out, dam, unit(shares(0.5, 0, 0.5, null))]))).toEqual(['"Unit": the crops\' share from another unit\'s dam needs that unit']);
+		expect(modelProblems(model([out, nodam, unit(shares(0.5, 0, 0.5, nodam.id))]))).toEqual(['"Unit": "No dam" has no dam to supply the crops\' share from']);
+		const below = node('Below', out.id, { damCapacityM3: 10_000 });
+		const above = node('Above', below.id, shares(0.5, 0, 0.5, below.id));
+		expect(modelProblems(model([out, below, above]))).toEqual(['"Above" drains into "Below", so its dam can\'t supply "Above"\'s crops the same day; pick a dam upstream or on another branch']);
+	});
+
+	it('refuses a share outside 0–100 % and a negative pipe in the body itself', () => {
+		expect(() => ModelBody.parse({ nodes: [out, unit({ cropShareDam: 1.5 })], crops: [], cropAreas: [], transfers: [] })).toThrow();
+		expect(() => ModelBody.parse({ nodes: [out, unit({ cropRemoteCapM3Day: -1 })], crops: [], cropAreas: [], transfers: [] })).toThrow();
+	});
+});

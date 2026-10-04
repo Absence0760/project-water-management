@@ -299,7 +299,15 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	if (!problems.length && !unsupported.length && ops.length) {
 		const applied = applyScenario(before, ops);
 		for (const p of applied.problems) problems.push(nameIds(p, names));
-		if (!applied.problems.length && !sameModel(applied.input.model, after))
+		// A unit's efficiency (engine ≥ 1.72.0) puts every planting on the unit on the table's row with it, as a stored
+		// op always meant; the form's edit means that too, so the plantings' systems it sets are the op's, not a
+		// mismatch. A planting's own system edited beside it is its cropArea.set, after the node's ops, so it stays:
+		// only the plantings the edit left as they were are the op's.
+		const bSystems = systemMap(b.cropAreas);
+		const aSystems = systemMap(after.cropAreas);
+		const byEfficiency = new Set(ops.flatMap((o) => (o.op === 'node.set' && o.field === 'irrigationEfficiency' ? [o.nodeId] : [])));
+		const keptAsWas = (key: string) => bSystems.get(key) === aSystems.get(key);
+		if (!applied.problems.length && !sameModel(applied.input.model, after, (key) => byEfficiency.has(key.slice(0, key.indexOf(' '))) && keptAsWas(key)))
 			problems.push("These edits don't come out the same when recorded as changes, so they can't be recorded. Discard them and make them one at a time.");
 	}
 	return { ops, unsupported, problems };
@@ -367,7 +375,8 @@ function whereOf(op: ScenarioOp, names: ReadonlyMap<string, string>): string {
  * land cover, boreholes and demand objects by id with the same values, crop areas summed per farm and
  * crop, months as sets. Array order and sortOrder (display only) are ignored.
  */
-function sameModel(x: ProjectModel, y: ProjectModel): boolean {
+/** Two models the same, as recorded edits compare them; `opSets` names plantings (`<node> <crop>`) whose system an efficiency op sets, not compared. */
+function sameModel(x: ProjectModel, y: ProjectModel, opSets: (key: string) => boolean = () => false): boolean {
 	const norm = (m: ProjectModel) => {
 		const byId = <T extends { id: string }>(xs: readonly T[], f: (t: T) => unknown) =>
 			[...xs].sort((a, b) => (a.id < b.id ? -1 : 1)).map(f);
@@ -381,7 +390,7 @@ function sameModel(x: ProjectModel, y: ProjectModel): boolean {
 			nodes: byId(m.nodes, node),
 			crops: byId(m.crops, (c) => [c.id, c.name, c.cropFactor, c.irrigationSystemId ?? null, c.irrigationEfficiency ?? null]),
 			areas: [...areaMap(m.cropAreas)].filter(([, v]) => v !== 0).sort(),
-			systems: [...systemMap(m.cropAreas)].sort(),
+			systems: [...systemMap(m.cropAreas)].filter(([k]) => !opSets(k)).sort(),
 			transfers: byId(m.transfers, (t) => [t.id, t.fromNodeId, t.toNodeId, sortedMonths(t.months), t.maxRateM3s, t.dailyCapM3, t.minStoragePct, t.enabled, t.priority, t.monthlyRateM3s ?? null, t.source ?? 'dam', t.handsOffM3Day ?? null, !!t.handsOffEwr, t.lossPct ?? 0, t.sizing ?? 'demand', !!t.topUpDam, t.lossReturnPct ?? 0, t.lossReturnNodeId ?? null]),
 			cover: byId(m.landCover ?? [], (p) => [p.id, p.nodeId, p.coverClass, p.areaKm2, p.densityPct, p.factors]),
 			boreholes: byId(m.boreholes ?? [], (x) => Object.entries(plain(x)).sort(([k], [l]) => (k < l ? -1 : 1))),

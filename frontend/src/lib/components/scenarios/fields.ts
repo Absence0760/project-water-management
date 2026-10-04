@@ -181,6 +181,11 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	cropWaterSource: { label: 'Crops’ water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL) } },
 	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	cropRiverPoolM3: { label: 'Crops’ pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
+	// The crop supply table (engine ≥ 1.73.0, docs/model.md §2.7k); which unit's dam gives the remote share is the model's.
+	cropShareDam: { label: 'Crops’ share from the dam', spec: pct(true, 'no table') },
+	cropShareRiver: { label: 'Crops’ share from the river', spec: pct(true, 'no table') },
+	cropShareRemote: { label: 'Crops’ share from another unit’s dam', spec: pct(true, 'no table') },
+	cropRemoteCapM3Day: { label: 'Pipe capacity from the other unit’s dam', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };

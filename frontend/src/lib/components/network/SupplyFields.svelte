@@ -8,20 +8,23 @@
 	// #204, §2.7h): a flow by month and/or the EWR left in the river before the
 	// pump or River to dam takes anything. Then where the crops take their
 	// water (engine ≥ 1.65.0, issue #344, §2.7j): the dam under the supply
-	// rule, or a river abstraction of their own (WaterSourceFields). The node
-	// is the editor's own object, so edits land in the model directly.
-	import { SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
+	// rule, or a river abstraction of their own (WaterSourceFields), or split
+	// between the dam, the river and another unit's dam by share (engine ≥
+	// 1.73.0, issue #408, §2.7k: CropSupplyFields). The node is the editor's
+	// own object, so edits land in the model directly.
+	import { hasCropShares, SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { operatingIssues, supplyIssues } from '$lib/model/validate';
 	import MonthFields from './MonthFields.svelte';
 	import WaterSourceFields from './WaterSourceFields.svelte';
+	import CropSupplyFields from './CropSupplyFields.svelte';
 	import { handsOffPreview, handsOffTicked, noDamSupplyHint, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 	import PumpCapacityField from './PumpCapacityField.svelte';
 	import { supplyProblemFields, type SupplyField } from './problemFields';
 
-	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
+	let { node, nodes, readonly }: { node: NetworkNode; nodes: readonly NetworkNode[]; readonly: boolean } = $props();
 
 	const id = (k: string) => `sp-${k}-${node.id}`;
 	// History's unit filter: a farm's own fields (a gauge or user keeps them only to clear).
@@ -91,6 +94,8 @@
 	{#if node.kind === 'farm'}
 		<!-- Where the crops take their water (engine ≥ 1.65.0, issue #344): the unit's supply under the rule above, or their own river abstraction. -->
 		<h3 class="sub">Water for the crops</h3>
+		<CropSupplyFields {node} {nodes} rule={SUPPLY_RULE_LABEL[rule]} {readonly} />
+		{#if !hasCropShares(node)}
 		<div class="grid crops-source">
 			<WaterSourceFields
 				idBase="ws-crops-{node.id}"
@@ -108,6 +113,7 @@
 				{#snippet history(f: string)}<FieldHistoryLine field="node:{node.id}:{f === 'source' ? 'cropWaterSource' : f === 'pump' ? 'cropRiverPumpM3Day' : 'cropRiverPoolM3'}" {unit} />{/snippet}
 			</WaterSourceFields>
 		</div>
+		{/if}
 	{/if}
 	<div class="hands-off" data-testid="hands-off-{node.id}">
 		<h3 class="sub">Hands-off flow <HelpTip key="node.handsOffM3Day" /></h3>
