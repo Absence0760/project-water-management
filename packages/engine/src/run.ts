@@ -25,7 +25,7 @@ import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, type Crop, type PlantingEfficiency } from './demand';
+import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -1400,7 +1400,7 @@ export function buildNetworkPlan(
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
 	const factorFrom = start === undefined ? 0 : demandFactorStart(settings.demandFactorFrom, start, days);
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
-	const model = upgradeLegacyModel(input.model);
+	const model = upgradeLegacyInput(input.model, input.settings?.apanMm);
 	const nodes = model.nodes;
 	// Shares of 0–1, as the API and the database hold them: 80 meant as a percent would start a dam at 80 × its
 	// capacity and spill water that never existed, with every self-check passing (engine ≥ 1.69.0: refused).

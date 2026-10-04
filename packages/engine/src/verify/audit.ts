@@ -21,13 +21,14 @@
 // survey curve, a hands-off flow, River to dam by month, a daily A-pan
 // series on a dam, a dam capacity that changes over the run, a drought restriction rule) gets `unsupported` instead, naming each, rather than a
 // workbook whose numbers would disagree.
+import { upgradeLegacyInput } from '../demand';
 import { toEpochDay } from '../calendar';
 import { ALLOCATION_SERIES } from '../allocations/mode';
 import { resolveDamCurve } from '../network/dam';
 import { demandObjectsByNode } from '../network/demandObjects';
 import { riverSourcesOf } from '../network/riverSource';
 import { onRiverDam, operatingOf } from '../network/supply';
-import { runReturnFlow, upgradeLegacyModel, type ModelInput, type NetworkNode } from '../project';
+import { runReturnFlow, type ModelInput, type NetworkNode } from '../project';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, onRiverDamForRun, runEfficiency } from './workings';
 
 // ── Expressions ──────────────────────────────────────────────────────────────
@@ -230,7 +231,7 @@ const LETTER: Record<string, string> = {
  * it needs, a node that isn't a farm).
  */
 export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditPlan } | { unsupported: string[] } {
-	const model = upgradeLegacyModel(run.model);
+	const model = upgradeLegacyInput(run.model, run.settings?.apanMm);
 	const n = model.nodes.find((x) => x.id === nodeId) as NetworkNode | undefined;
 	if (!n) return { unsupported: ['the run has no such unit'] };
 	if (n.kind !== 'farm') return { unsupported: [`it is a ${n.kind === 'gauge' ? 'gauge' : 'water user'}, not a farm`] };

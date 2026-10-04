@@ -4,7 +4,7 @@
 // The workbook rounds crop mm to 2 dp, farm demand to 0.1 m³/day and net demand
 // to whole m³; the engine keeps full precision (docs/engine-audit.md R1).
 import { daysPerMonth, toEpochDay, type Monthly } from './calendar';
-import { DEFAULT_IRRIGATION_SYSTEMS, RETURN_FLOW_SLACK, type DemandPart, type IrrigationSystemDef, type NetworkNode } from './project';
+import { DEFAULT_IRRIGATION_SYSTEMS, RETURN_FLOW_SLACK, returnFlowFromLossReturn, upgradeLegacyModel, type DemandPart, type IrrigationSystemDef, type ModelInput, type NetworkNode } from './project';
 
 export interface Crop {
 	id: string;
@@ -185,6 +185,34 @@ export function modelFarmEfficiency(
 ): number {
 	const plantings = unitPlantings(nodeId, crops, cropAreas, plantingEfficiencyResolver(crops, systems));
 	return unitIrrigationEfficiency(farmEfficiency, crops, plantings, apanMm);
+}
+
+/**
+ * A stored model upgraded as the run reads it (project.ts upgradeLegacyModel),
+ * with an engine 0.16.0–1.70.0 unit's β (a share of the losses) turned into
+ * r = β(1 − e) at the efficiency that engine ran it at: its plantings' blend
+ * (each crop's own efficiency since 0.43.0) under the run's A-pan, not the
+ * unit's own value alone, which upgradeLegacyModel has to use without the
+ * A-pan. So a re-run, verifyRun and the farm audit of a ≤ 1.70.0 run take the
+ * return flow it actually ran with.
+ */
+export function upgradeLegacyInput(model: ModelInput['model'], apanMm: unknown): ModelInput['model'] {
+	const up = upgradeLegacyModel(model);
+	const beta = new Map<string, number>();
+	for (const raw of (Array.isArray(model.nodes) ? model.nodes : []) as unknown as Record<string, unknown>[]) {
+		if (raw && typeof raw.lossReturnFraction === 'number' && raw.returnFlowFraction === undefined && raw.irrigationEfficiency !== undefined) beta.set(raw.id as string, raw.lossReturnFraction);
+	}
+	if (!beta.size) return up;
+	const apan = Array.isArray(apanMm) ? apanMm.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : [];
+	return {
+		...up,
+		nodes: up.nodes.map((n) => {
+			const b = beta.get(n.id);
+			if (b === undefined) return n;
+			const own = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
+			return { ...n, returnFlowFraction: returnFlowFromLossReturn(b, modelFarmEfficiency(own, n.id, up.crops, up.cropAreas, apan, up.irrigationSystems)) };
+		})
+	};
 }
 
 /**

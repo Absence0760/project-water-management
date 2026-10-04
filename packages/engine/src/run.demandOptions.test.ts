@@ -95,6 +95,18 @@ describe('irrigation efficiency per crop (engine 0.43.0)', () => {
 		expect(out.summary.warnings.filter((w) => w.includes('efficiency'))).toEqual([]);
 	});
 
+	it('a model saved by engine 0.43.0–1.70.0 (β, a share of the losses) returns what that engine did: β at the blend', () => {
+		// The same unit stored with β = 1 and no r: 1.70.0 returned all of the blend's losses, 325 − 200 = 125 m³/day,
+		// not β(1 − 0.8) × 325 = 65 at the unit's own efficiency (upgradeLegacyInput).
+		const x = input(twoCrops({ irrigationEfficiency: 0.5 }));
+		x.model.nodes = x.model.nodes.map((n) => {
+			if (n.id !== 'F') return n;
+			const { returnFlowFraction: _r, ...rest } = n;
+			return { ...rest, lossReturnFraction: 1 } as unknown as typeof n;
+		});
+		expect(get(run(x), 'return_flow')[0]).toBeCloseTo(125, 9);
+	});
+
 	it('both crops with their own efficiency ignore the farm’s', () => {
 		const out = run(input(twoCrops({ irrigationEfficiency: 0.5 }, { irrigationEfficiency: 1 })));
 		expect(get(out, 'demand')[0]).toBeCloseTo(300, 9); // 200 + 100

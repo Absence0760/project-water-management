@@ -135,7 +135,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
   from engine 1.63.0),
-  `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency` (the unit's own, the fallback for a planting with no system, engine ≥ 1.72.0),
+  `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency` (the unit's own, the fallback for a planting with no system, engine ≥ 1.72.0; so that a stored op from engine ≤ 1.71.0 still means what it did, setting it also puts every planting on the unit onto the table's row with that efficiency, adding one when none matches, with a note),
   `returnFlowFraction` (engine ≥ 1.71.0; a stored op setting 0.16.0–1.70.0's
   `lossReturnFraction` β still applies, as r = β(1 − e) of the node it meets);
   dam storage (WP-3.5) `damReleaseRule`,

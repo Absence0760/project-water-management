@@ -35,6 +35,7 @@ import {
 	type ScenarioOp
 } from './ops';
 import { structureIssues } from './structure';
+import { modelFarmEfficiency } from '../demand';
 import { resolveDamCurve } from '../network/dam';
 import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
 import { resizeDamCurve, resizedFullArea } from '../network/damResize';
@@ -523,8 +524,24 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if ((op.field as string) === LEGACY_LOSS_RETURN_FIELD) {
 				if (n.kind !== 'farm') fail(`"${LEGACY_LOSS_RETURN_FIELD}" can't be set on a ${n.kind}`);
 				if (!(typeof op.value === 'number' && op.value >= 0 && op.value <= 1)) fail(`${LEGACY_LOSS_RETURN_FIELD} must be from 0 to 1`);
-				n.returnFlowFraction = returnFlowFromLossReturn(op.value as number, n.irrigationEfficiency);
+				// β was a share of the losses at the efficiency the unit ran at: its plantings' blend since 0.43.0.
+				const e = modelFarmEfficiency(n.irrigationEfficiency, n.id, m.crops, m.cropAreas, d.settings.apanMm ?? [], m.irrigationSystems);
+				n.returnFlowFraction = returnFlowFromLossReturn(op.value as number, e);
 				break;
+			}
+			// A stored engine 0.16.0–1.71.0 op setting the unit's efficiency: what it meant then, every crop on the unit at
+			// that efficiency. Since 1.72.0 each planting runs on its system and the unit's own value is only a fallback no
+			// planting reaches, so setting it alone would change nothing: each planting on the unit gets the system row with
+			// that efficiency (one is added when the table has none) as its own.
+			if (n.kind === 'farm' && op.field === 'irrigationEfficiency' && typeof op.value === 'number' && op.value > 0 && op.value <= 1) {
+				const sys = systemWithEfficiency(m, op.value);
+				let moved = 0;
+				m.cropAreas = m.cropAreas.map((a) => {
+					if (a.nodeId !== n.id) return a;
+					moved++;
+					return { ...a, irrigationSystemId: sys.id };
+				});
+				if (moved && see.node(n.id)) notes.push(`${moved} planting(s) on ${n.name} put on ${sys.name} (${Math.round(op.value * 1000) / 10} %), the unit's efficiency`);
 			}
 			// The field written is the allowlist's own name for it, never the op's text (so never `__proto__`).
 			const settable: readonly string[] = Object.hasOwn(NODE_SET_FIELDS, n.kind) ? NODE_SET_FIELDS[n.kind] : [];
