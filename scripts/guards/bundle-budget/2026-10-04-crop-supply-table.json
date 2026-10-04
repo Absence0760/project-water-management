@@ -1,4 +1,4 @@
 {
-	"addKb": 5,
-	"why": "Crop supply table (#408): engine 1.73.0's cropSupply planning, simulation and self-checks (the engine runs in the browser), the unit form's CropSupplyFields and its help entry. Measured: main @ 7d9f517 1699 KB, this branch 1704 KB (pnpm build:frontend && pnpm check:bundle)."
+	"addKb": 6,
+	"why": "Crop supply table (#408): engine 1.73.0's cropSupply planning, simulation and self-checks (the engine runs in the browser), the unit form's CropSupplyFields and its help entry. Measured: +5 748 gzipped bytes of JS+CSS against main @ 7d9f517 (both builds summed file by file), so 6 KB; CI rounds the total up, so 5 KB left it at 1705 > 1704."
 }
