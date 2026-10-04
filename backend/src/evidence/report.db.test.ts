@@ -336,7 +336,7 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		const r = (await report(owner, appRun)).body.report as EvidenceReport;
 		expect(r.cumulative.combined!.applications.map((x) => x.scenarioName)).toEqual(['Upper dam', 'Applicant dam', 'Approved weir', 'Second dam']);
 		expect(r.cumulative.combined!.conflicts.length).toBeGreaterThan(0);
-		expect(r.cumulative.combined!.conflicts[0]).toMatch(/both change node "Upper": damCapacityM3$/);
+		expect(r.cumulative.combined!.conflicts[0]).toMatch(/both change hydrological unit "Upper": damCapacityM3$/);
 		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_CONFLICT(r.cumulative.combined!.conflicts), change: null });
 	});
 

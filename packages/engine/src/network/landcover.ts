@@ -47,7 +47,7 @@ export function resolveLandCover(model: Pick<ProjectModel, 'nodes' | 'landCover'
 		const i = index.get(p.nodeId);
 		const n: NetworkNode | undefined = i === undefined ? undefined : nodes[i];
 		if (i === undefined || !n) {
-			warnings.push(`a land-cover patch refers to a node that does not exist; skipped`);
+			warnings.push(`a land-cover patch refers to a hydrological unit that does not exist; skipped`);
 			continue;
 		}
 		if (n.kind !== 'farm' || !(n.areaKm2 > 0)) {

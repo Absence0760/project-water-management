@@ -7664,7 +7664,7 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   and queues its job).
 - **Refused, never merged:** when two applications change the same thing,
   or one removes what another uses, each conflict is listed: its target
-  (`node "Upper farm": damCapacityM3`), whether both change it or one removes
+  (`hydrological unit "Upper farm": damCapacityM3`), whether both change it or one removes
   what the other uses, and both changes side by side (each application's
   name, change number and the change in words). Changes that apply alone but
   not together (two new dams given one name) are listed too.

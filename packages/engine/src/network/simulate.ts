@@ -758,7 +758,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const u = new Float64Array(n.borehole.units.length);
 		const init = n.initialBoreholeUsedM3;
 		if (init) {
-			if (init.length !== u.length) throw new Error(`a node's saved borehole volumes have ${init.length} units, its plan ${u.length}`);
+			if (init.length !== u.length) throw new Error(`a hydrological unit's saved borehole volumes have ${init.length} units, its plan ${u.length}`);
 			u.set(init);
 		}
 		return u;
@@ -772,7 +772,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (!n.river) return null;
 		const tk = n.river.takes;
 		const init = n.initialPoolM3;
-		if (init && init.length !== tk.length) throw new Error(`a node's saved pool storage has ${init.length} abstractions, its plan ${tk.length}`);
+		if (init && init.length !== tk.length) throw new Error(`a hydrological unit's saved pool storage has ${init.length} abstractions, its plan ${tk.length}`);
 		return Float64Array.from(tk, (x, a) => (x.pool ? Math.min(Math.max(init ? init[a]! : x.pool.capM3, 0), x.pool.capM3) : 0));
 	});
 	const zeros = nodes.some((n) => n.river) ? new Float64Array(days) : null;

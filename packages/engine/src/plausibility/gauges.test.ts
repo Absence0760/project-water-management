@@ -171,8 +171,8 @@ describe('plausibility checks at gauge nodes (engine ≥ 1.4.0)', () => {
 		const w = out.summary.warnings.filter((x) => /record is attached to/.test(x));
 		expect(w).toEqual([
 			expect.stringMatching(/^An observed flow record is attached to "Node B", which is not a gauge/),
-			expect.stringMatching(/^An observed flow \(logger\) record is attached to the outlet node "Node G"/),
-			expect.stringMatching(/^An observed flow record is attached to a node that is no longer in the model/)
+			expect.stringMatching(/^An observed flow \(logger\) record is attached to the outlet, "Node G"/),
+			expect.stringMatching(/^An observed flow record is attached to a hydrological unit that is no longer in the model/)
 		]);
 	});
 });

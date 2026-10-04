@@ -47,7 +47,7 @@ export function boreholesByNode(model: Pick<ProjectModel, 'nodes' | 'boreholes'>
 	const ids = new Set(model.nodes.map((n) => n.id));
 	for (const b of [...list].sort((a, c) => cmpStr(String(a.id), String(c.id)))) {
 		if (!ids.has(b.nodeId)) {
-			warnings.push(`borehole "${b.name}" refers to a node that does not exist; skipped`);
+			warnings.push(`borehole "${b.name}" refers to a hydrological unit that does not exist; skipped`);
 			continue;
 		}
 		const a = out.get(b.nodeId) ?? [];
