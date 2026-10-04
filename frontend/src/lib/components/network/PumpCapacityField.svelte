@@ -116,10 +116,6 @@
 		align-items: center;
 		gap: 0.25rem;
 	}
-	.u {
-		font-weight: 400;
-		color: var(--text-muted);
-	}
 	@media (max-width: 640px) {
 		.field :global(input) {
 			min-height: 44px;
