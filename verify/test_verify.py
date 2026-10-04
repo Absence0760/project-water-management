@@ -97,9 +97,13 @@ MUTANTS = [
         "if not any(own(c, p) is not None for c, a, p in rows if a > 0):",
         "if True:",
     ),
+    ("a unit's own system on a planting is ignored (the crop's default only)", 'for sid in (planting.get("irrigationSystemId"), crop.get("irrigationSystemId")):', 'for sid in (crop.get("irrigationSystemId"),):'),
+    ("a crop's default system is ignored", 'for sid in (planting.get("irrigationSystemId"), crop.get("irrigationSystemId")):', 'for sid in (planting.get("irrigationSystemId"),):'),
+    ("the project's systems table is ignored (the SABI defaults)", 'if model.get("irrigationSystems") else dict(DEFAULT_SYSTEMS)', 'if False else dict(DEFAULT_SYSTEMS)'),
     ("GR4J's PE uses the 28.25-day February", "pet.append(monthly / calendar_days_in_month(o))", "pet.append(monthly / mdays[m])"),
     ("dam evaporation uses calendar days", "e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area", "e_raw = k_lake[m] * apan[m] / calendar_days_in_month(o) / 1000 * area"),
     ("return flow is the whole loss (r ignored, N1)", "T = r_ret * G", "T = (1 - d[\"e\"]) * G"),
+    ("return flow above the losses is not capped at 1 − e (engine 1.71.0)", 'r_ret = (1 - d["e"]) if r_ret > 1 - d["e"] + 1e-9 else max(r_ret, 0)', "r_ret = max(r_ret, 0)"),
     ("GR4J's routing store gets no exchange", "r = max(0.0, self.r + q9 + f)", "r = max(0.0, self.r + q9)"),
     # Phase 2a.
     # Boreholes and stream depletion (§2.7d).

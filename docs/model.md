@@ -358,7 +358,7 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    planting's efficiency e[p] is resolved in that order (the unit's own, the
    crop's default), then a crop's own `irrigationEfficiency` from engine
    0.43.0–1.71.0 (a snapshot or older document), else the unit's own `e[f]`
-   (`plantingEfficiencyResolver`); a system the table lacks is skipped with a
+   (`plantingEfficiencyResolver`); a system the table lacks is skipped for the next, with a
    warning. The unit then runs on its plantings' efficiencies combined, the
    harmonic mean weighted by each one's annual gross requirement at the
    monthly A-pan (`unitIrrigationEfficiency` in `packages/engine/src/demand.ts`):

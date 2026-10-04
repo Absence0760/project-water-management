@@ -304,6 +304,15 @@ describe('irrigation systems per crop and per unit (engine 1.72.0)', () => {
 		expect(get(run(one(crop())), 'demand')[0]).toBeCloseTo(125, 9); // the unit's 0.8
 		const missing = run(one(crop({ irrigationSystemId: 'gone' })));
 		expect(get(missing, 'demand')[0]).toBeCloseTo(125, 9);
-		expect(missing.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; using the unit's efficiency"]);
+		expect(missing.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; skipping it"]);
+	});
+
+	it('skips a unit’s system the table lacks for the crop’s default, then its legacy efficiency (fuzz seed 36, docs/model.md §2.3)', () => {
+		// The planting's own system is missing: the crop's default (Flood / furrow, 70 %) runs, not the unit's 0.8.
+		expect(get(run(one(crop({ irrigationSystemId: 'surface' }), { irrigationSystemId: 'gone' })), 'demand')[0]).toBeCloseTo(100 / 0.7, 9);
+		// A legacy crop (engine ≤ 1.71.0) runs at its own 0.5 whether or not the run's upgrade has turned it into a table row first.
+		const legacy = run(one(crop({ irrigationEfficiency: 0.5 }), { irrigationSystemId: 'gone' }));
+		expect(get(legacy, 'demand')[0]).toBeCloseTo(200, 9);
+		expect(legacy.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; skipping it"]);
 	});
 });

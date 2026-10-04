@@ -9,7 +9,7 @@
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
 import { withMonthlyRates } from '../network/transferRates';
 import type { AllocationEntry } from '../allocations/compare';
-import { DEMAND_PARTS, irrigationFromReturnFlow, LAND_COVER_CLASSES, type DemandPart, type DroughtRestrictionRule, type Borehole, type DemandObject, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
+import { DEMAND_PARTS, irrigationFromReturnFlow, LAND_COVER_CLASSES, type DemandPart, type DroughtRestrictionRule, type Borehole, type DemandObject, type LandCoverPatch, type CropArea, type CropDef, DEFAULT_IRRIGATION_SYSTEMS, type IrrigationSystemDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/params';
@@ -389,6 +389,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addUserPumps(new Rng(seed ^ 0x4f1bbcdc), nodes);
 	// River abstractions beside a unit's dam (engine ≥ 1.65.0, issue #344), from their own stream, last of all.
 	addRiverSources(new Rng(seed ^ 0x2545f491), nodes, demandObjects);
+	// Irrigation systems (engine ≥ 1.72.0), from their own stream, last of all.
+	const irrigationSystems = addIrrigationSystems(new Rng(seed ^ 0x1f83d9ab), crops, cropAreas);
 	return {
 		settings,
 		model: {
@@ -399,10 +401,37 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 			...(landCover.length ? { landCover } : {}),
 			...(boreholes.length ? { boreholes } : {}),
 			...(demandObjects.length ? { demandObjects } : {}),
-			...(allocations.length ? { allocations } : {})
+			...(allocations.length ? { allocations } : {}),
+			...(irrigationSystems ? { irrigationSystems } : {})
 		},
 		series
 	};
+}
+
+/**
+ * Irrigation systems (engine ≥ 1.72.0, docs/model.md §2.3) in 40 % of seeds:
+ * the project's table absent (the SABI defaults) half the time, else the
+ * defaults with edited efficiencies and up to three rows of the project's
+ * own; a default system on a third of the crops (over their legacy
+ * efficiency, which the system then wins over) and a per-planting system on
+ * a fifth of the crop areas. Now and then an id the table doesn't have (the
+ * engine warns and falls back). Efficiencies stay in (0, 1], as the API
+ * requires. Returns the table, or undefined for none.
+ */
+function addIrrigationSystems(g: Rng, crops: CropDef[], cropAreas: CropArea[]): IrrigationSystemDef[] | undefined {
+	if (!g.bool(0.4)) return undefined;
+	const eff = () => (g.bool(0.1) ? 1 : g.bool(0.05) ? g.float(0.01, 0.1) : g.float(0.5, 1));
+	let table: IrrigationSystemDef[] | undefined;
+	if (g.bool(0.5)) {
+		table = DEFAULT_IRRIGATION_SYSTEMS.map((s) => ({ ...s, ...(g.bool(0.3) ? { efficiency: eff() } : {}) }));
+		const extra = g.int(0, 3);
+		for (let i = 0; i < extra; i++) table.push({ id: `own-${i}`, name: `Own system ${i}`, efficiency: eff(), preset: null, sortOrder: table.length });
+	}
+	const ids = (table ?? DEFAULT_IRRIGATION_SYSTEMS).map((s) => s.id);
+	const pickId = () => (g.bool(0.03) ? 'no-such-system' : g.pick(ids));
+	for (const c of crops) if (g.bool(1 / 3)) c.irrigationSystemId = pickId();
+	for (const a of cropAreas) if (g.bool(0.2)) a.irrigationSystemId = pickId();
+	return table;
 }
 
 /**

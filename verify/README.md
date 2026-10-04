@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 79 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 83 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -71,8 +71,16 @@ The core daily chain, with every setting of it the generator varies:
   only, PE from the pan coefficient × A-pan or a monthly PE row.
 - **Crop demand** (§2.3): gross demand from A-pan × crop factor (28.25-day
   February), effective rain (annual or monthly fraction) through the
-  soil-water store, D = F ÷ e with crop efficiencies combined as the weighted
-  harmonic mean (N1).
+  soil-water store, D = F ÷ e with the plantings' efficiencies combined as
+  the weighted harmonic mean (N1). Engine 1.72.0's irrigation systems: the
+  project's table (absent = the SABI defaults, or edited with rows of the
+  project's own), a crop's default system and a unit's own system per
+  planting, resolved in that order, a system the table lacks skipped for the
+  next, then a pre-1.72.0 crop's own efficiency, else the unit's (the
+  generator's `add_irrigation_systems`, its own random stream).
+- **Return flow** (§2.3, engine ≥ 1.71.0): r as a share of the water
+  supplied, T = r × G, capped at 1 − e at the unit's combined efficiency e
+  (the losses), a demand object's own return share on its part.
 - **Dams** (§2.7, §2.7a): the power-law area (and the unknown-area estimate),
   rain on the dam, evaporation (single or monthly lake factor, the b > 1
   limiter), seepage and its return share, the minimum operating level, spill,
@@ -206,15 +214,15 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (79
+`test_verify.py` breaks `model.py` one documented rule at a time (83
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
 accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
-forecast warm-up; crop efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area. Phase 2a's and later 56: a
+forecast warm-up; planting efficiencies; the PE and evaporation month lengths;
+the return share; the exchange; no catchment area. Phase 2a's and later 60: a
 borehole's annual cap, the depletion lag and its carried deficit, the
 emergency level, supplemental boreholes before the dam, the 1 October reset;
 the cap's proration, the licence months and rate, the limit-bound kind, a
@@ -237,7 +245,10 @@ month; a cap's year with no licence in force, its per-day budget and the
 use outside a licence's days, a full allocation's unlicensed year, an
 off-take into a capped unit sized to the whole demand (engine 1.70.0);
 blank days counted however many, a reading after a blank outage kept on its
-day, and the 7-day limit off by one (engine 1.70.0). Each mutant must disagree with the engine somewhere on the examples,
+day, and the 7-day limit off by one (engine 1.70.0); a return flow above
+the losses not capped at 1 − e (engine 1.71.0); a unit's own system on a
+planting ignored, a crop's default system ignored, and the project's
+systems table ignored for the SABI defaults (engine 1.72.0). Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
