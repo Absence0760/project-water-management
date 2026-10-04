@@ -340,9 +340,9 @@
 	}
 	function applyPaste(plan: PastePlan) {
 		applyNodePaste(editor.model.nodes, plan);
-		announce = `Pasted ${plan.changes.length} ${plan.changes.length === 1 ? 'value' : 'values'} into the node table. Save the model to keep them.`;
+		announce = `Pasted ${plan.changes.length} ${plan.changes.length === 1 ? 'value' : 'values'} into the hydrological unit table. Save the model to keep them.`;
 	}
-	const labelOf = (id: string) => nodes.find((n) => n.id === id)?.name || 'unnamed node';
+	const labelOf = (id: string) => nodes.find((n) => n.id === id)?.name || 'unnamed hydrological unit';
 
 	function moveBy(id: string, delta: -1 | 1, focus = false) {
 		const from = nodes.findIndex((n) => n.id === id);
@@ -410,7 +410,7 @@
 		['planted-areas', 'Planted areas'],
 		['transfers', 'Transfers']
 	];
-	const GRID_ALL: [GridId, string][] = [['nodes', 'Node table'], ...GRID_LINKS];
+	const GRID_ALL: [GridId, string][] = [['nodes', 'Hydrological unit table'], ...GRID_LINKS];
 	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
 	// The Tables menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
@@ -530,7 +530,7 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }, view === 'map'));
 </script>
 
-{#snippet headerContext()}<span data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</span>{/snippet}
+{#snippet headerContext()}<span data-testid="network-summary">{nodes.length ? summaryLine : 'No hydrological units yet'}</span>{/snippet}
 {#snippet headerActions()}
 	<!-- A shortcut to the geographic map (issue #288), which also has its own sidebar row since #326 D3. -->
 	<a class="btn" href="?tab=map" data-testid="network-open-map">Map</a>
@@ -543,7 +543,7 @@
 		</div>
 	</details>
 	{#if !readonly}
-		<button type="button" class="btn" onclick={add}>+ Add node</button>
+		<button type="button" class="btn" onclick={add}>+ Add hydrological unit</button>
 		<!-- A town, industry or unlisted user, once there is one outlet for it to drain into (as the node table's toolbar). -->
 		{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
 	{/if}
@@ -609,9 +609,9 @@
 			<div class="empty">
 				<p>
 					{#if readonly}
-						No nodes yet. An editor builds the network here or from the Map.
+						No hydrological units yet. An editor builds the network here or from the Map.
 					{:else}
-						No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
+						No hydrological units yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
 						and the EWR applies), then add the hydrological units and gauges that drain into it.
 					{/if}
 				</p>
@@ -652,7 +652,7 @@
 					</thead>
 					<tbody bind:this={reorder.body} onpaste={readonly ? undefined : onTablePaste}>
 						{#each nodes as node, i (node.id)}
-							{@const label = node.name || 'unnamed node'}
+							{@const label = node.name || 'unnamed hydrological unit'}
 							{@const share = shareOf(i)}
 							{@const rs = reorder.rowState(node.id, i, nodes.length)}
 							<tr
@@ -714,7 +714,7 @@
 										<td class="num by-month vol" data-testid="divert-by-month-{node.id}">
 											<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 											{#if projectId}
-												<a href="?tab=network&edit={encodeURIComponent(node.id)}" aria-label="{c.aria}: edit it in the node’s form" title="Set by month: the one value isn’t used. Edit the months in the node’s form.">{c.text}</a>
+												<a href="?tab=network&edit={encodeURIComponent(node.id)}" aria-label="{c.aria}: edit it in the hydrological unit’s form" title="Set by month: the one value isn’t used. Edit the months in the hydrological unit’s form.">{c.text}</a>
 											{:else}
 												<span aria-hidden="true" title="Set by month: the one value isn’t used.">{c.text}</span><span class="visually-hidden">{c.aria}</span>
 											{/if}
@@ -748,7 +748,7 @@
 								<td class="num share" class:none={share === null}><span class="cell-label">Flow share in use{' '}</span>{share === null ? '–' : fmtPct(share, 2)}</td>
 								{#if !readonly}
 									<td class="rm">
-										<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove node" onclick={() => remove(node.id, label)}>✕</button>
+										<button type="button" class="btn-icon btn" aria-label="Remove {label}" title="Remove hydrological unit" onclick={() => remove(node.id, label)}>✕</button>
 									</td>
 								{/if}
 							</tr>
@@ -774,21 +774,21 @@
 			</div>
 			{#if !readonly}
 				<div class="toolbar after">
-					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add node</button>
+					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add hydrological unit</button>
 					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
 					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
 						Sort by flow path
 					</button>
 					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
-					{#if outletCount === 1}<span class="muted small">New nodes drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
+					{#if outletCount === 1}<span class="muted small">New hydrological units drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
 				</div>
 			{/if}
 			<details class="guide">
 				<summary>Field guide</summary>
 				<dl>
 					<div><dt>Kind</dt><dd>A <strong>hydrological unit</strong> (a farm, sub-catchment or town with its own area) generates runoff, has irrigation demand and may have a dam; a stand-alone dam or natural area is also a hydrological unit. The workspace and the farmer view call it a hydrological unit; exports and the API call it a farm. A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
-					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a hydrological unit, which reduce its runoff: edit them in the node's form (<strong>Edit</strong> on its card on the map), under "Land cover".</dd></div>
-					<div><dt>Drains into</dt><dd>The node immediately downstream. Exactly one node, the outflow gauge, drains nowhere.</dd></div>
+					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a hydrological unit, which reduce its runoff: edit them in the hydrological unit's form (<strong>Edit</strong> on its card on the map), under "Land cover".</dd></div>
+					<div><dt>Drains into</dt><dd>The hydrological unit immediately downstream. Exactly one, the outflow gauge, drains nowhere.</dd></div>
 					{#each NODE_FIELDS as f (f.key)}
 						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
 					{/each}
@@ -799,13 +799,13 @@
 				<GridPasteDialog
 					bind:open={pasteOpen}
 					bind:text={pasteText}
-					title="Paste into the node table"
-					layout="A row per node with its name first, under a heading row naming the columns (as the CSV below has them); without names or headings the values fill the table from the cell you pasted into, in its order. A % is 0–100."
+					title="Paste into the hydrological unit table"
+					layout="A row per hydrological unit with its name first, under a heading row naming the columns (as the CSV below has them); without names or headings the values fill the table from the cell you pasted into, in its order. A % is 0–100."
 					where={pasteWhere}
 					plan={(t) => planNodePaste(t, nodes, pasteAnchor)}
 					onapply={applyPaste}
 					csv={() => nodeTableCsv(nodes)}
-					csvName="node-table.csv"
+					csvName="hydrological-unit-table.csv"
 				/>
 			{/if}
 		{/if}
@@ -837,13 +837,13 @@
 	     below, with no nodes yet too); the map card fills the width beside the
 	     picked node and the node list. -->
 	{#if nodes.length === 0}
-		<section class="panel" aria-label="No nodes yet">
+		<section class="panel" aria-label="No hydrological units yet">
 			<div class="empty" data-testid="network-empty">
 				{#if readonly}
-					<p>No nodes yet. An editor builds the network here or from the Map.</p>
+					<p>No hydrological units yet. An editor builds the network here or from the Map.</p>
 				{:else}
 					<p>
-						No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
+						No hydrological units yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
 						and the EWR applies), then add the hydrological units and gauges that drain into it. Or start from the map: click the
 						outlet on the Map and the app delineates the units, their areas and what drains into what.
 					</p>
@@ -865,10 +865,10 @@
 			</div>
 			<div class="map-body">{@render colourStatus()}{@render drawing(true)}</div>
 		</section>
-		<aside class="map-side" aria-label="Nodes">
+		<aside class="map-side" aria-label="Hydrological units">
 			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
 				<!-- tabindex: where the focus lands after a node is removed from its sheet. -->
-				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All nodes</h3>
+				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All hydrological units</h3>
 				<ul class="node-list" aria-labelledby="all-nodes-h" bind:this={listEl} bind:clientHeight={listH}>
 					{#each nodes as n (n.id)}
 						{@const band = dotBand(n.id)}
@@ -885,7 +885,7 @@
 					{/each}
 				</ul>
 			</section>
-			<section class="panel side-box card-box" aria-label="Selected node">
+			<section class="panel side-box card-box" aria-label="Selected hydrological unit">
 				{#if picked}
 					<NodeCard
 						node={picked}
@@ -902,7 +902,7 @@
 						{readonly}
 					/>
 				{:else}
-					<p class="muted small pick-hint">Select a node on the map or in the list to see it here.</p>
+					<p class="muted small pick-hint">Select a hydrological unit on the map or in the list to see it here.</p>
 				{/if}
 			</section>
 		</aside>
@@ -915,14 +915,14 @@
 		<Dialog bind:open={sheetOpen} title={readonly ? `${editing.name || '(unnamed)'}: details` : `Edit ${editing.name || '(unnamed)'}`} side extraWide>
 			{#snippet subhead()}
 				<div class="picker sheet-picker">
-					<label for="node-pick" class="visually-hidden">Node to edit</label>
-					<button type="button" class="btn" aria-label="Previous node" disabled={editIndex <= 0} onclick={() => openEdit(nodes[editIndex - 1]!.id, true)}>‹</button>
+					<label for="node-pick" class="visually-hidden">Hydrological unit to edit</label>
+					<button type="button" class="btn" aria-label="Previous hydrological unit" disabled={editIndex <= 0} onclick={() => openEdit(nodes[editIndex - 1]!.id, true)}>‹</button>
 					<select id="node-pick" value={editing.id} onchange={(e) => openEdit(e.currentTarget.value, true)}>
 						{#each nodes as n, i (n.id)}
 							<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {KIND_WORD[n.kind]}</option>
 						{/each}
 					</select>
-					<button type="button" class="btn" aria-label="Next node" disabled={editIndex >= nodes.length - 1} onclick={() => openEdit(nodes[editIndex + 1]!.id, true)}>›</button>
+					<button type="button" class="btn" aria-label="Next hydrological unit" disabled={editIndex >= nodes.length - 1} onclick={() => openEdit(nodes[editIndex + 1]!.id, true)}>›</button>
 				</div>
 				<!-- The form's sections, fixed above it: one press scrolls to a section and focuses it. -->
 				{#if sheetSections.length > 1}
@@ -938,7 +938,7 @@
 					{nodes}
 					share={shareOf(editIndex)}
 					{readonly}
-					onremove={() => remove(editing!.id, editing!.name || 'unnamed node')}
+					onremove={() => remove(editing!.id, editing!.name || 'unnamed hydrological unit')}
 					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
 					mapHref={mapped.has(editing.id) ? mapNodeHref(editing.id) : null}
 					previewHref={editing.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}` : null}

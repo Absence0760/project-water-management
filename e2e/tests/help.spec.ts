@@ -57,7 +57,7 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await tip.click();
 	await expect(bubble).toBeVisible();
 	// Somewhere outside the bubble: the node table's own title (the page behind the grid is inert).
-	await page.getByRole('dialog', { name: 'Node table' }).getByRole('heading', { name: 'Node table' }).click();
+	await page.getByRole('dialog', { name: 'Hydrological unit table' }).getByRole('heading', { name: 'Hydrological unit table' }).click();
 	await expect(bubble).toHaveCount(0);
 
 	// "More in the glossary" lands on the term's entry.

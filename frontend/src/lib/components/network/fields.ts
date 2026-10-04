@@ -75,7 +75,7 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: 'km²',
 		group: 'area',
 		aria: (n) => `Area of ${n}, km²`,
-		help: "The node's own runoff area, excluding nodes upstream of it. Hydrological unit areas set the area-based flow shares and add up to the catchment area."
+		help: "The hydrological unit's own runoff area, excluding the units upstream of it. Hydrological unit areas set the area-based flow shares and add up to the catchment area."
 	},
 	{
 		key: 'areaHiKm2',
@@ -179,7 +179,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `Upstream inflow entering the dam at ${n}, %`,
-		help: 'Share of the water arriving from upstream nodes that enters the dam. 100 %: a dam on the river, which catches it all, and has no River to dam. 0 %: an off-channel dam, which the river passes by; it fills from its share of the runoff and from River to dam. (The b023 workbook\'s formula applied it the other way round; the import converts its values, see docs/model.md §3 Q1.)'
+		help: 'Share of the water arriving from upstream hydrological units that enters the dam. 100 %: a dam on the river, which catches it all, and has no River to dam. 0 %: an off-channel dam, which the river passes by; it fills from its share of the runoff and from River to dam. (The b023 workbook\'s formula applied it the other way round; the import converts its values, see docs/model.md §3 Q1.)'
 	},
 	{
 		key: 'pctRunoffToDam',

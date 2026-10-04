@@ -133,7 +133,7 @@ describe('the ticks', () => {
 		t.units[1]!.add = true;
 		expect(divideProblem(p, t, names)).toBeNull();
 		t.units[1]!.name = 'mid weir';
-		expect(divideProblem(p, t, names)).toMatch(/Two nodes would be called “mid weir”/);
+		expect(divideProblem(p, t, names)).toMatch(/Two hydrological units would be called “mid weir”/);
 		t.units[1]!.name = ' ';
 		expect(divideProblem(p, t, names)).toMatch(/Name the new gauge/);
 		t.units[1] = { ...t.units[1]!, add: false, name: 'G1', drainsInto: true };

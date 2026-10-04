@@ -15,7 +15,7 @@ test('order two municipalities before the crops, one after the other, and keep i
 	const project = await seedRunnableProject(page.request, 'Demand order');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const group = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await group.getByLabel('Category of the new demand object').selectOption('municipal');
@@ -53,7 +53,7 @@ test('order two municipalities before the crops, one after the other, and keep i
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: /^Supply order on a short day/ });
 	await expect(again.getByLabel('Town A', { exact: true })).toHaveValue('1');
 	await expect(again.getByLabel('Town B', { exact: true })).toHaveValue('2');

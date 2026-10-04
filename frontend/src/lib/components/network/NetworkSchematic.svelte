@@ -353,7 +353,7 @@
 {#snippet mapKey()}
 	<div class="key" aria-hidden="true" data-testid="map-key">
 		<ul class="legend">
-			<li class="key-h">Nodes</li>
+			<li class="key-h">Hydrological units</li>
 			{#if has.unit}<li><svg width="18" height="18" viewBox="-10 -10 20 20"><circle class="farm" r="8" /></svg> Hydrological unit</li>{/if}
 			{#if has.dam}
 				<li>
@@ -484,7 +484,7 @@
 {/snippet}
 
 {#if nodes.length === 0}
-	<p class="muted">Add nodes to see how water flows through the catchment.</p>
+	<p class="muted">Add hydrological units to see how water flows through the catchment.</p>
 {:else}
 	<!-- The drawing's tokens sit on this box, so the map key under the drawing is drawn in the same colours (and hatch) as the map. -->
 	<div class="sch" class:fill style:--sch-hatch="url(#{views.length > 1 ? `${uid}-0` : uid}-hatch)">
@@ -538,13 +538,13 @@
 							Release to make {dragName} drain into {nameOf(drag.over)}.
 						{:else if drag.valid.size === 0}
 							{nodes.find((n) => n.id === drag?.id)?.downstreamNodeId === null
-								? `${dragName} is the outflow gauge and stays at the outlet; use "Make outflow gauge" on another node to change that.`
-								: `No other node can take ${dragName} without making a loop.`}
+								? `${dragName} is the outflow gauge and stays at the outlet; use "Make outflow gauge" on another hydrological unit to change that.`
+								: `No other hydrological unit can take ${dragName} without making a loop.`}
 						{:else}
-							Drop {dragName} on the node it should drain into. Esc cancels.
+							Drop {dragName} on the hydrological unit it should drain into. Esc cancels.
 						{/if}
 					{:else}
-						Drag a node onto another to change what it drains into.
+						Drag a hydrological unit onto another to change what it drains into.
 					{/if}
 				</p>
 			{/if}
@@ -559,13 +559,13 @@
 					Release to make {dragName} drain into {nameOf(drag.over)}.
 				{:else if drag.valid.size === 0}
 					{nodes.find((n) => n.id === drag?.id)?.downstreamNodeId === null
-						? `${dragName} is the outflow gauge and stays at the outlet; use "Make outflow gauge" on another node to change that.`
-						: `No other node can take ${dragName} without making a loop.`}
+						? `${dragName} is the outflow gauge and stays at the outlet; use "Make outflow gauge" on another hydrological unit to change that.`
+						: `No other hydrological unit can take ${dragName} without making a loop.`}
 				{:else}
-					Drop {dragName} on the node it should drain into. Esc cancels.
+					Drop {dragName} on the hydrological unit it should drain into. Esc cancels.
 				{/if}
 			{:else}
-				Tip: drag a node onto another to change what it drains into.
+				Tip: drag a hydrological unit onto another to change what it drains into.
 			{/if}
 		</p>
 	{/if}

@@ -132,7 +132,7 @@ test('an editor starts an empty model from the map: delineate, place the dam, re
 	await review.getByLabel('Outflow gauge’s name').fill('Valley weir');
 	await startSheet(page).getByTestId('start-apply').click();
 	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
-	await expect(confirm).toContainText('The empty model gets 3 nodes, with 2 areas (each saved as its unit’s parcel; Valley dam without what drains into pans)');
+	await expect(confirm).toContainText('The empty model gets 3 hydrological units, with 2 areas (each saved as its unit’s parcel; Valley dam without what drains into pans)');
 	await confirm.getByRole('button', { name: 'Apply' }).click();
 
 	// 4. Data and the first run.

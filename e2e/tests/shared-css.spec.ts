@@ -65,7 +65,7 @@ test('Network tab: a small hint, and the node table’s units', async ({ page, o
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Shared CSS network');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	const hint = page.getByText('Select a node on the map or in the list to see it here.');
+	const hint = page.getByText('Select a hydrological unit on the map or in the list to see it here.');
 	await expect(hint).toBeVisible();
 	await eachCombo(page, async (at) => {
 		expect(await styleOf(hint, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });

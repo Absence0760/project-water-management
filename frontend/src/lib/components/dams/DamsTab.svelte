@@ -233,7 +233,7 @@
 
 {#snippet headerContext()}<span data-testid="dams-summary">{summary}</span>{/snippet}
 {#snippet headerActions()}
-	{#if cards.length}<a class="btn" href={withParam(page.url, 'grid', 'nodes')}>Node table</a>{/if}
+	{#if cards.length}<a class="btn" href={withParam(page.url, 'grid', 'nodes')}>Hydrological unit table</a>{/if}
 	{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs</a>{/if}
 {/snippet}
 
@@ -248,7 +248,7 @@
 				</p>
 				<p class="empty-links">
 					<a class="btn btn-sm" href="?tab=network">Open the Network</a>
-					<a class="btn btn-sm" href={withParam(page.url, 'grid', 'nodes')}>{readonly ? 'Node table' : 'Node table: add a node or set a dam capacity'}</a>
+					<a class="btn btn-sm" href={withParam(page.url, 'grid', 'nodes')}>{readonly ? 'Hydrological unit table' : 'Hydrological unit table: add a hydrological unit or set a dam capacity'}</a>
 				</p>
 			</div>
 		</section>

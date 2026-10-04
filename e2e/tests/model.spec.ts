@@ -14,17 +14,17 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	const project = await createProject(page.request, 'Model build');
 	// The node table, as a grid over the (empty) map.
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 
 	// --- network: outflow gauge + two farms ---------------------------------
 	await grid.getByRole('button', { name: 'Add outflow gauge' }).click();
-	await grid.getByRole('button', { name: '+ Add node' }).click();
-	await grid.getByRole('button', { name: '+ Add node' }).click();
+	await grid.getByRole('button', { name: '+ Add hydrological unit' }).click();
+	await grid.getByRole('button', { name: '+ Add hydrological unit' }).click();
 	const names = grid.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
 	await expect(names.nth(0)).toHaveValue('Outflow gauge');
 	// One heading per modal: the title names the table, the table has none of its own.
-	await expect(grid.getByRole('heading')).toHaveText(['Node table']);
+	await expect(grid.getByRole('heading')).toHaveText(['Hydrological unit table']);
 	// A new node is a "Unit N", as the workspace calls it (operator decision, 2026-10-01).
 	await expect(names.nth(1)).toHaveValue('Unit 1');
 	await expect(names.nth(2)).toHaveValue('Unit 2');
@@ -133,7 +133,7 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	const project = await createProject(page.request, 'Model validation');
 	await putModel(page.request, project.id, sampleModel());
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	const problems = grid.getByRole('status').filter({ hasText: 'Fix before saving:' });
 	const save = grid.getByRole('button', { name: 'Save changes' });
 
@@ -242,7 +242,7 @@ test('large values show thousands separators in the one-node form and the view-o
 	await putModel(page.request, project.id, sampleModel()); // Upper farm: 150 000 m³ dam
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByRole('dialog').getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByRole('dialog').getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const capacity = page.getByLabel('Capacity (m³)');
 	await expect(capacity).toHaveValue('150\u202f000');
@@ -349,9 +349,9 @@ test.describe('network layout', () => {
 			await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 
 			// The row's Edit (the card has none) opens the full form in a sheet the width of the screen.
-			await page.getByRole('list', { name: 'All nodes' }).getByRole('button', { name: 'Edit Upper farm' }).click();
+			await page.getByRole('list', { name: 'All hydrological units' }).getByRole('button', { name: 'Edit Upper farm' }).click();
 			const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
-			const picker = sheet.getByLabel('Node to edit');
+			const picker = sheet.getByLabel('Hydrological unit to edit');
 			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · hydrological unit');
 			await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Upper farm');
 			expect((await sheet.boundingBox())!.width).toBeGreaterThan(370);
@@ -362,9 +362,9 @@ test.describe('network layout', () => {
 			// Deep in the farm form, the picker and ‹ › are still on screen, at the top of the sheet.
 			await sheet.getByLabel('Return flow (% of supply)').scrollIntoViewIfNeeded();
 			await expect(picker).toBeInViewport();
-			await expect(sheet.getByRole('button', { name: 'Next node' })).toBeInViewport();
-			await sheet.getByRole('button', { name: 'Next node' }).click();
-			await expect(page.getByRole('dialog', { name: 'Edit Lower farm' }).getByLabel('Node to edit').locator('option:checked')).toHaveText('3. Lower farm · hydrological unit');
+			await expect(sheet.getByRole('button', { name: 'Next hydrological unit' })).toBeInViewport();
+			await sheet.getByRole('button', { name: 'Next hydrological unit' }).click();
+			await expect(page.getByRole('dialog', { name: 'Edit Lower farm' }).getByLabel('Hydrological unit to edit').locator('option:checked')).toHaveText('3. Lower farm · hydrological unit');
 			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 		});
 	});
@@ -389,7 +389,7 @@ test('the schematic can colour farms by the latest run’s supply, and says whic
 	await expect(page.locator('svg.schematic g.node').filter({ hasText: 'Outflow gauge' })).not.toHaveAttribute('data-supply');
 
 	// A farm added since the run shows as "not in this run", and the colours are said to be the run's, not the edit's.
-	await page.getByRole('button', { name: '+ Add node' }).click();
+	await page.getByRole('button', { name: '+ Add hydrological unit' }).click();
 	const added = page.locator('svg.schematic g.node[data-supply="absent"]');
 	await expect(added).toHaveCount(1);
 	await expect(added).toContainText('not in this run');

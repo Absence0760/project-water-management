@@ -62,7 +62,7 @@ async function headerRows(page: Page) {
 // Each section and what shows in its header once it has loaded.
 const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'overview', ready: 'Add data' },
-	{ tab: 'network', ready: '+ Add node' },
+	{ tab: 'network', ready: '+ Add hydrological unit' },
 	{ tab: 'crops', ready: '+ Add crop' },
 	{ tab: 'transfers', ready: '+ Add transfer' },
 	{ tab: 'settings', ready: 'Fit the parameters' },
@@ -172,7 +172,7 @@ test.describe('phone', () => {
 		await page.goto(`/projects/${p.id}?tab=network&edit=${unit.id}`);
 		await within(`Edit ${unit.name}`, true);
 		await page.goto(`/projects/${p.id}?tab=network&grid=nodes`);
-		await within('Node table', true);
+		await within('Hydrological unit table', true);
 		// Allocations' two sheets: full screen.
 		await page.goto(`/projects/${p.id}?tab=allocations&import=1`);
 		await within('Import registered volumes', true);

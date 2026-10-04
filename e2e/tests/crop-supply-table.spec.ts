@@ -16,7 +16,7 @@ test('split a unit’s crops between its dam, the river and another unit’s dam
 	const project = await seedRunnableProject(page.request, 'Crop supply table');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: lower });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: lower });
 
 	const supply = page.getByRole('group', { name: 'Supply', exact: true });
 	const split = supply.getByLabel('Split the crops’ water between sources');
@@ -52,7 +52,7 @@ test('split a unit’s crops between its dam, the river and another unit’s dam
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: lower });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: lower });
 	const again = page.getByRole('group', { name: 'Supply', exact: true });
 	await expect(again.getByLabel('Split the crops’ water between sources')).toBeChecked();
 	await expect(again.getByLabel('This unit’s dam (%)')).toHaveValue('60');
@@ -71,7 +71,7 @@ test('split a unit’s crops between its dam, the river and another unit’s dam
 	// Unticked, the table goes and the crops take their water source again.
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: lower });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: lower });
 	const last = page.getByRole('group', { name: 'Supply', exact: true });
 	await last.getByLabel('Split the crops’ water between sources').uncheck();
 	await expect(last.getByLabel('Water for the crops')).toHaveValue('dam');

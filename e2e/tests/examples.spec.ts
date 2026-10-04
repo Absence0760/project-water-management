@@ -61,7 +61,7 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await openNodeTable(page);
 	await expect(page.getByText('You have view-only access to this project.')).toBeVisible();
 	await expect(page.getByRole('textbox', { name: 'Name' }).first()).not.toBeEditable();
-	await expect(page.getByRole('button', { name: '+ Add node' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: '+ Add hydrological unit' })).toHaveCount(0);
 	await closeModal(page);
 
 	await page.getByRole('link', { name: 'Runs & results' }).click();
