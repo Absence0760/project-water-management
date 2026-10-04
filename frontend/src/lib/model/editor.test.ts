@@ -139,6 +139,22 @@ describe('ModelEditor', () => {
 		expect(ed.model.transfers.find((x) => x.id === t.id)).toMatchObject({ lossReturnPct: 0, lossReturnNodeId: null });
 	});
 
+	it('a crop supply table that drew on a removed unit’s dam keeps its share and loses the unit, which the save rules then ask for (engine 1.73.0)', () => {
+		const ed = new ModelEditor();
+		const g = ed.addNode();
+		const a = ed.addNode();
+		const b = ed.addNode();
+		a.downstreamNodeId = g.id;
+		b.downstreamNodeId = a.id;
+		b.damCapacityM3 = 10_000;
+		Object.assign(a, { cropShareDam: 0.6, cropShareRiver: 0, cropShareRemote: 0.4, cropRemoteNodeId: b.id });
+		// Positive control: a valid table, no problem.
+		expect(validateModel(ed.model).filter((i) => i.itemId === a.id)).toEqual([]);
+		ed.removeNode(b.id);
+		expect(ed.model.nodes.find((n) => n.id === a.id)).toMatchObject({ cropShareRemote: 0.4, cropRemoteNodeId: null });
+		expect(validateModel(ed.model).filter((i) => i.itemId === a.id).map((i) => i.message)).toEqual([`"${a.name}": the crops' share from another unit's dam needs that unit`]);
+	});
+
 	it('keeps crop areas sparse', () => {
 		const ed = new ModelEditor();
 		const g = ed.addNode();

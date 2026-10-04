@@ -135,7 +135,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
   from engine 1.63.0),
-  `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency` (the unit's own, the fallback for a planting with no system, engine ≥ 1.72.0; so that a stored op from engine ≤ 1.71.0 still means what it did, setting it also puts every planting on the unit onto the table's row with that efficiency, adding one when none matches, with a note),
+  `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency` (the unit's own, the fallback for a planting with no system, engine ≥ 1.72.0; so that a stored op from engine ≤ 1.71.0 still means what it did, setting it also puts every planting on the unit onto the table's row with that efficiency, adding one when none matches, with a note; the override editor records a unit's efficiency typed in its form as this op, with that meaning, and a planting's own system edited beside it is its `cropArea.set`, after the node's ops, so it stays),
   `returnFlowFraction` (engine ≥ 1.71.0; a stored op setting 0.16.0–1.70.0's
   `lossReturnFraction` β still applies, as r = β(1 − e) of the node it meets);
   dam storage (WP-3.5) `damReleaseRule`,
@@ -175,6 +175,16 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   null = none); farms only (a save rule). "What if the crops pumped from the
   river beside the dam at 1,500 m³/day" is two ops: `cropWaterSource` →
   `river` and `cropRiverPumpM3Day` → 1500.
+  The crop supply table (engine ≥ 1.73.0, [model.md §2.7k](./model.md)):
+  `cropShareDam`, `cropShareRiver`, `cropShareRemote` (0–1, null = no
+  table) and `cropRemoteCapM3Day` (≥ 0, null = no limit); farms only, and
+  the shares add up to 100 % (save rules, checked once after a run of
+  `node.set` ops on the farm, so set the shares next to each other). Which
+  unit's dam gives the remote share, `cropRemoteNodeId`, is the model's and
+  can't be set by a scenario (it names another node, which an applicant's
+  view may hide; a `node.add` carries none). "What if a fifth of the crops
+  came from the river" is two ops: `cropShareDam` → 0.8 and `cropShareRiver`
+  → 0.2 (with `cropShareRemote` → 0 when the farm had no table).
 
   **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
   provisional decision 2026-10-01, to be confirmed by the client's
@@ -805,7 +815,11 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   object or registered volume uses its node(s); a `demand.scale` without
   `nodeIds` writes every farm's (or user's) demand; a `series.scale` writes
   the series (two scalings stack, and whose climate assumption it is isn't
-  for either to settle). Conservative by design: what can't be told apart is
+  for either to settle); a unit's `irrigationEfficiency` writes every
+  planting on the unit, and a crop's `irrigationEfficiency` or
+  `irrigationSystemId` every planting of the crop (engine ≥ 1.72.0 puts
+  those plantings on a system; a planting another scenario adds would get it
+  in one order and not the other, combine fuzz seed 35). Conservative by design: what can't be told apart is
   a conflict the assessor sees. One conflict per pair of scenarios and
   target, with a readable message naming both ops (`"App A" op 1 (node.set)
   and "App B" op 1 (node.set) both change node "Upper farm":

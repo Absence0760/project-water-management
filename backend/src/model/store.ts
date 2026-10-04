@@ -1,4 +1,4 @@
-import { OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel } from '@water-management/engine';
+import { CROP_SUPPLY_DEFAULTS, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
@@ -31,6 +31,8 @@ const MODEL_JSON = `json_build_object(
 			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
 			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct",
 			crop_water_source AS "cropWaterSource", crop_river_pump_m3_day AS "cropRiverPumpM3Day", crop_river_pool_m3 AS "cropRiverPoolM3",
+			crop_share_dam AS "cropShareDam", crop_share_river AS "cropShareRiver", crop_share_remote AS "cropShareRemote",
+			crop_remote_node_id AS "cropRemoteNodeId", crop_remote_cap_m3_day AS "cropRemoteCapM3Day",
 			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
 			ewr_site AS "ewrSite",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
@@ -127,7 +129,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			cd AS (DELETE FROM crop WHERE project_id = $1 AND NOT (id = ANY($3::uuid[]))),
 			cr AS (UPDATE crop SET name = '~' || id::text WHERE project_id = $1 AND id = ANY($3::uuid[])),
 			nd AS (DELETE FROM node WHERE project_id = $1 AND NOT (id = ANY($2::uuid[]))),
-			nr AS (UPDATE node SET downstream_node_id = NULL, name = '~' || id::text WHERE project_id = $1 AND id = ANY($2::uuid[]))
+			nr AS (UPDATE node SET downstream_node_id = NULL, crop_remote_node_id = NULL, name = '~' || id::text WHERE project_id = $1 AND id = ANY($2::uuid[]))
 		 SELECT 1`,
 		[projectId, nodeIds, cropIds, transferIds]
 	);
@@ -151,6 +153,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
+			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
@@ -161,6 +164,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
+			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
@@ -189,7 +193,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pump_capacity_m3_day = EXCLUDED.pump_capacity_m3_day, supply_trigger_pct = EXCLUDED.supply_trigger_pct,
 			supply_stop_pct = EXCLUDED.supply_stop_pct,
 			crop_water_source = EXCLUDED.crop_water_source, crop_river_pump_m3_day = EXCLUDED.crop_river_pump_m3_day,
-			crop_river_pool_m3 = EXCLUDED.crop_river_pool_m3, hands_off_m3_day = EXCLUDED.hands_off_m3_day,
+			crop_river_pool_m3 = EXCLUDED.crop_river_pool_m3,
+			crop_share_dam = EXCLUDED.crop_share_dam, crop_share_river = EXCLUDED.crop_share_river,
+			crop_share_remote = EXCLUDED.crop_share_remote, crop_remote_cap_m3_day = EXCLUDED.crop_remote_cap_m3_day,
+			hands_off_m3_day = EXCLUDED.hands_off_m3_day,
 			hands_off_ewr = EXCLUDED.hands_off_ewr, divert_monthly_m3_day = EXCLUDED.divert_monthly_m3_day,
 			ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year
@@ -239,6 +246,11 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source: n.cropWaterSource ?? WATER_SOURCE_DEFAULTS.cropWaterSource,
 			crop_river_pump_m3_day: n.cropRiverPumpM3Day ?? WATER_SOURCE_DEFAULTS.cropRiverPumpM3Day,
 			crop_river_pool_m3: n.cropRiverPoolM3 ?? WATER_SOURCE_DEFAULTS.cropRiverPoolM3,
+			// The crop supply table (engine ≥ 1.73.0, migration 202); absent = none. Its other unit is linked below, with the topology.
+			crop_share_dam: n.cropShareDam ?? CROP_SUPPLY_DEFAULTS.cropShareDam,
+			crop_share_river: n.cropShareRiver ?? CROP_SUPPLY_DEFAULTS.cropShareRiver,
+			crop_share_remote: n.cropShareRemote ?? CROP_SUPPLY_DEFAULTS.cropShareRemote,
+			crop_remote_cap_m3_day: n.cropRemoteCapM3Day ?? CROP_SUPPLY_DEFAULTS.cropRemoteCapM3Day,
 			// Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114); absent = off.
 			hands_off_m3_day: n.handsOffM3Day ?? OPERATING_DEFAULTS.handsOffM3Day,
 			hands_off_ewr: n.handsOffEwr ?? OPERATING_DEFAULTS.handsOffEwr,
@@ -249,13 +261,14 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 		})),
 		'node'
 	);
-	const linked = m.nodes.filter((n) => n.downstreamNodeId);
+	const linked = m.nodes.filter((n) => n.downstreamNodeId || n.cropRemoteNodeId);
 	if (linked.length) {
+		// The topology and each crop supply table's other unit (engine ≥ 1.73.0), once every node exists.
 		await db.query(
-			`UPDATE node SET downstream_node_id = l.down
-			 FROM unnest($2::uuid[], $3::uuid[]) AS l(id, down)
+			`UPDATE node SET downstream_node_id = l.down, crop_remote_node_id = l.remote
+			 FROM unnest($2::uuid[], $3::uuid[], $4::uuid[]) AS l(id, down, remote)
 			 WHERE node.id = l.id AND node.project_id = $1`,
-			[projectId, linked.map((n) => n.id), linked.map((n) => n.downstreamNodeId)]
+			[projectId, linked.map((n) => n.id), linked.map((n) => n.downstreamNodeId ?? null), linked.map((n) => n.cropRemoteNodeId ?? null)]
 		);
 	}
 	await upsertAll(

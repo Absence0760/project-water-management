@@ -46,8 +46,8 @@ describe('the showcase example', () => {
 		expect(d.some((o) => o.sizing === 'monthly' && !o.monthlyUnit)).toBe(true);
 		expect(d.some((o) => o.monthlyUnit === 'ls')).toBe(true);
 		expect(d.filter((o) => o.sizing === 'perUnit')).toHaveLength(2);
-		// A river abstraction for the crops.
-		expect(m.nodes.find((n) => n.name === UNITS.lower)!.cropWaterSource).toBe('river');
+		// A river abstraction for the crops, in a crop supply table with a share from the upper unit's dam (engine 1.73.0).
+		expect(m.nodes.find((n) => n.name === UNITS.lower)).toMatchObject({ cropWaterSource: 'river', cropShareDam: 0.4, cropShareRiver: 0.4, cropShareRemote: 0.2, cropRemoteNodeId: showcaseNodeId(UNITS.upper) });
 		// The project's own irrigation systems: an edited efficiency, a row of its own, crop defaults and one per-unit override.
 		expect(m.irrigationSystems!.find((s) => s.id === 'micro')!.efficiency).toBe(0.78);
 		expect(m.irrigationSystems!.find((s) => s.id === OWN_SYSTEM_ID)!.preset).toBeNull();
@@ -62,6 +62,9 @@ describe('the showcase example', () => {
 		expect(sum('groundwater_used', showcaseNodeId(UNITS.upper)) + sum('groundwater_used', showcaseNodeId(UNITS.lower))).toBeGreaterThan(0);
 		expect(sum('supplied', showcaseNodeId(UNITS.town))).toBeGreaterThan(0);
 		expect(sum('river_take@crops', showcaseNodeId(UNITS.lower))).toBeGreaterThan(0);
+		// The upper dam gives the lower unit's crops their share (engine 1.73.0).
+		expect(sum('remote_dam_in', showcaseNodeId(UNITS.lower))).toBeGreaterThan(0);
+		expect(sum('remote_dam_out', showcaseNodeId(UNITS.upper))).toBeCloseTo(sum('remote_dam_in', showcaseNodeId(UNITS.lower)), 3);
 		expect(sum('landcover_reduction', null)).toBeGreaterThan(0);
 	});
 

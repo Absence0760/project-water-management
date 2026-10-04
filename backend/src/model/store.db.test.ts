@@ -110,7 +110,8 @@ describe('model store', () => {
 		// and a river pump capacity (engine 1.58.0; 060's column, a user's too).
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15', pumpCapacityM3Day: 864.25 });
 		// A canal head, the river off-take's destination (engine 1.14.0, 091).
-		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0 });
+		// It also carries a crop supply table (engine 1.73.0, 202_crop_supply_table): a share from Upper's dam, awkward numbers.
+		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0, cropShareDam: 0.25, cropShareRiver: 0.5, cropShareRemote: 0.25, cropRemoteNodeId: farm.id, cropRemoteCapM3Day: 0.1 + 0.2 });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
 		const maize = { id: crypto.randomUUID(), name: 'Maize', sortOrder: 1, cropFactor: monthly(0.8) };
 		const transfer = (priority: number, dailyCapM3: number | null) => ({
@@ -211,6 +212,11 @@ describe('model store', () => {
 			cropWaterSource: 'dam',
 			cropRiverPumpM3Day: null,
 			cropRiverPoolM3: null,
+			cropShareDam: null,
+			cropShareRiver: null,
+			cropShareRemote: null,
+			cropRemoteNodeId: null,
+			cropRemoteCapM3Day: null,
 			handsOffM3Day: null,
 			handsOffEwr: false,
 			divertMonthlyM3Day: null,
@@ -243,6 +249,14 @@ describe('model store', () => {
 		await expect(asOwner('UPDATE node SET crop_river_pool_m3 = -1 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_river_pool_size' });
 		await expect(asOwner('UPDATE demand_object SET water_source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'well'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_water_source_known' });
 		await expect(asOwner("UPDATE demand_object SET river_pump_m3_day = 'Infinity' WHERE id = $1", [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_river_pump_size' });
+		// Migration 202's CHECKs keep each crop supply share in 0–1 and the pipe a size, below the API's own checks (engine 1.73.0),
+		// and the same-project trigger keeps its other unit in the project.
+		await expect(asOwner('UPDATE node SET crop_share_remote = 1.5 WHERE id = $1', [canal.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_share_remote_range' });
+		await expect(asOwner("UPDATE node SET crop_remote_cap_m3_day = 'Infinity' WHERE id = $1", [canal.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_remote_cap_size' });
+		const other = await newProject(u, 'Another project');
+		const elsewhere = node('Elsewhere', null);
+		expect((await u.call('PUT', `/projects/${other}/model`, { nodes: [elsewhere], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		await expect(asOwner('UPDATE node SET crop_remote_node_id = $2 WHERE id = $1', [canal.id, elsewhere.id])).rejects.toThrow(/project/);
 		// Migration 169's CHECK keeps the rank in 1–99 below the API's own check (engine 1.64.0).
 		await expect(asOwner('UPDATE demand_object SET priority_rank = 0 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_priority_rank_range' });
 		// The API serves the same document.

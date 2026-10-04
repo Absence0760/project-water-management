@@ -113,7 +113,7 @@ export function offtakeOf(tr: Transfer, from: number, to: number, fromName: stri
  * reaches its own source this way would need the destination's flow before
  * the source's, which a same-day off-take can't have.
  */
-function reaches(start: number, target: number, downstream: Int32Array, extra: readonly (readonly number[])[]): boolean {
+export function reaches(start: number, target: number, downstream: Int32Array, extra: readonly (readonly number[])[]): boolean {
 	const seen = new Uint8Array(downstream.length);
 	const stack = [start];
 	while (stack.length) {
@@ -275,9 +275,11 @@ export function offtakeReturns(offtakes: readonly PlanOfftake[], volumes: readon
  * keeping `order`'s own sequence wherever the links allow (a node is placed as
  * soon as all its upstream nodes and off-take sources are). Without off-takes
  * it is `order` itself. planOfftakes has already dropped any off-take that
- * would close a loop.
+ * would close a loop. A crop supply table's remote share (engine ≥ 1.73.0,
+ * ./cropSupply.ts) is passed in as a link too, from the supplying dam's unit
+ * to the receiving unit; planRemoteSupply drops one that would close a loop.
  */
-export function offtakeOrder(order: Int32Array, upstream: readonly ArrayLike<number>[], offtakes: readonly PlanOfftake[]): Int32Array {
+export function offtakeOrder(order: Int32Array, upstream: readonly ArrayLike<number>[], offtakes: readonly Pick<PlanOfftake, 'from' | 'to'>[]): Int32Array {
 	if (!offtakes.length) return order;
 	const n = order.length;
 	const waits = new Int32Array(n);

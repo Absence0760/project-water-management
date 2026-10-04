@@ -139,6 +139,9 @@ function touches(model: ProjectModel, ops: readonly ScenarioOp[], index: number)
 	switch (op.op) {
 		case 'node.set':
 			w(node(op.nodeId), op.field);
+			// Engine ≥ 1.72.0: a unit's efficiency puts every planting on the unit on that system, a planting another
+			// scenario adds there included (or not, in the other order): every planting on the unit.
+			if (op.field === 'irrigationEfficiency') w(`cropArea:${op.nodeId}|*`);
 			break;
 		case 'node.add':
 			w(node(op.node.id));
@@ -167,6 +170,8 @@ function touches(model: ProjectModel, ops: readonly ScenarioOp[], index: number)
 			break;
 		case 'crop.set':
 			w(`crop:${op.cropId}`, op.field);
+			// Engine ≥ 1.72.0: a crop's efficiency or system clears each of its plantings' own system: every planting of it.
+			if (op.field === 'irrigationEfficiency' || op.field === 'irrigationSystemId') w(`cropArea:*|${op.cropId}`);
 			break;
 		case 'crop.remove':
 			t.removes.push(`crop:${op.cropId}`);
@@ -280,6 +285,9 @@ function label(model: ProjectModel, scenarios: readonly CombineScenario[], entit
 			return `crop "${cropName(id)}"`;
 		case 'cropArea': {
 			const [n, c] = id.split('|');
+			// The patterns (sameEntity) named when two of them meet.
+			if (c === '*') return `the plantings on "${nodeName(n ?? '')}"`;
+			if (n === '*') return `the plantings of "${cropName(c ?? '')}"`;
 			return `crop area of "${cropName(c ?? '')}" on "${nodeName(n ?? '')}"`;
 		}
 		case 'demand':
@@ -300,6 +308,23 @@ function label(model: ProjectModel, scenarios: readonly CombineScenario[], entit
 			return `${kind} ${id}`;
 	}
 }
+
+/**
+ * Do two written entities meet? Equal, or a crop-area pattern (`cropArea:<node>|*`, every planting on a unit;
+ * `cropArea:*|<crop>`, every planting of a crop) that covers the other: an op that rewrites all of a unit's or a
+ * crop's plantings meets any op on one of them.
+ */
+function sameEntity(a: string, b: string): boolean {
+	if (a === b) return true;
+	const p = 'cropArea:';
+	if (!a.startsWith(p) || !b.startsWith(p)) return false;
+	const [an, ac] = a.slice(p.length).split('|');
+	const [bn, bc] = b.slice(p.length).split('|');
+	return (an === '*' || bn === '*' || an === bn) && (ac === '*' || bc === '*' || ac === bc);
+}
+
+/** Of two meeting entities, the one to name: a concrete planting over a pattern. */
+const concrete = (a: string, b: string): string => (a.includes('*') ? b : a);
 
 /**
  * The conflicts between `scenarios` on `base` (module comment): every pair
@@ -333,7 +358,7 @@ export function scenarioConflicts(base: ModelInput, scenarios: readonly CombineS
 				for (const [oj, tj] of all[j]!.entries()) {
 					for (const x of ti.writes)
 						for (const y of tj.writes)
-							if (x.entity === y.entity && (x.field === null || y.field === null || x.field === y.field)) add('same_target', x.entity, x.field ?? y.field, [i, oi], [j, oj]);
+							if (sameEntity(x.entity, y.entity) && (x.field === null || y.field === null || x.field === y.field)) add('same_target', concrete(x.entity, y.entity), x.field ?? y.field, [i, oi], [j, oj]);
 					const removedInUse = (r: readonly string[], t: Touch, a: [number, number], b: [number, number]) => {
 						for (const e of r) {
 							if (t.removes.includes(e)) add('same_target', e, null, a, b, 'remove');

@@ -286,6 +286,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.cropWaterSource', 'node.cropRiverPumpM3Day', 'node.cropRiverPoolM3', 'demandObject.waterSource', 'demandObject.riverPumpM3Day', 'demandObject.riverPoolM3', 'summary.riverTakes']
 	},
 	{
+		id: 'crop-supply-table',
+		term: 'Crop supply table',
+		short: 'A hydrological unit’s crop demand split in fixed shares between its own dam, the river at the unit and the dam of another unit.',
+		units: '% of the crop demand',
+		category: 'network',
+		fields: ['node.cropShareDam', 'node.cropShareRiver', 'node.cropShareRemote', 'node.cropRemoteNodeId', 'node.cropRemoteCapM3Day', 'run.remote_dam_in', 'run.remote_dam_out']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',

@@ -49,7 +49,8 @@ const base: ModelInput = {
 			node(G, 'Gauge', 'gauge', null, 0),
 			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000 }),
 			node(MINE, 'Rooikloof', 'farm', G, 1, { cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 }),
-			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null }),
+			// A crop supply table (engine ≥ 1.73.0) drawing a share on the applicant's own dam.
+			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null, cropShareDam: 0.5, cropShareRiver: 0.3, cropShareRemote: 0.2, cropRemoteNodeId: MINE, cropRemoteCapM3Day: 900 }),
 			node(U1, 'Town', 'user', G, 4, { userDemandM3Day: monthly(500), userPriority: 'junior' })
 		],
 		crops: [
@@ -119,6 +120,15 @@ describe('projectBaseForApplicant', () => {
 		expect(hidden.cropRiverPoolM3).toBeNull();
 		expect(JSON.stringify(view.model.nodes.filter((n) => n.id !== MINE))).not.toMatch(/river/);
 		expect(byId.get(MINE)).toMatchObject({ cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 });
+	});
+
+	it('doesn’t say how a hidden farm’s crops are shared between sources, nor whose dam it draws on (engine ≥ 1.73.0)', () => {
+		const hidden = byId.get(N1)!;
+		// No table at all (none, not shares of 0, which would be a table with nothing in it).
+		expect(hidden).toMatchObject({ cropShareDam: null, cropShareRiver: null, cropShareRemote: null, cropRemoteCapM3Day: null });
+		expect(hidden).not.toHaveProperty('cropRemoteNodeId');
+		// Positive control: the base has them.
+		expect(base.model.nodes.find((n) => n.id === N1)).toMatchObject({ cropShareRemote: 0.2, cropRemoteNodeId: MINE });
 	});
 
 	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover, boreholes', () => {

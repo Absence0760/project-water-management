@@ -148,6 +148,17 @@ describe('combineScenarios: conflicts are refused, never merged', () => {
 		expect(c).toMatchObject({ reason: 'removed_in_use', target: 'crop "Lucerne"' });
 	});
 
+	it('a unit’s efficiency and a planting another scenario sets on that unit, or a crop’s system and a planting of it (engine ≥ 1.72.0, fuzz seed 35)', () => {
+		// The efficiency puts every planting on the unit on its system: one planted after it wouldn't be, in one order.
+		const [c] = conflictOf([{ op: 'node.set', nodeId: 'B', field: 'irrigationEfficiency', value: 0.7 }], plantB);
+		expect(c).toMatchObject({ reason: 'same_target', target: 'crop area of "Lucerne" on "Farm B"' });
+		const [d] = conflictOf([{ op: 'crop.set', cropId: 'c1', field: 'irrigationSystemId', value: null }], plantB);
+		expect(d).toMatchObject({ reason: 'same_target', target: 'crop area of "Lucerne" on "Farm B"' });
+		// Positive controls: a planting on another unit, and another field of the unit, meet nothing.
+		expect(scenarioConflicts(base(), [sc('a', [{ op: 'node.set', nodeId: 'A', field: 'irrigationEfficiency', value: 0.7 }]), sc('b', plantB)])).toEqual([]);
+		expect(scenarioConflicts(base(), [sc('a', [{ op: 'node.set', nodeId: 'B', field: 'damCapacityM3', value: 1 }]), sc('b', plantB)])).toEqual([]);
+	});
+
 	it("a transfer changed whose end another scenario removes", () => {
 		const cs = conflictOf([{ op: 'transfer.set', transferId: 't1', field: 'maxRateM3s', value: 0.1 }], [{ op: 'node.remove', nodeId: 'C' }]);
 		expect(cs.map((c) => [c.reason, c.target, c.a.scenarioId])).toContainEqual(['removed_in_use', 'node "Farm C"', 'b']);

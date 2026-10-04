@@ -299,6 +299,14 @@ runs and accumulations are real) can't be decided without the client.
       answers on #90; a reversal becomes a new engine version with its
       engine-audit.md entry.
 
+- [ ] **Crop supply table (engine 1.73.0, issue #408):** confirm the
+      decisions of [model.md §2.7k](./model.md) (open question R3 in
+      engine-audit.md): fixed shares with no cascade between sources, the
+      other unit's dam giving after its own unit and before its spill, only a
+      dam upstream or on another branch (no dam downstream pumping up), and
+      no pipe losses. Trigger: the hydrologist's answer on #90; a change is a
+      new engine version.
+
 - [ ] **River abstractions beside a dam (engine 1.65.0, issue #344):**
       confirm the decisions of [model.md §2.7j](./model.md) (open question R2
       in engine-audit.md): the abstractions take after the dam side from the

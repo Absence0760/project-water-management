@@ -1016,6 +1016,70 @@ def run(doc: dict) -> dict:
     # limit) and a pool (capacity > 0; it starts full, its full area 7.2 × capacity^0.77, b = 0.7). Its supply
     # level is its place in the unit's supply order (supply_key; the crops with 'shared'). The dam side serves
     # the other demands only.
+    # ---- the crop supply table (§2.7k) ------------------------------------
+    # Shares of the crop demand asked of the unit's dam side, the river (the crops' river abstraction) and
+    # another unit's dam. All three None = no table (cropWaterSource); a share outside [0, 1] counts 0; shares
+    # not adding up to 1 are scaled to; all on the dam or all on the river is that water source.
+    tab: dict[str, dict] = {}
+    one_src: dict[str, str] = {}
+    for f in farms:
+        raw = [f.get("cropShareDam"), f.get("cropShareRiver"), f.get("cropShareRemote")]
+        if all(v is None for v in raw):
+            continue
+        sh = [v if v is not None and 0 <= v <= 1 else 0.0 for v in raw]
+        tot = sh[0] + sh[1] + sh[2]
+        if not tot > 0:
+            continue
+        if abs(tot - 1) > 1e-6:
+            sh = [v / tot for v in sh]
+        if sh[1] == 0 and sh[2] == 0:
+            one_src[f["id"]] = "dam"
+        elif sh[0] == 0 and sh[2] == 0:
+            one_src[f["id"]] = "river"
+        else:
+            tab[f["id"]] = {"dam": sh[0], "river": sh[1], "remote": sh[2]}
+
+    def crop_share(fid, src):
+        """The share of the crops' demand asked of the dam side or the river (§2.7j, §2.7k)."""
+        if fid in tab:
+            return tab[fid][src]
+        on = one_src.get(fid, by_id[fid].get("cropWaterSource"))
+        return (1.0 if on == "river" else 0.0) if src == "river" else (0.0 if on == "river" else 1.0)
+
+    # The remote shares the run can supply, in the receivers' id order: another unit with a dam, which the
+    # receiver doesn't drain into along the river, the river off-takes or a remote share accepted before it.
+    down = {x["id"]: x.get("downstreamNodeId") for x in nodes}
+    links: dict[str, list[str]] = {x["id"]: [] for x in nodes}
+    for t in model.get("transfers", []):
+        if t.get("source") == "river" and t.get("enabled", True) and t["fromNodeId"] in links and t["toNodeId"] in links and t["fromNodeId"] != t["toNodeId"]:
+            links[t["fromNodeId"]].append(t["toNodeId"])
+
+    def reaches(a, b):
+        seen, stack = set(), [a]
+        while stack:
+            k = stack.pop()
+            if k == b:
+                return True
+            if k in seen or k is None:
+                continue
+            seen.add(k)
+            stack.append(down.get(k))
+            stack.extend(links.get(k, []))
+        return False
+
+    remote: dict[str, dict] = {}
+    for fid in sorted(f for f in tab if tab[f]["remote"] > 0):
+        src = by_id[fid].get("cropRemoteNodeId")
+        sx = by_id.get(src) if src else None
+        if sx is None or sx["kind"] != "farm" or src == fid or not sx["damCapacityM3"] > 0 or reaches(fid, src):
+            continue
+        links[src].append(fid)
+        pc_ = by_id[fid].get("cropRemoteCapM3Day")
+        remote[fid] = {"from": src, "share": tab[fid]["remote"], "cap": math.inf if pc_ is None else pc_}
+    remote_into: dict[str, list[str]] = {}
+    for fid in sorted(remote):
+        remote_into.setdefault(remote[fid]["from"], []).append(fid)
+
     riv: dict[str, list[dict]] = {}
     for f in farms:
         ts = []
@@ -1023,7 +1087,7 @@ def run(doc: dict) -> dict:
         def kit(pump_, pool_):
             return {"pump": math.inf if pump_ is None else pump_, "pool": pool_ if pool_ is not None and pool_ > 0 else None}
 
-        if f.get("cropWaterSource") == "river":
+        if crop_share(f["id"], "river") > 0:
             ts.append({"key": "crops", "ob": None, "level": (1, 0), **kit(f.get("cropRiverPumpM3Day"), f.get("cropRiverPoolM3"))})
         for ob in objs[f["id"]]:
             if ob.get("waterSource") == "river":
@@ -1036,12 +1100,13 @@ def run(doc: dict) -> dict:
     def crops_on_river(fid):
         return any(t["ob"] is None for t in riv.get(fid, []))
 
-    # The dam side's demand: its dam-sourced demands only (the crops' abstraction, the objects not on the river).
+    # The dam side's demand: its dam-sourced demands only (the crops' abstraction, or its share of it under a
+    # table, §2.7k; the objects not on the river).
     Dd: dict[str, list[float]] = {}
-    for fid in riv:
+    for fid in sorted(set(riv) | set(tab)):
         dd = []
         for i in range(n):
-            v = 0.0 if crops_on_river(fid) else fd[fid]["Dc"][i]
+            v = crop_share(fid, "dam") * fd[fid]["Dc"][i]
             for ob in objs[fid]:
                 if ob["id"] not in on_river_obj:
                     v += obj_dem[ob["id"]][i]
@@ -1052,7 +1117,7 @@ def run(doc: dict) -> dict:
         return Dd[fid][i] if fid in Dd else Dn[fid][i]
 
     # ---- network (§2.5–§2.7h) -------------------------------------------
-    order = network_order(nodes, model.get("transfers", []))
+    order = network_order(nodes, model.get("transfers", []), [(r["from"], fid) for fid, r in remote.items()])
     ups: dict[str, list[str]] = {x["id"]: [] for x in nodes}
     for x in nodes:
         d = x.get("downstreamNodeId")
@@ -1185,7 +1250,7 @@ def run(doc: dict) -> dict:
         "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
         "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
         "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
-        "basic_needs",
+        "basic_needs", "remote_dam_in", "remote_dam_out",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
@@ -1422,6 +1487,17 @@ def run(doc: dict) -> dict:
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, list[tuple[str, float]]] = {}
+        # The remote shares' asks (§2.7k), known before any unit runs: the share of the crop demand, up to the pipe
+        # and, under a cap, the receiver's surface room at the start of the day. What each got is set at its source.
+        rm_ask: dict[str, float] = {}
+        rm_got: dict[str, float] = {}
+        for fid, r_ in remote.items():
+            a_ = min(r_["share"] * fd[fid]["Dc"][i], r_["cap"])
+            sr_ = room.get((fid, "surface"))
+            if sr_:
+                a_ = min(a_, sr_[0])
+            rm_ask[fid] = max(a_, 0.0)
+            rm_got[fid] = 0.0
 
         # Nodes in network order (§2.7, §2.7c, §2.6a).
         U: dict[str, float] = {}
@@ -1522,6 +1598,10 @@ def run(doc: dict) -> dict:
             if xid in Dd:
                 dem = Dd[xid][i]
             d = fd[xid]
+            # The remote share (§2.7k) has arrived (its source ran first): the unit's first surface use.
+            gin = rm_got.get(xid, 0.0)
+            if gin > 0:
+                s_left = max(0.0, s_left - gin)
             cap = x["damCapacityM3"]
             s_prev = storage[xid]
             area, pd, e_raw, sp_raw = pre[xid]
@@ -1700,11 +1780,11 @@ def run(doc: dict) -> dict:
                 dam_obs = [ob for ob in objs[xid] if ob["id"] not in on_river_obj]
                 keys = sorted({supply_key(ob) for ob in dam_obs} | {(1, 0)})
                 classes = [
-                    ([("c", None)] if key == (1, 0) and not crops_on_river(xid) else []) + [("o", ob) for ob in dam_obs if supply_key(ob) == key]
+                    ([("c", None)] if key == (1, 0) and crop_share(xid, "dam") > 0 else []) + [("o", ob) for ob in dam_obs if supply_key(ob) == key]
                     for key in keys
                 ]
                 for cls in classes:
-                    want_c = [(kind, ob, d["Dc"][i] if kind == "c" else obj_dem[ob["id"]][i]) for kind, ob in cls]
+                    want_c = [(kind, ob, crop_share(xid, "dam") * d["Dc"][i] if kind == "c" else obj_dem[ob["id"]][i]) for kind, ob in cls]
                     tot = 0.0
                     for _, _, w_ in want_c:
                         tot += w_
@@ -1727,7 +1807,21 @@ def run(doc: dict) -> dict:
                 cc["basic_needs"][i] = bn
             else:
                 T = r_ret * G
+            if gin > 0:
+                T += r_ret * gin
             P = avail + GWd - Gs
+            # Other units' remote shares from this dam (§2.7k): after its own dam side and release, from the storage
+            # above dead storage, before the spill, pro rata to the asks (summed in the receivers' id order).
+            xr = 0.0
+            if xid in remote_into:
+                ask_t = 0.0
+                for fid in remote_into[xid]:
+                    ask_t += rm_ask[fid]
+                if ask_t > 0 and cap > 0:
+                    xr = min(ask_t, max(P - dead, 0.0))
+                    for fid in remote_into[xid]:
+                        rm_got[fid] = rm_ask[fid] if xr >= ask_t else rm_ask[fid] * xr / ask_t
+                P -= xr
             Q = min(P, cap)
             R = max(P - cap, 0.0)
             ret = x.get("damSeepageReturnPct", 1)
@@ -1743,7 +1837,7 @@ def run(doc: dict) -> dict:
                 ts = riv[xid]
                 past = R + S - Gr + Sp * ret + X + passed_on
                 free = max(0.0, past - keep)
-                rroom = (sroom[0] if sroom else math.inf) - (G - GW)
+                rroom = (sroom[0] if sroom else math.inf) - gin - (G - GW)
                 q = pool_q[xid]
                 held = []
                 evs = []
@@ -1755,7 +1849,7 @@ def run(doc: dict) -> dict:
                         ev = min(k_lake[m] * apan[m] / mdays[m] / 1000 * ar, prev)
                     evs.append(ev)
                     held.append(q[a] - ev)
-                want_t = [d["Dc"][i] if t["ob"] is None else obj_dem[t["ob"]["id"]][i] for t in ts]
+                want_t = [crop_share(xid, "river") * d["Dc"][i] if t["ob"] is None else obj_dem[t["ob"]["id"]][i] for t in ts]
                 got = [0.0] * len(ts)
                 left_p = [t["pump"] for t in ts]
                 from_flow = 0.0
@@ -1819,12 +1913,16 @@ def run(doc: dict) -> dict:
             for k_ in range(len(ulist)):
                 used_u[k_] += pumped[k_]
             if sroom:
-                spend(xid, "surface", G - GW + g_riv)
+                spend(xid, "surface", G - GW + g_riv + gin)
             if groom:
                 spend(xid, "groundwater", GW + GWd)
             # The unit's whole use, demand and shortfall: its river abstractions' too (§2.7j).
-            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv, sroom, dem_all, dem_all - G - g_riv, o, ald)
-            note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem_all, dem_all - G - g_riv, o, ald)
+            # What the unit got in all (§2.7k: with the remote share), at most its demand under a table.
+            g_all = G + g_riv + gin
+            if xid in tab:
+                g_all = min(g_all, dem_all)
+            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv + gin, sroom, dem_all, dem_all - g_all, o, ald)
+            note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem_all, dem_all - g_all, o, ald)
             # Off-takes from this unit (§2.6a), by priority.
             taken = 0.0
             ots = [t for t in ot_from.get(xid, []) if rule_limit(t, o, m) > 0]
@@ -1880,20 +1978,20 @@ def run(doc: dict) -> dict:
             for _, bv in sorted(back_to.get(xid, [])):
                 back += bv
             Uo = U0 - taken + back
-            V = (H + I + j + pd + GW + GWd + arrives + back) - (G + g_riv - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg
+            V = (H + I + j + pd + GW + GWd + arrives + back + gin) - (g_all - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg - xr
             aa = noise_short(z, Uo)
             ab = min(aa - aau, 0.0)
             for key, val in (
                 ("runoff", I), ("transfer", j), ("upstream_to_dam", K), ("upstream_below_dam", L),
                 ("runoff_to_dam", M), ("runoff_below_dam", N), ("diverted_to_dam", O), ("dam_area", area),
-                ("rain_on_dam", pd), ("dam_evaporation", E), ("dam_seepage", Sp), ("supplied", G + g_riv),
+                ("rain_on_dam", pd), ("dam_evaporation", E), ("dam_seepage", Sp), ("supplied", g_all),
                 ("interim_storage", P), ("dam_storage", Q), ("spill", R), ("below_dam_not_diverted", S),
-                ("return_flow", T), ("outflow", Uo), ("balance_residual", V), ("deficit", dem_all - (G + g_riv)), ("ewr", y_ewr),
+                ("return_flow", T), ("outflow", Uo), ("balance_residual", V), ("deficit", dem_all - g_all), ("ewr", y_ewr),
                 ("ewr_cumulative", z), ("ewr_shortfall", aa), ("ewr_shortfall_incremental", ab),
                 ("dam_seepage_lost", lost), ("dam_release", X), ("river_abstraction", Gr), ("groundwater_used", GW),
                 ("groundwater_to_dam", GWd), ("senior_requirement", zs), ("passed_for_senior", passed),
                 ("offtake_out", taken), ("offtake_in", arrives), ("offtake_used", used_off), ("offtake_to_dam", to_dam),
-                ("offtake_loss_return", back),
+                ("offtake_loss_return", back), ("remote_dam_in", gin), ("remote_dam_out", xr),
             ):
                 cc[key][i] = val
             for s_, r_ in (("surface", sroom), ("groundwater", groom)):
@@ -1960,6 +2058,9 @@ def run(doc: dict) -> dict:
         if lp > 0 and rp > 0:
             rn = t.get("lossReturnNodeId") or t["fromNodeId"]
             legs.append((t["fromNodeId"], rn, [v * lp * rp for v in rule_vol[t["id"]]], t["toNodeId"]))
+    # A remote share (§2.7k) moves water from the supplying unit to the receiving one, as a transfer does.
+    for fid, r_ in sorted(remote.items()):
+        legs.append((r_["from"], fid, col[fid]["remote_dam_in"], None))
     for i in range(n):
         best: dict[str, tuple] = {}
         for site_key, site_node in sites:
@@ -2064,6 +2165,11 @@ def run(doc: dict) -> dict:
                 extra.append("offtake_loss_return")
             if any(ob["id"] in obj_B for ob in objs[xid]):
                 extra.append("basic_needs")
+            # The remote share (§2.7k): on a receiving unit, and on a unit whose dam supplies one.
+            if xid in remote:
+                extra.append("remote_dam_in")
+            if xid in remote_into:
+                extra.append("remote_dam_out")
             for ob in objs[xid]:
                 put(xid, f"object_demand@{ob['id']}", obj_dem[ob["id"]])
                 put(xid, f"object_supplied@{ob['id']}", obj_sup[ob["id"]])
@@ -2333,9 +2439,10 @@ def note_limit(lb, nid, wy, room, src, use, r_, dem, short, o, ald):
     row[kind] += 1
 
 
-def network_order(nodes: list[dict], transfers: list[dict]) -> list[dict]:
+def network_order(nodes: list[dict], transfers: list[dict], extra: list[tuple[str, str]] = ()) -> list[dict]:
     """Upstream first, and a river off-take's destination after its source
-    (§2.6a): a topological order of the river and the off-takes, ties by id."""
+    (§2.6a), and a remote share's receiving unit after the unit whose dam
+    supplies it (§2.7k, `extra`): a topological order, ties by id."""
     by_id = {x["id"]: x for x in nodes}
     succ: dict[str, set[str]] = {x["id"]: set() for x in nodes}
     for x in nodes:
@@ -2344,6 +2451,8 @@ def network_order(nodes: list[dict], transfers: list[dict]) -> list[dict]:
     for t in transfers:
         if t.get("source") == "river" and t.get("enabled", True) and t["fromNodeId"] in by_id and t["toNodeId"] in by_id:
             succ[t["fromNodeId"]].add(t["toNodeId"])
+    for a, b in extra:
+        succ[a].add(b)
     indeg = {k: 0 for k in succ}
     for k, vs in succ.items():
         for v in vs:

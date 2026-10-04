@@ -6,6 +6,7 @@
 // run (../run.ts) and the self-checks (../verify/checks.ts) read a demand's
 // source through these, so a stored value means the same thing to each.
 import { DAM_AREA_EXPONENT, estimatedDamAreaM2, type DemandObject, type NetworkNode } from '../project';
+import { cropSharesOf, type PlanCropShare } from './cropSupply';
 
 /**
  * A pool at a river abstraction's pump (engine ≥ 1.65.0, after draft PR
@@ -38,6 +39,12 @@ export interface PlanRiver {
 	takes: PlanTake[];
 	/** Whether the crops draw on the river. */
 	cropsOnRiver: boolean;
+	/**
+	 * The share of the crop demand the crops' river abstraction is asked for:
+	 * 1 under `cropWaterSource` 'river', the river's share under a crop supply
+	 * table (engine ≥ 1.73.0, ./cropSupply.ts); 0 when the crops aren't on the river.
+	 */
+	cropShare: number;
 	/** 1 = the plan object at that index draws on the river. */
 	objOnRiver: Uint8Array;
 }
@@ -99,21 +106,26 @@ function poolOf(raw: unknown, who: string, warnings: string[]): PlanPool | undef
 
 /**
  * A unit's river abstractions for the plan (engine ≥ 1.65.0): the crops'
- * when `cropWaterSource` is 'river', then each plan object's whose
+ * when `cropWaterSource` is 'river' (or, under a crop supply table, engine ≥
+ * 1.73.0, when the table gives the river a share; `table` is the unit's
+ * cropSharesOf, which the run passes so its warnings are kept), then each plan object's whose
  * `waterSource` is 'river', in plan-object order (id order). {} when none,
  * so the unit runs exactly as engines before 1.65.0 did. A crop water source
  * on a node that isn't a farm, and an unknown source, run as the dam with a
  * warning (the API refuses both on save).
  */
-export function riverSourcesOf(n: NetworkNode, objects: readonly DemandObject[] | undefined, warnings: string[]): { river?: PlanRiver } {
-	const cs = n.cropWaterSource;
-	if (cs !== undefined && cs !== null && cs !== 'dam' && cs !== 'river') warnings.push(`unit "${n.name}": unknown crop water source "${String(cs)}"; the dam`);
+export function riverSourcesOf(n: NetworkNode, objects: readonly DemandObject[] | undefined, warnings: string[], table: { shares?: PlanCropShare; source?: 'dam' | 'river' } = cropSharesOf(n, [])): { river?: PlanRiver } {
+	// A crop supply table (engine ≥ 1.73.0, ./cropSupply.ts) replaces the crops' water source.
+	const tabled = table.shares !== undefined || table.source !== undefined;
+	const cs = tabled ? table.source : n.cropWaterSource;
+	if (!tabled && cs !== undefined && cs !== null && cs !== 'dam' && cs !== 'river') warnings.push(`unit "${n.name}": unknown crop water source "${String(cs)}"; the dam`);
 	if (n.kind !== 'farm') {
 		if (onRiver(cs)) warnings.push(`${n.kind === 'user' ? 'user' : 'gauge'} "${n.name}": only a unit's crops have a water source; ignored`);
 		return {};
 	}
 	const takes: PlanTake[] = [];
-	const cropsOnRiver = onRiver(cs);
+	const cropShare = table.shares ? table.shares.river : onRiver(cs) ? 1 : 0;
+	const cropsOnRiver = cropShare > 0;
 	if (cropsOnRiver) {
 		const who = `unit "${n.name}": the crops' river abstraction`;
 		const pool = poolOf(n.cropRiverPoolM3, who, warnings);
@@ -131,7 +143,7 @@ export function riverSourcesOf(n: NetworkNode, objects: readonly DemandObject[] 
 		takes.push({ key: o.id, name: o.name, obj: k, pumpM3Day: pumpOf(o.riverPumpM3Day, who, warnings), ...(pool ? { pool } : {}) });
 	});
 	if (!takes.length) return {};
-	return { river: { takes, cropsOnRiver, objOnRiver } };
+	return { river: { takes, cropsOnRiver, cropShare, objOnRiver } };
 }
 
 /**

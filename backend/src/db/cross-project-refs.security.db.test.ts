@@ -368,6 +368,11 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.outletId,
 		insert: (h, ref) => [`INSERT INTO node (id, project_id, name, kind, downstream_node_id) VALUES ($1, $2, $3, 'farm', $4)`, [randomUUID(), h.projectId, `N ${randomUUID()}`, ref]]
 	},
+	// A crop supply table's other unit (202, engine 1.73.0): its dam gives this unit's crops a share, the same project's only.
+	'node.crop_remote_node_id': {
+		ref: (w) => w.farmId,
+		insert: (h, ref) => [`INSERT INTO node (id, project_id, name, kind, downstream_node_id, crop_remote_node_id) VALUES ($1, $2, $3, 'farm', $4, $5)`, [randomUUID(), h.projectId, `N ${randomUUID()}`, h.outletId, ref]]
+	},
 	// A crop's default and a unit's own irrigation system (198): a row of the crop's own project only.
 	'crop.irrigation_system_id': {
 		ref: (w) => w.irrigationSystemId,
@@ -1047,6 +1052,16 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	// A river off-take whose canal seepage rejoins below a unit (migration 126): the source itself in the control.
 	'PUT /projects/:id/model transfers.lossReturnNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, modelOf(h, { transfers: [{ ...transferOf(h.farmId, h.farm2Id), source: 'river', lossPct: 0.2, lossReturnPct: 0.5, lossReturnNodeId: r.farmId }] })),
+	// A crop supply table drawing a share on another unit's dam (migration 202): Farm's dam in the control.
+	'PUT /projects/:id/model cropRemoteNodeId': (h, r) =>
+		dual.call('PUT', `/projects/${h.projectId}/model`, {
+			...modelOf(h),
+			nodes: [
+				node('Outlet', null, { id: h.outletId }),
+				node('Farm', h.outletId, { id: h.farmId }),
+				node('Farm two', h.outletId, { id: h.farm2Id, cropShareDam: 0.5, cropShareRiver: 0, cropShareRemote: 0.5, cropRemoteNodeId: r.farmId })
+			]
+		}),
 	'PUT /projects/:id/model landCover.nodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, modelOf(h, { landCover: [{ id: randomUUID(), nodeId: r.farmId, coverClass: 'pine', areaKm2: 1, densityPct: 0.5, factors: null }] })),
 	'PUT /projects/:id/model boreholes.nodeId': (h, r) =>
@@ -1138,6 +1153,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'model/validate.ts:fromNodeId': 'the same store path as toNodeId (transfer_same_project checks both)',
 	'model/validate.ts:toNodeId': ['PUT /projects/:id/model transfers.toNodeId'],
 	'model/validate.ts:lossReturnNodeId': ['PUT /projects/:id/model transfers.lossReturnNodeId'],
+	'model/validate.ts:cropRemoteNodeId': ['PUT /projects/:id/model cropRemoteNodeId'],
 	'notes/routes.ts:nodeId': ['POST /projects/:id/notes nodeId'],
 	'notes/routes.ts:runId': ['POST /projects/:id/notes runId'],
 	'notes/routes.ts:scenarioId': ['POST /projects/:id/notes scenarioId'],

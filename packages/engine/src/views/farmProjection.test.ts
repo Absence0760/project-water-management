@@ -362,7 +362,8 @@ describe('the dam’s days left follow what the dam itself gave (persona-farmer,
 		expect(Array.from(damDraw(run, node, Float64Array.from([20, 6, 7, 0.5])))).toEqual([14, 0, 7, 0.5]);
 	});
 
-	it('is supplied less groundwater_used and every river_take@ on random networks, within 0 and supplied', () => {
+	it('is supplied less groundwater_used, every river_take@ and remote_dam_in, plus remote_dam_out, on random networks, within 0 and supplied + given', () => {
+		let gave = 0;
 		for (let seed = 1; seed <= 40; seed++) {
 			const input = randomInput(seed);
 			const out = runModel(input);
@@ -373,15 +374,21 @@ describe('the dam’s days left follow what the dam itself gave (persona-farmer,
 				const supplied = get('supplied')!;
 				const takes = out.series.filter((s) => s.nodeId === node.id && s.key.startsWith('river_take@'));
 				const gw = get('groundwater_used');
+				// A crop supply table (engine ≥ 1.73.0): another dam's share of the crops, and what this dam gave other units.
+				const rin = get('remote_dam_in');
+				const rout = get('remote_dam_out');
 				const d = damDraw(run, node, Float64Array.from(supplied));
 				d.forEach((v, t) => {
-					const want = supplied[t]! - (gw?.[t] ?? 0) - takes.reduce((a, s) => a + s.values[t]!, 0);
-					expect(v, `seed ${seed} ${node.id} day ${t}`).toBeCloseTo(want > 1e-6 ? want : 0, 6);
+					const own = supplied[t]! - (gw?.[t] ?? 0) - takes.reduce((a, s) => a + s.values[t]!, 0) - (rin?.[t] ?? 0);
+					const given = rout?.[t] ?? 0;
+					if (given > 0) gave++;
+					expect(v, `seed ${seed} ${node.id} day ${t}`).toBeCloseTo((own > 1e-6 ? own : 0) + given, 6);
 					expect(v).toBeGreaterThanOrEqual(0);
-					expect(v).toBeLessThanOrEqual(supplied[t]! + 1e-9);
+					expect(v).toBeLessThanOrEqual(supplied[t]! + given + 1e-9);
 				});
 			}
 		}
+		expect(gave).toBeGreaterThan(0);
 	});
 });
 

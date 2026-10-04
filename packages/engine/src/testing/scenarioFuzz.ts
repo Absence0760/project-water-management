@@ -58,6 +58,13 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 			return g.pick([null, 0, g.logFloat(10, 1e6)]);
 		case 'cropWaterSource':
 			return g.pick(WATER_SOURCES);
+		// One share at a time: unless the others make it up to 100 %, a problem applyScenario reports (engine ≥ 1.73.0).
+		case 'cropShareDam':
+		case 'cropShareRiver':
+		case 'cropShareRemote':
+			return g.pick([null, 0, 1, g.float(0, 1)]);
+		case 'cropRemoteCapM3Day':
+			return g.pick([null, 0, g.logFloat(1, 1e5)]);
 		case 'handsOffM3Day':
 		case 'divertMonthlyM3Day':
 			return g.bool(0.3) ? null : monthly(g, () => (g.bool(0.2) ? 0 : g.logFloat(1, 1e5)));

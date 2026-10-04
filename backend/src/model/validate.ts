@@ -94,6 +94,14 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				cropWaterSource: z.enum(WATER_SOURCES).default('dam'),
 				cropRiverPumpM3Day: nonNeg.nullable().default(null),
 				cropRiverPoolM3: nonNeg.nullable().default(null),
+				// The crop supply table (engine ≥ 1.73.0, issue #408): each source's share of the crops (0–1, null = no table),
+				// the other unit whose dam gives its share, and the pipe from it (null = no limit). That set shares add up
+				// to 100 % and name a usable dam are model rules (cropShareSum, cropRemoteNode, …).
+				cropShareDam: z.number().finite().min(0).max(1).nullable().default(null),
+				cropShareRiver: z.number().finite().min(0).max(1).nullable().default(null),
+				cropShareRemote: z.number().finite().min(0).max(1).nullable().default(null),
+				cropRemoteNodeId: uuid.nullable().default(null),
+				cropRemoteCapM3Day: nonNeg.nullable().default(null),
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0, issue #204), m³/day by water-year
 				// month; null = none / the one divertCapacityM3Day. Farms only is a model rule (operatingKind).
 				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),

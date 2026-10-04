@@ -51,14 +51,24 @@ const TEXT_KEPT: Record<TextField, boolean> = {
 	userPriority: true,
 	boreholeRule: true,
 	supplyRule: true,
-	cropWaterSource: false
+	cropWaterSource: false,
+	// The crop supply table's other unit (engine ≥ 1.73.0): which neighbour's dam waters its crops.
+	cropRemoteNodeId: false
 };
+
+/**
+ * Number fields an anonymised node has none of (null), rather than 0: a crop
+ * supply table (engine ≥ 1.73.0) with every share 0 is a table with nothing in
+ * it, which the run warns about and a save refuses; none is the engine's default.
+ */
+const NUMBER_NONE = new Set(['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropRemoteCapM3Day']);
 
 /** A node with everything but its place, its kind and the kept rules blanked, under `name`. */
 function anonymise(n: NetworkNode, name: string): NetworkNode {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(n)) {
 		if (KEEP.has(k)) out[k] = v;
+		else if (NUMBER_NONE.has(k)) out[k] = null;
 		else if (typeof v === 'number') out[k] = 0;
 		else if (typeof v === 'boolean') out[k] = false;
 		// Text only when the list keeps it; an unlisted one (not a NetworkNode field) goes too.

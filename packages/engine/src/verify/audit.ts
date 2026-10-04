@@ -21,6 +21,7 @@
 // survey curve, a hands-off flow, River to dam by month, a daily A-pan
 // series on a dam, a dam capacity that changes over the run, a drought restriction rule) gets `unsupported` instead, naming each, rather than a
 // workbook whose numbers would disagree.
+import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
 import { upgradeLegacyInput } from '../demand';
 import { toEpochDay } from '../calendar';
 import { ALLOCATION_SERIES } from '../allocations/mode';
@@ -182,6 +183,9 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	['offtake_out', 'river off-takes from it'],
 	['offtake_loss_return', 'river off-takes’ seepage returning below it'],
 	['dam_storage_set', 'a dam storage reset'],
+	// Engine ≥ 1.73.0: a crop supply table's share from another unit's dam, at both ends.
+	[REMOTE_SERIES.in.key, 'crops supplied from another unit’s dam'],
+	[REMOTE_SERIES.out.key, 'its dam supplying other units’ crops'],
 	[ALLOCATION_SERIES.surfaceRoom.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.groundwaterRoom.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.surfaceLeft.key, 'an allocation cap'],
@@ -240,6 +244,8 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	if (demandObjectsByNode(model, []).get(n.id)) why.add('demand objects');
 	// River abstractions beside the dam (engine ≥ 1.65.0): they take from the flow past the dam, and the dam side no longer supplies their demands.
 	if (riverSourcesOf(n, demandObjectsByNode(model, []).get(n.id), []).river) why.add('river abstractions beside the dam');
+	// A crop supply table that splits the crops (engine ≥ 1.73.0): the dam side is asked for its share only.
+	if (cropSharesOf(n, []).shares) why.add('a crop supply table that splits the crops between sources');
 	// Operating rules (engine ≥ 1.32.0): they change O by month and by the day's flow.
 	const ops = operatingOf(n, []);
 	// A dam on the river takes no River to dam (engine ≥ 1.68.0); an older run's took it as entered.

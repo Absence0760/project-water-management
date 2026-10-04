@@ -1283,6 +1283,23 @@ export interface NetworkNode {
 	cropRiverPumpM3Day?: number | null;
 	/** A pool at the crops' river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
 	cropRiverPoolM3?: number | null;
+	/**
+	 * Farms only (engine ≥ 1.73.0, issue #408, docs/model.md §2.7k): the crop
+	 * supply table, the share of the crop demand asked of each source, 0–1,
+	 * together 1. `cropShareDam`: the unit's dam side; `cropShareRiver`: the
+	 * crops' river abstraction (its pump `cropRiverPumpM3Day` and pool
+	 * `cropRiverPoolM3`); `cropShareRemote`: the dam of the unit
+	 * `cropRemoteNodeId`, through a pipe of `cropRemoteCapM3Day`. All three
+	 * null / absent = no table: the crops take `cropWaterSource`, as every
+	 * engine before 1.73.0. A table replaces `cropWaterSource`.
+	 */
+	cropShareDam?: number | null;
+	cropShareRiver?: number | null;
+	cropShareRemote?: number | null;
+	/** The unit whose dam supplies `cropShareRemote` (a farm with a dam, not one this unit drains into). */
+	cropRemoteNodeId?: string | null;
+	/** The pipe or canal's capacity from that dam, m³/day; null / absent = no limit (the run warns); 0 = nothing. */
+	cropRemoteCapM3Day?: number | null;
 	/** 'trigger' only: switch to the river when the dam holds less than this fraction of its capacity (start of the day). Default 0.4. */
 	supplyTriggerPct?: number;
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
@@ -1386,6 +1403,15 @@ export const WATER_SOURCE_DEFAULTS = {
 	cropWaterSource: 'dam',
 	cropRiverPumpM3Day: null,
 	cropRiverPoolM3: null
+} as const;
+
+/** What a node without the crop supply table (engine ≥ 1.73.0, issue #408) runs as: no table, the crops on `cropWaterSource`. */
+export const CROP_SUPPLY_DEFAULTS = {
+	cropShareDam: null,
+	cropShareRiver: null,
+	cropShareRemote: null,
+	cropRemoteNodeId: null,
+	cropRemoteCapM3Day: null
 } as const;
 
 /**
@@ -1636,6 +1662,8 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 		...OPERATING_DEFAULTS,
 		// The crops on the dam (engine 1.65.0).
 		...WATER_SOURCE_DEFAULTS,
+		// No crop supply table (engine 1.73.0).
+		...CROP_SUPPLY_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true
 	};
@@ -1744,6 +1772,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				n.cropWaterSource ??= WATER_SOURCE_DEFAULTS.cropWaterSource;
 				if (n.cropRiverPumpM3Day === undefined) n.cropRiverPumpM3Day = WATER_SOURCE_DEFAULTS.cropRiverPumpM3Day;
 				if (n.cropRiverPoolM3 === undefined) n.cropRiverPoolM3 = WATER_SOURCE_DEFAULTS.cropRiverPoolM3;
+				// The crop supply table (engine ≥ 1.73.0): none unless set.
+				for (const k of Object.keys(CROP_SUPPLY_DEFAULTS) as (keyof typeof CROP_SUPPLY_DEFAULTS)[]) if (n[k] === undefined) n[k] = CROP_SUPPLY_DEFAULTS[k];
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;

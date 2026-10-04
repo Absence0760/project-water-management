@@ -7,6 +7,7 @@
 // accept as a save, and a rule added here reaches both.
 import { DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, WATER_SOURCES, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
+import { cropSupplyIssues } from './network/cropSupply';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
 import { isRiverOfftake, offtakeReturnAt } from './network/offtake';
@@ -101,6 +102,12 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			});
 		}
 	}
+	// The crop supply tables (engine ≥ 1.73.0, docs/model.md §2.7k): shares that add up, and a remote dam the run can draw on.
+	cropSupplyIssues(
+		m.nodes,
+		m.transfers.filter((tr) => tr.enabled && tr.source === 'river'),
+		add
+	);
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !byId.has(n.downstreamNodeId)) add(`down:${n.id}`, `"${n.name}" drains into an unknown node`);
 		// Boreholes (WP-1.34): a gauge only measures; the drought rule triggers on a dam.

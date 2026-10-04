@@ -1592,6 +1592,18 @@ own beside the dam (series `river_take@crops`, and with a pool
 `river_pool@crops` and `river_pool_evaporation@crops`); the supply rule then
 serves the unit's dam-sourced demand objects only.
 
+The crop supply table (engine ≥ 1.73.0, migration 202, issue #408,
+[model.md §2.7k](./model.md)): every node carries `cropShareDam`,
+`cropShareRiver`, `cropShareRemote` (0–1 or `null`), `cropRemoteNodeId` (a
+node id or `null`) and `cropRemoteCapM3Day` (≥ 0 or `null` = no limit). A
+body without them gets `null` for all five (no table, no change to any run).
+`PUT` refuses a share outside 0–1, a negative pipe, a table on a node that
+isn't a farm, shares that don't add up to 100 %, and a remote share without
+another unit with a dam or with a unit this one drains into. With a table the
+crops' demand is asked of each source by its share; runs store
+`remote_dam_in` on a unit with a remote share (part of `supplied`) and
+`remote_dam_out` on a unit whose dam gives one.
+
 Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114,
 issue #204, [model.md §2.7h](./model.md)): every node carries
 `handsOffM3Day` (12 finite m³/day values ≥ 0 by water-year month, Oct–Sep, or

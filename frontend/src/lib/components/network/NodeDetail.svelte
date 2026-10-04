@@ -211,7 +211,7 @@
 				{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
 				<DevelopmentFields {node} {readonly} part="dam" />
 			{:else if sec === 'supply'}
-				<SupplyFields {node} {readonly} />
+				<SupplyFields {node} {nodes} {readonly} />
 			{:else if sec === 'demand'}
 				<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
 				<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />

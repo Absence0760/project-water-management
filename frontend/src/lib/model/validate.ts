@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { cropSupplyIssues, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -83,6 +83,26 @@ export function operatingIssues(n: Pick<NetworkNode, 'kind' | 'handsOffM3Day' | 
 	const out: string[] = [];
 	if (handsOff !== null && bad(handsOff)) out.push('the hands-off flow needs 12 monthly values, none negative.');
 	if (divert !== null && bad(divert)) out.push('River to dam by month needs 12 monthly values, none negative.');
+	return out;
+}
+
+/**
+ * The crop supply tables' problems (engine ≥ 1.73.0, issue #408, docs/model.md
+ * §2.7k), as the API refuses them (the engine's cropSupplyIssues, through
+ * modelRules): each with the node it is about and the words after its name.
+ * Shares that don't add up to 100 %, a remote share without another unit with
+ * a dam, a dam the unit drains into, a negative pipe.
+ */
+export function cropSupplyProblems(model: Pick<ProjectModel, 'nodes' | 'transfers'>): { nodeId: string; message: string }[] {
+	const out: { nodeId: string; message: string }[] = [];
+	const offtakes = model.transfers.filter((t) => t.enabled && isRiverOfftake(t));
+	cropSupplyIssues(model.nodes, offtakes, (key, message) => {
+		const nodeId = key.slice(key.indexOf(':') + 1);
+		const n = model.nodes.find((x) => x.id === nodeId);
+		// The engine names the unit first ("Name": …); the form shows its own name above, so the words after it.
+		const prefix = n ? `"${n.name}": ` : '';
+		out.push({ nodeId, message: prefix && message.startsWith(prefix) ? message.slice(prefix.length) : message });
+	});
 	return out;
 }
 
@@ -206,6 +226,12 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 				issues.push({ area: 'network', itemId: n.id, message: `${label}: demand needs 12 monthly values, none negative.` });
 			if (cropAreas.some((a) => a.nodeId === n.id)) issues.push({ area: 'crops', message: `${label} is an other water user: its demand is monthly, so remove its crop areas.` });
 		}
+	}
+
+	// The crop supply tables (engine ≥ 1.73.0), as the API checks them.
+	for (const p of cropSupplyProblems(model)) {
+		const n = nodes.find((x) => x.id === p.nodeId);
+		issues.push({ area: 'network', itemId: p.nodeId, message: `"${n?.name || '?'}": ${p.message}` });
 	}
 
 	// Exactly one outlet (unless empty)

@@ -235,6 +235,15 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
  * and pool. Farms only (a model rule).
  */
 const CROP_SOURCE = ['cropWaterSource', 'cropRiverPumpM3Day', 'cropRiverPoolM3'] as const;
+/**
+ * A farm's crop supply table (engine ≥ 1.73.0, issue #408, docs/model.md
+ * §2.7k): the shares of its crop demand asked of its dam, the river and
+ * another unit's dam, and the pipe from that dam. Set them in consecutive
+ * ops, which are checked together, so the shares can add up to 100 % again.
+ * Which unit's dam is the model's own (`cropRemoteNodeId` names another
+ * node, which an applicant's view may hide), not a scenario's.
+ */
+const CROP_SUPPLY = ['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropRemoteCapM3Day'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -244,7 +253,7 @@ const CROP_SOURCE = ['cropWaterSource', 'cropRiverPumpM3Day', 'cropRiverPoolM3']
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY],
 	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -306,6 +315,10 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	cropWaterSource: oneOf(WATER_SOURCES),
 	cropRiverPumpM3Day: nullable(nonNeg),
 	cropRiverPoolM3: nullable(nonNeg),
+	cropShareDam: nullable(frac),
+	cropShareRiver: nullable(frac),
+	cropShareRemote: nullable(frac),
+	cropRemoteCapM3Day: nullable(nonNeg),
 	ewrSite: boolean
 };
 
@@ -1080,7 +1093,10 @@ const NODE_FIELDS: Record<string, Check> = {
 	...NODE_FIELD_CHECKS,
 	// A new farm or user may bring its GN 538 property area and Table 2 rate (engine ≥ 1.12.0), context for its groundwater.
 	gaPropertyAreaHa: nullable(range(0, 10_000_000)),
-	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`))
+	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`)),
+	// The unit whose dam supplies a crop supply table's remote share (engine ≥ 1.73.0) is the model's, never a scenario's
+	// (it names another node, which an applicant's view may hide): a new node carries none.
+	cropRemoteNodeId: (v) => (v === null || v === undefined ? null : 'is set in the model, not by a scenario')
 };
 /**
  * The field engine 0.16.0–1.70.0 scenarios set a farm's return flow by: β, a
@@ -1106,6 +1122,9 @@ const NODE_OPTIONAL = new Set<string>([
 	...OPERATING,
 	// The crops on the dam unless given (engine ≥ 1.65.0).
 	...CROP_SOURCE,
+	// No crop supply table unless given (engine ≥ 1.73.0); a new node names no other unit's dam.
+	...CROP_SUPPLY,
+	'cropRemoteNodeId',
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,
