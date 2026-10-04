@@ -143,6 +143,7 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 		}
 		// The node list: what a node drains into never squeezes its name, and nothing runs past the card.
 		const list = page.getByRole('list', { name: 'All nodes' });
+		// settled: the layout is final after waitForMapFit; whether the list shows depends only on the viewport size.
 		if (await list.isVisible()) expect(await list.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 	}
 
@@ -163,6 +164,7 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 	const svgs = page.locator('svg.schematic');
 	let printed = 0;
 	for (let i = 0; i < (await svgs.count()); i++) {
+		// settled: emulateMedia has applied the print styles, which alone decide which drawings show.
 		if (!(await svgs.nth(i).isVisible())) continue;
 		await expectCleanSchematic(page, `report on paper, drawing ${i}`, i);
 		printed++;

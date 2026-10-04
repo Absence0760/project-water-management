@@ -58,6 +58,7 @@ const squareAround = ([lon, lat]: [number, number], d = 0.004) =>
 async function typeOutlet(page: Page, [lon, lat]: [number, number]) {
 	const b = bar(page);
 	const coords = b.getByText('Enter coordinates');
+	// settled: Enter coordinates is a <details> only a click opens or closes, and the bar is idle when this runs.
 	if (!(await b.getByTestId('map-click-lat').isVisible())) await coords.click();
 	await b.getByTestId('map-click-lat').fill(String(lat));
 	await b.getByTestId('map-click-lon').fill(String(lon));
