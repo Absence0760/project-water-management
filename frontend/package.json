@@ -29,7 +29,7 @@
 	"type": "module",
 	"dependencies": {
 		"@water-management/engine": "workspace:*",
-		"maplibre-gl": "6.10.0",
+		"maplibre-gl": "6.11.2",
 		"pmtiles": "4.5.0",
 		"uplot": "1.6.32",
 		"uqr": "0.1.3"
