@@ -117,7 +117,7 @@ export async function yieldInputFor(db: Db, projectId: string, role: Role, userI
 	if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
 	const baseIds = new Set(base.model.nodes.map((n) => n.id));
 	const added = scenario.ops.flatMap((o) => ((o.op === 'node.add' || o.op === 'node.insert') && !baseIds.has(o.node.id) ? [o.node.id] : []));
-	if (!scenario.ownedNodeIds.includes(r.nodeId) && !added.includes(r.nodeId)) throw new ApiError(400, 'that node is not in this run or scenario');
+	if (!scenario.ownedNodeIds.includes(r.nodeId) && !added.includes(r.nodeId)) throw new ApiError(400, 'that hydrological unit is not in this run or scenario');
 	checkYieldNode(check.input, r.nodeId, r.kind);
 	return check.input;
 }
@@ -125,8 +125,8 @@ export async function yieldInputFor(db: Db, projectId: string, role: Role, userI
 /** A dam node of the input, or 400 with why not. */
 export function checkYieldNode(input: ModelInput, nodeId: string, kind: 'firm' | 'curve'): void {
 	const n = input.model.nodes.find((x) => x.id === nodeId);
-	if (!n) throw new ApiError(400, 'that node is not in this run or scenario');
-	if (n.kind !== 'farm') throw new ApiError(400, 'a yield is for a unit or dam node, not a gauge or other water user');
+	if (!n) throw new ApiError(400, 'that hydrological unit is not in this run or scenario');
+	if (n.kind !== 'farm') throw new ApiError(400, 'a yield is for a hydrological unit with land (a unit or its dam), not a gauge or other water user');
 	if (kind === 'curve' && !(n.damCapacityM3 > 0)) throw new ApiError(400, 'a storage–yield curve needs a dam with a capacity above 0');
 }
 

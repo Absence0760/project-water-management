@@ -5,7 +5,7 @@
 
 /** The grids the grid modal can show, with their titles. */
 export const GRIDS = {
-	nodes: 'Node table',
+	nodes: 'Hydrological unit table',
 	'crop-factors': 'Crop factors',
 	'planted-areas': 'Planted areas',
 	systems: 'Irrigation systems',

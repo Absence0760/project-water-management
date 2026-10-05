@@ -92,8 +92,8 @@ async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: 
 			'SELECT kind, downstream_node_id AS downstream FROM node WHERE project_id = $1 AND id = $2',
 			[projectId, siteNodeId]
 		);
-		if (!node[0]) throw new ApiError(400, 'siteNodeId: no such node in this project (save the model first)');
-		if (node[0].kind !== 'gauge') throw new ApiError(400, 'siteNodeId: a record\'s site is a gauge node');
+		if (!node[0]) throw new ApiError(400, 'siteNodeId: no such hydrological unit in this project (save the model first)');
+		if (node[0].kind !== 'gauge') throw new ApiError(400, 'siteNodeId: a record\'s site is a gauge');
 		if (node[0].downstream === null) throw new ApiError(400, 'siteNodeId: that gauge is the outlet, whose records have no site (null)');
 	}
 	const { rows } = await db.query<SeriesMetaRow>(

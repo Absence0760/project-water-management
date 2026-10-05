@@ -168,7 +168,7 @@ test.describe('phone node form', () => {
 		const project = await createProject(page.request, 'Phone node list');
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=network`);
-		const list = page.getByRole('list', { name: 'All nodes' });
+		const list = page.getByRole('list', { name: 'All hydrological units' });
 		await list.getByRole('button', { name: /^Upper farm/ }).click();
 		const listBox = (await list.boundingBox())!;
 		expect((await page.getByTestId('node-card').boundingBox())!.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);

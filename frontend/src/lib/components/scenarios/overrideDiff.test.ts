@@ -480,8 +480,8 @@ describe('diffModel', () => {
 		const d = diffModel(b, e.snapshot());
 		expect(d.unsupported).toEqual([
 			"Area on “Outflow gauge”: a scenario can't set that on a gauge.",
-			"Changing “Upper farm” from a farm to a user: a scenario can't change a node's kind. Remove it and add a new node.",
-			"Making “Lower farm” drain nowhere: the catchment keeps its outflow node, which a scenario can't move."
+			"Changing “Upper farm” from a farm to a user: a scenario can't change a hydrological unit's kind. Remove it and add a new one.",
+			"Making “Lower farm” drain nowhere: the catchment keeps its outflow, which a scenario can't move."
 		]);
 		expect(d.ops.some((o) => o.op === 'node.move')).toBe(false);
 	});

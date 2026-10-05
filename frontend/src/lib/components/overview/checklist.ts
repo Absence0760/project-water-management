@@ -45,7 +45,7 @@ function networkStep(m: ProjectModel, s: ProjectSettings): ChecklistStep {
 	if (!farms.length)
 		return { ...base, status: 'partial', detail: `${plural(gauges, 'gauge')} but no hydrological units yet. Add the hydrological units that draw water.` };
 	if (outlets.length !== 1)
-		return { ...base, status: 'partial', detail: 'The network needs exactly one outflow gauge (a node that drains nowhere).' };
+		return { ...base, status: 'partial', detail: 'The network needs exactly one outflow gauge (a hydrological unit that drains nowhere).' };
 	const area = farms.reduce((a, n) => a + (n.areaKm2 || 0), 0);
 	if (!(area > 0) && !(s.calibration.catchmentAreaKm2 && s.calibration.catchmentAreaKm2 > 0))
 		return { ...base, status: 'partial', detail: 'Give the hydrological units their catchment areas (km²) so rainfall can be turned into flow.' };

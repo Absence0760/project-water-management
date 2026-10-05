@@ -236,7 +236,7 @@ describe('the job fails closed', () => {
 		// Their link moves to another farm (a farm link list is never empty).
 		expect((await owner.call('PUT', `${P()}/farmers/${applicant.id}`, { nodeIds: [kalkoenkrans.id] })).status).toBe(200);
 		await tick();
-		expect(await job(a.body.jobId)).toEqual({ status: 'dead', last_error: 'that node is not in this run or scenario' });
+		expect(await job(a.body.jobId)).toEqual({ status: 'dead', last_error: 'that hydrological unit is not in this run or scenario' });
 
 		expect((await owner.call('PUT', `${P()}/farmers/${applicant.id}`, { nodeIds: [rooikloof.id] })).status).toBe(200);
 		const b = await ask(applicant, { scenarioId: sid, nodeId: rooikloof.id, params: { assurance: 0.8 } });

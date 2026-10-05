@@ -57,7 +57,7 @@ test('an editor divides a typed model from the map, value by value, beside the v
 	await expect(sheet(page).getByTestId('divide-count')).toHaveText('3 points in the division.');
 	// Two points can't stand for one node.
 	await sheet(page).getByLabel(/^Pump/).selectOption(v.dam.id);
-	await expect(sheet(page).getByRole('alert')).toHaveText('Two points stand for Valley dam: each node takes one point.');
+	await expect(sheet(page).getByRole('alert')).toHaveText('Two points stand for Valley dam: each hydrological unit takes one point.');
 	await expect(sheet(page).getByTestId('divide-propose')).toBeDisabled();
 	await sheet(page).getByLabel(/^Pump/).selectOption(v.pump.id);
 	await sheet(page).getByTestId('divide-propose').click();

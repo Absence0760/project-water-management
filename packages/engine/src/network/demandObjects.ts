@@ -236,7 +236,7 @@ export function demandObjectsByNode(model: Pick<ProjectModel, 'nodes' | 'demandO
 		if (o.enabled === false) continue;
 		const k = kind.get(o.nodeId);
 		if (k !== 'farm') {
-			warnings.push(`demand object "${o.name}" is ${k === undefined ? 'on a node that does not exist' : `on a ${k === 'user' ? 'user' : 'gauge'}`}: only a unit has demand objects; skipped`);
+			warnings.push(`demand object "${o.name}" is ${k === undefined ? 'on a hydrological unit that does not exist' : `on a ${k === 'user' ? 'user' : 'gauge'}`}: only a unit has demand objects; skipped`);
 			continue;
 		}
 		const list = out.get(o.nodeId) ?? [];

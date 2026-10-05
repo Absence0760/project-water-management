@@ -50,9 +50,11 @@ test('an editor sets the outlet’s Reserve rule table in a scenario, always a b
 	await expect(changes).toContainText('Baseline assumption');
 	await expect(page.getByTestId('baseline-callout')).toContainText('Baseline assumptions changed');
 
-	// Still a baseline assumption with every node the proposer's: the Reserve is never the proposal.
-	const proposer = page.getByRole('group', { name: "The proposer's nodes" });
-	for (const n of ['Outflow gauge', 'Upper farm', 'Lower farm']) await proposer.getByLabel(n).check();
+	// Still a baseline assumption with every hydrological unit the proposer's: the Reserve is never the proposal.
+	// (The gauge isn't listed: a gauge proposes nothing.)
+	const proposer = page.getByRole('group', { name: "The proposer's hydrological units" });
+	await expect(proposer.getByLabel('Outflow gauge')).toHaveCount(0);
+	for (const n of ['Upper farm', 'Lower farm']) await proposer.getByLabel(n).check();
 	await page.reload();
 	await expect(changes).toHaveCount(1);
 	await expect(changes).toContainText('Baseline assumption');

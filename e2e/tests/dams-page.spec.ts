@@ -159,9 +159,9 @@ test('before a run the cards show capacity with a prompt to run; with no dams it
 	const empty = page.getByRole('region', { name: 'No dams yet' });
 	await expect(empty.getByRole('link', { name: 'Open the Network' })).toHaveAttribute('href', '?tab=network');
 	// The node table opens over this page: a new dam there shows as a card at once (before any save).
-	await empty.getByRole('link', { name: /^Node table/ }).click();
+	await empty.getByRole('link', { name: /^Hydrological unit table/ }).click();
 	await expect(page).toHaveURL(/\?tab=dams&grid=nodes$/);
-	await expect(page.getByRole('dialog', { name: 'Node table' })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Hydrological unit table' })).toBeVisible();
 	await expectNoViolations(page);
 });
 
@@ -339,9 +339,9 @@ test('a card’s Edit dam opens its node sheet, Back returns to Dams with the pi
 	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}$`));
 	await expect(chart(page).getByRole('heading')).toHaveText('Storage: Lower farm');
 
-	await page.getByRole('link', { name: 'Node table', exact: true }).click();
+	await page.getByRole('link', { name: 'Hydrological unit table', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}&grid=nodes$`));
-	await expect(page.getByRole('dialog', { name: 'Node table' })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: 'Hydrological unit table' })).toBeVisible();
 });
 
 test('a viewer’s card links to Dam details, not Edit dam', async ({ page, owner, signIn }) => {

@@ -301,7 +301,7 @@ async function prepareImport(db: Db, projectId: string, body: Omit<z.infer<typeo
 		let matchedBy: PreviewRow['matchedBy'] = auto.matchedBy;
 		if (Object.hasOwn(manual, line)) {
 			const m = manual[line]!;
-			if (m !== null && !nodeIds.has(m)) throw new ApiError(400, `line ${line}: the chosen node is not a unit or water user of this project`);
+			if (m !== null && !nodeIds.has(m)) throw new ApiError(400, `line ${line}: the chosen hydrological unit is not one of this project's units with land or water users`);
 			nodeId = m;
 			matchedBy = m === null ? null : 'manual';
 		}

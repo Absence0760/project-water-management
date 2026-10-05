@@ -230,11 +230,11 @@
 		{#if step === 'off'}
 			<p data-testid="divide-off">Dividing the model needs an elevation model on the server, and this one has none. Set each unit’s area and order on the Network, or one unit at a time with the map’s Delineate and Use this area.</p>
 		{:else if step === 'outflow'}
-			<p data-testid="divide-outflow">The model needs exactly one outflow gauge (a node that drains nowhere) before it can be divided: set it on the Network.</p>
+			<p data-testid="divide-outflow">The model needs exactly one outflow gauge (a hydrological unit that drains nowhere) before it can be divided: set it on the Network.</p>
 		{:else if step === 'points'}
 			<form id="{uid}-points" onsubmit={propose} novalidate data-testid="divide-points">
 				<p class="lead">
-					Say which node each point on the map stands for. Each gets its own sub-catchment (what drains to its point and to no point above it) and the point below it, proposed beside its values now; nothing changes until you tick it. A gauge with no node can be added as a new gauge node.
+					Say which hydrological unit each point on the map stands for. Each gets its own sub-catchment (what drains to its point and to no point above it) and the point below it, proposed beside its values now; nothing changes until you tick it. A gauge with no node can be added as a new gauge node.
 				</p>
 				{#if candidates.length}
 					<ul class="points">
@@ -247,7 +247,7 @@
 								{:else}
 									<select id="{uid}-node-{f.id}" value={choiceOf(f)} onchange={(e) => (draft.picked[f.id] = e.currentTarget.value)} aria-invalid={twice && choiceOf(f) === twice ? 'true' : undefined}>
 										<option value={NONE}>Not in the division</option>
-										{#if f.kind === 'gauge' && f.geometry.type === 'Point' && !f.nodeId}<option value={NEW_GAUGE}>A new gauge node</option>{/if}
+										{#if f.kind === 'gauge' && f.geometry.type === 'Point' && !f.nodeId}<option value={NEW_GAUGE}>A new gauge</option>{/if}
 										{#each options as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 									</select>
 								{/if}
@@ -266,7 +266,7 @@
 					</select>
 					<span class="hint">Where the river leaves the catchment: the model’s outflow, {outflow?.name}.</span>
 				</div>
-				{#if twice}<p class="err" role="alert">Two points stand for {nodeName(twice)}: each node takes one point.</p>{/if}
+				{#if twice}<p class="err" role="alert">Two points stand for {nodeName(twice)}: each hydrological unit takes one point.</p>{/if}
 				<p class="hint" data-testid="divide-count">{chosen === 1 ? '1 point' : `${chosen} points`} in the division.</p>
 			</form>
 		{:else if step === 'review' && pending && ticks}

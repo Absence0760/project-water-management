@@ -104,7 +104,7 @@
 {:else}
 	<div class="form-row pickers">
 		<div class="field">
-			<label for="rc-node">Node</label>
+			<label for="rc-node">Hydrological unit</label>
 			<select id="rc-node" value={node} onchange={(e) => pickNode(e.currentTarget.value)}>
 				{#each groups as g (g.nodeId ?? CATCHMENT)}
 					<option value={g.nodeId ?? CATCHMENT}>{g.label}</option>

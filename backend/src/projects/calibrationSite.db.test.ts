@@ -76,8 +76,8 @@ describe('settings.calibrationSiteNodeId', () => {
 			[p.farm.id, 'the site is the outlet (null) or a gauge above it'],
 			[p.outlet.id, 'the site is the outlet (null) or a gauge above it'],
 			[p.bare.id, 'that gauge has no observed flow record attached'],
-			[other.upper.id, 'no such node in this project'],
-			[crypto.randomUUID(), 'no such node in this project']
+			[other.upper.id, 'no such hydrological unit in this project'],
+			[crypto.randomUUID(), 'no such hydrological unit in this project']
 		] as const) {
 			const res = await u.call('PATCH', `/projects/${p.id}`, site(id));
 			expect(res.status, why).toBe(400);

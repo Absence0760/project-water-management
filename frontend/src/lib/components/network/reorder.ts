@@ -62,13 +62,13 @@ export type DropCheck = { ok: true } | { ok: false; reason: string };
 /** Can `dragId` be re-pointed to drain into `targetId`? */
 export function canDrainInto(nodes: NetworkNode[], dragId: string, targetId: string): DropCheck {
 	const drag = nodes.find((n) => n.id === dragId);
-	if (!drag || !nodes.some((n) => n.id === targetId)) return { ok: false, reason: 'unknown node' };
-	if (dragId === targetId) return { ok: false, reason: 'a node cannot drain into itself' };
+	if (!drag || !nodes.some((n) => n.id === targetId)) return { ok: false, reason: 'unknown hydrological unit' };
+	if (dragId === targetId) return { ok: false, reason: 'a hydrological unit cannot drain into itself' };
 	if (drag.downstreamNodeId === null) {
-		return { ok: false, reason: 'the outflow gauge stays at the outlet; use "Make outflow gauge" on another node to change it' };
+		return { ok: false, reason: 'the outflow gauge stays at the outlet; use "Make outflow gauge" on another hydrological unit to change it' };
 	}
 	if (upstreamOf(nodes, dragId).has(targetId)) {
-		return { ok: false, reason: 'that node is upstream of this one, so it would make a loop' };
+		return { ok: false, reason: 'that hydrological unit is upstream of this one, so it would make a loop' };
 	}
 	return { ok: true };
 }

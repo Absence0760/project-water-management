@@ -116,8 +116,8 @@ const isProblem = (x: ModelInput | YieldProblem): x is YieldProblem => 'plan' in
 
 function nodeIndex(p: YieldProblem, nodeId: string): number {
 	const i = p.nodeIds.indexOf(nodeId);
-	if (i < 0) throw new Error(`node ${nodeId} not found`);
-	if (p.plan.nodes[i]!.kind !== 'farm') throw new Error('a yield is for a unit or dam node, not a gauge or other water user');
+	if (i < 0) throw new Error(`hydrological unit ${nodeId} not found`);
+	if (p.plan.nodes[i]!.kind !== 'farm') throw new Error('a yield is for a hydrological unit with land (a unit or its dam), not a gauge or other water user');
 	return i;
 }
 
@@ -151,7 +151,7 @@ export function yieldPatternDaily(p: YieldProblem, nodeId: string, pattern: Yiel
 	let total = 0;
 	for (let t = 0; t < p.days; t++) total += daily[t] = factors[p.wyMonth[t]!]!;
 	if (!(total > 0)) {
-		throw new Error(pattern === 'demand' ? 'this node has no irrigation demand to shape the draft; use a constant pattern' : 'the yield pattern is zero in every month of the record');
+		throw new Error(pattern === 'demand' ? 'this hydrological unit has no irrigation demand to shape the draft; use a constant pattern' : 'the yield pattern is zero in every month of the record');
 	}
 	const scale = p.days / total;
 	for (let t = 0; t < p.days; t++) daily[t]! *= scale;

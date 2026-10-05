@@ -53,7 +53,7 @@ test.describe('desktop', () => {
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
 		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
 		const actions = h.getByRole('button');
-		await expect(actions).toHaveText(['+ Add node', '+ Add other user', 'Add data']);
+		await expect(actions).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Add data']);
 		await expectNoViolations(page);
 
 		// Crops: its summary line and Add crop.
@@ -152,7 +152,7 @@ test.describe('desktop', () => {
 		void owner;
 		const project = await seedRunnableProject(page.request, 'Header unsaved');
 		await page.goto(`/projects/${project.id}?tab=network`);
-		await header(page).getByRole('button', { name: '+ Add node' }).click();
+		await header(page).getByRole('button', { name: '+ Add hydrological unit' }).click();
 		await closeModal(page);
 		await expect(header(page).getByText('Unsaved changes', { exact: true })).toBeVisible();
 		const bar = page.getByRole('region', { name: 'Unsaved model changes' });

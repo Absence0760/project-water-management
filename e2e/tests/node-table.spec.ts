@@ -22,7 +22,7 @@ function nodeRow(grid: Locator, model: Model, name: string) {
 /** Edits every kind of cell in the table, checks validation, saves and reloads. Same labels at every width. */
 async function editAndSave(page: Page, projectId: string, model: Model) {
 	await page.goto(`/projects/${projectId}?tab=network&grid=nodes`);
-	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	const names = grid.getByRole('textbox', { name: 'Name' });
 	await expect(names).toHaveCount(3);
 	const problems = grid.getByRole('status').filter({ hasText: 'Fix before saving:' });
@@ -81,7 +81,7 @@ async function editAndSave(page: Page, projectId: string, model: Model) {
 	await expect(saveBar(page)).toBeHidden();
 
 	await page.reload();
-	const again = page.getByRole('dialog', { name: 'Node table' });
+	const again = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	await expect(again.getByRole('textbox', { name: 'Name' }).nth(1)).toHaveValue('Lower block');
 	await expect(again.getByLabel('Area of Lower block, km²', { exact: true })).toHaveValue('9.5');
 	await expect(again.getByLabel('Dam capacity of Lower block, m³')).toHaveValue('95000');
@@ -207,7 +207,7 @@ test.describe('phone', () => {
 		model.transfers = [];
 		await putModel(page.request, project.id, model);
 		await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-		const grid = page.getByRole('dialog', { name: 'Node table' });
+		const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 		await expect(grid.getByRole('textbox', { name: 'Name' })).toHaveCount(30);
 		await expectNoTableScroll(grid);
 		await expectNoSidewaysScroll(page);
@@ -228,7 +228,7 @@ test.describe('phone', () => {
 		const v = viewer.page;
 		await v.setViewportSize({ width: 390, height: 844 });
 		await v.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-		const vGrid = v.getByRole('dialog', { name: 'Node table' });
+		const vGrid = v.getByRole('dialog', { name: 'Hydrological unit table' });
 		await expect(vGrid.getByRole('textbox', { name: 'Name' })).toHaveCount(30);
 		await expect(vGrid.getByRole('button', { name: /^Remove / })).toHaveCount(0);
 		await expect(vGrid.getByLabel(/^Dam capacity of /).first()).toHaveValue('1\u202f430\u202f000');
@@ -243,7 +243,7 @@ test('removing a row asks when something goes with it, then puts the focus on th
 	const project = await createProject(page.request, 'Node table remove');
 	await putModel(page.request, project.id, sampleModel());
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-	const grid = page.getByRole('dialog', { name: 'Node table' });
+	const grid = page.getByRole('dialog', { name: 'Hydrological unit table' });
 	await grid.getByRole('button', { name: 'Remove Upper farm' }).click();
 	await answerConfirm(page, true, 'Its 1 crop area and 1 transfer go with it.');
 	await expect(grid.getByRole('textbox', { name: 'Name' })).toHaveCount(2);

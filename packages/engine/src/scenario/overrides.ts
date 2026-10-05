@@ -435,7 +435,7 @@ function systemWithEfficiency(m: ModelInput['model'], e: number): IrrigationSyst
 }
 
 function findNode(d: Draft, nodeId: string): NetworkNode {
-	return d.model.nodes.find((n) => n.id === nodeId) ?? fail(`node ${nodeId} not found`);
+	return d.model.nodes.find((n) => n.id === nodeId) ?? fail(`hydrological unit ${nodeId} not found`);
 }
 function findTransfer(d: Draft, transferId: string): Transfer {
 	return d.model.transfers.find((t) => t.id === transferId) ?? fail(`transfer ${transferId} not found`);
@@ -445,17 +445,17 @@ function findTransfer(d: Draft, transferId: string): Transfer {
 function addNode(d: Draft, raw0: NetworkNode): NetworkNode {
 	const m = d.model;
 	const raw = raw0 as unknown as Record<string, unknown>;
-	for (const k of ['id', 'name', 'kind', 'downstreamNodeId'] as const) if (typeof raw?.[k] !== 'string') fail(`the new node needs a ${k}`);
-	if (m.nodes.some((n) => n.id === raw0.id)) fail(`node id ${raw0.id} is already in use`);
-	if (!m.nodes.some((n) => n.id === raw0.downstreamNodeId)) fail(`the new node drains into unknown node ${raw0.downstreamNodeId}`);
+	for (const k of ['id', 'name', 'kind', 'downstreamNodeId'] as const) if (typeof raw?.[k] !== 'string') fail(`the new hydrological unit needs a ${k}`);
+	if (m.nodes.some((n) => n.id === raw0.id)) fail(`hydrological unit id ${raw0.id} is already in use`);
+	if (!m.nodes.some((n) => n.id === raw0.downstreamNodeId)) fail(`the new hydrological unit drains into unknown hydrological unit ${raw0.downstreamNodeId}`);
 	for (const [k, v] of Object.entries(raw)) {
 		if (['id', 'name', 'kind', 'downstreamNodeId'].includes(k)) continue;
 		if (k === 'sortOrder') {
-			if (!Number.isInteger(v)) fail("the new node's sortOrder must be a whole number");
+			if (!Number.isInteger(v)) fail("the new hydrological unit's sortOrder must be a whole number");
 			continue;
 		}
 		const e = nodeAddFieldError(k, v);
-		if (e) fail(`the new node's ${k} ${e}`);
+		if (e) fail(`the new hydrological unit's ${k} ${e}`);
 	}
 	const [node] = upgradeLegacyModel({ nodes: [cloneData(raw0)] }).nodes as NetworkNode[];
 	node!.name = node!.name.trim();
@@ -561,14 +561,14 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			break;
 		case 'node.insert': {
 			// The nodes re-pointed first, against the network as it stands: each must drain into the new node's downstream node.
-			const ups = Array.isArray(op.upstreamNodeIds) ? op.upstreamNodeIds : fail('upstreamNodeIds must be a list of node ids');
-			if (!ups.length) fail('upstreamNodeIds names no node: with none, add the node instead');
-			if (new Set(ups).size !== ups.length) fail('upstreamNodeIds names a node more than once');
+			const ups = Array.isArray(op.upstreamNodeIds) ? op.upstreamNodeIds : fail('upstreamNodeIds must be a list of hydrological unit ids');
+			if (!ups.length) fail('upstreamNodeIds names no hydrological unit: with none, add the new one instead');
+			if (new Set(ups).size !== ups.length) fail('upstreamNodeIds names a hydrological unit more than once');
 			const down = typeof op.node?.downstreamNodeId === 'string' ? op.node.downstreamNodeId : null;
 			const upstream = ups.map((id) => findNode(d, id));
 			const node = addNode(d, op.node);
 			for (const u of upstream) {
-				if (u.downstreamNodeId !== down) fail(`"${u.name}" doesn't drain into the node the new one drains into, so the new node can't sit between them`);
+				if (u.downstreamNodeId !== down) fail(`"${u.name}" doesn't drain into what the new hydrological unit drains into, so the new one can't sit between them`);
 				u.downstreamNodeId = node.id;
 				notes.push(`"${u.name}" now drains into "${node.name}"`);
 			}
@@ -576,7 +576,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'node.move': {
 			const n = findNode(d, op.nodeId);
-			if (n.downstreamNodeId === null) fail(`"${n.name}" is the outflow node and can't be moved`);
+			if (n.downstreamNodeId === null) fail(`"${n.name}" is the outflow hydrological unit and can't be moved`);
 			const to = findNode(d, op.downstreamNodeId);
 			if (to.id === n.id) fail(`"${n.name}" can't drain into itself`);
 			// A loop (the new downstream node drains into this one) is a model rule, checked after the op.
@@ -585,7 +585,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'node.remove': {
 			const n = findNode(d, op.nodeId);
-			if (n.downstreamNodeId === null) fail(`"${n.name}" is the outflow node and can't be removed`);
+			if (n.downstreamNodeId === null) fail(`"${n.name}" is the outflow hydrological unit and can't be removed`);
 			for (const u of m.nodes) {
 				if (u.downstreamNodeId !== n.id) continue;
 				u.downstreamNodeId = n.downstreamNodeId;
@@ -707,7 +707,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const field = allowed(TRANSFER_SET_FIELDS, op.field) ?? fail(`"${String(op.field)}" is not a transfer field a scenario can set`);
 			const e = transferFieldError(field, op.value);
 			if (e) fail(`${field} ${e}`);
-			if ((field === 'fromNodeId' || field === 'toNodeId' || (field === 'lossReturnNodeId' && op.value !== null)) && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
+			if ((field === 'fromNodeId' || field === 'toNodeId' || (field === 'lossReturnNodeId' && op.value !== null)) && !m.nodes.some((n) => n.id === op.value)) fail(`hydrological unit ${String(op.value)} not found`);
 			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
 			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
 			if (field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
@@ -884,12 +884,12 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			break;
 		}
 		case 'ewrRule.remove': {
-			if (op.siteNodeId !== null && typeof op.siteNodeId !== 'string') fail('siteNodeId must be a node id, or null for the outlet');
+			if (op.siteNodeId !== null && typeof op.siteNodeId !== 'string') fail('siteNodeId must be a hydrological unit id, or null for the outlet');
 			const site = ewrSiteKey(d);
 			const list: EwrRuleTable[] = Array.isArray(d.settings.ewrRules) ? d.settings.ewrRules : [];
 			const key = site(op.siteNodeId);
 			// Named by id, never by a node's name: a table can only be sited at the outlet or a gauge, which every caller sees.
-			if (!list.some((x) => x && typeof x === 'object' && site(x.siteNodeId) === key)) fail(`there is no EWR rule table at ${key === null ? 'the outlet' : `node ${key}`}`);
+			if (!list.some((x) => x && typeof x === 'object' && site(x.siteNodeId) === key)) fail(`there is no EWR rule table at ${key === null ? 'the outlet' : `hydrological unit ${key}`}`);
 			d.settings.ewrRules = list.filter((x) => !(x && typeof x === 'object' && site(x.siteNodeId) === key));
 			break;
 		}

@@ -112,7 +112,7 @@ export function runDownloadItems(
 		{
 			label: 'Workbook (.xlsx)',
 			url: `workbook:${urls.run(projectId, runId)}`,
-			hint: 'Every table in one file: summary, daily sheets per node, curtailment, EWR grid, inputs',
+			hint: 'Every table in one file: summary, daily sheets per hydrological unit, curtailment, EWR grid, inputs',
 			workbook: { apiBase: urls.apiBase, projectId, runId }
 		},
 		{ label: 'Run summary (CSV)', url: urls.runSummary(projectId, runId), hint: 'Per-unit table, catchment and calibration' },

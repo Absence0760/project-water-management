@@ -158,7 +158,7 @@ describe('dividing the valley', () => {
 		// An existing node isn't named or added; a new gauge's name can't clash; the rest can't go to one of the points.
 		expect((await owner.call('POST', url, { units: ticks(plan, { [pump.key]: { add: true } }), rest: { to: 'none' } })).status).toBe(400);
 		const clash = await owner.call('POST', url, { units: ticks(plan, { [mid.key]: { add: true, name: 'hillside' } }), rest: { to: 'none' } });
-		expect(clash.body.error).toMatch(/Two nodes would be called/);
+		expect(clash.body.error).toMatch(/Two hydrological units would be called/);
 		expect((await owner.call('POST', url, { units: ticks(plan), rest: { to: 'node', nodeId: v.nodes.pump.id } })).status).toBe(400);
 
 		const [{ rev }] = await asOwner('SELECT coalesce(max(id), 0) AS rev FROM model_revision WHERE project_id = $1', [v.id]);

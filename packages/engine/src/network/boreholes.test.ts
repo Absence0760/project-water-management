@@ -458,7 +458,7 @@ describe('individual boreholes (WP-3.9)', () => {
 		expect(w).toMatch(/borehole "ToDam" pumps into a dam but there is none/);
 		expect(w).toMatch(/borehole "Emerg" runs in emergency mode but there is no dam/);
 		expect(w).toMatch(/gauge "G": a gauge only measures; its 1 borehole is skipped/);
-		expect(w).toMatch(/borehole "Nowhere" refers to a node that does not exist/);
+		expect(w).toMatch(/borehole "Nowhere" refers to a hydrological unit that does not exist/);
 		// Both remaining boreholes pump straight to the crop.
 		expect(col(o, 'A', 'groundwater_used')).toEqual([1000, 1000]);
 	});

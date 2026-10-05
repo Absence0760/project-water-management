@@ -44,7 +44,7 @@ test('a unit with a parcel links to it on the map from the Network, Hydrological
 	// The node sheet says it too.
 	await page.goto(`/projects/${p.id}?tab=network&edit=${p.upper}`);
 	await expect(page.getByTestId('node-detail-map')).toHaveAttribute('href', href);
-	await page.getByLabel('Node to edit').selectOption(p.lower);
+	await page.getByLabel('Hydrological unit to edit').selectOption(p.lower);
 	await expect(page).toHaveURL(new RegExp(`edit=${p.lower}`));
 	await expect(page.getByRole('dialog')).toContainText('Lower farm');
 	await expect(page.getByTestId('node-detail-map')).toHaveCount(0);

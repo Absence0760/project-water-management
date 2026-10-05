@@ -177,7 +177,7 @@
 		{:else}
 			<div class="form-row pickers">
 				<div class="field">
-					<label for="ov-node">Node</label>
+					<label for="ov-node">Hydrological unit</label>
 					<select id="ov-node" value={groupId} onchange={(e) => pickGroup(e.currentTarget.value)}>
 						{#each match.groups as g (g.id)}
 							<option value={g.id}>{g.label}{g.wasName ? ` (was ${g.wasName})` : ''}</option>

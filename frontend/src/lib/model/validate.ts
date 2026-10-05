@@ -146,7 +146,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	for (const n of nodes) {
 		const key = n.name.trim().toLowerCase();
 		if (!key) {
-			issues.push({ area: 'network', itemId: n.id, message: 'Every node needs a name.' });
+			issues.push({ area: 'network', itemId: n.id, message: 'Every hydrological unit needs a name.' });
 			continue;
 		}
 		seen.set(key, (seen.get(key) ?? 0) + 1);
@@ -155,7 +155,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (count > 1) {
 			const first = nodes.find((n) => n.name.trim().toLowerCase() === key)!;
 			const display = first.name.trim();
-			issues.push({ area: 'network', itemId: first.id, message: `Node name "${display}" is used ${count} times.` });
+			issues.push({ area: 'network', itemId: first.id, message: `Hydrological unit name "${display}" is used ${count} times.` });
 		}
 	}
 
@@ -164,7 +164,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (n.downstreamNodeId === n.id) {
 			issues.push({ area: 'network', itemId: n.id, message: `"${nodeName(n.id)}" drains into itself.` });
 		} else if (n.downstreamNodeId !== null && !nodeIds.has(n.downstreamNodeId)) {
-			issues.push({ area: 'network', itemId: n.id, message: `"${nodeName(n.id)}" drains into a node that no longer exists.` });
+			issues.push({ area: 'network', itemId: n.id, message: `"${nodeName(n.id)}" drains into a hydrological unit that no longer exists.` });
 		}
 	}
 
@@ -238,11 +238,11 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	if (nodes.length > 0) {
 		const outlets = nodes.filter((n) => n.downstreamNodeId === null);
 		if (outlets.length === 0) {
-			issues.push({ area: 'network', message: 'The network needs one outlet (a node that drains nowhere).' });
+			issues.push({ area: 'network', message: 'The network needs one outlet (a hydrological unit that drains nowhere).' });
 		} else if (outlets.length > 1) {
 			issues.push({
 				area: 'network',
-				message: `The network has ${outlets.length} outlets (${outlets.map((n) => `"${n.name}"`).join(', ')}); exactly one node may drain nowhere.`
+				message: `The network has ${outlets.length} outlets (${outlets.map((n) => `"${n.name}"`).join(', ')}); exactly one hydrological unit may drain nowhere.`
 			});
 		}
 	}
@@ -309,7 +309,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	for (const b of model.boreholes ?? []) {
 		const n = nodes.find((x) => x.id === b.nodeId);
 		const label = `Borehole "${b.name || '?'}"${n ? ` on "${nodeName(n.id)}"` : ''}`;
-		if (!n) issues.push({ area: 'network', message: 'A borehole refers to a deleted node.' });
+		if (!n) issues.push({ area: 'network', message: 'A borehole refers to a deleted hydrological unit.' });
 		else if (n.kind === 'gauge') issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: a gauge can't have boreholes.` });
 		else if (b.mode !== 'none' && !(n.kind === 'farm' && n.damCapacityM3 > 0)) {
 			if (b.mode === 'emergency') issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: emergency mode needs a dam on the hydrological unit to trigger on.` });
@@ -364,9 +364,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	transfers.forEach((t, i) => {
 		const label = `Transfer ${i + 1}`;
 		if (!nodeIds.has(t.fromNodeId) || !nodeIds.has(t.toNodeId)) {
-			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: choose both a source and a destination node.` });
+			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: choose both a source and a destination hydrological unit.` });
 		} else if (t.fromNodeId === t.toNodeId) {
-			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: source and destination are the same node.` });
+			issues.push({ area: 'transfers', itemId: t.id, message: `${label}: source and destination are the same hydrological unit.` });
 		} else {
 			// Both ends a hydrological unit (the API refuses an other water user; the engine skips a gauge's rule
 			// with only a run warning, so it is refused here before it saves as a rule that does nothing).

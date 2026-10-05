@@ -86,7 +86,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'ewr_binding_site',
 		letter: null,
 		formula:
-			'the binding site of ewr_charge: the EWR site whose share is the largest (on a tie the most downstream), as its index in the run’s sites (0 = the outlet, then gauges by node id); blank on a day with no charge. Only on a farm upstream of two or more sites (engine ≥ 1.5.0)',
+			'the binding site of ewr_charge: the EWR site whose share is the largest (on a tie the most downstream), as its index in the run’s sites (0 = the outlet, then gauges by hydrological unit id); blank on a day with no charge. Only on a farm upstream of two or more sites (engine ≥ 1.5.0)',
 		optional: true
 	},
 	{

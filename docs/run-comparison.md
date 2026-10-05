@@ -373,7 +373,7 @@ bottom:
    A run from an older engine has none: a note says to rerun it. The
    Scenarios tab's comparison shows the same table.
 8. **Daily series** (issue #8; `compare/CompareOverlay.svelte`, a chunk
-   shared with the Scenarios tab). Pick a **node** and one of its **series** (outflow, dam storage,
+   shared with the Scenarios tab). Pick a **hydrological unit** (the picker's label; the catchment, a unit, a gauge or a user) and one of its **series** (outflow, dam storage,
    supplied, EWR charge, …), and run A and run B are drawn on one chart, with
    **B − A** on a second chart underneath. It opens on the catchment's
    simulated outflow; switching node keeps the same kind of series when the

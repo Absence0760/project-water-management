@@ -123,7 +123,7 @@ export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly
 		if (!u.nodeId && x.add) {
 			const n = x.name?.trim() ?? '';
 			if (!n) return `Name the new gauge at “${u.featureName || 'its point'}”.`;
-			if (names.has(n.toLowerCase())) return `Two nodes would be called “${n}”: give the new gauge a name of its own.`;
+			if (names.has(n.toLowerCase())) return `Two hydrological units would be called “${n}”: give the new gauge a name of its own.`;
 			names.add(n.toLowerCase());
 		}
 		if (!u.nodeId && !x.add && (x.drainsInto || x.area || x.runoffToDam || x.upstreamToDam)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
@@ -135,7 +135,7 @@ export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly
 	if (t.rest.to === 'new') {
 		const n = t.rest.name.trim();
 		if (!n) return 'Name the new unit for the rest of the catchment.';
-		if (names.has(n.toLowerCase())) return `Two nodes would be called “${n}”: give the rest of the catchment a name of its own.`;
+		if (names.has(n.toLowerCase())) return `Two hydrological units would be called “${n}”: give the rest of the catchment a name of its own.`;
 	}
 	return null;
 }

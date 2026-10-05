@@ -219,7 +219,7 @@ test('from a node-based workbook: FAO-56 Kc, so Kp starts at 0.75 with why, and 
 	await openLoad(page);
 	const d = dialog(page);
 	const kp = d.getByLabel('Pan coefficient Kp');
-	await d.getByRole('radio', { name: 'A node-based workbook' }).check();
+	await d.getByRole('radio', { name: 'A hydrological-unit-based workbook' }).check();
 	// FAO-56 Kc against ET₀: Kp switches from the library's 1 to 0.75, and the line under it says why.
 	await expect(kp).toHaveValue('0.75');
 	const why = d.getByTestId('kp-why');
@@ -250,7 +250,7 @@ test('a node-based workbook with many problems lists the first five, and all on 
 	await page.goto(`/projects/${project.id}?tab=crops`);
 	await openLoad(page);
 	const d = dialog(page);
-	await d.getByRole('radio', { name: 'A node-based workbook' }).check();
+	await d.getByRole('radio', { name: 'A hydrological-unit-based workbook' }).check();
 	// Seven of Lucerne's months are text: seven warnings.
 	const b = syntheticNodeBased();
 	for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H']) b.set('Crop_Factors', `${col}8`, 'x');

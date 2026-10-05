@@ -201,13 +201,13 @@ describe('renaming their own farm (or naming a crop) in an application', () => {
 
 	it('still collides with the names the applicant can see', async () => {
 		const res = await application(applicantA, 'Rename seen', [rename('farm 1'), addCrop('CITRUS')]);
-		expect(res.check.problems).toEqual(['op 1 (node.set): duplicate node name "farm 1"', 'op 2 (crop.add): duplicate crop name "citrus"']);
+		expect(res.check.problems).toEqual(['op 1 (node.set): duplicate hydrological unit name "farm 1"', 'op 2 (crop.add): duplicate crop name "citrus"']);
 	});
 
 	it('keeps the duplicate-name problem for the team’s own scenarios (positive control)', async () => {
 		const res = await owner.call('POST', `${P()}/scenarios`, { name: 'Team rename', baseRunId: published, ops: [rename(HIDDEN), addCrop('lucerne')] });
 		expect(res.status).toBe(201);
-		expect(res.body.check.problems).toEqual(['op 1 (node.set): duplicate node name "kalkoenkrans"', 'op 2 (crop.add): duplicate crop name "lucerne"']);
+		expect(res.body.check.problems).toEqual(['op 1 (node.set): duplicate hydrological unit name "kalkoenkrans"', 'op 2 (crop.add): duplicate crop name "lucerne"']);
 		expect(res.body.check.renamed).toEqual([]);
 	});
 });

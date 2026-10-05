@@ -1020,7 +1020,7 @@
 				<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
 					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
 				</select>
-				<span class="hint" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>node table</a>'s In use column.</span>
+				<span class="hint" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>hydrological unit table</a>'s In use column.</span>
 				<FieldHistoryLine field="settings:flowShareMethod" />
 			</div>
 			<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->

@@ -65,7 +65,7 @@ test('a rule with a problem is marked, and the bar links to it from another page
 	// The open page shows in the strip though hidden.
 	await page.getByLabel('To, transfer 1', { exact: true }).selectOption({ label: 'Upper farm' });
 	const card = ruleCard(page, 1);
-	await expect(card).toContainText('Source and destination are the same node.');
+	await expect(card).toContainText('Source and destination are the same hydrological unit.');
 	// Its edge in the danger colour.
 	const edge = await card.evaluate((el) => {
 		const probe = document.createElement('span');
@@ -84,9 +84,9 @@ test('a rule with a problem is marked, and the bar links to it from another page
 	await expect(saveBar(page)).toContainText('1 problem to fix before saving');
 	const save = saveBar(page).getByRole('button', { name: 'Save changes' });
 	await expect(save).toBeDisabled();
-	await expect(save).toHaveAccessibleDescription(/Transfer 1: source and destination are the same node\./);
+	await expect(save).toHaveAccessibleDescription(/Transfer 1: source and destination are the same hydrological unit\./);
 	// The link lands on the rule, its heading focused.
-	await saveBar(page).getByRole('link', { name: 'Transfer 1: source and destination are the same node.' }).click();
+	await saveBar(page).getByRole('link', { name: 'Transfer 1: source and destination are the same hydrological unit.' }).click();
 	await expect(title(page, 'Transfers')).toBeVisible();
 	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeFocused();
 	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeInViewport();

@@ -15,7 +15,7 @@ const entries = (page: Page) => page.getByTestId('history-entry');
 async function openCapacity(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	return page.getByLabel('Capacity (m³)');
 }
 

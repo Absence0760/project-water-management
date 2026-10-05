@@ -438,7 +438,7 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 			if (text === '') return { ok: true, value: null };
 			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
 		case 'node':
-			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick a node' };
+			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick a hydrological unit' };
 		case 'system':
 			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick an irrigation system' };
 		case 'reductions': {

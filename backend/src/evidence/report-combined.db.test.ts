@@ -176,7 +176,7 @@ describe('the evidence report’s combined row (evidence-11, C26)', () => {
 		try {
 			const r = await reportOf(assessor, runA);
 			const c = r.cumulative.combined!;
-			const message = '"Raise Rooikloof" op 1 (node.set) and "Smaller Rooikloof" op 1 (node.set) both change node "Rooikloof": damCapacityM3';
+			const message = '"Raise Rooikloof" op 1 (node.set) and "Smaller Rooikloof" op 1 (node.set) both change hydrological unit "Rooikloof": damCapacityM3';
 			expect(c.conflicts).toEqual([message]);
 			expect(c.ewrDays).toBeNull();
 			expect(c.assessment).toBeNull();

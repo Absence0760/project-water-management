@@ -822,7 +822,7 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   in one order and not the other, combine fuzz seed 35). Conservative by design: what can't be told apart is
   a conflict the assessor sees. One conflict per pair of scenarios and
   target, with a readable message naming both ops (`"App A" op 1 (node.set)
-  and "App B" op 1 (node.set) both change node "Upper farm":
+  and "App B" op 1 (node.set) both change hydrological unit "Upper farm":
   damCapacityM3`). Ops within one scenario never conflict: they apply in
   their own order, as alone.
 - **Then in order.** Without conflicts each scenario's ops apply to the
@@ -965,12 +965,12 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   (Gazetted Reserve), total flow, 10 % points", so the compare page's
   Scenario overrides show the changed table, in red, with both confidence
   lines.
-- **The later ops in the form** (engine ≥ 1.35.0). **Move a node (what it
-  drains into)**: the node (not the outlet) and the node it will drain
+- **The later ops in the form** (engine ≥ 1.35.0). **Move what a
+  hydrological unit drains into**: the hydrological unit (not the outlet) and the one it will drain
   into, with "Now: drains into …"; it reads "Move “Lower farm”: drains into
-  Outflow gauge → Upper farm". **Insert a node on a reach**: as **Add a
-  node** (kind, name, dam or demand), the node it drains into (only nodes
-  something drains into), and a checkbox per node draining there now, at
+  Outflow gauge → Upper farm". **Insert a hydrological unit on a reach**: as **Add a
+  hydrological unit** (kind, name, dam or demand), the hydrological unit it drains into (only
+  ones something drains into), and a checkbox per hydrological unit draining there now, at
   least one ticked; "Insert the hydrological unit “Weir dam” above Outflow
   gauge, taking what Upper farm drains, dam 50 000 m³". **Change a crop**:
   the crop, the field (name, crop factors, irrigation efficiency), the value
@@ -1006,7 +1006,8 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
   changed** callout, in the tab and on the compare page. On a team scenario
-  the proposer's nodes (`ownedNodeIds`) are a checkbox list in the tab; on an
+  the proposer's hydrological units and users (`ownedNodeIds`) are a checkbox
+  list in the tab (gauges only while one is still ticked); on an
   application they are its owner's farm links, set by the server.
 - **Comparison**: the tab compares the latest scenario run with the base run
   that run recorded (`inputs.scenario.baseRunId`), reusing the compare page's

@@ -593,7 +593,7 @@ async function checkBundle(bytes: Uint8Array<ArrayBuffer>, opts: CheckPackBundle
 			const paths = differingPaths(stored.summary, fresh.summary);
 			if (paths.length) why.push(`summary differs at ${paths.join(', ')}`);
 			// An output by its key, and its node when it has one ("simulated_outflow", "dam_volume at node n1").
-			const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at node ${s.nodeId}`);
+			const name = (s: { nodeId: string | null; key: string }) => (s.nodeId === null ? s.key : `${s.key} at hydrological unit ${s.nodeId}`);
 			const was = new Map(stored.series.map((s) => [name(s), s.valuesSha256]));
 			const now = new Map(again.series.map((s) => [name(s), s.valuesSha256]));
 			const changed = [...was.keys()].filter((k) => now.has(k) && now.get(k) !== was.get(k));

@@ -88,7 +88,7 @@ test('an editor adds a demand object and changes it through the form, and runs i
 	await expect(changes.nth(4)).toContainText("Crops (irrigation of the crop areas) demand of Upper farm: 70 % of what they'd take (× 0.7)");
 
 	// The farm is the proposer's: every change is the proposal.
-	await page.getByRole('group', { name: "The proposer's nodes" }).getByLabel('Upper farm').check();
+	await page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm').check();
 	for (let i = 0; i < 5; i++) await expect(changes.nth(i)).toContainText('Proposal');
 
 	await page.getByRole('button', { name: 'Run scenario' }).click();

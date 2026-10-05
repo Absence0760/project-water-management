@@ -182,8 +182,8 @@ describe('POST /projects/:id/assessments', () => {
 		expect(res.body.details.conflicts).toHaveLength(1);
 		expect(res.body.details.conflicts[0]).toMatchObject({
 			reason: 'same_target',
-			target: 'node "Rooikloof": damCapacityM3',
-			message: '"Raise Rooikloof" op 1 (node.set) and "Smaller Rooikloof" op 1 (node.set) both change node "Rooikloof": damCapacityM3',
+			target: 'hydrological unit "Rooikloof": damCapacityM3',
+			message: '"Raise Rooikloof" op 1 (node.set) and "Smaller Rooikloof" op 1 (node.set) both change hydrological unit "Rooikloof": damCapacityM3',
 			a: { scenarioId: appA, opIndex: 0 },
 			b: { scenarioId: team.body.scenario.id, opIndex: 0 }
 		});

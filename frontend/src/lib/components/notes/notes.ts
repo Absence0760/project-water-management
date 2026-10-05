@@ -170,7 +170,7 @@ export function targetTitle(t: NoteTarget): string {
 		case 'project':
 			return 'Project notes';
 		case 'node':
-			return `Notes on ${t.name || 'this node'}`;
+			return `Notes on ${t.name || 'this hydrological unit'}`;
 		case 'run':
 			return `Notes on run ${t.label}`;
 		case 'setting':
@@ -193,7 +193,7 @@ export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): 
 		case 'project':
 			return 'The project';
 		case 'node':
-			return n.nodeName ?? 'A node';
+			return n.nodeName ?? 'A hydrological unit';
 		case 'run':
 			return 'A run';
 		case 'setting': {

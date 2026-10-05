@@ -19,7 +19,7 @@ import { openNodeForm } from '../support/network.ts';
 async function openUpperFarm(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	return page.getByRole('region', { name: 'Yield of Upper farm' });
 }
 
@@ -76,7 +76,7 @@ test('the panel follows a yield job it did not queue: running after a reload, th
 	await openUpperFarm(page, project.id);
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const panel = page.getByRole('region', { name: 'Yield of Upper farm' });
 	await expect(panel.getByTestId('yield-status')).toHaveText('Running: 40 % done.');
 	await expect(panel.getByRole('progressbar', { name: 'Yield calculation progress' })).toHaveAttribute('value', '40');

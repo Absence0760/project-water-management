@@ -183,20 +183,20 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'network',
 		term: 'Network',
-		short: 'How the hydrological units and gauges connect: each element drains into exactly one element downstream, ending at the outflow gauge.',
+		short: 'How the hydrological units connect: each drains into exactly one hydrological unit downstream, ending at the outflow gauge.',
 		category: 'network',
 		fields: ['node.downstreamNodeId']
 	},
 	{
 		id: 'element-farm',
 		term: 'Hydrological unit',
-		short: 'A farm, sub-catchment or town with land of its own: a runoff share, an optional dam and demands. Exports and the API call it a farm.',
+		short: 'Any point of the network: a unit with land (runoff, an optional dam, demands), a gauge or an other water user. Exports call it a node.',
 		category: 'network',
 		fields: ['node.kind', 'node.name']
 	},
 	{
 		id: 'element-gauge',
-		term: 'Gauge element',
+		term: 'Gauge',
 		short: 'A measuring point that only passes flow through and reports it, with its EWR check unless it isn’t an EWR site. No runoff, dam or demand.',
 		category: 'network',
 		fields: ['node.ewrSite']

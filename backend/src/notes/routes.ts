@@ -66,7 +66,7 @@ export const CreateNote = z
 	.strict()
 	.refine(
 		(b) => [b.nodeId, b.runId, b.settingKey, b.scenarioId, b.packId].filter((t) => t !== undefined).length <= 1,
-		'a note is about one thing: a node, a run, a setting, a scenario or an evidence pack'
+		'a note is about one thing: a hydrological unit, a run, a setting, a scenario or an evidence pack'
 	)
 	.refine((b) => b.visibility !== 'farm' || b.nodeId !== undefined, 'only a note on a farm can be shown to its farmers')
 	.refine((b) => !onScenarioOnly(b.visibility) || b.scenarioId !== undefined, 'only a note on a scenario can be for the assessors or the parties')

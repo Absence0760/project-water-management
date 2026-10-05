@@ -39,7 +39,7 @@ export type ConflictReason = 'same_target' | 'removed_in_use';
  */
 export interface ScenarioConflict {
 	reason: ConflictReason;
-	/** The element and field, readable: `node "Upper farm": damCapacityM3`, `settings: gr4j.x1`. */
+	/** The element and field, readable: `hydrological unit "Upper farm": damCapacityM3`, `settings: gr4j.x1`. */
 	target: string;
 	a: ConflictSide;
 	b: ConflictSide;
@@ -280,7 +280,7 @@ function label(model: ProjectModel, scenarios: readonly CombineScenario[], entit
 	};
 	switch (kind) {
 		case 'node':
-			return `node "${nodeName(id)}"`;
+			return `hydrological unit "${nodeName(id)}"`;
 		case 'crop':
 			return `crop "${cropName(id)}"`;
 		case 'cropArea': {

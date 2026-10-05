@@ -976,7 +976,7 @@ role, freshness, Add data) and each tab's own header:
   "3 transfer rules · 2 active", "No runs yet" on a Summary before the
   first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
-  (below), the section's own (the Network's **Tables** and **+ Add node**,
+  (below), the section's own (the Network's **Tables** and **+ Add hydrological unit**,
   Crops' **Tables** and **+ Add crop**, Transfers' **Show on the Network** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
@@ -1389,7 +1389,7 @@ for every workspace tab. Its own chunk.
 
 - **Header**: the section header titled "Dams", with the context line
   "8 dams · 2.73 million m³ capacity · latest run “Baseline”, ran today"
-  (`damsSummary`, `fmtVolume`), **Node table** (the grid modal over this
+  (`damsSummary`, `fmtVolume`), **Hydrological unit table** (the grid modal over this
   page, `grid=nodes`) once there is a dam, and **Open in Runs** once there
   is a run, all filled through `fillHeader` like Crops & demand. The cards'
   and the chart's headings are h2 under its h1.
@@ -1488,7 +1488,7 @@ for every workspace tab. Its own chunk.
   1.2.0, issue #55), because each card's sparkline and the storage chart draw
   them.
 - **Empty states**: no dams in the model says how to add one, with **Open the
-  Network** and **Node table** (the grid modal over this page, where a node's
+  Network** and **Hydrological unit table** (the grid modal over this page, where a node's
   dam capacity is set or a node added; a new dam shows as a card at once).
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
@@ -2099,14 +2099,17 @@ from it.
 ## Network
 
 One page, the **map** (issue #17, option A's simplicity with nothing lost).
+What the code calls a node (a unit, a gauge or another water user) the
+screens call a **hydrological unit**: until 2026-10-04 they said node ("+ Add
+node", "Node table", "All nodes", "Node to edit").
 It used to have three layouts (Map, Table, One node); with the Tables menu
 they only made the page jump, so the other two became things the map opens:
-the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
+the **node table** is a grid (**Tables → Hydrological unit table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
 node's **full form** opens in a sheet over the map from its row's **Edit** in
-All nodes (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
+All hydrological units (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
 `view=node` becomes `edit=<node or the first>`. `node=<id>` is the picked
-node: a pick in the All nodes list or on the drawing writes it (a new
+node: a pick in the All hydrological units list or on the drawing writes it (a new
 history entry, so Back steps back through the picks; a reload or a shared
 link keeps it, playbook § 2), opening a node's sheet writes it with `edit=`
 (so closing the sheet leaves the map on that node), removing the node drops
@@ -2117,11 +2120,11 @@ itself.
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
-    "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
-    as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    "No hydrological units yet"); on the right a **Tables** menu (a disclosure named "Open
+    as a table": *Hydrological unit table*, *Crop factors*, *Planted areas*, *Transfers*,
     *Demands*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
-    it) and, for editors, **+ Add node** and (once there is one outlet)
+    it) and, for editors, **+ Add hydrological unit** and (once there is one outlet)
     **+ Add other user**, each opening the new node's form in the sheet with
     the focus on its name. A new unit is named "Unit N" with the first N no
     node has (`nextFreeName` in `model/editor.svelte.ts`), so a removal never
@@ -2129,13 +2132,13 @@ itself.
     card is an empty panel: for an editor, **Add outflow gauge** and **Start
     from the map** (`?tab=map&start=1`, [maps.md § Start from the
     map](./maps.md#start-from-the-map), with a line on what it does); a viewer
-    reads "No nodes yet. An editor builds the network here or from the Map."
+    reads "No hydrological units yet. An editor builds the network here or from the Map."
     and no buttons.
   - **Catchment map** card: *Colour farms by* in its header, the schematic
     filling the card, and the map key under it. Colouring by supply is
     **on by default** once the project has a run.
   - **Map key** (`mapKey` in `NetworkSchematic.svelte`, also under the
-    report's drawing): headed groups, **Nodes** (the shapes), **Lines** (the
+    report's drawing): headed groups, **Hydrological units** (the shapes), **Lines** (the
     river, drawn thickening, "thicker with more area upstream", and
     transfers) and **Colour: supply** / **Colour: dam level** (the bands),
     then the run caption and the drag hint. Each swatch uses the map's own
@@ -2194,7 +2197,7 @@ itself.
       nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
       fetched once the page has drawn, `workspace/mapLinks.ts`, as on
       Hydrological units and Dams); no Edit of its own since 2026-10-03 (the
-      row's, in All nodes, is the one). A farm has two tiles:
+      row's, in All hydrological units, is the one). A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, the band in words under the % ("Under
@@ -2214,7 +2217,7 @@ itself.
       its flow share in use, dam capacity and irrigated area, a link ("20.00
       ha, 1 crop") to the farm drawer. With nothing picked: "Select a node on
       the map or in the list to see it here."
-    - **All nodes**: a button per node, in the model's order, with a dot for
+    - **All hydrological units**: a button per node, in the model's order, with a dot for
       its kind (in its supply band's colour while colouring is on), its name
       and "→ downstream" (or "outlet"). The name wraps between words; the
       downstream name takes at most 45 % of the row on one line, cut with an
@@ -2228,11 +2231,11 @@ itself.
       `inViewDelta` in `network/scroll.ts`), on a pick, a `node=` link, and
       whenever the box changes size: on a 30-unit network the last row's
       node is scrolled onto the drawing. After a node is removed from its
-      sheet the focus goes to the **All nodes** heading.
+      sheet the focus goes to the **All hydrological units** heading.
 
   - **Node sheet** (`edit=<id>`, the `Dialog` `side extraWide` variant, 920 px,
     three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
-    viewer), the node picker (‹ select ›, labelled "Node to edit") and under it
+    viewer), the node picker (‹ select ›, labelled "Hydrological unit to edit") and under it
     a jump row of the form's sections ("Sections of the form": Catchment
     area, Flow share, Dam, …, Land cover; one press scrolls the form to the
     section and focuses its card), both fixed in the dialog's sub-header
@@ -2254,12 +2257,12 @@ itself.
     nodes that drain into it and where they will drain; its farmers; and
     that Discard brings it back until the save), confirmed with **Remove
     hydrological unit** / **Remove gauge** / **Remove other water user**.
-    After a removal the focus goes to the All nodes heading (the sheet and
+    After a removal the focus goes to the All hydrological units heading (the sheet and
     the card's Edit it opened from are gone); in the node table, to the next
-    row's name (else **+ Add node**).
+    row's name (else **+ Add hydrological unit**).
 
   Every field of the old Table and One node layouts is a click away (Edit,
-  Tables → Node table), so nothing was removed.
+  Tables → Hydrological unit table), so nothing was removed.
 - **Schematic** (`NetworkSchematic.svelte`, layout in `schematic.ts`): the
   drains-into tree with the outflow gauge at the bottom. Farms are circles,
   farms with a dam (≥ 1 m³) are filled squares, gauges are open triangles
@@ -2390,7 +2393,7 @@ itself.
   out rather than shown as "–". The totals are a card of their own lines
   ("Area 144.00 km²"). The inputs, their accessible names, validation and the
   save row are the table's, and the cards scroll with the modal rather than
-  in a box of their own, so **+ Add node** and the field guide follow the
+  in a box of their own, so **+ Add hydrological unit** and the field guide follow the
   last card. The ⓘ tips sat in the column headers, so the intro sends a
   phone to the field guide instead (`node-table.spec.ts`).
 - **The one-node form** (the node sheet): the picker (‹ select ›) and the
@@ -2452,7 +2455,7 @@ itself.
   the 7.2 × capacity^0.77 m² estimate the run will use (N2, warning W6;
   engine ≥ 1.63.0). The area exponent's field takes 0 < b ≤ 1.
 - **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
-  **+ Add other user** (next to + Add node, in the page header and the node
+  **+ Add other user** (next to + Add hydrological unit, in the page header and the node
   table's toolbar, once there is one outlet) adds a node of
   kind *Other user* draining into the outlet, with no demand yet; any node's
   Kind can also be switched to it. In the table a user's row shows "–" in
@@ -2636,7 +2639,7 @@ itself.
   only here: on a farm set by month the node table's River to dam cell
   (`NetworkTab.svelte`, desktop and phone card) has no input for the one
   value the run ignores, but the months' range, read-only ("by month:
-  0–0.01", in m³/s, `divertMonthsCell`), which in the catchment's Node table grid links
+  0–0.01", in m³/s, `divertMonthsCell`), which in the catchment's Hydrological unit table grid links
   to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
   tables it is plain text. A farm with the one value edits it in the table as
   before.
@@ -3090,7 +3093,7 @@ map" card) stays the schematic; this is the geography.
   then its name and area, and the same choice); **Tick every value**; **How it was made**
   (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
   the reason by the names, while a name is empty or used twice),
-  which asks first ("The empty model gets 3 nodes, with 2 areas (each saved
+  which asks first ("The empty model gets 3 hydrological units, with 2 areas (each saved
   as its unit’s parcel; Valley dam without what drains into pans) … It is
   saved now as one change in History."). **Data and the first run**: links
   to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
@@ -3771,7 +3774,7 @@ answer is beside **Apply** at every size.
    b023 workbook; it reads the whole workbook, so a large one takes a few
    seconds). Workbooks never leave the browser, and the dialog says so under
    the file field.
-   **A node-based workbook** is the third source: its [Crop_Factors] and
+   **A hydrological-unit-based workbook** is the third source: its [Crop_Factors] and
    [Crop_Areas] sheets, read by the same worker
    (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
    those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
@@ -4051,7 +4054,7 @@ user's demand could only be read one node form at a time.
 An existing model grid, unchanged, full screen over whichever tab is open
 (`model/GridModal.svelte`; issue #17: the simpler screens keep every grid one
 click away). It opens while the workspace URL has `grid=<id>`
-(`lib/workspace/overlays.ts`): `nodes` (the Network's node table, `NetworkTab`
+(`lib/workspace/overlays.ts`): `nodes` (the Network's node table, titled **Hydrological unit table** since 2026-10-04, `NetworkTab`
 with `only="table"`: every column, reordering, Add node / other user, Sort by
 flow path, the other water users and the field guide; with no nodes, **Add
 outflow gauge**), `crop-factors` and `planted-areas` (the
@@ -4088,11 +4091,11 @@ the link goes to that tab with it open (`movedGridHref`;
   the same save row as the farm drawer (`ModelSaveRow`): status, reason,
   **Discard** (the save bar's), **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
   and **Close**.
-- **Paste from a spreadsheet** (issue #285): the node table, the
+- **Paste from a spreadsheet** (issue #285): the hydrological unit table, the
   planted-areas and crop-factor grids and the [Demands grid](#demands-grid)
   take a block copied from Excel. Pasting more than one
   cell into any of their inputs (a tab or a line break in it; one value stays
-  the input's own paste) opens **Paste into the node table** / **Paste
+  the input's own paste) opens **Paste into the hydrological unit table** / **Paste
   planted areas** (`model/GridPasteDialog.svelte`) with the block in its box;
   **Paste from a spreadsheet…** under the grid opens it empty, to paste,
   type or **Load a CSV file**. **Download the table as CSV** is the grid as
@@ -7327,9 +7330,24 @@ closing, and **Discard edits** puts it back. **Edits to record**
   while a run is in flight: the run re-reads the scenario when it ends, and
   that read could otherwise land after a submit and show the old status. The "Add a change" form and rebase are hidden while
   override mode is open.
-- **The proposer's nodes**: a checkbox per node of the base. Changes to them
-  (and to nodes the scenario adds) are proposals; the rest are baseline
+- **The proposer's hydrological units** ("… and users" when the base has
+  other water users): a checkbox per hydrological unit, then per other
+  water user, each kind under its own label when both are there. A gauge
+  measures and proposes nothing, so it is listed only while an older
+  scenario still has one ticked (to untick it). Changes to the ticked ones
+  (and to any the scenario adds) are proposals; the rest are baseline
   assumptions ([scenarios.md § Classification](./scenarios.md#classification-proposal-or-baseline-assumption)).
+  The hint says the list decides whose a change is, not where it applies: a
+  change to a crop applies on every unit that grows it, and one unit's
+  planting is changed with **Set a hydrological unit's crop area** (its
+  area and irrigation system). (Until 2026-10-04 it was "The proposer's
+  nodes", every node of the base, gauges included; the form's node ops read
+  "Change a node's value", "Add a node" and so on, and now say
+  hydrological unit, as the whole app does for any node, gauges and other
+  water users included: **Change a hydrological unit**, **Add a
+  hydrological unit**, **Remove a hydrological unit**, **Move what a
+  hydrological unit drains into**, **Insert a hydrological unit on a
+  reach**, the picker **Hydrological unit**.)
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
   application's too): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
@@ -7765,7 +7783,7 @@ card for the cumulative impact view, and **Back to the list** swaps it back.
   and queues its job).
 - **Refused, never merged:** when two applications change the same thing,
   or one removes what another uses, each conflict is listed: its target
-  (`node "Upper farm": damCapacityM3`), whether both change it or one removes
+  (`hydrological unit "Upper farm": damCapacityM3`), whether both change it or one removes
   what the other uses, and both changes side by side (each application's
   name, change number and the change in words). Changes that apply alone but
   not together (two new dams given one name) are listed too.
@@ -7953,7 +7971,7 @@ March") is kept against what it is about.
   (`notes.spec.ts` checks 30). A half-typed note or an unsaved edit makes
   Escape, the close button and **Close** ask "Discard your note?" first
   (`NotesList`'s bindable `unsaved`). It is not in the URL: it opens from inside
-  other overlays (the Node table's grid modal) and from several places that
+  other overlays (the Hydrological unit table's grid modal) and from several places that
   can show the same target at once (a node's card and its grid row), so a
   param would open two. Opened from:
   - on each **Network** node row, beside its name (icon and number; only on a

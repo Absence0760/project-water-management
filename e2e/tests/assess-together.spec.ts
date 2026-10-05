@@ -43,7 +43,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		await panel.getByRole('button', { name: 'Check they combine' }).click();
 		const conflict = panel.getByTestId('assess-conflict');
 		await expect(conflict).toHaveCount(1);
-		await expect(conflict).toContainText('node "Upper farm": damCapacityM3');
+		await expect(conflict).toContainText('hydrological unit "Upper farm": damCapacityM3');
 		await expect(conflict).toContainText('both change it');
 		await expect(conflict).toContainText('Raise the Upper dam change 1: Upper farm');
 		await expect(conflict).toContainText('Lower the Upper dam change 1: Upper farm');

@@ -33,7 +33,7 @@ describe('planOfftakes', () => {
 			(tr) => `k@${tr.id}`
 		);
 		expect(plan.map((o) => [o.id, o.from, o.to, o.seriesKey])).toEqual([['z', 1, 3, 'k@z']]);
-		expect(warnings).toEqual(['river off-take x references a node that does not exist; skipped', 'river off-take a → g: an off-take runs from one unit to another; skipped']);
+		expect(warnings).toEqual(['river off-take x references a hydrological unit that does not exist; skipped', 'river off-take a → g: an off-take runs from one unit to another; skipped']);
 	});
 
 	it('skips a rule whose destination drains into its source, along the river or through off-takes accepted before it', () => {

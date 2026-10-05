@@ -22,7 +22,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
 import { panReferenceLoader } from './panReference.js';
 import { featureNameOf, type Geometry, type Position } from '../geo/geojson.js';
-import { KIND_NODES } from '../geo/routes.js';
+import { KIND_NODES, NODE_KIND_WORD } from '../geo/routes.js';
 import { beginModelChange, recordAudit, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
@@ -82,7 +82,7 @@ export const DivideBody = z
 			.refine((ps) => {
 				const ids = ps.flatMap((p) => (p.nodeId ? [p.nodeId] : []));
 				return new Set(ids).size === ids.length;
-			}, 'two points stand for one node')
+			}, 'two points stand for one hydrological unit')
 	})
 	.strict();
 
@@ -194,7 +194,7 @@ export interface DivideDecision {
 	revisionId: string | null;
 }
 
-const NOT_EMPTY_NEEDED = 'The model has no nodes yet: start it from the map instead, which makes them.';
+const NOT_EMPTY_NEEDED = 'The model has no hydrological units yet: start it from the map instead, which makes them.';
 const NO_DEM = 'Dividing the model needs an elevation model on the server (DEM_URL), and this one has none: set the areas and the order on the Network, or one unit at a time with Delineate and Use this area.';
 const EPS_KM2 = 1e-9;
 
@@ -209,7 +209,7 @@ export function roleOf(node: Pick<NetworkNode, 'kind' | 'damCapacityM3'> | null,
 /** The node every other drains to in the end: the one that drains nowhere. */
 function outflowOf(model: ProjectModel): NetworkNode {
 	const roots = model.nodes.filter((n) => n.downstreamNodeId === null);
-	if (roots.length !== 1) throw new ApiError(400, 'The model needs exactly one outflow gauge (a node that drains nowhere) before it can be divided; fix it on the Network.');
+	if (roots.length !== 1) throw new ApiError(400, 'The model needs exactly one outflow gauge (a hydrological unit that drains nowhere) before it can be divided; fix it on the Network.');
 	return roots[0]!;
 }
 
@@ -259,7 +259,7 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 		if (!f) throw new ApiError(400, 'The outlet gauge is not on this catchment’s map.');
 		if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, 'The outlet must be a gauge point on the map.');
 		if (body.points.some((p) => p.featureId === f.id)) throw new ApiError(400, 'The outlet gauge can’t also be one of the points.');
-		if (f.node_id && f.node_id !== outflow.id) throw new ApiError(400, `“${f.name || 'That gauge'}” stands for ${nodes.get(f.node_id)?.name ?? 'another node'}, not the outflow (${outflow.name}).`);
+		if (f.node_id && f.node_id !== outflow.id) throw new ApiError(400, `“${f.name || 'That gauge'}” stands for ${nodes.get(f.node_id)?.name ?? 'another hydrological unit'}, not the outflow (${outflow.name}).`);
 		outlet = { featureId: f.id, point: f.geometry.coordinates, foundIn: 'gauge' };
 	} else {
 		if (!boundary) throw new ApiError(400, 'Put the catchment boundary on the map first (draw, delineate or upload it), or pick the outlet gauge.');
@@ -277,15 +277,15 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 		const polygon = f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon';
 		if (!(f.geometry.type === 'Point' || (polygon && f.kind === 'dam'))) throw new ApiError(400, `${label} is not a point or a dam: only points and dams stand for units.`);
 		if (p.nodeId === null) {
-			if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, `${label} is not a gauge point, so it can’t be a new gauge node.`);
-			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a node'} already.`);
+			if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, `${label} is not a gauge point, so it can’t be a new gauge.`);
+			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a hydrological unit'} already.`);
 			return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Gauge ${++gauges}`, node: null, geometry: f.geometry, damPosition: f.dam_position };
 		}
 		const n = nodes.get(p.nodeId);
-		if (!n) throw new ApiError(400, `${label} is matched to a node that isn’t in the model (deleted since?). Reload and propose again.`);
+		if (!n) throw new ApiError(400, `${label} is matched to a hydrological unit that isn’t in the model (deleted since?). Reload and propose again.`);
 		if (n.id === outflow.id) throw new ApiError(400, `${n.name} is the outflow: it is where the division ends, not one of its points.`);
-		if (!(KIND_NODES[f.kind as keyof typeof KIND_NODES] ?? []).includes(n.kind)) throw new ApiError(400, `${label} can’t stand for ${n.name} (a ${n.kind} node).`);
-		if (f.node_id && f.node_id !== n.id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'another node'} on the map, not ${n.name}.`);
+		if (!(KIND_NODES[f.kind as keyof typeof KIND_NODES] ?? []).includes(n.kind)) throw new ApiError(400, `${label} can’t stand for ${n.name} (${NODE_KIND_WORD[n.kind] ?? `a ${n.kind}`}).`);
+		if (f.node_id && f.node_id !== n.id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'another hydrological unit'} on the map, not ${n.name}.`);
 		return { featureId: f.id, featureKind: f.kind, name: f.name, node: n, geometry: f.geometry, damPosition: f.dam_position };
 	});
 	return { boundary, outlet, outflow, model, areaSource: new Map(src.map((r) => [r.id, r.area_source])), points };
@@ -447,7 +447,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			const names = new Set(model.nodes.map((n) => n.name.trim().toLowerCase()));
 			const fresh = (name: string) => {
 				const k = name.trim().toLowerCase();
-				if (names.has(k)) throw new ApiError(400, `Two nodes would be called “${name.trim()}”; give the new one a name of its own.`);
+				if (names.has(k)) throw new ApiError(400, `Two hydrological units would be called “${name.trim()}”; give the new one a name of its own.`);
 				names.add(k);
 				return name.trim();
 			};

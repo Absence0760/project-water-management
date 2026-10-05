@@ -430,7 +430,7 @@
 	/** What the editor chose and ticked in the sheet: kept here, so closing it or leaving for a tool loses nothing. */
 	let startDraft = $state<StartDraft>({ picked: {}, outlet: null, pointsAsked: false, ticks: {}, placement: emptyPlacement() });
 	async function startApplied() {
-		notice = 'Started the model from the map. Its nodes are on the Network now, and each unit’s point and parcel stand for it on the map.';
+		notice = 'Started the model from the map. Its hydrological units are on the Network now, and each unit’s point and parcel stand for it on the map.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
 	}
 	async function startDiscarded() {

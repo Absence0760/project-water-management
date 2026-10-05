@@ -13,7 +13,7 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 
 async function openUpperFarm(page: Page) {
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	return page.getByRole('group', { name: 'Dam survey and releases' });
 }
 
@@ -59,7 +59,7 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await expectNoViolations(page, { include: `[data-testid^="dam-storage-"]` });
 
 	// A gauge has no dam, so no survey or releases.
-	await page.getByLabel('Node to edit').selectOption({ label: '1. Outflow gauge · gauge' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '1. Outflow gauge · gauge' });
 	await expect(page.getByRole('group', { name: 'Dam survey and releases' })).toHaveCount(0);
 
 	await page.goto(`/projects/${project.id}?tab=runs`);

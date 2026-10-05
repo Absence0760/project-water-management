@@ -13,7 +13,7 @@ const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model 
 
 async function openUpperFarm(page: Page) {
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
+	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	return page.getByRole('group', { name: 'Dam survey and releases' });
 }
 

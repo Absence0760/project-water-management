@@ -159,8 +159,8 @@ test('an application on the nominated run gives the full evidence report, draft 
 	const others = table.getByRole('row', { name: /^This and the other applications on this baseline, together/ });
 	await expect(others).toContainText('run together (a cumulative assessment, WP-3.11)');
 	await expect(others).toContainText('Not assessed: these applications conflict, so they are not run together (a conflict is never merged)');
-	await expect(others).toContainText('both change node "Upper farm": damCapacityM3');
-	await expect(page.getByTestId('evidence-combined-na')).toContainText('both change node "Upper farm": damCapacityM3');
+	await expect(others).toContainText('both change hydrological unit "Upper farm": damCapacityM3');
+	await expect(page.getByTestId('evidence-combined-na')).toContainText('both change hydrological unit "Upper farm": damCapacityM3');
 	const cumulative = page.getByTestId('evidence-cumulative');
 	await expect(cumulative.getByRole('rowheader', { name: /^“Second dam 150 000 m³”/ })).toBeVisible();
 	await expect(cumulative.getByRole('row', { name: /^“Second dam/ })).toContainText('submitted');

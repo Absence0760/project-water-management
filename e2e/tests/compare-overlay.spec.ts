@@ -38,7 +38,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			const panel = overlay(page);
 
 			// Opens on the catchment's simulated outflow.
-			const node = panel.getByLabel('Node');
+			const node = panel.getByLabel('Hydrological unit');
 			const series = panel.getByLabel('Series');
 			await expect(node).toHaveValue('catchment');
 			await expect(series).toHaveValue('simulated_outflow');
@@ -88,8 +88,8 @@ test('matches nodes across a project copy by name', async ({ page, owner }) => {
 	const runB = await createRun(page.request, copy, 'Copy');
 	await page.goto(`/compare?a=${project.id}:${runA}&b=${copy}:${runB}`);
 	const panel = overlay(page);
-	await expect(panel.getByLabel('Node').getByRole('option')).toHaveText(['Catchment (outflow gauge)', 'Outflow gauge', 'Upper farm', 'Lower farm']);
-	await panel.getByLabel('Node').selectOption({ label: 'Lower farm' });
+	await expect(panel.getByLabel('Hydrological unit').getByRole('option')).toHaveText(['Catchment (outflow gauge)', 'Outflow gauge', 'Upper farm', 'Lower farm']);
+	await panel.getByLabel('Hydrological unit').selectOption({ label: 'Lower farm' });
 	await expect(panel.getByRole('img', { name: /^Lower farm · Outflow · run A vs run B: line chart of A · Original \(Overlay original\), B · Copy \(Overlay copy\), in m³\/s, \d+ \w+ \d{4} to \d+ \w+ \d{4}$/ })).toBeVisible();
 	// Same inputs, same results: B − A is zero on every day.
 	await expect(panel.getByTestId('overlay-summary')).toHaveText(

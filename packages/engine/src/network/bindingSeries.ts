@@ -17,7 +17,7 @@ import type { AttributionResult } from './attribution';
 
 export const EWR_BINDING_SERIES = {
 	key: 'ewr_binding_site',
-	label: 'EWR site that set the charge (index into the run’s EWR sites: 0 = the outlet, then gauges by node id; blank = not charged)',
+	label: 'EWR site that set the charge (index into the run’s EWR sites: 0 = the outlet, then gauges by hydrological unit id; blank = not charged)',
 	unit: 'index'
 } as const;
 

@@ -29,7 +29,7 @@ export function siteOptions(nodes: readonly Pick<NetworkNode, 'id' | 'name' | 'k
 	const out: SiteOption[] = [{ id: null, label: outlet ? `Outlet (${outlet.name})` : 'Outlet' }];
 	const gauges = nodes.filter((n) => n.kind === 'gauge' && n !== outlet).sort((a, b) => a.sortOrder - b.sortOrder);
 	for (const g of gauges) out.push({ id: g.id, label: `Gauge: ${g.name}` });
-	for (const id of stored) if (id !== null && !out.some((o) => o.id === id)) out.push({ id, label: 'A node no longer in the network' });
+	for (const id of stored) if (id !== null && !out.some((o) => o.id === id)) out.push({ id, label: 'A hydrological unit no longer in the network' });
 	return out;
 }
 

@@ -123,12 +123,12 @@ test('a just-created scenario with a half-filled change asks before leaving the 
 	await create.getByRole('button', { name: 'Create scenario' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Just made' })).toBeVisible();
 	const form = page.getByRole('form', { name: 'Add a change' });
-	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 
 	// Another section: asked, naming it; Stay keeps the form as it was.
 	await sections(page).getByRole('link', { name: 'Summary', exact: true }).click();
 	await answerConfirm(page, false, 'You have unsaved changes (a change not yet added to the scenario). Leave and go to the Summary page?');
-	await expect(form.getByLabel('Node')).toHaveValue(/.+/);
+	await expect(form.getByLabel('Hydrological unit')).toHaveValue(/.+/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Just made' })).toBeVisible();
 
 	// Another scenario in the list: asked too; Leave opens it.
