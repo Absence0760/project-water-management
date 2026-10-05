@@ -1465,7 +1465,8 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   they don't sit on. A marked dam's card says it was placed as marked, and
   the method counts them ("1 point at a dam polygon’s outflow (1 marked
   off-channel)", with the rule) only when one is marked; an unmarked dam is
-  placed exactly as before, so the method stays `start-12`. A
+  placed exactly as before, so marking dams didn't bump the method
+  version (`start-14` today, for the pans against rivers). A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the channel
   matching river reach 11509680 (292 km²), 602 m from the point"), and the
