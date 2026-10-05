@@ -70,7 +70,10 @@ export interface PlantingSystemInput {
  * system named, the crop's legacy efficiency (engine 0.43.0–1.71.0); else
  * undefined, the unit's own. A system id the table doesn't have, or a row with
  * an efficiency outside (0, 1], is skipped for the next in that order, with a
- * warning (once each).
+ * warning: a missing system once per crop that names it, a bad row once per
+ * system. Keying the missing-system warning by crop as well (engine 1.74.1)
+ * keeps the set of warnings independent of the plantings' order: keyed by
+ * system alone it named whichever crop came first (release soak, seed 1087).
  */
 export function plantingEfficiencyResolver(
 	crops: readonly CropSystemInput[],
@@ -94,7 +97,7 @@ export function plantingEfficiencyResolver(
 			const s = table.get(id);
 			const e = s ? ownCropEfficiency(s.efficiency) : undefined;
 			if (e !== undefined) return e;
-			if (!s) warn(`missing:${id}`, `crop "${crop?.name ?? p.cropId}": irrigation system ${id} is not in the project's table; skipping it`);
+			if (!s) warn(`missing:${p.cropId}:${id}`, `crop "${crop?.name ?? p.cropId}": irrigation system ${id} is not in the project's table; skipping it`);
 			else warn(`bad:${id}`, `irrigation system "${s.name}": efficiency ${String(s.efficiency)} is not in (0, 1]; skipping it`);
 		}
 		return ownCropEfficiency(crop?.irrigationEfficiency);
