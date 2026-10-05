@@ -954,23 +954,15 @@
 	let tabBefore: SideTab = 'features';
 	let layersOpen = $state(false);
 	/**
-	 * The Key: open by default while the areas are coloured by a run's results (their colours need the legend) and the map is
-	 * wide enough to spare its corner; folded otherwise (kinds' colours, a phone), so it covers nothing it needn't.
+	 * The Key starts folded everywhere (until 2026-10-03 it opened by default over a wide map showing a run's results): beside the
+	 * column the list keeps the first view, and over the map (a phone, an empty map, dividing) it would cover what is under it.
 	 */
-	let keyChoice = $state<boolean | null>(null);
+	let keyChoice = $state(false);
 	/** On a narrow map (a window narrowed with both open, too) the Key gives way to an open Layers panel. */
-	const keyOpen = $derived((keyChoice ?? (wide && results.on && !panelsInSide)) && (wide || !layersOpen));
+	const keyOpen = $derived(keyChoice && (wide || !layersOpen));
 	/** Shown where they are now: the tab picked, or the panel open over the map. */
 	const layersShown = $derived(panelsInSide ? sideTab === 'layers' : layersOpen);
 	const keyShown = $derived(panelsInSide ? sideTab === 'key' : keyOpen);
-	// The default is taken once, when the runs, the features and the page's width are in: switching the measure to Kind from inside the
-	// open panel must not fold it under the pointer.
-	$effect(() => {
-		if (keyChoice !== null || runs === null || !pageWidth || !data) return;
-		const open = wide && results.on;
-		// In the column the Key is a tab the list would give way to: the column opens on the list (or a pick's Details) as ever.
-		untrack(() => (keyChoice = open && !panelsInSide));
-	});
 	/** On a narrow map the two panels would overlap: opening one folds the other. */
 	function openPanel(which: 'layers' | 'key', on = true) {
 		if (panelsInSide) {
