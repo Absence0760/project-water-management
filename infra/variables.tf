@@ -199,7 +199,7 @@ variable "db_log_retention_days" {
 }
 
 variable "secretsmanager_endpoint_az_count" {
-  description = "How many AZs get an ENI for the Secrets Manager interface endpoint (used only by the migrate Lambda). 1 halves the cost; the endpoint is reachable from both subnets either way, it just loses AZ redundancy for deploys."
+  description = "How many AZs get an ENI for the Secrets Manager interface endpoint (the migrate Lambda's RDS master secret, and the API, worker and migrate Lambdas' runtime secrets at cold start, secrets.tf). 1 halves the cost; the endpoint is reachable from both subnets either way, but if its AZ is down a cold-starting API, worker or migrate Lambda can't read its secret (warm ones carry on)."
   type        = number
   default     = 1
   validation {
@@ -321,9 +321,9 @@ variable "login_failed_alarm_per_15min" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 100 sits above af-south-1's ~$68–75 idle (infra/README.md § Cost), so ACTUAL 80% ($80) doesn't fire at idle; ~70 fits us-east-1 (~$56 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 110 sits above af-south-1's ~$77 idle (infra/README.md § Cost), so ACTUAL 80% ($88) doesn't fire at idle; ~85 fits us-east-1 (~$63 idle), ~220 the full tier in af-south-1 and ~180 in us-east-1 (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
-  default     = 100
+  default     = 110
 
   validation {
     condition     = var.budget_monthly_usd >= 0
@@ -334,7 +334,7 @@ variable "budget_monthly_usd" {
 # The daily budget is the first-month guard: the monthly FORECASTED alert needs
 # ~5 weeks of history, and daily budgets support ACTUAL notifications only.
 variable "budget_daily_usd" {
-  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $8 on $100, ~3.3× af-south-1's ~$2.40/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
+  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $9 on $110, ~3.5× af-south-1's ~$2.55/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
   type        = number
   default     = null
 
@@ -482,6 +482,16 @@ variable "sqs_endpoint_az_count" {
   default     = 1
   validation {
     condition     = var.sqs_endpoint_az_count >= 1 && var.sqs_endpoint_az_count <= 2
+    error_message = "Must be 1 or 2."
+  }
+}
+
+variable "s3_endpoint_az_count" {
+  description = "How many AZs get an ENI for the S3 interface endpoint (packs.tf: the worker's check of a pack PDF, the API's put of a pack bundle, the delineation DEM and dam-trace reads, the migrate Lambda's reference loads). 1 halves the cost; both subnets still reach it, and an outage of its AZ fails only those calls. 2 on the full tier (docs/deployment-tiers.md)."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.s3_endpoint_az_count >= 1 && var.s3_endpoint_az_count <= 2
     error_message = "Must be 1 or 2."
   }
 }

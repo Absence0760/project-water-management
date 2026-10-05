@@ -362,7 +362,7 @@ decided:
 ### 6a. Account, domain, secrets
 
 Decided: slug **`water-management`**, URL **`https://water-management.jaredhoward.com`**,
-region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 80`;
+region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, the default;
 [deployment-tiers.md](./deployment-tiers.md)).
 
 - ⬜ Bootstrap tfvars `~/github/templates/infra/bootstrap/projects/water-management.tfvars`

@@ -178,7 +178,7 @@ export async function seedShowcase(d: ShowcaseDeps): Promise<string | null> {
 	await api('POST', `${at}/feeds`, { source: 'dws', config: { station: 'Z1H001' }, targetName: 'Outlet weir (DWS feed)', enabled: false });
 
 	// Runs: before the fit, the calibrated baseline, and a forecast run.
-	const r1 = (await api('POST', `${at}/runs`, { label: 'Before calibration (GR4J defaults)' })).run.id as string;
+	await api('POST', `${at}/runs`, { label: 'Before calibration (GR4J defaults)' });
 	await api('PATCH', at, { settings: { gr4j, fitRecord }, reason: 'Applied the automatic GR4J fit (Settings → Fit automatically)' });
 	const r2 = (await api('POST', `${at}/runs`, { label: 'Calibrated baseline' })).run.id as string;
 	await api('PATCH', `${at}/runs/${r2}`, { pinned: true, notes: 'The baseline every scenario is built on. Calibrated 2011/12–2019/20, 2016/17 excluded.' });

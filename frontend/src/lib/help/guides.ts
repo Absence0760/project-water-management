@@ -303,8 +303,8 @@ export const GUIDES: Guide[] = [
 							'Press **+ Add hydrological unit** for each hydrological unit (its form opens in a sheet over the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the hydrological unit table (**Tables** › **Hydrological unit table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
 							'Give every hydrological unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
-							'For a hydrological unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A hydrological unit’s full form (**Edit** on its card beside the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
-							'Set the hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
+							'For a hydrological unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A hydrological unit’s full form (**Edit** on its row under **All hydrological units**, or double-click it in the drawing) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
+							'Set the share of the water supplied that returns to the river as [[return-flow|return flow]] (10 % for a new unit) and any [[diversion|diversion back to the dam]]. The hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] comes from its crops’ [[irrigation-system|irrigation systems]] (Crops & demand). Under **Supply**, set where its irrigation comes from (the [[supply-rule|supply rule]]); **Split the crops’ water between sources** gives it a [[crop-supply-table|crop supply table]]: fixed shares from its own dam, the river at the unit and another unit’s dam.',
 							'Press **Save changes** on the save bar (or in the hydrological unit’s sheet).'
 						]
 					},
@@ -383,7 +383,7 @@ export const GUIDES: Guide[] = [
 							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: what the catchment abstracts for its crops per month (the gross demand ÷ each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], so an efficiency below 100 % raises it), stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain, which a run takes off day by day. It uses the monthly A-pan means: with a daily [[apan|A-pan]] series on the **Data** tab, runs use that on the days it has a value, so their demand differs, and a line under the heading says so.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or use them from the map, when an A-pan grid is loaded), the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
-							'Set each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
+							'Give each crop its [[irrigation-system|irrigation system]] in its sheet (a unit can override it per crop in **Edit areas**); the systems and their efficiencies are under **Tables** › **Irrigation systems**. Each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] is its crops’ systems combined.',
 							'Press **Save changes** on the save bar.'
 						]
 					},
@@ -903,7 +903,7 @@ export const GUIDES: Guide[] = [
 							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any hydrological unit irrigates.',
 							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; seepage reaches the river below the wall.',
 							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows and the rain on it, less evaporation and seepage).',
-							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the returning share of the irrigation losses, back to the river the same day.',
+							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the share of the irrigation water supplied that returns to the river the same day (never more than the losses).',
 							'Outflow = spill + water passing below the dam not diverted + seepage + return flow. It is the next element’s upstream inflow.'
 						]
 					}
@@ -1379,6 +1379,8 @@ export const GUIDES: Guide[] = [
 							'Draw the boundary with **Draw a shape**, or **Upload GeoJSON** (WGS84). The header counts the features and gives the boundary’s area.',
 							'Add dams, abstraction points and gauges with **Place a point**, and parcels with **Draw a shape**. **Snap to features** puts a corner on a neighbour’s corner or edge.',
 							'With an elevation model on the server, **Delineate** draws the terrain channels (solid lines): click one at the catchment’s outlet and the catchment above it is proposed, following the terrain, to accept or reject. The river network’s dashed lines are for reference only and can sit off the terrain channels.',
+							'A catchment over about 100 km across is worked out in the background (or tick **work it out in the background**); the map shows the proposal when it is ready. Where pans drain part of it, **Which area** lets you take the gross area (the default, as WR2012’s quaternaries are) or the effective one without them.',
+							'On a dam’s card, say whether it stands **On the river** or **Off-channel** (filled by a pump or a furrow): Start and Divide place an off-channel dam’s unit where its own outflow meets the river, and propose its inflow and runoff shares from that.',
 							'An accepted boundary is on the map only, not in the model yet. Its card, and the message after accepting, offer the next step: **Divide the model** splits it into each unit’s area at your dams, abstraction points and gauges (**Start from the map** while the model is empty), each value ticked to take it.',
 							'While the model is empty, **Start from the map** proposes the units, their areas and their order from the boundary and the points; each value is ticked to take it.',
 							'With water occurrence data on the server, **Trace a dam** proposes a dam’s outline from a click inside it.',

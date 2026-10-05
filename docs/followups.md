@@ -102,10 +102,10 @@ The checklist for these is issue #62; the history scrub is #63.
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
       email.
-- [ ] **AWS budget default is now $90** (`infra/variables.tf`
-      `budget_monthly_usd`; was $60, then $80, #126), sized for af-south-1's ~$59–64
-      idle with the database's KMS key, plus a derived $7/day budget (deployment.md § Budget alerts).
-      Set ~60 in tfvars for us-east-1. Cost Anomaly Detection is off by
+- [ ] **AWS budget default is now $110** (`infra/variables.tf`
+      `budget_monthly_usd`; was $60, $80, $90, then $100, #126), sized for af-south-1's ~$77
+      idle (list prices re-checked 2026-10-04, deployment-tiers.md), plus a derived $9/day budget (deployment.md § Budget alerts).
+      Set ~85 in tfvars for us-east-1. Cost Anomaly Detection is off by
       default so the first apply can't fail on an existing monitor: turn it
       on after the first apply (infra/README.md § Operator steps, step 11).
 - [ ] **Data-feed terms** (operator, roadmap D7): DWS's terms for automated
@@ -172,8 +172,8 @@ The checklist for these is issue #62; the history scrub is #63.
 - [ ] **AWS bootstrap:** follow `infra/README.md` steps 1–9a, then
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
-      recommendation](./deployment.md)). If that's the choice, raise
-      `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
+      recommendation](./deployment.md)). The default
+      `budget_monthly_usd` (110) is already sized for it; set `dmarc_report_email`.
 
 ## DB tests share the mail outbox (2026-10-02, PR #360)
 
@@ -2349,7 +2349,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       `backend/src/farms/invites.db.test.ts` (Afrikaans, `lang="af"`), the
       alert email `alerts-mailpit.spec.ts`.
 - [x] **Afrikaans boards** at 360 px and an axe pass on every translated
-      page in Afrikaans: `e2e/tests/af-layout.spec.ts`, light and dark, all
+      page in Afrikaans: `e2e/tests/lang-layout.spec.ts`, light and dark, all
       green.
 - [ ] **A native speaker's review** (tracked in issue #90, where the
       client answers it; moved off #74 by the 2026-09-30 fact-check, so #74

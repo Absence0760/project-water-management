@@ -1542,8 +1542,8 @@ run "alarms" {
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "100" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
-    error_message = "A $100 monthly budget exists by default (its 80% alert, $80, above af-south-1's ~$68–75 idle)."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "110" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "A $110 monthly budget exists by default (its 80% alert, $88, above af-south-1's ~$77 idle)."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1558,9 +1558,9 @@ run "alarms" {
       length(aws_budgets_budget.daily) == 1 &&
       aws_budgets_budget.daily[0].time_unit == "DAILY" &&
       aws_budgets_budget.daily[0].budget_type == "COST" &&
-      aws_budgets_budget.daily[0].limit_amount == "8"
+      aws_budgets_budget.daily[0].limit_amount == "9"
     )
-    error_message = "A $8/day budget (ceil(100 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+    error_message = "A $9/day budget (ceil(110 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1666,7 +1666,51 @@ run "daily_budget_follows_monthly" {
   }
   assert {
     condition     = aws_budgets_budget.monthly[0].limit_amount == "170" && aws_budgets_budget.daily[0].limit_amount == "13"
-    error_message = "The derived daily budget is ceil(monthly × 2.25 / 30): $13 on the full tier's $170."
+    error_message = "The derived daily budget is ceil(monthly × 2.25 / 30): $13 on $170."
+  }
+}
+
+# The full tier's tfvars (docs/deployment-tiers.md § Full deployment): every
+# interface endpoint in both AZs, a Multi-AZ db.t4g.small with 14 days of PITR.
+run "full_tier" {
+  command = plan
+  variables {
+    budget_monthly_usd               = 220
+    db_instance_class                = "db.t4g.small"
+    db_multi_az                      = true
+    db_backup_retention_days         = 14
+    secretsmanager_endpoint_az_count = 2
+    ses_endpoint_az_count            = 2
+    sqs_endpoint_az_count            = 2
+    s3_endpoint_az_count             = 2
+  }
+  # Two distinct subnet IDs at plan time, so a two-subnet set has a known size.
+  override_resource {
+    target          = aws_subnet.private[0]
+    override_during = plan
+    values          = { id = "subnet-00000000000000001" }
+  }
+  override_resource {
+    target          = aws_subnet.private[1]
+    override_during = plan
+    values          = { id = "subnet-00000000000000002" }
+  }
+  assert {
+    condition = (
+      length(aws_vpc_endpoint.secretsmanager.subnet_ids) == 2 &&
+      length(aws_vpc_endpoint.ses.subnet_ids) == 2 &&
+      length(aws_vpc_endpoint.sqs.subnet_ids) == 2 &&
+      length(aws_vpc_endpoint.s3.subnet_ids) == 2
+    )
+    error_message = "The full tier puts every interface endpoint (Secrets Manager, SES, SQS, S3) in both AZs."
+  }
+  assert {
+    condition     = aws_db_instance.main.multi_az && aws_db_instance.main.instance_class == "db.t4g.small" && aws_db_instance.main.backup_retention_period == 14
+    error_message = "The full tier's database is a Multi-AZ db.t4g.small with 14 days of backups."
+  }
+  assert {
+    condition     = aws_budgets_budget.monthly[0].limit_amount == "220" && aws_budgets_budget.daily[0].limit_amount == "17"
+    error_message = "The full tier's af-south-1 budget: $220 a month (80% = $176, above its ~$166 idle), ceil(220 × 2.25 / 30) = $17 a day."
   }
 }
 
@@ -1676,7 +1720,7 @@ run "daily_budget_explicit" {
     budget_daily_usd = 4.5
   }
   assert {
-    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "100"
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "110"
     error_message = "An explicit budget_daily_usd is used as given."
   }
 }
@@ -1753,7 +1797,7 @@ run "no_budgets_before_billing_access" {
 run "rejects_daily_budget_not_below_monthly" {
   command = plan
   variables {
-    budget_daily_usd = 100
+    budget_daily_usd = 110 # equal to the default monthly
   }
   expect_failures = [var.budget_daily_usd]
 }

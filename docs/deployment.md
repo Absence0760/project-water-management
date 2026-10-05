@@ -2,8 +2,9 @@
 
 > **Status:** not deployed yet. V1 runs locally ([run-locally.md](./run-locally.md)).
 > This page describes the target setup and the steps to get there. The
-> Terraform (VPC, RDS, both Lambdas, SES, CloudFront + WAF + security headers,
-> alarms) is written and tested plan-only; nothing is applied. What is left is
+> Terraform (VPC, RDS, the five Lambdas, the SQS queues, the S3 buckets, SES,
+> CloudFront + WAF + security headers, alarms and budgets) is written and
+> tested plan-only; nothing is applied. What is left is
 > operator work (account, region, secrets, apply, SES sandbox exit, the
 > `production` environment's reviewer), tracked in
 > [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws). The release pipelines
@@ -51,6 +52,15 @@ EventBridge rate(5 minutes) ──────────────► worker
   migrations run as the owner role.
 - **Background jobs:** the worker Lambda runs the job queue (§ Background
   jobs below).
+- **Outside the VPC:** the data feeds' fetcher Lambda (§ Data feeds) and
+  the report renderer, a container-image Lambda (§ Reports), reach the
+  internet directly and hold no database access; they talk to the worker
+  through SQS queues, each with a DLQ.
+- **Storage:** private S3 buckets for the SPA, report PDFs (7 days),
+  issued evidence packs (Object Lock, § Evidence packs), the map's tiles
+  and the reference datasets (§ The Map tab). The VPC reaches S3, Secrets
+  Manager, SES and SQS through one interface endpoint each (no NAT). The
+  full diagram is [infra/README.md § Architecture](../infra/README.md#architecture).
 - **Region:** the operator's choice (`aws_region` has no default). The
   recommendation is `af-south-1` for everything regional, SES included; see
   [Region recommendation](#region-recommendation). The CloudFront certificate
@@ -110,14 +120,16 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $68–75/month | ≈ $60–63/month | ≈ $59/month |
+| Idle cost, minimal tier ([deployment-tiers.md](./deployment-tiers.md); list prices 2026-10-04) | ≈ $77/month | ≈ $67/month | ≈ $63/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
-Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (the default `budget_monthly_usd = 100` allows for them), the opt-in step, and a
+Tradeoffs of af-south-1 to accept: ~30% higher prices on RDS, endpoints
+and storage (the default `budget_monthly_usd = 110` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
-~$8/month saving matters more than latency.
+~$10/month saving matters more than latency (and only with
+`data_outside_south_africa = true` and the privacy notice's §6 rewritten:
+Terraform refuses any other region without it).
 
 Whatever the region, SES follows `aws_region` in Terraform: the DKIM target
 domain, the MAIL FROM MX and the VPC endpoint name are derived from it and
@@ -546,6 +558,7 @@ environment's job is the required reviewer (§ 1), not storage.
 | `RENDERER_ECR_REPOSITORY` | `renderer_ecr_repository` (the renderer image's ECR repository; the release preflight requires it) |
 | `PUBLIC_SITE_URL` | `public_site_url` |
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
+| `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET`, `DB_INSTANCE_IDENTIFIER`, `DB_SUBNET_GROUP_NAME`, `DB_SECURITY_GROUP_ID`, `DB_PARAMETER_GROUP_NAME` | the outputs of the same names (not read by the workflows; the bucket names are for the operator's uploads, the `db_*` ones for `restore-db.sh`, which reads them from Terraform) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
 | `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
@@ -585,18 +598,27 @@ A local or e2e build has none and says *Not recorded for this build*.
 
 Written and tested (plan-only, mocked providers), **nothing applied**:
 
-- RDS PostgreSQL 17 in private subnets, the API Lambda in the VPC (VPC
-  endpoints, no NAT), and the **migrate Lambda** the deploy runs before
-  publishing new code.
-- Lambda runtime `nodejs24.x`, 30 s timeout, 1024 MB, reserved concurrency 10,
-  with `DATABASE_URL` and `AUTH_JWT_SECRET` from sops (`scripts/tf.sh`,
-  ephemeral variables, `secrets.tf`), in its runtime secret in Secrets
-  Manager, written write-only: not in its environment, not in Terraform state.
+- RDS PostgreSQL 17 in private subnets; the API, worker and migrate
+  Lambdas in the VPC (four interface endpoints: Secrets Manager, SES, SQS,
+  S3; no NAT), the **migrate Lambda** being what the deploy runs before
+  publishing new code and what `load-reference.yml` invokes.
+- The API Lambda: runtime `nodejs24.x`, 30 s timeout, 1024 MB, reserved
+  concurrency 10, with `DATABASE_URL`, `AUTH_JWT_SECRET` and its other
+  secrets from sops (`scripts/tf.sh`, ephemeral variables, `secrets.tf`), in
+  its runtime secret in Secrets Manager, written write-only: not in its
+  environment, not in Terraform state. The worker and migrate Lambdas have
+  one each the same way.
+- The fetcher and renderer Lambdas outside the VPC (§ Data feeds,
+  § Reports; the renderer only once `renderer_image_tag` is set), the
+  renderer's ECR repository, and the reports, packs, tiles and reference
+  buckets (§ Evidence packs, § The Map tab).
 - No CORS block on the Function URL (the browser never calls it).
 - SES (above), CloudFront security headers and CSP, PriceClass_All.
 - Background jobs (`jobs.tf`, § Background jobs below): the SQS `jobs`
   queue + DLQ, the worker Lambda, its 5-minute EventBridge tick and the SQS
-  interface endpoint.
+  interface endpoint; the `fetch-requests`, `ingest-results`,
+  `render-requests`, `render-results` and `mail-events` queues, each with a
+  DLQ.
 - Monthly and daily budgets and Cost Anomaly Detection (§ Budget alerts
   below). Alarms: Lambda errors / throttles / p95 duration, migrate errors,
   RDS CPU / CPU credits / surplus CPU credits charged (T4g runs Unlimited:
@@ -1127,8 +1149,10 @@ plan-only until the first deploy):
   window, goes back to the queue 120 s on without spending an attempt
   (`app_release_job`, `job_released` in the log).
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
-  default 1) whose policy lets only the API role send to, and the worker role
-  use, the `jobs` queue. No NAT.
+  default 1) whose policy allows `SendMessage` only: the API role to `jobs`,
+  the worker role to `fetch-requests` and `render-requests`. The worker
+  receives through its event source mappings, whose pollers run in the
+  Lambda service, not through the endpoint. No NAT.
 - **Retries and the DLQ:** a job's own failure is recorded in the table (with
   backoff, then `dead`), not thrown, so it never redelivers a message. The
   worker's SQS triggers report partial batch failures
@@ -1482,8 +1506,11 @@ first deploy):
   good (`pack_pdf_answer_refused` in the worker's log, the pack's PDF shows
   failed with why, nothing recorded), so a buggy or compromised renderer
   can't fix a wrong hash on a pack. The worker reaches S3 through an **S3
-  interface endpoint** (one AZ, ~$7.30/month; its policy allows only the
-  worker's `s3:GetObject` on `packs/*`) and holds that one grant. The renderer
+  interface endpoint** (`s3_endpoint_az_count`, one AZ by default,
+  ~$7.30/month; for the worker its policy allows only `s3:GetObject` on
+  `packs/*`, and otherwise only the API's put of a pack bundle, the DEM and
+  water reads and the migrate Lambda's reference reads) and holds that one
+  grant. The renderer
   and the worker both need `PACKS_BUCKET` (Terraform sets it; each refuses to
   start without it).
 - **The re-run** (154_pack_reproduce). Issuing also queues a
@@ -2250,13 +2277,16 @@ Rehearsed: not yet.
 
 ## Costs (rough, idle to light use)
 
-CloudFront, S3, Lambda and SES sending are cents. WAF is ~$8/month. The DB is
-the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
-endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
-still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
-the report renderer run outside the VPC for the same reason. The database's
-customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $63/month in
-us-east-1, ≈ $68–75 in af-south-1 (with the S3 endpoint); the breakdown is in
+CloudFront, S3, Lambda and SES sending are cents. WAF is $10/month (the ACL
+and its five rules). The DB is the main cost: RDS t4g.micro and its 20 GiB
+at ~$14/month in us-east-1, ~$18 in af-south-1. The VPC Lambdas' four
+interface endpoints (Secrets Manager, SES API, SQS, S3) cost $7.30/month each
+per AZ in us-east-1 ($9.56 in af-south-1), which is still cheaper than a NAT
+(~$33/month plus data); the data feeds' fetcher and the report renderer run
+outside the VPC for the same reason. The database's customer-managed KMS key
+(§ Decide before the first apply) adds $1–3. Total ≈ $77/month in
+af-south-1, ≈ $63 in us-east-1; the breakdown is in
+[deployment-tiers.md](./deployment-tiers.md) and
 [infra/README.md § Cost](../infra/README.md#cost). CloudFront and WAF
 request charges have no ceiling, and nor does egress (the map's tiles are
 the large objects); the `cloudfront-requests` and `cloudfront-bytes` alarms
@@ -2272,11 +2302,11 @@ Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
 alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
-  `ceil(budget_monthly_usd × 2.25 / 30)` = $8/day on $100, about 3.3× the
-  ~$2.40/day af-south-1 idle): a single day cost more than that. This is the
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $9/day on $110, about 3.5× the
+  ~$2.55/day af-south-1 idle): a single day cost more than that. This is the
   one that works in the **first month**, when the monthly forecast has no
   history. Daily budgets support ACTUAL notifications only.
-- **Monthly, ACTUAL 80%** ($80 on the default $100, above the
+- **Monthly, ACTUAL 80%** ($88 on the default $110, above the
   af-south-1 idle): spend is heading for the budget.
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent
@@ -2295,7 +2325,7 @@ Billing data refreshes at least daily, so every one of these lags the spend
 by up to a day; the Lambda concurrency caps and the CloudWatch alarms are
 what bound and report a runaway as it happens. On any of them: open Cost
 Explorer, group by service and usage type for the last few days, and find
-what grew. `budget_monthly_usd` defaults to 100 (af-south-1; ~70 is enough
-in us-east-1, ~170 on the full tier). Before billing access is enabled, set
+what grew. `budget_monthly_usd` defaults to 110 (af-south-1; ~85 is enough
+in us-east-1, ~220 on the full tier, ~180 for it in us-east-1). Before billing access is enabled, set
 it to 0 ([infra/README.md § Operator
 steps](../infra/README.md#operator-steps), step 4).
