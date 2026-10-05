@@ -6,6 +6,7 @@ import { API_URL } from '../support/env.ts';
 import { openRowMenu, outcomesReady, row } from '../support/projects.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { runsList } from '../support/runs.ts';
+import { projectDay } from '../support/dates.ts';
 
 /** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
 async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
@@ -329,7 +330,7 @@ test.describe('data age under a skewed time zone', () => {
 		void owner;
 		const p = await createProject(page.request, 'Skewed clock');
 		expect((await page.request.patch(`${API_URL}/projects/${p.id}`, { data: { timeZone: 'Pacific/Kiritimati' } })).status()).toBe(200);
-		const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Kiritimati' }).format(new Date());
+		const today = projectDay('Pacific/Kiritimati');
 		const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000);
 		const end = day(-10);
 		const start = day(-129);

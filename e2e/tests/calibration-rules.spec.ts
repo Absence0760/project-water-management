@@ -6,6 +6,7 @@ import { addMember, seedRunnableProject, updateSettings } from '../support/api.t
 import { expect, test } from '../support/fixtures.ts';
 import { anySaveBar, saveSettings } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { projectDay } from '../support/dates.ts';
 
 test('the saved rules pick the fit on the server: a rule change needs saving first, and the kept fit is applied with its rules', async ({ page, owner }) => {
 	void owner;
@@ -80,10 +81,13 @@ test('a sign-off is a typed signature the server dates, and a viewer can read th
 	await expect(sign).toBeDisabled();
 	await rules.getByLabel('Your name, as a signature').fill('A. Hydrologist');
 	await sign.click();
+	// The server dates the sign-off on the project's calendar (Africa/Johannesburg, a new project's zone), not UTC's.
+	// Read either side of the save, in case it straddles the project's midnight.
+	const before = projectDay();
 	await saveSettings(page);
+	const after = projectDay();
 	// Signing off changes no rule: the revision stays; the date is the server's.
-	const today = new Date().toISOString().slice(0, 10);
-	await expect(rules.getByTestId('rules-status')).toHaveText(new RegExp(`Signed off\\s*Revision 1 · signed off by A\\. Hydrologist on ${today}`));
+	await expect(rules.getByTestId('rules-status')).toHaveText(new RegExp(`Signed off\\s*Revision 1 · signed off by A\\. Hydrologist on (${before}|${after})\\s*$`));
 
 	const viewer = await signIn('Rules viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
