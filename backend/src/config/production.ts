@@ -166,6 +166,10 @@ export const SETTINGS: Record<string, Setting> = {
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
 	PASSWORD_HASH_FAST: { why: '1 hashes new passwords with the smallest Argon2id parameters, for the local e2e server only; auth/password.ts refuses it in Lambda.', checks: { api: unset, worker: unset } },
+	SIGNUP_OPEN: {
+		why: 'true opens sign-up to anyone; false (and unset, on Lambda) admits only the holder of a live invite for that address (auth/signupOpen.ts). Terraform var.signup_open; closed until docs/legal-status.md Gates A and C are done.',
+		checks: { api: optional(oneOf('true', 'false')) }
+	},
 	SIGNUP_THROTTLE: {
 		why: 'off turns the sign-up throttle off for the backend tests and the e2e server only (auth/signupThrottle.ts); Lambda ignores it too.',
 		checks: { api: unset }

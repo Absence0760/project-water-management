@@ -124,6 +124,13 @@ client goes live. Not customer-facing.
 
 Tracked in issue #103.
 
+Until Gates A and C are done, production admits **invited people only**
+(`signup_open = false`, the default; [security.md § Sign-up by
+invitation](./security.md#sign-up-by-invitation)): nobody can sign up from the
+public site. The only account made so far is the operator's own (2026-10-05),
+for showing the client their catchments. Set `signup_open = true` only after
+both gates are ticked.
+
 - [ ] **Gate A: register the information officer** with the Information
   Regulator (POPIA s55) **before the first production sign-up**. Pack:
   [legal/information-officer.md](./legal/information-officer.md). The

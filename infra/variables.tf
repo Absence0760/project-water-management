@@ -405,6 +405,12 @@ variable "delineation_dem" {
   default     = false
 }
 
+variable "signup_open" {
+  description = "Whether anyone may sign up (SIGNUP_OPEN on the API; backend/src/auth/signupOpen.ts). false (the default): sign-up only through a live invite for that address, so people join when a project member invites them. Set true only once docs/legal-status.md Gates A (the information officer's registration) and C (a published business address) are done, since both come before the first open sign-up."
+  type        = bool
+  default     = false
+}
+
 variable "dam_trace_water" {
   description = "Tracing a dam in production (docs/maps.md § Assisted drawing, docs/deployment.md § Map tiles): true sets the API's WATER_URL to s3://<tiles bucket>/tiles/water.pmtiles and lets its role read that one key. Turn it on once water.pmtiles (JRC Global Surface Water, `pnpm dev:tiles:water`) is uploaded. false (the default): no Trace a dam."
   type        = bool

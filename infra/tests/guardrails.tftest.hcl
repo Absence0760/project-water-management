@@ -2928,6 +2928,12 @@ run "map_data" {
     error_message = "The migrate Lambda runs a load for up to 900 s with 3008 MB by default (V8's heap at 85% of it), one at a time (reserved concurrency 1)."
   }
 
+  # --- Sign-up by invitation until the legal gates are done (auth/signupOpen.ts) -----------
+  assert {
+    condition     = !var.signup_open && aws_lambda_function.backend.environment[0].variables["SIGNUP_OPEN"] == "false"
+    error_message = "Sign-up is closed by default (SIGNUP_OPEN=false): only an invite makes an account until signup_open is set."
+  }
+
   # --- Delineation off by default: no DEM, no grant -----------------------------------------
   assert {
     condition     = !var.delineation_dem && aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
@@ -2979,6 +2985,19 @@ run "map_data_with_dam_trace" {
   assert {
     condition     = aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
     error_message = "Tracing a dam on leaves delineation off: each switch grants its own key only."
+  }
+}
+
+run "signup_open" {
+  command = plan
+
+  variables {
+    signup_open = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["SIGNUP_OPEN"] == "true"
+    error_message = "signup_open opens sign-up on the API (SIGNUP_OPEN=true)."
   }
 }
 

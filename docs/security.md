@@ -274,6 +274,36 @@ decide a licence application.
   schema owner (deployment.md § Runbooks); the person then signs in with the
   password and sets up again.
 
+## Sign-up by invitation
+
+Production admits only invited people until the go-live gates that come
+before the first open sign-up are done ([legal-status.md](./legal-status.md),
+Gates A and C: the information officer's registration and a published
+business address). While sign-up is closed, `POST /auth/register` makes an
+account only through a **live invite for exactly the address it signs up
+with** (a project or team invite, or a farmer invite); anything else (no
+token, a malformed or unknown one, a live invite for another address) is
+`403 signup_closed`, with no account made and no email sent.
+
+- **The switch** is `SIGNUP_OPEN` on the API (`backend/src/auth/signupOpen.ts`):
+  `true` open, `false` invite only. **Unset, it is closed on Lambda** and
+  open locally (dev, the tests, the e2e server), so production can't open by
+  accident: a backend released before Terraform sets the variable is still
+  closed. Terraform sets it from `var.signup_open` (default `false`);
+  `config/production.ts` refuses any other value at the API's start.
+- **Order:** the terms check, then the sign-up throttle, then this check,
+  then anything that touches the address. So guessing invite tokens is
+  throttled like any sign-up, and a taken and a free address get the same
+  `403`: the check can't be used to find accounts.
+- **People still join** the way they do with sign-up open: a project member
+  invites them, and the invite link signs them up, verified and joined. An
+  existing account is untouched; signing in, resets and verification work
+  as before.
+- **To open it,** once Gates A and C are done: `signup_open = true` in the
+  tfvars, plan and apply. Tests: `auth/signupOpen.test.ts`,
+  `auth/signupClosed.security.db.test.ts`, and the `signup_open` runs in
+  `infra/tests/guardrails.tftest.hcl`.
+
 ## Password reset, email verification and invites
 
 - **Tokens** are 32 bytes from `crypto.randomBytes`, mailed as base64url. The

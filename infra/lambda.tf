@@ -161,6 +161,10 @@ resource "aws_lambda_function" "backend" {
       COOKIE_SECURE          = "true"
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
 
+      # Sign-up by invitation (auth/signupOpen.ts): closed unless signup_open.
+      # The backend treats an unset value on Lambda as closed too.
+      SIGNUP_OPEN = var.signup_open ? "true" : "false"
+
       # Email (ses.tf, docs/deployment.md § Email). MAIL_TRANSPORT must be set:
       # the default `log` sends nothing.
       MAIL_TRANSPORT        = "ses"
