@@ -47,10 +47,16 @@ resource "aws_db_parameter_group" "main" {
   description = "water-management Postgres ${local.db_major_version}: TLS enforced, slow-query logging."
 
   # Refuse any non-TLS connection (the default is already 1 on PG 15+, pinned
-  # here so a default-group change can't silently loosen it).
+  # here so a default-group change can't silently loosen it). apply_method is
+  # pending-reboot because that is what RDS reports back for it: 1 equals the
+  # engine default, so RDS keeps it as a `system` parameter with ApplyMethod
+  # pending-reboot, and the provider's default ("immediate") showed a one-line
+  # in-place diff on every plan after the first apply (2026-10-04). The value
+  # is the same either way; no reboot is involved.
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
   }
 
   # Log statements slower than 1 s — enough to spot a bad model-run query
