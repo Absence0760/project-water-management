@@ -71,7 +71,8 @@
 # checksum: a mismatch stops with both hashes, an unlisted file is recorded on
 # first use (commit it; docs/maps.md § Checksums).
 #
-# `rivers` needs ogr2ogr (GDAL: `sudo dnf install gdal`) and the database up
+# `rivers` needs ogr2ogr (GDAL: `sudo dnf install gdal`) or docker (the same
+# pinned $GDAL_IMAGE when ogr2ogr isn't on PATH), and the database up
 # (pnpm dev:db:up). HydroRIVERS is © WWF, free for commercial use with the
 # attribution docs/maps.md § Sources records (HydroSHEDS licence). RIVERS_URL
 # (the zip), TILES_BBOX and RIVERS_MIN_ORDER (a Strahler order, default 1:
@@ -202,7 +203,15 @@ case "${1:-}" in
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev and turn on Map → Layers → Relief."
 		;;
 	rivers)
-		command -v ogr2ogr >/dev/null || { echo "ogr2ogr not found: install GDAL (sudo dnf install gdal)." >&2; exit 1; }
+		# Paths given to ogr are relative to $CACHE, so the docker form sees the same files.
+		if command -v ogr2ogr >/dev/null; then
+			ogr() { (cd "$CACHE" && ogr2ogr "$@"); }
+		elif command -v docker >/dev/null; then
+			ogr() { docker run --rm -u "$(id -u):$(id -g)" -v "$CACHE":/w -w /w "$GDAL_IMAGE" ogr2ogr "$@"; }
+		else
+			echo "ogr2ogr not found: install GDAL (sudo dnf install gdal), or docker to run $GDAL_IMAGE." >&2
+			exit 1
+		fi
 		mkdir -p "$CACHE"
 		if [ ! -f "$RIVERS_ZIP" ]; then
 			echo "Downloading $RIVERS_SRC (about 110 MB) …"
@@ -218,8 +227,8 @@ case "${1:-}" in
 		echo "Cutting $(basename "$shp") to $BBOX …"
 		rm -f "$RIVERS_FILE"
 		# -spat keeps every reach that meets the bbox (whole, not clipped); five decimals is about 1 m.
-		ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat "$west" "$south" "$east" "$north" -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS,ENDORHEIC \
-			-lco COORDINATE_PRECISION=5 "$RIVERS_FILE" "$shp"
+		ogr -f GeoJSON -t_srs EPSG:4326 -spat "$west" "$south" "$east" "$north" -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS,ENDORHEIC \
+			-lco COORDINATE_PRECISION=5 "${RIVERS_FILE#"$CACHE"/}" "${shp#"$CACHE"/}"
 		du -h "$RIVERS_FILE"
 		(cd "$ROOT/backend" && NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsx scripts/import-rivers.ts "$RIVERS_FILE" --dataset HydroRIVERS-v10 --source "$RIVERS_SOURCE" --min-order "$RIVERS_MIN_ORDER")
 		echo "Now: Map → Layers → River network."
