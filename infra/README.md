@@ -380,9 +380,9 @@ could call the Function URL directly, past the WAF, where the app's own auth
 still applies; it can't forge a session. The state bucket is SSE-encrypted,
 private to this account, and versioned, and **old state versions written
 before this change still hold the earlier plaintext** (the sops values, the
-old alert-token secret): the stack isn't deployed yet, so there are none;
-if it had been, rotating each sops value once after this change would retire
-them.
+old alert-token secret): the stack was first applied after this change (2026-10-04), so there are
+none; had it been applied before, rotating each sops value once after this
+change would have retired them.
 
 This follows the estate. project-flakey uses the same RDS-managed master plus
 app secrets from sops. The master is kept out of state because it is the one
@@ -686,7 +686,11 @@ Claude does not run any of these, and none of them print a secret. Replace
    multi-region trail in this account the same way. Skipped when
    `rds_customer_managed_key = false`. The region comes from the tfvars'
    `aws_region` (or `--region`). Plan only once it passes.
-8. **Plan, review, apply:**
+8. **Plan, review, apply** from a checkout on the current `main`
+   (`git -C ~/github/project-water-management pull --ff-only` first): a plan
+   from an older checkout proposes undoing whatever `main` has fixed since
+   (2026-10-05: a stale checkout's plan wanted to put back an
+   `rds.force_ssl` diff #430 had removed).
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
    - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
