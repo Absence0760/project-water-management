@@ -98,8 +98,8 @@ sides share.
   with its two queues and a private reports bucket) + the map's tiles bucket
   (`/tiles/*`) and private reference bucket, which the migrate Lambda loads
   the allowed reference datasets from (`load-reference.yml`) + RDS Postgres 17
-  in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
-  ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
+  in a private VPC + SES + Route 53 + ACM + budget/alarms. Deployed 2026-10-05, minimal tier
+  ([deployment.md](./deployment.md), [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 
 pnpm monorepo with four workspaces (`frontend`, `backend`, `packages/*`, `e2e`).
 Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
@@ -323,8 +323,8 @@ Prefer reading these over guessing. Update them when behaviour changes.
   sets `app.current_user_id`.** Never connect the running backend as `water`,
   and never add `BYPASSRLS`. A new project table needs RLS policies,
   same-project triggers and grants (use `/safe-migration`).
-- **Migrations move forward once deployed.** Add `NNN_name.sql`. `001` may
-  still be edited until the first production deploy. Prefer expand/contract
+- **Migrations move forward.** Production has run them all (2026-10-05), so
+  never edit one, `001` included: add `NNN_name.sql`. Prefer expand/contract
   ([data-model.md § Migrations](./data-model.md#migrations)).
 - **Two backend entry points.** `server.ts` imports `dotenv/config`. `lambda.ts`
   must not reach any module that imports dotenv, so that esbuild tree-shakes it

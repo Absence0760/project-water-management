@@ -30,7 +30,7 @@ Walk these in order. Stop at about five findings; quality over quantity.
 **Database and RLS** (CLAUDE.md rules 1–5, `docs/data-model.md`):
 - All project data goes through `withUser` (`backend/src/db/tx.ts`), or `withApiKey` for the ingest key. `withoutUser` / `queryWithoutUser` are only for pre-sign-in auth lookups and the job queue's `SECURITY DEFINER` calls; a new caller that reads project data through them is Critical. `actAsUser` only ever takes an id a proof returned (an email token, a fresh sign-up), never one from a request. Never the `water` role or `BYPASSRLS` from app code.
 - A migration that adds a table adds `ENABLE ROW LEVEL SECURITY`, its policies, same-project triggers for foreign keys to `node`/`crop`, and `GRANT … TO water_app` in the same file.
-- Migrations are forward-only: an already-merged `backend/migrations/NNN_*.sql` is never edited (only `001` before the first production deploy). The new file takes the next number after the highest one on `origin/main` (`pnpm check:migrations`, after `git fetch`).
+- Migrations are forward-only: an already-merged `backend/migrations/NNN_*.sql` is never edited, `001` included (production has run them all). The new file takes the next number after the highest one on `origin/main` (`pnpm check:migrations`, after `git fetch`).
 - A changed SQL function or policy starts from its latest definition (it may have been redefined in a later migration). `DROP POLICY` uses the exact name.
 - Every SQL function pins `search_path`; every foreign key has a covering index; a new `SECURITY DEFINER` function revokes `PUBLIC` and grants `water_app`.
 - A project the caller cannot see returns `404`, never `403`.

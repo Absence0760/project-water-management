@@ -3,9 +3,9 @@
 Postgres 17 (locally in docker on `:5434`; in production RDS PostgreSQL 17, see
 [deployment.md](./deployment.md)). The schema lives in plain SQL
 migrations under `backend/migrations/` and is applied by a small runner
-(`pnpm dev:db:migrate`). Once deployed, migrations only move forward: never edit
-one that has shipped, add a new numbered file instead. Until the first
-production deploy, `001_init.sql` may still be edited in place.
+(`pnpm dev:db:migrate`). Migrations only move forward: production has run
+every one since 2026-10-05, so never edit one that has shipped (`001_init.sql`
+included); add a new numbered file instead.
 
 The TypeScript shapes that mirror these tables are in
 `packages/engine/src/project.ts`. The backend (storage and validation) and the
@@ -3726,10 +3726,10 @@ ids are rejected.
   first run, and are held to it from then on. The `checksum` column is added
   by the runner's own bootstrap (it creates `schema_migrations`), not by a
   numbered migration, since it has to exist before any numbered file can be
-  checked. `001` may still be edited until the first production deploy: the
-  test and e2e setups rebuild their schema from scratch every run, so they
-  pick an edit up; a dev database refuses it, and `pnpm dev:db:reset`
-  rebuilds it. Each checkout migrates its own dev database (`water`, or a
+  checked. Production has run every migration, so none is edited any more,
+  `001` included (production's runner would refuse the changed checksum). The
+  test and e2e setups rebuild their schema from scratch every run; a dev
+  database refuses an edited file, and `pnpm dev:db:reset` rebuilds it. Each checkout migrates its own dev database (`water`, or a
   worktree's `water_w<tag>`; [run-locally.md](./run-locally.md)), so a
   branch's migration never reaches the main checkout's before it merges
   under its final number. Production recovery: [deployment.md § Migration
