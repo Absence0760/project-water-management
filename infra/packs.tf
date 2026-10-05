@@ -238,7 +238,7 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = slice(aws_subnet.private[*].id, 0, 1)
+  subnet_ids          = slice(aws_subnet.private[*].id, 0, var.s3_endpoint_az_count)
   security_group_ids  = [aws_security_group.vpce_s3.id]
   private_dns_enabled = true
 

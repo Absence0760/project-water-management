@@ -83,7 +83,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   are shuffled per account and the list's order isn't a contract, while a
   zone ID is the same physical zone everywhere. Opt-in zones (Local,
   Wavelength) are excluded (`network.tf`, `tests/edge.tftest.hcl`). Nothing needs the internet, and Lambda log delivery
-  doesn't go through the function's ENI. The VPC reaches exactly three AWS
+  doesn't go through the function's ENI. The VPC reaches exactly four AWS
   APIs, each through its own interface endpoint and security group: **SES**
   (`SendEmail` from the API and the worker, which sends report and alert
   emails, and `DeleteSuppressedDestination` from the API only; its endpoint
@@ -91,12 +91,17 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   no-reply@; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
   (the migrate Lambda's RDS master secret, and the API, worker and migrate
   Lambdas' runtime secrets; its endpoint policy lets each role read only its
-  own secrets; `network.tf`, `secrets.tf`) and **SQS** (from the API and the worker; its
+  own secrets; `network.tf`, `secrets.tf`), **SQS** (from the API and the worker; its
   endpoint policy, `jobs.tf`, allows `SendMessage` only, from those two roles
   to three queues: the API to `jobs`, the worker to `fetch-requests` and
   `render-requests`. Every queue a Lambda consumes is read by an event
   source mapping, whose pollers run in the Lambda service, not through the
-  endpoint). Security groups only ever reference
+  endpoint) and **S3** (the worker's check of a pack PDF, the API's put of a
+  pack bundle, the delineation DEM and dam-trace reads, the migrate Lambda's
+  reference loads; its endpoint policy allows only those; `packs.tf`,
+  `pack_bundles.tf`, `map_data.tf`). Each endpoint's ENIs sit in
+  `<service>_endpoint_az_count` subnets, 1 by default (2 on the full tier,
+  [docs/deployment-tiers.md](../docs/deployment-tiers.md)). Security groups only ever reference
   other security groups, never a CIDR: RDS takes 5432 from the API, migrate
   and worker Lambda groups and nothing else, each endpoint takes 443 from
   the Lambdas that use it, and none of RDS or the endpoints has egress. A
@@ -114,12 +119,14 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   counts to CloudWatch. The API role may call `ses:SendEmail` on that identity
   and configuration set only, and only with `From = no-reply@<domain>`.
   Leaving the SES sandbox is a manual step ([Operator steps](#operator-steps)).
-- **Four Lambdas.** `water-management-backend` is the API. It connects as the
+- **Five Lambdas.** `water-management-backend` is the API. It connects as the
   RLS-bound `water_app` role, with memory 1024 MB, a 30 s timeout and reserved
   concurrency 10. `water-management-migrate` (`backend/src/lambda-migrate.ts`)
   reads the owner credentials at run time, creates or re-passwords
-  `water_app`, and applies `backend/migrations/*.sql`. It has 512 MB, a 300 s
-  timeout, reserved concurrency 1 and no URL. `water-management-worker`
+  `water_app`, and applies `backend/migrations/*.sql`; `load-reference.yml`
+  invokes it for a reference dataset load too. It has `migrate_memory_mb`
+  (3008 MB, the least the variable accepts), a 900 s timeout, reserved
+  concurrency 1 and no URL. `water-management-worker`
   (`backend/src/lambda-worker.ts`, `jobs.tf`) runs the background job queue
   as `water_app`: 1024 MB, 300 s, reserved concurrency
   `worker_reserved_concurrency` (8: the sum of its four SQS triggers'
@@ -189,17 +196,17 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | File | What |
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
-| `variables.tf` | Inputs. Only `aws_region`, `route53_zone_id` and `github_repo` are required |
+| `variables.tf` | Inputs. Required in the tfvars: `aws_region`, `route53_zone_id`, `github_repo`, `budget_alert_email`, `report_download_public_keys` and `report_download_signing_key`; the five sops secrets (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`, `cloudfront_private_key`, `app_encryption_key`) are required too, but come from `tf.sh` as ephemeral variables, never a tfvars file |
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
-| `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
+| `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint (`secretsmanager_endpoint_az_count`) and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds`, and its alarm: an EventBridge rule on CloudTrail's `DisableKey` / `ScheduleKeyDeletion` / `PutKeyPolicy` / `RevokeGrant` for the key (by key ID or ARN) to the regional alerts topic (free; needs a CloudTrail trail, step 7a) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance (`prevent_destroy`, a random final-snapshot suffix), the RDS event subscription to the alerts topic |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL (invoke mode `RESPONSE_STREAM`, docs/deployment.md § Response streaming) + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
-| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint whose policy allows only that and the three reads and writes the API and migrate make through it (a pack bundle's put, the delineation DEM, a reference file), and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
+| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint (`s3_endpoint_az_count`) whose policy allows only that and the four reads and writes the API and migrate make through it (a pack bundle's put, the delineation DEM, the dam-trace water raster, a reference file), and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions (`spa_rewrite`, `api_strip_prefix`, `tiles_range`), distribution (incl. the `/tiles/*` behaviour), A/AAAA records |
 | `map_data.tf` | The catchment map's data ([deployment.md § The Map tab](../docs/deployment.md#the-map-tab)): the tiles bucket (SSE-S3, TLS only, ACLs off, versioned with old versions kept 14 days, broken uploads aborted after 7 days; only this distribution reads `tiles/`) and its OAC; the API's and the worker's read of `tiles/terrain.pmtiles` for delineation (`api_dem`, `worker_dem`, only with `delineation_dem`; the worker then has at least 2 048 MB, jobs.tf) and of `tiles/water.pmtiles` for tracing a dam (`api_water`, only with `dam_trace_water`); the private reference bucket (versioned, old versions kept a year; no grant in its policy) and the migrate role's read of `reference/*`; the migrate Lambda's path to the S3 endpoint |
@@ -217,7 +224,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (85 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (89 runs, among them `full_tier`, the full tier's tfvars; see [Validating locally](#validating-locally)) |
 | `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
 | `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
 
@@ -492,7 +499,7 @@ Idle to light use, on-demand, us-east-1:
 | CloudWatch: 44 alarms, 41 until the renderer is on (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $63** (the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
+| **Total** | **≈ $63** (list prices checked 2026-10-04; the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -526,7 +533,7 @@ CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
 for a handful of users: ~250 requests). A flood just under it is 16.7 req/s =
-1.44M a day = $2.30–4.03 a day unseen, 3–4% of the $90 budget; a 1,000 req/s
+1.44M a day = $2.30–4.03 a day unseen, 2–4% of the default $110 budget; a 1,000 req/s
 flood is 60× the threshold and fires in the first period. The variable is held
 to 1,000–20,000 (at 20,000 an unseen flood costs $9–16 a day).
 `waf-blocked-requests` fires on more than 100 blocks in each of three
@@ -534,23 +541,26 @@ to 1,000–20,000 (at 20,000 an unseen flood costs $9–16 a day).
 office NAT) stuck behind a limit. What to do: [docs/deployment.md §
 Runbooks](../docs/deployment.md#runbooks), Request flood.
 
-**af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $68–75/month** (with the database's KMS key and the four
-endpoints). Check the AWS pricing calculator before
-you commit to it. The default `budget_monthly_usd = 100` is set for
-af-south-1: its ACTUAL 80% alert ($80) sits above that idle, so it
-shouldn't fire every month (in us-east-1, ~70 is enough). See
-[§ Budget alerts](#budget-alerts). Main levers: the three endpoint AZ counts
-(`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
-`sqs_endpoint_az_count`, all 1 by default), and dropping WAF, which is not
+**af-south-1** has higher RDS, endpoint and storage rates (RDS
+`db.t4g.micro` $0.021/h against $0.016, gp3 $0.151/GiB against $0.115, an
+interface endpoint $0.01309/h against $0.01), which comes to **≈ $77/month**
+(with the database's KMS key and the four endpoints;
+[docs/deployment-tiers.md](../docs/deployment-tiers.md) has the line items).
+Check the AWS pricing calculator before you commit to it. The default
+`budget_monthly_usd = 110` is set for af-south-1: its ACTUAL 80% alert ($88)
+sits above that idle, so it shouldn't fire every month (in us-east-1, ~85 is
+enough). See [§ Budget alerts](#budget-alerts). Main levers: the four
+endpoint AZ counts (`secretsmanager_endpoint_az_count`,
+`ses_endpoint_az_count`, `sqs_endpoint_az_count`, `s3_endpoint_az_count`,
+all 1 by default), and dropping WAF, which is not
 recommended because it is the spend and brute-force guard for the API. A NAT
 instead of the endpoints would cost more (~$33 + data), and the fetcher
 Lambda outside the VPC (WP-2.10) is what keeps step 2's internet fetches from
 needing one.
 
 These are the minimal (default) figures. The full, highly available
-configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $110–115 in
-us-east-1) is costed in
+configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $166 in
+af-south-1, ≈ $133 in us-east-1) is costed in
 [docs/deployment-tiers.md](../docs/deployment-tiers.md).
 
 ### Budget alerts
@@ -563,8 +573,8 @@ alarms are what bound and report a runaway while it happens.
 
 | Alert | Fires when | Notes |
 | --- | --- | --- |
-| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$8** on $100, ~3.3× af-south-1's ~$2.40/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
-| Monthly, ACTUAL 80% | the month's spend passes $72 (on $90) | Early warning, set above the idle so it doesn't fire every month. |
+| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$9** on $110, ~3.5× af-south-1's ~$2.55/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
+| Monthly, ACTUAL 80% | the month's spend passes $88 (on the default $110) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
 | Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
@@ -622,8 +632,11 @@ Claude does not run any of these, and none of them print a secret. Replace
    `scripts/preapply-check.sh` (step 7a) runs this check too.
 5. **Secrets** in the private repo. The key list is in
    [`prod.sops.yaml.example`](./prod.sops.yaml.example). Generate the values
-   with `openssl rand -hex 32` (JWT, alert-token secret) and
-   `openssl rand -hex 24` (db password) inside the editor.
+   with `openssl rand -hex 32` (JWT, alert-token secret, app encryption
+   key) and `openssl rand -hex 24` (db password) inside the editor; the
+   report-download signing key (`cloudfront_private_key`) is an RSA key pair
+   whose public half goes in `prod.tfvars`
+   ([docs/deployment.md § The report-download signing key](../docs/deployment.md#the-report-download-signing-key)).
    - `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`
      (the KMS key lives in the bootstrap region)
    - `cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml`
@@ -713,10 +726,13 @@ Claude does not run any of these, and none of them print a secret. Replace
    `dmarc_report_email`, set `dmarc_policy = "quarantine"` and apply.
 9. **Wire CI:** `cd ~/github/project-water-management && ~/github/templates/scripts/export-tf-vars.sh infra/`.
    This sets `AWS_REGION`, `FRONTEND_BUCKET`, `CLOUDFRONT_DISTRIBUTION_ID`,
-   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, **`RENDERER_FUNCTION_NAME`**, **`RENDERER_ECR_REPOSITORY`**, `REPORTS_BUCKET` (unused by the workflows), `PUBLIC_SITE_URL` and
-   `CLOUDFRONT_DOMAIN_NAME` (unused by the workflows) as variables, and
-   `AWS_DEPLOY_ROLE_ARN` and `LAMBDA_FUNCTION_URL` (debugging only) as
-   secrets. The release preflight (`scripts/release/preflight.mjs`) refuses
+   `LAMBDA_FUNCTION_NAME`, **`MIGRATE_FUNCTION_NAME`**, **`WORKER_FUNCTION_NAME`**, **`FETCHER_FUNCTION_NAME`**, **`RENDERER_FUNCTION_NAME`**, **`RENDERER_ECR_REPOSITORY`**, `PUBLIC_SITE_URL` and
+   `WAF_CAPTCHA_SCRIPT_URL` (the sign-in CAPTCHA, read by
+   `deploy-frontend.yml`) as variables, plus `CLOUDFRONT_DOMAIN_NAME`,
+   `REPORTS_BUCKET`, `PACKS_BUCKET`, `TILES_BUCKET`, `REFERENCE_BUCKET` and
+   the `DB_*` names (unused by the workflows); and `AWS_DEPLOY_ROLE_ARN`,
+   `WAF_CAPTCHA_API_KEY` and `LAMBDA_FUNCTION_URL` (debugging only) as
+   secrets (every sensitive output). The release preflight (`scripts/release/preflight.mjs`) refuses
    to deploy while any value that deploy reads is empty (`REQUIRED_CONFIG` in
    each deploy workflow).
 9a. **Approval gate.** Confirm the `production` environment exists with you
@@ -1028,8 +1044,8 @@ single statement, `ses:FromAddress` pinned); the RDS parameter group logging
 no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
 `log_statement = none`; the worker heartbeat (< 1 invocation in
 15 minutes, missing data breaching) and the tick rule's `FailedInvocations`
-alarm; the budgets (monthly $90 with FORECASTED 100% / ACTUAL 80% / ACTUAL
-100%, the derived $7 daily ACTUAL 100%, all to the us-east-1 topic), the
+alarm; the budgets (monthly $110 with FORECASTED 100% / ACTUAL 80% / ACTUAL
+100%, the derived $9 daily ACTUAL 100%, all to the us-east-1 topic), the
 Cost Anomaly Detection monitor and subscription (off by default,
 `anomaly_detection_off_by_default`; on at a threshold, `anomaly_detection_on`), and both alert topics'
 policies (one service per statement, each pinned by `aws:SourceAccount`,
