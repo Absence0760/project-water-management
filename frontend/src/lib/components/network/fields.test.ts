@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NEW_FARM_IRRIGATION, newNetworkNode } from '@water-management/engine';
+import { newNetworkNode } from '@water-management/engine';
 import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, GROUPS, hasDam, hasDamDevelopment, hiLoHint, isVolume, NODE_FIELDS, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
