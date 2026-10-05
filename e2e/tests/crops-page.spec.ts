@@ -179,7 +179,7 @@ test('the Tables menu and Edit areas open the full grids over the page; a farm o
 	// The menu holds the two crop grids and the irrigation systems: the demand table is on the page, behind Show table (issue #174).
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas', 'Irrigation systems']);
+	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas', 'Irrigation systems', 'Demands']);
 	// The menu closes on Escape, focus back on its button.
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();

@@ -156,6 +156,21 @@ test.describe('the seeded Sandspruit', () => {
 	});
 });
 
+test('on a wide empty map with a run the Key starts folded, so no panel sits over the blank map', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Map results empty key');
+	await createRun(page.request, project.id, 'Only');
+	await openMap(page, project.id);
+	await resultsReady(page, 'daysShort');
+	// No features: the Key stays a button over the map (not a side-column tab), folded until asked for.
+	await expect(page.getByTestId('map-tab-key')).toHaveCount(0);
+	await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
+	await expect(page.locator('.key-panel')).toBeHidden();
+	await openKey(page);
+	await expect(page.locator('.key-panel')).toBeVisible();
+});
+
 test('an editor sees the newest run until one is published, picks a run in the URL; a viewer sees only the published one', async ({ page, owner, signIn }) => {
 	void owner;
 	test.setTimeout(60_000);

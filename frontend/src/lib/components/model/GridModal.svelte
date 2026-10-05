@@ -9,6 +9,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import CropsTab from '$lib/components/crops/CropsTab.svelte';
 	import IrrigationSystemsPanel from '$lib/components/crops/IrrigationSystemsPanel.svelte';
+	import DemandsTable from '$lib/components/network/DemandsTable.svelte';
 	import NetworkTab from '$lib/components/network/NetworkTab.svelte';
 	import type { RunMeta } from '$lib/api';
 	import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
@@ -46,7 +47,7 @@
 	} = $props();
 
 	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas' } as const;
-	const area = $derived(grid === 'nodes' ? 'network' : grid === 'transfers' ? 'transfers' : 'crops');
+	const area = $derived(grid === 'nodes' || grid === 'demands' ? 'network' : grid === 'transfers' ? 'transfers' : 'crops');
 </script>
 
 <Dialog bind:open title={GRIDS[grid]} full keepInputs>
@@ -56,6 +57,8 @@
 			<NetworkTab {editor} {settings} {readonly} {projectId} {runs} only="table" />
 		{:else if grid === 'transfers'}
 			<TransfersTab {editor} {readonly} inModal />
+		{:else if grid === 'demands'}
+			<DemandsTable {editor} {settings} {readonly} {projectId} {runs} />
 		{:else if grid === 'systems'}
 			<IrrigationSystemsPanel {editor} {readonly} />
 		{:else}

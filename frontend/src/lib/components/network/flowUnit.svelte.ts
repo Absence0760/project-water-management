@@ -53,7 +53,7 @@ export class FlowUnit {
 
 /** River to dam (stored m³/day, shown m³/s until changed). */
 export const riverToDamUnit = new FlowUnit('wm.unit.riverToDam', 'm3s');
-/** Pump and borehole capacities (stored m³/day, shown m³/day until changed). */
+/** Pump, borehole and the crops' pipe capacities (stored m³/day, shown m³/day until changed). */
 export const pumpUnit = new FlowUnit('wm.unit.pump', 'm3day');
 /** A transfer's rate (stored m³/s, shown m³/s until changed). */
 export const transferUnit = new FlowUnit('wm.unit.transfer', 'm3s');

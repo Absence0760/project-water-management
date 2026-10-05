@@ -14,6 +14,8 @@
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
+	import FlowUnitSelect from './FlowUnitSelect.svelte';
+	import { pumpUnit } from './flowUnit.svelte';
 	import PumpCapacityField from './PumpCapacityField.svelte';
 
 	let { node, nodes, rule, readonly }: { node: NetworkNode; nodes: readonly NetworkNode[]; rule: string; readonly: boolean } = $props();
@@ -118,8 +120,10 @@
 						<FieldHistoryLine field="node:{node.id}:cropRemoteNodeId" {unit} />
 					</div>
 					<div class="field">
-						<label for={id('pipe')}>Pipe capacity <span class="u">(m³/day)</span></label>
-						<NumberInput id={id('pipe')} min={0} grouped nullable placeholder="no limit" disabled={readonly} aria-describedby="{id('pipe')}-h" value={node.cropRemoteCapM3Day ?? null} onchange={(v) => (node.cropRemoteCapM3Day = v)} />
+						<span class="lbl"
+							><label for={id('pipe')}>Pipe capacity{' '}<span class="visually-hidden">({pumpUnit.label})</span></label><FlowUnitSelect unit={pumpUnit} label="Unit of pipe capacity" /></span
+						>
+						<NumberInput id={id('pipe')} min={0} scale={pumpUnit.scale} grouped nullable placeholder="no limit" disabled={readonly} aria-describedby="{id('pipe')}-h" value={node.cropRemoteCapM3Day ?? null} onchange={(v) => (node.cropRemoteCapM3Day = v)} />
 						<span class="hint" id="{id('pipe')}-h">Blank is no limit: it takes what the dam can give, and the run warns.</span>
 						<FieldHistoryLine field="node:{node.id}:cropRemoteCapM3Day" {unit} />
 					</div>
@@ -176,6 +180,11 @@
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 	.u {
 		font-weight: 400;

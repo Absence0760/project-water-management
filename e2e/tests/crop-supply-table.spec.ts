@@ -4,6 +4,7 @@
 // shares don't add up, and run.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
+import { API_URL } from '../support/env.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
@@ -39,8 +40,11 @@ test('split a unit’s crops between its dam, the river and another unit’s dam
 
 	await supply.getByLabel('Another unit’s dam (%)').fill('20');
 	await supply.getByLabel('Which unit’s dam').selectOption({ label: 'Upper farm' });
-	await supply.getByLabel('Pipe capacity (m³/day)').fill('500');
-	await supply.getByLabel('River pump capacity for the crops (m³/day)').fill('800');
+	// The pipe takes the pumps' unit picker (docs/ui.md § Flow units): 5 l/s is 432 m³/day, and the crops' pump follows the pick.
+	await expect(supply.getByLabel('Pipe capacity (m³/day)')).toBeVisible();
+	await supply.getByLabel('Unit of pipe capacity').selectOption('ls');
+	await supply.getByLabel('Pipe capacity (l/s)').fill('5');
+	await supply.getByLabel('River pump capacity for the crops (l/s)').fill('10');
 	await expect(total).toHaveText('Total 100 %');
 	await expect(supply.getByRole('alert')).toHaveCount(0);
 	await expectNoViolations(page, { include: '.detail' });
@@ -49,6 +53,10 @@ test('split a unit’s crops between its dam, the river and another unit’s dam
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
+	const saved = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { name: string; cropRemoteCapM3Day: number | null; cropRiverPumpM3Day: number | null }[] };
+	const lowerSaved = saved.nodes.find((n) => n.name === 'Lower farm')!;
+	expect(lowerSaved.cropRemoteCapM3Day).toBeCloseTo(432, 6);
+	expect(lowerSaved.cropRiverPumpM3Day).toBeCloseTo(864, 6);
 
 	await page.reload();
 	await openNodeForm(page);
@@ -59,8 +67,9 @@ test('split a unit’s crops between its dam, the river and another unit’s dam
 	await expect(again.getByLabel('The river at this unit (%)')).toHaveValue('20');
 	await expect(again.getByLabel('Another unit’s dam (%)')).toHaveValue('20');
 	await expect(again.getByLabel('Which unit’s dam')).toHaveValue(project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string);
-	await expect(again.getByLabel('Pipe capacity (m³/day)')).toHaveValue('500');
-	await expect(again.getByLabel('River pump capacity for the crops (m³/day)')).toHaveValue('800');
+	// The pick lasts across the reload.
+	await expect(again.getByLabel('Pipe capacity (l/s)')).toHaveValue('5');
+	await expect(again.getByLabel('River pump capacity for the crops (l/s)')).toHaveValue('10');
 
 	// The model runs with it (the engine checks its own balance, the remote share at both ends included).
 	await page.goto(`/projects/${project.id}?tab=runs`);

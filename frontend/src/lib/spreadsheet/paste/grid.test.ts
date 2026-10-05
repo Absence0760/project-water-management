@@ -35,6 +35,12 @@ describe('mapPaste', () => {
 		expect(r.notes).toEqual(["Left out a column the table doesn't have: Total.", 'Matched 1 row by name.', "Left out a row the table doesn't have: New farm."]);
 	});
 
+	it('leaves out the grid’s own read-only headings without a note', () => {
+		const r = ok(mapPaste('Farm\tKind\tArea\tTotal (ha)\nUpper farm\tunit\t1\t9', rows, cols, { nameHeadings: ['Farm'], ignoreHeadings: ['Kind', 'Total'] }));
+		expect(r.values).toEqual([{ rowId: 'u', key: 'a', value: 1 }]);
+		expect(r.notes).toEqual(['Matched 1 row by name.']);
+	});
+
 	it('without names or headings, fills from the anchor cell in the grid’s order', () => {
 		const r = ok(mapPaste('5\t6\n7\t8', rows, cols, { anchor: { row: 1, col: 1 } }));
 		expect(r.values).toEqual([

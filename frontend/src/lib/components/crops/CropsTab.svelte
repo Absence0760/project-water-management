@@ -211,7 +211,8 @@
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
 		['planted-areas', 'Planted areas'],
-		['systems', 'Irrigation systems']
+		['systems', 'Irrigation systems'],
+		['demands', 'Demands']
 	];
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();

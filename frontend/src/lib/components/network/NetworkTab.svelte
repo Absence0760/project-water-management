@@ -408,7 +408,8 @@
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
 		['planted-areas', 'Planted areas'],
-		['transfers', 'Transfers']
+		['transfers', 'Transfers'],
+		['demands', 'Demands']
 	];
 	const GRID_ALL: [GridId, string][] = [['nodes', 'Hydrological unit table'], ...GRID_LINKS];
 	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
