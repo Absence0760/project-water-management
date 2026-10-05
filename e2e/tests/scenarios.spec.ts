@@ -186,16 +186,16 @@ test('a rebase onto a run without the farm reports the change that no longer app
 	await page.getByRole('button', { name: 'Check', exact: true }).click();
 	const check = page.getByTestId('rebase-check');
 	await expect(check).toContainText("1 change doesn't apply to that run:");
-	await expect(check.getByRole('listitem')).toHaveText('op 1 (node.set): node “Upper farm” not found');
+	await expect(check.getByRole('listitem')).toHaveText('op 1 (node.set): hydrological unit “Upper farm” not found');
 
 	await check.getByRole('button', { name: 'Rebase onto this run' }).click();
 	await expect(page.getByTestId('scenario-base')).toContainText('Based on run Without upper');
 	await expect(page.getByTestId('scenario-problems')).toHaveText("1 change doesn't apply to the base run, so the scenario can't run until it is removed or the base changes.");
-	await expect(changes(page).getByRole('listitem')).toContainText("Doesn't apply: node “Upper farm” not found");
+	await expect(changes(page).getByRole('listitem')).toContainText("Doesn't apply: hydrological unit “Upper farm” not found");
 	await expect(page.getByRole('button', { name: 'Run scenario' })).toBeDisabled();
 	// After a reload the new base can't name the farm, but the scenario kept its name with the change.
 	await page.reload();
-	await expect(changes(page).getByRole('listitem')).toContainText("Doesn't apply: node “Upper farm” not found");
+	await expect(changes(page).getByRole('listitem')).toContainText("Doesn't apply: hydrological unit “Upper farm” not found");
 	await expect(changes(page).getByRole('listitem')).toContainText('Upper farm: Dam capacity → 180\u202f000 m³');
 
 	// The server refuses the run too (422, the problems listed).
