@@ -1783,6 +1783,16 @@ migrating: the migrate Lambda's reserved concurrency of 1 turns the second
 invocation away (the workflow fails with a throttle, nothing is loaded), and
 a load writes only its own dataset's rows, so retrying afterwards is safe.
 
+## Who can sign up
+
+Production starts **invite-only**: `signup_open = false` (the default) sets
+`SIGNUP_OPEN=false` on the API, and the backend treats an unset value on
+Lambda as closed too ([security.md § Sign-up by
+invitation](./security.md#sign-up-by-invitation)). People join through an
+invite from a project or team member. Open sign-up only once the go-live
+Gates A and C in [legal-status.md](./legal-status.md) are done: set
+`signup_open = true` in `prod.tfvars`, plan and apply (no release needed).
+
 ## Runbooks
 
 Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-cost-and-operations)).

@@ -23,6 +23,7 @@ const CODES: Record<string, Msg> = {
 	email_unconfirmed: msg('Confirm your email address before you sign in: open the link we emailed you.'),
 	signin_locked: msg('Too many sign-in attempts for this address. Try again in {wait}, or reset your password.'),
 	signup_throttled: msg('Too many accounts were made from your network. Try again in {wait}.'),
+	signup_closed: msg('Sign-up is by invitation only for now. Ask the person who manages your catchment to invite you, then use the link in the invitation email.'),
 	terms_not_accepted: msg('The Terms of use or Privacy notice changed since this page opened. Reload the page and read them again.'),
 	farm_notice_changed: msg('This notice changed since the page opened. Reload the page and read it again.'),
 	wrong_current_password: msg('Your current password is wrong.'),

@@ -1531,6 +1531,8 @@ export const af: Catalogue = {
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
 	// Too many accounts were made from your network. Try again in {wait}.
 	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
+	// Sign-up is by invitation only for now. Ask the person who manages your catchment to invite you, then use the link in the invitation email.
+	'9988cf57': 'Jy kan voorlopig net met ’n uitnodiging registreer. Vra die persoon wat jou opvanggebied bestuur om jou uit te nooi, en gebruik dan die skakel in die uitnodigings-e-pos.',
 	// The Terms of use or Privacy notice changed since this page opened. Reload the page and read them again.
 	'b7c3703c': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy en lees hulle weer.',
 	// This notice changed since the page opened. Reload the page and read it again.

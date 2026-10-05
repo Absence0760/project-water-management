@@ -50,6 +50,7 @@ export const ERROR_CODES = [
 	'email_unconfirmed',
 	'signin_locked',
 	'signup_throttled',
+	'signup_closed',
 	'terms_not_accepted',
 	'farm_notice_changed',
 	'wrong_current_password',

@@ -22,6 +22,7 @@ import { readJson } from '../http/body.js';
 import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
+import { signupOpen } from './signupOpen.js';
 import { logLoginFailed, type LoginFailureRoute } from './loginFailed.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
@@ -199,6 +200,14 @@ export const toUser = (r: UserRow) => ({
 });
 export const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, terms_version, farm_notice_version, ${PREFERENCES_COL}`;
 
+/** Whether the invite behind this token hash is live and names exactly this address (the closed sign-up's pass). */
+async function inviteNames(inviteHash: Buffer, address: string): Promise<boolean> {
+	const invited = await withoutUser(
+		async (db) => (await db.query<{ email: string }>('SELECT email FROM app_invite_for_token($1)', [inviteHash])).rows[0]?.email
+	);
+	return invited !== undefined && invited.toLowerCase() === address.toLowerCase();
+}
+
 /**
  * The email for a sign-up with an address that already has an account: a
  * fresh confirmation link if the account was never confirmed, else "you
@@ -248,8 +257,17 @@ export const authRoutes = new Hono<AuthEnv>()
 			c.header('Retry-After', String(wait));
 			throw ApiError.coded(429, 'signup_throttled', 'too many sign-ups from your network — try again later', { seconds: wait });
 		}
-		const hash = await hashPassword(body.password);
 		const inviteHash = body.inviteToken ? parseToken(body.inviteToken) : null;
+		// Sign-up by invitation (auth/signupOpen.ts, docs/security.md § Sign-up
+		// by invitation): while sign-up is closed, only a live invite for
+		// exactly this address may make an account. Checked after the throttle,
+		// so guessing invite tokens is throttled too, and before anything is
+		// written or mailed. An invite names its address, so the 403 tells its
+		// holder nothing new, and anyone else gets it for every address.
+		if (!signupOpen() && !(inviteHash && (await inviteNames(inviteHash, body.email)))) {
+			throw ApiError.coded(403, 'signup_closed', 'sign-up is by invitation only: ask the person who manages your catchment to invite you');
+		}
+		const hash = await hashPassword(body.password);
 		type Outcome = { kind: 'joined'; row: UserRow } | { kind: 'confirm'; mail: Mail | null } | { kind: 'taken'; mail: Mail | null };
 		const result = await withoutUser(async (db): Promise<Outcome> => {
 			// app_user is under RLS (068): the insert goes through app_register,
@@ -277,6 +295,9 @@ export const authRoutes = new Hono<AuthEnv>()
 					return { kind: 'joined', row: fresh[0]! };
 				}
 			}
+			// Closed, and the invite lapsed since the check above (expired or
+			// withdrawn in between): throwing rolls the new account back.
+			if (!signupOpen()) throw ApiError.coded(403, 'signup_closed', 'sign-up is by invitation only: ask the person who manages your catchment to invite you');
 			const verify = await verificationMail(db, row.id, row.email);
 			return { kind: 'confirm', mail: 'mail' in verify ? verify.mail : null };
 		});

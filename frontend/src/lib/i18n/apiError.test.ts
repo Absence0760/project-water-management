@@ -22,6 +22,7 @@ describe('errorText', () => {
 		email_unconfirmed: 'Confirm your email address before you sign in: open the link we emailed you.',
 		signin_locked: 'Too many sign-in attempts for this address. Try again in 1 minute, or reset your password.',
 		signup_throttled: 'Too many accounts were made from your network. Try again in 1 minute.',
+		signup_closed: 'Sign-up is by invitation only for now. Ask the person who manages your catchment to invite you, then use the link in the invitation email.',
 		terms_not_accepted: 'The Terms of use or Privacy notice changed since this page opened. Reload the page and read them again.',
 		farm_notice_changed: 'This notice changed since the page opened. Reload the page and read it again.',
 		wrong_current_password: 'Your current password is wrong.',
