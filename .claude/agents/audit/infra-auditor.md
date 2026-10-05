@@ -31,8 +31,9 @@ repo-security-auditor: …").
    A control that exists but isn't tested is worth a Low; a control that's
    tested is only a finding if the test itself is wrong.
 
-The stack is not deployed yet: judge the Terraform as it would apply with
-the defaults plus the example tfvars.
+The stack is deployed (minimal tier, 2026-10-05): judge the Terraform as it
+applies with the defaults plus the example tfvars, and say when a finding
+needs a check against the live account (`infra/scripts/postapply-check.sh`).
 
 ## The system you audit
 

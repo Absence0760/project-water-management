@@ -1,15 +1,16 @@
 # Deployment
 
-> **Status:** not deployed yet. V1 runs locally ([run-locally.md](./run-locally.md)).
-> This page describes the target setup and the steps to get there. The
-> Terraform (VPC, RDS, the five Lambdas, the SQS queues, the S3 buckets, SES,
-> CloudFront + WAF + security headers, alarms and budgets) is written and
-> tested plan-only; nothing is applied. What is left is
-> operator work (account, region, secrets, apply, SES sandbox exit, the
-> `production` environment's reviewer), tracked in
-> [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws). The release pipelines
-> are live: a release refuses to deploy, with a pointer to the missing step,
-> until that work is done ([§ Releasing](#releasing)).
+> **Status:** deployed (2026-10-05) at `https://water-management.jaredhoward.com`,
+> minimal tier in `af-south-1`. The Terraform (VPC, RDS, the five Lambdas, the
+> SQS queues, the S3 buckets, SES, CloudFront + WAF + security headers, alarms
+> and budgets) is applied, `backend@0.1.0` and `web@0.1.2` are released, the
+> report renderer is created, and `infra/scripts/postapply-check.sh` passes. The map
+> serves the basemap, its label fonts and the relief, and delineation is on
+> (`delineation_dem`; [§ Map tiles](#map-tiles)). Still open: SES production
+> access (the account is in the sandbox, so mail reaches verified addresses
+> only), tracing a dam (`water.pmtiles`, `dam_trace_water`) and the first
+> restore rehearsal; [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws) tracks
+> them. This page describes the setup and the steps that built it.
 
 ## Target setup
 
@@ -627,9 +628,9 @@ invariants passed, soak cases), which the report's validation statement
 prints ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
 A local or e2e build has none and says *Not recorded for this build*.
 
-### State of the Terraform before the first deploy
+### What the Terraform builds
 
-Written and tested (plan-only, mocked providers), **nothing applied**:
+Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in CI:
 
 - RDS PostgreSQL 17 in private subnets; the API, worker and migrate
   Lambdas in the VPC (four interface endpoints: Secrets Manager, SES, SQS,
@@ -1145,8 +1146,7 @@ catchment is well under 1 MB). Client files stay out of the repo: take them from
 ## Background jobs
 
 The job queue ([architecture.md § Background work](./architecture.md#background-work))
-runs in production as `JOB_TRANSPORT=sqs` (infra/jobs.tf, Terraform
-plan-only until the first deploy):
+runs in production as `JOB_TRANSPORT=sqs` (infra/jobs.tf):
 
 - **The `job` table stays the source of truth.** SQS carries only wake-ups
   (`{ v: 1, type: "wake", jobId }`, never a payload): after queueing a job the
@@ -1242,8 +1242,7 @@ plan-only until the first deploy):
 ## Data feeds
 
 The feeds ([architecture.md § Data feeds](./architecture.md#data-feeds)) run
-on the job queue, with the fetching done outside the VPC (infra/feeds.tf,
-plan-only until the first deploy):
+on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
 
 - **The worker** (`FEED_FETCHER=sqs`) never fetches: a `feed_fetch` job sends
   a versioned request to the `fetch-requests` queue
@@ -1335,8 +1334,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   `alert-mail-failures`, alert sends failing for 15 minutes. Both read the
   worker's embedded metrics (`AlertMailsSent`, `AlertMailsFailed` in
   `water-management/Jobs`).
-- **SES suppression → the app** (`infra/ses.tf`, plan-only until the first
-  deploy). Bounced and complaining addresses are on the configuration set's
+- **SES suppression → the app** (`infra/ses.tf`). Bounced and complaining addresses are on the configuration set's
   suppression list, so SES drops mail to them. The same set also publishes
   `BOUNCE` and `COMPLAINT` events to the SNS topic `ses-events`, which
   delivers them raw to the SQS queue `mail-events` (SSE, a DLQ after 5
@@ -1369,8 +1367,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
 ## Reports
 
 Server-side PDFs ([architecture.md § Server-side reports](./architecture.md#server-side-reports))
-run on the job queue, with the rendering done outside the VPC (infra/reports.tf,
-plan-only until the first deploy):
+run on the job queue, with the rendering done outside the VPC (infra/reports.tf):
 
 - **The worker** (`REPORT_RENDERER=sqs`) never renders: a `report_render` job
   issues the render token, sends a versioned request (ids and the token) to
@@ -1518,8 +1515,7 @@ plan-only until the first deploy):
 
 An issued evidence pack's PDF ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf),
 119_pack_render) is printed by the same renderer as a report, on the same two
-queues, and kept in a bucket of its own (infra/packs.tf, plan-only until the
-first deploy):
+queues, and kept in a bucket of its own (infra/packs.tf):
 
 - **The flow.** Issuing a pack queues a `pack_render` job (as the issuer).
   The worker (`REPORT_RENDERER=sqs`) issues a render token for that pack and

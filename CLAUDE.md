@@ -26,7 +26,7 @@ If you find a rule worth applying to *every* future project, propose it for the 
 Rules only. The reasoning and the catalogues live in `docs/` (`data-model.md`, `security.md`, `model.md`, `plan.md`).
 
 1. **Never bypass RLS.** All project data goes through the backend's `withUser` (a transaction as `water_app` with `app.current_user_id` set). App code never connects as the owner or a superuser. A migration that adds a table adds its RLS policies **and** `GRANT … TO water_app` in the same file.
-2. **Migrations are forward-only once deployed.** `001` may still be edited until the first production deploy. After that, add `NNN_*.sql`. Prefer expand/contract.
+2. **Migrations are forward-only.** Production has run every migration since 2026-10-05, so none is edited in place, `001` included: add `NNN_*.sql`. Prefer expand/contract.
 3. When changing a SQL function or policy, start from its **latest** definition. `DROP POLICY` needs the exact name.
 4. Every SQL function pins `search_path`, and every foreign key has a covering index. Catalogue tests guard both, so keep them green.
 5. RLS "cannot see" tests need a **positive control** (a member *can* see it).

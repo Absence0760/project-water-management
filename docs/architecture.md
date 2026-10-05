@@ -15,7 +15,7 @@ flowchart LR
     UI --- EB
   end
 
-  subgraph AWS["AWS (Phase 6: in Terraform, not yet deployed)"]
+  subgraph AWS["AWS (Phase 6: deployed, minimal tier)"]
     CF[CloudFront + WAF<br/>water-management.jaredhoward.com]
     S3[(S3<br/>static build)]
     L[Lambda · Hono<br/>Function URL]

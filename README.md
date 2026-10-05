@@ -14,9 +14,9 @@ Each catchment is a **project**. You can keep several side by side (place A, B,
 C…), create more, copy one to try a what-if, and share each project with other
 users as viewer, editor or owner.
 
-**Status:** building V1, a local demo for the client. The roadmap is in
-[docs/plan.md](./docs/plan.md). The target production URL is
-`https://water-management.jaredhoward.com` (not deployed yet).
+**Status:** V1 is in production for the client, and still being built. The roadmap is in
+[docs/plan.md](./docs/plan.md). The production URL is
+`https://water-management.jaredhoward.com` (deployed 2026-10-05; [docs/deployment.md](./docs/deployment.md)).
 
 ## Quick start
 
@@ -53,7 +53,7 @@ gitignored) and imports it for a local demo user. Step by step:
 - **backend**: Hono API (Node locally, AWS Lambda in production) on
   **Postgres**. Per-project access is enforced with row-level security.
 - **frontend**: SvelteKit static site with uPlot charts.
-- **infra**: Terraform for S3 + CloudFront + Lambda + RDS Postgres + SES (not deployed yet).
+- **infra**: Terraform for S3 + CloudFront + Lambda + RDS Postgres + SES (deployed, minimal tier).
 
 Details: [docs/architecture.md](./docs/architecture.md) ·
 [docs/STACK.md](./docs/STACK.md).

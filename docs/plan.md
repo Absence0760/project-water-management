@@ -355,9 +355,11 @@ that the tests assert.
 
 ## Phase 6: Deploy to AWS
 
-Do this after Phase 2, once the client wants other people to use it. The
-mechanics are in [deployment.md](./deployment.md). What has to be built or
-decided:
+🚧 **Deployed 2026-10-05** (minimal tier, `af-south-1`): `backend@0.1.0`,
+`web@0.1.2`, the report renderer, the map's basemap, relief and delineation.
+Open: SES production access, tracing a dam, and the restore rehearsal in the
+acceptance below. The mechanics are in [deployment.md](./deployment.md). What
+had to be built or decided:
 
 ### 6a. Account, domain, secrets
 
@@ -379,10 +381,10 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
   account), the same way as `disag.jaredhoward.com`. Done 2026-10-04: the
   delegation resolves, and the operator's SSO user has `AdministratorAccess`
   on the account (`water-management` profile).
-- ⬜ This repo's Terraform owns the ACM certificate (us-east-1, DNS-validated
+- ✅ This repo's Terraform owns the ACM certificate (us-east-1, DNS-validated
   in the child zone) and the CloudFront alias and Route 53 A/AAAA records for
   `water-management.jaredhoward.com`. `domain_name` and `route53_zone_id` in
-  `terraform.tfvars` point at the child zone.
+  `terraform.tfvars` point at the child zone (applied 2026-10-04).
 - ✅ Secrets (2026-10-04): `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`,
   then `sops water-management/prod.sops.yaml` with the keys in
   `infra/prod.sops.yaml.example` (the owner/migration password is RDS-managed,
@@ -397,9 +399,13 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
 - ✅ **CloudTrail** for the database KMS key alarm: the Organization trail
   in the management account covers this account in every region (applied
   2026-10-04 from `~/github/project-mgmt`, `infra/modules/cloudtrail`).
-- 🚧 **Lambda concurrency quota** (infra/README.md § Operator steps, step 3):
-  1000 requested 2026-10-04, with AWS. The only failing pre-apply check; the
-  first plan (264 to add) is otherwise clean.
+- ✅ **Lambda concurrency quota** (infra/README.md § Operator steps, step 3):
+  1000, granted after the 2026-10-04 request; the first apply followed.
+- 🚧 **SES production access** (infra/README.md § Operator steps, step 8a):
+  requested, then held for more detail; the operator answered on the support
+  case 2026-10-05. Until it is granted the account is in the sandbox, so mail
+  reaches verified addresses only, which also means nobody else can finish
+  signing up.
 
 ### 6b. Terraform additions (`infra/`)
 
@@ -408,53 +414,64 @@ state in the bootstrap's S3 bucket (lockfile), a deploy role looked up from the
 bootstrap, secrets from `infra-secrets` through sops. Resource-level detail
 lives in [infra/README.md](../infra/README.md). The intent:
 
-- 🚧 **Database: RDS PostgreSQL 17** (`db.t4g.micro`, the same major version as
+- ✅ **Database: RDS PostgreSQL 17** (`db.t4g.micro`, the same major version as
   local). Private subnets only, encrypted at rest, TLS, automated backups with
   PITR (7+ days), deletion protection. Chosen over Aurora Serverless v2 for
   these reasons: it stays warm with no ~15 s resume on first request, the
   `pg` code path is the same as local (no Data API driver or payload limits),
   and the cost is predictable (~$12–15/month). Revisit Aurora with
   scale-to-zero only if idle cost matters more than first-request latency.
-- 🚧 **VPC Lambda.** The API Lambda runs in the DB's VPC and reaches AWS APIs
+- ✅ **VPC Lambda.** The API Lambda runs in the DB's VPC and reaches AWS APIs
   through VPC endpoints rather than a NAT. It connects as `water_app`
   (RLS-bound).
-- 🚧 **Migrate Lambda.** A separate function that runs `backend/migrations` as
+- ✅ **Migrate Lambda.** A separate function that runs `backend/migrations` as
   the owner role and also creates or updates `water_app`. The deploy invokes it
   before publishing new API code.
-- 🚧 **Secrets through sops.** `AUTH_JWT_SECRET` and the DB passwords come from
+- ✅ **Secrets through sops.** `AUTH_JWT_SECRET` and the DB passwords come from
   `infra-secrets/water-management/prod.sops.yaml` (through `infra/scripts/tf.sh`,
   as ephemeral variables) into write-only Secrets Manager values, out of the
   Lambda configuration and out of Terraform state. Nothing is in this repo.
-- 🚧 **Lambda runtime `nodejs24.x`** (the repo moves to Node 24). Timeout ~30 s
+- ✅ **Lambda runtime `nodejs24.x`** (the repo moves to Node 24). Timeout ~30 s
   for runs and memory ~1024 MB (engine plus large JSON). Reserved concurrency
   stays capped.
-- 🚧 CloudFront already proxies same-origin `/api/*` to the Function URL with a
+- ✅ CloudFront already proxies same-origin `/api/*` to the Function URL with a
   shared-secret header. Keep that, so the session cookie is first-party and
   `SameSite=Lax` works. Tighten or drop the Function URL CORS block, since the
   browser never calls the Function URL directly (dropped in `infra/lambda.tf`).
-- 🚧 Budget and alarms: DB CPU, free storage and connections, plus Lambda
-  errors and duration. Budget $25–50/month (written in `infra/alarms.tf`).
+- ✅ Budget and alarms: DB CPU, free storage and connections, Lambda errors,
+  throttles and duration, CloudFront bytes and requests, and two budgets
+  ($9 a day, $110 a month; `infra/alarms.tf`). Both alert subscriptions are
+  confirmed and `infra/scripts/postapply-check.sh` passes (2026-10-05).
 
 ### 6c. CI/CD
 
-- 🚧 CI (`.github/workflows/ci.yml`) runs on PRs and on `main`, including the
-  DB tests against a Postgres service container. Once the account exists, make
-  `CI gate` a required check.
-- 🚧 Deploy workflows: turn on the release trigger. Add a **migrate** step
+- ✅ CI (`.github/workflows/ci.yml`) runs on PRs and on `main`, including the
+  DB tests against a Postgres service container. `CI gate` is a required
+  check on `main`.
+- ✅ Deploy workflows: turn on the release trigger. Add a **migrate** step
   (a one-off Lambda invocation or a CI job with DB access) that runs before the
   new code is published. All of this is gated on `environment: production`.
   Built: `deploy-backend.yml` and `deploy-frontend.yml` run on `backend@` /
   `web@` releases behind a preflight, and the backend deploy updates the
   migrate Lambda and runs it before the API. The preflight refuses every
   release until the account exists ([deployment.md § Releasing](./deployment.md#releasing)).
-- ⬜ `~/github/templates/scripts/export-tf-vars.sh infra/` to push Terraform
-  outputs into GitHub variables and secrets.
+  First releases 2026-10-05: `backend@0.1.0` (every migration applied, the
+  renderer image pushed), then `web@0.1.0`–`0.1.2`.
+- ✅ `~/github/templates/scripts/export-tf-vars.sh infra/` to push Terraform
+  outputs into GitHub variables and secrets (2026-10-04).
+- ✅ Map data (deployment.md § Map tiles): the basemap at maxzoom 15, its
+  label fonts and the relief's DEM in the tiles bucket, the frontend
+  variables set, and `delineation_dem` on (2026-10-05).
+- ⬜ Tracing a dam: `pnpm dev:tiles:water`, upload `water.pmtiles`, then
+  `dam_trace_water = true` and apply.
 
 **Acceptance:** `gh release create backend@X.Y.Z` (and `web@X.Y.Z`) deploys after the reviewer approves.
 The site is served at the chosen domain over HTTPS, a smoke test (register,
 import, run) passes against production, and a restore from backup has been
 rehearsed once (`infra/scripts/restore-db.sh`, the checklist in
 [deployment.md § Restoring the database](./deployment.md#restoring-the-database)).
+Done: releases deploy after approval, HTTPS at the domain, and a sign-up,
+import and run in production (2026-10-05). Open: the restore rehearsal.
 
 ## Phase 7: Production hardening
 

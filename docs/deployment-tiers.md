@@ -1,6 +1,6 @@
 # Deployment tiers and monthly cost
 
-> **Status:** not deployed yet. This page compares two ways to run the
+> **Status:** production runs the **minimal** tier (deployed 2026-10-05). This page compares two ways to run the
 > Terraform in `infra/`: a **minimal** production deployment and a **full**
 > (highly available) one. Both use the same code and the same Terraform; only
 > `terraform.tfvars` changes. The step-by-step procedure is in
