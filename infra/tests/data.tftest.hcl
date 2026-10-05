@@ -669,6 +669,12 @@ run "db_parameters" {
     condition     = contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "rds.force_ssl=1")
     error_message = "The DB parameter group must pin rds.force_ssl = 1 (TLS only)."
   }
+  # pending-reboot, matching what RDS reports for a parameter at its engine
+  # default; "immediate" here is a perpetual one-line diff (rds.tf).
+  assert {
+    condition     = one([for p in aws_db_parameter_group.main.parameter : p.apply_method if p.name == "rds.force_ssl"]) == "pending-reboot"
+    error_message = "rds.force_ssl must set apply_method = \"pending-reboot\", or every plan shows an in-place diff."
+  }
   # log_statement none: no statement is logged just for its type, so the
   # migrate Lambda's ALTER ROLE … PASSWORD isn't logged as DDL (rds.tf).
   assert {
