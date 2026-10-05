@@ -15,6 +15,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { saveSettings } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { projectDay } from '../support/dates.ts';
 
 // One at a time: these ticks run the feed schedule, which looks at every
 // project (a new feed is due at once), so a tick in one test would queue
@@ -36,7 +37,7 @@ const day = (n: number) => {
  * ahead of UTC from 22:00 to 24:00 UTC.
  */
 const projectToday = () => {
-	const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(new Date()).split('-').map(Number) as [number, number, number];
+	const [y, m, d] = projectDay().split('-').map(Number) as [number, number, number];
 	return `${d} ${MONTHS[m - 1]} ${y}`;
 };
 

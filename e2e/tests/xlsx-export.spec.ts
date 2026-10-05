@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx';
 import { createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { projectDay } from '../support/dates.ts';
 
 /** A runnable synthetic project whose upper farm has a formula-looking name, with one run. */
 async function seeded(request: APIRequestContext) {
@@ -117,12 +118,11 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 	const { item, status } = await openRunDownloads(page, id, runId);
 	const download = page.waitForEvent('download');
 	// Dated by the project's calendar day (South Africa by default), not UTC's (issue #45).
-	const sast = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(d);
-	const before = sast(new Date());
+	const before = projectDay();
 	await item.click();
 	const file = await download;
 	expect(file.suggestedFilename()).toMatch(/^workbook-export_baseline_workbook_\d{4}-\d{2}-\d{2}\.xlsx$/);
-	expect([before, sast(new Date())]).toContain(/_(\d{4}-\d{2}-\d{2})\.xlsx$/.exec(file.suggestedFilename())![1]);
+	expect([before, projectDay()]).toContain(/_(\d{4}-\d{2}-\d{2})\.xlsx$/.exec(file.suggestedFilename())![1]);
 	await expect(status).toHaveText(/^Downloaded workbook-export_baseline_workbook_\d{4}-\d{2}-\d{2}\.xlsx$/);
 
 	const wb = XLSX.read(await readFile((await file.path())!), { type: 'buffer', cellNF: true, cellText: true });
