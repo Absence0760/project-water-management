@@ -2349,7 +2349,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       `backend/src/farms/invites.db.test.ts` (Afrikaans, `lang="af"`), the
       alert email `alerts-mailpit.spec.ts`.
 - [x] **Afrikaans boards** at 360 px and an axe pass on every translated
-      page in Afrikaans: `e2e/tests/af-layout.spec.ts`, light and dark, all
+      page in Afrikaans: `e2e/tests/lang-layout.spec.ts`, light and dark, all
       green.
 - [ ] **A native speaker's review** (tracked in issue #90, where the
       client answers it; moved off #74 by the 2026-09-30 fact-check, so #74
