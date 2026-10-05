@@ -365,9 +365,9 @@ Decided: slug **`water-management`**, URL **`https://water-management.jaredhowar
 region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, the default;
 [deployment-tiers.md](./deployment-tiers.md)).
 
-- ⬜ Bootstrap tfvars `~/github/templates/infra/bootstrap/projects/water-management.tfvars`
-  with `create_subdomain = true`.
-- ⬜ Run `~/github/templates/scripts/new-project-account.sh water-management`
+- ✅ Bootstrap tfvars `~/github/infra-secrets/water-management/bootstrap.tfvars`
+  with `create_subdomain = true` (2026-10-04).
+- ✅ Run `~/github/templates/scripts/new-project-account.sh water-management`
   (with `--plan` first). It creates the in-org sub-account, the tfstate bucket
   `water-management-tfstate-<account-id>` (S3 lockfile, no DynamoDB), the
   `alias/water-management-sops` KMS key, the GitHub OIDC deploy role
@@ -376,22 +376,30 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
   It also creates the **child Route 53 zone `water-management.jaredhoward.com`**.
   Its delegation stage runs as the `dns-parent` profile and writes the NS
   records into the `jaredhoward.com` parent zone (in the `jaredhoward`
-  account), the same way as `disag.jaredhoward.com`.
+  account), the same way as `disag.jaredhoward.com`. Done 2026-10-04: the
+  delegation resolves, and the operator's SSO user has `AdministratorAccess`
+  on the account (`water-management` profile).
 - ⬜ This repo's Terraform owns the ACM certificate (us-east-1, DNS-validated
   in the child zone) and the CloudFront alias and Route 53 A/AAAA records for
   `water-management.jaredhoward.com`. `domain_name` and `route53_zone_id` in
   `terraform.tfvars` point at the child zone.
-- ⬜ Secrets: `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region <region>`,
-  then `sops water-management/prod.sops.yaml` with `AUTH_JWT_SECRET`, the
-  `water_app` DB password and the owner/migration DB password (unless RDS
-  Secrets Manager manages it). Terraform gets them as ephemeral variables
+- ✅ Secrets (2026-10-04): `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`,
+  then `sops water-management/prod.sops.yaml` with the keys in
+  `infra/prod.sops.yaml.example` (the owner/migration password is RDS-managed,
+  not a sops key). `prod.tfvars` sits beside it. Terraform gets them as ephemeral variables
   through `infra/scripts/tf.sh` (`sops exec-env`), so they stay out of state
   too (issue #126). Plaintext never touches this repo.
-- ⬜ **Region.** Given POPIA and latency to South Africa, `af-south-1` (Cape
+- ✅ **Region** (af-south-1 enabled 2026-10-04). Given POPIA and latency to South Africa, `af-south-1` (Cape
   Town) is the natural choice for the DB and Lambda. It is an opt-in region with
   somewhat higher prices, and RDS PostgreSQL 17 on t4g must be available
   there. CloudFront's certificate stays in `us-east-1` whatever the
   region.
+- ✅ **CloudTrail** for the database KMS key alarm: the Organization trail
+  in the management account covers this account in every region (applied
+  2026-10-04 from `~/github/project-mgmt`, `infra/modules/cloudtrail`).
+- 🚧 **Lambda concurrency quota** (infra/README.md § Operator steps, step 3):
+  1000 requested 2026-10-04, with AWS. The only failing pre-apply check; the
+  first plan (264 to add) is otherwise clean.
 
 ### 6b. Terraform additions (`infra/`)
 

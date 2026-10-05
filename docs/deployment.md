@@ -144,8 +144,17 @@ covered by the Terraform tests.
 
 ## 1. Provision the account (one-time)
 
-Create `~/github/templates/infra/bootstrap/projects/water-management.tfvars`
-from `example.tfvars` (`create_subdomain = true`) and keep
+Create `~/github/infra-secrets/water-management/bootstrap.tfvars` (the
+private estate repo, one file per project; copy it from the templates repo's
+`infra/bootstrap/projects/example.tfvars`, with `create_subdomain = true`) and
+commit and push it there: the script refuses an unsaved one, and it is the
+only record of the account's root email, which AWS never lets you change or
+reuse. Set `github_subject_prefix` to what
+`gh api repos/Absence0760/project-water-management/actions/oidc/customization/sub --jq .sub_claim_prefix`
+prints, never to `repo:<owner>/<repo>`: this repo is on GitHub's immutable
+subject claims, so its OIDC subject carries numeric IDs, and a slug-form
+prefix leaves every deploy failing to assume the role
+(Runbook G in `~/github/project-mgmt/docs/runbooks.md`). Keep
 **`region = "us-east-1"`** in it, even though the workloads run in
 af-south-1. The bootstrap creates the tfstate bucket and the sops KMS key in
 that `region`, and this repo's Terraform backend reads state from us-east-1
@@ -156,9 +165,19 @@ the wrong region. The workload region is `aws_region` in `prod.tfvars`
 (§ 3). Then, from the templates repo:
 
 ```bash
+aws sso login --profile mgmt && aws sso login --profile dns-parent
 cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan
 cd ~/github/templates && ./scripts/new-project-account.sh water-management
 ```
+
+Both profiles must be signed in before either run: stage 1 (the account)
+and stage 2 (the baseline, through `OrganizationAccountAccessRole`) run as
+`mgmt`, stage 3 (the delegation) as `dns-parent`. `--plan` shows stage 1
+only, since the later stages need the new account's ID. Stage 2 can fail
+right after stage 1 with `NotSignedUp` (S3) or
+`SubscriptionRequiredException` (KMS) while the new account's services
+activate; wait a few minutes and re-run the same command (stage 1 is then a
+no-op).
 
 This creates, inside the org:
 
@@ -179,6 +198,20 @@ This creates, inside the org:
   pattern as `disag.jaredhoward.com`. The ACM certificate, the CloudFront alias
   and the A/AAAA records inside the child zone belong to *this* repo's
   Terraform.
+
+It also turns on **required linear history** on `main`, so GitHub accepts
+only squash and rebase merges there.
+
+The bootstrap does **not** give your SSO user access to the new account.
+Assign it in Identity Center (Runbook D: user → the account →
+`AdministratorAccess`, from the `mgmt` account), then add the workstation
+profile every later step uses, with the same SSO start URL as `mgmt` and
+default region us-east-1 (af-south-1 isn't enabled yet):
+
+```bash
+aws configure sso --profile water-management
+aws sts get-caller-identity --profile water-management --query Account --output text
+```
 
 Estate runbook: `~/github/project-mgmt/docs/runbooks.md`.
 
