@@ -16,6 +16,9 @@
 // hand as renderer.Dockerfile's header says. Every pin must be exact: a range
 // would let the lockfile drift from the image.
 //
+// And every URL tarball in pnpm-lock.yaml (lockfileTarballProblems) keeps its
+// `integrity:` hash, its only pin.
+//
 // And CI's service containers (serviceImageProblems): every `services:` image
 // in .github/workflows/*.yml carries an @sha256 digest, and the same digest
 // docker-compose.yml gives that image:tag, so CI tests against what local dev
@@ -178,6 +181,22 @@ export function composeImageProblems(compose, where) {
 		.map((image) => `${where}: image "${image}" is not pinned by digest (image:tag@sha256:…; docker buildx imagetools inspect <image:tag> gives it)`);
 }
 
+const LOCK_TARBALL = /^\s*resolution:\s*\{([^}]*\btarball:\s*https?:[^}]*)\}/gm;
+
+/**
+ * The pnpm-lock.yaml entries resolved from a URL tarball (SheetJS's CDN
+ * tarball, docs/STACK.md) that carry no `integrity:` hash: one line each. A
+ * registry package's integrity comes from the registry, but a URL tarball's
+ * only pin is the hash in the lockfile, and a regenerated lockfile can drop it
+ * silently (Dependabot's did, PR #433), after which pnpm installs whatever the
+ * URL serves.
+ */
+export function lockfileTarballProblems(lock, where) {
+	return [...lock.matchAll(LOCK_TARBALL)]
+		.filter((m) => !/\bintegrity:\s*sha512-/.test(m[1]))
+		.map((m) => `${where}: ${m[1].match(/tarball:\s*(\S+)/)[1].replace(/,$/, '')} has no integrity hash; restore it (pnpm install from a lockfile that has it) rather than trust the URL`);
+}
+
 /** What is wrong with the pins: one line each, empty when they agree. */
 export function pinProblems(pins) {
 	const problems = [];
@@ -271,9 +290,11 @@ function main() {
 	if (scripts.length) console.error(`::error::Operator script images:\n${scripts.join('\n')}`);
 	const compose = composeImageProblems(readFileSync(join(root, 'docker-compose.yml'), 'utf8'), 'docker-compose.yml');
 	if (compose.length) console.error(`::error::Local-dev service images:\n${compose.join('\n')}`);
-	if (problems.length || image.length || scripts.length || compose.length) process.exit(1);
+	const tarballs = lockfileTarballProblems(readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8'), 'pnpm-lock.yaml');
+	if (tarballs.length) console.error(`::error::Lockfile tarball pins:\n${tarballs.join('\n')}`);
+	if (problems.length || image.length || scripts.length || compose.length || tarballs.length) process.exit(1);
 	console.log(
-		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Operator script images and docker-compose.yml's: by digest.`
+		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Operator script images and docker-compose.yml's: by digest. URL tarballs in pnpm-lock.yaml: by integrity.`
 	);
 }
 
