@@ -788,7 +788,7 @@
 				<summary>Field guide</summary>
 				<dl>
 					<div><dt>Kind</dt><dd>A <strong>hydrological unit</strong> (a farm, sub-catchment or town with its own area) generates runoff, has irrigation demand and may have a dam; a stand-alone dam or natural area is also a hydrological unit. The workspace and the farmer view call it a hydrological unit; exports and the API call it a farm. A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
-					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a hydrological unit, which reduce its runoff: edit them in the hydrological unit's form (<strong>Edit</strong> on its card on the map), under "Land cover".</dd></div>
+					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a hydrological unit, which reduce its runoff: edit them in the hydrological unit's form (<strong>Edit</strong> on its row under <strong>All hydrological units</strong>), under "Land cover".</dd></div>
 					<div><dt>Drains into</dt><dd>The hydrological unit immediately downstream. Exactly one, the outflow gauge, drains nowhere.</dd></div>
 					{#each NODE_FIELDS as f (f.key)}
 						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
