@@ -3850,17 +3850,15 @@ run "network" {
 
   # --- The Function URL ------------------------------------------------------
   # NONE, with the CloudFront shared secret checked first in the app
-  # (backend/src/app.ts) and InvokeFunction allowed only via the URL. Moving
-  # to AWS_IAM means CloudFront OAC for Lambda plus a body-hash change in the
-  # SPA; either way, a deliberate edit here.
+  # (backend/src/app.ts). Its two public permissions (InvokeFunctionUrl, and
+  # InvokeFunction only via the URL) are added by the provider when it creates
+  # the URL, not declared (lambda.tf), so they can't be asserted here; the
+  # post-apply check's Function URL 403 is the live proof. Moving to AWS_IAM
+  # means CloudFront OAC for Lambda plus a body-hash change in the SPA; either
+  # way, a deliberate edit here.
   assert {
-    condition = (
-      aws_lambda_function_url.backend.authorization_type == "NONE" &&
-      aws_lambda_permission.function_url_public.function_url_auth_type == "NONE" &&
-      aws_lambda_permission.function_url_invoke.action == "lambda:InvokeFunction" &&
-      aws_lambda_permission.function_url_invoke.invoked_via_function_url == true
-    )
-    error_message = "The Function URL is authorization_type NONE (shared secret in the app), and the public InvokeFunction permission is restricted to invocations via the URL."
+    condition     = aws_lambda_function_url.backend.authorization_type == "NONE"
+    error_message = "The Function URL is authorization_type NONE (shared secret in the app); its public permissions come from the provider on create (lambda.tf)."
   }
 
   # --- Security-group descriptions, verbatim -------------------------------

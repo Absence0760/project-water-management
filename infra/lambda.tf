@@ -261,22 +261,14 @@ resource "aws_lambda_function_url" "backend" {
 # invoke it; since Oct 2025 AWS requires both InvokeFunctionUrl and
 # InvokeFunction (the latter restricted to invocations via the URL, so this
 # does NOT make the function directly invokable by other accounts). The
+# provider adds both itself when it creates a NONE URL (aws_lambda_function_url,
+# since 6.28: statements FunctionURLAllowPublicAccess and
+# FunctionURLAllowInvokeAction), so they are deliberately not declared here: an
+# aws_lambda_permission with the same statement id fails the apply with a 409
+# (the first apply, 2026-10-04), and one with another id is a duplicate. The
+# provider adds them only on create; if a statement is ever removed by hand,
+# `terraform apply -replace=aws_lambda_function_url.backend` puts both back. The
 # shared-secret check in the app is what rejects callers that skip CloudFront.
-resource "aws_lambda_permission" "function_url_public" {
-  statement_id           = "FunctionURLAllowPublicAccess"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.backend.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
-}
-
-resource "aws_lambda_permission" "function_url_invoke" {
-  statement_id             = "FunctionURLInvokeAllowPublicAccess"
-  action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.backend.function_name
-  principal                = "*"
-  invoked_via_function_url = true
-}
 
 # ============================================================================
 # Migrate Lambda
