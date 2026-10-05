@@ -117,6 +117,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	reports: { why: 'CompareView: reportHref(), `${base}/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
 	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
 	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },
+	editHref: { why: 'DemandsTable: the literal "?tab=crops&farm=" or "?tab=network&edit=" + encodeURIComponent(node id)', in: ['lib/components/network/DemandsTable.svelte'] },
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
 	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },

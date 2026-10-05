@@ -2119,6 +2119,7 @@ itself.
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
     "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
     as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
+    *Demands*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
     it) and, for editors, **+ Add node** and (once there is one outlet)
     **+ Add other user**, each opening the new node's form in the sheet with
@@ -3517,8 +3518,9 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   hydrological units · water year October to September", `cropsSummary`; the
   workspace says unit, not farm), and on the right
-  a **Tables** menu (Crop factors, Planted areas → the
-  [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
+  a **Tables** menu (Crop factors, Planted areas, Irrigation systems,
+  Demands → the [grid modal](#grid-modal),
+  `grid=crop-factors|planted-areas|systems|demands`; Escape
   or a click outside closes it), then for editors **Load crop factors…**
   (once there is a crop; the [same dialog](#load-crop-factors), its own
   chunk) and **+ Add crop**. The header shows with no crops too, over an
@@ -3933,6 +3935,117 @@ saves the catchment's model, and override mode there edits the scenario's
   area. Its save row is `model/ModelSaveRow.svelte`, shared with the grid
   modal.
 
+### Demands grid
+
+Every demand in the catchment in one table (`network/DemandsTable.svelte`,
+rows from `network/demands.ts` `demandRows`), in the
+[grid modal](#grid-modal) as `grid=demands`, from the Network's and Crops &
+demand's **Tables** menus. Before it a demand object or another water
+user's demand could only be read one node form at a time.
+
+- **Rows**, in the network's node order: each unit's **Crops** (its
+  irrigation demand, the number Crops & demand's demand table shows:
+  requirement ÷ the unit's efficiency, before rain; only on a unit with
+  something planted), then its **demand objects**, the crops and objects in
+  the unit's supply order (`supplyOrder`, equal places keeping the crops
+  first), an object that isn't modelled after them, greyed, "not modelled",
+  with no place in the order; then each **other water user**. Gauges and
+  units with no demand have no row.
+- **Columns:** the demand (a per-unit object's "200 × 50 l a day, losses
+  20 %" under its name; *piped out* and *scheduled* tags), its unit, its
+  kind (Irrigation (crops), the object's category, Other water user), where
+  its water comes from (dam side, river abstraction, the crop supply
+  table's shares), its place in the supply order ("1 of 3"; a user's senior
+  or junior; – when the unit has one place), m³/day for each water-year
+  month (shaded by size, as the crop demand table), the mean and Mm³/a, and
+  **Edit** (viewers: **View**). The **Catchment** row sums the modelled
+  rows, and a line above the table splits the annual total by kind,
+  largest first (`demandShares`).
+- **Editing:** a monthly object's and a user's months are inputs (m³/day,
+  whatever unit the object's form shows); a per-unit object's and the
+  crops' are made from other values, so they are text. Everything else (the
+  sizing, the schedule, the water source, the priority and rank) stays in
+  the node form, which a row's **Edit** opens (`?tab=network&edit=<node>`,
+  closing the modal); the crops' **Edit** opens the unit's
+  [farm drawer](#farm-drawer) on Crops & demand. Edits go into the shared
+  `ModelEditor` and are saved with the modal's save row.
+- **Show demands in** (above the table, `network/demandUnits.ts`): the unit
+  the month cells, the mean and the Catchment row read and take, m³/day (the
+  default), l/s or m³/s, from the engine's `DEMAND_MONTHLY_UNIT_SCALE` (1 l/s
+  = 86.4 m³/day), the headers and each input's label naming it. The model
+  keeps m³/day: a value typed in l/s is stored ÷ the scale. In l/s or m³/s an
+  input is plain text at 2 or 4 decimals (m³/day groups its thousands). The
+  annual column stays Mm³/a. The choice is in the URL (`unit=ls|m3s`, none
+  for m³/day), so Back and a reload keep it. It always starts at m³/day, not
+  at the unit a demand object was entered in: rows can disagree (a town in
+  l/s, a mine in m³/day), the crops' and users' demand has no unit of its
+  own, and a table whose unit depended on its rows would change under the
+  reader as objects were added.
+- **Paste from a spreadsheet and CSV** (`network/demandsPaste.ts`, the
+  [grid modal's paste](#grid-modal)): a block pasted into a month cell, or
+  **Paste from a spreadsheet…** under the table (editors), opens **Paste
+  demands**: rows matched by name (the demand's own name, or "Name (Unit)"
+  where two rows share it, "Crops (Upper farm)", `pasteNames`), months by
+  heading ("Oct", "October", "Oct (m³/day)") or by position from the cell,
+  so one copied row of 12 months fills a demand. Only a monthly object's and
+  a user's months take a paste: values on the crops or a per-unit object
+  are left out with a note naming them; a value below 0 stops the paste.
+  **Download the table as CSV** (everyone; `demands.csv`, `demandsCsv`) is
+  the table as shown: demand, unit, kind, water from, supply order, the
+  months and the mean in m³/day, Mm³/a, names defused. Its read-only
+  columns paste back without a note. Pasted values and the CSV are in the
+  unit **Show demands in** picks (the dialog names it).
+- The months are before schedules, daily A-pan, rain, demand factors and
+  restrictions, which a run applies day by day; the note under the table
+  says so.
+- **Registered** (Mm³/a, after Annual; `network/demandsRegistered.ts`,
+  [allocations.md](./allocations.md)): an allocation is matched to a
+  hydrological unit or another water user, never to one demand on it, so
+  each node's registered volume shows **once**, on its first row and
+  spanning its rows, beside the sum of its modelled demands: every take
+  (s21a) in force today, surface and groundwater summed (a storage-only
+  s21b row and lapsed or future ones are left out). Under the volume, in
+  words, the comparison's status on that sum with the project's band
+  (Settings › Registered volumes, ±10 % unless set; engine
+  `allocationStatus`): *Above registered*, *Within band*, *Below
+  registered*, *No registered volume* (the first and last in bold red),
+  with the node's demand total when it has several rows ("Above
+  registered: 0.040 for the unit"). The footer sums the volumes, and a note
+  under the table says what the column is, how many are above, and that a
+  registered volume isn't an entitlement and a run's use is what the
+  Allocations page compares. The grid reads the volumes as the Allocations
+  page does (`GET /projects/:id/allocations`), so the
+  [who sees what](./allocations.md#who-sees-what) rules hold: a viewer
+  gets the column only while the owners let viewers see each unit's
+  volumes, otherwise a note ("aren't shown to viewers"); a project with no
+  registered volumes says so; a refused read shows nothing.
+- **Run columns** (`network/demandsRun.ts`, loaded by
+  `demandsRunLoad.svelte.ts`): with a run, three columns after Annual (and
+  Registered), before **Edit**, set off by a rule: **Supplied** and
+  **Short** (the mean over the run, in the table's display unit) and **Short %** (short ÷ the run's demand), short-falls in the danger
+  colour, and the Catchment row's sums. The run is the latest (`runs[0]`, as
+  the Network's supply colouring takes it), its summary from the Runs cache
+  or one fetch. A demand object reads its own `DemandObjectSummary`, another
+  water user its `UserSummary`, and a unit's crops the unit's figures less
+  its objects' (the summary's rule: the irrigation part is the unit's demand
+  less its objects'). A row the run doesn't have (added since, or an object
+  that was off) reads "–". A caption above the table names the run ("…
+  over run “Dry year”, ran …"), and with unsaved changes says they aren't in
+  it; a failed load says so with **Retry**. No run: no columns, no caption.
+- Tests: `network/demands.test.ts` (rows, order, sizing, totals, shares),
+  `network/demandUnits.test.ts` (the unit param and scales),
+  `network/demandsRegistered.test.ts` (in force, the per-node sums, the
+  band, the spans), `e2e/tests/demands-grid-registered.spec.ts` (none, the
+  column and its flags, a viewer without per-unit volumes),
+  `network/demandsRun.test.ts` (each kind's run figure, the crops less the
+  objects, rows the run lacks, the total), `e2e/tests/demands-grid-run.spec.ts`
+  (the columns and caption, "–" for a demand added since, unsaved edits, no run),
+  `network/demandsPaste.test.ts` (names, matching, computed rows, the unit,
+  the CSV),
+  `e2e/tests/demands-grid.spec.ts` (the menu, the order, an edit saved and
+  reloaded, a paste previewed, applied and saved, the CSV download, Edit
+  to the unit's form, the display unit, a phone, axe).
+
 ### Grid modal
 
 An existing model grid, unchanged, full screen over whichever tab is open
@@ -3942,8 +4055,9 @@ click away). It opens while the workspace URL has `grid=<id>`
 with `only="table"`: every column, reordering, Add node / other user, Sort by
 flow path, the other water users and the field guide; with no nodes, **Add
 outflow gauge**), `crop-factors` and `planted-areas` (the
-[crop grids](#crop-grids), through `CropsTab`'s `sections` prop) and
-`transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
+[crop grids](#crop-grids), through `CropsTab`'s `sections` prop),
+`transfers` (the Transfers tab) and `demands` (the [Demands
+grid](#demands-grid)). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab
 (`GRID_TAB`), where the grid is already on the page: the parameter is dropped.
 The node table and the crop grids have no such tab (`GRID_TAB` null: the
@@ -3974,8 +4088,9 @@ the link goes to that tab with it open (`movedGridHref`;
   the same save row as the farm drawer (`ModelSaveRow`): status, reason,
   **Discard** (the save bar's), **Save changes** (the page's save), **Done**. A viewer gets a read-only grid
   and **Close**.
-- **Paste from a spreadsheet** (issue #285): the node table and the
-  planted-areas grid take a block copied from Excel. Pasting more than one
+- **Paste from a spreadsheet** (issue #285): the node table, the
+  planted-areas and crop-factor grids and the [Demands grid](#demands-grid)
+  take a block copied from Excel. Pasting more than one
   cell into any of their inputs (a tab or a line break in it; one value stays
   the input's own paste) opens **Paste into the node table** / **Paste
   planted areas** (`model/GridPasteDialog.svelte`) with the block in its box;
@@ -3996,7 +4111,9 @@ the link goes to that tab with it open (`movedGridHref`;
   `paste/grid.ts` `mapPaste` places it: a heading row puts each column where
   its heading says (case and a last bracket, the unit, ignored: "Dam
   capacity (m³)", "Maize (white) (ha)"; a heading the grid hasn't got, such
-  as Total, is left out with a note); names in the first column put each row
+  as Total, is left out with a note, except the grid's own read-only
+  columns its CSV has, `mapPaste`'s `ignoreHeadings`, left out quietly so its
+  own CSV pastes back clean); names in the first column put each row
   on the row of that name, in any order, ignoring case but not brackets, so
   "Farm A (east)" and "Farm A (west)" stay apart (a name the grid hasn't got,
   or two rows share, is left out with a note; a name that is only a number

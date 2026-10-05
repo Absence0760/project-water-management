@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "the Demands grid (DemandsTable + demands.ts in the grid modal's chunk): main 1704 KB, this branch 1708 KB"
+}

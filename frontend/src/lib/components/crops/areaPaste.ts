@@ -53,9 +53,9 @@ export function plantedAreasCsv(farms: readonly Farm[], crops: readonly Pick<Cro
 
 /** Headings the crop-factor grid's first column goes by. */
 const CROP_HEADINGS = ['Crop', 'Name'];
-const LONG_MONTHS = ['October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September'];
+export const LONG_MONTHS = ['October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September'];
 /** The month columns: "Oct" or "October", keyed by the water-year index. */
-const MONTH_COLS = WATER_YEAR_MONTHS.map((m, i) => ({ key: String(i), labels: [m, LONG_MONTHS[i]!] }));
+export const MONTH_COLS = WATER_YEAR_MONTHS.map((m, i) => ({ key: String(i), labels: [m, LONG_MONTHS[i]!] }));
 
 type FactorCrop = Pick<Crop, 'id' | 'name'> & { cropFactor: readonly number[] };
 
