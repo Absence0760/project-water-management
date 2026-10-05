@@ -628,14 +628,14 @@ fetched the first time that tab opens (started alongside the data load when
 the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
-The tabs are grouped into three sections, in this order: **Outcomes**
-(Summary, River & reserve, Hydrological units, Runs & results, Dams,
-Compare runs, Scenarios, Allocations), **Build the model** (Network, Crops &
-demand, Transfers, Data, Settings & calibration) and **Review** (Project,
-Applications, History). Outcomes leads because the Summary is the tab a
-project opens on (issue #17's option A; moved last on 2026-09-27 and back to
-the top by issue #162), and Help's "Getting around a project" names them in
-the same order (`tour.test.ts` fails if the two part). The sections are
+The tabs are grouped into three sections, in this order: **Review**
+(Project, Applications, History), **Build the model** (Network, Map, Crops &
+demand, Transfers, Data, Settings & calibration) and **Outcomes** (Summary,
+River & reserve, Hydrological units, Runs & results, Dams, Compare runs,
+Scenarios, Allocations). The operator chose this order on 2026-10-05 (before
+it, Outcomes led: issue #17's option A, and issue #162). A project still
+opens on its Summary, the first tab under Outcomes, and Help's "Getting
+around a project" names the sections in the same order (`tour.test.ts` fails if the two part). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in

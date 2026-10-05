@@ -158,7 +158,7 @@
 	// A model tab with problems in unsaved edits stays in the strip though hidden, so its link and dot can be reached.
 	const problemTabs = $derived(hasRole(project?.role, 'editor') && editor.dirty ? MODEL_TABS.filter((id) => editor.issues.some((x) => x.area === id)) : []);
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS, problemTabs));
-	// Outcomes, Build the model, Review (issue #17). `strip` is the same tabs
+	// Review, Build the model, Outcomes (lib/workspace/tabs.ts NAV_SECTIONS). `strip` is the same tabs
 	// flattened in the order shown, for the arrow keys.
 	const sections = $derived(navSections(stripIds));
 	const strip = $derived(sections.flatMap((s) => s.tabs));
