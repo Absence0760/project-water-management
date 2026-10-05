@@ -590,7 +590,10 @@ publish through it.
 Claude does not run any of these, and none of them print a secret. Replace
 `<region>` with the chosen region (e.g. `af-south-1`).
 
-1. **Account.** Create the bootstrap config (`create_subdomain = true`) per
+1. **Account.** Create the bootstrap config
+   `~/github/infra-secrets/water-management/bootstrap.tfvars`
+   (`create_subdomain = true`; committed and pushed there, and its
+   `github_subject_prefix` read from GitHub, docs/deployment.md § 1) per
    Runbook A in `~/github/project-mgmt/docs/runbooks.md`, **with
    `region = "us-east-1"`**, whatever `aws_region` this stack will use. The
    bootstrap creates the tfstate bucket and the sops KMS key in its `region`,
@@ -598,8 +601,16 @@ Claude does not run any of these, and none of them print a secret. Replace
    `backend "s3"`); a bootstrap run with `af-south-1` puts the bucket where
    `terraform init` can't find it. The workload region is `aws_region` in
    `prod.tfvars` (step 6), not the bootstrap's. Then run it:
+   - `aws sso login --profile mgmt && aws sso login --profile dns-parent`
    - `cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan`
    - `cd ~/github/templates && ./scripts/new-project-account.sh water-management`
+     (a `NotSignedUp` / `SubscriptionRequiredException` in stage 2 means the
+     new account is still activating: wait a few minutes and re-run)
+
+   Then give your SSO user `AdministratorAccess` on the new account in
+   Identity Center (Runbook D; the bootstrap doesn't) and add the profile:
+   `aws configure sso --profile water-management` (same start URL as `mgmt`,
+   default region us-east-1).
 
    Wait until the child zone's delegation resolves:
    `dig +short NS water-management.jaredhoward.com`. ACM validation hangs
