@@ -253,7 +253,8 @@ describe('engine invariants on random networks', () => {
 			const input = randomInput(seed);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
-		for (const seed of [3321, 4260, 9912, 18288, 18330, 19214, 3899, 7094]) {
+		// 1087, 1269 (engine 1.74.1, the release soak): a missing irrigation system's warning named whichever crop came first.
+		for (const seed of [3321, 4260, 9912, 18288, 18330, 19214, 3899, 7094, 1087, 1269]) {
 			const input = randomInput(seed);
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}, GR4J`).toBeNull();
 		}

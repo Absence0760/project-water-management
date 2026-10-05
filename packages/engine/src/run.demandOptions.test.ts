@@ -307,6 +307,29 @@ describe('irrigation systems per crop and per unit (engine 1.72.0)', () => {
 		expect(missing.summary.warnings.filter((w) => w.includes('gone'))).toEqual(["crop \"Crop a\": irrigation system gone is not in the project's table; skipping it"]);
 	});
 
+	it('names every crop whose system the table lacks, whatever the units’ order (release soak, seeds 1087 and 1269)', () => {
+		// Keyed by system alone the warning named whichever crop the run met first. Plantings are
+		// sorted by unit then crop before they resolve, so only the unit order can change which comes
+		// first: crop a on unit G, crop b on unit F, in both node orders.
+		const both = (flip: boolean) => {
+			const x = input({
+				crops: [crop({ irrigationSystemId: 'gone' }), { ...crop({ irrigationSystemId: 'gone' }), id: 'b', name: 'Crop b', sortOrder: 1 }],
+				cropAreas: [
+					{ nodeId: 'G', cropId: 'a', areaM2: 1000 },
+					{ nodeId: 'F', cropId: 'b', areaM2: 1000 }
+				],
+				startDate: '2020-10-01',
+				rain: [0]
+			});
+			x.model.nodes.push(farm({ id: 'G', name: 'G', sortOrder: 1, downstreamNodeId: 'F' }));
+			if (flip) x.model.nodes.reverse();
+			return run(x).summary.warnings.filter((w) => w.includes('gone')).sort();
+		};
+		const expected = ['crop "Crop a": irrigation system gone is not in the project\'s table; skipping it', 'crop "Crop b": irrigation system gone is not in the project\'s table; skipping it'];
+		expect(both(false)).toEqual(expected);
+		expect(both(true)).toEqual(expected);
+	});
+
 	it('skips a unit’s system the table lacks for the crop’s default, then its legacy efficiency (fuzz seed 36, docs/model.md §2.3)', () => {
 		// The planting's own system is missing: the crop's default (Flood / furrow, 70 %) runs, not the unit's 0.8.
 		expect(get(run(one(crop({ irrigationSystemId: 'surface' }), { irrigationSystemId: 'gone' })), 'demand')[0]).toBeCloseTo(100 / 0.7, 9);
