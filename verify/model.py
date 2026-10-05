@@ -1097,9 +1097,6 @@ def run(doc: dict) -> dict:
     pool_q = {fid: [t["pool"] or 0.0 for t in ts] for fid, ts in riv.items()}
     on_river_obj = {ob["id"] for ts in riv.values() for t in ts if t["ob"] is not None for ob in [t["ob"]]}
 
-    def crops_on_river(fid):
-        return any(t["ob"] is None for t in riv.get(fid, []))
-
     # The dam side's demand: its dam-sourced demands only (the crops' abstraction, or its share of it under a
     # table, §2.7k; the objects not on the river).
     Dd: dict[str, list[float]] = {}
