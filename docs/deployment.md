@@ -1797,13 +1797,14 @@ instance the resize restarts it, a few minutes down.
 
 ## Who can sign up
 
-Production starts **invite-only**: `signup_open = false` (the default) sets
-`SIGNUP_OPEN=false` on the API, and the backend treats an unset value on
-Lambda as closed too ([security.md § Sign-up by
-invitation](./security.md#sign-up-by-invitation)). People join through an
-invite from a project or team member. Open sign-up only once the go-live
-Gates A and C in [legal-status.md](./legal-status.md) are done: set
-`signup_open = true` in `prod.tfvars`, plan and apply (no release needed).
+`signup_open = false` (the default) sets `SIGNUP_OPEN=false` on the API, and
+the backend treats an unset value on Lambda as closed too ([security.md §
+Sign-up by invitation](./security.md#sign-up-by-invitation)); people then
+join only through an invite from a project or team member. Production ran
+that way from 2026-10-05 and has been **open since 2026-10-06**
+(`signup_open = true` in `prod.tfvars`, applied), before go-live Gates A and
+C in [legal-status.md](./legal-status.md). To close it again, set it back to
+`false`, plan and apply (no release needed).
 
 ## Runbooks
 
