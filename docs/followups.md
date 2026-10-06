@@ -98,10 +98,11 @@ The checklist for these is issue #62; the history scrub is #63.
       before the first apply**, preferably the Organization trail from the
       management account; `preapply-check.sh`'s `cloudtrail` check FAILs
       until one does (infra/README.md § Operator steps, step 7a).
-- [ ] **SES production access.** Report links (#26), invites and password
+- [x] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
-      email.
+      email. — *Done 2026-10-06: granted in af-south-1 (support case
+      answered 2026-10-05).*
 - [ ] **AWS budget default is now $110** (`infra/variables.tf`
       `budget_monthly_usd`; was $60, $80, $90, then $100, #126), sized for af-south-1's ~$77
       idle (list prices re-checked 2026-10-04, deployment-tiers.md), plus a derived $9/day budget (deployment.md § Budget alerts).

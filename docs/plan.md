@@ -357,7 +357,8 @@ that the tests assert.
 
 🚧 **Deployed 2026-10-05** (minimal tier, `af-south-1`): `backend@0.1.0`,
 `web@0.1.2`, the report renderer, the map's basemap, relief and delineation.
-Open: SES production access, tracing a dam, and the restore rehearsal in the
+SES production access was granted 2026-10-06. Open: tracing a dam, and the
+restore rehearsal in the
 acceptance below. The mechanics are in [deployment.md](./deployment.md). What
 had to be built or decided:
 
@@ -401,11 +402,11 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 110`, 
   2026-10-04 from `~/github/project-mgmt`, `infra/modules/cloudtrail`).
 - ✅ **Lambda concurrency quota** (infra/README.md § Operator steps, step 3):
   1000, granted after the 2026-10-04 request; the first apply followed.
-- 🚧 **SES production access** (infra/README.md § Operator steps, step 8a):
+- ✅ **SES production access** (infra/README.md § Operator steps, step 8a):
   requested, then held for more detail; the operator answered on the support
-  case 2026-10-05. Until it is granted the account is in the sandbox, so mail
-  reaches verified addresses only, which also means nobody else can finish
-  signing up.
+  case 2026-10-05 and AWS granted it 2026-10-06. Mail now reaches any
+  address; sign-up stays invite-only (`signup_open = false`) until the legal
+  go-live gates are met (legal-status.md).
 
 ### 6b. Terraform additions (`infra/`)
 
