@@ -8,6 +8,7 @@ import {
 	isProductionGated,
 	jobsOf,
 	needsOf,
+	pnpmVersionSteps,
 	prTargetHeadCheckouts,
 	pushFullProblem,
 	topLevelPermissions,
@@ -134,10 +135,35 @@ test('pull_request_target may never check out or fetch the PR head', () => {
 	assert.deepEqual(prTargetHeadCheckouts(prt('\n  push:', checkout('ref: ${{ github.head_ref }}'))), []);
 });
 
+test('pnpm/action-setup may not name a version when package.json pins packageManager', () => {
+	const wf = (setup) => `name: x
+on: push
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up pnpm
+        uses: pnpm/action-setup@${SHA} # v6.1.0
+${setup}      - run: pnpm install
+`;
+	const named = wf('        with:\n          version: 10\n');
+	const pinned = { packageManager: 'pnpm@10.33.2' };
+	assert.deepEqual(rules(named).filter((r) => r === 'pnpm-version'), []);
+	assert.deepEqual(checkWorkflow('.github/workflows/x.yml', named, pinned).map((f) => [f.rule, f.line]), [['pnpm-version', 9]]);
+	// Positive control: the same step without `version:` passes, and so does a comment naming one.
+	assert.deepEqual(checkWorkflow('.github/workflows/x.yml', wf('        # version: 10 comes from packageManager\n'), pinned), []);
+	assert.deepEqual(pnpmVersionSteps(wf('').split('\n')), []);
+	// A later step's `version:` is not the setup step's.
+	assert.deepEqual(pnpmVersionSteps(wf('      - uses: actions/setup-node@x\n        with:\n          version: 1\n').split('\n')), []);
+});
+
 test('the repo workflows pass the guard (real positive control)', () => {
 	const dir = new URL('../../.github/workflows/', import.meta.url);
+	const { packageManager } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 	for (const f of readdirSync(dir).filter((n) => /\.ya?ml$/.test(n))) {
-		assert.deepEqual(checkWorkflow(`.github/workflows/${f}`, readFileSync(new URL(f, dir), 'utf8')), [], f);
+		assert.deepEqual(checkWorkflow(`.github/workflows/${f}`, readFileSync(new URL(f, dir), 'utf8'), { packageManager }), [], f);
 	}
 });
 

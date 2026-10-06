@@ -69,6 +69,11 @@
 //              (/backend/renderer-deps) by fetch-metadata's `directory` and by
 //              the PR's branch name, each on its own line joined with `&&`.
 //              Those PRs stay manual.
+//   pnpm-version  when the root package.json pins `packageManager: pnpm@…`, no
+//              `pnpm/action-setup` step names a `version:`. The action reads
+//              packageManager itself and fails the step on two versions
+//              (ERR_PNPM_BAD_PM_VERSION), which broke the weekly audit and
+//              the Dependabot lockfile sync until 2026-10-05.
 //
 // Line-based on purpose (no YAML dependency at the root): the workflows are
 // ours and 2-space indented, and the tests pin the shapes it reads.
@@ -366,11 +371,37 @@ export function unshaPushSteps(lines) {
 }
 
 /**
+ * The `pnpm/action-setup` steps (1-based start lines) that name a pnpm
+ * `version:`. With package.json's `packageManager` set, the action refuses two
+ * versions (ERR_PNPM_BAD_PM_VERSION) and the step fails before anything runs.
+ * @param {string[]} lines
+ * @returns {number[]}
+ */
+export function pnpmVersionSteps(lines) {
+	const out = [];
+	lines.forEach((l, i) => {
+		if (/^\s*#/.test(l) || !/uses:\s*['"]?pnpm\/action-setup@/.test(l)) return;
+		let start = i;
+		while (start >= 0 && !/^\s*- /.test(lines[start])) start--;
+		if (start < 0) return;
+		const indent = lines[start].match(/^\s*/)[0].length;
+		for (let j = start + 1; j < lines.length && (/^\s*$/.test(lines[j]) || lines[j].match(/^\s*/)[0].length > indent); j++) {
+			if (/^\s+version:/.test(lines[j])) {
+				out.push(start + 1);
+				break;
+			}
+		}
+	});
+	return out;
+}
+
+/**
  * @param {string} file e.g. `.github/workflows/ci.yml`
  * @param {string} text
+ * @param {{ packageManager?: string }} [repo] the root package.json's `packageManager`, when it has one
  * @returns {Finding[]}
  */
-export function checkWorkflow(file, text) {
+export function checkWorkflow(file, text, repo = {}) {
 	/** @type {Finding[]} */
 	const out = [];
 	const lines = text.split('\n');
@@ -405,6 +436,12 @@ export function checkWorkflow(file, text) {
 
 	for (const line of unshaPushSteps(lines)) {
 		out.push({ file, line, rule: 'image-sha', message: 'a step pushes an image without naming the commit it was built from; tag it <version>-<sha> (needs.<job>.outputs.sha or github.sha) so a recut release pushes its own image' });
+	}
+
+	if (repo.packageManager?.startsWith('pnpm@')) {
+		for (const line of pnpmVersionSteps(lines)) {
+			out.push({ file, line, rule: 'pnpm-version', message: `pnpm/action-setup names a version while package.json pins ${repo.packageManager}; drop \`version:\` (the action reads packageManager, and naming both fails the step)` });
+		}
 	}
 
 	const perms = topLevelPermissions(text);
@@ -474,7 +511,8 @@ function main() {
 		console.error(`::error::no workflows found under ${dir}; this guard checked nothing`);
 		process.exit(1);
 	}
-	const findings = files.flatMap((f) => checkWorkflow(join(dir, f), readFileSync(join(dir, f), 'utf8')));
+	const { packageManager } = JSON.parse(readFileSync('package.json', 'utf8'));
+	const findings = files.flatMap((f) => checkWorkflow(join(dir, f), readFileSync(join(dir, f), 'utf8'), { packageManager }));
 	for (const f of findings) {
 		const loc = f.line ? `file=${f.file},line=${f.line}` : `file=${f.file}`;
 		console.error(`::error ${loc}::[${f.rule}] ${f.message}`);

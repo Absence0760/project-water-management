@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { composeImageProblems, imageProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
+import { composeImageProblems, imageProblems, lockfileTarballProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
 
 const DIGEST = '@sha256:' + 'a'.repeat(64);
 
@@ -158,4 +158,20 @@ test("the repo's docker-compose.yml pins Postgres, Mailpit and MinIO by digest",
 	const compose = readFileSync(join(root, 'docker-compose.yml'), 'utf8');
 	for (const name of ['postgres', 'axllent/mailpit', 'pgsty/minio']) assert.match(compose, new RegExp(`^\\s*image: ${name}:[^@\\s]+@sha256:[0-9a-f]{64}$`, 'm'), name);
 	assert.deepEqual(composeImageProblems(compose, 'docker-compose.yml'), []);
+});
+
+test('a URL tarball in pnpm-lock.yaml must keep its integrity hash', () => {
+	const url = 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz';
+	const pinned = `packages:\n  xlsx@${url}:\n    resolution: {integrity: sha512-oLDq3jw7AcLq==, tarball: ${url}}\n    version: 0.20.3\n`;
+	const stripped = `packages:\n  xlsx@${url}:\n    resolution: {tarball: ${url}}\n    version: 0.20.3\n`;
+	// Positive control: the pinned form passes, and so does a registry package (no tarball).
+	assert.deepEqual(lockfileTarballProblems(pinned, 'pnpm-lock.yaml'), []);
+	assert.deepEqual(lockfileTarballProblems('  nodemailer@10.0.11:\n    resolution: {integrity: sha512-abc==}\n', 'pnpm-lock.yaml'), []);
+	assert.deepEqual(lockfileTarballProblems(stripped, 'pnpm-lock.yaml'), [`pnpm-lock.yaml: ${url} has no integrity hash; restore it (pnpm install from a lockfile that has it) rather than trust the URL`]);
+});
+
+test("the repo's pnpm-lock.yaml keeps every URL tarball's integrity (real positive control)", () => {
+	const lock = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'pnpm-lock.yaml'), 'utf8');
+	assert.match(lock, /tarball: https:/, 'the lockfile has a URL tarball for this guard to check');
+	assert.deepEqual(lockfileTarballProblems(lock, 'pnpm-lock.yaml'), []);
 });

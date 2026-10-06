@@ -1783,6 +1783,18 @@ migrating: the migrate Lambda's reserved concurrency of 1 turns the second
 invocation away (the workflow fails with a throttle, nothing is loaded), and
 a load writes only its own dataset's rows, so retrying afterwards is safe.
 
+A large load squeezes the database's memory. The first production loads
+(2026-10-05: HydroRIVERS, 89 454 reaches, then WorldCover, 5.4 million cells,
+back to back) took the 1 GiB `db.t4g.micro` from about 140 MB freeable to
+51 MB, with swap from 4 MB to 38 MB and CPU to 51%. That tripped
+`rds-freeable-memory` for 20 minutes, until 34 minutes after the load, while
+autovacuum analysed the new rows. Nothing failed. Expect that alarm after a
+land-cover or rivers load, and run loads one at a time with a quiet spell
+between them. If freeable memory settles near the 64 MiB threshold
+afterwards rather than climbing back, the instance is too small for the data:
+move `db_instance_class` to `db.t4g.small` (2 GiB). On this single-AZ
+instance the resize restarts it, a few minutes down.
+
 ## Who can sign up
 
 Production starts **invite-only**: `signup_open = false` (the default) sets

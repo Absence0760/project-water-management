@@ -177,7 +177,7 @@ pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
 
-pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, a release preflight before every production-gated job, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, a release preflight before every production-gated job, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps, no pnpm `version:` beside packageManager) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings in scripts/guards/check_web_bundle_budget.mjs
@@ -185,7 +185,7 @@ pnpm gen:bundle-budget <slug> <kb> "<why>"  # raise the total ceiling: one new e
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm check:migrations       # every migration this branch adds sorts after origin/main's highest (git fetch first; data-model.md § Migrations)
-pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest; bump them together as backend/renderer.Dockerfile's header says
+pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest, and every URL tarball in pnpm-lock.yaml (SheetJS) by its integrity hash; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
                              # check:pins also holds every CI service image (ci.yml's Postgres) to the digest docker-compose.yml gives that image:tag (serviceImageProblems), so a Dependabot compose bump fails until ci.yml moves with it

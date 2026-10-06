@@ -47,7 +47,7 @@ services:
   # http://localhost:8026 (`pnpm dev:mail:open`). Published on 1026/8026 so it
   # doesn't collide with other projects' Mailpit on the default 1025/8025.
   mailpit:
-    image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
+    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
     container_name: water-management-mail
     ports:
       - "127.0.0.1:1026:1025"

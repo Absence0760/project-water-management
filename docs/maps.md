@@ -1686,7 +1686,8 @@ reads it.
   `~/.cache/water-management-tiles/`, its SHA-256 pinned, [§
   Checksums](#checksums)), cuts it to `TILES_BBOX` (South Africa
   by default; every reach that meets the box, uncut) with `ogr2ogr` (GDAL:
-  `sudo dnf install gdal`), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
+  `sudo dnf install gdal`, or docker, which runs the pinned GDAL image
+  `water` uses), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
   `LENGTH_KM`, `DIS_AV_CMS` and `ENDORHEIC` at five decimals, and loads it as dataset
   `HydroRIVERS-v10` with the attribution as its source. `ENDORHEIC`
   (`river_reference.endorheic`, migration 196) says whether a reach reaches

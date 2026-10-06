@@ -16,11 +16,11 @@ const setup = (page: Page) => page.getByRole('region', { name: 'Set up this catc
 const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
 // Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
-// In sidebar order: Outcomes, Build the model, Review (issue #162: the Summary a project opens on is at the top; lib/workspace/tabs.ts NAV_SECTIONS).
-const EVERY_TAB = ['Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History'];
+// In sidebar order: Review, Build the model, Outcomes (lib/workspace/tabs.ts NAV_SECTIONS).
+const EVERY_TAB = ['Project', 'Applications', 'History', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
 // The Map is a core tab since #326 D3: a viewer sees it without the inputs.
-const SHORT = ['Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations', 'Map', 'Data', 'Project'];
+const SHORT = ['Project', 'Map', 'Data', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 // What each shows by default: the role's set less the sections hidden until chosen.
 const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
 const byDefault = (tabs: string[]) => tabs.filter((t) => !DEFAULT_HIDDEN.includes(t));
@@ -47,9 +47,9 @@ test('owners and editors see every tab, and no "Show model inputs"', async ({ pa
 		await showAllSections(p.request);
 		await p.reload();
 		await expect.poll(() => tabNames(p)).toEqual(EVERY_TAB);
-		await expect(strip(p).getByRole('group', { name: 'Outcomes' }).getByRole('link')).toHaveText(EVERY_TAB.slice(0, 8));
-		await expect(strip(p).getByRole('group', { name: 'Build the model' }).getByRole('link')).toHaveText(EVERY_TAB.slice(8, 14));
 		await expect(strip(p).getByRole('group', { name: 'Review' }).getByRole('link')).toHaveText(['Project', 'Applications', 'History']);
+		await expect(strip(p).getByRole('group', { name: 'Build the model' }).getByRole('link')).toHaveText(EVERY_TAB.slice(3, 9));
+		await expect(strip(p).getByRole('group', { name: 'Outcomes' }).getByRole('link')).toHaveText(EVERY_TAB.slice(9));
 		// Every checklist step links to its tab.
 		await expect(setup(p).getByRole('link')).toHaveCount(5);
 	}
@@ -96,7 +96,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations', 'Network', 'Map', 'Data', 'Project']);
+	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Network', 'Map', 'Data', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Summary' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);
@@ -113,7 +113,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body (Allocations is hidden by default).
-	await expect.poll(() => tabNames(v)).toEqual(['Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Map', 'Data', 'Settings & calibration', 'Project']);
+	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Settings & calibration', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();
@@ -122,21 +122,24 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await v.goto(`/projects/${project.id}?tab=demand`);
 	await expect(strip(v).getByRole('link', { name: 'Crops & demand' })).toHaveAttribute('aria-current', 'page');
 
-	// Arrow keys move through the tabs as shown (skipping the hidden Allocations), across sections, and wrap.
+	// Arrow keys move through the tabs as shown (skipping the hidden Allocations, so Scenarios is last), across sections, and wrap.
 	await v.goto(`/projects/${project.id}?tab=map`);
 	await strip(v).getByRole('link', { name: 'Map', exact: true }).focus();
 	await v.keyboard.press('ArrowLeft');
+	await expect(v).toHaveURL(/\?tab=project$/);
+	await expect(strip(v).getByRole('link', { name: 'Project', exact: true })).toBeFocused();
+	await v.keyboard.press('ArrowLeft');
 	await expect(v).toHaveURL(/\?tab=scenarios$/);
 	await expect(strip(v).getByRole('link', { name: 'Scenarios' })).toBeFocused();
+	await v.keyboard.press('ArrowRight');
+	await expect(v).toHaveURL(/\?tab=project$/);
+	await expect(strip(v).getByRole('link', { name: 'Project', exact: true })).toBeFocused();
 	await v.keyboard.press('ArrowDown');
 	await expect(v).toHaveURL(/\?tab=map$/);
 	await expect(strip(v).getByRole('link', { name: 'Map', exact: true })).toBeFocused();
 	await v.keyboard.press('ArrowDown');
 	await expect(v).toHaveURL(/\?tab=series$/);
 	await expect(strip(v).getByRole('link', { name: 'Data' })).toBeFocused();
-	await v.keyboard.press('ArrowRight');
-	await expect(v).toHaveURL(/\?tab=project$/);
-	await expect(strip(v).getByRole('link', { name: 'Project', exact: true })).toBeFocused();
 	await v.keyboard.press('ArrowRight');
 	await expect(v).not.toHaveURL(/\?tab=/);
 	await expect(strip(v).getByRole('link', { name: 'Summary' })).toBeFocused();
@@ -156,8 +159,8 @@ test.describe('phone', () => {
 
 		await button.click();
 		await expect(button).toHaveAttribute('aria-expanded', 'true');
-		await expect(strip(page).getByRole('group', { name: 'Outcomes' })).toBeVisible();
 		await expect(strip(page).getByRole('group', { name: 'Build the model' })).toBeVisible();
+		await expect(strip(page).getByRole('group', { name: 'Outcomes' })).toBeVisible();
 		await expect(strip(page).getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'page');
 		await expect.poll(() => tabNames(page)).toEqual(byDefault(EVERY_TAB));
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);

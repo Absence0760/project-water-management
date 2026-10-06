@@ -14,8 +14,17 @@ import { expect, test } from '../support/fixtures.ts';
 
 // Long enough to wrap to two lines in the sidebar (the name is clamped to two).
 const LONG_NAME = 'Upper Catchment Irrigation Board Demonstration Sidebar';
-// Outcomes first, then Build the model, then Review (issue #162, item 22).
+// Review first, then Build the model, then Outcomes (lib/workspace/tabs.ts NAV_SECTIONS).
 const OWNER_TABS = [
+	'Project',
+	'Applications',
+	'History',
+	'Network',
+	'Map',
+	'Crops & demand',
+	'Transfers',
+	'Data',
+	'Settings & calibration',
 	'Summary',
 	'River & reserve',
 	'Hydrological units',
@@ -23,16 +32,7 @@ const OWNER_TABS = [
 	'Dams',
 	'Compare runs',
 	'Scenarios',
-	'Allocations',
-	'Network',
-	'Map',
-	'Crops & demand',
-	'Transfers',
-	'Data',
-	'Settings & calibration',
-	'Project',
-	'Applications',
-	'History'
+	'Allocations'
 ];
 /** Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS). */
 const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
@@ -190,8 +190,8 @@ test.describe('1280×800', () => {
 		const project = await seedRunnableProject(page.request, LONG_NAME);
 		// Every section, so the list is at its longest and has to scroll.
 		await showAllSections(page.request);
-		await page.goto(`/projects/${project.id}?tab=history`);
-		await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+		await page.goto(`/projects/${project.id}?tab=allocations`);
+		await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();
 
 		// The whole sidebar never scrolls; its account block is in the window.
 		const m = await measure(page);
@@ -199,16 +199,16 @@ test.describe('1280×800', () => {
 		await expect(account(page)).toBeInViewport({ ratio: 1 });
 		await expect(sidebar(page).getByRole('link', { name: 'Projects', exact: true })).toBeInViewport({ ratio: 1 });
 		// The open section, last in the list, is scrolled into view in the slot.
-		await expect(nav(page).getByRole('link', { name: 'History' })).toBeInViewport({ ratio: 1 });
+		await expect(nav(page).getByRole('link', { name: 'Allocations' })).toBeInViewport({ ratio: 1 });
 		await expectNoViolations(page);
 
 		// Arrow keys wrap to the first section, which comes into view with focus.
-		await nav(page).getByRole('link', { name: 'History' }).focus();
+		await nav(page).getByRole('link', { name: 'Allocations' }).focus();
 		await page.keyboard.press('ArrowDown');
-		await expect(page.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
-		const summary = nav(page).getByRole('link', { name: 'Summary' });
-		await expect(summary).toBeFocused();
-		await expect(summary).toBeInViewport({ ratio: 1 });
+		await expect(page.getByRole('heading', { level: 1, name: 'Project' })).toBeVisible();
+		const first = nav(page).getByRole('link', { name: 'Project', exact: true });
+		await expect(first).toBeFocused();
+		await expect(first).toBeInViewport({ ratio: 1 });
 		await expect(account(page)).toBeInViewport({ ratio: 1 });
 	});
 });
