@@ -6,10 +6,10 @@
 > and budgets) is applied, `backend@0.1.0` and `web@0.1.2` are released, the
 > report renderer is created, and `infra/scripts/postapply-check.sh` passes. The map
 > serves the basemap, its label fonts and the relief, and delineation is on
-> (`delineation_dem`; [§ Map tiles](#map-tiles)). Still open: SES production
-> access (the account is in the sandbox, so mail reaches verified addresses
-> only), tracing a dam (`water.pmtiles`, `dam_trace_water`) and the first
-> restore rehearsal; [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws) tracks
+> (`delineation_dem`; [§ Map tiles](#map-tiles)). SES production access was
+> granted 2026-10-06, so mail reaches any address (sign-up stays invite-only,
+> `signup_open`). Still open: tracing a dam (`water.pmtiles`,
+> `dam_trace_water`) and the first restore rehearsal; [plan.md Phase 6](./plan.md#phase-6-deploy-to-aws) tracks
 > them. This page describes the setup and the steps that built it.
 
 ## Target setup
