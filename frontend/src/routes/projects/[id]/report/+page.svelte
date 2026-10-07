@@ -46,7 +46,7 @@
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
-	import { heatmapHeadlineNote } from '$lib/components/ewr/headline';
+	import { heatmapHeadlineNote, reportJudgedBy } from '$lib/components/ewr/headline';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
 	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
@@ -243,6 +243,14 @@
 	const nodeOrder = $derived(new Map(nodes.map((n) => [n.id, n.sortOrder] as [string, number])));
 	const runName = $derived(run ? run.label || `Run of ${fmtDate(run.createdAt, true)}` : '');
 	const prepared = fmtDate(new Date().toISOString(), true);
+	// Which EWR the results are judged by (issue #444): the project's setting now, which a later change moves, so the
+	// printed copy says which it was.
+	const judgedLine = $derived.by(() => {
+		if (!run) return '';
+		const choice = project?.settings.ewrHeadline;
+		const j = resolveHeadline(run.summary, choice);
+		return reportJudgedBy(j.site, choice, j.fellBack, !!run.summary.ewrAssurance?.length);
+	});
 	// The cover box; an unsigned run nominated as evidence, or an impact report, says it isn't evidence.
 	const box = $derived(readFirst(sections, signoffs?.signoffs ?? [], run?.evidence === 'current' || !!againstParam));
 	// The server PDF prints this on every page (backend reports/render.ts reads it).
@@ -380,6 +388,8 @@
 						{#if box.notEvidence}<p><strong>{box.notEvidence}</strong></p>{/if}
 					</div>
 					<p class="lede">{runSentence(summary, project!.settings.ewrHeadline)}</p>
+					<!-- Which EWR the results are judged by (issue #444): the project's setting when printed, which a later change moves. -->
+					{#if judgedLine}<p class="judged" data-testid="report-judged-by">{judgedLine}</p>{/if}
 					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain (CHIRPS-GEFS named only when it was the source). -->
 					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(run)}</p>{/if}
 					<nav aria-label="Contents">
@@ -638,7 +648,8 @@
 	.read-first p {
 		margin: 0.3rem 0 0;
 	}
-	.lede {
+	.lede,
+	.judged {
 		max-width: 72ch;
 		line-height: 1.55;
 	}

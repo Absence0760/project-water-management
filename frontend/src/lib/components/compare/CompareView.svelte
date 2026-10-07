@@ -351,8 +351,10 @@
 				]
 			: []
 	);
-	// What the water-year bars count, named as River & reserve names it (issue #177).
-	const yearsBelow = $derived(daysBelowTestOf(whatIfs.flatMap((s) => [cmp[s].data!.a.run.summary, cmp[s].data!.b.run.summary])));
+	// What the water-year bars count, named as River & reserve names it (issue #177), each run by its project's choice (#444).
+	const yearsBelow = $derived(
+		daysBelowTestOf(whatIfs.flatMap((s) => [cmp[s].data!.a, cmp[s].data!.b].map((x) => ({ summary: x.run.summary, choice: x.project.ewrHeadline }))))
+	);
 	const H = $derived(`h${level}`);
 
 	// --- the action: Export impact report ------------------------------------------

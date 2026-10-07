@@ -61,7 +61,7 @@
 		/** The page's runs list (null if it couldn't be loaded). */
 		runs: RunMeta[] | null;
 		readonly: boolean;
-		/** The role sees Allocations: link each unit's registered volume there (it is hidden from the sidebar by default). */
+		/** The role sees Allocations: link each unit's registered volume there. */
 		showAllocations?: boolean;
 	} = $props();
 

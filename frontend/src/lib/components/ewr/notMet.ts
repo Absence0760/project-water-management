@@ -8,6 +8,7 @@
 import type { RunSummary } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { headlineSite } from '$lib/components/runs/ewrAssurance';
+import type { EwrHeadline } from '$lib/api/types';
 
 /** The term, on every card, tile and label that counts days below the pragmatic EWR. */
 export const EWR_NOT_MET = 'EWR not met';
@@ -61,8 +62,9 @@ export function daysBelowTest(ruleTable: boolean): 'the reserve' | 'the pragmati
 /**
  * The same for a chart of several runs (Compare runs' water-year bars): the
  * bars always count the pragmatic EWR, so "the pragmatic EWR" is true for any
- * mix and is used as soon as one run has a rule table.
+ * mix and is used as soon as one run is judged by a rule table, each by its
+ * own project's choice (settings.ewrHeadline, issue #444; none = automatic).
  */
-export function daysBelowTestOf(summaries: readonly Pick<RunSummary, 'ewrAssurance'>[]): 'the reserve' | 'the pragmatic EWR' {
-	return daysBelowTest(summaries.some((s) => headlineSite(s) !== null));
+export function daysBelowTestOf(runs: readonly { summary: Pick<RunSummary, 'ewrAssurance'>; choice?: EwrHeadline | null }[]): 'the reserve' | 'the pragmatic EWR' {
+	return daysBelowTest(runs.some((r) => headlineSite(r.summary, r.choice) !== null));
 }

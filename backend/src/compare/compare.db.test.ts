@@ -53,7 +53,7 @@ describe('GET /compare/runs', () => {
 
 		const res = await compare(u, `${projectId}:${base}`, `${projectId}:${dam}`);
 		expect(res.status).toBe(200);
-		expect(res.body.a.project).toEqual({ id: projectId, name: 'Catchment C' });
+		expect(res.body.a.project).toEqual({ id: projectId, name: 'Catchment C', ewrHeadline: { source: 'auto' } });
 		expect(res.body.a.run).toMatchObject({ id: base, label: 'Baseline', startDate: '2020-01-01', endDate: '2020-02-29' });
 		expect(res.body.b.run.label).toBe('Dam raise');
 		// The stored inputs snapshot is exposed here (and only here).
@@ -213,6 +213,22 @@ describe('GET /compare/runs', () => {
 		const texts = (await compare(u, `${projectId}:${before}`, `${projectId}:${after}`)).body.changes.map((x: { text: string }) => x.text);
 		expect(texts).toContain('Rainfall (catchment) series extended to 2020-03-01 (was 2020-02-29)');
 		expect(texts).toContain('Rainfall (catchment) values changed on 9 of the 60 days both runs cover (2020-01-01 to 2020-02-29); their total fell 15% (180 → 153)');
+	});
+
+	it("gives each side its own project's choice of the EWR the results are judged by (issue #444)", async () => {
+		const u = await signUp('Judge');
+		const { projectId: c } = await runnableProject(u);
+		const baseC = await run(u, c, 'C baseline');
+		const copy = await u.call('POST', `/projects/${c}/copy`, { name: 'Catchment D' });
+		const d = copy.body.project.id as string;
+		const runD = await run(u, d, 'D baseline');
+		expect((await u.call('PATCH', `/projects/${d}`, { settings: { ewrHeadline: { source: 'pragmatic' } } })).status).toBe(200);
+
+		const res = await compare(u, `${c}:${baseC}`, `${d}:${runD}`);
+		expect(res.status).toBe(200);
+		// Positive control: the project that chose has its choice; the other the default.
+		expect(res.body.b.project.ewrHeadline).toEqual({ source: 'pragmatic' });
+		expect(res.body.a.project.ewrHeadline).toEqual({ source: 'auto' });
 	});
 
 	it('compares runs across a copied project, matching farms by name', async () => {

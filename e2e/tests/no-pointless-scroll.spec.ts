@@ -57,7 +57,7 @@ test('every workspace tab and app page keeps only a gutter below its content, wi
 	const project = await seedRunnableProject(page.request, 'Gutter only');
 	await createRun(page.request, project.id, 'Baseline');
 	// Every section an owner sees is checked: a new tab fails here until it joins TABS. Shown all first, since
-	// History, Allocations and Applications start hidden (DEFAULT_HIDDEN_TABS) and still open from their links.
+	// History and Applications start hidden (DEFAULT_HIDDEN_TABS) and still open from their links.
 	await showAllSections(page.request);
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await page.goto(`/projects/${project.id}`);

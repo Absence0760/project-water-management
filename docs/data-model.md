@@ -2852,7 +2852,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Today `preferences` is `{ hiddenTabs: [...] }`, the workspace sections the
   person hid from their sidebar ([ui.md § Tabs by role](./ui.md)); a missing
   or `null` `hiddenTabs` means they never chose, so the app's default applies
-  (History, Allocations and Applications hidden); later
+  (History and Applications hidden); later
   display choices (the roadmap's WP-1.26 unit preferences) join it as keys.
   The backend validates the shape (`auth/preferences.ts`, zod); the table
   keeps it an object of bounded size (`CHECK`).

@@ -51,8 +51,13 @@ describe('daysBelowTest', () => {
 describe('daysBelowTestOf', () => {
 	const site = { isOutlet: true } as NonNullable<RunSummary['ewrAssurance']>[number];
 	it('names the pragmatic EWR once any compared run has a rule table, and the reserve when none has', () => {
-		expect(daysBelowTestOf([{ ewrAssurance: [] }, {}])).toBe('the reserve');
-		expect(daysBelowTestOf([{ ewrAssurance: [] }, { ewrAssurance: [site] }])).toBe('the pragmatic EWR');
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [] } }, { summary: {} }])).toBe('the reserve');
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [] } }, { summary: { ewrAssurance: [site] } }])).toBe('the pragmatic EWR');
 		expect(daysBelowTestOf([])).toBe('the reserve');
+	});
+	it("follows each run's project choice: a table judged by the pragmatic EWR leaves the count as the reserve (issue #444)", () => {
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'pragmatic' } }])).toBe('the reserve');
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'auto' } }])).toBe('the pragmatic EWR');
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'pragmatic' } }, { summary: { ewrAssurance: [site] } }])).toBe('the pragmatic EWR');
 	});
 });

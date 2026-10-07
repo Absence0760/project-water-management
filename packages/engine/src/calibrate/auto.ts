@@ -45,7 +45,11 @@ export interface AutoCase {
 	/** The fit; null when it failed (`error`). */
 	report: CalibrationReport | null;
 	error: string | null;
-	/** Mean annual simulated natural flow with the fitted parameters over the whole run (Mm³/a); null when not fitted. */
+	/**
+	 * Mean annual simulated natural flow with the fitted parameters over the whole run (Mm³/a); null when not fitted.
+	 * The runoff model's, before any bed loss: with bed losses on, the WR2012 filter reads the flow at the outlet net
+	 * of them (summary.wr2012, engine ≥ 1.76.0), so the two differ by the natural losses.
+	 */
 	naturalMarMm3: number | null;
 	filters: FilterResult[];
 	/** The held-out score the rules select by; null when the record doesn't allow the test. */

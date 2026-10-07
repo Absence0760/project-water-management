@@ -35,7 +35,7 @@ const OWNER_TABS = [
 	'Allocations'
 ];
 /** Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS). */
-const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
+const DEFAULT_HIDDEN = ['Applications', 'History'];
 /** One sidebar row (the rows are 32 px since the Map took the spare one, #326 D3): the room left for one more section. */
 const ROW = 32;
 
@@ -70,9 +70,9 @@ test.describe('1440×960', () => {
 
 		// Data's link also carries its "series behind" badge, so match each label at the start.
 		const links = nav(page).getByRole('link');
-		// By default three sections are hidden.
+		// By default two sections are hidden (Allocations shows since issue #444).
 		await expect(links).toHaveText(OWNER_TABS.filter((t) => !DEFAULT_HIDDEN.includes(t)).map((t) => new RegExp(`^${t}`)));
-		await expect(page.getByRole('button', { name: 'Choose sections: Hidden (3)' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Choose sections: Hidden (2)' })).toBeVisible();
 
 		// The budget is for the worst case: every section shown.
 		await showAllSections(page.request);

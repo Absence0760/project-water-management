@@ -99,12 +99,14 @@ export const VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT = false;
 /**
  * The sections hidden from the sidebar until a person chooses their own
  * (their saved `hiddenTabs` is null: never chosen, or "Reset to default"):
- * the ones most days don't need. History is the model's change log,
- * Allocations the registered-volume comparison and Applications the
- * licensing inbox. Each still opens from a link and is one tick away in
- * Choose sections.
+ * the ones most days don't need. History is the model's change log and
+ * Applications the licensing inbox. Each still opens from a link and is one
+ * tick away in Choose sections. Allocations (the registered-volume
+ * comparison) was hidden too until issue #444, when the client looked for it
+ * in the sidebar and couldn't find it, so it shows by default now. A person
+ * who already chose their sections keeps their choice.
  */
-export const DEFAULT_HIDDEN_TABS: readonly TabId[] = ['allocations', 'applications', 'history'];
+export const DEFAULT_HIDDEN_TABS: readonly TabId[] = ['applications', 'history'];
 
 /**
  * Each page's guide on /help (lib/help/guides.ts), linked as "How this page

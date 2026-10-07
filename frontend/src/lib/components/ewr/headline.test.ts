@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, heatmapHeadlineNote, judgedByText, resolveEwrHeadline, ruleTableSites } from './headline';
+import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, heatmapHeadlineNote, judgedByText, reportJudgedBy, resolveEwrHeadline, ruleTableSites } from './headline';
 
 // Synthetic network: an outlet gauge, two gauges above it, a farm.
 const nodes = [
@@ -82,6 +82,28 @@ describe('judgedByText', () => {
 		expect(judgedByText(null, undefined)).toBe('the pragmatic EWR at the outflow gauge (automatic)');
 		expect(judgedByText({ isOutlet: true, name: 'Outlet weir' }, { source: 'auto' })).toBe('the Reserve rule table at the outlet, Outlet weir (automatic)');
 		expect(judgedByText({ isOutlet: false, name: 'Gauge A' }, { source: 'ruleTable', siteNodeId: 'g1' })).toBe('the Reserve rule table at Gauge A');
+	});
+});
+
+describe('reportJudgedBy', () => {
+	it('says what the printed run is judged by and that it is the setting at printing (issue #444)', () => {
+		expect(reportJudgedBy({ isOutlet: false, name: 'Gauge A' }, { source: 'ruleTable', siteNodeId: 'g1' }, false, true)).toBe(
+			'Results are judged by the Reserve rule table at Gauge A, the project’s setting when this report was printed.'
+		);
+		expect(reportJudgedBy(null, { source: 'pragmatic' }, false, false)).toBe(
+			'Results are judged by the pragmatic EWR at the outflow gauge, the project’s setting when this report was printed.'
+		);
+	});
+	it('says when the run has no table at the chosen site', () => {
+		expect(reportJudgedBy({ isOutlet: true, name: 'Outlet weir' }, { source: 'ruleTable', siteNodeId: 'g1' }, true, true)).toBe(
+			'Results are judged by the Reserve rule table at the outlet, Outlet weir, the project’s setting when this report was printed; this run has no Reserve rule table at the chosen site, so it is judged automatically.'
+		);
+	});
+	it('is empty when there is nothing to choose between', () => {
+		expect(reportJudgedBy(null, { source: 'auto' }, false, false)).toBe('');
+		expect(reportJudgedBy(null, undefined, false, false)).toBe('');
+		// Positive control: automatic with a table in the run still says so.
+		expect(reportJudgedBy({ isOutlet: true, name: 'Outlet weir' }, undefined, false, true)).toContain('(automatic), the project’s setting');
 	});
 });
 

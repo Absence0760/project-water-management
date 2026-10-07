@@ -93,7 +93,7 @@ export async function createProject(request: APIRequestContext, name: string, de
 
 /**
  * Shows every workspace section in the signed-in account's sidebar (its own choice, `hiddenTabs: []`),
- * instead of the default that hides History, Allocations and Applications (frontend
+ * instead of the default that hides History and Applications (frontend
  * lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS): setup for the specs that reach one of those through the
  * sidebar, or need every section in it. own-sections.spec.ts tests the choice and the default themselves.
  */

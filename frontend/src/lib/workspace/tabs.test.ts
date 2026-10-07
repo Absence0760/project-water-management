@@ -142,12 +142,12 @@ describe('hiddenTabs (the "Hidden (n)" count)', () => {
 });
 
 describe('hiddenChoice (the default hidden sections)', () => {
-	it('hides History, Allocations and Applications until the person chooses; their own choice, even [], wins', () => {
-		expect([...DEFAULT_HIDDEN_TABS].sort()).toEqual(['allocations', 'applications', 'history']);
+	it('hides History and Applications until the person chooses, and shows Allocations (issue #444); their own choice, even [], wins', () => {
+		expect([...DEFAULT_HIDDEN_TABS].sort()).toEqual(['applications', 'history']);
 		for (const never of [null, undefined]) {
 			const shown = visibleTabs('owner', { hidden: hiddenChoice(never) }, PAGE);
 			expect(shown).not.toContain('history');
-			expect(shown).not.toContain('allocations');
+			expect(shown).toContain('allocations');
 			expect(shown).not.toContain('applications');
 			expect(shown).toContain('overview');
 		}

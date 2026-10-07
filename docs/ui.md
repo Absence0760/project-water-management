@@ -726,11 +726,13 @@ Project page's headline facts still link to their tabs (a deep link, as above).
 
 **Your own sections** (`workspace/SectionsMenu.svelte`,
 `e2e/tests/own-sections.spec.ts`). Within what the role shows, each person
-hides the sections they don't use. Until they choose, three are hidden by
+hides the sections they don't use. Until they choose, two are hidden by
 default (`DEFAULT_HIDDEN_TABS` in `lib/workspace/tabs.ts`): **History** (the
-model's change log), **Allocations** (registered volumes against modelled
-use) and **Applications** (the licensing inbox), the sections most days don't
-need; each is one tick away and still opens from a link. The **Choose sections** button (icon only
+model's change log) and **Applications** (the licensing inbox), the sections
+most days don't need; each is one tick away and still opens from a link.
+**Allocations** was hidden too until issue #444, when the client looked for it
+in the sidebar and couldn't find it; it shows by default now, and a person who
+had already chosen their sections keeps their choice. The **Choose sections** button (icon only
 on the sidebar's "Catchment" line, in words at the foot of the phone's
 Sections menu; once some are hidden, a count on the corner of the sidebar's
 icon, kept within its 24 px button so the slot never scrolls sideways, and
@@ -1234,8 +1236,8 @@ put the results first; its first screen follows board A1 of the redesign
    and sharing → Project** and, for a role that sees Allocations,
    **Registered vs modelled use → Allocations** (`allocationsHref`,
    `allocations/links.ts`, with `run=` the run the Summary shows; issue
-   #444): Allocations is hidden from the sidebar by default, and the client
-   couldn't find it. The Summary doesn't count the units over their
+   #444): the client couldn't find Allocations while it was hidden from the
+   sidebar by default; it is in the sidebar now too. The Summary doesn't count the units over their
    registered volume: the run summary's comparison is against the volumes
    when it ran and has no part-year sums, so its count could disagree with
    the Allocations page's, which compares today's volumes. A second, **Dam levels for each dam → Dams**,
@@ -4826,6 +4828,13 @@ section header, which it fills (`fillHeader`) like the other sections.
   `resolveHeadline`). It changes no result, so it needs no re-run and saving
   it alone doesn't put the latest run out of date: every run, old ones
   included, is read by the project's current choice (runs don't record it).
+  That is deliberate (decided for issue #444): the choice picks which of the
+  run's own figures heads it, every site's being in the run, so freezing it
+  on the run would only make a change of mind need a re-run that changes
+  nothing. A printed report says which EWR it was judged by and that it is
+  the project's setting at printing (below, § Report), and Compare runs reads
+  each run by its own project's choice. The issued record is the evidence
+  pack, which doesn't follow the choice (`evidence/report.ts`).
   A stored choice whose table has gone (or a pragmatic EWR cleared to 0)
   keeps its option, labelled as no longer in the settings, with a note that
   results are judged automatically until you choose again; it never blocks
@@ -7414,13 +7423,13 @@ gives it an `h1` and **Back to runs**). The full reference is
   a note and **Show as a table**. Its value axis is labelled "days below";
   when every year is 0 the plot says "No day below the reserve in any
   year" rather than showing empty bars. It fills the height of its row.
-  The bars always count the pragmatic EWR, so once any compared run has a
-  rule table the heading and the chart's labels say "the pragmatic EWR"
-  instead of "the reserve" (`daysBelowTestOf`, issue #177); that is true of
-  every run in a mixed set. It doesn't follow a project's Settings → Judge
-  results by (issue #444): the runs compared may be of different projects
-  with different choices, and "the pragmatic EWR" is true of the bars
-  whatever they chose.
+  The bars always count the pragmatic EWR, so once any compared run is
+  judged by a rule table the heading and the chart's labels say "the
+  pragmatic EWR" instead of "the reserve" (`daysBelowTestOf`, issue #177);
+  that is true of every run in a mixed set. Each run is judged by its own
+  project's Settings → Judge results by (issue #444; `GET /compare/runs`
+  gives each side's), so runs whose projects all judge by the pragmatic EWR
+  say "the reserve", as River & reserve does for them.
 - **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
   a **Baseline vs What-if 1 / 2** radio switch when there are two what-ifs,
   then every panel of the two-run comparison, unchanged.
@@ -7644,14 +7653,15 @@ closing, and **Discard edits** puts it back. **Edits to record**
 WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
 [allocations.md](./allocations.md)); laid out as an option A page (issue
 #17). A core tab: owners, editors and viewers see it; farmers never reach the
-workspace. It is hidden from the sidebar until a person chooses their
-sections (`DEFAULT_HIDDEN_TABS`), so it is reached from links: the Summary's
+workspace. It is in the sidebar unless a person hides it (it was hidden by
+default, `DEFAULT_HIDDEN_TABS`, until issue #444, after the client couldn't
+find the page), and it is reached from links too: the Summary's
 **Registered vs modelled use → Allocations**, and on [Hydrological
 units](#hydrological-units) the line under the unit results and each card's
 **Registered use** (with `unit=`), all with the run they show
-(`allocations/links.ts` `allocationsHref`; issue #444, after the client
-couldn't find the page). Opened from a link it shows in the sidebar in its
-place, as any hidden section does.
+(`allocations/links.ts` `allocationsHref`; issue #444). Opened from a link
+by someone who hid it, it shows in the sidebar in its place, as any hidden
+section does.
 
 **What a viewer sees** (decision D3, 162). Until an owner switches viewers
 on, a viewer gets one card instead of the page below, *Registered water use
@@ -8272,7 +8282,10 @@ anyone who can view the project. Without `?run=` it reports the latest run. It
 reads the project, the run with its settings and model snapshot (one
 exception: the lede and headline cards follow the project's current Settings
 → Judge results by, `settings.ewrHeadline`, issue #444, which runs don't
-record, so an old run's printed headline follows a later change of it), the series
+record, so an old run's printed headline follows a later change of it; the
+line under the lede, `ewr/headline.ts` `reportJudgedBy`, says which EWR the
+results are judged by and that it is the project's setting when printed, so
+every printed copy names its basis), the series
 list, four catchment series, the run's sign-offs and its place in the
 project's publications (`GET …/runs/:runId/publication`, issue #70), and is
 its own lazy route chunk. A non-member gets the workspace's "This project

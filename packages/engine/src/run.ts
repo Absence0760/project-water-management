@@ -43,7 +43,7 @@ import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimi
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
-import { REACH_LOSS_SERIES, reachGross, reachLossOf, SENIOR_REACH_LOSS_SERIES, type PlanReachLoss } from './network/reachLoss';
+import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatural, SENIOR_REACH_LOSS_SERIES, type NaturalReaches, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -316,17 +316,13 @@ function runNetwork(
 	// factor. What the catchment's own water balance reads (the WR2012 rain scaling, the water
 	// account, the plausibility checks); the same array as finalRain without a correction.
 	const catchmentRain = areal && finalRain ? finalRain.map((v, t) => (v === null ? null : v * areal[waterYearIndex(month[t]!)]!)) : finalRain;
-	// WR2012 flows are naturalised: compare them with natural flow, never the outflow.
-	const wr2012 = wr2012Report(
-		{
-			settings: settings.wr2012,
-			startDate,
-			natural,
-			areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
-			rainMm: catchmentRain
-		},
-		warnings
-	);
+	// WR2012 flows are naturalised: compare them with natural flow, never the outflow. They are also net of
+	// WRSM's Bedloss, so with bed losses on (engine ≥ 1.76.0) the comparison waits for the plan and reads the
+	// natural flow at the outlet net of them (naturalAtOutlet below).
+	const wr2012Of = (flow: Float64Array) =>
+		wr2012Report({ settings: settings.wr2012, startDate, natural: flow, areaKm2: resolveCatchmentAreaKm2(settings.calibration, input), rainMm: catchmentRain }, warnings);
+	const lossy = hasReachLosses(input.model.nodes);
+	let wr2012 = lossy ? null : wr2012Of(natural);
 
 	// --- network ----------------------------------------------------------------
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
@@ -337,6 +333,7 @@ function runNetwork(
 	const { plan, topo } = built;
 	const nodes = input.model.nodes;
 	const ewr = plan.ewr;
+	if (lossy) wr2012 = wr2012Of(naturalAtOutlet(plan, topo.outflow, natural) ?? natural);
 	// A resumed run starts from the snapshot's state and its pinned statistics (engine ≥ 1.1.0).
 	if (resume) {
 		plan.nodes.forEach((p, i) => {
@@ -523,6 +520,7 @@ function runNetwork(
 		siteNodes.map((node) => ({ node, farms: siteUnits(kinds, plan.upstream, ranked, node) })),
 		sim,
 		simOutflow,
+		naturalReaches(plan),
 		startDate,
 		days,
 		historyDays,
@@ -1551,7 +1549,7 @@ export function buildNetworkPlan(
 	const reaches = nodes.map((n) => reachLossOf(n, warnings).reachLoss);
 	if (reaches.some((p) => p))
 		warnings.push(
-			'bed losses are on: the EWR requirements are still fragmented from the natural flow without them, so a site below a losing reach can fall short of its requirement with no development at all (docs/model.md §2.6b)'
+			'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
 		);
 	const users = otherUsers(nodes, topo, shares.share, reaches, days, month, warnings, factorFrom, (i, d) => {
 		d.fill(0, 0, abstractFrom[i]!);
@@ -2384,6 +2382,31 @@ function catchmentRunoffCoefficient(
 	return coefficient;
 }
 
+/** The plan as the natural flow crosses it (./network/reachLoss.ts routeNatural), or null when no reach loses (engine ≥ 1.76.0). */
+export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>): NaturalReaches | null {
+	const reach = plan.nodes.map((n) => n.reachLoss);
+	return reach.some((p) => p) ? { order: plan.order, upstream: plan.upstream, reach } : null;
+}
+
+/**
+ * The catchment's natural flow at the outlet net of the natural bed losses
+ * (engine ≥ 1.76.0, docs/model.md §2.6b): each unit's flow share of `natural`
+ * routed down the reaches, plus the part of the catchment no unit's share
+ * holds, which crosses no modelled reach. What WR2012's naturalised flows
+ * (net of WRSM's Bedloss) are compared with: the run's WR2012 check and the
+ * calibration's MAR penalty. null when no reach loses or there is no outlet.
+ */
+export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>, outflow: number, natural: ArrayLike<number>): Float64Array | null {
+	const r = naturalReaches(plan);
+	if (!r || outflow < 0) return null;
+	const share = plan.nodes.map((n) => (n.kind === 'farm' ? n.share : 0));
+	// Summed in value order, so the float sum (and `rest`) doesn't depend on how the network is listed.
+	const rest = Math.max(0, 1 - [...share].sort((a, b) => a - b).reduce((a, b) => a + b, 0));
+	const at = routeNatural(r, (i, t) => natural[t]! * share[i]!, natural.length, [outflow])[0]!;
+	if (rest > 0) for (let t = 0; t < at.length; t++) at[t] = at[t]! + natural[t]! * rest;
+	return at;
+}
+
 /**
  * Assess each rule table at its EWR site (./reserve/assurance.ts): the outlet
  * (simulated outflow) or a gauge (its flow). The site's natural flow is the
@@ -2398,6 +2421,11 @@ function assessEwrRules(
 	sites: readonly { node: number; farms: Int32Array }[],
 	sim: { nodes: readonly NodeResult[] },
 	simOutflow: Float64Array,
+	/**
+	 * The plan as the natural flow crosses it when a reach loses (engine ≥ 1.76.0), else null: a site's
+	 * natural flow is then its units' runoff routed down to it net of the natural bed losses.
+	 */
+	reaches: NaturalReaches | null,
 	startDate: string,
 	days: number,
 	/** Only complete months within the first this many days are assessed (the days before a forecast tail). */
@@ -2443,15 +2471,24 @@ function assessEwrRules(
 			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: the gauge is not marked as an EWR site`);
 			continue;
 		}
-		const natural = new Float64Array(days);
-		// Summed in node-id order, not display order, so a month's natural volume (and the
-		// percentile and requirement it selects) is bit-identical however the network is listed:
-		// on a flat stretch of the table's natural curve a one-ulp difference moved the
-		// percentile from one % point to the next (fuzz seed 18472, engine 0.24.1).
-		const upstreamFarms = [...(siteOf.get(node)?.farms ?? [])].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
-		for (const f of upstreamFarms) {
-			const r = sim.nodes[f]!.runoff;
-			for (let t = 0; t < days; t++) natural[t] = natural[t]! + r[t]!;
+		let natural = new Float64Array(days);
+		if (reaches) {
+			// With bed losses (engine ≥ 1.76.0, docs/model.md §2.6b): the units' runoff routed to the site net of
+			// the natural losses of the reaches on its way, as WRSM's naturalised flows are net of its Bedloss, so
+			// a site below a losing reach doesn't fall short with nothing built. Summed in node-id order
+			// (plan.upstream) and in the plan's order, so it doesn't depend on the listing either.
+			const units = new Set(siteOf.get(node)?.farms ?? []);
+			natural = routeNatural(reaches, (i, t) => (units.has(i) ? sim.nodes[i]!.runoff[t]! : 0), days, [node])[0]!;
+		} else {
+			// Summed in node-id order, not display order, so a month's natural volume (and the
+			// percentile and requirement it selects) is bit-identical however the network is listed:
+			// on a flat stretch of the table's natural curve a one-ulp difference moved the
+			// percentile from one % point to the next (fuzz seed 18472, engine 0.24.1).
+			const upstreamFarms = [...(siteOf.get(node)?.farms ?? [])].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
+			for (const f of upstreamFarms) {
+				const r = sim.nodes[f]!.runoff;
+				for (let t = 0; t < days; t++) natural[t] = natural[t]! + r[t]!;
+			}
 		}
 		const impacted = isOutlet ? simOutflow : sim.nodes[node]!.outflow;
 		const name = nodes[node]!.name;
