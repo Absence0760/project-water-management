@@ -21,7 +21,7 @@ const copy = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v
  * the model runs: the server leaves them out of a run's input
  * (backend/src/runs/execute.ts loadLiveInput), so the overlay does too.
  */
-export const NOT_MODEL_SETTINGS: readonly string[] = ['autoRun', 'outcomes', 'outlook'];
+export const NOT_MODEL_SETTINGS: readonly string[] = ['autoRun', 'outcomes', 'outlook', 'ewrHeadline'];
 const stripped = (s: Plain): Plain => Object.fromEntries(Object.entries(s).filter(([k]) => !NOT_MODEL_SETTINGS.includes(k)));
 
 /**

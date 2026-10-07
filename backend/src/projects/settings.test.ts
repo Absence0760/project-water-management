@@ -1424,3 +1424,25 @@ describe('SettingsPatch dates that do not exist (engine ≥ 1.69.0)', () => {
 		expect(SettingsPatch.safeParse({ reportStart: '2004-02-29' }).success).toBe(true);
 	});
 });
+
+describe('settings.ewrHeadline (issue #444)', () => {
+	const id = '6f1c2d3e-4b5a-4c6d-8e7f-901234567890';
+	it('parses each choice and nothing else', () => {
+		for (const ok of [{ source: 'auto' }, { source: 'pragmatic' }, { source: 'ruleTable', siteNodeId: null }, { source: 'ruleTable', siteNodeId: id }]) {
+			expect(SettingsPatch.safeParse({ ewrHeadline: ok }).success, JSON.stringify(ok)).toBe(true);
+		}
+		for (const bad of [{ source: 'pragmatic', siteNodeId: id }, { source: 'ruleTable' }, { source: 'other' }, null]) {
+			expect(SettingsPatch.safeParse({ ewrHeadline: bad }).success, JSON.stringify(bad)).toBe(false);
+		}
+	});
+	it('is replaced whole, so a rule table’s site never outlives the choice', () => {
+		const stored = patchSettings({}, { ewrHeadline: { source: 'ruleTable', siteNodeId: id } });
+		expect(patchSettings(stored, { ewrHeadline: { source: 'pragmatic' } })).toHaveProperty('ewrHeadline', { source: 'pragmatic' });
+	});
+	it('its site follows its node on a copy, the outlet (null) and an unknown site left alone', () => {
+		const ids = new Map([['g1', 'new-g1']]);
+		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'g1' } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'new-g1' } });
+		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: null } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: null } });
+		expect(remapSettingNodeIds({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'gone' } }, ids)).toEqual({ ewrHeadline: { source: 'ruleTable', siteNodeId: 'gone' } });
+	});
+});

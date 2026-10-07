@@ -5,7 +5,7 @@
 // reserve); their `#res-…` ids moved with them, so an old
 // `?tab=runs&run=…#res-reserve` link is sent here (links.ts riverAnchor).
 import { metricDelta, type MetricDelta, type RunSummary } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { EwrHeadline, RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import type { MetricSpec } from '$lib/components/compare/delta';
 import { daysBelowTest, ewrNotMet } from '$lib/components/ewr/notMet';
@@ -63,7 +63,8 @@ export const perYear = (daysNotMet: number, days: number) => (days > 0 ? (daysNo
  * worded as the Summary's card, ewr/notMet.ts; its sub lines are the days
  * not met of the record and how many in an average year, both the same
  * pragmatic EWR test, then the rule-table months, labelled as such, when the
- * project has one) and the mean simulated outflow (the Summary's figure,
+ * project judges by a rule table, `choice`: settings.ewrHeadline, issue #444)
+ * and the mean simulated outflow (the Summary's figure,
  * overview/latestRun.ts). `days` is the run's length. A third tile, the days
  * below the reserve, repeated this tile's count, and its per-year figure is
  * the share × 365.25, so its change said what this tile's does; it became the
@@ -71,14 +72,14 @@ export const perYear = (daysNotMet: number, days: number) => (days > 0 ? (daysNo
  * largest figure of the EWR by month grid's "All years" row and was removed
  * (2026-09-29, issue #175).
  */
-export function riverKpis(s: RunSummary, days: number, previous: { summary: RunSummary; days: number } | null): RiverKpi[] {
+export function riverKpis(s: RunSummary, days: number, previous: { summary: RunSummary; days: number } | null, choice?: EwrHeadline | null): RiverKpi[] {
 	const c = s.catchment;
 	const pc = previous?.summary.catchment;
 	const ewr = ewrNotMet(c, days);
 	const year = perYear(c.ewrDaysNotMet, days);
 	const perYearText = fmtNum(year, year < 10 ? 1 : 0, true);
 	const ewrSub = [ewr.count, `${perYearText} ${perYearText === '1' ? 'day' : 'days'} in an average year`];
-	const reserve = headlines(s, days, null).find((h) => h.id === 'reserve');
+	const reserve = headlines(s, days, null, choice).find((h) => h.id === 'reserve');
 	if (reserve) ewrSub.push(`Reserve rules: ${reserve.value} of months`);
 
 	const outflow = headlines(s, days, previous?.summary ?? null).find((h) => h.id === 'outflow')!;
@@ -140,13 +141,16 @@ export function reserveYearsWords(ruleTable: boolean): { heading: string; below:
  * the panel only then; that is also when the project has a rule table.
  * `ruleLine`: the run stored the outlet's rule requirement, so the flow chart
  * draws it and keeps its "Flow vs reserve" name (summaryChart.ts flowHeading).
+ * `headlineRuleTable`: the headline judges by a rule table (the project's
+ * settings.ewrHeadline, issue #444), which names the flow chart as it does
+ * the chart's own heading; by default, whenever the run has a table.
  */
-export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean): NavGroup[] {
+export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean, headlineRuleTable = hasReserveCompliance): NavGroup[] {
 	return [
 		{
 			label: 'The reserve',
 			sections: [
-				{ id: 'res-ewr', label: flowHeading(hasReserveCompliance, ruleLine) },
+				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine) },
 				{ id: 'res-reserve-years', label: 'Days below, by year' },
 				...(hasReserveCompliance ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
 				{ id: 'res-ewr-grid', label: 'EWR by month' }

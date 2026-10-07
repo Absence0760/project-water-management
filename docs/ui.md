@@ -1258,9 +1258,11 @@ put the results first; its first screen follows board A1 of the redesign
   so. Beside its heading, **More on River & reserve** opens [River &
   reserve](#river--reserve) for that run (`riverHref`, `river/links.ts`),
   where the **Flow vs reserve** chart is.
-  **With a Reserve rule table** (issue #177) the headline card is
+  **When the results are judged by a Reserve rule table** (issue #177; by
+  default whenever the project has one, or as chosen in Settings → [Judge
+  results by](#settings--calibration), issue #444) the headline card is
   *Reserve rules met*, judged by the table (whole months at a site,
-  `headlineSite`), while the strip still counts days below the pragmatic
+  `headlineSite` with the project's `settings.ewrHeadline`), while the strip still counts days below the pragmatic
   EWR at the outlet, so "the reserve" would name two different tests on one
   screen. There the strip is headed **Days below the pragmatic EWR** (its
   region and month list named the same, a month "below the pragmatic EWR on
@@ -1268,7 +1270,8 @@ put the results first; its first screen follows board A1 of the redesign
   card above judges whole months by the rule table instead."
   (`stripWords`/`stripWhat`, `reserveStrip.ts`, its name from
   `ewr/notMet.ts` `daysBelowTest`, which River & reserve's panels share;
-  OverviewTab passes `ruleTable` from `headlineSite`). It keeps counting the pragmatic EWR
+  OverviewTab passes `ruleTable` from `headlineSite`). Judged by the
+  pragmatic EWR, the strip keeps its plain **Days below the reserve**. It keeps counting the pragmatic EWR
   rather than switching to the table's test: the table gives one verdict
   per complete month, not a count of days, so there is no "days below"
   to draw from it, and its months are already the card's figure (and
@@ -1312,8 +1315,9 @@ put the results first; its first screen follows board A1 of the redesign
   GR4J) and the evidence run. **Open in Runs** links
   to `?tab=runs&run=<id>`. Four cards, the same figures and labels as the Runs
   tab's headline (`RunSummaryView.svelte`): *Reserve rules met* (the rule-table
-  site from `headlineSite`) or, without a rule table, *EWR not met* (days below
-  the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
+  site from `headlineSite`, under the project's choice in Settings → Judge
+  results by) or, judged by the pragmatic EWR (by choice, or with no rule
+  table), *EWR not met* (days below the pragmatic EWR); *Irrigation supplied* (% of all farms' demand, with "N of
   M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
   (in-sample)" only when the parameters were fitted on those days, otherwise
   why not, as on the Runs tab; "–" without observed flow). They show in the
@@ -4705,6 +4709,35 @@ section header, which it fills (`fillHeader`) like the other sections.
   for a viewer when there is one, before Add data. The old
   intro paragraph is gone: the header and the menu's groups say what it
   said, and the monthly tables' own Oct … Sep headers show the water year.
+- **Judge results by** (`#set-judge`, `settings/EwrHeadlineField.svelte`,
+  helpers in `ewr/headline.ts`; issue #444: the client asked where to choose
+  which EWR to use, at the top). The first panel of the form, right under the
+  section menu (not a link in it: it is already at the top): one select,
+  `settings.ewrHeadline`, with a line saying what it does. The options list
+  only what exists: **Automatic: now …**, naming what it picks today (the
+  outlet's Reserve rule table, else the first site's, else the pragmatic EWR:
+  what every project did before the choice, and the default); **The pragmatic
+  EWR at the outflow gauge**, when some month of it is above 0; and **The
+  Reserve rule table at …** for each site with a table (the outlet first, a
+  table keyed by the outlet node counting as the outlet, then gauges in
+  network order). It decides which test the Summary's headline card, the run
+  sentence (Runs & results, the printable report), River & reserve's tiles
+  and line, and the "days below" wording report (`runs/ewrAssurance.ts`
+  `resolveHeadline`). It changes no result, so it needs no re-run and saving
+  it alone doesn't put the latest run out of date: every run, old ones
+  included, is read by the project's current choice (runs don't record it).
+  A stored choice whose table has gone (or a pragmatic EWR cleared to 0)
+  keeps its option, labelled as no longer in the settings, with a note that
+  results are judged automatically until you choose again; it never blocks
+  Save (the note is a warning box, tied to the select by
+  `aria-describedby`). With no rule table and no stored choice there is
+  nothing to choose, so the panel says results are judged by the pragmatic
+  EWR and links to Reserve rules instead of showing a select. It never sets
+  **EWR charge follows** (Reserve rules), the model input behind the daily
+  charge, curtailment and water account: when the test the choice judges by
+  (`headlineTest`: Automatic counts as a rule table whenever there is one)
+  differs from the charge's, a line under the select says which test the
+  charge follows.
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
   Project page's recent notes, `notes.ts` `noteHref`; `?tab=calibration`
   still works) land on that group once the tab's chunk has drawn it, held
@@ -5690,12 +5723,24 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   project's rule tables), and its actions: the **Run** menu and **Open in
   Runs & results**, before the page's Add data. With no run the context says
   what the page is for.
+- **Judged by** (`data-testid="river-judged-by"`, issue #444): a line at
+  the top, under the section menu: "Results are judged by the Reserve rule
+  table at the outlet, Outflow gauge (automatic). Change", shown when the run
+  has a rule table or the project has chosen (not Automatic), so a project
+  with nothing to choose doesn't get it; resolved from the run shown
+  under the project's `settings.ewrHeadline` (`resolveHeadline`,
+  `ewr/headline.ts` `judgedByText`), "(automatic)" when the project hasn't
+  chosen. **Change** (for a viewer, **Where this is set**) opens Settings →
+  Judge results by (`?tab=settings#set-judge`). When the chosen site's table
+  isn't in the run (the table or gauge went, or the run predates it), the
+  line adds that the run is judged automatically. Reserve compliance keeps
+  its panel whenever the run has a table, whatever judges the headline.
 - **Tiles** (`riverKpis`), each with its change from the previous run where
   both runs have the figure (`Delta`, as on the Summary):
   *EWR not met* (share of days the outflow was below the pragmatic EWR at
   the outflow gauge, "N of M days", how many in an average year ("37 days
-  in an average year", one decimal under 10), and with a rule table
-  "Reserve rules: x% of months", which is the rule table's test and named
+  in an average year", one decimal under 10), and when the results are
+  judged by a rule table "Reserve rules: x% of months", which is the rule table's test and named
   as such; flagged above 5 % of days; a fall is the better change). It
   is the Summary's *EWR not met* card word for word: both take their term,
   value and count from `ewr/notMet.ts` `ewrNotMet`, since until issue #162
@@ -5741,7 +5786,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   a table behind *Show as a table*; about six years labelled, always the
   last, and a label near an edge moved in so it is never cut off,
   `compare/yearAxis.ts`, issue #162: the narrow column clipped "2024/25" to
-  "2024/2…"). With a Reserve rule table (`headlineSite`) the bars are
+  "2024/2…"). When the results are judged by a Reserve rule table
+  (`headlineSite` under `settings.ewrHeadline`) the bars are
   headed **Days below the pragmatic EWR, each water year**, their drawing
   and table named the same (`river.ts` `reserveYearsWords`, the chart's
   `below` prop), since the Reserve is then the table's monthly test and the
@@ -6146,8 +6192,8 @@ read it before.
 - **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): the river measure the cards lead with (Reserve
-  rules met in X % of months at the headline site when there is a rule table,
-  else the % of days below the pragmatic EWR at the outflow gauge), then the
+  rules met in X % of months at the headline site when the results are judged
+  by a rule table (Settings → Judge results by), else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
   "Every hydrological unit got at least 95 %"; left out when the run has no farms). The
   calibration fit is left to the NSE and PBIAS cards (a sentence repeating
@@ -7183,7 +7229,10 @@ gives it an `h1` and **Back to runs**). The full reference is
   The bars always count the pragmatic EWR, so once any compared run has a
   rule table the heading and the chart's labels say "the pragmatic EWR"
   instead of "the reserve" (`daysBelowTestOf`, issue #177); that is true of
-  every run in a mixed set.
+  every run in a mixed set. It doesn't follow a project's Settings → Judge
+  results by (issue #444): the runs compared may be of different projects
+  with different choices, and "the pragmatic EWR" is true of the bars
+  whatever they chose.
 - **Full comparison:** a divider, "Baseline (run A) against What-if 1 (run B)",
   a **Baseline vs What-if 1 / 2** radio switch when there are two what-ifs,
   then every panel of the two-run comparison, unchanged.
@@ -8025,7 +8074,10 @@ March") is kept against what it is about.
 `/projects/:id/report?run=<runId>` (`routes/projects/[id]/report/+page.svelte`,
 WP-2.15 Phase A, issue #19): a meeting-ready catchment report of one run, for
 anyone who can view the project. Without `?run=` it reports the latest run. It
-reads the project, the run with its settings and model snapshot, the series
+reads the project, the run with its settings and model snapshot (one
+exception: the lede and headline cards follow the project's current Settings
+→ Judge results by, `settings.ewrHeadline`, issue #444, which runs don't
+record, so an old run's printed headline follows a later change of it), the series
 list, four catchment series, the run's sign-offs and its place in the
 project's publications (`GET …/runs/:runId/publication`, issue #70), and is
 its own lazy route chunk. A non-member gets the workspace's "This project

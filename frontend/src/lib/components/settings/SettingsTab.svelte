@@ -87,6 +87,7 @@
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
+	import EwrHeadlineField from './EwrHeadlineField.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
@@ -393,6 +394,17 @@
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
 <div class="settings-form">
+
+	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
+	     section menu, which starts right above it; River & reserve's "Change" links here (#set-judge). -->
+	<EwrHeadlineField
+		bind:value={s.ewrHeadline}
+		ewrRules={s.ewrRules}
+		ewrPragmatic={s.ewrPragmaticM3PerDay}
+		chargeSource={s.ewrChargeSource}
+		nodes={editor?.model.nodes ?? []}
+		{readonly}
+	/>
 
 	<!-- Demand ------------------------------------------------------------------>
 	<section class="panel" id="set-demand" aria-labelledby="dem-h">

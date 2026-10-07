@@ -7,7 +7,7 @@
 	// Only this section waits for the run's summary; the rest of the tab
 	// renders at once. Which run it is (label, period, engine, age, a link to
 	// it) is the section header's context line (OverviewTab, RunContext).
-	import type { Run, RunMeta } from '$lib/api';
+	import type { EwrHeadline, Run, RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -26,7 +26,8 @@
 		error,
 		previousError,
 		retry,
-		dams
+		dams,
+		headline = null
 	}: {
 		/** The run shown (from the page's list). */
 		meta: RunMeta;
@@ -44,9 +45,11 @@
 		retry: () => void;
 		/** All dams at the end of the run (their series load after the summary). */
 		dams: DamsState;
+		/** The project's settings.ewrHeadline (issue #444): which test the Reserve card reports; null = automatic. */
+		headline?: EwrHeadline | null;
 	} = $props();
 
-	const all = $derived(run ? headlines(run.summary, historyDays(run), previous?.summary ?? null) : []);
+	const all = $derived(run ? headlines(run.summary, historyDays(run), previous?.summary ?? null, headline) : []);
 	// Reserve · Irrigation supplied · Dams today ("Dams on <date>" once the dams' last day is stale) · NSE; the outflow is River & reserve's.
 	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams, dataEndOf(damsEnd(dams, meta), localIsoDate())), ...all.filter((h) => h.id === 'nse')] : []);
 	const name = (r: RunMeta) => r.label || 'Untitled run';

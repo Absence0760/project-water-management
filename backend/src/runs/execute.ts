@@ -85,8 +85,9 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how, settings.outcomes
 	// (projects/outcomeSettings.ts) how its results are read, and settings.outlook
 	// (projects/outlookSettings.ts) how a seasonal outlook is set up, and settings.responsibleAuthority
-	// (projects/authoritySettings.ts) who decides its applications: none is a model input, so runs don't record them.
-	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ...settings } = mergeSettings(
+	// (projects/authoritySettings.ts) who decides its applications, and settings.ewrHeadline (projects/ewrHeadlineSettings.ts)
+	// which EWR test its results are judged by: none is a model input, so runs don't record them.
+	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, responsibleAuthority: _authority, ewrHeadline: _headline, ...settings } = mergeSettings(
 		p[0]?.settings
 	) as unknown as Record<string, unknown>;
 	// Registered volumes (engine ≥ 1.18.0, issue #72): what settings.allocationMode caps or scales the run

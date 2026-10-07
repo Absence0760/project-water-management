@@ -6,6 +6,7 @@
 	// `units`, in their old place.
 	import type { Snippet } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
+	import type { EwrHeadline } from '$lib/api/types';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
@@ -21,7 +22,8 @@
 		days,
 		units,
 		reserveHref = '#res-reserve',
-		otherUsesHref
+		otherUsesHref,
+		headline = null
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -32,6 +34,8 @@
 		reserveHref?: string;
 		/** A link to a panel of Units & supply by its anchor: where the land-cover, groundwater, demand-object and other-user tables are in the workspace (issue #137). */
 		otherUsesHref?: (hash: string) => string;
+		/** The project's settings.ewrHeadline (issue #444): which test the headline reports; null = automatic. */
+		headline?: EwrHeadline | null;
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
@@ -43,11 +47,11 @@
 	const cal = $derived(summary.calibration);
 	// "in-sample" only when the parameters were fitted on the days scored (issue #45).
 	const sample = $derived(calibrationSample(cal));
-	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project has a rule table.
-	const reserve = $derived(headlineSite(summary));
+	// Reserve compliance by month (engine ≥ 0.21.0): the headline when the project judges by a rule table.
+	const reserve = $derived(headlineSite(summary, headline));
 	const c = $derived(summary.catchment);
 	// The cards below in one or two plain sentences (runs/runSentence.ts).
-	const lede = $derived(runSentence(summary));
+	const lede = $derived(runSentence(summary, headline));
 	const groups = $derived(warningGroups(summary.warnings));
 	const checkItems = $derived(credibility(summary));
 	const otherUses = $derived(otherUsesHref ? otherUsesLink(summary) : null);

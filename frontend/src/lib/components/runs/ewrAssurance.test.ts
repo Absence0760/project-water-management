@@ -8,6 +8,7 @@ import {
 	fmtFlow,
 	fmtMm3,
 	headlineSite,
+	resolveHeadline,
 	highFlowVerdict,
 	monthLabel,
 	naturalMarLine,
@@ -45,6 +46,27 @@ describe('headlineSite', () => {
 		expect(headlineSite({ ewrAssurance: [g, out] })).toBe(out);
 		expect(headlineSite({ ewrAssurance: [g] })).toBe(g);
 		expect(headlineSite({})).toBeNull();
+	});
+	it('follows the project’s choice (settings.ewrHeadline, issue #444)', () => {
+		const out = site(() => 1);
+		const g = { ...out, nodeId: 'g', name: 'Gauge', isOutlet: false };
+		const summary = { ewrAssurance: [g, out] };
+		// auto (or none) is the old rule exactly.
+		expect(headlineSite(summary, { source: 'auto' })).toBe(out);
+		expect(headlineSite(summary, null)).toBe(out);
+		// The pragmatic EWR even with tables.
+		expect(resolveHeadline(summary, { source: 'pragmatic' })).toEqual({ site: null, fellBack: false });
+		// One site's table: a gauge over the outlet, or the outlet by null.
+		expect(resolveHeadline(summary, { source: 'ruleTable', siteNodeId: 'g' })).toEqual({ site: g, fellBack: false });
+		expect(resolveHeadline({ ewrAssurance: [g, out] }, { source: 'ruleTable', siteNodeId: null })).toEqual({ site: out, fellBack: false });
+	});
+	it('falls back to automatic, and says so, when the run has no table at the chosen site', () => {
+		const out = site(() => 1);
+		const g = { ...out, nodeId: 'g', name: 'Gauge', isOutlet: false };
+		expect(resolveHeadline({ ewrAssurance: [out] }, { source: 'ruleTable', siteNodeId: 'gone' })).toEqual({ site: out, fellBack: true });
+		expect(resolveHeadline({ ewrAssurance: [g] }, { source: 'ruleTable', siteNodeId: null })).toEqual({ site: g, fellBack: true });
+		// No table at all: the pragmatic EWR, still flagged.
+		expect(resolveHeadline({}, { source: 'ruleTable', siteNodeId: 'g' })).toEqual({ site: null, fellBack: true });
 	});
 });
 

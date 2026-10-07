@@ -7,10 +7,11 @@
 // reports what blocks the save (`blockers`, with where each is fixed); the
 // page saves `snapshot()`.
 import type { CalibrationParams, ChirpsQuantileMap, ProjectSettings } from '@water-management/engine';
-import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
+import type { AutoRunSettings, EwrHeadline, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 import { resolveAutoRun } from '$lib/components/autorun/autoRun';
 import { resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 import { resolveOutlook } from '$lib/components/outlook/settings';
+import { resolveEwrHeadline } from '$lib/components/ewr/headline';
 import type { EditableArealRain } from './arealRain';
 import type { EditablePe } from './peInput';
 import type { SaveBlocker } from './sections';
@@ -31,9 +32,11 @@ export type EditableSettings = Omit<ProjectSettings, 'apanMm' | 'ewrPragmaticM3P
 	outcomes: OutcomeSettings;
 	/** How a seasonal outlook is set up (issue #53 R5); defaults filled in for an older API. */
 	outlook: OutlookSettings;
+	/** Which EWR test the results are judged by (issue #444); `auto` for an older API. */
+	ewrHeadline: EwrHeadline;
 };
 
-type SavedSettings = ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
+type SavedSettings = ProjectSettings & { autoRun?: Partial<AutoRunSettings>; outcomes?: OutcomeSettings; outlook?: OutlookSettings; ewrHeadline?: EwrHeadline };
 
 /** A deep copy the form can edit, with the defaults an older API leaves out filled in. */
 export function editableSettings(v: SavedSettings): EditableSettings {
@@ -41,6 +44,7 @@ export function editableSettings(v: SavedSettings): EditableSettings {
 	c.autoRun = resolveAutoRun(v);
 	c.outcomes = resolveOutcomes(v);
 	c.outlook = resolveOutlook(v);
+	c.ewrHeadline = resolveEwrHeadline(v);
 	return c;
 }
 

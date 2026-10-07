@@ -81,6 +81,14 @@ describe('runSentence: the river', () => {
 	});
 });
 
+describe('runSentence: the project’s choice of EWR (issue #444)', () => {
+	it('leads with the pragmatic EWR when the project judges by it, even with a rule table', () => {
+		const s = site((t) => (t < 100 ? 0.1 : 1));
+		expect(runSentences(base({ ewrAssurance: [s] }), { source: 'pragmatic' })[0]).toBe('Flow at the outflow gauge was below the EWR on 10.0% of days (73 days).');
+		expect(runSentence(base({ ewrAssurance: [s] }), { source: 'auto' })).toMatch(/^The Reserve rules were met/);
+	});
+});
+
 describe('runSentence: the farms', () => {
 	it('says every farm got at least the target when all are fine', () => {
 		expect(runSentences(base())[1]).toBe('Every hydrological unit got at least 95% of its demand.');
