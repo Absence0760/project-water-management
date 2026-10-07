@@ -21,4 +21,7 @@ regexes = [
   '''^0123456789abcdef$''',
   '''^synthetic0app0encryption0key0123456789$''',
   '''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''',
+  # A model field's name after "key:" (issue #444, bed losses), reviewed 2026-10-07: generic-api-key matched it in
+  # frontend/src/lib/components/network/fields.ts and its test on main's push scan of #445.
+  '''^reachLossMaxM3Day$''',
 ]
