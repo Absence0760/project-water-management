@@ -695,7 +695,7 @@ def run(doc: dict) -> dict:
                 cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
-                divert_by_month_days=0)
+                divert_by_month_days=0, reach_loss_days=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})
@@ -1133,9 +1133,32 @@ def run(doc: dict) -> dict:
     ewr = [float(settings["ewrPragmaticM3PerDay"][m]) for m in wm]
     k_lake = settings.get("lakeEvapFactorMonthly") or [settings["lakeEvapFactor"]] * 12
 
+    # Bed losses in the reach below each node (§2.6b): the share f clamped to [0, 0.5], the cap (None = none);
+    # none below the outlet, for f = 0 or a cap of 0.
+    reach: dict[str, tuple[float, float]] = {}
+    for x in nodes:
+        f_ = x.get("reachLossFrac") or 0
+        if f_ == 0 or x.get("downstreamNodeId") is None:
+            continue
+        f_ = min(max(f_, 0.0), 0.5) if isinstance(f_, (int, float)) and math.isfinite(f_) else 0.0
+        c_ = x.get("reachLossMaxM3Day")
+        c_ = c_ if isinstance(c_, (int, float)) and math.isfinite(c_) and c_ >= 0 else math.inf
+        if f_ > 0 and c_ > 0:
+            reach[x["id"]] = (f_, c_)
+
+    def reach_loss(xid, q):
+        f_, c_ = reach[xid]
+        return min(c_, f_ * q) if q > 0 else 0.0
+
+    def reach_gross(xid, v):
+        f_, c_ = reach[xid]
+        return min(v / (1 - f_), v + c_) if v > 0 else v
+
     # Senior users' requirement fragmented to the farms upstream (§2.7c).
     seniors = sorted((u for u in users if u.get("userPriority", "senior") != "junior"), key=lambda u: u["id"])
     sen_y: dict[str, list[float]] = {f["id"]: [0.0] * n for f in farms}
+    # What the claims' gross-ups add for each reach's bed losses (§2.6b), by the reach's upper node.
+    sen_led: dict[str, list[float]] = {}
     any_senior = False
     for u in seniors:
         up_farms = sorted(f["id"] for f in farms if f["id"] in upstream_set[u["id"]])
@@ -1147,8 +1170,22 @@ def run(doc: dict) -> dict:
         if any(v > 0 for v in Dn[u["id"]]):
             any_senior = True
         for fid in up_farms:
+            # The reaches with bed losses between the farm and the user, nearest the user first (§2.6b).
+            path = []
+            k_ = fid
+            while k_ != u["id"]:
+                if k_ in reach:
+                    path.insert(0, k_)
+                k_ = by_id[k_]["downstreamNodeId"]
+            for r_ in path:
+                sen_led.setdefault(r_, [0.0] * n)
             for i in range(n):
-                sen_y[fid][i] += Dn[u["id"]][i] * shares.get(fid, 0.0) / tot
+                v = Dn[u["id"]][i] * shares.get(fid, 0.0) / tot
+                for r_ in path:
+                    g_ = reach_gross(r_, v)
+                    sen_led[r_][i] += g_ - v
+                    v = g_
+                sen_y[fid][i] += v
 
     # Transfer rules: dam rules (§2.6) and river off-takes (§2.6a).
     rules = []
@@ -1247,7 +1284,7 @@ def run(doc: dict) -> dict:
         "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
         "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
         "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
-        "basic_needs", "remote_dam_in", "remote_dam_out",
+        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
@@ -1504,9 +1541,18 @@ def run(doc: dict) -> dict:
         for x in order:
             xid = x["id"]
             cc = col[xid]
+            # The node below receives each upstream outflow less the bed losses of the reach between (§2.6b), and
+            # the senior requirement as much as arrives of it; the EWR requirement Z crosses the reach as it is.
             H = 0.0
             for u in ups[xid]:
-                H += U[u]
+                if u in reach:
+                    lost = reach_loss(u, U[u])
+                    col[u]["reach_loss"][i] = lost
+                    if lost > 0:
+                        diag["reach_loss_days"] += 1
+                    H += U[u] - lost
+                else:
+                    H += U[u]
             zu = 0.0
             for u in ups[xid]:
                 zu += Z[u]
@@ -1515,7 +1561,7 @@ def run(doc: dict) -> dict:
                 aau += AA[u]
             zs_in = 0.0
             for u in ups[xid]:
-                zs_in += ZS[u]
+                zs_in += ZS[u] - min(ZS[u], sen_led[u][i]) if u in sen_led else ZS[u]
             cc["inflow_upstream"][i] = H
             if x["kind"] == "gauge":
                 U[xid] = H
@@ -2138,6 +2184,10 @@ def run(doc: dict) -> dict:
             put(xid, "allocation_demand_factor", kf[xid])
         if any_senior:
             extra.append("senior_requirement")
+        if xid in reach:
+            put(xid, "reach_loss", cc["reach_loss"])
+        if xid in sen_led:
+            put(xid, "senior_reach_loss", sen_led[xid])
         if x["kind"] == "farm":
             d = fd[xid]
             put(xid, "gross_demand", d["gross"])

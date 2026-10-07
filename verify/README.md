@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 83 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 87 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -166,6 +166,11 @@ the ranks within one (engine ≥ 1.64.0),
   after its source in the network order, and a remote share the unit drains
   into skipped; the remote share counted as a transfer in the EWR
   attribution (`remote_dam_in`, `remote_dam_out`).
+- **Bed losses** (§2.6b, engine ≥ 1.75.0): MIN(cap, f × outflow) lost in
+  the reach below any node but the outlet, the node below receiving the
+  rest; a senior user's claim grossed up through every reach on the way, and
+  the requirement crossing each less what the claims were grossed up by for
+  it (`reach_loss`, `senior_reach_loss`).
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent
@@ -221,7 +226,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (83
+`test_verify.py` breaks `model.py` one documented rule at a time (87
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -229,7 +234,7 @@ accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
 forecast warm-up; planting efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area. Phase 2a's and later 60: a
+the return share; the exchange; no catchment area. Phase 2a's and later 64: a
 borehole's annual cap, the depletion lag and its carried deficit, the
 emergency level, supplemental boreholes before the dam, the 1 October reset;
 the cap's proration, the licence months and rate, the limit-bound kind, a
@@ -255,7 +260,9 @@ blank days counted however many, a reading after a blank outage kept on its
 day, and the 7-day limit off by one (engine 1.70.0); a return flow above
 the losses not capped at 1 − e (engine 1.71.0); a unit's own system on a
 planting ignored, a crop's default system ignored, and the project's
-systems table ignored for the SABI defaults (engine 1.72.0). Each mutant must disagree with the engine somewhere on the examples,
+systems table ignored for the SABI defaults (engine 1.72.0); bed losses left
+in the river, uncapped, a senior claim not grossed up for them, and the
+senior requirement crossing a reach whole (engine 1.75.0). Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes

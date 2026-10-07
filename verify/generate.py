@@ -561,6 +561,15 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
             if f.get("cropRiverPumpM3Day") is None and rng.random() < 0.5:
                 f["cropRiverPumpM3Day"] = round(rng.uniform(50, 5000))
 
+    # Bed losses in the reach below a node (§2.6b): any kind of node, the outlet too (ignored), a share up to the
+    # 0.5 limit (now and then out of range, clamped) with no cap, a tight cap or a loose one; drawn last of all.
+    if rng.random() < gate(0.3):
+        for x in nodes:
+            if rng.random() >= 0.5:
+                continue
+            x["reachLossFrac"] = rng.choice([round(rng.uniform(0, 0.5), 3), 0.5, round(rng.uniform(0, 0.05), 3), 0.8])
+            x["reachLossMaxM3Day"] = rng.choice([None, None, 0, round(rng.uniform(10, 500)), round(rng.uniform(500, 50000))])
+
 
 def _window(rng, start: dt.date, days: int) -> dict:
     span = rng.choice(["always", "yearly", "range", "easter"])
