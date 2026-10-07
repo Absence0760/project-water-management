@@ -21,6 +21,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { allocationsHref } from './components/allocations/links';
 import { compareTabHref } from './components/compare/picker';
 import { farmDrawerHref } from './components/crops/farmDrawer';
 import { farmHref } from './components/farm/load';
@@ -58,6 +59,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	mapNodeHref: { why: 'BUILDER: "?tab=map&node=" + encoded node id (workspace/mapLinks.ts, #326 A2)', in: ['lib/components/crops/CroplandProposalsBox.svelte', 'lib/components/dams/DamProposalsBox.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	'view.src': { why: 'LocalityMap: data:image/svg+xml of the engine\'s own locality figure (packages/engine/src/geo/localityMap.ts, numbers and escaped names only), shown in an <img>, where an SVG runs no script (report/evidence/locality.ts)', in: ['lib/components/report/evidence/LocalityMap.svelte'] },
 	mapHref: { why: 'NodeCard/NodeDetail: their `mapHref` prop, which NetworkTab builds with mapNodeHref(node id) or leaves null', in: ['lib/components/network/NodeCard.svelte', 'lib/components/network/NodeDetail.svelte'] },
+	allocationsHref: { why: 'BUILDER: "?" + URLSearchParams (tab=allocations, the run id and unit node id from the API; allocations/links.ts, #444)', in: ['lib/components/overview/OverviewTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
@@ -458,6 +460,7 @@ describe('URL attributes', () => {
 				riverHref(id, 'res-flow'),
 				mapNodeHref(id),
 				supplyHref(id, { unit: id, window: id }),
+				allocationsHref(id, { unit: id }),
 				farmHref('', id, id, true, 'dam'),
 				farmHref('/app', id, id, true),
 				farmDrawerHref(null, id),
