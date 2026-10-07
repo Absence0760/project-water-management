@@ -102,10 +102,14 @@ describe('model store', () => {
 			damSurveyDate: '2012-02-29',
 			damSedimentPctPerYear: 0.0125,
 			damInServiceFrom: '1999-10-01',
-			abstractionFrom: '2001-01-01'
+			abstractionFrom: '2001-01-01',
+			// Bed losses in the reach below (engine 1.75.0, 203_reach_loss), awkward numbers.
+			reachLossFrac: 0.1 + 0.2,
+			reachLossMaxM3Day: 1 / 3
 		});
 		// A gauge taken off the EWR sites (engine 1.5.0, 086_ewr_site).
-		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false });
+		// Bed losses below a gauge too, the CHECK's upper bound, no cap (engine 1.75.0).
+		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false, reachLossFrac: 0.5 });
 		// The town carries the GN 538 property area and Table 2 rate (engine 1.12.0, 089_ga538_property)
 		// and a river pump capacity (engine 1.58.0; 060's column, a user's too).
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15', pumpCapacityM3Day: 864.25 });
@@ -227,6 +231,8 @@ describe('model store', () => {
 			damSedimentPctPerYear: null,
 			damInServiceFrom: null,
 			abstractionFrom: null,
+			reachLossFrac: 0,
+			reachLossMaxM3Day: null,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.
@@ -253,6 +259,10 @@ describe('model store', () => {
 		// and the same-project trigger keeps its other unit in the project.
 		await expect(asOwner('UPDATE node SET crop_share_remote = 1.5 WHERE id = $1', [canal.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_share_remote_range' });
 		await expect(asOwner("UPDATE node SET crop_remote_cap_m3_day = 'Infinity' WHERE id = $1", [canal.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_remote_cap_size' });
+		// Migration 203's CHECKs keep the bed losses' share in 0–0.5 and their cap a size, below the API's own checks (engine 1.75.0).
+		await expect(asOwner('UPDATE node SET reach_loss_frac = 0.6 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_reach_loss_frac_range' });
+		await expect(asOwner('UPDATE node SET reach_loss_frac = -0.1 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_reach_loss_frac_range' });
+		await expect(asOwner("UPDATE node SET reach_loss_max_m3_day = 'Infinity' WHERE id = $1", [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_reach_loss_max_size' });
 		const other = await newProject(u, 'Another project');
 		const elsewhere = node('Elsewhere', null);
 		expect((await u.call('PUT', `/projects/${other}/model`, { nodes: [elsewhere], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);

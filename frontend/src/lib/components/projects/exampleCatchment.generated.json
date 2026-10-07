@@ -41,7 +41,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.74.0",
+			"engineVersion": "1.75.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -960,6 +960,8 @@
 				"cropShareRemote": null,
 				"cropRemoteNodeId": null,
 				"cropRemoteCapM3Day": null,
+				"reachLossFrac": 0,
+				"reachLossMaxM3Day": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1017,6 +1019,8 @@
 				"cropShareRemote": null,
 				"cropRemoteNodeId": null,
 				"cropRemoteCapM3Day": null,
+				"reachLossFrac": 0,
+				"reachLossMaxM3Day": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1074,6 +1078,8 @@
 				"cropShareRemote": null,
 				"cropRemoteNodeId": null,
 				"cropRemoteCapM3Day": null,
+				"reachLossFrac": 0,
+				"reachLossMaxM3Day": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1131,6 +1137,8 @@
 				"cropShareRemote": null,
 				"cropRemoteNodeId": null,
 				"cropRemoteCapM3Day": null,
+				"reachLossFrac": 0,
+				"reachLossMaxM3Day": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1188,6 +1196,8 @@
 				"cropShareRemote": null,
 				"cropRemoteNodeId": null,
 				"cropRemoteCapM3Day": null,
+				"reachLossFrac": 0,
+				"reachLossMaxM3Day": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null

@@ -66,6 +66,8 @@ describe('the showcase example', () => {
 		expect(sum('remote_dam_in', showcaseNodeId(UNITS.lower))).toBeGreaterThan(0);
 		expect(sum('remote_dam_out', showcaseNodeId(UNITS.upper))).toBeCloseTo(sum('remote_dam_in', showcaseNodeId(UNITS.lower)), 3);
 		expect(sum('landcover_reduction', null)).toBeGreaterThan(0);
+		// The losing reach below the gauge (engine 1.75.0) loses water into the bed.
+		expect(sum('reach_loss', showcaseNodeId(UNITS.gauge))).toBeGreaterThan(0);
 	});
 
 	it('its map links a parcel and a dam to every unit, and every gauge to its node', () => {
