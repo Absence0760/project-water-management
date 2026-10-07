@@ -12,6 +12,9 @@ export const volumesCard = (page: Page) => page.getByRole('region', { name: 'Reg
 export async function openAllocations(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=allocations${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();
+	// Settled: the volumes and the run's comparison have loaded (AllocationsTab's aria-busy). The comparison lands above
+	// the rest of the page and moves it, so a click before then can miss (a CI flake: a checkbox click that changed nothing).
+	await expect(page.getByTestId('allocations-page')).toHaveAttribute('aria-busy', 'false');
 }
 
 export interface AllocationBody {
