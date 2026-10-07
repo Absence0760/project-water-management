@@ -2407,7 +2407,7 @@ itself.
   boreholes (one capacity)** and **Individual boreholes** side by side,
   **Land cover**, and last **Bed losses in the reach below** (engine ≥
   1.75.0, [model.md §2.6b](./model.md); on every kind of node, gauges and
-  other water users too): the share of the flow lost (at most 50 %) and the
+  other water users too): the share of the flow lost (up to 100 %: with a daily maximum, WRSM's bed loss; over half without one, the run warns) and the
   most lost in a day, under a note saying where the water goes. On the outlet
   both are read-only (no reach below it) unless a share is left there to
   clear; the cap is read-only while the share is 0 %. Each is a bordered card with its title in a tinted header

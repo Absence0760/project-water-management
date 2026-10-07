@@ -186,7 +186,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   came from the river" is two ops: `cropShareDam` → 0.8 and `cropShareRiver`
   → 0.2 (with `cropShareRemote` → 0 when the farm had no table).
   Bed losses in the reach below (engine ≥ 1.75.0, [model.md
-  §2.6b](./model.md)): `reachLossFrac` (0–0.5) and `reachLossMaxM3Day` (≥ 0,
+  §2.6b](./model.md)): `reachLossFrac` (0–1) and `reachLossMaxM3Day` (≥ 0,
   null = no cap), on any kind of node, never the outlet (a save rule); always
   a baseline assumption, since the river's losses are no party's proposal.
 

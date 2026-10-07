@@ -2750,14 +2750,14 @@ warning).
 
 | Field | Meaning |
 | --- | --- |
-| `reachLossFrac` f | share of the flow the node passes downstream that is lost in the reach between it and the next node, 0 ≤ f ≤ 0.5; default 0 (none) |
+| `reachLossFrac` f | share of the flow the node passes downstream that is lost in the reach between it and the next node, 0 ≤ f ≤ 1; default 0 (none) |
 | `reachLossMaxM3Day` L | the reach's daily loss at most, m³/day ≥ 0; null (the default) = no cap. Read only with f > 0; 0 = no loss |
 
 The reach belongs to the upper node: it is the stretch from that node's
 outflow to the next node downstream, so a farm, an other water user and a
 gauge each carry their own. The outlet has no reach below it in the model;
 a share set there is ignored with a warning. The run clamps a share outside
-[0, 0.5] and warns, and runs a cap that is not a size ≥ 0 as none, with a
+[0, 1] and warns, and runs a cap that is not a size ≥ 0 as none, with a
 warning; the API and the node form refuse both (`backend/src/model/validate.ts`,
 `frontend/src/lib/model/validate.ts`).
 
@@ -2771,7 +2771,7 @@ H_below += Q − loss        the node below receives the rest
 
 So the loss is never negative, never falls as the flow rises and is never
 more than the flow (the eWater Source practice note's three rules for a loss
-function), and with f ≤ 0.5 a reach never runs dry from bed losses alone. It
+function). With f = 1 and no cap the reach loses everything that reaches it. It
 is stored on the upper node as `reach_loss` (m³/day, only on a node with
 losses); that node's own columns (its outflow U, its EWR shortfall) are
 unchanged, and the node below's H is already net of it.
@@ -2782,20 +2782,23 @@ re-enter the network" (WR2012 User Manual, WRC TT 689/16 §6.2.3.1; Theory
 Manual TT 690/16). Water that returns lower down as baseflow is deliberately
 not modelled: there is no store or lag for it, so a reach that feeds a spring
 further down is a known simplification. WRSM's Bedloss is a fixed monthly
-volume, MIN(Bedloss, flow); the app takes a share of the flow with a cap
-instead, a proportional loss function of the kind eWater Source's practice
-note on losses describes, so the loss shrinks with the flow in a drought
-rather than taking the whole low flow (Mvandaba et al. 2018, PIAHS 378,
-discuss transmission losses on South African rivers). A WRSM Bedloss maps to f = 0.5 with
-L = Bedloss × 10⁶ ÷ days in the month; the two agree on every day the flow is
-at least 2L, and the app loses less on lower flows.
+volume, MIN(Bedloss, flow): **f = 1 with L = Bedloss × 10⁶ ÷ days in the
+month reproduces it exactly**, day by day, every flow below the day's Bedloss
+lost whole (`network/reachLoss.test.ts`). A share below 1 is a proportional
+loss function of the kind eWater Source's practice note on losses describes,
+so the loss shrinks with the flow in a drought rather than taking the whole
+low flow (Mvandaba et al. 2018, PIAHS 378, discuss transmission losses on
+South African rivers).
 
 **Guidance** (the node form's help says the same). A perennial reach should
 normally stay at 0. Turn bed losses on only where an observed record shows
 persistent over-simulated low flows below a reach that abstractions, dams and
 transfers don't explain, and set them from that evidence (a gauge pair, a
 transmission-loss study, NEH-630 chapter 19's channel loss estimates for an
-ungauged ephemeral reach). A share above 0.3 needs a source.
+ungauged ephemeral reach). A share above 0.3 needs a source. More than half
+the flow without a cap is allowed but the run warns ("more than half the
+flow lost in the reach below it; check this is meant (with a cap this is how
+WRSM's Bedloss is expressed)"); with a cap, f = 1 is the WRSM form.
 
 **The senior users' requirement is grossed up.** A senior user's claim (§2.7c)
 is what must *arrive* at it, so a farm upstream passes enough that the claim
@@ -2804,8 +2807,12 @@ through each reach between it and the user, nearest the user first, by the
 inverse of Q − loss,
 
 ```
-gross(x) = MIN(x / (1 − f), x + L)
+gross(x) = MIN(x / (1 − f), x + L)     (f = 1: x + L)
 ```
+
+A reach that loses the whole flow with no cap delivers nothing whatever is
+passed, so a claim across it is not grossed up (x itself) and the user below
+gets none of it.
 
 and the requirement nets down by exactly that as it crosses each reach: for
 the reach below node k the plan adds up what the gross-ups of every claim
