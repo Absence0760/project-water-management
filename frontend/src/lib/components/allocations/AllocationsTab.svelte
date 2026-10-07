@@ -313,7 +313,9 @@
 	{/if}
 {/snippet}
 
-<div class="allocations" bind:clientWidth={pageW}>
+<!-- Busy while the volumes or the run's comparison are loading: the comparison renders above the rest of the page
+     and moves it down when it lands, so assistive tech and the e2e helper (support/allocations.ts) wait for it. -->
+<div class="allocations" bind:clientWidth={pageW} aria-busy={loading || cLoading} data-testid="allocations-page">
 	{#if gone}<p class="alert alert-info" role="note">That run no longer exists, so this compares the {defaultRun?.published ? 'published' : 'newest'} run.</p>{/if}
 	{#if notice}<p class="alert alert-info slim" role="status">{notice}</p>{/if}
 

@@ -7661,7 +7661,10 @@ units](#hydrological-units) the line under the unit results and each card's
 **Registered use** (with `unit=`), all with the run they show
 (`allocations/links.ts` `allocationsHref`; issue #444). Opened from a link
 by someone who hid it, it shows in the sidebar in its place, as any hidden
-section does.
+section does. The page is `aria-busy` while the volumes or the run's
+comparison are loading (the comparison lands above the rest of the page and
+moves it); `e2e/support/allocations.ts` `openAllocations` waits for it to
+clear.
 
 **What a viewer sees** (decision D3, 162). Until an owner switches viewers
 on, a viewer gets one card instead of the page below, *Registered water use
