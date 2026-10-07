@@ -4168,7 +4168,8 @@ matched.
 
 ```ts
 {
-  a: { project: { id, name }, run: RunMeta & { summary: RunSummary, inputs: RunInputsSnapshot }, scenario: CompareScenario | null },
+  a: { project: { id, name, ewrHeadline }, run: RunMeta & { summary: RunSummary, inputs: RunInputsSnapshot }, scenario: CompareScenario | null },
+                                // ewrHeadline: the project's current Settings → Judge results by (issue #444), as GET /projects/:id gives it
   b: { … same shape … },
   comparison: RunComparison,    // compareRuns(a.run, b.run) — every delta is b − a
   changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs, both runs' stored values of each differing series)

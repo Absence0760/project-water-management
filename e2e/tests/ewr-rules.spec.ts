@@ -304,7 +304,13 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	void owner;
 	const id = await seedThreeYears(page.request, 'Judge results by');
 	await updateSettings(page.request, id, { ewrRules: [janOnlyTable(1000)] });
-	await createRun(page.request, id, 'Judged');
+	const runId = await createRun(page.request, id, 'Judged');
+	// The printed report says what it is judged by, and that it is the project's setting at printing.
+	await page.goto(`/projects/${id}/report?run=${runId}`);
+	const printed = page.getByTestId('report-judged-by');
+	await expect(printed).toHaveText(
+		'Results are judged by the Reserve rule table at the outlet, Outflow gauge (automatic), the project’s setting when this report was printed.'
+	);
 
 	// Automatic: the outlet's rule table heads the Summary, and River & reserve says so at the top.
 	await page.goto(`/projects/${id}?tab=overview`);
@@ -349,6 +355,10 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	// The heat map's test is now the headline's own: no clause.
 	await expect(heatNote).toContainText('A day counts when simulated outflow at the outlet is below the pragmatic EWR.');
 	await expect(heatNote).not.toContainText('the results are judged by');
+	// The same run printed again follows the new choice, and says so.
+	await page.goto(`/projects/${id}/report?run=${runId}`);
+	await expect(printed).toHaveText('Results are judged by the pragmatic EWR at the outflow gauge, the project’s setting when this report was printed.');
+	await page.goto(`/projects/${id}?tab=river`);
 	// Reserve compliance keeps its panel: the table is still assessed, it just doesn't head the results.
 	await expect(page.getByRole('region', { name: /^Reserve compliance by month/ })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Days below the reserve, each water year' })).toBeVisible();

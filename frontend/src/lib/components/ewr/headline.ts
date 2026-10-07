@@ -117,6 +117,27 @@ export function judgedByText(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> |
 }
 
 /**
+ * The printed report's line under its lede (issue #444): what the run is
+ * judged by and that it is the project's setting at printing. The choice is
+ * a lens over a run, not a model input, so a run printed again after the
+ * setting changes is judged by the new one; this line keeps each printed copy
+ * saying which. `fellBack`: the run has no table at the chosen site
+ * (runs/ewrAssurance.ts resolveHeadline). '' when there is nothing to choose
+ * between (no rule table in the run, the project automatic), as River &
+ * reserve leaves its line out.
+ */
+export function reportJudgedBy(
+	site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> | null,
+	choice: EwrHeadline | null | undefined,
+	fellBack: boolean,
+	hasRuleTable: boolean
+): string {
+	if (!hasRuleTable && (!choice || choice.source === 'auto')) return '';
+	const why = fellBack ? '; this run has no Reserve rule table at the chosen site, so it is judged automatically' : '';
+	return `Results are judged by ${judgedByText(site, choice)}, the project’s setting when this report was printed${why}.`;
+}
+
+/**
  * The EWR compliance heat map's clause when the headline is a rule table
  * (site from resolveHeadline): its outlet cells count days below the
  * pragmatic EWR, which isn't what the results are judged by. '' when the

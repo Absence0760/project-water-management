@@ -19,6 +19,7 @@ import { ApiError } from '../http/errors.js';
 import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { listNominations, runEvidence, type RunEvidence } from '../runs/evidence.js';
+import { resolveEwrHeadline } from '../projects/ewrHeadlineSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
 
 /** "<projectId>:<runId>" */
@@ -77,10 +78,10 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 	// requireRole: 404 when the project is invisible (never 403 — viewer is the floor).
 	const role = await requireRole(db, ref.projectId, 'viewer');
 	if (!UUID.test(ref.runId)) throw new ApiError(404, 'not found');
-	const { rows } = await db.query<Omit<LoadedRun, 'evidence'> & { projectName: string; scenarioName: string | null }>(
+	const { rows } = await db.query<Omit<LoadedRun, 'evidence'> & { projectName: string; projectEwrHeadline: unknown; scenarioName: string | null }>(
 		`SELECT r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 		        r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
-		        r.summary, r.inputs, p.name AS "projectName",
+		        r.summary, r.inputs, p.name AS "projectName", p.settings->'ewrHeadline' AS "projectEwrHeadline",
 		        COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 		        r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
 		        r.scenario_id AS "scenarioId", sc.name AS "scenarioName"
@@ -101,7 +102,7 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 		 FROM run_series WHERE run_id = $1 AND node_id IS NULL ORDER BY key`,
 		[ref.runId]
 	);
-	const { projectName, scenarioName, ...rest } = row;
+	const { projectName, projectEwrHeadline, scenarioName, ...rest } = row;
 	const run: LoadedRun = { ...rest, evidence: runEvidence(await listNominations(db, ref.projectId), ref.runId) };
 	const recorded = (row.inputs as { scenario?: RunScenarioSnapshot }).scenario;
 	const scenario: CompareScenario | null = recorded
@@ -115,7 +116,9 @@ async function loadSide(db: Db, ref: { projectId: string; runId: string }) {
 				classified: recorded.classified
 			}
 		: null;
-	return { project: { id: ref.projectId, name: projectName }, run, scenario, catchmentSeries: series };
+	// The project's choice of the EWR its results are judged by (issue #444): a lens, not a model input, so the
+	// project's current one, as every other page reads it (ewrHeadlineSettings.ts).
+	return { project: { id: ref.projectId, name: projectName, ewrHeadline: resolveEwrHeadline({ ewrHeadline: projectEwrHeadline }) }, run, scenario, catchmentSeries: series };
 }
 
 /**

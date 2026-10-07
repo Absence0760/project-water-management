@@ -943,7 +943,8 @@ export interface RunCatchmentDay {
 
 /** One side of GET /compare/runs. */
 export interface CompareSide {
-	project: { id: string; name: string };
+	/** `ewrHeadline`: the project's current choice of the EWR its results are judged by (issue #444); absent from an older API. */
+	project: { id: string; name: string; ewrHeadline?: EwrHeadline };
 	/** `evidence` is null when the run was never nominated, absent from an older API. */
 	run: Omit<Run, 'evidence'> & { inputs: RunInputsSnapshot; evidence?: RunEvidence | null };
 	/** The scenario that made this side's run; null for a run of the model. Absent from an older API. */
