@@ -279,6 +279,15 @@ MUTANTS = [
         'dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)',
         'dcap = x.get("divertCapacityM3Day") or 0.0',
     ),
+    # Bed losses in the reaches (§2.6b).
+    ("bed losses are left in the river", "                    H += U[u] - lost", "                    H += U[u]"),
+    ("bed losses ignore the daily cap", "return min(c_, f_ * q) if q > 0 else 0.0", "return f_ * q if q > 0 else 0.0"),
+    ("a senior claim is not grossed up for the reaches on the way", "                sen_y[fid][i] += v", "                sen_y[fid][i] += Dn[u[\"id\"]][i] * shares.get(fid, 0.0) / tot"),
+    (
+        "the senior requirement crosses a reach whole",
+        "                zs_in += ZS[u] - min(ZS[u], sen_led[u][i]) if u in sen_led else ZS[u]",
+        "                zs_in += ZS[u]",
+    ),
 ]
 
 
@@ -324,7 +333,7 @@ class CrossCheck(unittest.TestCase):
             "borehole_days", "borehole_to_dam_days", "borehole_annual_cap_days", "depletion_owed_days",
             "cap_bound_days", "full_allocation_units", "floor_days", "object_shortage_days", "offtake_days",
             "offtake_return_days", "user_days", "junior_short_days", "senior_pass_days", "river_pump_days",
-            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days",
+            "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days", "reach_loss_days",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 

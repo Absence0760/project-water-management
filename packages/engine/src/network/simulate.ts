@@ -14,6 +14,7 @@ import { damHasFilled, PART_INDEX, restrictedObjectDemand, restrictionLevelFor, 
 import type { PlanOfftake } from './offtake';
 import type { PlanRemote } from './cropSupply';
 import type { AllocationCap } from '../allocations/mode';
+import { reachLossDay, type PlanReachLoss } from './reachLoss';
 
 /**
  * Relative size of float noise treated as zero in a shortfall. A difference
@@ -123,6 +124,19 @@ export interface PlanNode {
 	release?: PlanRelease;
 	/** Share of the seepage returning below the dam (WP-3.5); absent = all of it. */
 	seepageReturn?: number;
+	/**
+	 * Bed losses in the reach below this node (engine ≥ 1.75.0, ./reachLoss.ts,
+	 * docs/model.md §2.6b): taken off its outflow as it is handed to the node
+	 * downstream. Absent = none (and on the outlet).
+	 */
+	reachLoss?: PlanReachLoss;
+	/**
+	 * The senior users' claims' share of those bed losses, m³/day (engine ≥
+	 * 1.75.0, ../run.ts otherUsers): Σ over the claims crossing the reach of
+	 * what their gross-up added for it. The node below receives the senior
+	 * requirement less this. Absent = no claim crosses the reach.
+	 */
+	seniorReachLoss?: Float64Array;
 	/** Daily crop water requirement (F, net irrigation need); zeros for gauges; a user's own demand from the river (WP-1.33). */
 	demand: Float64Array;
 	/** A user's share of what it takes that returns below it the same day (WP-1.33); 0 for other kinds. */
@@ -390,6 +404,12 @@ export interface NodeResult {
 	depletionStore: Float64Array;
 	/** Natural runoff land cover removed before the farm got it (WP-1.35); I = natural × share − this. */
 	landCoverReduction: Float64Array;
+	/**
+	 * Lost into the river bed in the reach below this node (engine ≥ 1.75.0,
+	 * docs/model.md §2.6b): the node downstream receives outflow − this.
+	 * Absent on a node without bed losses.
+	 */
+	reachLoss?: Float64Array;
 }
 
 /**
@@ -718,6 +738,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.pumpLimited = new Float64Array(days);
 		}
 		if (plan.restriction?.inScope[i]) r.restrictedDemand = new Float64Array(days);
+		if (n.reachLoss) r.reachLoss = new Float64Array(days);
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.river) {
 			const tk = n.river.takes;
@@ -1274,9 +1295,25 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let absAA = 0;
 			for (let u = 0; u < ups.length; u++) {
 				const ur = res[ups[u]!]!;
-				sumU += ur.outflow[t]!;
+				const rl = ur.reachLoss;
+				if (rl) {
+					// Bed losses in the reach between them (engine ≥ 1.75.0, docs/model.md §2.6b): this node receives the
+					// upstream outflow less the loss, and the senior users' requirement less what the claims crossing the
+					// reach were grossed up by for it (run.ts otherUsers), what they need below it. The EWR requirement Z
+					// is a site's own share and crosses the reach as it is.
+					const un = nodes[ups[u]!]!;
+					const q = ur.outflow[t]!;
+					const l = reachLossDay(un.reachLoss!, q);
+					rl[t] = l;
+					sumU += q - l;
+					const zs = ur.seniorRequirement[t]!;
+					const sl = un.seniorReachLoss;
+					sumZs += sl ? zs - Math.min(zs, sl[t]!) : zs;
+				} else {
+					sumU += ur.outflow[t]!;
+					sumZs += ur.seniorRequirement[t]!;
+				}
 				sumZ += ur.ewrCumulative[t]!;
-				sumZs += ur.seniorRequirement[t]!;
 				sumAA += ur.ewrShortfall[t]!;
 				absAA += Math.abs(ur.ewrShortfall[t]!);
 			}

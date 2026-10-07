@@ -1352,6 +1352,17 @@ export interface NetworkNode {
 	 * absent = not looked up yet (see `gaPropertyAreaHa`).
 	 */
 	gaRateM3HaYear?: number | null;
+	/**
+	 * Any node but the outlet (engine ≥ 1.75.0, issue #444, docs/model.md
+	 * §2.6b): the share f (0–1) of the flow this node passes downstream that
+	 * is lost in the reach between it and the next node, into the river bed
+	 * and banks: loss = MIN(`reachLossMaxM3Day`, f × outflow). The lost water
+	 * leaves the catchment (it doesn't come back as baseflow). 0 / absent =
+	 * none, every engine before 1.75.0.
+	 */
+	reachLossFrac?: number;
+	/** The reach's bed losses at most, m³/day; null / absent = no cap. Read only with `reachLossFrac` > 0. */
+	reachLossMaxM3Day?: number | null;
 }
 
 /**
@@ -1471,6 +1482,12 @@ export const DAM_STORAGE_DEFAULTS = {
 	damReleaseM3Day: null,
 	damOutletCapacityM3Day: null,
 	damSeepageReturnPct: 1
+} as const;
+
+/** What a node without the bed-loss fields (engine ≥ 1.75.0, docs/model.md §2.6b) runs as: no losses in the reach below it. */
+export const REACH_LOSS_DEFAULTS = {
+	reachLossFrac: 0,
+	reachLossMaxM3Day: null
 } as const;
 
 /** What a node without the development fields (engine ≥ 1.30.0, docs/model.md §2.7g) runs as: its entered dam and demand throughout. */
@@ -1664,6 +1681,8 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 		...WATER_SOURCE_DEFAULTS,
 		// No crop supply table (engine 1.73.0).
 		...CROP_SUPPLY_DEFAULTS,
+		// No bed losses in the reach below (engine 1.75.0).
+		...REACH_LOSS_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true
 	};
@@ -1774,6 +1793,9 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.cropRiverPoolM3 === undefined) n.cropRiverPoolM3 = WATER_SOURCE_DEFAULTS.cropRiverPoolM3;
 				// The crop supply table (engine ≥ 1.73.0): none unless set.
 				for (const k of Object.keys(CROP_SUPPLY_DEFAULTS) as (keyof typeof CROP_SUPPLY_DEFAULTS)[]) if (n[k] === undefined) n[k] = CROP_SUPPLY_DEFAULTS[k];
+				// Bed losses in the reach below (engine ≥ 1.75.0): none unless set.
+				n.reachLossFrac ??= REACH_LOSS_DEFAULTS.reachLossFrac;
+				if (n.reachLossMaxM3Day === undefined) n.reachLossMaxM3Day = REACH_LOSS_DEFAULTS.reachLossMaxM3Day;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -3523,10 +3545,12 @@ export interface WaterBalanceRow {
 	damReleaseM3?: number;
 	/** Lost on the way by river off-takes (engine ≥ 1.14.0): taken − delivered − what seeped back to the river (engine ≥ 1.42.0), a loss from the catchment; absent without off-takes. */
 	conveyanceLossM3?: number;
+	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b), a loss from the catchment; absent without bed losses. */
+	reachLossM3?: number;
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − bed losses − outflow − closing. */
 	residualM3: number;
 }
 

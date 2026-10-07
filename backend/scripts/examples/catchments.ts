@@ -31,6 +31,7 @@ import {
 	SUPPLY_DEFAULTS,
 	WATER_SOURCE_DEFAULTS,
 	CROP_SUPPLY_DEFAULTS,
+	REACH_LOSS_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -140,6 +141,8 @@ interface FarmSpec {
 	 * river (through `cropRiver`'s pump and pool) and the dam of the unit named `from`, through a pipe (m³/day).
 	 */
 	cropSupply?: { dam: number; river: number; remote: number; from: string; pipeM3Day: number | null };
+	/** Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the share of the flow lost (0–0.5) and the daily cap (m³/day). */
+	reachLoss?: { frac: number; maxM3Day: number | null };
 }
 
 /** A river abstraction's pump (m³/day) and optional pool (m³, starts full). */
@@ -293,6 +296,9 @@ export function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 						cropRemoteCapM3Day: f.cropSupply.pipeM3Day
 					}
 				: {}),
+			// No bed losses in the reach below (engine ≥ 1.75.0) unless the spec gives some.
+			...REACH_LOSS_DEFAULTS,
+			...(f.reachLoss ? { reachLossFrac: f.reachLoss.frac, reachLossMaxM3Day: f.reachLoss.maxM3Day } : {}),
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null

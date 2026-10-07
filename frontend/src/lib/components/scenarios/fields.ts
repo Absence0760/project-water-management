@@ -186,6 +186,9 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	cropShareRiver: { label: 'Crops’ share from the river', spec: pct(true, 'no table') },
 	cropShareRemote: { label: 'Crops’ share from another unit’s dam', spec: pct(true, 'no table') },
 	cropRemoteCapM3Day: { label: 'Pipe capacity from the other unit’s dam', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): the river's, a baseline assumption.
+	reachLossFrac: { label: 'Bed losses in the reach below', spec: pct() },
+	reachLossMaxM3Day: { label: 'Bed losses at most', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };

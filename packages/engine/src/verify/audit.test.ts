@@ -211,7 +211,8 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		ewr_charge: 'attribution of a shortfall downstream',
 		ewr_charge_irrigation: 'attribution of a shortfall downstream',
 		ewr_shortfall_incremental: 'attribution of a shortfall downstream',
-		'transfer_rule@': "one transfer rule's part of J, an input"
+		'transfer_rule@': "one transfer rule's part of J, an input",
+		reach_loss: 'lost in the reach below the farm, after its outflow U; the next unit’s H has it off already'
 	};
 	// Written only beside a series or model feature that already refuses the farm.
 	const WITH_REFUSED: Record<string, string> = {
@@ -222,6 +223,7 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		offtake_used: 'offtake_in',
 		offtake_to_dam: 'offtake_in',
 		passed_for_senior: 'senior_requirement',
+		senior_reach_loss: 'senior_requirement',
 		'object_demand@': 'demand objects',
 		'object_supplied@': 'demand objects',
 		// The basic-needs floor (engine 1.44.0) is written only on a unit with a demand object.

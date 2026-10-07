@@ -2,7 +2,8 @@
 // through a unit: its area and flow share, its dam with the dam's survey and
 // releases, how water reaches the dam, where the unit's supply comes from,
 // how it irrigates, its other demands, its groundwater (the combined
-// boreholes, then the individual ones) and its land cover. The node sheet's
+// boreholes, then the individual ones), its land cover, and last the bed
+// losses in the reach below it, where its water leaves it. The node sheet's
 // jump row (NetworkTab.svelte) lists the same sections, so the two never
 // disagree.
 import type { NetworkNode } from '@water-management/engine';
@@ -12,7 +13,7 @@ import { hasSupplySettings } from './supply';
 /** A field group of NODE_FIELDS, or one of the form's own sections. */
 export type NodeSection = NodeField['group'] | 'damSurvey' | 'supply' | 'demand' | 'boreholes' | 'cover';
 
-export const SECTION_ORDER: readonly NodeSection[] = ['area', 'share', 'dam', 'damSurvey', 'routing', 'supply', 'irrigation', 'demand', 'groundwater', 'boreholes', 'cover'];
+export const SECTION_ORDER: readonly NodeSection[] = ['area', 'share', 'dam', 'damSurvey', 'routing', 'supply', 'irrigation', 'demand', 'groundwater', 'boreholes', 'cover', 'reach'];
 
 /** Each section's legend in the form. */
 export const SECTION_TITLE: Record<NodeSection, string> = {
@@ -28,15 +29,17 @@ export const SECTION_TITLE: Record<NodeSection, string> = {
 export const SECTION_SHORT: Record<NodeSection, string> = {
 	...SECTION_TITLE,
 	groundwater: 'Combined boreholes',
-	damSurvey: 'Dam survey'
+	damSurvey: 'Dam survey',
+	reach: 'Bed losses'
 };
 
 /** Whether one of NODE_FIELDS shows on this kind of node (a gauge passes flow through; a user has only groundwater). */
 export function fieldShows(f: NodeField, kind: NetworkNode['kind']): boolean {
 	if (f.farmOnly && kind !== 'farm') return false;
 	if (f.notGauge && kind === 'gauge') return false;
-	// An other water user has no land, dam or routing of its own (WP-1.33), but may have boreholes (WP-1.34).
-	if (kind === 'user' && f.group !== 'groundwater') return false;
+	// An other water user has no land, dam or routing of its own (WP-1.33), but may have boreholes (WP-1.34), and a
+	// reach below it that loses water into the bed like any node's (engine ≥ 1.75.0).
+	if (kind === 'user' && f.group !== 'groundwater' && f.group !== 'reach') return false;
 	return true;
 }
 

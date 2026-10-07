@@ -332,6 +332,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['run.landcover_reduction']
 	},
 	{
+		id: 'bed-losses',
+		term: 'Bed losses (channel transmission losses)',
+		short: 'Flow lost into the river bed and banks between a hydrological unit and the next one downstream; it leaves the catchment.',
+		units: 'share of the flow (shown as %); cap m³/day',
+		category: 'network',
+		fields: ['node.reachLossFrac', 'node.reachLossMaxM3Day', 'run.reach_loss']
+	},
+	{
 		id: 'outflow-gauge',
 		term: 'Outflow gauge',
 		short: 'The single element at the bottom of the network. Its simulated flow is compared with the EWR and with observed flow.',

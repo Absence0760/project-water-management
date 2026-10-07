@@ -47,7 +47,7 @@ const base: ModelInput = {
 	model: {
 		nodes: [
 			node(G, 'Gauge', 'gauge', null, 0),
-			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000 }),
+			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000, reachLossFrac: 0.2, reachLossMaxM3Day: 300 }),
 			node(MINE, 'Rooikloof', 'farm', G, 1, { cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 }),
 			// A crop supply table (engine ≥ 1.73.0) drawing a share on the applicant's own dam.
 			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null, cropShareDam: 0.5, cropShareRiver: 0.3, cropShareRemote: 0.2, cropRemoteNodeId: MINE, cropRemoteCapM3Day: 900 }),
@@ -129,6 +129,12 @@ describe('projectBaseForApplicant', () => {
 		expect(hidden).not.toHaveProperty('cropRemoteNodeId');
 		// Positive control: the base has them.
 		expect(base.model.nodes.find((n) => n.id === N1)).toMatchObject({ cropShareRemote: 0.2, cropRemoteNodeId: MINE });
+	});
+
+	it('keeps the river’s bed losses below a hidden node, a property of the river, not of the farm (engine ≥ 1.75.0)', () => {
+		expect(byId.get(N2)).toMatchObject({ reachLossFrac: 0.2, reachLossMaxM3Day: 300 });
+		// Its use is still blanked beside them.
+		expect(byId.get(N2)!.damCapacityM3).toBe(0);
 	});
 
 	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover, boreholes', () => {

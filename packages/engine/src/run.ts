@@ -43,6 +43,7 @@ import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimi
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
+import { REACH_LOSS_SERIES, reachGross, reachLossOf, SENIOR_REACH_LOSS_SERIES, type PlanReachLoss } from './network/reachLoss';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
@@ -609,7 +610,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -666,6 +667,11 @@ function runNetwork(
 		if (ks) push(node.id, DAM_CAPACITY_SERIES.key, DAM_CAPACITY_SERIES.label, DAM_CAPACITY_SERIES.unit, Float64Array.from(ks, (k) => k * node.damCapacityM3));
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this hydrological unit', 'm³/day', r.seniorRequirement);
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
+		// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): on any node that has them.
+		if (r.reachLoss) push(node.id, REACH_LOSS_SERIES.key, REACH_LOSS_SERIES.label, REACH_LOSS_SERIES.unit, r.reachLoss);
+		// The senior users' claims' share of them, which the node below takes off the senior requirement.
+		const srl = plan.nodes[i]!.seniorReachLoss;
+		if (srl) push(node.id, SENIOR_REACH_LOSS_SERIES.key, SENIOR_REACH_LOSS_SERIES.label, SENIOR_REACH_LOSS_SERIES.unit, srl);
 		if (plan.nodes[i]!.borehole) {
 			// Boreholes (WP-1.34): what they gave and what the river loses for it.
 			push(node.id, 'groundwater_used', 'Groundwater pumped (part of supplied)', 'm³/day', r.groundwater);
@@ -1056,6 +1062,7 @@ function runNetwork(
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
 				...(r.offtakeReturn ? { offtakeReturn: r.offtakeReturn } : {}),
+				...(r.reachLoss ? { reachLoss: r.reachLoss } : {}),
 				initialStorageM3: kind === 'farm' ? plan.nodes[i]!.initialStorageM3 : 0
 			};
 		}),
@@ -1539,7 +1546,14 @@ export function buildNetworkPlan(
 	// A capture run also fits the year in progress on its days before the snapshot's (engine ≥ 1.69.0): an outlook's members keep that.
 	if (warm.captureAt !== undefined) allocation.asOf = warm.captureAt;
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
-	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => {
+	// Bed losses in the reach below each node (engine ≥ 1.75.0, ./network/reachLoss.ts): before the users, whose
+	// claims are grossed up for the reaches they cross.
+	const reaches = nodes.map((n) => reachLossOf(n, warnings).reachLoss);
+	if (reaches.some((p) => p))
+		warnings.push(
+			'bed losses are on: the EWR requirements are still fragmented from the natural flow without them, so a site below a losing reach can fall short of its requirement with no development at all (docs/model.md §2.6b)'
+		);
+	const users = otherUsers(nodes, topo, shares.share, reaches, days, month, warnings, factorFrom, (i, d) => {
 		d.fill(0, 0, abstractFrom[i]!);
 		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
 	});
@@ -1642,6 +1656,8 @@ export function buildNetworkPlan(
 				...(remotes[i] ? { remote: remotes[i] } : {}),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
+				...(reaches[i] ? { reachLoss: reaches[i] } : {}),
+				...(users.reachClaims[i] ? { seniorReachLoss: users.reachClaims[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
 			};
 		})
@@ -1987,6 +2003,11 @@ function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
  * u), the rule the EWR is fragmented by. A senior user with no farm share
  * upstream can't be protected that way: it takes what reaches it, with a
  * warning. Map keyed by node index; claims only for farms that carry one.
+ * A farm's claim is grossed up for the bed losses of every reach between it
+ * and the user (engine ≥ 1.75.0, docs/model.md §2.6b), so that what it passes
+ * still arrives; `reachClaims[k]` adds up what the gross-ups put on for the
+ * reach below node k, which the simulation takes off the requirement as it
+ * crosses that reach, so it nets exactly to what the claims need below it.
  */
 interface OtherUser {
 	demand: Float64Array;
@@ -2001,15 +2022,25 @@ function otherUsers(
 	nodes: readonly NetworkNode[],
 	topo: ReturnType<typeof buildTopology>,
 	share: Float64Array,
+	reaches: readonly (PlanReachLoss | undefined)[],
 	days: number,
 	month: Uint8Array,
 	warnings: string[],
 	factorFrom: number,
 	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
 	scale?: (i: number, demand: Float64Array) => void
-): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
+): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[]; reachClaims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	const reachClaims: (Float64Array | undefined)[] = nodes.map(() => undefined);
+	// Each node's downstream node, only when some reach has bed losses to gross the claims up for (engine ≥ 1.75.0).
+	let down: Int32Array | null = null;
+	if (reaches.some((p) => p)) {
+		down = new Int32Array(nodes.length).fill(-1);
+		topo.upstream.forEach((ups, d) => {
+			for (const u of ups) down![u] = d;
+		});
+	}
 	// Users in node-id order: a farm below two senior users adds their claims in that order.
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 	for (const i of byId) {
@@ -2052,8 +2083,23 @@ function otherUsers(
 				for (const j of up) {
 					const c = (claims[j] ??= new Float64Array(days));
 					const f = share[j]! / total;
+					// The reaches with bed losses between the farm and the user, nearest the user first (engine ≥ 1.75.0).
+					const path: number[] = [];
+					if (down) for (let k = j; k !== i && k >= 0; k = down[k]!) if (reaches[k]) path.unshift(k);
+					if (path.length) {
+						const add = path.map((k) => (reachClaims[k] ??= new Float64Array(days)));
+						for (let t = 0; t < days; t++) {
+							let v = (pump === undefined ? demand[t]! : Math.min(demand[t]!, pump)) * f;
+							for (let a = 0; a < path.length; a++) {
+								const g = reachGross(reaches[path[a]!]!, v);
+								add[a]![t]! += g - v;
+								v = g;
+							}
+							c[t]! += v;
+						}
+					}
 					// The farms pass what its pump can take (engine ≥ 1.58.0): MIN(D, capacity), not water it can't lift.
-					if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
+					else if (pump === undefined) for (let t = 0; t < days; t++) c[t]! += demand[t]! * f;
 					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
 				}
 			} else {
@@ -2062,7 +2108,7 @@ function otherUsers(
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
 	}
-	return { byNode, claims };
+	return { byNode, claims, reachClaims };
 }
 
 /**

@@ -59,6 +59,7 @@ export { EWR_BINDING_SERIES } from './network/bindingSeries';
 export { parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRates, WATER_YEAR_MONTHS, withMonthlyRates } from './network/transferRates';
 export { isRiverOfftake, OFFTAKE_SERIES, offtakeReturnAt } from './network/offtake';
+export { REACH_LOSS_FRAC_MAX, REACH_LOSS_SERIES, reachLossDay } from './network/reachLoss';
 export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, fromSupplyOrder, objectMonthlyM3Day, objectRank, objectSuppliedKey, parseDemandObjectKey, supplyLevels, supplyOrder } from './network/demandObjects';
 export { onRiverDam } from './network/supply';
 export { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverTakeKey } from './network/riverSource';
