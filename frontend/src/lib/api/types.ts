@@ -182,6 +182,18 @@ export interface OutcomeSettings {
 	siteNodeId?: string | null;
 }
 
+/**
+ * settings.ewrHeadline (issue #444, backend projects/ewrHeadlineSettings.ts):
+ * which EWR test the results are judged by on the headline card, the run
+ * sentence, River & reserve's tiles and the "days below" wording. `auto`
+ * (the default) is the outlet's Reserve rule table, else the first site's,
+ * else the pragmatic EWR; `pragmatic` is always the pragmatic EWR at the
+ * outflow gauge; `ruleTable` is one site's rule table (siteNodeId null = the
+ * outlet). Not a model input, so not in the engine's ProjectSettings and runs
+ * don't record it: every run is read by the project's current choice.
+ */
+export type EwrHeadline = { source: 'auto' } | { source: 'pragmatic' } | { source: 'ruleTable'; siteNodeId: string | null };
+
 /** A season as a month and day each end (settings.outlook.season): the decision date and the season end. */
 export interface OutlookSeasonSetting {
 	startMonth: number;
@@ -219,7 +231,7 @@ export interface Project extends ProjectSummary {
 	timeZone?: string;
 	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
 	wuaName?: string | null;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null; ewrHeadline?: EwrHeadline };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
 	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */

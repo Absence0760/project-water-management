@@ -211,6 +211,18 @@ describe('headlines', () => {
 		expect(card(headlines(summary(), 120, here), 'ewr').delta).toBeNull();
 	});
 
+	it('follows the project’s choice of EWR (settings.ewrHeadline, issue #444), for both runs', () => {
+		const tables = summary({ ewrAssurance: [site('g2', 3, 4), site(null, 18, 24, 3)] });
+		// The pragmatic EWR over a rule table: the EWR card, with its change from a run that had a table too.
+		const hs = headlines(tables, 120, summary({ ewrAssurance: [site(null, 12, 24)] }), { source: 'pragmatic' });
+		expect(hs.map((h) => h.id)).toEqual(['ewr', 'supply', 'nse', 'outflow']);
+		expect(card(hs, 'ewr').delta).not.toBeNull();
+		// A gauge's table over the outlet's.
+		expect(card(headlines(tables, 120, null, { source: 'ruleTable', siteNodeId: 'g2' }), 'reserve')).toMatchObject({ value: '75.0%', sub: ['3 of 4 months at g2'] });
+		// A site the run has no table at: automatic, the outlet.
+		expect(card(headlines(tables, 120, null, { source: 'ruleTable', siteNodeId: 'gone' }), 'reserve').sub[0]).toBe('18 of 24 months at the outlet');
+	});
+
 	it('does not flag a clean run', () => {
 		const clean = summary({
 			farms: [farm('Upper', 100, 100)],

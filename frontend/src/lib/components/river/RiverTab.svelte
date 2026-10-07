@@ -27,7 +27,8 @@
 	import { runHref } from '$lib/components/overview/attention';
 	import { historyDays } from '$lib/components/overview/latestRun';
 	import { hasRuleLine } from '$lib/components/overview/summaryChart';
-	import { headlineSite } from '$lib/components/runs/ewrAssurance';
+	import { resolveHeadline } from '$lib/components/runs/ewrAssurance';
+	import { judgedByText } from '$lib/components/ewr/headline';
 	import { detailCache } from '$lib/components/runs/cache';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { holdAnchor } from '$lib/help/anchor';
@@ -137,14 +138,18 @@
 	/** The record shown: only once it is the run picked, never a stale one while the next loads. */
 	const shown = $derived(detail && detail.run.id === pick?.run.id ? detail : null);
 	const summary = $derived(shown?.run.summary ?? null);
-	// A Reserve rule table judges the Reserve (the tile's rule months, Reserve compliance), so the panels that count
-	// the pragmatic EWR are named for it, not "the reserve" (issue #177); the flow chart keeps its name when it
-	// draws the outlet's rule requirement.
-	const ruleTable = $derived(!!summary && headlineSite(summary) !== null);
+	// What the results are judged by: the project's choice (settings.ewrHeadline, issue #444) applied to this run.
+	const headline = $derived(project.settings.ewrHeadline ?? null);
+	const judged = $derived(summary ? resolveHeadline(summary, headline) : null);
+	// When a Reserve rule table judges the Reserve (the tile's rule months), the panels that count the pragmatic EWR
+	// are named for it, not "the reserve" (issue #177); the flow chart keeps its name when it draws the outlet's rule
+	// requirement. Reserve compliance shows whenever the run has a table, whatever judges the headline.
+	const ruleTable = $derived(!!judged?.site);
+	const hasAssurance = $derived(!!summary?.ewrAssurance?.length);
 	const ruleLine = $derived(!!shown && hasRuleLine(shown.series));
 	const yearsWords = $derived(reserveYearsWords(ruleTable));
 	const kpis = $derived(
-		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null) : []
+		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null, headline) : []
 	);
 
 	// --- a link to one of the panels (`#res-reserve`, or an old Runs & results link sent here):
@@ -235,7 +240,17 @@
 	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
 	     under its first screen. Its group names show on the bar (issue #162), so the gaps between
 	     the groups read as groups. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(ruleTable, ruleLine)} label="River sections" />{/if}
+	{#if shown && summary}<SectionNav groups={riverNavGroups(hasAssurance, ruleLine, ruleTable)} label="River sections" />{/if}
+	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
+	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
+	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
+		<p class="judged muted small" data-testid="river-judged-by">
+			Results are judged by <strong>{judgedByText(judged.site, headline)}</strong>.
+			<a href="?tab=settings#set-judge">{canEdit ? 'Change' : 'Where this is set'}</a>{#if judged.fellBack}<span class="fell-back"
+					>This run has no Reserve rule table at the chosen site, so it is judged automatically.</span
+				>{/if}
+		</p>
+	{/if}
 	<div class="first" bind:clientWidth={firstW}>
 		<div class="top">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>
@@ -355,6 +370,13 @@
 	.empty h2 {
 		margin-top: 0;
 		font-size: 1.05rem;
+	}
+	.judged {
+		margin: 0 0 0.75rem;
+	}
+	.judged .fell-back {
+		display: block;
+		color: var(--warning);
 	}
 	.first {
 		display: grid;

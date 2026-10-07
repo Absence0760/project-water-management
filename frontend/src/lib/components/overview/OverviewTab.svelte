@@ -297,12 +297,13 @@
 			{previousError}
 			retry={retryRuns}
 			dams={damsState}
+			headline={project.settings.ewrHeadline ?? null}
 		/>
 		{#if shown}
 			<ReserveStrip
 				compliance={shown.summary.ewrCompliance}
 				forecastFrom={shown.summary.forecast?.from ?? null}
-				ruleTable={headlineSite(shown.summary) !== null}
+				ruleTable={headlineSite(shown.summary, project.settings.ewrHeadline) !== null}
 				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
 			/>
 		{/if}

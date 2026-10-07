@@ -4,7 +4,7 @@
 // never disagree; the change against the previous run is formatted the way
 // the compare page does it (compare/delta.ts).
 import { fromEpochDay, metricDelta, toEpochDay, type MetricDelta, type RunSummary } from '@water-management/engine';
-import type { RunMeta } from '$lib/api/types';
+import type { EwrHeadline, RunMeta } from '$lib/api/types';
 import type { MetricSpec } from '$lib/components/compare/delta';
 import { headlineSite } from '$lib/components/runs/ewrAssurance';
 import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
@@ -117,17 +117,19 @@ function change(prev: number | null | undefined, cur: number | null | undefined)
  * (Dam storage isn't in a run's summary, only in its daily series, so its
  * card is `damsHeadline`, built once they are fetched.) `previous` is the run
  * before, for the changes. The Summary shows the first three as cards and the
- * outflow in the line under them.
+ * outflow in the line under them. `choice` is the project's settings.ewrHeadline
+ * (issue #444; absent = `auto`): which test the Reserve card reports, for this
+ * run and the one before alike.
  */
-export function headlines(s: RunSummary, days: number, previous: RunSummary | null): Headline[] {
+export function headlines(s: RunSummary, days: number, previous: RunSummary | null, choice?: EwrHeadline | null): Headline[] {
 	const out: Headline[] = [];
 	const c = s.catchment;
 	const pc = previous?.catchment;
 
-	const reserve = headlineSite(s);
+	const reserve = headlineSite(s, choice);
 	if (reserve) {
 		const o = reserve.overall;
-		const prevSite = previous ? headlineSite(previous) : null;
+		const prevSite = previous ? headlineSite(previous, choice) : null;
 		// Only the same site is comparable (a rule table added elsewhere moves the headline).
 		const same = prevSite && prevSite.nodeId === reserve.nodeId ? prevSite : null;
 		const sub = [`${fmtNum(o.met)} of ${fmtNum(o.months)} months at ${reserve.isOutlet ? 'the outlet' : reserve.name}`];
@@ -155,7 +157,7 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 			flagged: ewr.flagged,
 			// The pragmatic test runs on every run, so a previous run always has it
 			// (unless its headline was a rule table: then the two cards differ).
-			delta: previous && !headlineSite(previous) ? change(pc?.ewrFractionDaysNotMet, c.ewrFractionDaysNotMet) : null,
+			delta: previous && !headlineSite(previous, choice) ? change(pc?.ewrFractionDaysNotMet, c.ewrFractionDaysNotMet) : null,
 			spec: { format: 'fraction', better: 'lower' }
 		});
 	}

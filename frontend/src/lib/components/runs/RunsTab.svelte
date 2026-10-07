@@ -668,7 +668,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
 				</section>
 			</section>
 			{#if summary.forecast}

@@ -4,6 +4,7 @@
 // and PBIAS cards (issue #177: a sentence repeating them put the NSE on the
 // screen three times); the printable report draws the same cards.
 import type { RunSummary } from '@water-management/engine';
+import type { EwrHeadline } from '$lib/api/types';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { headlineSite } from './ewrAssurance';
 import { SUPPLY_TARGET } from './results';
@@ -16,20 +17,21 @@ export type SentenceInput = Pick<RunSummary, 'catchment' | 'ewrAssurance'> & {
 /**
  * The river first, then the farms. The river measure is the one
  * the cards lead with: months meeting the Reserve rules at the headline site
- * when the project has a rule table, else days below the pragmatic EWR at the
- * outflow gauge.
+ * when the project judges by a rule table, else days below the pragmatic EWR
+ * at the outflow gauge. `choice`: the project's settings.ewrHeadline (issue
+ * #444; absent = automatic).
  */
-export function runSentences(summary: SentenceInput): string[] {
-	const out = [riverSentence(summary)];
+export function runSentences(summary: SentenceInput, choice?: EwrHeadline | null): string[] {
+	const out = [riverSentence(summary, choice)];
 	const farms = farmSentence(summary.farms ?? []);
 	if (farms) out.push(farms);
 	return out;
 }
 
-export const runSentence = (summary: SentenceInput) => runSentences(summary).join(' ');
+export const runSentence = (summary: SentenceInput, choice?: EwrHeadline | null) => runSentences(summary, choice).join(' ');
 
-function riverSentence(summary: SentenceInput): string {
-	const site = headlineSite(summary);
+function riverSentence(summary: SentenceInput, choice?: EwrHeadline | null): string {
+	const site = headlineSite(summary, choice);
 	if (site) {
 		const where = site.isOutlet ? 'the outlet' : site.name;
 		const o = site.overall;

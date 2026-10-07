@@ -377,7 +377,7 @@
 						<p>{box.status}</p>
 						{#if box.notEvidence}<p><strong>{box.notEvidence}</strong></p>{/if}
 					</div>
-					<p class="lede">{runSentence(summary)}</p>
+					<p class="lede">{runSentence(summary, project!.settings.ewrHeadline)}</p>
 					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain (CHIRPS-GEFS named only when it was the source). -->
 					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(run)}</p>{/if}
 					<nav aria-label="Contents">
@@ -482,7 +482,7 @@
 					{:else if s.id === 'assurance'}
 						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={run.engineVersion} print />
 					{:else if s.id === 'farms'}
-						<RunSummaryView {summary} {days}>
+						<RunSummaryView {summary} {days} headline={project!.settings.ewrHeadline ?? null}>
 							{#snippet units()}
 								<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />
 								<!-- The land-cover, groundwater, demand-object and other-user tables: on Units & supply in the workspace (issue #137), here in their old place. -->
