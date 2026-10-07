@@ -314,7 +314,7 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	const judged = page.getByTestId('river-judged-by');
 	await expect(judged).toHaveText(/^Results are judged by the Reserve rule table at the outlet, Outflow gauge \(automatic\)\. Change$/);
 	// The EWR by month heat map counts days below the pragmatic EWR, and says that isn't the test the results are judged by.
-	const heatNote = page.locator('#res-ewr-grid p.note');
+	const heatNote = page.locator('#res-ewr-grid .ewr-heatmap p.note');
 	await expect(heatNote).toContainText(
 		'A day counts when simulated outflow at the outlet is below the pragmatic EWR. These bands count days below the pragmatic EWR; the results are judged by the Reserve rule table at the outlet, Outflow gauge (automatic) instead.'
 	);
