@@ -250,7 +250,8 @@ test('after a dam capacity edit the card’s Dam at end of run agrees with the m
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await page.getByLabel('Colour hydrological units by').selectOption({ label: 'Dam level, end of latest run' });
 	const meta = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' }).locator('text.meta');
-	await expect(meta).toHaveText(/^\d+(% full|%, at its minimum)$/);
+	// The % is the run's (issue #173); the dam edited since adds its capacity now (issue #444).
+	await expect(meta).toHaveText(/^\d+(% full|%, at its minimum) · now 75\u202f000 m³$/);
 	const mapPct = (await meta.textContent())!.match(/^(\d+)%/)![1];
 
 	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
@@ -470,9 +471,26 @@ test('the node sheet runs in the order water moves, with a jump row that stays p
 		'Demand objects',
 		'Combined boreholes (one capacity)',
 		'Individual boreholes',
-		'Land cover'
+		'Land cover',
+		// Last, where the unit's water leaves it: the reach below (engine 1.75.0, issue #444).
+		'Bed losses in the reach below'
 	]);
 	const jump = sheet.getByRole('navigation', { name: 'Sections of the form' });
+	// The jump row lists the same sections in the same order, by their short names.
+	await expect(jump.getByRole('button')).toHaveText([
+		'Catchment area',
+		'Flow share',
+		'Dam',
+		'Dam survey',
+		'Routing',
+		'Supply',
+		'Irrigation',
+		'Demand objects',
+		'Combined boreholes',
+		'Individual boreholes',
+		'Land cover',
+		'Bed losses'
+	]);
 	await jump.getByRole('button', { name: 'Individual boreholes' }).click();
 	const target = sheet.getByRole('group', { name: 'Individual boreholes', exact: true });
 	await expect(target).toBeFocused();
