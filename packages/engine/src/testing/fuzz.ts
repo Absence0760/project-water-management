@@ -393,6 +393,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const irrigationSystems = addIrrigationSystems(new Rng(seed ^ 0x1f83d9ab), crops, cropAreas);
 	// Crop supply tables (engine ≥ 1.73.0, issue #408), from their own stream, last of all.
 	addCropSupply(new Rng(seed ^ 0x5bd1e995), nodes);
+	// Bed losses in the reaches (engine ≥ 1.75.0, issue #444), from their own stream, last of all.
+	addReachLosses(new Rng(seed ^ 0x6c8e9cf5), nodes);
 	return {
 		settings,
 		model: {
@@ -743,6 +745,37 @@ function addCropSupply(g: Rng, nodes: NetworkNode[]): void {
 		const other = nodes.filter((m) => m !== n);
 		n.cropRemoteNodeId = other.length && g.bool(0.95) ? g.pick(other).id : null;
 		n.cropRemoteCapM3Day = g.pick([null, 0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
+	}
+}
+
+/**
+ * The input with no bed losses (engine ≥ 1.75.0): every reach loses nothing,
+ * as before addReachLosses, so a seed pinned for another feature keeps the
+ * network it was found on. Changes `input` in place and returns it.
+ */
+export function withoutReachLosses(input: ModelInput): ModelInput {
+	for (const n of input.model.nodes) {
+		n.reachLossFrac = 0;
+		n.reachLossMaxM3Day = null;
+	}
+	return input;
+}
+
+/**
+ * Bed losses in the reach below a node (engine ≥ 1.75.0, issue #444,
+ * docs/model.md §2.6b) in 20 % of seeds, below each node 40 % of the time
+ * (any kind, the outlet too, which the run ignores): a share from a trace to
+ * all of the flow (f = 1, WRSM's Bedloss with a cap), now and then out of
+ * range (which the run clamps), with a cap
+ * of none, 0, a trickle or more than any flow, so the cap binds some days,
+ * every day or never, with and without senior users downstream.
+ */
+function addReachLosses(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.2)) return;
+	for (const n of nodes) {
+		if (!g.bool(0.4)) continue;
+		n.reachLossFrac = g.bool(0.05) ? g.pick([-0.1, 1.2]) : g.pick([g.float(0, 0.05), g.float(0, 0.5), 0.5, g.float(0.5, 1), 1]);
+		n.reachLossMaxM3Day = g.pick([null, null, 0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
 	}
 }
 

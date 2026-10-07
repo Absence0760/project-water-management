@@ -6,7 +6,7 @@ import type { NetworkNode } from '@water-management/engine';
 export { moveTo, renumber } from '$lib/model/order';
 
 /** Ids of every node upstream of `id` (draining into it directly or indirectly). */
-export function upstreamOf(nodes: NetworkNode[], id: string): Set<string> {
+export function upstreamOf(nodes: readonly Pick<NetworkNode, 'id' | 'downstreamNodeId'>[], id: string): Set<string> {
 	const children = new Map<string, string[]>();
 	for (const n of nodes) {
 		if (n.downstreamNodeId === null) continue;

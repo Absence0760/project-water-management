@@ -121,6 +121,8 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			if (n.downstreamNodeId === null) add(`ewrSiteOutlet:${n.id}`, `"${n.name}" is the outlet, which is always an EWR site`);
 			else if (n.kind !== 'gauge') add(`ewrSiteKind:${n.id}`, `"${n.name}": only a gauge can be taken off the EWR sites`);
 		}
+		// Bed losses (engine ≥ 1.75.0, docs/model.md §2.6b) are in the reach below a node: the outlet has none in the model.
+		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0) add(`reachLossOutlet:${n.id}`, `"${n.name}" is the outlet: there is no reach below it in the model to lose water in`);
 		// Supply rule and river pump (WP-3.8): a farm's; trigger switches on a dam; run of river has none.
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';

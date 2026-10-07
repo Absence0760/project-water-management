@@ -70,6 +70,11 @@ describe('riverNavGroups', () => {
 		expect(flowLabel(true, true)).toBe('Flow vs reserve');
 		expect(flowLabel(true, false)).toBe('Flow vs pragmatic EWR');
 	});
+	it('names the flow chart by the headline’s test, and keeps Reserve compliance, when the project judges by the pragmatic EWR (issue #444)', () => {
+		const groups = riverNavGroups(true, false, false);
+		expect(groups[0]!.sections.find((s) => s.id === 'res-ewr')!.label).toBe('Flow vs reserve');
+		expect(groups.flatMap((g) => g.sections.map((s) => s.id))).toContain('res-reserve');
+	});
 });
 
 describe('reserveYearsWords (issue #177: "reserve" named two different tests)', () => {
@@ -117,6 +122,10 @@ describe('riverKpis', () => {
 	it('adds the rule-table months to the reserve tile when the project has one, after the pragmatic lines and named as the rules', () => {
 		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null);
 		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year', 'Reserve rules: 91.7% of months']);
+	});
+	it('leaves the rule-table months off when the project judges by the pragmatic EWR (issue #444)', () => {
+		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null, { source: 'pragmatic' });
+		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', '37 days in an average year']);
 	});
 	it('gives a short or dry run its days a year to one decimal (no trailing zero), and one day as "day"', () => {
 		expect(tile(riverKpis(summary({ ewrDaysNotMet: 5, ewrFractionDaysNotMet: 5 / 730 }), days, null), 'ewr').sub[1]).toBe('2.5 days in an average year');

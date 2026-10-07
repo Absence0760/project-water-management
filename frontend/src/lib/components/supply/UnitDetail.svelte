@@ -6,14 +6,18 @@
 	// 30 days / 1 year / All windows, at the plot height the page gives it. A
 	// unit with a dam links to its storage on the Dams page (`?tab=dams&dam=`),
 	// whose chart has the capacity and minimum lines this panel's own "Dam
-	// storage" view lacked (removed 2026-09-29, issue #175).
-	import type { DailySeries, FarmSummary } from '@water-management/engine';
+	// storage" view lacked (removed 2026-09-29, issue #175). Under the chart,
+	// the unit's assurance of supply (issue #444, reliability/NodeAssurance):
+	// its reliability and its stress classes by month, with a link to every
+	// year's grid in Assurance of supply below, which opens on this unit.
+	import type { DailySeries, FarmSummary, SupplyAssurance } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
 	import { cachedSeries } from '$lib/components/runs/cache';
+	import NodeAssurance from '$lib/components/reliability/NodeAssurance.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { shortRanges } from './supply';
 
@@ -26,7 +30,9 @@
 		capacity,
 		deficit = null,
 		forecastFrom = null,
-		height = 260
+		height = 260,
+		assurance = null,
+		engineVersion = null
 	}: {
 		projectId: string;
 		runId: string;
@@ -42,9 +48,18 @@
 		forecastFrom?: string | null;
 		/** The plot's height in px (taller beside the cards on a wide page). */
 		height?: number;
+		/** The run's assurance of supply (RunSummary.supplyAssurance; absent on a run before engine 0.32.0). */
+		assurance?: SupplyAssurance | null;
+		/** The run's engine version, for the "not computed" note on older runs. */
+		engineVersion?: string | null;
 	} = $props();
 
 	const band = $derived(forecastBand(forecastFrom));
+	// The plot's height: the page's, less the assurance under it when the page gives a tall plot (beside the
+	// cards, where the panel sits level with them), never under PLOT_MIN; stacked, the page flows and the plot keeps its height.
+	const PLOT_MIN = 240;
+	let assuranceH = $state(0);
+	const plotH = $derived(height > 300 ? Math.max(PLOT_MIN, height - assuranceH) : height);
 	const has = (key: string, nodeId: string) => refs.some((r) => r.key === key && r.nodeId === nodeId);
 	const get = (key: string, nodeId: string): Promise<DailySeries> => cachedSeries(runId, key, nodeId, () => api.runs.series(projectId, runId, key, nodeId));
 
@@ -104,7 +119,7 @@
 		<LineChart
 			title="Supply vs demand"
 			unit="m³/day"
-			{height}
+			height={plotH}
 			series={supplySeries}
 			recentDays={FLOW_OPEN_DAYS}
 			windows={FLOW_WINDOWS}
@@ -113,8 +128,14 @@
 			caption={shade.length ? 'Shaded: the days the hydrological unit got less than its demand.' : undefined}
 		/>
 	{:else}
-		<div class="chart-ph" style:height="{height}px" role="status">{loading ? 'Loading…' : 'No demand series.'}</div>
+		<div class="chart-ph" style:height="{plotH}px" role="status">{loading ? 'Loading…' : 'No demand series.'}</div>
 	{/if}
+	<!-- Beside the cards (a tall plot), the plot gives up the assurance's height, so the panel keeps its size and the first screen. -->
+	<div bind:clientHeight={assuranceH}>
+		<NodeAssurance {assurance} nodeId={farm.nodeId} {engineVersion} heading="Assurance of supply: {name}">
+			{#snippet more()}<a href="#res-assurance" data-testid="unit-assurance-link">Every year by month, in Assurance of supply below</a>{/snippet}
+		</NodeAssurance>
+	</div>
 </section>
 
 <style>

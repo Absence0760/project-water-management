@@ -18,6 +18,7 @@
 		distinctShortNames,
 		labelBox,
 		measuredWidths,
+		metaLine,
 		paperBands,
 		schematicLayout,
 		symbolBox,
@@ -99,6 +100,14 @@
 	});
 
 	const supplyOf = (id: string) => colouring?.byNode.get(id);
+	// A unit whose dam was edited since the coloured run (issue #444): its colour and figure are the run's.
+	const changedOf = (id: string) => colouring?.changed?.get(id);
+	const changedCount = $derived(colouring?.changed?.size ?? 0);
+	const changedSentence = $derived(
+		changedCount
+			? `Marked: ${changedCount === 1 ? 'a dam' : `${changedCount} dams`} whose own settings were edited since that run. The colour and % are the run's; “now” is the capacity in the model today. Run the model again to update them.`
+			: ''
+	);
 	const legend = $derived(colouring?.legend ?? []);
 	// The map key lists only what the drawing has, so no entry sends the eye looking for a shape that isn't there.
 	const has = $derived({
@@ -279,13 +288,7 @@
 		})
 	);
 
-	const metaText = (ln: SchematicNode) => {
-		const s = supplyOf(ln.node.id);
-		// Coloured, a farm's second line is what it's coloured by alone ("82% supplied", "64% full"):
-		// with the area and dam as well it ran into the next column's label. Both stay in its tooltip.
-		if (s) return s.text;
-		return `${isOutlet(ln.node) ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${hasDam(ln.node) ? ` · ${fmtVolume(ln.node.damCapacityM3)}` : ''}`;
-	};
+	const metaText = (ln: SchematicNode) => metaLine(ln, supplyOf(ln.node.id), changedOf(ln.node.id) ?? null);
 
 	// What a transfer arc must not cross: every label, and every symbol but its own two ends.
 	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(ln.node), metaText(ln), widths)));
@@ -383,6 +386,12 @@
 					</li>
 				{/each}
 			</ul>
+			{#if changedCount}
+				<ul class="legend">
+					<li class="key-h">Since the run</li>
+					<li><svg width="18" height="18" viewBox="-10 -10 20 20"><rect class="farm dam" x="-9" y="-6" width="15" height="15" rx="3" /><circle class="changed-mark" cx="6" cy="-6" r="3.5" /></svg> Dam settings changed: re-run to update</li>
+				</ul>
+			{/if}
 		{/if}
 	</div>
 {/snippet}
@@ -437,6 +446,7 @@
 			{@const n = ln.node}
 			{@const dam = hasDam(n)}
 			{@const sup = supplyOf(n.id)}
+			{@const chg = changedOf(n.id)}
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 			<g
 				class="node"
@@ -447,6 +457,7 @@
 				class:drop-over={drag?.moved && drag.over === n.id}
 				class:dragged={drag?.moved && drag.id === n.id}
 				data-supply={sup?.band}
+				data-changed={chg ? 'true' : undefined}
 				transform="translate({p.x},{p.y})"
 				onclick={() => !editable && onselect?.(n.id)}
 				ondblclick={() => onopen?.(n.id)}
@@ -455,7 +466,7 @@
 				onpointerup={onUp}
 				onpointercancel={() => (drag = null)}
 			>
-				<title>{name(n)} ({KIND_WORD[n.kind]}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}</title>
+				<title>{name(n)} ({KIND_WORD[n.kind]}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}{chg ? ` · ${chg.text}` : ''}</title>
 				<circle class="halo" r="17" />
 				{#if n.kind === 'user'}
 					<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
@@ -467,6 +478,10 @@
 					<path class="dam-water" d="M-6,1 q3,-3 6,0 t6,0" />
 				{:else}
 					<circle class="farm" r="8" />
+				{/if}
+				{#if chg}
+					<!-- Edited since the coloured run (issue #444): a mark on the symbol's corner, with "changed" in the label line. -->
+					<circle class="changed-mark" cx="9" cy="-9" r="3.5" data-testid="dam-changed-mark" />
 				{/if}
 				<text class="label" x="17" y="-2">{short(n)}</text>
 				<text class="meta" x="17" y="12">{metaText(ln)}</text>
@@ -527,6 +542,7 @@
 				<p class="supply-run">
 					{colouring.caption}
 					{#if colouring.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
+					{#if changedCount}<span data-testid="changed-since-run">{changedSentence}</span>{/if}
 				</p>
 			{/if}
 			{#if editable}
@@ -578,6 +594,7 @@
 			<p class="supply-run">
 				{colouring.caption}
 				{#if colouring.unsaved}<strong>The colours show that run, not your unsaved changes.</strong>{/if}
+				{#if changedCount}<span data-testid="changed-since-run">{changedSentence}</span>{/if}
 			</p>
 		</div>
 	{/if}
@@ -590,7 +607,7 @@
 		{#each tree.rows as row (row.node.id)}
 			{@const sup = supplyOf(row.node.id)}
 			<li>
-				{name(row.node)}, {KIND_WORD[row.node.kind]}{row.depth === 0 && row.node.downstreamNodeId === null ? ', outlet' : ''}, level {row.depth + 1}{sup ? `, ${sup.text}` : ''}
+				{name(row.node)}, {KIND_WORD[row.node.kind]}{row.depth === 0 && row.node.downstreamNodeId === null ? ', outlet' : ''}, level {row.depth + 1}{sup ? `, ${sup.text}` : ''}{changedOf(row.node.id) ? `. ${changedOf(row.node.id)!.text}` : ''}
 			</li>
 		{/each}
 	</ul>
@@ -796,6 +813,13 @@
 		margin: 0;
 		font-size: 0.8rem;
 		color: var(--text-2);
+	}
+	/* Edited since the coloured run (issue #444): the drawing's ink, ringed in its ground, so it reads on every band
+	   (the amber of a short unit included); "now"/"changed" in the label line says what it means. */
+	.changed-mark {
+		fill: var(--sch-node);
+		stroke: var(--sch-ground);
+		stroke-width: 1.5;
 	}
 	.dam-water {
 		fill: none;

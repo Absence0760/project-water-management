@@ -506,6 +506,24 @@ alongside teams, e.g. to give an outside client `viewer` access.
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
+  `settings.ewrHeadline` (issue #444, `projects/ewrHeadlineSettings.ts`,
+  [ui.md § Settings & calibration](./ui.md#settings--calibration), *Judge
+  results by*) is which EWR test the results are judged by: always present,
+  default `{ source: 'auto' }` (the outlet's Reserve rule table, else the
+  first site's, else the pragmatic EWR, as before it existed); `{ source:
+  'pragmatic' }` (the pragmatic EWR at the outflow gauge); or `{ source:
+  'ruleTable', siteNodeId }` (one site's table, null = the outlet). `PATCH`
+  takes one whole choice, replaced whole (no other shape or key; `400`). A
+  new rule-table site is checked against the network and the rule tables as
+  they'd be saved: a gauge as for `outcomes.siteNodeId` (`400
+  ewrHeadline.siteNodeId: …`, the same three reasons), the outlet when a
+  table is keyed null or by the outlet node (`400 ewrHeadline.siteNodeId:
+  the outlet has no Reserve rule table`); only when the choice changes, so a
+  stored choice whose table has gone doesn't block other saves (the screens
+  fall back to `auto` and say so). A copy or an imported project document
+  moves the site to the copy's gauge. It never sets `ewrChargeSource`. Like
+  `outcomes` it is no model input: runs don't record it, saving only it
+  leaves `updatedAt` alone, and every run is read by the current choice.
   `settings.droughtRestriction` (engine ≥ 1.54.0, WP-3.8,
   [model.md §2.7i](./model.md), [ui.md § Drought restrictions](./ui.md#drought-restrictions))
   is the model's drought restriction rule: `{ reviewDates: ['MM-DD', …]
@@ -1191,7 +1209,9 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     5 % is amber. `unknown` carries `reason`: `no-figures` (no
     run), `no-ewr` (the source run had no EWR set, every month 0, so "never
     short" would be a false green) or `no-series` (the run has no outlet EWR
-    record).
+    record). Always the pragmatic EWR's days, whatever the project's
+    `settings.ewrHeadline` (issue #444): a Reserve rule table is judged by
+    whole months over a run, so it has no 30-day window to light.
   - `farmsShort7` / `farmsShort30`: farms short at least one day in the 7 /
     30 days to `figuresUntil`, stored with the publication
     (`catchmentView.recent`); `null` without a publication, or for one made
@@ -1592,6 +1612,17 @@ pool. Under `"river"` the unit's crops take from a river abstraction of their
 own beside the dam (series `river_take@crops`, and with a pool
 `river_pool@crops` and `river_pool_evaporation@crops`); the supply rule then
 serves the unit's dam-sourced demand objects only.
+
+Bed losses (engine ≥ 1.75.0, migration 203, issue #444,
+[model.md §2.6b](./model.md)): every node carries `reachLossFrac` (0–1, the
+share of the flow it passes downstream lost in the reach to the next node)
+and `reachLossMaxM3Day` (≥ 0 or `null` = no cap). A body without them gets 0
+and `null` (no loss, no change to any run). `PUT` refuses a share outside
+0–1, a negative cap, and a share on the outlet, which has no reach below it
+(more than half the flow without a cap saves, and its runs warn).
+A run with bed losses stores `reach_loss` (m³/day) on each node that has them,
+and `summary.waterBalance` and the water account gain `reachLossM3`; the
+run warns that the EWR is still read from the natural flow before the losses.
 
 The crop supply table (engine ≥ 1.73.0, migration 202, issue #408,
 [model.md §2.7k](./model.md)): every node carries `cropShareDam`,

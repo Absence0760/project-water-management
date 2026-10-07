@@ -1,13 +1,32 @@
 // Runs & results → Reserve compliance (engine ≥ 0.21.0, docs/model.md §2.9c):
 // pure helpers for EwrAssurancePanel.svelte and the headline card.
 import { EWR_NATURAL_MAR_TOLERANCE, ewrSourceConfidence, naturalMarBeyondTolerance, type EwrAssuranceMonth, type EwrAssuranceSite, type EwrHighFlowReport, type RunSummary } from '@water-management/engine';
+import type { EwrHeadline } from '$lib/api/types';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 import { monthName } from '$lib/format/months';
 
-/** The site the headline reports: the outlet when it has a table, else the first site. */
-export function headlineSite(summary: Pick<RunSummary, 'ewrAssurance'>): EwrAssuranceSite | null {
+/**
+ * The rule-table site the headline reports, or null for the pragmatic EWR,
+ * under the project's choice (settings.ewrHeadline, issue #444; absent =
+ * `auto`). `auto`: the outlet when it has a table, else the first site, else
+ * the pragmatic EWR, as before the choice existed. `pragmatic`: always null.
+ * `ruleTable`: that site (null = the outlet); when the run has no table there
+ * (the table or its gauge has gone, or the run predates it) the headline falls
+ * back to `auto` and `fellBack` says so, for a visible note.
+ */
+export function resolveHeadline(summary: Pick<RunSummary, 'ewrAssurance'>, choice?: EwrHeadline | null): { site: EwrAssuranceSite | null; fellBack: boolean } {
 	const sites = summary.ewrAssurance ?? [];
-	return sites.find((s) => s.isOutlet) ?? sites[0] ?? null;
+	const auto = sites.find((s) => s.isOutlet) ?? sites[0] ?? null;
+	if (!choice || choice.source === 'auto') return { site: auto, fellBack: false };
+	if (choice.source === 'pragmatic') return { site: null, fellBack: false };
+	const id = choice.siteNodeId;
+	const hit = sites.find((s) => (id === null ? s.isOutlet : s.nodeId === id));
+	return hit ? { site: hit, fellBack: false } : { site: auto, fellBack: true };
+}
+
+/** The site the headline reports (resolveHeadline), or null for the pragmatic EWR. */
+export function headlineSite(summary: Pick<RunSummary, 'ewrAssurance'>, choice?: EwrHeadline | null): EwrAssuranceSite | null {
+	return resolveHeadline(summary, choice).site;
 }
 
 export const UNIT_LABEL = { mcm: 'Mm³', m3s: 'm³/s' } as const;

@@ -9,6 +9,7 @@
 	// test it counts, the pragmatic EWR, since the headline card's Reserve is
 	// the table's (reserveStrip.ts stripWords, issue #177).
 	import type { EwrCompliance } from '@water-management/engine';
+	import { bandLabels, EWR_BANDS } from '$lib/components/ewr/bands';
 	import { monthText, recentMonths, stripSpan, stripWhat, stripWords } from './reserveStrip';
 
 	let {
@@ -30,6 +31,8 @@
 	const months = $derived(compliance ? recentMonths(compliance, forecastFrom) : []);
 	const span = $derived(stripSpan(months));
 	const words = $derived(stripWords(ruleTable));
+	// The key names what the strip counts: days below the EWR, or the pragmatic EWR beside a rule table.
+	const bands = $derived(bandLabels(undefined, `days below ${words.test}`));
 </script>
 
 <section class="panel strip" aria-labelledby="strip-h" data-testid="reserve-strip">
@@ -45,15 +48,20 @@
 		<p class="what" data-testid="reserve-strip-what">{stripWhat(months, words)}</p>
 		<ol class="months" aria-label="{words.list}, {span}">
 			{#each months as x, i (`${x.year}-${x.month}`)}
-				<li data-month="{x.year}-{String(x.month).padStart(2, '0')}" data-not-met={x.notMet} title={monthText(x, words.test)}>
+				<li data-month="{x.year}-{String(x.month).padStart(2, '0')}" data-not-met={x.notMet} data-band={x.band} title={monthText(x, words.test)}>
 					<span class="visually-hidden">{monthText(x, words.test)}</span>
 					<span class="n" class:zero={x.notMet === 0} aria-hidden="true">{x.notMet}</span>
-					<span class="track" aria-hidden="true"><span class="fill" style:height="{Math.round(x.fraction * 100)}%"></span></span>
+					<span class="track" aria-hidden="true"><span class="fill {x.band}" style:height="{Math.round(x.fraction * 100)}%"></span></span>
 					<span class="m" aria-hidden="true">{x.label}</span>
 					<span class="y" aria-hidden="true">{i === 0 || x.month === 1 ? x.year : ''}</span>
 				</li>
 			{/each}
 		</ol>
+		<!-- A line of text, not a list: the strip's one list is its months. -->
+		<p class="key" data-testid="reserve-strip-key">
+			<span class="visually-hidden">Bar colours:</span>
+			{#each EWR_BANDS as b (b)}<span class="item"><span class="swatch {b}" aria-hidden="true"></span>{bands[b]}</span>{/each}
+		</p>
 	{/if}
 </section>
 
@@ -125,7 +133,36 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
+	}
+	/* The traffic light's tokens: each ≥ 5:1 on the track (--surface-2) in both themes. */
+	.green {
+		background: var(--success);
+	}
+	.amber {
 		background: var(--warning);
+	}
+	.red {
+		background: var(--danger);
+	}
+	.key {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.2rem 1rem;
+		list-style: none;
+		margin: 0.35rem 0 0;
+		padding: 0;
+		font-size: 0.75rem;
+		color: var(--text-2);
+	}
+	.key .item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.swatch {
+		width: 0.75rem;
+		height: 0.75rem;
+		border-radius: 2px;
 	}
 	.m {
 		color: var(--text-2);
@@ -143,7 +180,8 @@
 		}
 	}
 	@media (forced-colors: active) {
-		.fill {
+		.fill,
+		.swatch {
 			background: CanvasText;
 		}
 	}

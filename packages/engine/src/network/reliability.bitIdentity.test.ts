@@ -35,7 +35,8 @@ describe('the assurance of supply is bit-identical to the pre-#192 code', () => 
 			for (const recordedInput of recorded) {
 				// The river abstractions' pools (engine 1.65.0) came after the reference; it can't read them, so both sides
 				// compare without them (the pools' own terms are held by the water account invariant, testing/invariants.ts).
-				const x = { ...recordedInput, accountNodes: recordedInput.accountNodes.map(({ pool: _pool, ...n }) => n) };
+				// Bed losses (engine 1.75.0) likewise: the reference has no reach-loss term.
+				const x = { ...recordedInput, accountNodes: recordedInput.accountNodes.map(({ pool: _pool, reachLoss: _reach, ...n }) => n) };
 				expect(current.supplyAssurance(x), `seed ${seed}`).toEqual(reference.supplyAssurance(x));
 				nodes += x.demandNodes.length;
 			}

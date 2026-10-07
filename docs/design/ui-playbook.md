@@ -64,7 +64,8 @@ section it belongs to, with the example that taught it.
 - **The section header is the only page title.** Every workspace section
   gets `workspace/SectionHeader` from the page: the title (`TAB_LABELS`) as
   the `h1`, a one-line context, and on the right the rain pill, the
-  section's own actions and **Add data**. A tab adds its
+  section's own actions, **Add data** and **Run model** (editors; the
+  primary action). A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
   (`workspace/headerSlot.svelte.ts`), and a status pill of its own beside
   the rain pill as `status` (the Summary's **Setup complete**); it never
@@ -74,10 +75,16 @@ section it belongs to, with the example that taught it.
   (the header's `h1` and its own `h2`, 65 px) until it filled the header
   with its context and actions when inside a tab and kept its own `h1`
   only on `/compare`. A section with a main action of its own passes
-  it as `main`, rendered last after a plain Add data: Runs & results' run
-  form (label, Run forecast, Run model) went there from a full-width panel
+  it as `main`, rendered last after a plain Add data in place of the page's
+  Run model button: Runs & results' run form (label, Run forecast, Run model) went there from a full-width panel
   that pushed the results 110 px down, its status one slim line under the
-  header. Notices (viewer, new data, upload result) are one slim
+  header. Elsewhere Run model (`workspace/RunButton.svelte`, issue #444)
+  opens a small form so the run can still be named. A popover in the header
+  must close on navigation as well as on Escape and a click outside: the
+  header stays mounted across sections, so a form whose status line links
+  to the Network sat over the Network once followed (`afterNavigate`).
+  RunButton copies the Setup complete pill's `fit()` nudge; a third
+  popover should extract it rather than copy it again. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
   Crops, the Projects list) is

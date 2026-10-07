@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, REACH_LOSS_FRAC_MAX, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -107,6 +107,10 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				handsOffEwr: z.boolean().default(false),
 				divertMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
+				// Bed losses in the reach below (engine ≥ 1.75.0, issue #444): the share of the flow lost (0–1; above half without a cap the run warns) and the
+				// daily cap (null = none). Any kind of node; none on the outlet is a model rule (reachLossOutlet).
+				reachLossFrac: z.number().finite().min(0).max(REACH_LOSS_FRAC_MAX).default(0),
+				reachLossMaxM3Day: nonNeg.nullable().default(null),
 				// Gauges: whether the EWR is assessed there (engine ≥ 1.5.0); the outlet always, a model rule.
 				ewrSite: z.boolean().default(true),
 				// GN 538 context (engine ≥ 1.12.0): the property's size and its quaternary's Table 2 rate; null = unknown.

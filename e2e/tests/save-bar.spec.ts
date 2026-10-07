@@ -3,7 +3,8 @@
 // the problems that block a save as links to where they are fixed (even from a page
 // the problem isn't on, and with that page hidden from the sidebar), asks before
 // Discard, and says "Changes saved" / "Changes discarded" with the focus on the
-// page's title once it goes. Runs & results' Run model saves unsaved edits first.
+// page's title once it goes. Run model (Runs & results' form, or the header's on any
+// other section) saves unsaved edits first.
 // Synthetic data only.
 import type { Page } from '@playwright/test';
 import { createProject, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
@@ -96,7 +97,7 @@ test('Run model with unsaved edits asks to save first, then runs the saved edits
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Bar run');
 	await openTransfers(page, project.id);
-	// The edits are made on Transfers and the run started from Runs & results, the only Run model.
+	// The edits are made on Transfers and the run started from Runs & results, where the tab's own run form takes the header Run model's place.
 	const run = page.getByTestId('section-header').getByRole('button', { name: 'Run model', exact: true });
 	const toRuns = async () => {
 		await sections(page).getByRole('link', { name: 'Runs & results' }).click();
@@ -130,6 +131,29 @@ test('Run model with unsaved edits asks to save first, then runs the saved edits
 	await expect(saveBar(page)).toBeHidden();
 	const model = await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json();
 	expect(model.transfers[0].dailyCapM3).toBe(500);
+});
+
+test('the header’s Run model on the page with the edits asks to save them first, then runs and opens the run', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Bar run here');
+	await openTransfers(page, project.id);
+	await page.getByLabel('Daily cap of transfer 1, m³', { exact: true }).fill('400');
+	await page.getByLabel('Daily cap of transfer 1, m³', { exact: true }).blur();
+	await expect(saveBar(page)).toBeVisible();
+
+	await page.getByTestId('header-run').click();
+	const form = page.getByRole('dialog', { name: 'Run the model' });
+	await expect(form.getByRole('status')).toHaveText(/^You have unsaved changes: Run model asks to save them first/);
+	await form.getByLabel(/^Run label/).fill('Cap 400');
+	const saved = page.waitForResponse((r) => r.request().method() === 'PUT' && r.url().endsWith(`/projects/${project.id}/model`));
+	const ran = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${project.id}/runs`));
+	await form.getByRole('button', { name: 'Run model' }).click();
+	await answerConfirm(page, true, 'A run uses the saved model. Your unsaved model edits aren’t in it yet');
+	expect((await saved).status()).toBe(200);
+	expect((await ran).status()).toBeLessThan(300);
+	await expect(page).toHaveURL(/tab=runs&run=/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Cap 400' })).toBeVisible();
+	await expect(saveBar(page)).toBeHidden();
 });
 
 test('a number that needs fixing counts as unsaved: the bar lists it, and leaving asks', async ({ page, owner }) => {

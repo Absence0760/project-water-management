@@ -4,21 +4,133 @@
 // themselves come from overview/damLevels.ts (shared with the Summary's Dams
 // today card and the Network's colour by dam level); this file turns them and
 // the model into the page's cards, header line, sparkline and chart series.
-// Pure, so the page stays markup and the numbers are unit-tested.
-import { fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
+// Pure, so the page stays markup and the numbers are unit-tested. A card's
+// figures are the run's (issue #173); its capacity is the model's now, and
+// when the dam's own settings have been edited since the run the card says so
+// (damChange, issue #444), as the Network's drawing does.
+import { CROP_SUPPLY_DEFAULTS, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, SUPPLY_DEFAULTS, WATER_SOURCE_DEFAULTS, fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
 import { pctOfCapacity, type DamLevel } from '$lib/components/overview/damLevels';
 import { fmtDay, fmtNum } from '$lib/format/number';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 
+const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
+
 type NodeLike = { id: string; name?: string; kind?: string; damCapacityM3?: unknown; damMinPct?: unknown };
+
+/**
+ * The dam's own settings that change what a run works out for it, each with
+ * what it is about in words: the dam's fields and how its own unit draws on
+ * it (the supply rule and its switch levels, the crops' water source and
+ * supply table). Absent on one side (a run saved before the field existed)
+ * means the default for the WP-3.5, development and supply fields, and is not
+ * compared for the rest. Edits elsewhere that change what reaches the dam or
+ * what is asked of it (a unit upstream, its bed losses, the crops and their
+ * areas, another unit's pipe from this dam) are not checked: this is the
+ * dam's own settings only, and the badge says so.
+ */
+const DAM_FIELDS: readonly [string, string][] = [
+	['damMinPct', 'minimum level'],
+	['damInitialPct', 'starting level'],
+	['damAreaFullM2', 'surface area'],
+	['damAreaExponent', 'surface area'],
+	['damCurve', 'surface area'],
+	['damSeepagePerDay', 'seepage'],
+	['damSeepageReturnPct', 'seepage'],
+	['damReleaseRule', 'release rule'],
+	['damReleaseM3Day', 'release rule'],
+	['damOutletCapacityM3Day', 'release rule'],
+	['damSurveyDate', 'capacity over time'],
+	['damSedimentPctPerYear', 'capacity over time'],
+	['damInServiceFrom', 'capacity over time'],
+	['pctUpstreamToDam', 'what flows into it'],
+	['pctRunoffToDam', 'what flows into it'],
+	['supplyRule', 'how its unit draws on it'],
+	['supplyTriggerPct', 'how its unit draws on it'],
+	['supplyStopPct', 'how its unit draws on it'],
+	['cropWaterSource', 'how its unit draws on it'],
+	['cropShareDam', 'how its unit draws on it'],
+	['cropShareRiver', 'how its unit draws on it'],
+	['cropShareRemote', 'how its unit draws on it']
+];
+const DAM_DEFAULTS: Record<string, unknown> = { ...DAM_STORAGE_DEFAULTS, ...DEVELOPMENT_DEFAULTS, ...SUPPLY_DEFAULTS, ...WATER_SOURCE_DEFAULTS, ...CROP_SUPPLY_DEFAULTS };
+
+/** The card's badge, and the start of damChange's sentence: what the check covers, the dam's own settings only. */
+export const DAM_CHANGED = 'Dam settings changed since the run';
+
+/** How a dam differs between the run's model and the model now (damChange). */
+export interface DamChange {
+	/** The capacity in the run and now (m³; 0 = no dam), when they differ by 1 m³ or more. */
+	capacity: { run: number; now: number } | null;
+	/** What else changed, in words ("minimum level", "release rule"). */
+	other: string[];
+	/** What changed and "Re-run to update.", for after the card's badge. */
+	detail: string;
+	/** One sentence for a badge's title, a tooltip and the drawing's text equivalent: DAM_CHANGED, then the detail. */
+	text: string;
+}
+
+/**
+ * Whether a unit's dam's own settings have been edited since the run (issue
+ * #444): its capacity (added, removed or resized) or another of DAM_FIELDS.
+ * null when it is the same, when the unit had
+ * no dam then and has none now, or when either side is missing (a unit added
+ * since the run, a run saved without its model).
+ */
+export function damChange(runNode: object | undefined, liveNode: object | undefined): DamChange | null {
+	if (!runNode || !liveNode) return null;
+	const then = runNode as Record<string, unknown>;
+	const now = liveNode as Record<string, unknown>;
+	const capRun = num(then.damCapacityM3);
+	const capNow = num(now.damCapacityM3);
+	if (capRun < 1 && capNow < 1) return null;
+	const capacity = Math.abs(capRun - capNow) >= 1 ? { run: capRun, now: capNow } : null;
+	const other: string[] = [];
+	if (capRun >= 1 && capNow >= 1) {
+		for (const [key, words] of DAM_FIELDS) {
+			// Only an absent field takes its default: a stored null (no area entered) is a value.
+			const a = then[key] === undefined ? DAM_DEFAULTS[key] : then[key];
+			const b = now[key] === undefined ? DAM_DEFAULTS[key] : now[key];
+			if (a === undefined || b === undefined) continue;
+			const same = typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)) : JSON.stringify(a) === JSON.stringify(b);
+			if (!same && !other.includes(words)) other.push(words);
+		}
+	}
+	if (!capacity && !other.length) return null;
+	const what = capacity
+		? capRun < 1
+			? `dam added (${fmtVolume(capNow)})`
+			: capNow < 1
+				? 'dam removed'
+				: `capacity ${fmtVolume(capRun)} in the run, ${fmtVolume(capNow)} now`
+		: '';
+	const detail = `${[what, ...other].filter(Boolean).join(', ')}. Re-run to update.`;
+	return { capacity, other, detail, text: `${DAM_CHANGED}: ${detail}` };
+}
+
+/** damChange for every unit in the model now that the run also has, keyed by node id (only the changed ones). */
+export function damChanges(runNodes: readonly { id: string }[] | undefined, liveNodes: readonly { id: string; kind?: string }[]): Map<string, DamChange> {
+	const out = new Map<string, DamChange>();
+	if (!runNodes?.length) return out;
+	const then = new Map(runNodes.map((n) => [n.id, n]));
+	for (const n of liveNodes) {
+		if (n.kind !== 'farm') continue;
+		const c = damChange(then.get(n.id), n);
+		if (c) out.set(n.id, c);
+	}
+	return out;
+}
 
 export interface DamCard {
 	nodeId: string;
 	name: string;
 	/** From the run's model when the run has the dam (so a later edit doesn't skew its %), else the live model. */
 	capacityM3: number;
+	/** The model's capacity now (0 when the dam has been removed since the run): what the card's head shows. */
+	nowCapacityM3: number;
+	/** How the dam has been edited since the run whose levels the card shows; null when it hasn't (or there are no levels). */
+	change: DamChange | null;
 	minPct: number;
 	/** A farm's own dam: the card links to the farm drawer. */
 	farm: boolean;
@@ -26,7 +138,6 @@ export interface DamCard {
 	level: DamLevel | null;
 }
 
-const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 
 /**
  * The model's dams: farms with a capacity of at least 1 m³, in node order.
@@ -50,22 +161,26 @@ export function modelDams(nodes: readonly NodeLike[]): { nodeId: string; name: s
  * One card per dam in the model: those with levels first, in the levels'
  * order (emptiest first, `sortDamLevels`), then the rest in node order. A dam
  * the run has but the model no longer has (removed since) keeps its card, so
- * the cards always match the run's levels.
+ * the cards always match the run's levels. `runNodes` (the run's own model)
+ * marks a card whose dam has been edited since (damChange).
  */
-export function damCards(nodes: readonly NodeLike[], levels: readonly DamLevel[]): DamCard[] {
+export function damCards(nodes: readonly NodeLike[], levels: readonly DamLevel[], runNodes?: readonly NodeLike[]): DamCard[] {
 	const dams = modelDams(nodes);
 	const byId = new Map(dams.map((d) => [d.nodeId, d]));
-	const kinds = new Map(nodes.map((n) => [n.id, n.kind]));
+	const live = new Map(nodes.map((n) => [n.id, n]));
+	const then = new Map((runNodes ?? []).map((n) => [n.id, n]));
 	const withLevel: DamCard[] = levels.map((l) => ({
 		nodeId: l.nodeId,
 		name: byId.get(l.nodeId)?.name ?? l.name,
 		capacityM3: l.capacityM3,
+		nowCapacityM3: byId.get(l.nodeId)?.capacityM3 ?? 0,
 		minPct: l.minPct,
-		farm: kinds.get(l.nodeId) === 'farm',
-		level: l
+		farm: live.get(l.nodeId)?.kind === 'farm',
+		level: l,
+		change: damChange(then.get(l.nodeId), live.get(l.nodeId) ?? { id: l.nodeId, damCapacityM3: 0 })
 	}));
 	const seen = new Set(levels.map((l) => l.nodeId));
-	return [...withLevel, ...dams.filter((d) => !seen.has(d.nodeId)).map((d) => ({ ...d, level: null }))];
+	return [...withLevel, ...dams.filter((d) => !seen.has(d.nodeId)).map((d) => ({ ...d, nowCapacityM3: d.capacityM3, level: null, change: null }))];
 }
 
 /** The dam shown in the chart: the one the URL names when it has a card, else the first (the emptiest). */

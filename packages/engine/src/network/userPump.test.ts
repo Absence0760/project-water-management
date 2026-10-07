@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelInput, NetworkNode } from '../project';
 import { runModel, runModelWith, withVerification } from '../run';
-import { randomInput } from '../testing/fuzz';
+import { randomInput, withoutReachLosses } from '../testing/fuzz';
 import { sameOutput } from '../testing/invariants';
 import { checkInvariants } from '../verify/checks';
 import { userPumpOf } from './supply';
@@ -194,7 +194,8 @@ describe('the invariants see the users’ pumps (engine 1.58.0)', () => {
 	it('random networks whose users’ pumps bind: every invariant holds, the water balance included', () => {
 		let binding = 0;
 		for (let seed = 1; seed < 1500 && binding < 6; seed++) {
-			const x = randomInput(seed, { maxDays: 300 });
+			// Without bed losses (engine 1.75.0), which can dry a user's reach so its pump never binds: the pumps are the subject here.
+			const x = withoutReachLosses(randomInput(seed, { maxDays: 300 }));
 			if (!x.model.nodes.some((n) => n.kind === 'user' && typeof n.pumpCapacityM3Day === 'number')) continue;
 			const out = runModel(x);
 			if (!out.series.some((s) => s.key === 'pump_limited' && s.values.some((v) => v > 0))) continue;

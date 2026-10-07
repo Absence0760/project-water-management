@@ -247,6 +247,18 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks bed losses in the reach below as the API does: a share up to 100 %, a cap ≥ 0, none on the outlet (engine 1.75.0)', () => {
+		const g = node('g', 'Gauge', null);
+		const a = node('a', 'A', 'g');
+		expect(messages(model([g, { ...a, reachLossFrac: 1, reachLossMaxM3Day: 2000 }]))).toEqual([]);
+		expect(messages(model([g, { ...a, reachLossFrac: 0.2, reachLossMaxM3Day: null }]))).toEqual([]);
+		expect(messages(model([g, { ...a, reachLossFrac: 1.2, reachLossMaxM3Day: -1 }]))).toEqual([
+			'"A": the share of the flow lost in the reach below must be between 0% and 100%.',
+			'"A": the most lost in the reach below in a day can\'t be negative.'
+		]);
+		expect(messages(model([{ ...g, reachLossFrac: 0.1 }, a]))).toEqual(['"Gauge": the outlet has no reach below it in the model; set its bed losses to 0%.']);
+	});
+
 	it('checks a dam’s survey curve, release and seepage share as the API does (WP-3.5)', () => {
 		const g = node('g', 'Gauge', null);
 		const curve = [

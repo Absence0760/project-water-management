@@ -61,7 +61,7 @@ test('a card per dam, emptiest first, with % full, its change, a sparkline and i
 
 	// The first card is the one charted, and the chart says how full it is; a farm's minimum level (10 %) is counted.
 	await expect(card(page, names[0]!).getByRole('link', { name: names[0]!, exact: true })).toHaveAttribute('aria-current', 'true');
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${names[0]}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${names[0]}`);
 	await page.goto(`/projects/${project.id}?tab=dams&dam=${project.model.nodes[1]!.id}`);
 	await expect(page.getByTestId('dam-facts')).toContainText('at its minimum level (10%)');
 	const facts = (await page.getByTestId('dam-facts').textContent())!.replace(/[ \t\r\n]+/g, ' ').trim();
@@ -78,24 +78,24 @@ test('picking a dam puts it in the URL, and Back returns to the one before; the 
 	await createRun(page.request, project.id, 'Baseline');
 	await openDams(page, project.id);
 	await chartReady(page);
-	const first = (await chart(page).getByRole('heading').textContent())!.replace('Storage: ', '');
+	const first = (await chart(page).getByRole('heading', { level: 2 }).textContent())!.replace('Storage: ', '');
 	const other = first === 'Middle farm' ? 'Lower farm' : 'Middle farm';
 	const otherId = project.model.nodes.find((n) => n.name === other)!.id as string;
 
 	// Anywhere on the card picks it.
 	await card(page, other).click({ position: { x: 150, y: 70 } });
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=dams&dam=${otherId}$`));
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${other}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${other}`);
 	await expect(card(page, other).getByRole('link', { name: other, exact: true })).toHaveAttribute('aria-current', 'true');
 	await chartReady(page);
 	await page.goBack();
 	await expect(page).toHaveURL(/[?&]tab=dams$/);
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${first}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${first}`);
 	await page.goForward();
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${other}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${other}`);
 	// A reload keeps it (the link can be shared).
 	await page.reload();
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${other}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${other}`);
 	await chartReady(page);
 
 	// 30 days / 1 year / All; it opens on a year (the whole of this 120-day run).
@@ -236,7 +236,7 @@ test.describe('flows in the window’s scroll, with nothing scrolling inside a c
 				expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 				// Picking a dam brings its chart into view.
 				await cards(page).last().locator('a.name').click();
-				await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${(await cards(page).last().locator('a.name').textContent())!}`);
+				await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${(await cards(page).last().locator('a.name').textContent())!}`);
 				await expect(chart(page)).toBeInViewport();
 			}
 			expect(await innerScrollers(page)).toEqual([]);
@@ -268,7 +268,7 @@ test('many dams: every card shows, emptiest first, with no “Show all” fold; 
 	// Pick one far down: its card is highlighted and the chart shows it; a shared link to it opens the same way.
 	const far = (await cards(page).nth(12).locator('a.name').innerText()).trim();
 	await cards(page).nth(12).locator('a.name').click();
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${far}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${far}`);
 	await expect(cards(page).nth(12)).toHaveClass(/\bpicked\b/);
 	await expect(cards(page).nth(12).locator('a.name')).toHaveAttribute('aria-current', 'true');
 	await page.reload();
@@ -300,11 +300,17 @@ test('at 1120×800 the chart sits beside the cards at 420 px, and a pick doesn�
 	const list = (await page.getByRole('list', { name: 'Dams' }).boundingBox())!;
 	const box = (await chart(page).boundingBox())!;
 	expect(box.x).toBeGreaterThan(list.x + list.width);
-	// The plot is drawn at the side-by-side height.
-	expect((await chart(page).locator('figure.chart').boundingBox())!.height).toBeGreaterThan(400);
+	// The plot is drawn at the side-by-side height: 420 px, less the unit's assurance under it (issue #444), so the
+	// sticky panel stays the height it was and fits the window.
+	const figure = (await chart(page).locator('figure.chart').boundingBox())!;
+	const assurance = (await chart(page).getByTestId('node-assurance').boundingBox())!;
+	expect(figure.height + assurance.height).toBeGreaterThan(400);
+	// Stuck under the header, the whole panel fits the window.
+	const stuckTop = await chart(page).evaluate((el) => parseFloat(getComputedStyle(el).top));
+	expect(box.height).toBeLessThanOrEqual(800 - stuckTop);
 	const y = await page.evaluate(() => window.scrollY);
 	await cards(page).last().locator('a.name').click();
-	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${(await cards(page).last().locator('a.name').textContent())!}`);
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText(`Storage: ${(await cards(page).last().locator('a.name').textContent())!}`);
 	expect(await page.evaluate(() => window.scrollY)).toBe(y);
 });
 
@@ -330,14 +336,15 @@ test('a card’s Edit dam opens its node sheet, Back returns to Dams with the pi
 	await chartReady(page);
 	await expect(page.getByRole('heading', { level: 2, name: /^Storage: Lower farm/ })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Each dam' })).toBeAttached();
-	await expect(page.locator('.dams-page h3')).toHaveCount(0);
+	// The one h3 is a part of the chart's panel: the picked dam's unit's assurance of supply (issue #444).
+	await expect(page.locator('.dams-page h3')).toHaveText(['Assurance of supply: Lower farm']);
 
 	await card(page, 'Lower farm').getByRole('link', { name: 'Edit dam: Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=network&edit=${lowerId}$`));
 	await expect(page.getByRole('dialog', { name: /Lower farm/ })).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}$`));
-	await expect(chart(page).getByRole('heading')).toHaveText('Storage: Lower farm');
+	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText('Storage: Lower farm');
 
 	await page.getByRole('link', { name: 'Hydrological unit table', exact: true }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}&grid=nodes$`));
@@ -353,4 +360,52 @@ test('a viewer’s card links to Dam details, not Edit dam', async ({ page, owne
 	await openDams(v, project.id);
 	await expect(card(v, 'Upper farm').getByRole('link', { name: 'Dam details: Upper farm' })).toBeVisible();
 	await expect(v.getByRole('link', { name: /^Edit dam/ })).toHaveCount(0);
+});
+
+test('a dam resized since the run: the Network’s drawing shows today’s capacity marked changed, and so does its Dams card (issue #444)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam resized');
+	await createRun(page.request, project.id, 'Baseline');
+	// The client's report: a dam's capacity edited (and saved) after the run, then the diagram looked at.
+	const model = project.model;
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
+	upper.damCapacityM3 = 200_000;
+	await putModel(page.request, project.id, model);
+
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const colourBy = page.getByLabel('Colour hydrological units by');
+	await expect(colourBy.locator('option:checked')).toHaveText('Supply, latest run');
+	const node = (name: string) => page.locator('svg.schematic g.node').filter({ hasText: name });
+	// Coloured by the run's supply, the label line carries the capacity the model has now, beside the run's figure.
+	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand) · now 0\.20 Mm³$/);
+	await expect(node('Upper farm')).toHaveAttribute('data-changed', 'true');
+	await expect(node('Upper farm').getByTestId('dam-changed-mark')).toHaveCount(1);
+	await expect(node('Upper farm').locator('title')).toContainText('Dam settings changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
+	// The unchanged dam isn't marked.
+	await expect(node('Lower farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
+	await expect(node('Lower farm')).not.toHaveAttribute('data-changed');
+	await expect(page.getByTestId('changed-since-run')).toHaveText('Marked: a dam whose own settings were edited since that run. The colour and % are the run\'s; “now” is the capacity in the model today. Run the model again to update them.');
+	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('. Dam settings changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
+	// Coloured by dam level (the % of the run's capacity), the same.
+	await colourBy.selectOption({ label: 'Dam level, end of latest run' });
+	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^\d+%(,| full).* · now 0\.20 Mm³$/);
+	// Plain: today's model only, nothing to mark.
+	await colourBy.selectOption({ label: 'Nothing' });
+	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^[\d.]+ km² · 0\.20 Mm³$/);
+	await expect(page.locator('svg.schematic g.node[data-changed]')).toHaveCount(0);
+
+	// The Dams page: the card's head is today's capacity, its figures the run's, and it says the dam changed.
+	await openDams(page, project.id);
+	await expect(page.getByTestId('dams-summary')).toHaveText('2 dams · 290\u202f000 m³ capacity · latest run “Baseline”, ran today');
+	await expect(card(page, 'Upper farm').locator('.card-head .cap')).toHaveText('200\u202f000 m³');
+	await expect(card(page, 'Upper farm').getByTestId('dam-changed')).toHaveText('Dam settings changed since the run capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
+	await expect(card(page, 'Lower farm').getByTestId('dam-changed')).toHaveCount(0);
+
+	// A new run with the new capacity clears the marks.
+	await createRun(page.request, project.id, 'Resized');
+	await openDams(page, project.id);
+	await expect(card(page, 'Upper farm').getByTestId('dam-changed')).toHaveCount(0);
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
+	await expect(page.locator('svg.schematic g.node[data-changed]')).toHaveCount(0);
 });

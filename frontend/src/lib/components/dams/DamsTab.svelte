@@ -12,7 +12,10 @@
 	// at the minimum operating level. The page flows in the window's one scroll: every dam's card shows, emptiest
 	// first (no card list scrolls inside itself, and none folds away), and on a
 	// wide page the chart sticks beside the cards as they are read down.
-	// Before a run the cards show each dam's capacity.
+	// Before a run the cards show each dam's capacity. Under the chart, the
+	// assurance of supply of the unit the dam belongs to (issue #444,
+	// reliability/NodeAssurance): a dam has none of its own, so it is labelled
+	// as the unit's, with a link to the unit on Hydrological units.
 	// The levels come from overview/damLevels.ts, the loader the Summary's
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
@@ -25,6 +28,8 @@
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import Sparkline from '$lib/components/charts/Sparkline.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import NodeAssurance from '$lib/components/reliability/NodeAssurance.svelte';
+	import { supplyHref } from '$lib/components/supply/links';
 	import { runHref } from '$lib/components/overview/attention';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { AGO_DAYS, capacityOver, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
@@ -36,7 +41,7 @@
 	import { withParam } from '$lib/workspace/overlays';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
-	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
+	import { changeWords, DAM_CHANGED, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 	import DamProposalsBox from './DamProposalsBox.svelte';
 
 	let {
@@ -165,14 +170,15 @@
 	});
 
 	// --- the cards, the picked dam and the header line ---
-	const cards = $derived(damCards(editor.model.nodes, levels));
+	// The run's own model marks a dam edited since the run (issue #444): its figures are the run's, its head capacity today's.
+	const cards = $derived(damCards(editor.model.nodes, levels, run?.model?.nodes as { id: string }[] | undefined));
 	const damParam = $derived(page.url.searchParams.get('dam'));
 	const picked = $derived(pickDam(cards, damParam));
 	// A failed run list is not "no run yet": the header says which it is, as the alert below does.
 	const runText = $derived(
 		runs === null ? 'run list couldn’t be loaded' : latest ? `latest run “${latest.label || 'Untitled run'}”, ran ${ranAgo(latest.createdAt)}` : null
 	);
-	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.capacityM3, 0), runText));
+	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.nowCapacityM3, 0), runText));
 	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
 	const record = (s: DailySeries): DailySeries => ({ startDate: s.startDate, values: Array.from(beforeForecast(s.values, s.startDate, run?.summary.forecast?.from)) });
 	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3, 365, 60, c.level ? capacityOver(c.level, storage.get(c.nodeId)!.startDate) : undefined) : null])));
@@ -209,6 +215,10 @@
 	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit, picked.level ? capacityOver(picked.level, pickedSeries.startDate) : undefined) : []);
 	// A fixed plot height: taller beside the cards, where it sits level with the first few.
 	const chartH = $derived(side ? 420 : 260);
+	// Beside the cards the panel sticks, so the unit's assurance under the chart takes its height from the plot
+	// (never under 240 px) and the panel stays the height it was; stacked, the page flows and the plot keeps 260 px.
+	let assuranceH = $state(0);
+	const plotH = $derived(side ? Math.max(240, chartH - assuranceH) : chartH);
 	// --- the proposals box (issue #326 B-dams): every hydrological unit, the dams first in the cards' order ---
 	const proposalUnits = $derived.by(() => {
 		const farms = editor.model.nodes.filter((n) => n.kind === 'farm');
@@ -290,8 +300,12 @@
 								{:else}
 									<span class="name">{c.name}</span>
 								{/if}
-								<span class="cap muted">{fmtVolume(c.capacityM3)}</span>
+								<span class="cap muted">{c.nowCapacityM3 >= 1 ? fmtVolume(c.nowCapacityM3) : 'no dam now'}</span>
 							</div>
+							{#if c.change}
+								<!-- The figures below are the run's, worked out with the dam as it was then (issue #173); say its own settings changed (issue #444); edits upstream aren't checked. -->
+								<p class="changed small" data-testid="dam-changed"><span class="badge badge-warn">{DAM_CHANGED}</span> {c.change.detail}</p>
+							{/if}
 							{#if c.level && band}
 								<p class="level">
 									<span class="v">{pct(c.level.endPct)}</span> full{#if BAND_WORDS[band]}<span class="band {band}">{` · ${BAND_WORDS[band]}`}</span>{/if}
@@ -362,7 +376,7 @@
 							<LineChart
 								title="{picked.name} storage"
 								unit={unit === 'pct' ? '% of capacity' : 'm³'}
-								height={chartH}
+								height={plotH}
 								series={chartSeries}
 								recentDays={FLOW_OPEN_DAYS}
 								windows={FLOW_WINDOWS}
@@ -374,6 +388,19 @@
 							<p class="muted">{picked?.name ?? 'This dam'} isn't in the latest run: add it before the next run, or pick another dam.</p>
 						{/if}
 					</LoadState>
+					{#if run && picked}
+						{@const unitId = picked.nodeId}
+						{@const unitHere = picked.farm}
+						<div bind:clientHeight={assuranceH}>
+						<NodeAssurance assurance={run.summary.supplyAssurance ?? null} nodeId={unitId} engineVersion={run.engineVersion} heading="Assurance of supply: {picked.name}">
+							{#snippet lead()}The hydrological unit's supply, which this dam serves: a dam has no assurance of supply of its own.{/snippet}
+							{#snippet more()}
+								<!-- Only while the unit is in the model: a unit removed since the run has no card there. -->
+								{#if unitHere}<a href={supplyHref(run!.id, { unit: unitId, hash: 'res-farm' })} data-testid="dam-unit-link">{picked!.name} on Hydrological units</a>{/if}
+							{/snippet}
+						</NodeAssurance>
+						</div>
+					{/if}
 				</section>
 			{/if}
 		</div>
@@ -548,6 +575,14 @@
 	}
 	.small {
 		font-size: 0.85rem;
+	}
+	/* Above the card's stretched link (so it can be read and selected) but passing clicks to it, as .links does. */
+	.changed {
+		position: relative;
+		z-index: 1;
+		pointer-events: none;
+		margin: 0.15rem 0 0.25rem;
+		color: var(--text-2);
 	}
 	.chart-panel {
 		margin: 0;

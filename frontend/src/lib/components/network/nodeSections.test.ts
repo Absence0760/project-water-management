@@ -17,7 +17,8 @@ describe('nodeSections', () => {
 			'Demand objects',
 			'Combined boreholes (one capacity)',
 			'Individual boreholes',
-			'Land cover'
+			'Land cover',
+			'Bed losses in the reach below'
 		]);
 	});
 
@@ -26,14 +27,15 @@ describe('nodeSections', () => {
 		expect(nodeSections(node({ kind: 'farm', damCapacityM3: 0, damSurveyDate: '2020-01-01' }), 0)).toContain('damSurvey');
 	});
 
-	it('shows a gauge its area only, and a user its groundwater, plus anything left from another kind', () => {
-		expect(nodeSections(node({ kind: 'gauge' }), 0)).toEqual(['area']);
-		expect(nodeSections(node({ kind: 'gauge' }), 2)).toEqual(['area', 'demand']);
-		expect(nodeSections(node({ kind: 'user' }), 0)).toEqual(['groundwater', 'boreholes']);
+	it('shows a gauge its area only, and a user its groundwater, plus anything left from another kind; both the bed losses below them', () => {
+		expect(nodeSections(node({ kind: 'gauge' }), 0)).toEqual(['area', 'reach']);
+		expect(nodeSections(node({ kind: 'gauge' }), 2)).toEqual(['area', 'demand', 'reach']);
+		expect(nodeSections(node({ kind: 'user' }), 0)).toEqual(['groundwater', 'boreholes', 'reach']);
 	});
 
 	it('has a short name for every section on the jump row', () => {
 		expect(SECTION_SHORT.groundwater).toBe('Combined boreholes');
 		expect(SECTION_SHORT.damSurvey).toBe('Dam survey');
+		expect(SECTION_SHORT.reach).toBe('Bed losses');
 	});
 });

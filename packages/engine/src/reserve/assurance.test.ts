@@ -497,8 +497,10 @@ describe('Reserve compliance in a run', () => {
 			x.model.demandObjects = [];
 			x.model.transfers = [];
 			// River abstractions' pools (engine 1.65.0) store and evaporate even with no demand, so the crops go back to the dam,
-			// and no crop supply table (engine 1.73.0) gives the river a share.
-			for (const n of x.model.nodes) Object.assign(n, { damCapacityM3: 0, divertCapacityM3Day: 0, cropWaterSource: 'dam', cropShareDam: null, cropShareRiver: null, cropShareRemote: null });
+			// and no crop supply table (engine 1.73.0) gives the river a share. Bed losses (engine 1.75.0) are natural, but the
+			// site's table is read from the lossless natural flow (docs/engine-audit.md, known limitations), so none here.
+			for (const n of x.model.nodes)
+				Object.assign(n, { damCapacityM3: 0, divertCapacityM3Day: 0, cropWaterSource: 'dam', cropShareDam: null, cropShareRiver: null, cropShareRemote: null, reachLossFrac: 0 });
 			const gauges = x.model.nodes.filter((n) => n.kind === 'gauge').map((n) => n.id);
 			const rng = new Rng(seed);
 			x.settings.ewrRules = [null, ...gauges].map((siteNodeId) => ({

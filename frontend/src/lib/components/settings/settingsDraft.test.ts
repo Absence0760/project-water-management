@@ -42,7 +42,17 @@ describe('SettingsDraft', () => {
 		const d = new SettingsDraft();
 		d.load(old);
 		expect(d.s.autoRun.enabled).toBe(false);
+		// No EWR headline choice (issue #444): automatic.
+		expect(d.s.ewrHeadline).toEqual({ source: 'auto' });
 		expect(d.dirty).toBe(false);
+	});
+
+	it('is dirty when the EWR the results are judged by changes (issue #444)', () => {
+		const d = new SettingsDraft();
+		d.load({ ...saved(), ewrHeadline: { source: 'ruleTable', siteNodeId: null } } as ProjectSettings);
+		expect(d.s.ewrHeadline).toEqual({ source: 'ruleTable', siteNodeId: null });
+		d.s.ewrHeadline = { source: 'pragmatic' };
+		expect(d.dirty).toBe(true);
 	});
 
 	it('a rebase while clean takes the new settings', () => {

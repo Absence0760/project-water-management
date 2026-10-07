@@ -161,6 +161,7 @@ export interface WaterAccountEwr {
  *       + evaporation from the river abstractions' pools (engine ≥ 1.65.0)
  *       + stream depletion + river off-takes' conveyance losses (engine ≥ 1.14.0,
  *         less the share that seeps back to the river, engine ≥ 1.42.0)
+ *       + bed losses in the reaches between nodes (engine ≥ 1.75.0)
  *       + outflow at the outlet
  * A dam release (WP-3.5) joins the river below the dam, so it is already in
  * the outflow (or taken again downstream): a memo, not a term.
@@ -207,6 +208,8 @@ export interface WaterAccountRow {
 	streamDepletionM3: number;
 	/** Lost on the way by river off-takes (engine ≥ 1.14.0): taken − delivered − seeped back to the river (engine ≥ 1.42.0); present only on a run with off-takes. */
 	conveyanceLossM3?: number;
+	/** Lost into the river bed in the reaches between nodes (engine ≥ 1.75.0, docs/model.md §2.6b); present only on a run with bed losses. */
+	reachLossM3?: number;
 	/** Simulated outflow at the outlet. */
 	outflowM3: number;
 	outM3: number;
@@ -294,6 +297,8 @@ export interface AccountNodeInput {
 	offtakeIn?: ArrayLike<number>;
 	/** Their conveyance losses seeping back to the river below this node (engine ≥ 1.42.0, part of its outflow); missing = none. */
 	offtakeReturn?: ArrayLike<number>;
+	/** Bed losses in the reach below this node (engine ≥ 1.75.0); missing = none. */
+	reachLoss?: ArrayLike<number>;
 	initialStorageM3: number;
 }
 
@@ -541,6 +546,7 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const depletion = s(cum.depletion);
 	const conveyance = cum.conveyance ? s(cum.conveyance) : null;
 	const poolEvap = cum.poolEvaporation ? s(cum.poolEvaporation) : null;
+	const reach = cum.reachLoss ? s(cum.reachLoss) : null;
 	const outflow = s(cum.outflow);
 	const opening = from === 0 ? cum.initialStorage : cum.storage[from - 1]!;
 	const closing = to < from ? opening : cum.storage[to]!;
@@ -548,8 +554,28 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 	const inM3 = storageSet === null ? inBase : inBase + storageSet;
 	const outBase = landCover + unallocated + consumptive + otherUse + evap + seepageLost + depletion + outflow;
 	const outConveyed = conveyance === null ? outBase : outBase + conveyance;
-	const outM3 = poolEvap === null ? outConveyed : outConveyed + poolEvap;
-	const terms = [natural, rainOnDams, groundwater, transfers, ...(storageSet === null ? [] : [storageSet]), landCover, unallocated, consumptive, otherUse, evap, seepageLost, depletion, ...(conveyance === null ? [] : [conveyance]), ...(poolEvap === null ? [] : [poolEvap]), outflow, opening, closing];
+	const outPooled = poolEvap === null ? outConveyed : outConveyed + poolEvap;
+	const outM3 = reach === null ? outPooled : outPooled + reach;
+	const terms = [
+		natural,
+		rainOnDams,
+		groundwater,
+		transfers,
+		...(storageSet === null ? [] : [storageSet]),
+		landCover,
+		unallocated,
+		consumptive,
+		otherUse,
+		evap,
+		seepageLost,
+		depletion,
+		...(conveyance === null ? [] : [conveyance]),
+		...(poolEvap === null ? [] : [poolEvap]),
+		...(reach === null ? [] : [reach]),
+		outflow,
+		opening,
+		closing
+	];
 	let rainM3: number | null = null;
 	if (x.rainMm && x.areaKm2 && x.areaKm2 > 0) {
 		let mm = 0;
@@ -584,6 +610,7 @@ function accountRow(x: SupplyAssuranceInput, cum: DailyTotals, waterYear: number
 		damSeepageLostM3: nz(seepageLost),
 		streamDepletionM3: nz(depletion),
 		...(conveyance !== null ? { conveyanceLossM3: nz(conveyance) } : {}),
+		...(reach !== null ? { reachLossM3: nz(reach) } : {}),
 		outflowM3: nz(outflow),
 		outM3: nz(outM3),
 		damSeepageM3: nz(s(cum.seepage) - seepageLost),
@@ -632,6 +659,8 @@ interface DailyTotals {
 	storageSet: Float64Array | null;
 	/** River off-takes' conveyance losses lost from the catchment (taken − delivered − seeped back) over all nodes; null without off-takes (engine ≥ 1.14.0). */
 	conveyance: Float64Array | null;
+	/** Bed losses in the reaches over all nodes; null without any (engine ≥ 1.75.0). */
+	reachLoss: Float64Array | null;
 	initialStorage: number;
 }
 
@@ -643,6 +672,7 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 	c.storageSet = x.accountNodes.some((n) => n.storageSet) ? new Float64Array(days) : null;
 	c.conveyance = x.accountNodes.some((n) => n.offtakeOut) ? new Float64Array(days) : null;
 	c.poolEvaporation = x.accountNodes.some((n) => n.pool) ? new Float64Array(days) : null;
+	c.reachLoss = x.accountNodes.some((n) => n.reachLoss) ? new Float64Array(days) : null;
 	c.initialStorage = x.accountNodes.reduce((a, n) => a + n.initialStorageM3 + (n.pool ? n.pool.initialM3 : 0), 0);
 	// Node by node, each over every day: a day's total still adds the nodes in
 	// the list's (node-id) order, starting from 0, so every total is the same
@@ -686,6 +716,7 @@ function dailyTotals(x: SupplyAssuranceInput): DailyTotals {
 			add(c.poolEvaporation!, n.pool.evaporation);
 		}
 		if (c.storageSet) addOptional(c.storageSet, n.storageSet);
+		if (c.reachLoss) addOptional(c.reachLoss, n.reachLoss);
 		if (c.conveyance) {
 			const o = n.offtakeOut;
 			const d = n.offtakeIn;

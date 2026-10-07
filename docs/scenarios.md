@@ -185,6 +185,10 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   view may hide; a `node.add` carries none). "What if a fifth of the crops
   came from the river" is two ops: `cropShareDam` → 0.8 and `cropShareRiver`
   → 0.2 (with `cropShareRemote` → 0 when the farm had no table).
+  Bed losses in the reach below (engine ≥ 1.75.0, [model.md
+  §2.6b](./model.md)): `reachLossFrac` (0–1) and `reachLossMaxM3Day` (≥ 0,
+  null = no cap), on any kind of node, never the outlet (a save rule); always
+  a baseline assumption, since the river's losses are no party's proposal.
 
   **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
   provisional decision 2026-10-01, to be confirmed by the client's
@@ -466,7 +470,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale`, `ewrRule.set`, `ewrRule.remove` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, or a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, and a dam's survey and sediment (the dam as it is) |
+| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), and the river's bed losses |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
 | `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own; and not a senior other water user (the default priority) | baseline. A senior user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
@@ -1163,7 +1167,9 @@ scenario is `'team'`, and behaves exactly as above).
   `backend/src/scenarios/applicant.ts`): the settings, their own farms (their
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
-  its values blanked; crops, crop areas, transfers, land cover and
+  its values blanked but for the bed losses in the reach below it (engine ≥
+  1.75.0: the river's, not the farm's use, so the applicant's runs lose water
+  where the base's do); crops, crop areas, transfers, land cover and
   boreholes on their own farms only. Of a hidden node's text fields only
   those an explicit list keeps survive (`TEXT_KEPT`: its place, kind and
   the categorical rules: dam release, dates in service, user priority,

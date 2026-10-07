@@ -26,7 +26,9 @@ export type NodeNumberKey =
 	| 'boreholeTriggerPct'
 	| 'streamDepletionFrac'
 	| 'streamDepletionLagDays'
-	| 'gaPropertyAreaHa';
+	| 'gaPropertyAreaHa'
+	| 'reachLossFrac'
+	| 'reachLossMaxM3Day';
 
 export interface NodeField {
 	key: NodeNumberKey;
@@ -35,7 +37,7 @@ export interface NodeField {
 	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | 'l/s' | '×' | 'days' | 'ha';
 	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
 	scale?: number;
-	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
+	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater' | 'reach';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
 	help: string;
@@ -65,7 +67,8 @@ export const GROUPS: Record<NodeField['group'], string> = {
 	routing: 'Routing',
 	irrigation: 'Irrigation',
 	share: 'Flow share',
-	groundwater: 'Combined boreholes (one capacity)'
+	groundwater: 'Combined boreholes (one capacity)',
+	reach: 'Bed losses in the reach below'
 };
 
 export const NODE_FIELDS: NodeField[] = [
@@ -293,6 +296,25 @@ export const NODE_FIELDS: NodeField[] = [
 		nullable: true,
 		aria: (n) => `GN 538 property area of ${n}, ha`,
 		help: 'Size of the property the groundwater is taken on (land registered separately in a Deeds Office). With the Table 2 rate below it gives the general authorisation’s volume for the property, for context only.'
+	},
+	{
+		key: 'reachLossFrac',
+		detailOnly: true,
+		label: 'Share of the flow lost',
+		unit: '%',
+		group: 'reach',
+		aria: (n) => `Share of the flow below ${n} lost into the river bed before the next hydrological unit, %`,
+		help: 'Share of the flow leaving here that soaks into the river bed and banks before it reaches the next hydrological unit downstream, and leaves the catchment. 0 % (the default) for a perennial reach. Set it only where a gauge shows low flows the model keeps over-simulating that abstractions and dams don’t explain; above 30 % needs a source. 100 % with a daily maximum is WRSM’s bed loss: the whole flow up to that much a day.'
+	},
+	{
+		key: 'reachLossMaxM3Day',
+		detailOnly: true,
+		label: 'Most lost in a day',
+		unit: 'm³/day',
+		group: 'reach',
+		nullable: true,
+		aria: (n) => `Most lost into the river bed below ${n} in a day, m³/day`,
+		help: 'The reach loses at most this much a day, however high the flow (a bed that is already wet takes no more). Empty: no limit, the share alone.'
 	}
 ];
 
@@ -333,9 +355,16 @@ export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
  * The node table passes no method and keeps those editable, so a block pasted
  * or typed across a row lands whole.
  */
-export function fieldUnused(f: NodeField, n: Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3'>>, method?: FlowShareMethod): string | null {
+export function fieldUnused(
+	f: NodeField,
+	n: Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3' | 'downstreamNodeId' | 'reachLossFrac'>>,
+	method?: FlowShareMethod
+): string | null {
 	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) // gitleaks:allow (a field name, not a secret)
 		return 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.';
+	// Bed losses (engine ≥ 1.75.0) are in the reach below: none below the outlet. One left there stays editable so it can be cleared.
+	if (f.group === 'reach' && n.downstreamNodeId === null && !((n.reachLossFrac ?? 0) > 0)) return 'Not used: the outlet has no reach below it in the model.';
+	if (f.key === 'reachLossMaxM3Day' && !((n.reachLossFrac ?? 0) > 0)) return 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.';
 	if (!method) return null;
 	if (f.group === 'dam' && f.key !== 'damCapacityM3' && !((n.damCapacityM3 ?? 0) > 0)) return 'Not used: no dam (capacity 0). Enter a capacity to use it.';
 	if ((f.key === 'areaHiKm2' || f.key === 'areaLoKm2') && method !== 'hiLo')

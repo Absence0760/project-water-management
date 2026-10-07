@@ -444,6 +444,18 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, cropWaterSource: 'river' }, unit] })).join()).toMatch(/only a unit's crops have a water source/);
 	});
 
+	it('takes bed losses in the reach below any node but the outlet (engine 1.75.0, issue #444): none by default, a share up to all of the flow and a cap', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		expect(ModelBody.parse(body(monthly)).nodes[1]).toMatchObject({ reachLossFrac: 0, reachLossMaxM3Day: null });
+		const losing = ModelBody.parse({ ...body(monthly), nodes: [gauge, { ...unit, reachLossFrac: 1, reachLossMaxM3Day: 2500 }] });
+		expect(losing.nodes[1]).toMatchObject({ reachLossFrac: 1, reachLossMaxM3Day: 2500 });
+		expect(modelProblems(losing)).toEqual([]);
+		for (const bad of [{ reachLossFrac: 1.01 }, { reachLossFrac: -0.1 }, { reachLossMaxM3Day: -1 }, { reachLossMaxM3Day: Number.POSITIVE_INFINITY }])
+			expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		// The outlet has no reach below it (a model rule).
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, reachLossFrac: 0.2 }, unit] })).join()).toMatch(/is the outlet: there is no reach below it/);
+	});
+
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10) };
 		it('is none by default, and fills a window’s blanks', () => {

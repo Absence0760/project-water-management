@@ -73,7 +73,25 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	const svgBox = (await years.locator('svg').boundingBox())!;
 	const labelBox = (await lastLabel.boundingBox())!;
 	expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(svgBox.x + svgBox.width);
-	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
+	const heat = page.getByRole('region', { name: /^EWR compliance by month/ });
+	await expect(heat).toBeVisible();
+	// % of days not met in the EWR traffic light's three bands, as the portfolio's (stated in the key), each month's
+	// band in its words too; the number stays on every month that missed a day.
+	await expect(heat.getByRole('list', { name: 'Colour key' }).getByRole('listitem')).toHaveText([
+		'Green: under 5% of days not met',
+		'Amber: 5% to under 20%',
+		'Red: 20% or more',
+		'Not simulated'
+	]);
+	const cells = await heat.locator('tbody td[title]').evaluateAll((tds) => tds.map((td) => ({ cls: td.className.split(' ')[0], title: td.getAttribute('title')!, text: td.querySelector('span[aria-hidden]')!.textContent!.trim() })));
+	const simulated = cells.filter((c) => !c.title.endsWith('not simulated'));
+	expect(simulated.length).toBeGreaterThan(0);
+	for (const c of simulated) {
+		const [, notMet, of, band] = /not met on (\d+) of (\d+) days \(\d+%, (green|amber|red)\)/.exec(c.title)!;
+		expect(c.cls, c.title).toBe(band);
+		expect(band, c.title).toBe(Number(notMet) * 100 < 5 * Number(of) ? 'green' : Number(notMet) * 100 < 20 * Number(of) ? 'amber' : 'red');
+		expect(c.text, c.title).toBe(Number(notMet) > 0 ? String(Math.round((100 * Number(notMet)) / Number(of))) : '');
+	}
 	await expect(page.getByTestId('uncertainty-panel')).toBeVisible();
 	await expect(page.getByTestId('outcome-matrix')).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Water account' })).toBeVisible();

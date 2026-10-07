@@ -78,6 +78,7 @@ import { AutoRunPatch } from '../runs/autoRun.js';
 import { OutcomesPatch } from './outcomeSettings.js';
 import { OutlookPatch } from './outlookSettings.js';
 import { ResponsibleAuthorityPatch } from './authoritySettings.js';
+import { EwrHeadlinePatch } from './ewrHeadlineSettings.js';
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -150,6 +151,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 	if (isObj(s.outcomes) && typeof s.outcomes.siteNodeId === 'string' && ids.has(s.outcomes.siteNodeId)) {
 		s.outcomes = { ...s.outcomes, siteNodeId: ids.get(s.outcomes.siteNodeId) };
 	}
+	// The site the results are judged by (settings.ewrHeadline, issue #444) follows its node too.
+	if (isObj(s.ewrHeadline) && typeof s.ewrHeadline.siteNodeId === 'string' && ids.has(s.ewrHeadline.siteNodeId)) {
+		s.ewrHeadline = { ...s.ewrHeadline, siteNodeId: ids.get(s.ewrHeadline.siteNodeId) };
+	}
 	// The drought restriction rule's dams, units and EWR site (engine ≥ 1.54.0) follow their nodes too.
 	if (isObj(s.droughtRestriction)) {
 		const r = { ...s.droughtRestriction };
@@ -174,8 +179,10 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * own source. The declared uncertainty rule (issue #71) is one rule: a patch
  * that changed one threshold must not keep another from an older one. So is
  * the drought restriction rule (engine ≥ 1.54.0): a level left out is gone.
+ * And the EWR headline choice (issue #444): a site kept from a rule-table
+ * choice under `{ source: 'pragmatic' }` would be a field no choice has.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -1024,7 +1031,9 @@ export const SettingsPatch = z
 		// How a seasonal outlook is set up (outlookSettings.ts, issue #53 R5): either field. Not a model input.
 		outlook: OutlookPatch,
 		// Who decides the project's applications (authoritySettings.ts, 163): the whole authority, or null. Not a model input.
-		responsibleAuthority: ResponsibleAuthorityPatch
+		responsibleAuthority: ResponsibleAuthorityPatch,
+		// Which EWR test the results are judged by (ewrHeadlineSettings.ts, issue #444): one whole choice. Not a model input.
+		ewrHeadline: EwrHeadlinePatch
 	})
 	.partial()
 	.refine((s) => JSON.stringify(s).length <= 64_000, 'settings too large');

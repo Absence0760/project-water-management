@@ -26,7 +26,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'crop_requirement', letter: 'F', formula: 'MAX(0, gross demand) − effective rain used; × the demand factor for the month when a demand.scale scenario set one' },
 	{ key: 'demand', letter: null, formula: 'D = F ÷ irrigation efficiency e: the abstraction that meets the crop requirement' },
 	{ key: 'supplied', letter: 'G', formula: 'MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J − release − dam capacity × minimum operating level, 0), D) (release only with a release rule, WP-3.5)' },
-	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
+	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream, less the bed losses of the reaches from them (engine ≥ 1.75.0)' },
 	{ key: 'runoff', letter: 'I', formula: "natural flow × this farm's share − runoff removed by land cover (only with land cover, WP-1.35)" },
 	{
 		key: 'landcover_reduction',
@@ -185,7 +185,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{
 		key: 'senior_requirement',
 		letter: 'Zs',
-		formula: "Σ Zs of the elements directly upstream + this farm's share of the senior users' demand below it (demand × share ÷ Σ shares upstream of the user); only with senior users (WP-1.33)",
+		formula: "Σ Zs of the elements directly upstream (as much as arrives past each reach's bed losses) + this farm's share of the senior users' demand below it (demand × share ÷ Σ shares upstream of the user, grossed up for the bed losses on the way, engine ≥ 1.75.0); only with senior users (WP-1.33)",
 		optional: true
 	},
 	{
@@ -193,13 +193,15 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		letter: null,
 		formula: 'kept out of the dam so S ≥ MIN(Zs, H + I): O is cut first, then K and M pro rata; 0 without senior users (WP-1.33)',
 		optional: true
-	}
+	},
+	{ key: 'reach_loss', letter: null, formula: 'bed losses in the reach below (engine ≥ 1.75.0): MIN(cap, f × U), lost from the catchment; the element below receives U − this; only with bed losses', optional: true },
+	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the senior claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with senior claims across a losing reach', optional: true }
 ];
 
 /** Other water users (engine ≥ 0.22.0, WP-1.33, docs/model.md §2.7c). No letters: the workbook has no such element. */
 export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'demand', letter: null, formula: 'the monthly demand from the river (m³/day) for the day’s month, × the demand factor for the month when a demand.scale scenario set one' },
-	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream' },
+	{ key: 'inflow_upstream', letter: 'H', formula: 'Σ outflow U of the elements directly upstream, less the bed losses of the reaches from them (engine ≥ 1.75.0)' },
 	{ key: 'supplied', letter: 'G', formula: 'senior: MIN(demand, H); junior: MIN(demand, MAX(0, H − Σ upstream Zs)); with a pump capacity (engine ≥ 1.58.0) the river part is at most the capacity' },
 	{ key: 'return_flow', letter: 'T', formula: 'return share × G' },
 	{ key: 'outflow', letter: 'U', formula: 'H − G + T' },
@@ -217,18 +219,22 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'allocation_room_groundwater', letter: null, formula: 'allocation cap (engine ≥ 1.18.0): MIN(the water year’s registered groundwater volume − GW so far that year, the licence limit today, engine ≥ 1.37.0); blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)', optional: true },
 	{ key: 'allocation_left_surface', letter: null, formula: 'allocation cap with licence conditions (engine ≥ 1.40.0): the water year’s registered surface volume − its river take so far that year, never < 0, before the licence limit; blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)', optional: true },
 	{ key: 'allocation_left_groundwater', letter: null, formula: 'allocation cap with licence conditions (engine ≥ 1.40.0): the water year’s registered groundwater volume − GW so far that year, never < 0, before the licence limit; blank on a day none of its licences of the source is in force, which isn’t capped and whose use doesn’t count (engine ≥ 1.70.0)', optional: true },
-	{ key: 'allocation_demand_factor', letter: null, formula: 'full allocation (engine ≥ 1.18.0): demand is × this, the registered volume over the run’s days of the water year ÷ demand over them', optional: true }
+	{ key: 'allocation_demand_factor', letter: null, formula: 'full allocation (engine ≥ 1.18.0): demand is × this, the registered volume over the run’s days of the water year ÷ demand over them', optional: true },
+	{ key: 'reach_loss', letter: null, formula: 'bed losses in the reach below (engine ≥ 1.75.0): MIN(cap, f × U), lost from the catchment; the element below receives U − this; only with bed losses', optional: true },
+	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the senior claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with senior claims across a losing reach', optional: true }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */
 export const GAUGE_COLUMNS: readonly FarmColumn[] = [
-	{ key: 'inflow_upstream', letter: 'G', formula: 'Σ outflow U of the elements directly upstream' },
+	{ key: 'inflow_upstream', letter: 'G', formula: 'Σ outflow U of the elements directly upstream, less the bed losses of the reaches from them (engine ≥ 1.75.0)' },
 	{ key: 'outflow', letter: null, formula: 'the same as the inflow: a gauge only measures' },
 	{ key: 'ewr_cumulative', letter: 'H', formula: 'Σ Z of the elements directly upstream' },
 	{ key: 'ewr_shortfall', letter: 'I', formula: 'MIN(flow − required EWR, 0)' },
 	{ key: 'ewr_charged', letter: null, formula: '−MIN(shortfall, Σ MAX(e, 0)) over the farms upstream, e = H + I + J − U with only the transfers inside the gauge’s catchment (audit Q17)' },
 	{ key: 'ewr_natural', letter: null, formula: 'shortfall − charged: the part natural flow already missed' },
-	{ key: 'senior_requirement', letter: 'Zs', formula: 'Σ Zs of the elements directly upstream; only with senior users (WP-1.33)', optional: true }
+	{ key: 'senior_requirement', letter: 'Zs', formula: 'Σ Zs of the elements directly upstream; only with senior users (WP-1.33)', optional: true },
+	{ key: 'reach_loss', letter: null, formula: 'bed losses in the reach below (engine ≥ 1.75.0): MIN(cap, f × U), lost from the catchment; the element below receives U − this; only with bed losses', optional: true },
+	{ key: 'senior_reach_loss', letter: null, formula: 'Σ over the senior claims crossing the reach below of what their gross-up added for its bed losses, MIN(x ÷ (1 − f), x + cap) − x (engine ≥ 1.75.0); the element below receives Zs − MIN(Zs, this); only with senior claims across a losing reach', optional: true }
 ];
 
 // The catchment's runoff-model columns (node_id NULL in run_series), in the

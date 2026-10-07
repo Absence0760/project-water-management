@@ -42,8 +42,12 @@
 		refs: RunSeriesRef[];
 		nodeNames: Map<string, string>;
 		nodeOrder: ReadonlyMap<string, number>;
-		/** Model quality, after the hydrograph and the flow-duration curve (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
-		modelTail?: Snippet;
+		/**
+		 * Model quality, after the hydrograph and the flow-duration curve (calibration, runoff model, WR2012, EWR vs
+		 * observed, plausibility), given the page's flow unit and its switch, so a chart there (the calibration check)
+		 * follows the one switch.
+		 */
+		modelTail?: Snippet<[{ flowUnit: 'm³/s' | 'm³/day'; toolbar: Snippet }]>;
 		/** The Record group: notes, evidence and publication (sign-off, after the results). */
 		record?: Snippet;
 		/** Opening Dig deeper, before the explorer (self-checks). */
@@ -327,7 +331,7 @@
 	</section>
 
 	{#if lower}
-		{#if modelTail}<div class="wide slot">{@render modelTail()}</div>{/if}
+		{#if modelTail}<div class="wide slot">{@render modelTail({ flowUnit, toolbar: unitToggle })}</div>{/if}
 
 		{#if record}
 			<h2 class="group-h wide">Record</h2>

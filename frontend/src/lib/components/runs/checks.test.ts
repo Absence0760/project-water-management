@@ -90,16 +90,17 @@ describe('water balance table', () => {
 			'Start storage + hydrological unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage'
 		);
 		// Every term the engine's residual counts (verify.ts): with all of them, each gain and loss is a column.
-		const full = row({ groundwaterM3: 3e4, storageSetM3: -1e4, otherUseM3: 5e4, streamDepletionM3: 2e4, damSeepageLostM3: 1e3 });
+		const full = row({ groundwaterM3: 3e4, storageSetM3: -1e4, otherUseM3: 5e4, streamDepletionM3: 2e4, damSeepageLostM3: 1e3, poolEvaporationM3: 400, conveyanceLossM3: 600, reachLossM3: 7e3 });
 		const cols = balanceColumns([row(), full]);
 		expect(cols.map((c) => c.key)).toEqual([
 			'rain', 'runoffCoef', 'opening', 'runoff', 'transfers', 'groundwater', 'storageSet', 'rainOnDams',
-			'consumptive', 'damEvaporation', 'otherUse', 'streamDepletion', 'seepageLost', 'outflow', 'closing', 'residual'
+			'consumptive', 'damEvaporation', 'otherUse', 'streamDepletion', 'seepageLost', 'poolEvaporation', 'conveyanceLoss', 'reachLoss', 'outflow', 'closing', 'residual'
 		]);
+		expect(cols.find((c) => c.key === 'reachLoss')!.value(full)).toBeCloseTo(0.007, 12);
 		expect(cols.find((c) => c.key === 'otherUse')!.value(full)).toBeCloseTo(0.05, 12);
 		expect(cols.find((c) => c.key === 'storageSet')!.value(full)).toBeCloseTo(-0.01, 12);
 		expect(balanceEquation(cols)).toBe(
-			'Start storage + hydrological unit runoff + transfers + groundwater + storage set + rain on dams = consumptive use + other users’ use + stream depletion + dam evaporation + seepage lost + outflow + end storage'
+			'Start storage + hydrological unit runoff + transfers + groundwater + storage set + rain on dams = consumptive use + other users’ use + stream depletion + dam evaporation + pool evaporation + seepage lost + off-take losses + bed losses + outflow + end storage'
 		);
 	});
 });
@@ -181,6 +182,9 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		allocation_left_surface: 0,
 		allocation_left_groundwater: 0,
 		allocation_demand_factor: 0,
+		// Bed losses in the reach below (engine 1.75.0): only on a node that has them.
+		reach_loss: 0,
+		senior_reach_loss: 0,
 		dam_storage_set: 0,
 		depletion_store: 0,
 		baseflow_depletion: 0,

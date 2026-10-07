@@ -6,10 +6,12 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { inputFlowShares, overAllocationError, resolveQualityFlags, toEpochDay, type SeriesMeta } from '@water-management/engine';
+	import { resolveQualityFlags, toEpochDay, type SeriesMeta } from '@water-management/engine';
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
 	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import CalibrationCheck from '$lib/components/calibration/CalibrationCheck.svelte';
+	import type { CheckNode } from '$lib/components/calibration/calibrationCheck';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
@@ -41,6 +43,7 @@
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '$lib/components/river/links';
+	import { hasForecastRain, runBlockers } from './runReady';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
 	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Units & supply
@@ -73,6 +76,7 @@
 		runs: initialRuns = null,
 		canRun,
 		modelDirty,
+		busy = false,
 		beforeRun,
 		onRunsChange,
 		onInputsRestored
@@ -86,6 +90,8 @@
 		runs?: RunMeta[] | null;
 		canRun: boolean;
 		modelDirty: boolean;
+		/** A run the page started (the new-data line's Re-run model) is still going: this form waits for it. */
+		busy?: boolean;
 		/** Asked before a run starts: the page saves unsaved edits first (with the person's say); false stops the run. */
 		beforeRun?: () => Promise<boolean>;
 		onRunsChange?: (runs: RunMeta[]) => void;
@@ -105,6 +111,8 @@
 
 	let label = $state('');
 	let running = $state(false);
+	/** This form's run or the page's: either way another can't start yet. */
+	const runBusy = $derived(running || busy);
 	let elapsed = $state(0);
 	let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -283,6 +291,7 @@
 	}
 	/** Run the model, or (forecast) a forecast run: the history as an ordinary run, then the forecast days (WP-2.12). */
 	async function start(forecast: boolean) {
+		if (runBusy) return;
 		if (beforeRun && !(await beforeRun())) return;
 		running = true;
 		actionError = null;
@@ -385,18 +394,13 @@
 		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(dataEnd).sort().pop()}`);
 		return reasons.length ? reasons : null;
 	});
-	// A forecast run needs forecast rain (a forecast series, uploaded or fed by CHIRPS-GEFS); the server says if none is past the record.
-	const hasForecast = $derived(!!series?.some((x) => x.kind === 'rain_forecast_mm'));
-	// What a run still needs (the engine refuses to run without these).
-	const missing = $derived.by(() => {
-		const out: string[] = [];
-		if (!editor.model.nodes.length) out.push('a network');
-		if (series && !series.some((x) => x.kind.startsWith('rain_'))) out.push('a rainfall series');
-		return out;
-	});
-	// Flow shares over 100 % make water from nowhere: the engine refuses the run, so say why first.
-	// The editor's model, like the Network tab's total (unsaved edits have their own note).
-	const overAllocated = $derived(overAllocationError(inputFlowShares({ model: editor.model, settings: project.settings }).sum));
+	// What a run still needs, and whether forecast rain allows a forecast run (runReady.ts, shared with
+	// the section header's Run model on the other sections). The editor's model, like the Network tab's
+	// total (unsaved edits have their own note).
+	const hasForecast = $derived(hasForecastRain(series));
+	const blockers = $derived(runBlockers(editor.model, project.settings, series));
+	const missing = $derived(blockers.missing);
+	const overAllocated = $derived(blockers.overAllocated);
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
 	// The in-page menu above the results (SectionNav).
 	const groups = $derived(detail ? resultGroups(detail.run.summary) : []);
@@ -455,22 +459,22 @@
 {/snippet}
 <!-- The run form: in the section header, after Add data; its status line opens the page. -->
 {#snippet runForm()}
-	<form class="run-form" onsubmit={run} aria-busy={running}>
+	<form class="run-form" onsubmit={run} aria-busy={runBusy}>
 		<label class="run-label" for="run-label">Run label <span class="visually-hidden">(optional)</span></label>
-		<input id="run-label" maxlength="200" placeholder="optional, e.g. Baseline" bind:value={label} disabled={running} />
+		<input id="run-label" maxlength="200" placeholder="optional, e.g. Baseline" bind:value={label} disabled={runBusy} />
 		{#if hasForecast}
 			<button
 				type="button"
 				class="btn"
-				disabled={running || missing.length > 0 || !!overAllocated}
+				disabled={runBusy || missing.length > 0 || !!overAllocated}
 				aria-describedby="run-note"
 				title="The record as an ordinary run, then the days after the last recorded rain on forecast rain, shown apart. Keeps one forecast run."
 				onclick={() => start(true)}>Run forecast</button
 			>
 		{/if}
-		<button type="submit" class="btn btn-primary" disabled={running || missing.length > 0 || !!overAllocated} aria-describedby="run-note">
-			{#if running}<span class="spin" aria-hidden="true"></span>{/if}
-			{running ? 'Running model…' : 'Run model'}
+		<button type="submit" class="btn btn-primary" disabled={runBusy || missing.length > 0 || !!overAllocated} aria-describedby="run-note">
+			{#if runBusy}<span class="spin" aria-hidden="true"></span>{/if}
+			{runBusy ? 'Running model…' : 'Run model'}
 		</button>
 	</form>
 {/snippet}
@@ -480,7 +484,7 @@
 	<!-- The run form's status: one slim line (the form is in the section header). -->
 	<div class="run-status">
 		<p class="note" id="run-note" role="status" aria-live="polite">
-			{#if running}
+			{#if runBusy}
 				Simulating every day of the record for all nodes{elapsed >= 1 ? ` · ${elapsed} s` : ''}. Large catchments take a few seconds.
 			{:else if missing.length}
 				<span class="warn">
@@ -500,7 +504,7 @@
 				Runs use the saved network, crops, transfers, settings and time series.
 			{/if}
 		</p>
-		{#if running}<div class="progress" aria-hidden="true"><span></span></div>{/if}
+		{#if runBusy}<div class="progress" aria-hidden="true"><span></span></div>{/if}
 	</div>
 {:else if stale}
 	<p class="alert alert-info">Inputs changed since the latest run ({stale.join('; ')}); an editor can run the model again.</p>
@@ -668,7 +672,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
 				</section>
 			</section>
 			{#if summary.forecast}
@@ -688,12 +692,23 @@
 				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
 				flagUse={shownSettings ? resolveQualityFlags(shownSettings.qualityFlags) : null}
 			>
-				{#snippet modelTail()}
+				{#snippet modelTail(flow)}
 					<div class="panel" id="res-calibration">
 						<CalibrationPanel
 							calibration={summary.calibration}
 							requestedStart={runSettings.calibrationStart ?? null}
 							requestedEnd={runSettings.calibrationEnd ?? null}
+						/>
+						<!-- Flow against use at each gauge with a record (issue #444): where a calibration gap is read. -->
+						<CalibrationCheck
+							{projectId}
+							runId={shownRunId}
+							refs={runSeries}
+							nodes={(shownRun.model?.nodes ?? []) as unknown as CheckNode[]}
+							{nodeNames}
+							forecastFrom={summary.forecast?.from ?? null}
+							flowUnit={flow.flowUnit}
+							toolbar={flow.toolbar}
 						/>
 						{#if shownSettings}
 							<div class="provenance">

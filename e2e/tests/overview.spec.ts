@@ -241,6 +241,12 @@ test('the reserve strip: the days below the EWR in each month of the run, adding
 	await expect(card.locator('dt')).toContainText('EWR not met');
 	const notMet = Number(/(\d+) of 120 days/.exec((await card.textContent()) ?? '')![1]);
 	expect(counts.reduce((a, b) => a + b, 0)).toBe(notMet);
+	// Each bar in the EWR traffic light's band for its month (the portfolio's: under 5 % of days green, under 20 % amber),
+	// stated in a key under the months.
+	const days = [31, 30, 31, 28];
+	const bands = await months.evaluateAll((lis) => lis.map((li) => li.getAttribute('data-band')));
+	expect(bands).toEqual(counts.map((n, i) => (n * 100 < 5 * days[i]! ? 'green' : n * 100 < 20 * days[i]! ? 'amber' : 'red')));
+	await expect(strip.getByTestId('reserve-strip-key').locator('.item')).toHaveText(['Green: under 5% of days below the EWR', 'Amber: 5% to under 20%', 'Red: 20% or more']);
 
 	await strip.getByRole('link', { name: 'More on River & reserve' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));

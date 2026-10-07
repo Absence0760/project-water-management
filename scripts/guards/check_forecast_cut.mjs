@@ -57,6 +57,14 @@ export const READERS = {
  */
 export const INVENTORY = [
 	// --- frontend ---------------------------------------------------------------
+	{
+		path: 'frontend/src/lib/components/calibration/CalibrationCheck.svelte',
+		reads: 1,
+		how: 'cut',
+		evidence: ['beforeForecastFlows(', 'beforeForecast(d.values, d.startDate, forecastFrom)'],
+		in: ['frontend/src/lib/components/calibration/CalibrationCheck.svelte', 'frontend/src/lib/components/calibration/calibrationCheck.ts'],
+		note: 'simulated against observed: no observed flow after the forecast starts, so every line stops there'
+	},
 	{ path: 'frontend/src/lib/components/compare/CompareOverlay.svelte', reads: 1, how: 'cut+band', evidence: ['recordOf(pair.a, forecastA)', '{band}'] },
 	{ path: 'frontend/src/lib/components/compare/ReserveYearsChart.svelte', reads: 1, how: 'cut', evidence: ['reserveDaysByWaterYear(x.value.startDate, x.value.values, list[i]!.forecastFrom'] },
 	{ path: 'frontend/src/lib/components/dams/DamsTab.svelte', reads: 1, how: 'cut+band', evidence: ['beforeForecast(s.values', 'band={forecastBand('] },

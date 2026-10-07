@@ -409,3 +409,37 @@ test('the over/under-use chart: every unit and source with a volume in the listâ
 	}
 	await expectNoViolations(page);
 });
+
+test('hidden from the sidebar by default, it opens from the Summary and from Hydrological units, with the run and the unit', async ({ page, owner }) => {
+	test.setTimeout(90_000);
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const p = await seedManyAllocations(page.request, 'Allocations links', { farms: 6, unmatched: 0 });
+	// A run after the volumes were registered, so its summary compares them (the unit cards link only those).
+	const runId = await createRun(page.request, p.id, 'With the volumes');
+	const sections = page.getByRole('navigation', { name: 'Project sections' });
+
+	// The Summary: a link to the comparison, for the run it shows.
+	await page.goto(`/projects/${p.id}`);
+	await expect(sections.getByRole('link', { name: 'Allocations' })).toHaveCount(0);
+	const fromSummary = page.getByRole('link', { name: /^Registered vs modelled use\s+Allocations$/ });
+	await expect(fromSummary).toHaveAttribute('href', `?tab=allocations&run=${runId}`);
+	await fromSummary.click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();
+	await expect(compareCard(page)).toBeVisible();
+	// Hidden, it still shows in the sidebar while it is open.
+	await expect(sections.getByRole('link', { name: 'Allocations' })).toHaveAttribute('aria-current', 'page');
+
+	// Hydrological units: under the unit results, and on each unit's card with a registered volume, picking that unit.
+	await page.goto(`/projects/${p.id}?tab=supply`);
+	const results = page.getByRole('region', { name: 'Hydrological unit results' });
+	await expect(results.getByRole('link', { name: /^Registered vs modelled use, for each unit\s+Allocations$/ })).toHaveAttribute('href', `?tab=allocations&run=${runId}`);
+	const card = page.getByRole('link', { name: /: registered vs modelled use$/ }).first();
+	await expect(card).toHaveText('Registered use');
+	const label = (await card.getAttribute('aria-label'))!;
+	const unit = p.units.find((u) => label === `${u.name}: registered vs modelled use`)!;
+	await expect(card).toHaveAttribute('href', `?tab=allocations&run=${runId}&unit=${unit.id}`);
+	await card.click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();
+	await expect(compareCard(page).getByRole('link', { name: unit.name, exact: true })).toHaveAttribute('aria-current', 'true');
+});

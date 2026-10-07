@@ -30,6 +30,12 @@ export interface Colouring {
 	caption: string;
 	/** The colours are a run's, and the model has unsaved edits they don't reflect. */
 	unsaved: boolean;
+	/**
+	 * Units whose dam's own settings have been edited since that run (dams/dams.ts damChanges,
+	 * issue #444), each with its sentence and whether its capacity changed: the drawing marks them, since their
+	 * colour and figure are the run's. Absent = none, or the run's model isn't known.
+	 */
+	changed?: ReadonlyMap<string, { text: string; capacity: boolean }>;
 }
 
 const present = <B extends ColourBand>(byNode: ReadonlyMap<string, NodeColour>, order: readonly B[], label: Record<B, string>) => {

@@ -73,6 +73,8 @@
 	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
+	import RunButton from '$lib/components/workspace/RunButton.svelte';
+	import { hasForecastRain, runBlockers } from '$lib/components/runs/runReady';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
 	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
@@ -367,11 +369,11 @@
 	// The new-data line's Re-run model starts a run here and opens it in Runs.
 	/** The new-data re-run, labelled with the data's end. */
 	const rerun = () => runModel(`Data to ${fresh?.latest ?? today}`);
-	async function startRun(label?: string) {
+	async function startRun(label?: string, forecast = false) {
 		rerunning = true;
 		rerunError = null;
 		try {
-			const { run: r, removedRunIds } = await api.runs.create(projectId, label);
+			const { run: r, removedRunIds } = await api.runs.create(projectId, label, { forecast });
 			const { summary: _s, ...meta } = r;
 			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
@@ -387,8 +389,9 @@
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// Every section ends on Add data; Runs & results puts its run form (Run label, Run model)
-	// after it (headerSlot.main), the one place a run starts from the header so it can be named.
+	// For an editor every section ends on Add data, then Run model: the header's RunButton, which
+	// opens a small form so the run can be named, or on Runs & results the tab's own run form
+	// (headerSlot.main: Run label, Run forecast, Run model), never both.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
 	const behindCount = $derived(fresh?.behind.length ?? 0);
 	const contextText = $derived(
@@ -595,9 +598,12 @@
 		}
 		return true;
 	}
-	async function runModel(label?: string) {
-		if (await saveBeforeRun()) await startRun(label);
+	async function runModel(label?: string, forecast = false) {
+		if (rerunning) return;
+		if (await saveBeforeRun()) await startRun(label, forecast);
 	}
+	// What the header's Run model needs before a run can start (runs/runReady.ts, as Runs & results' form).
+	const runReady = $derived(runBlockers(editor.model, project?.settings ?? {}, series));
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
@@ -793,13 +799,12 @@
 		<span class="fresh-none muted">No data yet</span>
 	{/if}
 {/snippet}
-<!-- Add data, then the tab's main action (Runs & results' run form): what every section ends on. -->
+<!-- Add data, then Run model (the tab's main action on Runs & results, its run form): what every section ends on. -->
 {#snippet headerMain()}
 	{#if canEdit}
 		<button
 			type="button"
 			class="btn add"
-			class:btn-primary={!headerSlot.main}
 			onclick={() => openAddData()}
 			onpointerenter={() => prefetch(loadAddData)}
 			onfocus={() => prefetch(loadAddData)}
@@ -808,7 +813,21 @@
 			Add data
 		</button>
 	{/if}
-	{@render headerSlot.main?.()}
+	{#if headerSlot.main}
+		{@render headerSlot.main()}
+	{:else if canEdit && tab !== 'runs'}
+		<!-- Not on Runs & results, even while its chunk loads: its run form is the one Run model there. -->
+		<RunButton
+			missing={runReady.missing}
+			overAllocated={runReady.overAllocated}
+			hasForecast={hasForecastRain(series)}
+			modelDirty={unsaved}
+			problems={unsaved ? saveProblems.length : 0}
+			running={rerunning}
+			error={rerunError}
+			onrun={runModel}
+		/>
+	{/if}
 {/snippet}
 <!-- The notices: one slim line under the header, not full-width banners. -->
 {#snippet headerNotices()}
@@ -965,6 +984,7 @@
 								{runs}
 								canRun={canEdit}
 								modelDirty={editor.dirty}
+								busy={rerunning}
 								beforeRun={saveBeforeRun}
 								onRunsChange={setRuns}
 								onInputsRestored={reloadInputs}
@@ -977,7 +997,7 @@
 					</Lazy>
 				{:else if tab === 'supply'}
 					<Lazy load={LOAD.supply}>
-						{#snippet children(SupplyTab)}<SupplyTab {projectId} {editor} {runs} readonly={!canEdit} />{/snippet}
+						{#snippet children(SupplyTab)}<SupplyTab {projectId} {editor} {runs} readonly={!canEdit} showAllocations={roleIds.includes('allocations')} />{/snippet}
 					</Lazy>
 				{:else if tab === 'dams'}
 					<Lazy load={LOAD.dams}>

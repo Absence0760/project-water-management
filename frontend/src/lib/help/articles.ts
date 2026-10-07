@@ -239,6 +239,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['element-farm', 'natural-flow'],
 		source: 'docs/model.md §2.5a; Scott & Smith (1997); Le Maitre et al. (2016); roadmap WP-1.35'
 	},
+	'bed-losses': {
+		long: 'On a losing river part of the flow soaks into the bed and banks between two points and never reaches the next one. Each hydrological unit, gauge or other water user can lose a share of the flow it passes downstream in the reach to the next one: loss = MIN(most lost in a day, share × outflow). The next unit receives the outflow less the loss, and the loss leaves the catchment: it doesn’t become groundwater that comes back as baseflow (as WRSM2000’s bed loss in the Pitman model). A share of 100 % with a daily maximum is WRSM’s fixed monthly bed loss (the maximum = the month’s bed loss ÷ its days): the whole flow is lost on days below it. More than half the flow without a maximum runs with a warning. The outlet has no reach below it.\n\nSenior water users downstream are still passed their demand in full: the units above them pass enough that it arrives after the losses on the way (except below a reach that loses the whole flow with no maximum, where nothing can arrive). The EWR is not grossed up: a loss that leaves a site short shows as a shortfall there, charged to no unit. The EWR is still worked out from the natural flow before any bed loss, so a site below a losing reach can fall short with no development at all; the run warns when bed losses are on.\n\nLeave it at 0 % for a perennial reach. Turn it on only where a gauge shows low flows the model keeps over-simulating that abstractions, dams and transfers don’t explain, and set it from that evidence; above 30 % needs a source. Calibration then fits the runoff with the losses in place: they trade off against the GR4J exchange, so fix them first and fit after.',
+		aliases: ['transmission losses', 'channel losses', 'river losses', 'losing river', 'bedloss', 'reach loss'],
+		related: ['outflow-gauge', 'ewr', 'stream-depletion'],
+		source: 'docs/model.md §2.6b; WR2012 User Manual (WRC TT 689/16) §6.2.3.1; eWater Source practice note on losses; Mvandaba et al. (2018)'
+	},
 	'outflow-gauge': {
 		long: 'Exactly one element has nothing downstream of it. Its flow is the catchment’s simulated outflow: the series checked against the pragmatic EWR and, when an observed record exists, used for the calibration statistics.',
 		aliases: ['outlet', 'catchment outlet'],

@@ -2733,6 +2733,151 @@ into a unit with no dam and no demand, from a probable run-of-river unit
 (scripts/wbt-import/README.md), and a workbook transfer whose draw formula
 is the constant 0 stays switched off, so an import runs as the workbook did.
 
+### 2.6b River bed losses in a reach (engine ≥ 1.75.0, issue #444)
+
+**Why.** Routing hands each node's outflow to the node below it unchanged
+(§2.7 row H). On a losing river, mostly the semi-arid west and north of the
+country and sandy alluvial reaches, part of the flow soaks into the bed and
+banks between two points and never reaches the next one. Without a term for
+it the model can only absorb that loss in the runoff fit (§2.10b), usually as
+a GR4J exchange X2 more negative than the catchment's groundwater can
+justify, and a gauge downstream shows persistent over-simulated low flows
+that no abstraction or dam explains. **Off by default**: a node with no bed
+losses runs exactly as before, to the bit (no new series, summary field or
+warning).
+
+**The setting.** Any node but the outlet (`NetworkNode`):
+
+| Field | Meaning |
+| --- | --- |
+| `reachLossFrac` f | share of the flow the node passes downstream that is lost in the reach between it and the next node, 0 ≤ f ≤ 1; default 0 (none) |
+| `reachLossMaxM3Day` L | the reach's daily loss at most, m³/day ≥ 0; null (the default) = no cap. Read only with f > 0; 0 = no loss |
+
+The reach belongs to the upper node: it is the stretch from that node's
+outflow to the next node downstream, so a farm, an other water user and a
+gauge each carry their own. The outlet has no reach below it in the model;
+a share set there is ignored with a warning. The run clamps a share outside
+[0, 1] and warns, and runs a cap that is not a size ≥ 0 as none, with a
+warning; the API and the node form refuse both (`backend/src/model/validate.ts`,
+`frontend/src/lib/model/validate.ts`).
+
+**Each day** (network/reachLoss.ts, at the hand-off in network/simulate.ts),
+with Q the upper node's outflow U:
+
+```
+loss = MIN(L, f × Q)       (0 when Q ≤ 0; L = ∞ without a cap)
+H_below += Q − loss        the node below receives the rest
+```
+
+So the loss is never negative, never falls as the flow rises and is never
+more than the flow (the eWater Source practice note's three rules for a loss
+function). With f = 1 and no cap the reach loses everything that reaches it. It
+is stored on the upper node as `reach_loss` (m³/day, only on a node with
+losses); that node's own columns (its outflow U, its EWR shortfall) are
+unchanged, and the node below's H is already net of it.
+
+**Where the water goes.** Out of the catchment, as WRSM2000/Pitman's channel
+module treats its *Bedloss*: it "does not become groundwater and does not
+re-enter the network" (WR2012 User Manual, WRC TT 689/16 §6.2.3.1; Theory
+Manual TT 690/16). Water that returns lower down as baseflow is deliberately
+not modelled: there is no store or lag for it, so a reach that feeds a spring
+further down is a known simplification. WRSM's Bedloss is a fixed monthly
+volume, MIN(Bedloss, flow): **f = 1 with L = Bedloss × 10⁶ ÷ days in the
+month reproduces it exactly**, day by day, every flow below the day's Bedloss
+lost whole (`network/reachLoss.test.ts`). A share below 1 is a proportional
+loss function of the kind eWater Source's practice note on losses describes,
+so the loss shrinks with the flow in a drought rather than taking the whole
+low flow (Mvandaba et al. 2018, PIAHS 378, discuss transmission losses on
+South African rivers).
+
+**Guidance** (the node form's help says the same). A perennial reach should
+normally stay at 0. Turn bed losses on only where an observed record shows
+persistent over-simulated low flows below a reach that abstractions, dams and
+transfers don't explain, and set them from that evidence (a gauge pair, a
+transmission-loss study, NEH-630 chapter 19's channel loss estimates for an
+ungauged ephemeral reach). A share above 0.3 needs a source. More than half
+the flow without a cap is allowed but the run warns ("more than half the
+flow lost in the reach below it; check this is meant (with a cap this is how
+WRSM's Bedloss is expressed)"); with a cap, f = 1 is the WRSM form.
+
+**The senior users' requirement is grossed up.** A senior user's claim (§2.7c)
+is what must *arrive* at it, so a farm upstream passes enough that the claim
+still arrives after every reach on the way: its fragment Y_f is grossed up
+through each reach between it and the user, nearest the user first, by the
+inverse of Q − loss,
+
+```
+gross(x) = MIN(x / (1 − f), x + L)     (f = 1: x + L)
+```
+
+A reach that loses the whole flow with no cap delivers nothing whatever is
+passed, so a claim across it is not grossed up (x itself) and the user below
+gets none of it.
+
+and the requirement nets down by exactly that as it crosses each reach: for
+the reach below node k the plan adds up what the gross-ups of every claim
+crossing it put on, `S_k = Σ (gross(x) − x)` (series `senior_reach_loss` on
+node k, only where a claim crosses a losing reach), and the node below adds
+`Zs − MIN(Zs, S_k)` of node k's Zs, not Zs itself. The two cancel for any
+number of farms and users, so each user's own MIN(D, P) is what arrives and
+nothing is left to hold back below it. The water passed is enough: the
+reach's actual loss on a flow of at least Zs, MIN(L, f × Zs) at most where
+it binds, is never more than S_k, since the cap applies once to the sum and
+once to each claim. This is how a release for a downstream user is sized in
+practice (demand plus the losses on the way). A junior user leaves the
+requirement as it stands at its own position, which is already net of the
+reaches above it.
+
+**The EWR requirement crosses a reach as it is.** A site's requirement Z is
+its share of the Reserve fragmented from the natural flow (§2.5), not a flow
+the farms above have to deliver, so it is neither netted nor grossed up:
+upstream units only ever keep their own site's Z (§2.7h). A loss that pushes
+a site below its requirement shows as a shortfall there. It is no unit's
+impact (a unit's net impact e = H + I + J − U is its own, §2.7b, and the loss
+happens outside every unit), so attribution charges it to nobody: an
+undeveloped catchment's shortfall is all natural, and where the units also
+took water the charge still never exceeds what they took. The known
+limitation: the natural flow the EWR (and a Reserve rule table's natural
+curve, §2.9c) is read from is the runoff model's, before any bed loss, so a
+site below a losing reach can fall short of its requirement with no
+development at all. The run says so whenever bed losses are on.
+
+**Calibration.** The fit scores the simulated outflow at the calibration site
+(§2.10b, §2.10k), which is net of every reach above it, so bed losses enter
+the fit automatically. They trade off against GR4J's exchange X2: both remove
+water, X2 everywhere and in proportion to the routing store, bed losses only
+below the reaches that have them and in proportion to the day's flow. Fix the
+bed losses from evidence first and fit X2 after; fitting both against one
+record is poorly identified. WR2012's naturalised flows are already net of
+WRSM's Bedloss, so a fit with the WR2012 MAR penalty (§2.10c) and bed losses
+on may count a loss twice: leave the penalty off for such a fit until the
+hydrologist decides (docs/engine-audit.md R4).
+
+**Balances.** `summary.waterBalance` and the water account (§2.11b) gain
+`reachLossM3`, an out term, only on a run with bed losses: the residual stays
+float noise. `checkBalance` holds each node's routed inflow to Σ upstream
+(U − loss), recomputes every day's loss from the node's setting and counts it
+out of the catchment; `checkWorkings` and the users' check net the senior
+requirement arriving from upstream by the stored `senior_reach_loss`, which
+is never negative nor more than the requirement it is taken from. The fuzz generator puts bed
+losses on a fifth of the random networks (any kind of node, the outlet too,
+shares up to the limit and now and then out of range, caps from none to
+tight), and `verify/` carries them in its independent model. Hand examples:
+`network/reachLoss.test.ts`.
+
+**Sources.** WR2012 Theory Manual, WRC TT 690/16
+(https://www.wrc.org.za/wp-content/uploads/mdocs/TT%20690-16.pdf) and User
+Manual, TT 689/16 (https://www.wrc.org.za/wp-content/uploads/mdocs/TT%20689-16.pdf);
+Mvandaba et al. 2018 (https://piahs.copernicus.org/articles/378/17/2018/piahs-378-17-2018.pdf);
+eWater Source, Practice Note: Estimation of Losses
+(https://ewater.atlassian.net/wiki/spaces/SC/pages/69271553/Practice+Note+Estimation+of+Losses);
+USDA NRCS National Engineering Handbook part 630, chapter 19 (Lane's
+transmission losses).
+
+**Scenarios.** `reachLossFrac` and `reachLossMaxM3Day` are `node.set` fields
+on every kind of node, and baseline assumptions (`BASELINE_NODE_FIELDS`): the
+river's losses are not something an applicant proposes (docs/scenarios.md).
+
 ### 2.7 Farm balance (one sheet per element)
 
 Farms are processed in network order. Upstream elements come first, so a farm
@@ -2744,7 +2889,7 @@ storage to whole m³; the engine doesn't (R1).
 | --- | --- | --- |
 | F | Crop water requirement | from §2.3 (`crop_requirement`) |
 | D | Abstraction demand | `F / e` (`demand`; engine ≥ 0.16.0, N1). The workbook has no column: D = F there |
-| H | Upstream inflow | Σ outflow `U` of the elements directly upstream |
+| H | Upstream inflow | Σ outflow `U` of the elements directly upstream, less the bed losses of the reach from each (engine ≥ 1.75.0, §2.6b) |
 | I | Farm runoff | fragmented natural flow (§2.5), less the land-cover reduction when the farm has land cover (§2.5a) |
 | – | Runoff removed by land cover | `landcover_reduction`, only for a farm with land cover (§2.5a): I + this = natural flow × share. The daily CSV puts it right after I |
 | J | Transfer in (+) / out (−) | from §2.6 |
@@ -3387,6 +3532,11 @@ Y_f  = Σ over senior users u downstream of f of C_u × share_f / Σ_{g upstream
 Zs   = Y_f + Σ upstream Zs              at a farm (series senior_requirement)
 Zs   = MAX(0, Σ upstream Zs − C_u)      below a senior user; junior users and gauges pass it on
 ```
+
+With bed losses in a reach (engine ≥ 1.75.0, §2.6b) Y_f is grossed up through
+every reach between the farm and the user, and each upstream Zs arrives less
+what the claims crossing its reach were grossed up by, so C_u is what reaches
+the user.
 
 A farm then keeps MIN(Zs, H + I) below its dam before it fills the dam:
 it diverts less first (O), then takes less of the upstream inflow and its own
@@ -8253,7 +8403,9 @@ the run, volumes in m³, summed over every node per day in node-id order.
   (§2.7, audit N1: the crop's e·G plus the losses that don't return); other
   users' take − return; dam evaporation; dam seepage **lost from the
   catchment** (engine ≥ 0.35.0, the share §2.7a's seepage destination sends
-  out, `damSeepageLostM3`); stream depletion; outflow at the outlet.
+  out, `damSeepageLostM3`); stream depletion; bed losses in the reaches
+  (engine ≥ 1.75.0, §2.6b, `reachLossM3`, only on a run with them); outflow
+  at the outlet.
 - **Δ storage:** Σ farm dam storage at the end − at the start.
 - **Residual** = in − out − Δ storage: float noise. `scaleM3` is Σ of the
   terms' magnitudes; the invariant (`checkWaterAccount`) is |residual| ≤

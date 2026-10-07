@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DamLevel } from '$lib/components/overview/damLevels';
-import { changeWords, damCards, damsSummary, fmtVolume, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
+import { changeWords, damCards, damChange, damChanges, damsSummary, fmtVolume, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
 
 const level = (nodeId: string, endPct: number, over: Partial<DamLevel> = {}): DamLevel => ({
 	nodeId,
@@ -56,7 +56,84 @@ describe('damCards', () => {
 
 	it('keeps a dam the run has though the model has since lost it', () => {
 		const cards = damCards([], [level('gone', 50, { name: 'Old dam' })]);
-		expect(cards).toEqual([expect.objectContaining({ nodeId: 'gone', name: 'Old dam', farm: false })]);
+		expect(cards).toEqual([expect.objectContaining({ nodeId: 'gone', name: 'Old dam', farm: false, nowCapacityM3: 0 })]);
+	});
+
+	it('shows the model’s capacity now, and marks a dam edited since the run (issue #444)', () => {
+		const runNodes = [
+			{ id: 'a', name: 'Upper farm', kind: 'farm', damCapacityM3: 140_000, damMinPct: 0.1 },
+			{ id: 'b', name: 'Lower farm', kind: 'farm', damCapacityM3: 90_000 }
+		];
+		const cards = damCards(nodes, [level('b', 20, { capacityM3: 90_000 }), level('a', 60, { capacityM3: 140_000 })], runNodes);
+		// The figures stay the run's; the head shows today's capacity, and the edit is named.
+		expect(cards[1]).toMatchObject({ nodeId: 'a', capacityM3: 140_000, nowCapacityM3: 150_000 });
+		expect(cards[1]!.change?.text).toBe('Dam settings changed since the run: capacity 140\u202f000 m³ in the run, 150\u202f000 m³ now. Re-run to update.');
+		expect(cards[0]).toMatchObject({ nodeId: 'b', nowCapacityM3: 90_000, change: null });
+		// Without the run's model there is nothing to compare: no mark.
+		expect(damCards(nodes, [level('a', 60)]).every((c) => c.change === null)).toBe(true);
+		// A dam not in the run has no run figures to be stale.
+		expect(damCards(nodes, [], runNodes).every((c) => c.change === null)).toBe(true);
+		// Removed from the model since the run: the card stays, marked.
+		const gone = damCards([], [level('a', 60)], runNodes);
+		expect(gone[0]).toMatchObject({ nowCapacityM3: 0, change: { capacity: { run: 140_000, now: 0 } } });
+		expect(gone[0]!.change?.text).toBe('Dam settings changed since the run: dam removed. Re-run to update.');
+	});
+});
+
+describe('damChange', () => {
+	const dam = { id: 'a', kind: 'farm', damCapacityM3: 100_000, damMinPct: 0.1, damInitialPct: 0.5, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0, pctUpstreamToDam: 1, pctRunoffToDam: 0 };
+
+	it('is null when nothing the run’s dam figures used has changed, or a side is missing', () => {
+		expect(damChange(dam, { ...dam, name: 'Renamed', areaKm2: 9 })).toBeNull();
+		expect(damChange(dam, { ...dam, damCapacityM3: 100_000.4 })).toBeNull();
+		expect(damChange({ ...dam, damCapacityM3: 0 }, { ...dam, damCapacityM3: 0.5 })).toBeNull();
+		expect(damChange(undefined, dam)).toBeNull();
+		expect(damChange(dam, undefined)).toBeNull();
+	});
+
+	it('reads a field the run’s model lacks as its default, and skips the rest', () => {
+		// An older run without the WP-3.5 and development fields ran as their defaults: the same as them stated.
+		expect(damChange(dam, { ...dam, damReleaseRule: 'none', damCurve: null, damSeepageReturnPct: 1, damSurveyDate: null })).toBeNull();
+		expect(damChange(dam, { ...dam, damReleaseRule: 'fixed' })?.other).toEqual(['release rule']);
+		// A stored null (no area entered, estimated from the capacity) set to an area is a change.
+		expect(damChange(dam, { ...dam, damAreaFullM2: 5_000 })?.other).toEqual(['surface area']);
+		expect(damChange({ ...dam, damAreaFullM2: 5_000 }, dam)?.other).toEqual(['surface area']);
+		const { damAreaExponent: _, ...older } = dam;
+		expect(damChange(older, { ...dam, damAreaExponent: 0.9 })).toBeNull();
+	});
+
+	it('names a resize, an added or removed dam, and each other kind of edit once', () => {
+		expect(damChange(dam, { ...dam, damCapacityM3: 2_500_000 })).toEqual({
+			capacity: { run: 100_000, now: 2_500_000 },
+			other: [],
+			detail: 'capacity 100\u202f000 m³ in the run, 2.5 million m³ now. Re-run to update.',
+			text: 'Dam settings changed since the run: capacity 100\u202f000 m³ in the run, 2.5 million m³ now. Re-run to update.'
+		});
+		expect(damChange({ ...dam, damCapacityM3: 0 }, dam)?.text).toBe('Dam settings changed since the run: dam added (100\u202f000 m³). Re-run to update.');
+		expect(damChange(dam, { ...dam, damCapacityM3: 0 })?.text).toBe('Dam settings changed since the run: dam removed. Re-run to update.');
+		const many = damChange(dam, { ...dam, damMinPct: 0.2, damAreaFullM2: 5_000, damAreaExponent: 0.8, damCurve: [{ levelM: 1, areaM2: 1, volumeM3: 1 }], pctRunoffToDam: 0.5 });
+		expect(many?.capacity).toBeNull();
+		expect(many?.other).toEqual(['minimum level', 'surface area', 'what flows into it']);
+		expect(many?.text).toBe('Dam settings changed since the run: minimum level, surface area, what flows into it. Re-run to update.');
+	});
+
+	it('counts how its own unit draws on it, the supply rule and the crops’ supply table, as the dam’s own settings', () => {
+		// An older run without the supply fields ran as their defaults: dam only, no table.
+		expect(damChange(dam, { ...dam, supplyRule: 'damFirst', supplyTriggerPct: 0.4, supplyStopPct: 0.6, cropWaterSource: 'dam', cropShareDam: null, cropShareRiver: null, cropShareRemote: null })).toBeNull();
+		expect(damChange(dam, { ...dam, supplyRule: 'riverFirst' })?.other).toEqual(['how its unit draws on it']);
+		expect(damChange({ ...dam, supplyRule: 'trigger' }, { ...dam, supplyRule: 'trigger', supplyTriggerPct: 0.3 })?.other).toEqual(['how its unit draws on it']);
+		const table = damChange(dam, { ...dam, cropShareDam: 0.6, cropShareRiver: 0.4, cropWaterSource: 'river' });
+		expect(table?.other).toEqual(['how its unit draws on it']);
+		expect(table?.detail).toBe('how its unit draws on it. Re-run to update.');
+		// Not the dam's own settings, so not checked: the bed losses of the unit's reach, its area (its runoff), its river pump. (An upstream unit's edits never reach this comparison at all.)
+		expect(damChange(dam, { ...dam, reachLossFrac: 0.2, reachLossMaxM3Day: 5_000, areaKm2: 20, pumpCapacityM3Day: 900 })).toBeNull();
+	});
+
+	it('maps every unit the run also has, leaving gauges and unchanged units out', () => {
+		const run = [dam, { ...dam, id: 'b' }, { id: 'g', kind: 'gauge', damCapacityM3: 0 }];
+		const live = [{ ...dam, damCapacityM3: 50_000 }, { ...dam, id: 'b' }, { id: 'g', kind: 'gauge', damCapacityM3: 9_000 }, { ...dam, id: 'new' }];
+		expect([...damChanges(run, live).keys()]).toEqual(['a']);
+		expect(damChanges(undefined, live).size).toBe(0);
 	});
 });
 
