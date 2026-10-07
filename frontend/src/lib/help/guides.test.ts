@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { helpFor } from './content';
 import { SHOTS } from './pictures';
@@ -100,6 +101,10 @@ describe('guides', () => {
 				expect(id, g.id).not.toBe(g.id);
 			}
 		}
+	});
+
+	it('give the EWR traffic light’s cut-offs as the engine has them', () => {
+		expect(allText.join('\n')).toContain(`**green** means the EWR was not met on fewer than ${EWR_TRAFFIC_LIGHT.green} % of the days, **amber** fewer than ${EWR_TRAFFIC_LIGHT.amber} %, and **red** ${EWR_TRAFFIC_LIGHT.amber} % or more`);
 	});
 
 	it('leave no markup unparsed (stray ** or [[ )', () => {
