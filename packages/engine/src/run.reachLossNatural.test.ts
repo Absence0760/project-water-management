@@ -9,6 +9,7 @@ import { daysPerMonth, toEpochDay } from './calendar';
 import type { ModelInput, ModelOutput, NetworkNode } from './project';
 import { Rng } from './random';
 import { naturalAtOutlet, runModel } from './run';
+import { routeNatural } from './network/reachLoss';
 import { prepareCalibration } from './calibrate/calibrate';
 import { blankEwrRuleTable } from './reserve/rules';
 import { defaultWr2012Settings } from './reference/wr2012Settings';
@@ -163,5 +164,68 @@ describe('the natural flow net of the natural bed losses (engine 1.76.0)', () =>
 		const said = (o: ModelOutput) => o.summary.warnings.some((w) => w.startsWith('bed losses are on: a Reserve rule table reads its site’s natural flow net of them'));
 		expect(said(on)).toBe(true);
 		expect(said(off)).toBe(false);
+	});
+});
+
+describe('routeNatural with caps that bind, on two branches, and a site in the middle', () => {
+	// A (0) → G (2) → O (3), B (1) → O. A's reach loses half up to 300 m³/day, G's (below the site) 20 %,
+	// B's all of it up to 100 m³/day (WRSM's Bedloss form). Day 0: A 1000, B 250; day 1: A 400, B 50.
+	const r = {
+		order: [0, 1, 2, 3],
+		upstream: [[], [], [0], [1, 2]],
+		reach: [{ frac: 0.5, maxM3Day: 300 }, { frac: 1, maxM3Day: 100 }, { frac: 0.2, maxM3Day: Infinity }, undefined]
+	};
+	const own = [
+		[1000, 400],
+		[250, 50],
+		[0, 0],
+		[0, 0]
+	];
+
+	it('takes each reach’s loss on the flow entering it, not on a confluence’s total, and not a site’s own reach below it (worked by hand)', () => {
+		const [g, o] = routeNatural(r, (i, t) => own[i]![t]!, 2, [2, 3]);
+		// G: 1000 − MIN(300, 500) = 700; 400 − MIN(300, 200) = 200. Its own 20 % reach is below it.
+		expect([...g!]).toEqual([700, 200]);
+		// O: G's 700 − 140 = 560 plus B's 250 − 100 = 150; G's 200 − 40 = 160 plus B's 50 − 50 = 0.
+		expect([...o!]).toEqual([710, 160]);
+	});
+});
+
+describe('a Reserve rule table at a gauge in the middle, with caps (engine 1.76.0)', () => {
+	// Undeveloped: F1 → G (an EWR site) → O, F2 → O. F1's reach is capped, G's own reach below it loses 30 %.
+	function network(losses: boolean): ModelInput {
+		const base = catchment(0);
+		const table = { ...base.settings.ewrRules![0]!, siteNodeId: 'G' };
+		return {
+			...base,
+			settings: { ...base.settings, ewrRules: [table] },
+			model: {
+				...base.model,
+				nodes: [
+					node({ id: 'O', name: 'Outlet', kind: 'gauge' }),
+					node({ id: 'G', name: 'Middle gauge', kind: 'gauge', downstreamNodeId: 'O', ...(losses ? { reachLossFrac: 0.3 } : {}) }),
+					node({ id: 'F1', name: 'Upper unit', downstreamNodeId: 'G', areaKm2: 25, ...(losses ? { reachLossFrac: 0.5, reachLossMaxM3Day: 2000 } : {}) }),
+					node({ id: 'F2', name: 'Side unit', downstreamNodeId: 'O', areaKm2: 15 })
+				]
+			}
+		};
+	}
+	const gauge = (o: ModelOutput) => o.summary.ewrAssurance!.find((a) => a.nodeId === 'G')!;
+	const col = (o: ModelOutput, id: string, key: string) => o.series.find((x) => x.nodeId === id && x.key === key)!.values;
+	const on = runModel(network(true));
+	const off = runModel(network(false));
+
+	it('undeveloped, the site’s natural flow is its own flow: F1’s runoff less its capped reach, without the side unit or the reach below', () => {
+		// Three complete water years: the natural MAR is the site's flow over them ÷ 3.
+		const flowMcm = total(col(on, 'G', 'outflow')) / 3 / 1e6;
+		expect(gauge(on).ewrPctNmar!.naturalMarMcm).toBeCloseTo(flowMcm, 9);
+		// The cap bound on some days and not on others: the loss is neither 0 nor half of the runoff.
+		const runoff = total(col(on, 'F1', 'runoff'));
+		const lost = total(col(on, 'F1', 'reach_loss'));
+		expect(lost).toBeGreaterThan(0);
+		expect(lost).toBeLessThan(0.5 * runoff);
+		// Positive control: without the losses the site reads F1's whole runoff, more than with them.
+		expect(gauge(off).ewrPctNmar!.naturalMarMcm).toBeCloseTo(total(col(off, 'F1', 'runoff')) / 3 / 1e6, 9);
+		expect(gauge(on).ewrPctNmar!.naturalMarMcm).toBeLessThan(gauge(off).ewrPctNmar!.naturalMarMcm);
 	});
 });

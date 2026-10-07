@@ -2854,8 +2854,9 @@ below it, is not taken off):
 - **The WR2012 check** (§2.10c, `summary.wr2012`) and **the calibration's MAR
   penalty** compare WR2012's naturalised MAR with the natural flow at the
   outlet net of the losses (`run.ts` `naturalAtOutlet`: each unit's flow
-  share routed down, plus the part of the catchment no unit's share holds),
-  so a fit with the penalty no longer counts a loss twice.
+  share routed down, plus the part of the catchment no unit's share holds,
+  which is assumed to cross no losing reach), so a fit with the penalty no
+  longer counts a loss twice.
 - **The pragmatic EWR** is a fixed flow the hydrologist sets at the outlet
   (§2.5), not one read from the natural flow, so it doesn't change: it is
   split between the units by flow share and passed down whole, as above.
@@ -5402,7 +5403,8 @@ rule table).
 run is not assessed; `packages/engine/src/reserve/assurance.ts`):
 
 ```
-V  = the month's natural flow at the site = Σ runoff I of the farms upstream   (table unit)
+V  = the month's natural flow at the site = Σ runoff I of the farms upstream   (table unit;
+     with bed losses, that runoff routed to the site net of the natural losses, §2.6b, engine ≥ 1.76.0)
 A  = the month's simulated flow at the site (outlet: simulated outflow; gauge: its flow)
 N  = that calendar month's natural curve at the points (run or table, × scale)
 T  = that calendar month's EWR row (× scale)
@@ -5515,7 +5517,8 @@ on the list's order. A table keyed by the outlet node's own id is the outlet's
 table, the same as one keyed `null` (engine ≥ 1.69.0): it is listed first, and
 beside a `null` one neither is used (before, it sorted among the gauges by id
 and the `null` one was used). **Order invariance** (engine ≥ 0.24.1): a site's natural
-flow is summed over its farms in node-id order, and a natural flow within 1e-12
+flow is summed over its farms in node-id order (with bed losses, routed down
+`plan.upstream`, which is in node-id order, engine ≥ 1.76.0), and a natural flow within 1e-12
 of a curve point counts as reaching it, so a one-ulp difference can't move the
 percentile across a flat stretch of the curve (equal natural flow at several %
 points). Plausibility notes don't block a table but are repeated as
@@ -5786,7 +5789,7 @@ event     = a maximal run of days with daily flow ≥ level (relative tolerance 
             that reaches the peak on at least one day, lasts at least min_days,
             and whose first day at the peak falls in one of the months;
             a run is cut at the water year's ends, a missing day breaks it
-n_nat     = events in the site's natural flow (Σ runoff of the farms upstream, §2.9c)
+n_nat     = events in the site's natural flow (Σ runoff of the farms upstream, routed net of the natural bed losses when a reach loses; §2.9c, §2.6b)
 n_sim     = events in the simulated flow at the site (outlet: outflow; gauge: its flow)
 required  = MIN(perYear, n_nat)
 met       = n_sim ≥ required
@@ -6596,7 +6599,11 @@ run with it (`RunSummary.wr2012`). It never changes model results.
 - **What is compared: simulated natural flow, never the outflow.** WR2012 flows
   are naturalised (no farms, dams or abstraction), so they compare with the
   rain → flow model's output before the network takes water out. A test
-  fails if the outflow were used.
+  fails if the outflow were used. They are also net of WRSM's Bedloss, so
+  with bed losses on (engine ≥ 1.76.0, §2.6b) the comparison and the
+  calibration penalty read that output at the outlet net of the natural bed
+  losses; an automated fit's "natural MAR" column stays the runoff model's,
+  before them.
 - **Scaling** (`settings.wr2012.scaling`) to the modelled catchment
   (`resolveCatchmentAreaKm2`):
   - `area` (default): × modelled area ÷ quaternary area;

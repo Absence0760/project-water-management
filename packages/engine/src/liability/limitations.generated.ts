@@ -161,7 +161,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"id": "R4",
 		"source": "finding",
 		"severity": "Low (reaches with bed losses, engine 1.75.0; the natural flow net of them, engine 1.76.0)",
-		"title": "Bed losses in a reach run on choices the hydrologist hasn't confirmed",
+		"title": "Bed losses in a reach run on choices the hydrologist hasn't confirmed, and the pragmatic EWR is passed down whole, so a site below a losing reach can fall short of it with no development",
 		"status": "Needs hydrologist (issue #444)"
 	},
 	{

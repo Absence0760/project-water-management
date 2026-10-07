@@ -2400,7 +2400,8 @@ export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'ups
 	const r = naturalReaches(plan);
 	if (!r || outflow < 0) return null;
 	const share = plan.nodes.map((n) => (n.kind === 'farm' ? n.share : 0));
-	const rest = Math.max(0, 1 - share.reduce((a, b) => a + b, 0));
+	// Summed in value order, so the float sum (and `rest`) doesn't depend on how the network is listed.
+	const rest = Math.max(0, 1 - [...share].sort((a, b) => a - b).reduce((a, b) => a + b, 0));
 	const at = routeNatural(r, (i, t) => natural[t]! * share[i]!, natural.length, [outflow])[0]!;
 	if (rest > 0) for (let t = 0; t < at.length; t++) at[t] = at[t]! + natural[t]! * rest;
 	return at;
