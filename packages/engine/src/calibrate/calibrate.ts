@@ -26,7 +26,7 @@ import { fromEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf }
 import { simulateNetwork } from '../network/simulate';
 import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
-import { buildNetworkPlan, pickObservedKind } from '../run';
+import { buildNetworkPlan, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
@@ -293,6 +293,17 @@ export interface MarPenaltyResult {
 	unpenalised: { params: ParamSet; fit: ScoredPeriod; marRatio: number } | null;
 }
 
+/**
+ * The WR2012 MAR penalty read on the natural flow at the outlet net of the
+ * natural bed losses (engine ≥ 1.76.0, run.ts naturalAtOutlet), as the run's
+ * WR2012 check reads it; the penalty itself when no reach loses.
+ */
+function netOfReachLosses(p: Wr2012Penalty | null, plan: Parameters<typeof naturalAtOutlet>[0], outflow: number): Wr2012Penalty | null {
+	if (!p || !naturalReaches(plan) || outflow < 0) return p;
+	const net = (natural: ArrayLike<number>) => naturalAtOutlet(plan, outflow, natural) ?? natural;
+	return { ...p, simulatedMar: (natural) => p.simulatedMar(net(natural)), penalty: (natural) => p.penalty(net(natural)) };
+}
+
 /** Everything a calibration needs, built once: forcing, network plan, observed record, scored days. */
 export interface CalibrationProblem {
 	model: RunoffModelId;
@@ -494,17 +505,22 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		}),
 		reference: input.series?.flow_reference_m3s ? Float64Array.from(aligned('flow_reference_m3s'), (v) => (v === null ? NaN : v)) : null,
 		natural,
-		// On natural flow, never the outflow: WR2012 flows are naturalised.
-		marPenalty: wr2012Penalty(
-			settings.wr2012,
-			startDate,
-			idx[idx.length - 1]! + 1,
-			area,
-			arealRainOn(
-				runRain(aligned, hasRain, idx[idx.length - 1]! + 1),
-				areal,
-				month
-			)
+		// On natural flow, never the outflow: WR2012 flows are naturalised. They are net of WRSM's Bedloss
+		// too, so with bed losses on (engine ≥ 1.76.0) on the natural flow at the outlet net of them.
+		marPenalty: netOfReachLosses(
+			wr2012Penalty(
+				settings.wr2012,
+				startDate,
+				idx[idx.length - 1]! + 1,
+				area,
+				arealRainOn(
+					runRain(aligned, hasRain, idx[idx.length - 1]! + 1),
+					areal,
+					month
+				)
+			),
+			plan,
+			topo.outflow
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),

@@ -101,3 +101,55 @@ export function reachGross(p: PlanReachLoss, x: number): number {
 	const b = x + p.maxM3Day;
 	return a < b ? a : b;
 }
+
+/**
+ * Does any reach of the model lose flow (engine ≥ 1.76.0)? reachLossOf's own
+ * test, without its warnings: for the parts of a run decided before the plan
+ * is built (the WR2012 check waits for it when a reach loses).
+ */
+export function hasReachLosses(nodes: readonly NetworkNode[]): boolean {
+	const quiet: string[] = [];
+	return nodes.some((n) => reachLossOf(n, quiet).reachLoss !== undefined);
+}
+
+/** A network as the natural flow crosses it: no dam and no use, only each reach's bed losses. */
+export interface NaturalReaches {
+	/** Every node after the nodes draining into it. */
+	order: ArrayLike<number>;
+	/** upstream[i] = the nodes draining directly into node i, in a fixed order (node id), so the sums don't depend on the listing. */
+	upstream: readonly ArrayLike<number>[];
+	/** The bed losses of the reach below each node (absent = none). */
+	reach: readonly (PlanReachLoss | undefined)[];
+}
+
+/**
+ * The natural flow at each node of `at`, net of the natural bed losses of the
+ * reaches above it (engine ≥ 1.76.0, docs/model.md §2.6b): each node passes
+ * its own natural runoff `own(i, t)` and what arrives from the nodes above,
+ * and each reach loses reachLossDay of the natural flow entering it, as the
+ * river would with nothing built or taken. A node's own reach, below it, is
+ * not taken off its flow. This is the flow a Reserve rule table's natural
+ * curve and the WR2012 comparison read when bed losses are on: WRSM's
+ * naturalised flows are net of its Bedloss, so a site's natural flow has to
+ * be too, or a site below a losing reach falls short with nothing built.
+ */
+export function routeNatural(r: NaturalReaches, own: (i: number, t: number) => number, days: number, at: readonly number[]): Float64Array<ArrayBuffer>[] {
+	const q = new Float64Array(r.reach.length);
+	const out = at.map(() => new Float64Array(days));
+	for (let t = 0; t < days; t++) {
+		for (let k = 0; k < r.order.length; k++) {
+			const i = r.order[k]!;
+			let s = own(i, t);
+			const ups = r.upstream[i]!;
+			for (let j = 0; j < ups.length; j++) {
+				const u = ups[j]!;
+				const v = q[u]!;
+				const p = r.reach[u];
+				s += p ? v - reachLossDay(p, v) : v;
+			}
+			q[i] = s;
+		}
+		for (let a = 0; a < at.length; a++) out[a]![t] = q[at[a]!]!;
+	}
+	return out;
+}
