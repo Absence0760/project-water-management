@@ -1,0 +1,4 @@
+{
+	"addKb": 15,
+	"why": "Issue #444, the walkthrough feedback: the header Run model button and its run readiness on every tab (B), the unit and dam assurance strip and the calibration check chart with its bed-loss line (C), the EWR headline picker in Settings (D) and the bed-loss fields in the node sheet (A). Measured 1731 KB total vs the 1716 KB budget locally on feat/444-walkthrough-feedback (+15 KB)."
+}
