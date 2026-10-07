@@ -58,7 +58,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	mapNodeHref: { why: 'BUILDER: "?tab=map&node=" + encoded node id (workspace/mapLinks.ts, #326 A2)', in: ['lib/components/crops/CroplandProposalsBox.svelte', 'lib/components/dams/DamProposalsBox.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	'view.src': { why: 'LocalityMap: data:image/svg+xml of the engine\'s own locality figure (packages/engine/src/geo/localityMap.ts, numbers and escaped names only), shown in an <img>, where an SVG runs no script (report/evidence/locality.ts)', in: ['lib/components/report/evidence/LocalityMap.svelte'] },
 	mapHref: { why: 'NodeCard/NodeDetail: their `mapHref` prop, which NetworkTab builds with mapNodeHref(node id) or leaves null', in: ['lib/components/network/NodeCard.svelte', 'lib/components/network/NodeDetail.svelte'] },
-	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
+	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },

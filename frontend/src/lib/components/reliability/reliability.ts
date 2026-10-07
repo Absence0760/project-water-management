@@ -1,7 +1,7 @@
 // Pure helpers for the assurance-of-supply panels (engine ≥ 0.32.0, WP-3.4,
 // docs/model.md §2.11a–b): the stress heat map's cells and the water
 // account's rows. Unit-tested in reliability.test.ts.
-import { STRESS_LABEL, type StressClass, type StressGrid, type StressSummary, type SupplyAssurance, type WaterAccountRow } from '@water-management/engine';
+import { STRESS_LABEL, type StressClass, type StressGrid, type StressSummary, type SupplyAssurance, type SupplyReliability, type WaterAccountRow } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 /** The engine version that first computed RunSummary.supplyAssurance. */
@@ -46,6 +46,45 @@ export function classCounts(g: StressGrid): Record<StressClass, number> {
 	const n: Record<StressClass, number> = { low: 0, moderate: 0, high: 0, severe: 0, critical: 0 };
 	for (const row of g.stressClass) for (const c of row) if (c) n[c]++;
 	return n;
+}
+
+/** The class of a supply ratio by the run's own thresholds (the engine's stressClassOf, with the thresholds the run stored); null without demand. */
+export function classOf(ratio: number | null, thresholds: StressSummary['thresholds']): StressClass | null {
+	if (ratio === null || !Number.isFinite(ratio)) return null;
+	for (const t of thresholds) if (ratio >= t.min) return t.cls;
+	return 'critical';
+}
+
+/** One demand node's figures for a panel about that node (a unit's detail, its dam on the Dams page). */
+export interface NodeAssurance {
+	reliability: SupplyReliability;
+	/** Its stress grid over the whole run; null when the run has none for it. */
+	grid: StressGrid | null;
+	/**
+	 * Oct … Sep: the class of each calendar month's Σ supplied ÷ Σ demand,
+	 * every year of the reporting window pooled (the reliability's own
+	 * months), so the strip reads over the same window as the figures beside it.
+	 */
+	months: { cls: StressClass | null; ratio: number | null }[];
+}
+
+/** A farm's or other user's assurance from the run, or null when the run has none for it (no demand node, added since the run). */
+export function nodeAssurance(a: SupplyAssurance, nodeId: string): NodeAssurance | null {
+	const reliability = a.reliability.find((r) => r.nodeId === nodeId);
+	if (!reliability) return null;
+	return {
+		reliability,
+		grid: a.stress.nodes.find((g) => g.nodeId === nodeId) ?? null,
+		months: reliability.months.map((m) => ({ ratio: m.volumetricReliability, cls: classOf(m.volumetricReliability, a.stress.thresholds) }))
+	};
+}
+
+/** "92% of demand days fully met · 88% of the demand volume supplied · 7 of 10 water years met (70%)": the reliability in one line. */
+export function reliabilityLine(r: SupplyReliability): string {
+	if (!r.demandDays) return 'No demand in the reporting window.';
+	const parts = [`${pctText(r.timeReliability, 1)} of demand days fully met`, `${pctText(r.volumetricReliability, 1)} of the demand volume supplied`];
+	if (r.waterYears) parts.push(`${r.waterYearsMet} of ${r.waterYears} water year${r.waterYears === 1 ? '' : 's'} met (${pctText(r.annualReliability)})`);
+	return parts.join(' · ');
 }
 
 /** One line of the water account table: in, out, storage, residual. */

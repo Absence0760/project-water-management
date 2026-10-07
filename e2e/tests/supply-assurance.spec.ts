@@ -15,7 +15,7 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	// Assurance of supply moved to Units & supply (issue #17): the Runs page links there for this run.
 	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'Hydrological units for this run' }).click();
 	await expect(page).toHaveURL(/[?&]tab=supply&run=/);
-	const assurance = page.getByRole('region', { name: 'Assurance of supply' });
+	const assurance = page.getByRole('region', { name: 'Assurance of supply', exact: true });
 	const reliability = assurance.getByTestId('reliability-table');
 	await expect(reliability.getByRole('rowheader')).toHaveText(['Upper farm', 'Lower farm']);
 	// Every metric is a percentage (or – without demand), never blank.
@@ -53,4 +53,41 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	await expect(met.getByRole('rowheader')).toHaveText(['Outflow gauge (outlet)']);
 	for (const cell of await met.getByRole('cell').all()) await expect(cell).toHaveText(/^\d+(\.\d)?% of [\d.\u202f]+ (m³|Mm³); [\d\u202f]+ days short$/);
 	await expect(required).toContainText('Met = the part of the requirement that passed the site');
+});
+
+test('a unit’s detail and its dam on the Dams page carry the unit’s reliability and stress by month (issue #444)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Assurance where you look');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
+	await createRun(page.request, project.id, 'Assured');
+
+	// Hydrological units → the picked unit: its reliability in one line, then a strip of twelve months.
+	await page.goto(`/projects/${project.id}?tab=supply&unit=${upper.id}`);
+	const unit = page.locator('#res-farm').getByRole('region', { name: 'Assurance of supply: Upper farm' });
+	await expect(unit.getByTestId('node-reliability')).toHaveText(/^[\d.]+% of demand days fully met · [\d.]+% of the demand volume supplied \(2021-10-01 to 2022-01-28\)$/);
+	const strip = unit.getByTestId('node-stress-strip');
+	const cells = strip.getByRole('listitem');
+	await expect(cells).toHaveCount(12);
+	// 120 days from 1 October: October … January have demand and a class name; February … September don't.
+	for (let m = 0; m < 4; m++) await expect(cells.nth(m)).toContainText(/(Low|Moderate|High|Severe|Critical) stress, [\d.]+% of demand supplied/);
+	for (let m = 4; m < 12; m++) await expect(cells.nth(m)).toContainText('no demand');
+	await expect(unit).toContainText(/Over the whole run: \d+ (Low|Moderate|High|Severe|Critical)/);
+	const figures = (await unit.getByTestId('node-reliability').textContent())!.trim();
+	// Every year's grid is in Assurance of supply below, opened on this unit.
+	await unit.getByTestId('unit-assurance-link').click();
+	await expect(page).toHaveURL(/#res-assurance$/);
+	const panel = page.locator('#res-assurance').getByRole('region', { name: 'Assurance of supply' });
+	await expect(panel.getByLabel('Show')).toHaveValue(upper.id as string);
+	await expect(panel.getByTestId('stress-grid').getByRole('caption')).toContainText('Upper farm');
+
+	// The Dams page: the picked dam's unit, labelled as the unit's supply, linking back to the unit.
+	await page.goto(`/projects/${project.id}?tab=dams&dam=${upper.id}`);
+	const dam = page.getByRole('region', { name: /^Storage/ }).getByRole('region', { name: 'Assurance of supply: Upper farm' });
+	await expect(dam).toContainText('The hydrological unit\'s supply, which this dam serves: a dam has no assurance of supply of its own.');
+	// The same figures as the unit's detail: the dam has none of its own.
+	await expect(dam.getByTestId('node-reliability')).toHaveText(figures);
+	await expect(dam.getByTestId('node-stress-strip').getByRole('listitem')).toHaveCount(12);
+	await dam.getByTestId('dam-unit-link').click();
+	await expect(page).toHaveURL(new RegExp(`[?&]tab=supply&run=[^&]+&unit=${upper.id}#res-farm$`));
+	await expect(page.locator('#res-farm').getByRole('heading', { level: 2 })).toContainText('Upper farm');
 });

@@ -7,10 +7,14 @@
 	`print` (the printable report, docs/ui.md § Report): no heading of its own
 	(the report's section names it) and every stress grid, the whole network's
 	then each unit's and user's, each under its own heading, with no picker and
-	no keyboard navigation.
+	no keyboard navigation. On Hydrological units the grid opens on the
+	picked unit (`unit=`, the unit detail's "Every year, month by month" link
+	lands here) and follows a new pick.
 -->
 <script lang="ts">
 	import { STRESS_LABEL, type StressGrid, type SupplyAssurance } from '@water-management/engine';
+	import { page } from '$app/state';
+	import { UNIT_PARAM } from '$lib/components/supply/links';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
@@ -35,6 +39,11 @@
 
 	const grids = $derived(assurance ? [assurance.stress.system, ...assurance.stress.nodes] : []);
 	const grid = $derived(grids.find((g) => (g.nodeId ?? 'system') === gridId) ?? grids[0]);
+	// The unit picked on the page (`unit=`): its grid, until the picker says otherwise.
+	$effect(() => {
+		const unit = print ? null : page.url.searchParams.get(UNIT_PARAM);
+		if (unit && grids.some((g) => g.nodeId === unit)) gridId = unit;
+	});
 	const legend = $derived(assurance ? stressLegend(assurance.stress) : []);
 	const gridName = (g: StressGrid) => (g.kind === 'system' ? 'All hydrological units and users' : g.name);
 	const partYears = $derived(assurance ? partWaterYears(assurance) : null);

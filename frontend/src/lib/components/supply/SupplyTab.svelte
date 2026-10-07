@@ -411,6 +411,8 @@
 										deficit={deficits.get(picked.nodeId) ?? null}
 										forecastFrom={summary.forecast?.from ?? null}
 										height={chartH}
+										assurance={summary.supplyAssurance ?? null}
+										engineVersion={run.engineVersion}
 									/>
 								{/key}
 							{/if}
