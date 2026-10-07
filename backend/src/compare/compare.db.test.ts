@@ -53,7 +53,7 @@ describe('GET /compare/runs', () => {
 
 		const res = await compare(u, `${projectId}:${base}`, `${projectId}:${dam}`);
 		expect(res.status).toBe(200);
-		expect(res.body.a.project).toEqual({ id: projectId, name: 'Catchment C' });
+		expect(res.body.a.project).toEqual({ id: projectId, name: 'Catchment C', ewrHeadline: { source: 'auto' } });
 		expect(res.body.a.run).toMatchObject({ id: base, label: 'Baseline', startDate: '2020-01-01', endDate: '2020-02-29' });
 		expect(res.body.b.run.label).toBe('Dam raise');
 		// The stored inputs snapshot is exposed here (and only here).
