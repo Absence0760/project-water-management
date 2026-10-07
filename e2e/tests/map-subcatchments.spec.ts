@@ -76,7 +76,8 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await page.getByTestId('map-show-everything').click();
 
 	// The header's actions fit one row at 1440 (Sub-catchments is Delineate's choice, Download GeoJSON is the list's).
-	const tops = await header(page).locator('button, a.btn').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+	// Visible ones only: the header Run model's closed form (display: none) has buttons too, at top 0.
+	const tops = await header(page).locator('button:visible, a.btn:visible').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
 	expect(new Set(tops).size).toBe(1);
 	const mapHeight = (await page.locator('.map-body').boundingBox())!.height;
 
