@@ -29,7 +29,11 @@ test('the series behind come first and are marked, the same count as the sidebar
 	await expect(sections(page).getByRole('link', { name: /^Data/ })).toContainText('(2 series behind)');
 	const header = page.getByTestId('section-header');
 	await expect(header.getByRole('button', { name: 'Preview all data' })).toBeVisible();
-	await expect(header.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
+	// Run model is the header's primary action on every section; Add data sits beside it.
+	await expect(header.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
+	await expect(header.getByTestId('header-run')).toHaveClass(/btn-primary/);
+	// The feeds that fill series daily are one link away (Settings → Data feeds).
+	await expect(page.getByTestId('data-feeds-link')).toHaveAttribute('href', '?tab=settings#set-feeds');
 
 	// Most days behind first (A-pan 45 days, CHIRPS 20), each marked in words; nothing else is, the 60-day-old logger
 	// included (it only scores a run) and the forecast that runs ahead.

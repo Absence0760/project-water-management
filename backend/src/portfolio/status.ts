@@ -1,7 +1,7 @@
 // The portfolio dashboard's rules (roadmap WP-2.14, docs/api.md § Portfolio):
 // the EWR traffic light and how old a figure is. Pure, so they're unit-tested
 // apart from the query.
-import { FARM_VIEW_STALE_DAYS } from '@water-management/engine';
+import { EWR_TRAFFIC_LIGHT, ewrBand, FARM_VIEW_STALE_DAYS, type EwrTrafficLight } from '@water-management/engine';
 import { toEpochDay } from '@water-management/engine/calendar';
 
 export type EwrStatus = 'green' | 'amber' | 'red' | 'unknown';
@@ -21,16 +21,15 @@ export type EwrUnknownReason = 'no-figures' | 'no-ewr' | 'no-series';
  * with the outlet EWR not met: green below `green`, amber below `amber`, red
  * otherwise. A team may set its own (055_team_settings, teams/settings.ts).
  */
-export interface EwrThresholds {
-	green: number;
-	amber: number;
-}
+export type EwrThresholds = EwrTrafficLight;
 
 /**
  * The defaults, for a team that has set none: green below 5 %, amber below
- * 20 %. The hydrologist still has to confirm them (plan.md D11).
+ * 20 %. The hydrologist still has to confirm them (plan.md D11). The engine's
+ * constant, so the workspace's EWR compliance by month and the Summary's
+ * reserve strip band with the same numbers (reserve/trafficLight.ts).
  */
-export const EWR_THRESHOLDS: Readonly<EwrThresholds> = Object.freeze({ green: 5, amber: 20 });
+export const EWR_THRESHOLDS: Readonly<EwrThresholds> = EWR_TRAFFIC_LIGHT;
 
 export interface EwrFigure {
 	status: EwrStatus;
@@ -45,11 +44,7 @@ export interface EwrFigure {
 
 /** The status for `daysNotMet` of `days` under thresholds `t`. An empty window is unknown, never green. */
 export function ewrStatus(daysNotMet: number, days: number, t: EwrThresholds = EWR_THRESHOLDS): Exclude<EwrStatus, 'unknown'> | null {
-	if (!(days > 0) || !(daysNotMet >= 0) || daysNotMet > days) return null;
-	// daysNotMet ÷ days < pct ÷ 100, cross-multiplied so no division rounds a
-	// boundary (7 of 100 days is 7 %, not 7.000000000000001 %).
-	const below = (pct: number) => daysNotMet * 100 < pct * days;
-	return below(t.green) ? 'green' : below(t.amber) ? 'amber' : 'red';
+	return ewrBand(daysNotMet, days, t);
 }
 
 /** The EWR figure from what the query read, with the unknown reason when there's nothing honest to show. */

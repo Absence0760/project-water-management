@@ -114,6 +114,30 @@ export function pickUnit(cards: readonly UnitCard[], param: string | null): Unit
 	return (param ? cards.find((c) => c.nodeId === param) : undefined) ?? cards[0] ?? null;
 }
 
+/** A unit the folded card list never hides: supplied below SUPPLY_TARGET over the record, or short on a day this week. */
+export function needsLook(c: Pick<UnitCard, 'fraction' | 'weekShort'>): boolean {
+	return (c.fraction !== null && c.fraction < SUPPLY_TARGET) || (c.weekShort ?? 0) > 0;
+}
+
+/**
+ * The card list's fold (issue #444): the `cap` least supplied, every unit below
+ * the supply target or short this week wherever it sits (with ten short, all ten
+ * show: three of them read as "only three are short"), and the picked unit; the
+ * rest, the units meeting the target, wait behind "Show all". Folding away one
+ * card isn't worth a button, so it then shows whole (as foldList).
+ */
+export function foldCards(cards: readonly UnitCard[], pickedId: string | null, open: boolean, cap: number): { shown: UnitCard[]; hidden: number } {
+	if (open) return { shown: [...cards], hidden: 0 };
+	const shown = cards.filter((c, i) => i < cap || needsLook(c) || c.nodeId === pickedId);
+	const hidden = cards.length - shown.length;
+	return hidden <= 1 ? { shown: [...cards], hidden: 0 } : { shown, hidden };
+}
+
+/** What the folded list leaves out, said under its cards (foldCards folds two or more): "6 more meet the 95 % supply target …". */
+export function foldNote(hidden: number, weekKnown: boolean): string {
+	return `${fmtNum(hidden)} more meet the ${fmtPct(SUPPLY_TARGET, 0)} supply target or have no irrigation demand${weekKnown ? ', and none is short this week' : ''}.`;
+}
+
 export interface SupplyTotals {
 	units: number;
 	/** Units under SUPPLY_TARGET (the Runs tab's and the Summary's count: every unit, demand or not, by its fraction). */

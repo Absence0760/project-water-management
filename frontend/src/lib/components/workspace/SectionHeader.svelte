@@ -4,8 +4,8 @@
 	// right, in this order, the page's rain-freshness pill (`status`, after the
 	// Summary's "Setup complete" pill), the
 	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's main
-	// box: Add data, then the tab's main action if it has one (`main`; Runs &
-	// results' run form, the one place a run starts).
+	// box: Add data, then Run model (the page's RunButton, or the tab's main
+	// action in its place: `main`, Runs & results' run form).
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//
@@ -182,7 +182,8 @@
 			flex: 1 1 0;
 			justify-content: center;
 		}
-		/* Runs' run form (label, name, Run model) takes a row of its own under Add data. */
+		/* Runs' run form (label, name, Run model) takes a row of its own under Add data (the
+		   other sections' Run model is a button, sharing Add data's row). */
 		.main:has(> :global(form)) {
 			flex-basis: 100%;
 		}

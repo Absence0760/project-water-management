@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { EwrCompliance } from '@water-management/engine';
-import { binPct, binVolume, cellPct, fmtCompact, fmtVolume, legend, maxShortfall, monthProfile, totals, worstYears } from './heatmap';
+import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
+import { bandLabels } from './bands';
+import { bandPct, binVolume, cellPct, fmtCompact, fmtVolume, legend, maxShortfall, monthProfile, totals, worstYears } from './heatmap';
 
 const row = (vals: Record<number, number>) => Array.from({ length: 12 }, (_, i) => vals[i] ?? 0);
 
@@ -18,16 +20,15 @@ const c: EwrCompliance = {
 };
 
 describe('binning', () => {
-	it('bins % of days with inclusive upper bounds', () => {
-		expect(binPct(null)).toBeNull();
-		expect(binPct(0)).toBe(0);
-		expect(binPct(0.1)).toBe(1);
-		expect(binPct(10)).toBe(1);
-		expect(binPct(10.01)).toBe(2);
-		expect(binPct(25)).toBe(2);
-		expect(binPct(50)).toBe(3);
-		expect(binPct(50.1)).toBe(4);
-		expect(binPct(100)).toBe(4);
+	it('bands % of days by the EWR traffic light: green under 5 %, amber under 20 %, red from 20 %', () => {
+		expect(bandPct(0, 0)).toBeNull();
+		expect(bandPct(0, 31)).toBe('green');
+		expect(bandPct(1, 31)).toBe('green'); // 3.2 %
+		expect(bandPct(2, 31)).toBe('amber'); // 6.5 %
+		expect(bandPct(5, 100)).toBe('amber');
+		expect(bandPct(6, 31)).toBe('amber'); // 19.4 %
+		expect(bandPct(20, 100)).toBe('red');
+		expect(bandPct(31, 31)).toBe('red');
 	});
 
 	it('bins volume relative to the grid maximum', () => {
@@ -46,12 +47,21 @@ describe('binning', () => {
 });
 
 describe('legend and formatting', () => {
-	it('labels five bins for each metric', () => {
-		expect(legend('pct').map((l) => l.bin)).toEqual([0, 1, 2, 3, 4]);
-		expect(legend('pct')[4]!.label).toBe('> 50%');
+	it('states the three bands for % of days, and five volume steps', () => {
+		expect(legend('pct')).toEqual([
+			{ cls: 'green', label: 'Green: under 5% of days not met' },
+			{ cls: 'amber', label: 'Amber: 5% to under 20%' },
+			{ cls: 'red', label: 'Red: 20% or more' }
+		]);
 		const v = legend('volume', 2_000_000);
+		expect(v.map((l) => l.cls)).toEqual(['v0', 'v1', 'v2', 'v3', 'v4']);
 		expect(v[1]!.label).toBe('≤ 200\u202f000 m³');
 		expect(v[4]!.label).toBe('> 1.00 Mm³');
+	});
+
+	it('reads the engine’s traffic light, the portfolio’s defaults (backend portfolio/status.ts uses the same constant)', () => {
+		expect(bandLabels()).toEqual(bandLabels(EWR_TRAFFIC_LIGHT));
+		expect(bandLabels({ green: 10, amber: 30 }).amber).toBe('Amber: 10% to under 30%');
 	});
 
 	it('abbreviates cell values', () => {

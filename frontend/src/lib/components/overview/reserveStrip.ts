@@ -9,7 +9,7 @@
 // strip is named for what it counts, not "the reserve" (issue #177): the rule
 // table gives a verdict per month, not a count of days, so it can't be drawn
 // as days below.
-import type { EwrCompliance } from '@water-management/engine';
+import { ewrBand, type EwrBand, type EwrCompliance } from '@water-management/engine';
 import { EWR_NOT_MET, daysBelowTest } from '$lib/components/ewr/notMet';
 import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
 
@@ -24,6 +24,8 @@ export interface StripMonth {
 	notMet: number;
 	/** notMet / days, 0–1. */
 	fraction: number;
+	/** The EWR traffic light's band for the month (the portfolio's, engine reserve/trafficLight.ts), its bar's colour. */
+	band: EwrBand;
 }
 
 /** The months the strip shows. */
@@ -45,8 +47,9 @@ export function recentMonths(c: EwrCompliance, forecastFrom: string | null = nul
 			// Oct–Dec belong to the calendar year the water year starts in.
 			const year = month >= 10 ? wy : wy + 1;
 			if (year * 12 + month - 1 >= cut) return;
+			// days > 0 here, and the engine counts the days not met within the month's, so the band is never null.
 			const notMet = c.outlet.daysNotMet[r]?.[m] ?? 0;
-			out.push({ year, month, label: monthName(month), days, notMet, fraction: notMet / days });
+			out.push({ year, month, label: monthName(month), days, notMet, fraction: notMet / days, band: ewrBand(notMet, days)! });
 		});
 	});
 	return out.slice(-n);
@@ -92,8 +95,8 @@ export function stripWhat(ms: readonly StripMonth[], words: StripWords): string 
 	return words.note ? `${line}. ${words.note}` : line;
 }
 
-/** One month in words, for screen readers and the tooltip: "Jan 2024: below the EWR on 12 of 31 days". */
+/** One month in words, for screen readers and the tooltip: "Jan 2024: below the EWR on 12 of 31 days (red)". */
 export function monthText(x: StripMonth, test = 'the EWR'): string {
 	const name = test.replace(/^the /, '');
-	return x.notMet === 0 ? `${x.label} ${x.year}: ${name} met every day (${x.days} days)` : `${x.label} ${x.year}: below ${test} on ${x.notMet} of ${x.days} days`;
+	return x.notMet === 0 ? `${x.label} ${x.year}: ${name} met every day (${x.days} days)` : `${x.label} ${x.year}: below ${test} on ${x.notMet} of ${x.days} days (${x.band})`;
 }
