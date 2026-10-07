@@ -817,9 +817,11 @@ first and says it reverts every unsaved model edit, not only the modal's,
 and **Save changes**, after which the row says "Changes saved." and the
 focus stays in it, on **Done**.
 
-**Run model with unsaved edits.** A run uses the saved model, so Runs &
-results' **Run model** and **Run forecast** (and the new-data line's
-**Re-run model**) with unsaved edits ask "Save your changes and run?"
+**Run model with unsaved edits.** A run uses the saved model, so the
+header's **Run model** on every other tab (its form's **Run model** and
+**Run forecast**, `workspace/RunButton.svelte`, through the page's
+`runModel`), Runs & results' own **Run model** and **Run forecast** (and the
+new-data line's **Re-run model**) with unsaved edits ask "Save your changes and run?"
 (**Save and run**), save them (`saveAll`) and run once they are saved: the
 page passes its `saveBeforeRun` to the Runs tab as `beforeRun`, and the run
 form's status line says so. While problems block that save it refuses,
@@ -6211,7 +6213,8 @@ read it before.
      under the statistics, where a hydrologist calibrating reads the fit, so it
      takes no menu entry of its own: one chart per gauge the run has an
      observed record for (the outlet, then the calibration site), "Calibration
-     check at &lt;gauge&gt;: observed, simulated, natural and upstream demand",
+     check at &lt;gauge&gt;: observed, simulated, natural and upstream demand"
+     (", with bed losses" after it when it has them),
      four lines on one axis in the page's flow unit (Runs & results' one
      m³/s / m³/day switch, shared with the hydrograph through `RunCharts`'s
      `modelTail` snippet; demand converted the same), a log switch and the last 3 years with the
@@ -6222,9 +6225,21 @@ read it before.
      the abstraction `demand` of every unit and other water user above the
      gauge (the unrestricted demand, before any drought restriction, the
      boreholes' share included); *Simulated* is the outlet's `simulated_outflow` or the gauge's
-     `outflow`. A how-to-read line heads it: simulated should track observed;
-     natural sits above simulated by roughly the use upstream; where demand
-     rises and simulated drops below natural, abstraction is biting. The
+     `outflow`. On a run with river bed losses (engine ≥ 1.75.0,
+     [model.md §2.6b](./model.md)) a fifth line, *Bed losses upstream*
+     (dashed, like the demand), sums the `reach_loss` of every node above the
+     gauge: a node's loss is in the reach below it, so every upstream node's
+     reach lies on the way to the gauge and the gauge's own lies below it (not
+     counted). Its caption counts the reaches; without bed losses there is no
+     fifth line and no text about them. A how-to-read line heads it: simulated should track observed;
+     natural sits above simulated by roughly the use upstream (plus the bed
+     losses in the reaches above the gauge, on such a run); where demand
+     rises and simulated drops below natural, abstraction is biting. A
+     forecast run's lines stop the day before its forecast starts
+     (`beforeForecastFlows`, engine `beforeForecast`, as the flow duration
+     curves cut; `scripts/guards/check_forecast_cut.mjs`): there's no
+     observed flow to check simulated against after it, so no forecast band
+     either. The
      series come through the Runs cache six at a time once the lower groups
      render (after the hydrograph has painted), with a count while they load
      and a retry on failure. A run saved without its model has no network to

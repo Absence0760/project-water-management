@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allKeys, checkGauges, checkKeys, checkSeries, contributors, sumDaily } from './calibrationCheck';
+import { allKeys, beforeForecastFlows, checkGauges, checkKeys, checkSeries, contributors, sumDaily } from './calibrationCheck';
 
 // Out ← Weir ← A (unit) ← A1 (unit); Weir ← U (other user); Out ← B (unit). The weir is the calibration site.
 const nodes = [
@@ -45,6 +45,7 @@ describe('checkKeys', () => {
 		expect(k.simulated).toEqual(ref('simulated_outflow', null));
 		expect(k.natural).toEqual([ref('natural_flow', null)]);
 		expect(k.demand.map((d) => d.nodeId)).toEqual(['A', 'A1', 'U', 'B']);
+		expect(k.bedLoss).toEqual([]);
 	});
 
 	it('a gauge inside: its outflow, its units’ runoff plus land cover’s share, and only the demand above it', () => {
@@ -57,7 +58,18 @@ describe('checkKeys', () => {
 
 	it('leaves out what the run didn’t store', () => {
 		const k = checkKeys([ref('observed_flow', null)], nodes, null);
-		expect(k).toEqual({ observed: ref('observed_flow', null), simulated: null, natural: [], demand: [] });
+		expect(k).toEqual({ observed: ref('observed_flow', null), simulated: null, natural: [], demand: [], bedLoss: [] });
+	});
+
+	it('the bed losses upstream: every losing reach above the gauge, never the gauge’s own reach below it', () => {
+		// A1's reach leads to A, A's and the weir's own to the next node down, B's to the outlet.
+		const losing = [...refs, ...['A1', 'A', 'Weir', 'B'].map((id) => ref('reach_loss', id))];
+		expect(checkKeys(losing, nodes, null).bedLoss.map((k) => k.nodeId)).toEqual(['Weir', 'A', 'A1', 'B']);
+		// The weir's own loss is below it, so its simulated outflow doesn't carry it.
+		expect(checkKeys(losing, nodes, 'Weir').bedLoss).toEqual([ref('reach_loss', 'A'), ref('reach_loss', 'A1')]);
+		// A unit as the site: the reach above it only.
+		expect(checkKeys(losing, nodes, 'A').bedLoss).toEqual([ref('reach_loss', 'A1')]);
+		expect(allKeys([checkKeys(losing, nodes, null), checkKeys(losing, nodes, 'Weir')]).filter((k) => k.key === 'reach_loss')).toHaveLength(4);
 	});
 
 	it('fetches each series once across the gauges', () => {
@@ -97,7 +109,38 @@ describe('checkSeries', () => {
 		expect(s.slice(0, 3).every((x) => x.style === undefined)).toBe(true);
 	});
 
+	it('draws the bed losses upstream as a fifth line, dashed, only when the run has any', () => {
+		const s = checkSeries({ observed: d(86_400), simulated: d(86_400), natural: d(86_400), demand: d(86_400), bedLoss: d(21_600) }, perSecond);
+		expect(s.map((x) => x.label)).toEqual(['Observed', 'Simulated', 'Natural', 'Upstream demand', 'Bed losses upstream']);
+		expect(s[4]).toMatchObject({ style: 'dashed', color: '--series-4', values: [0.25, 0.25] });
+		expect(checkSeries({ observed: d(1), bedLoss: null }, perSecond).map((x) => x.label)).toEqual(['Observed']);
+	});
+
 	it('draws only the lines it has', () => {
 		expect(checkSeries({ observed: d(1), natural: null, demand: null }, perSecond).map((x) => x.label)).toEqual(['Observed']);
+	});
+});
+
+describe('beforeForecastFlows', () => {
+	const s = (startDate: string, values: number[]) => ({ startDate, values });
+
+	it('cuts every line of a forecast run at the forecast’s first day, each by its own start date', () => {
+		const f = beforeForecastFlows(
+			{ observed: s('2021-10-01', [1, 2, 3, 4]), simulated: s('2021-10-01', [5, 6, 7, 8]), natural: s('2021-10-02', [9, 10, 11]), demand: s('2021-10-01', [1, 1, 1, 1]), bedLoss: s('2021-10-01', [2, 2, 2, 2]) },
+			'2021-10-03'
+		);
+		expect(f).toEqual({
+			observed: s('2021-10-01', [1, 2]),
+			simulated: s('2021-10-01', [5, 6]),
+			natural: s('2021-10-02', [9]),
+			demand: s('2021-10-01', [1, 1]),
+			bedLoss: s('2021-10-01', [2, 2])
+		});
+	});
+
+	it('leaves an ordinary run, and a line it doesn’t have, as they are', () => {
+		const flows = { observed: s('2021-10-01', [1, 2]), natural: null };
+		expect(beforeForecastFlows(flows, null)).toBe(flows);
+		expect(beforeForecastFlows(flows, '2021-10-02')).toEqual({ observed: s('2021-10-01', [1]), simulated: undefined, natural: null, demand: undefined, bedLoss: undefined });
 	});
 });
