@@ -17,8 +17,8 @@ export interface HeaderParts {
 	/** The section's own actions, placed before Add data. */
 	actions?: Snippet;
 	/**
-	 * The section's main action: last, after Add data. Runs & results puts its run form
-	 * (label, Run forecast, Run model) here, the only Run model in the header.
+	 * The section's main action: last, after Add data, in place of the page's Run model button
+	 * (RunButton). Runs & results puts its run form (label, Run forecast, Run model) here.
 	 */
 	main?: Snippet;
 }

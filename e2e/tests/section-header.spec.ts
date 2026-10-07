@@ -1,7 +1,8 @@
 // One header per workspace section (issue #17, option A; docs/ui.md §
 // Section header): the section's title, a one-line context, and on the right
-// the rain-freshness pill, the section's own actions and Add data (Runs &
-// results adds its run form, the only Run model in the header).
+// the rain-freshness pill, the section's own actions, Add data and Run model
+// (a button that opens the Run label form; on Runs & results the tab's own run
+// form instead, so there is always exactly one Run model).
 // The notices (view only, new data) are one slim line under it; the
 // project's name and your role are at the top of the sidebar (a compact line
 // on a phone); Data carries a badge counting the series behind. Synthetic
@@ -31,15 +32,16 @@ test.describe('desktop', () => {
 		await expect(page.getByTestId('project-role')).toHaveText('owner');
 		await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-		// Summary: no run yet, so the context says so; the freshness pill and Add data (primary) on the right, no Run model.
+		// Summary: no run yet, so the context says so; the freshness pill, Add data and Run model (the primary action) on the right.
 		const h = header(page);
 		await expect(h.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
 		await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
 		// Every page links to its own guide, so what a page is for is one click away.
 		await expect(h.getByTestId('section-guide')).toHaveAttribute('href', '/help/guides/the-whole-process');
 		await expect(h.locator('summary', { hasText: 'Rain up to' })).toBeVisible();
-		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
-		await expect(h.getByRole('button', { name: 'Run model' })).toHaveCount(0);
+		await expect(h.getByRole('button', { name: 'Add data' })).not.toHaveClass(/btn-primary/);
+		await expect(h.getByRole('button', { name: 'Run model' })).toHaveClass(/btn-primary/);
+		await expect(h.getByRole('button', { name: 'Run model' })).toHaveAttribute('aria-expanded', 'false');
 		// The title and the actions share one row.
 		const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 		const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
@@ -53,23 +55,22 @@ test.describe('desktop', () => {
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
 		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
 		const actions = h.getByRole('button');
-		await expect(actions).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Add data']);
+		await expect(actions).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Add data', 'Run model']);
 		await expectNoViolations(page);
 
 		// Crops: its summary line and Add crop.
 		await nav(page).getByRole('link', { name: 'Crops & demand' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
 		await expect(h.getByTestId('crops-summary')).toContainText(/crops? · /);
-		await expect(actions).toHaveText(['Load crop factors…', '+ Add crop', 'Add data']);
+		await expect(actions).toHaveText(['Load crop factors…', '+ Add crop', 'Add data', 'Run model']);
 
-		// Data: Add data, after the tab's Preview all data. The context counts the series.
+		// Data: Add data and Run model, after the tab's Preview all data. The context counts the series.
 		await nav(page).getByRole('link', { name: /^Data/ }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
 		await expect(h.getByTestId('section-context')).toHaveText('2 daily input series · 1 behind');
-		await expect(actions).toHaveText(['Preview all data', 'Add data']);
-		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
+		await expect(actions).toHaveText(['Preview all data', 'Add data', 'Run model']);
 
-		// Runs: the tab's own run form (with a label), the only Run model, last in the header, after a plain Add data.
+		// Runs: the tab's own run form (with a label) in place of the header's button: one Run model, last, after a plain Add data.
 		await nav(page).getByRole('link', { name: 'Runs & results' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
 		await expect(actions).toHaveText(['Add data', 'Run model']);
@@ -91,6 +92,48 @@ test.describe('desktop', () => {
 		await expect(context).toContainText('Untitled run');
 		await expect(context).toContainText(/engine \d+\.\d+\.\d+ · ran today/);
 		await expect(context.getByRole('link', { name: 'Open in Runs' })).toBeVisible();
+	});
+
+	test('Run model on any section opens a form to name the run, runs it and opens it in Runs & results', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, 'Header run anywhere');
+		await page.goto(`/projects/${project.id}?tab=network`);
+		// The button, not the form's Run model inside the header once it is open.
+		const toggle = header(page).getByTestId('header-run');
+		await expect(toggle).toHaveAccessibleName('Run model');
+		await toggle.click();
+		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+		const form = page.getByRole('dialog', { name: 'Run the model' });
+		// The label field takes focus; Escape closes the form and puts focus back on the button.
+		await expect(form.getByLabel(/^Run label/)).toBeFocused();
+		await expect(form.getByRole('status')).toHaveText(/^Runs the saved network, crops, transfers, settings and time series/);
+		await expectNoViolations(page);
+		await page.keyboard.press('Escape');
+		await expect(form).toBeHidden();
+		await expect(toggle).toBeFocused();
+
+		await toggle.click();
+		await form.getByLabel(/^Run label/).fill('From the Network');
+		const ran = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${project.id}/runs`));
+		await form.getByRole('button', { name: 'Run model' }).click();
+		expect((await ran).status()).toBeLessThan(300);
+		await expect(page).toHaveURL(/[?&]tab=runs&run=[\w-]+$/);
+		await expect(page.getByRole('heading', { level: 2, name: 'From the Network' })).toBeVisible();
+		// On Runs & results the tab's run form is the header's one Run model.
+		await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(1);
+		await expect(header(page).getByLabel(/^Run label/)).toBeVisible();
+	});
+
+	test('the header’s Run model waits for rain too, and says why in its form', async ({ page, owner }) => {
+		void owner;
+		const project = await createProject(page.request, 'Header run anywhere needs');
+		await putModel(page.request, project.id, sampleModel());
+		await page.goto(`/projects/${project.id}`);
+		await header(page).getByRole('button', { name: 'Run model' }).click();
+		const form = page.getByRole('dialog', { name: 'Run the model' });
+		const run = form.getByRole('button', { name: 'Run model' });
+		await expect(run).toBeDisabled();
+		await expect(run).toHaveAccessibleDescription(/^A run needs a rainfall series\. /);
 	});
 
 	test('Run model waits for rain, and says why', async ({ page, owner }) => {
@@ -246,10 +289,13 @@ test.describe('a long context line', () => {
 			expect(await noSideScroll(page)).toBe(true);
 			await expectNoViolations(page);
 
-			// Data's short context ("2 daily input series · 1 behind") keeps its controls beside it, as before.
+			// Data's short context ("2 daily input series · 1 behind") keeps its controls beside it from 1280; at 1024
+			// its four (the pill, Preview all data, Add data, Run model) go under it, the context still one line.
 			await nav(page).getByRole('link', { name: /^Data/ }).click();
 			await expect(header(page).getByTestId('section-context')).toHaveText('2 daily input series · 1 behind');
-			expect(await contextLayout(page), `Data at ${size.width} px`).toEqual({ lines: 1, beside: true });
+			const data = await contextLayout(page);
+			if (size.width >= 1280) expect(data, `Data at ${size.width} px`).toEqual({ lines: 1, beside: true });
+			else expect(data.lines, `Data at ${size.width} px`).toBe(1);
 		}
 	});
 });

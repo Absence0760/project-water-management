@@ -568,6 +568,11 @@
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
+		<!-- The feeds that fill series daily live in Settings → Data feeds; a project that has none had no way to
+		     find them from here (issue #444). -->
+		{#if !readonly}
+			<a class="small feeds-link" href="?tab=settings#set-feeds" data-testid="data-feeds-link">Fetch data automatically (CHIRPS rain, forecast, DWS flow) <span aria-hidden="true">→</span> Data feeds</a>
+		{/if}
 	</div>
 	<LoadState
 		{loading}
@@ -849,6 +854,12 @@
 {/if}
 
 <style>
+	/* A 24 px target (WCAG 2.5.8). */
+	.feeds-link {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+	}
 	.series th[scope='row'] {
 		min-width: 190px;
 	}

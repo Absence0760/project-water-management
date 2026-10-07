@@ -2,7 +2,7 @@
 // every workspace section at 390 × 844 on a big catchment (30 units with dams, two
 // runs, scenarios and registered volumes). The section header lays its actions out
 // in full rows under the rain pill, a picker a row of its own, with Add data
-// (and on Runs & results the run form) always ending it; the pill's list opens on screen; Compare
+// and Run model (on Runs & results the run form) always ending it; the pill's list opens on screen; Compare
 // runs has one title; and the sheets, dialogs and the Sections menu the per-page
 // specs don't scan on a phone are scanned here. Synthetic data only.
 import type { Page } from '@playwright/test';
@@ -80,7 +80,7 @@ const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
-	test('every section: the pill, then the controls in full rows, pickers full width, Add data last', async ({ page, owner }) => {
+	test('every section: the pill, then the controls in full rows, pickers full width, Add data and Run model last', async ({ page, owner }) => {
 		test.setTimeout(120_000);
 		void owner;
 		const p = await seedBig(page, 'Phone header big catchment');
@@ -104,7 +104,7 @@ test.describe('phone', () => {
 			for (const w of m.selects) expect(w, at).toBeGreaterThan(m.right - m.left - 2);
 			// ...with no "Run" line of its own above it (River & reserve's had one): the word is for screen readers.
 			for (const d of m.pickerDrops) expect(d, at).toBeLessThan(2);
-			// Add data ends the header; Run model is only in Runs' run form.
+			// Add data, then Run model, end the header: on Runs the tab's run form, elsewhere the button that opens one.
 			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
 			const last = m.rows.at(-1)!;
 			if (s.tab === 'runs') {
@@ -112,8 +112,9 @@ test.describe('phone', () => {
 				const form = (await h.locator('form.run-form').boundingBox())!;
 				expect(form.y, at).toBeGreaterThan(add.y + add.height - 1);
 			} else {
-				await expect(h.getByRole('button', { name: 'Run model' }), at).toHaveCount(0);
-				expect(last.at(-1)!.texts[0], at).toBe('Add data');
+				// Add data beside Run model, which is last (its closed form adds no box): the main box never splits.
+				expect(last.slice(-2).map((c) => c.texts[0]!.split(' Run label')[0]), at).toEqual(['Add data', 'Run model']);
+				expect((await h.getByTestId('header-run').boundingBox())!.height, at).toBeGreaterThanOrEqual(44);
 			}
 		}
 	});
@@ -224,7 +225,7 @@ test.describe('phone', () => {
 test.describe('desktop', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });
 
-	test('the header controls stay one row, beside the title where they fit, Add data last', async ({ page, owner }) => {
+	test('the header controls stay one row, beside the title where they fit, Add data then Run model last', async ({ page, owner }) => {
 		void owner;
 		const p = await seedBig(page, 'Desktop header row');
 		// Whether a tab's controls fit beside its title depends on its words (the seeded
@@ -259,7 +260,7 @@ test.describe('desktop', () => {
 			if (beside) expect(pill.x, tab).toBeGreaterThan(title.x + title.width);
 			else expect(pill.y, tab).toBeGreaterThan(title.y + title.height);
 			const buttons = await h.getByTestId('header-main').getByRole('button').allTextContents();
-			expect(buttons.map((t) => t.trim()).at(-1), tab).toBe('Add data');
+			expect(buttons.map((t) => t.trim()), tab).toEqual(['Add data', 'Run model']);
 		}
 	});
 });

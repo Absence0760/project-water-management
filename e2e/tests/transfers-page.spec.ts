@@ -24,8 +24,8 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	await expect(header(page).getByTestId('section-context')).toHaveText('1 transfer rule · 1 active');
 	await expect(header(page).getByRole('link', { name: 'Show on the Network', exact: true })).toHaveAttribute('href', '?tab=network');
 	await expect(header(page).getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
-	// Runs start only from Runs & results, where they can be named.
-	await expect(header(page).getByRole('button', { name: 'Run model', exact: true })).toHaveCount(0);
+	// The header's Run model opens a form to name the run (the one on every section but Runs & results).
+	await expect(header(page).getByTestId('header-run')).toHaveAttribute('aria-expanded', 'false');
 	// The add button lives in the header only on the page.
 	await expect(rulesCard(page).getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 

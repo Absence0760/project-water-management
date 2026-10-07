@@ -984,13 +984,33 @@ role, freshness, Add data) and each tab's own header:
   supply's run menu and **Open in Runs**, Dams' **Open in Runs**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**) and **Add data** (editors), the primary action on
-  every section but Runs & results. A run starts from the header only on
-  Runs & results, whose run form (**Run label**, Run forecast, Run model)
-  comes last, after a plain Add data (`fillHeader({ main })`, the header
-  slot's `main` part), so every run can be named. The other sections had
-  their own unlabelled **Run model** until it was removed for that reason;
-  the new-data line's **Re-run model** still runs from any section, labelled
+  longest waiting**), then for editors **Add data** and **Run model**, the
+  primary action, on every section (issue #444: the client looked for a way
+  to run the model from where they had just changed it). On every section
+  but Runs & results, **Run model** (`workspace/RunButton.svelte`) doesn't
+  run at once: it opens a small form under it (a non-modal `role="dialog"`,
+  *Run the model*; the button has `aria-expanded` and `aria-haspopup`,
+  Escape closes it and returns focus, a click outside or a navigation (its
+  links go to other sections, where the same button stays mounted) closes
+  it, the Setup complete pill's pattern) with the **Run label** field (focused, optional), **Run
+  forecast** (with forecast rain) and **Run model**, so every run can still
+  be named, and one status line: what a run still needs or why the flow
+  shares stop it (`runs/runReady.ts` `runBlockers`, the same reasons and
+  words as Runs & results' form, which uses it too), why the last run
+  didn't start, that problems stop the unsaved changes being saved (so the
+  run waits for them), that unsaved changes are saved first, the progress with the seconds while it runs, else what
+  it runs. The page runs it (`runModel`: unsaved edits go through the same
+  **Save your changes and run?** confirm, and a problem that blocks the
+  save stops it with the reason) and opens the run in Runs & results;
+  a run that didn't start says so in the notice line. On Runs & results the
+  tab's own run form (**Run label**, Run forecast, Run model) takes its
+  place, last after Add data (`fillHeader({ main })`, the header slot's
+  `main` part), so a page never has two Run models; while a run the page
+  started is going, that form waits for it (`busy`). Viewers get neither:
+  a run needs an editor. Until issue #444 a run started from the header only
+  on Runs & results: the other sections' unlabelled **Run model** had been
+  removed so every run could be named, which the form now does. The
+  new-data line's **Re-run model** still runs from any section, labelled
   with the data's end. A tab shown inside the grid modal or scenario
   override mode fills nothing.
 - **Notices, one slim line** under the title row, instead of full-width
@@ -1018,8 +1038,9 @@ role, freshness, Add data) and each tab's own header:
   header after the Sections button. The pill is a line of its own (its list
   opens rightwards, on the screen); a picker (a run select) takes a full row;
   the tab's buttons and the main box then fill full rows, every control
-  growing to fill its row, and Add data always ends the header. Runs' run
-  form is a row of its own under Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
+  growing to fill its row, and Add data and Run model always end the
+  header (the main box never splits; Run model's form is nudged to stay on
+  the screen). Runs' run form is a row of its own under Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
   on every section with a big catchment, plus the overlays' phone scans (node
   sheet, node table, Allocations' sheets, New scenario, Add data, the
   Sections menu).
@@ -1207,8 +1228,15 @@ put the results first; its first screen follows board A1 of the redesign
    the columns; `overview.spec.ts` checks the seeded catchment fits). Before
    the first run, when there is no first screen, the active alerts sit
    beside the baseline, two columns once the tab is 56rem wide (a container
-   query; stacked below that). The link is **Model facts, details, team
-   and sharing → Project**. A second, **Dam levels for each dam → Dams**,
+   query; stacked below that). The links are **Model facts, details, team
+   and sharing → Project** and, for a role that sees Allocations,
+   **Registered vs modelled use → Allocations** (`allocationsHref`,
+   `allocations/links.ts`, with `run=` the run the Summary shows; issue
+   #444): Allocations is hidden from the sidebar by default, and the client
+   couldn't find it. The Summary doesn't count the units over their
+   registered volume: the run summary's comparison is against the volumes
+   when it ran and has no part-year sums, so its count could disagree with
+   the Allocations page's, which compares today's volumes. A second, **Dam levels for each dam → Dams**,
    was removed in issue #177: the **Dams today** card and the sidebar
    already open the [Dams](#dams) page. The
    model's headline facts, project details, import record, recent notes,
@@ -1247,11 +1275,21 @@ put the results first; its first screen follows board A1 of the redesign
   months (`recentMonths`, from the run summary's monthly grid,
   `RunSummary.ewrCompliance`, so it draws with the cards: no series to fetch,
   no chart library), oldest first. Each month is a small bar (its height the
-  share of the month's days below, in the warning colour of the flow chart's
-  shading), the count above it and the month under it, the year under the
+  share of the month's days below), the count above it and the month under it, the year under the
   first month and each January; each is a list item whose words ("Jan 2024:
-  below the EWR on 12 of 31 days") are what a screen reader and the tooltip
-  get. A line under the heading says what it counts and the span ("… (EWR
+  below the EWR on 12 of 31 days (red)") are what a screen reader and the tooltip
+  get. The bar takes the month's **EWR traffic-light** colour (issue #444),
+  the portfolio's bands: green under 5 % of the month's days below, amber
+  under 20 %, red from 20 % (`ewrBand`, engine `reserve/trafficLight.ts`
+  `EWR_TRAFFIC_LIGHT`, the same constant backend `portfolio/status.ts`
+  judges the portfolio by; the `--success`, `--warning` and `--danger`
+  tokens, each ≥ 5:1 on the track in both themes), and a key under the
+  months states the bands (`ewr/bands.ts` `bandLabels`, naming what the
+  strip counts: "Green: under 5% of days below the EWR" (the pragmatic EWR
+  beside a rule table), "Amber: 5% to under 20%", "Red: 20% or more"), so the
+  colour is never the only cue: the count is written too. The bands are the
+  defaults; a team's own portfolio thresholds don't reach the workspace.
+  (Until then every bar was the warning colour.) A line under the heading says what it counts and the span ("… (EWR
   not met), the run's last 12 months: Jan 2024 – Dec 2024"). On a forecast
   run it stops before the month the forecast starts in, as the cards are the
   history's. Six a row on a phone. A run made before the monthly grid says
@@ -4326,8 +4364,8 @@ with the table the data needs).
 - **Header**: the section header titled "Data", its context line counting
   the series and those behind ("5 daily input series · 2 behind",
   `workspace/context.ts`), then the Rain up to pill, **Preview all data**
-  (filled through `fillHeader`; absent with no series) and **Add data**, the
-  main (primary) action for editors. *New data since the last run* is the
+  (filled through `fillHeader`; absent with no series), **Add data** and
+  **Run model** ([§ Section header](#section-header)) for editors. *New data since the last run* is the
   page's own notice here as on every tab (`freshness.ts` `newDataSinceRun`:
   a driver series updated after the run, a correction of old days
   included, or with data past its end; **Re-run model**, or *An automatic
@@ -4341,7 +4379,11 @@ with the table the data needs).
   that read "Daily values · 5 series · 2 behind (more than 7 days old) ·
   recorded rain up to …" repeated the context line and the pill, and was
   folded into the context (issue #174); the table's key says what *behind*
-  means.
+  means. Beside the panel's heading, for editors, **Fetch data
+  automatically (CHIRPS rain, forecast, DWS flow) → Data feeds** opens
+  Settings & calibration at [Data feeds](#data-feeds) (`?tab=settings#set-feeds`,
+  `data-testid="data-feeds-link"`; issue #444): the feeds live there, and a
+  project that used none had no way in from the page about its data.
 - **Freshness first**: the table lists the series **behind** first, most
   days behind first, then the series a run reads, then the rest (another
   series of that kind is read, reference only), keeping the list's order
@@ -5765,7 +5807,22 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
   **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`, with the
   **EWR required vs met, each water year** table under the grid, engine ≥
-  0.32.0, `ewr/EwrRequiredMet.svelte`), the
+  0.32.0, `ewr/EwrRequiredMet.svelte`; its cells by **% of days not met**
+  are in the EWR traffic light's three bands since issue #444, green under
+  5 %, amber under 20 %, red from 20 %: the default thresholds, the
+  portfolio's for a team that hasn't set its own, and the Summary strip's
+  (`ewr/heatmap.ts` `bandPct`, engine `EWR_TRAFFIC_LIGHT`; the note under
+  the grid says they are provisional), in the
+  status tokens' soft fill with the token as the number's ink (as the
+  portfolio's status pills; ≥ 5:1 in both themes; red with a 2 px edge, so
+  the worst band reads apart without telling red from green), the bands stated in the
+  key ("Green: under 5% of days not met", "Amber: 5% to under 20%", "Red:
+  20% or more") and each cell's words for screen readers and its tooltip
+  ("… (6%, amber)"); every month that missed a day keeps its number, a met
+  month is blank in the green band. Until then a blue ramp at 10, 25 and
+  50 %. **Shortfall volume** keeps the blue ramp relative to the grid's
+  largest month (`binVolume`): a volume has no pass mark, and banding it by
+  the traffic light's percentages would invent one), the
   **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
   under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
@@ -5848,7 +5905,12 @@ read it before.
   short in the last 7 when there were any, and the cut the curtailment table
   asks for; links to its node on the Network (`?tab=network&node=`), **Show on
   map** (`?tab=map&node=`, only for a unit a map feature is linked to; issue
-  #326 A2) and its planted areas (the farm drawer, `farm=`). The whole card picks the unit:
+  #326 A2), its planted areas (the farm drawer, `farm=`) and, for a unit the
+  run compared with a registered volume (`summary.allocations.nodes`) and a
+  role that sees Allocations, **Registered use** (named "<unit>: registered
+  vs modelled use"), [Allocations](#allocations-taballocations) with that run and
+  unit picked (`allocationsHref(run, { unit })`, `allocations/links.ts`;
+  issue #444). The whole card picks the unit:
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
 - **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
@@ -5863,15 +5925,21 @@ read it before.
   weaker copy of that one with neither line.
 - **Layout.** The page flows in the window's one scroll; nothing on it
   scrolls inside itself. From 56rem of page width the cards are a column
-  beside the chart (a fixed 420 px plot; 260 px stacked). The three least
-  supplied cards show, then **Show all N hydrological units**
+  beside the chart (a fixed 420 px plot; 260 px stacked). Folded, the list
+  shows the three least supplied cards and **every unit below the 95 %
+  supply target or short in the run's last 7 days**, wherever it sits
+  (`supply.ts` `needsLook`, `foldCards`; issue #444: it showed only the
+  three least supplied, so with ten units short the client read "only three
+  are short"). A line under them says what the rest are ("6 more meet the
+  95% supply target or have no irrigation demand, and none is short this
+  week.", `foldNote`), then **Show all N hydrological units**
   (`aria-expanded`, `aria-controls="unit-cards"`) opens the rest in place and
-  becomes **Show the 3 least supplied**; four units show whole. A picked unit
-  further down keeps its card after the three when the list is folded, so a
-  shared `unit=` link shows its card (`foldList`). On a
+  becomes **Show only the units to look into first**; when folding would
+  leave out one card or none the list shows whole. A picked unit further
+  down keeps its card after them, so a shared `unit=` link shows its card. On a
   wide window at least 700 px tall the chart is `position: sticky` just under
   the *On this page* menu (its height measured into `--nav-h`), so it stays
-  beside an opened list as it is read down. Narrower, one column: three
+  beside an opened list as it is read down. Narrower, one column: the same
   cards, the fold, then the chart; picking a card scrolls the chart into view.
   The page was fitted to the window until 2026-09-29, the cards scrolling
   inside their column, so with 40 units it looked like the whole page.
@@ -5884,7 +5952,8 @@ read it before.
 - **Below it**, under *Tables for this run*, the moved panels with their
   ids: **Hydrological unit results** (`#res-farms`, `supply/UnitResultsTable.svelte`, the
   table that was in the run summary; the printable report still shows it
-  there), **Curtailment** (`#res-curtailment`, with the
+  there; under it, for a role that sees Allocations, **Registered vs
+  modelled use, for each unit → Allocations** for the same run, issue #444), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`), **Assurance of supply**
   (`#res-assurance`), for a run with the drought restriction rule **Drought
   restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
@@ -5916,14 +5985,17 @@ read it before.
 - **The page** (issue #17): a reading page with the runs list beside the
   shown run. The section header's line counts the runs and says when the
   newest ran ("20 runs · newest ran today", "No runs yet"), and for an
-  editor the **run form** sits last in the header, after Add data, the only
-  place a run starts from the header: a **Run label** field, **Run forecast** (with a forecast
+  editor the **run form** sits last in the header, after Add data, in place
+  of the **Run model** button the other sections have ([§ Section
+  header](#section-header)): a **Run label** field, **Run forecast** (with a forecast
   series) and **Run model**. Its status (what a run still needs, flow shares
   over 100 %, unsaved model changes (Run model asks to save them first),
   inputs changed since the latest run,
   the progress while a run goes, else "Runs use the saved network…") is one
   slim line under the header (`#run-note`, the buttons' accessible
-  description), with the progress bar under it. A viewer gets no form, and
+  description), with the progress bar under it. A run the header started on
+  another section and still going when the page opens shows here the same
+  way, the form waiting for it. A viewer gets no form, and
   the inputs-changed note as before.
 - **The rail.** Where the page is at least 50rem (700 px) wide (a container
   query, `runs-page`), a 250 px left rail holds the runs list beside the
@@ -7407,7 +7479,14 @@ closing, and **Discard edits** puts it back. **Edits to record**
 WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
 [allocations.md](./allocations.md)); laid out as an option A page (issue
 #17). A core tab: owners, editors and viewers see it; farmers never reach the
-workspace.
+workspace. It is hidden from the sidebar until a person chooses their
+sections (`DEFAULT_HIDDEN_TABS`), so it is reached from links: the Summary's
+**Registered vs modelled use → Allocations**, and on [Hydrological
+units](#hydrological-units) the line under the unit results and each card's
+**Registered use** (with `unit=`), all with the run they show
+(`allocations/links.ts` `allocationsHref`; issue #444, after the client
+couldn't find the page). Opened from a link it shows in the sidebar in its
+place, as any hidden section does.
 
 **What a viewer sees** (decision D3, 162). Until an owner switches viewers
 on, a viewer gets one card instead of the page below, *Registered water use
