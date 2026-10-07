@@ -1,9 +1,10 @@
 // Tabs by role (issue #6, docs/ui.md § Tabs by role, lib/workspace/tabs.ts):
 // owners and editors see every tab; a viewer sees Overview, Data and Runs &
 // results, with the model inputs behind "Show model inputs". Presentation
-// only: a deep link to a hidden tab still opens it. On top of the role, History,
-// Allocations and Applications are hidden until a person chooses their own
-// sections (DEFAULT_HIDDEN_TABS; own-sections.spec.ts), so the role's full set
+// only: a deep link to a hidden tab still opens it. On top of the role, History
+// and Applications are hidden until a person chooses their own sections
+// (DEFAULT_HIDDEN_TABS, Allocations showing since issue #444;
+// own-sections.spec.ts), so the role's full set
 // is checked with every section shown. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -112,8 +113,8 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await v.goto(`/projects/${project.id}?tab=settings`);
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
-	// The open tab shows in the strip, in its place, and names the tab body (Allocations is hidden by default).
-	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Settings & calibration', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios']);
+	// The open tab shows in the strip, in its place, and names the tab body (Allocations shows by default, issue #444).
+	await expect.poll(() => tabNames(v)).toEqual(['Project', 'Map', 'Data', 'Settings & calibration', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();
@@ -122,15 +123,15 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await v.goto(`/projects/${project.id}?tab=demand`);
 	await expect(strip(v).getByRole('link', { name: 'Crops & demand' })).toHaveAttribute('aria-current', 'page');
 
-	// Arrow keys move through the tabs as shown (skipping the hidden Allocations, so Scenarios is last), across sections, and wrap.
+	// Arrow keys move through the tabs as shown (Allocations last), across sections, and wrap.
 	await v.goto(`/projects/${project.id}?tab=map`);
 	await strip(v).getByRole('link', { name: 'Map', exact: true }).focus();
 	await v.keyboard.press('ArrowLeft');
 	await expect(v).toHaveURL(/\?tab=project$/);
 	await expect(strip(v).getByRole('link', { name: 'Project', exact: true })).toBeFocused();
 	await v.keyboard.press('ArrowLeft');
-	await expect(v).toHaveURL(/\?tab=scenarios$/);
-	await expect(strip(v).getByRole('link', { name: 'Scenarios' })).toBeFocused();
+	await expect(v).toHaveURL(/\?tab=allocations$/);
+	await expect(strip(v).getByRole('link', { name: 'Allocations' })).toBeFocused();
 	await v.keyboard.press('ArrowRight');
 	await expect(v).toHaveURL(/\?tab=project$/);
 	await expect(strip(v).getByRole('link', { name: 'Project', exact: true })).toBeFocused();

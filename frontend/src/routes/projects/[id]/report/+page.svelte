@@ -30,7 +30,7 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type RunSummary, type SeriesMeta } from '@water-management/engine';
+	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
 	import { loadImpactSeries, type ImpactSeries } from '$lib/components/report/impactSeries';
 	import { parseRef } from '$lib/components/compare/picker';
@@ -243,14 +243,15 @@
 	const nodeOrder = $derived(new Map(nodes.map((n) => [n.id, n.sortOrder] as [string, number])));
 	const runName = $derived(run ? run.label || `Run of ${fmtDate(run.createdAt, true)}` : '');
 	const prepared = fmtDate(new Date().toISOString(), true);
-	// The cover box; an unsigned run nominated as evidence, or an impact report, says it isn't evidence.
 	// Which EWR the results are judged by (issue #444): the project's setting now, which a later change moves, so the
 	// printed copy says which it was.
-	const judgedLine = (summary: RunSummary): string => {
+	const judgedLine = $derived.by(() => {
+		if (!run) return '';
 		const choice = project?.settings.ewrHeadline;
-		const j = resolveHeadline(summary, choice);
-		return reportJudgedBy(j.site, choice, j.fellBack, !!summary.ewrAssurance?.length);
-	};
+		const j = resolveHeadline(run.summary, choice);
+		return reportJudgedBy(j.site, choice, j.fellBack, !!run.summary.ewrAssurance?.length);
+	});
+	// The cover box; an unsigned run nominated as evidence, or an impact report, says it isn't evidence.
 	const box = $derived(readFirst(sections, signoffs?.signoffs ?? [], run?.evidence === 'current' || !!againstParam));
 	// The server PDF prints this on every page (backend reports/render.ts reads it).
 	const footer = $derived(project && run ? REPORT_FOOTER(project.name, runName, disclaimerSection(sections)) : undefined);
@@ -388,7 +389,7 @@
 					</div>
 					<p class="lede">{runSentence(summary, project!.settings.ewrHeadline)}</p>
 					<!-- Which EWR the results are judged by (issue #444): the project's setting when printed, which a later change moves. -->
-					{#if judgedLine(summary)}<p class="judged" data-testid="report-judged-by">{judgedLine(summary)}</p>{/if}
+					{#if judgedLine}<p class="judged" data-testid="report-judged-by">{judgedLine}</p>{/if}
 					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain (CHIRPS-GEFS named only when it was the source). -->
 					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(run)}</p>{/if}
 					<nav aria-label="Contents">
@@ -647,7 +648,8 @@
 	.read-first p {
 		margin: 0.3rem 0 0;
 	}
-	.lede {
+	.lede,
+	.judged {
 		max-width: 72ch;
 		line-height: 1.55;
 	}

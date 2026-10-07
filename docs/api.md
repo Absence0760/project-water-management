@@ -126,7 +126,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   (`user_preferences`, 083), today `{ hiddenTabs: string[] | null }`: the
   workspace sections (`?tab=` ids) they hid from their sidebar ([ui.md § Tabs
   by role](./ui.md)); `null` until they choose (the app then hides its default
-  sections: History, Allocations, Applications), `[]` once they chose to show
+  sections: History and Applications), `[]` once they chose to show
   every one. Only ever their own.
   `termsVersion` is the version it accepted (`null`: none), from which the
   re-acceptance notice lists what changed since.
