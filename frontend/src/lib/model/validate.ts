@@ -209,7 +209,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a hydrological unit has a dam';
 			if (bad) issues.push({ area: 'network', itemId: n.id, message: `${label}: dam survey curve: ${bad}.` });
 		}
-		// Bed losses in the reach below (engine ≥ 1.75.0), as the API checks them: a share up to 50 %, a cap ≥ 0, none on the outlet.
+		// Bed losses in the reach below (engine ≥ 1.75.0), as the API checks them: a share up to 100 %, a cap ≥ 0, none on the outlet.
 		if (!inRange(n.reachLossFrac ?? 0, 0, REACH_LOSS_FRAC_MAX))
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: the share of the flow lost in the reach below must be between 0% and ${REACH_LOSS_FRAC_MAX * 100}%.` });
 		if (!inRange(n.reachLossMaxM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the most lost in the reach below in a day can't be negative.` });

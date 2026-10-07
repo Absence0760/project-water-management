@@ -125,9 +125,8 @@ describe('bed losses in the reach below (engine 1.75.0)', () => {
 	const share = NODE_FIELDS.find((x) => x.key === 'reachLossFrac')!;
 	const cap = NODE_FIELDS.find((x) => x.key === 'reachLossMaxM3Day')!;
 
-	it('is a percentage up to 50 %, and a nullable cap, both in the one-node form only', () => {
+	it('is a percentage up to 100 %, and a nullable cap, both in the one-node form only', () => {
 		expect(share.unit).toBe('%');
-		expect(share.max).toBe(50);
 		expect(cap.nullable).toBe(true);
 		expect(TABLE_FIELDS.some((f) => f.group === 'reach')).toBe(false);
 		expect(GROUPS.reach).toBe('Bed losses in the reach below');

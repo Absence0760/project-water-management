@@ -46,8 +46,6 @@ export interface NodeField {
 	/** Farms and other water users, not gauges (boreholes, WP-1.34). */
 	notGauge?: boolean;
 	nullable?: boolean;
-	/** The most the input takes, as shown (a percentage's 0–100 scale): 50 for bed losses' share. Absent = 100 for a percentage, else none. */
-	max?: number;
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
 	/** A flow rate whose unit is picked beside it (./flowUnit.svelte.ts): `unit` and `scale` follow it. */
@@ -304,10 +302,9 @@ export const NODE_FIELDS: NodeField[] = [
 		detailOnly: true,
 		label: 'Share of the flow lost',
 		unit: '%',
-		max: 50,
 		group: 'reach',
 		aria: (n) => `Share of the flow below ${n} lost into the river bed before the next hydrological unit, %`,
-		help: 'Share of the flow leaving here that soaks into the river bed and banks before it reaches the next hydrological unit downstream, and leaves the catchment. 0 % (the default) for a perennial reach. Set it only where a gauge shows low flows the model keeps over-simulating that abstractions and dams don’t explain; above 30 % needs a source. At most 50 %.'
+		help: 'Share of the flow leaving here that soaks into the river bed and banks before it reaches the next hydrological unit downstream, and leaves the catchment. 0 % (the default) for a perennial reach. Set it only where a gauge shows low flows the model keeps over-simulating that abstractions and dams don’t explain; above 30 % needs a source. 100 % with a daily maximum is WRSM’s bed loss: the whole flow up to that much a day.'
 	},
 	{
 		key: 'reachLossMaxM3Day',

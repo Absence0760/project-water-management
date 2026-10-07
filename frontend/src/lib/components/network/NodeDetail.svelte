@@ -251,7 +251,7 @@
 							<NumberInput
 								id={id(f.key)}
 								min={0}
-								max={f.max ?? (isPct(f) ? 100 : undefined)}
+								max={isPct(f) ? 100 : undefined}
 								scale={fieldScale(f)}
 								nullable={f.nullable}
 								grouped={!isPct(f)}
