@@ -28,7 +28,7 @@
 	import { historyDays } from '$lib/components/overview/latestRun';
 	import { hasRuleLine } from '$lib/components/overview/summaryChart';
 	import { resolveHeadline } from '$lib/components/runs/ewrAssurance';
-	import { judgedByText } from '$lib/components/ewr/headline';
+	import { heatmapHeadlineNote, judgedByText } from '$lib/components/ewr/headline';
 	import { detailCache } from '$lib/components/runs/cache';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { holdAnchor } from '$lib/help/anchor';
@@ -315,7 +315,7 @@
 			{/if}
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
-					<EwrHeatmap compliance={summary.ewrCompliance} />
+					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline)} />
 				{:else}
 					<h3>EWR compliance by month</h3>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>

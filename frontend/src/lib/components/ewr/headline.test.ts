@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, judgedByText, resolveEwrHeadline, ruleTableSites } from './headline';
+import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, heatmapHeadlineNote, judgedByText, resolveEwrHeadline, ruleTableSites } from './headline';
 
 // Synthetic network: an outlet gauge, two gauges above it, a farm.
 const nodes = [
@@ -82,6 +82,19 @@ describe('judgedByText', () => {
 		expect(judgedByText(null, undefined)).toBe('the pragmatic EWR at the outflow gauge (automatic)');
 		expect(judgedByText({ isOutlet: true, name: 'Outlet weir' }, { source: 'auto' })).toBe('the Reserve rule table at the outlet, Outlet weir (automatic)');
 		expect(judgedByText({ isOutlet: false, name: 'Gauge A' }, { source: 'ruleTable', siteNodeId: 'g1' })).toBe('the Reserve rule table at Gauge A');
+	});
+});
+
+describe('heatmapHeadlineNote', () => {
+	it('says the heat map’s bands aren’t the rule table the results are judged by, and nothing when the pragmatic EWR judges them', () => {
+		expect(heatmapHeadlineNote({ isOutlet: false, name: 'Gauge A' }, { source: 'ruleTable', siteNodeId: 'g1' })).toBe(
+			'These bands count days below the pragmatic EWR; the results are judged by the Reserve rule table at Gauge A instead.'
+		);
+		expect(heatmapHeadlineNote({ isOutlet: true, name: 'Outlet weir' }, undefined)).toBe(
+			'These bands count days below the pragmatic EWR; the results are judged by the Reserve rule table at the outlet, Outlet weir (automatic) instead.'
+		);
+		expect(heatmapHeadlineNote(null, { source: 'pragmatic' })).toBe('');
+		expect(heatmapHeadlineNote(null, undefined)).toBe('');
 	});
 });
 

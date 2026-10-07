@@ -46,6 +46,7 @@
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import { heatmapHeadlineNote } from '$lib/components/ewr/headline';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
 	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
@@ -67,6 +68,7 @@
 	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
 	import { hasHumanImpacts, loadHumanImpacts } from '$lib/components/runs/humanImpacts';
 	import { loadRestrictionTables } from '$lib/components/runs/restrictions';
+	import { resolveHeadline } from '$lib/components/runs/ewrAssurance';
 	import { runSentence } from '$lib/components/runs/runSentence';
 	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -474,7 +476,7 @@
 						{/each}
 						{#if summary.ewrCompliance}
 							{#each ['outlet', ...summary.ewrCompliance.farms.map((f) => f.nodeId ?? 'outlet')] as site, j (j)}
-								<div class="sub"><EwrHeatmap compliance={summary.ewrCompliance} {site} print /></div>
+								<div class="sub"><EwrHeatmap compliance={summary.ewrCompliance} {site} print headlineNote={heatmapHeadlineNote(resolveHeadline(summary, project!.settings.ewrHeadline).site, project!.settings.ewrHeadline)} /></div>
 							{/each}
 						{:else}
 							<p class="muted">This run was made before the monthly EWR compliance grid existed.</p>

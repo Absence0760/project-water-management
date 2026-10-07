@@ -5926,7 +5926,13 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   month is blank in the green band. Until then a blue ramp at 10, 25 and
   50 %. **Shortfall volume** keeps the blue ramp relative to the grid's
   largest month (`binVolume`): a volume has no pass mark, and banding it by
-  the traffic light's percentages would invent one), the
+  the traffic light's percentages would invent one. When a Reserve rule
+  table judges the results (settings.ewrHeadline, resolved for the run by
+  `resolveHeadline`), the outlet's note under the grid adds "These bands
+  count days below the pragmatic EWR; the results are judged by the Reserve
+  rule table at … instead." (`ewr/headline.ts` `heatmapHeadlineNote`, which
+  RiverTab and the printable report pass as `headlineNote`); a unit's note,
+  which counts its charged shortfall, doesn't), the
   **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
   under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal

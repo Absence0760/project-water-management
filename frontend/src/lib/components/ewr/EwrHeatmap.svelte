@@ -32,13 +32,16 @@
 	let {
 		compliance,
 		site: initialSite = 'outlet',
-		print = false
+		print = false,
+		headlineNote = ''
 	}: {
 		compliance: EwrCompliance | undefined | null;
 		/** The site shown first: 'outlet' or a farm's node id. */
 		site?: string;
 		/** The printable report's static view: one site, named in the heading, no pickers or keyboard read-out. */
 		print?: boolean;
+		/** When the results are judged by a Reserve rule table: a clause for the outlet's note saying the bands aren't that test (ewr/headline.ts heatmapHeadlineNote). */
+		headlineNote?: string;
 	} = $props();
 
 	const uid = $props.id();
@@ -221,7 +224,7 @@
 		</div>
 		<p id="{uid}-note" class="note muted">
 			{#if site === 'outlet'}
-				A day counts when simulated outflow at the outlet is below the pragmatic EWR.
+				A day counts when simulated outflow at the outlet is below the pragmatic EWR.{headlineNote ? ` ${headlineNote}` : ''}
 			{:else}
 				A day counts when this hydrological unit is charged part of the shortfall at an EWR site below it (runs before engine 0.17.0: when its reach shortfall was below zero).
 			{/if}

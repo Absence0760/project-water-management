@@ -115,3 +115,13 @@ export function judgedByText(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> |
 	const what = site ? `the Reserve rule table at ${site.isOutlet ? `the outlet, ${site.name}` : site.name}` : 'the pragmatic EWR at the outflow gauge';
 	return !choice || choice.source === 'auto' ? `${what} (automatic)` : what;
 }
+
+/**
+ * The EWR compliance heat map's clause when the headline is a rule table
+ * (site from resolveHeadline): its outlet cells count days below the
+ * pragmatic EWR, which isn't what the results are judged by. '' when the
+ * headline is the pragmatic EWR itself.
+ */
+export function heatmapHeadlineNote(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> | null, choice: EwrHeadline | null | undefined): string {
+	return site ? `These bands count days below the pragmatic EWR; the results are judged by ${judgedByText(site, choice)} instead.` : '';
+}
