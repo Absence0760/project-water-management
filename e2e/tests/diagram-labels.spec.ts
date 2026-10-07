@@ -126,6 +126,10 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(60) });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(60) });
 	const runId = await createRun(page.request, project.id, 'Baseline');
+	// One dam resized since the run (issue #444): coloured, its label line is the longest, "…% full · now 1.75 Mm³".
+	const resized = model.nodes.find((n) => n.damCapacityM3 > 1_000_000)!;
+	resized.damCapacityM3 += 500_000;
+	await putModel(page.request, project.id, model);
 
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await expect(page.locator('svg.schematic g.node')).toHaveCount(model.nodes.length);
@@ -139,6 +143,7 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 		for (const colourBy of ['supply', 'dam', 'none']) {
 			await page.getByLabel('Colour hydrological units by').selectOption(colourBy);
 			await waitForMapFit(page);
+			await expect(page.locator('svg.schematic g.node[data-changed]')).toHaveCount(colourBy === 'none' ? 0 : 1);
 			await expectCleanSchematic(page, `map at ${size.width}, coloured by ${colourBy}`);
 		}
 		// The node list: what a node drains into never squeezes its name, and nothing runs past the card.

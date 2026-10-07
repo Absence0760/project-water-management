@@ -10,6 +10,8 @@
 	import { apanDailyOfInput, chirpsSourceOfInput, originOfFit, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
 	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import CalibrationCheck from '$lib/components/calibration/CalibrationCheck.svelte';
+	import type { CheckNode } from '$lib/components/calibration/calibrationCheck';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
@@ -690,12 +692,23 @@
 				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
 				flagUse={shownSettings ? resolveQualityFlags(shownSettings.qualityFlags) : null}
 			>
-				{#snippet modelTail()}
+				{#snippet modelTail(flow)}
 					<div class="panel" id="res-calibration">
 						<CalibrationPanel
 							calibration={summary.calibration}
 							requestedStart={runSettings.calibrationStart ?? null}
 							requestedEnd={runSettings.calibrationEnd ?? null}
+						/>
+						<!-- Flow against use at each gauge with a record (issue #444): where a calibration gap is read. -->
+						<CalibrationCheck
+							{projectId}
+							runId={shownRunId}
+							refs={runSeries}
+							nodes={(shownRun.model?.nodes ?? []) as unknown as CheckNode[]}
+							{nodeNames}
+							forecastFrom={summary.forecast?.from ?? null}
+							flowUnit={flow.flowUnit}
+							toolbar={flow.toolbar}
 						/>
 						{#if shownSettings}
 							<div class="provenance">

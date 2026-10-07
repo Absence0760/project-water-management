@@ -1,6 +1,6 @@
 import { STRESS_THRESHOLDS, supplyAssurance, type WaterAccountRow } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { accountBars, accountLines, classCounts, ewrMetShare, notComputedText, partWaterYears, pctText, stressLegend } from './reliability';
+import { accountBars, accountLines, classCounts, classOf, ewrMetShare, nodeAssurance, notComputedText, partWaterYears, pctText, reliabilityLine, stressLegend } from './reliability';
 
 const zeros = (n: number) => new Array<number>(n).fill(0);
 
@@ -96,5 +96,40 @@ describe('water account view', () => {
 		const r: WaterAccountRow = { ...t, storageChangeM3: -50, naturalFlowM3: 550 };
 		const b = accountBars(r);
 		expect(b.inBar.map((s) => s.label)).toEqual(['Natural flow', 'Drawn from dam storage']);
+	});
+});
+
+describe('one node’s assurance (a unit’s detail, its dam on the Dams page)', () => {
+	it('classes a ratio by the run’s own thresholds', () => {
+		expect(classOf(0.95, STRESS_THRESHOLDS)).toBe('low');
+		expect(classOf(0.9, STRESS_THRESHOLDS)).toBe('moderate');
+		expect(classOf(0.49, STRESS_THRESHOLDS)).toBe('critical');
+		expect(classOf(null, STRESS_THRESHOLDS)).toBeNull();
+		expect(classOf(NaN, STRESS_THRESHOLDS)).toBeNull();
+		// Thresholds stored with the run win over the engine's current ones.
+		expect(classOf(0.9, [{ cls: 'low', min: 0.8 }])).toBe('low');
+	});
+
+	it('picks the node’s reliability and grid, and classes each month pooled over the window', () => {
+		const n = nodeAssurance(a, 'A')!;
+		expect(n.reliability.name).toBe('Farm A');
+		expect(n.grid?.nodeId).toBe('A');
+		expect(n.months).toHaveLength(12);
+		// September 2001 (index 11): demand 20 over two days, 15 supplied → 75%, High.
+		expect(n.months[11]).toEqual({ ratio: 0.75, cls: 'high' });
+		// October 2001 (index 0): demand 30 over three demand days, 14 supplied → under 50%, Critical.
+		expect(n.months[0]!.ratio).toBeCloseTo(14 / 30, 9);
+		expect(n.months[0]!.cls).toBe('critical');
+		// A month with no demand in the window has no class.
+		expect(n.months[3]).toEqual({ ratio: null, cls: null });
+		expect(nodeAssurance(a, 'gone')).toBeNull();
+	});
+
+	it('says the reliability in one line, and says so when there was no demand', () => {
+		const r = nodeAssurance(a, 'A')!.reliability;
+		expect(reliabilityLine(r)).toBe(`${pctText(r.timeReliability, 1)} of demand days fully met · ${pctText(r.volumetricReliability, 1)} of the demand volume supplied`);
+		expect(reliabilityLine({ ...r, waterYears: 3, waterYearsMet: 2, annualReliability: 2 / 3 })).toMatch(/ · 2 of 3 water years met \(67%\)$/);
+		expect(reliabilityLine({ ...r, waterYears: 1, waterYearsMet: 1, annualReliability: 1 })).toMatch(/1 of 1 water year met \(100%\)$/);
+		expect(reliabilityLine({ ...r, demandDays: 0 })).toBe('No demand in the reporting window.');
 	});
 });

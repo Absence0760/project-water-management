@@ -7,6 +7,7 @@
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
+	import { damChanges } from '$lib/components/dams/dams';
 	import { damEndPctFromSummary, damInRun, type DamEnd, damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
 	import { historyEnd } from '$lib/components/overview/latestRun';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
@@ -168,12 +169,20 @@
 		});
 	});
 
+	// Dams edited since the coloured run (issue #444): against the run's own model, read from the Runs cache once
+	// the run is loaded (supplyRun follows the load). The drawing marks them; their colour and figure stay the run's.
+	const changedDams = $derived.by(() => {
+		const id = supplyRun?.id;
+		const runNodes = id && latestRun?.id === id ? detailCache.get(id)?.run.model?.nodes : undefined;
+		return new Map([...damChanges(runNodes as { id: string }[] | undefined, nodes)].map(([nodeId, c]) => [nodeId, { text: c.text, capacity: !!c.capacity }]));
+	});
 	const colouring = $derived.by((): Colouring | null => {
 		if (colourBy === 'none' || !farms.length) return null;
 		if (!latestRun || supplyRun?.id !== latestRun.id) return null;
 		const run = { name: latestRun.label || fmtDate(latestRun.createdAt, true), ago: ranAgo(latestRun.createdAt) };
-		if (colourBy === 'supply') return supplyColouring(nodes, supplyRun.summary, run, editor.dirty);
-		return damLevels?.runId === latestRun.id ? damColouring(nodes, damLevels.levels, run, editor.dirty) : null;
+		const changed = changedDams.size ? { changed: changedDams } : {};
+		if (colourBy === 'supply') return { ...supplyColouring(nodes, supplyRun.summary, run, editor.dirty), ...changed };
+		return damLevels?.runId === latestRun.id ? { ...damColouring(nodes, damLevels.levels, run, editor.dirty), ...changed } : null;
 	});
 
 	// The Network is one page, the map (issue #17, option A · A2): the node
