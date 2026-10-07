@@ -276,10 +276,11 @@ decide a licence application.
 
 ## Sign-up by invitation
 
-Production admits only invited people until the go-live gates that come
-before the first open sign-up are done ([legal-status.md](./legal-status.md),
-Gates A and C: the information officer's registration and a published
-business address). While sign-up is closed, `POST /auth/register` makes an
+Production ran invite-only from 2026-10-05 and has been **open since
+2026-10-06** (`signup_open = true`), opened by the operator before go-live
+Gates A and C ([legal-status.md](./legal-status.md): the information
+officer's registration and a published business address). While sign-up is
+closed, `POST /auth/register` makes an
 account only through a **live invite for exactly the address it signs up
 with** (a project or team invite, or a farmer invite); anything else (no
 token, a malformed or unknown one, a live invite for another address) is
@@ -299,8 +300,8 @@ token, a malformed or unknown one, a live invite for another address) is
   invites them, and the invite link signs them up, verified and joined. An
   existing account is untouched; signing in, resets and verification work
   as before.
-- **To open it,** once Gates A and C are done: `signup_open = true` in the
-  tfvars, plan and apply. Tests: `auth/signupOpen.test.ts`,
+- **To open or close it:** `signup_open = true` or `false` in the
+  tfvars, plan and apply (no release needed). Tests: `auth/signupOpen.test.ts`,
   `auth/signupClosed.security.db.test.ts`, and the `signup_open` runs in
   `infra/tests/guardrails.tftest.hcl`.
 
