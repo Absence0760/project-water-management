@@ -31,7 +31,7 @@ export interface Colouring {
 	/** The colours are a run's, and the model has unsaved edits they don't reflect. */
 	unsaved: boolean;
 	/**
-	 * Units whose dam has been edited since that run (dams/dams.ts damChanges,
+	 * Units whose dam's own settings have been edited since that run (dams/dams.ts damChanges,
 	 * issue #444), each with its sentence and whether its capacity changed: the drawing marks them, since their
 	 * colour and figure are the run's. Absent = none, or the run's model isn't known.
 	 */

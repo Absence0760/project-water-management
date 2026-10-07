@@ -41,7 +41,7 @@
 	import { withParam } from '$lib/workspace/overlays';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
-	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
+	import { changeWords, DAM_CHANGED, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 	import DamProposalsBox from './DamProposalsBox.svelte';
 
 	let {
@@ -303,8 +303,8 @@
 								<span class="cap muted">{c.nowCapacityM3 >= 1 ? fmtVolume(c.nowCapacityM3) : 'no dam now'}</span>
 							</div>
 							{#if c.change}
-								<!-- The figures below are the run's, worked out with the dam as it was then (issue #173); say it changed (issue #444). -->
-								<p class="changed small" data-testid="dam-changed"><span class="badge badge-warn">Changed since the run</span> {c.change.text.replace(/^Changed since the run: /, '')}</p>
+								<!-- The figures below are the run's, worked out with the dam as it was then (issue #173); say its own settings changed (issue #444); edits upstream aren't checked. -->
+								<p class="changed small" data-testid="dam-changed"><span class="badge badge-warn">{DAM_CHANGED}</span> {c.change.detail}</p>
 							{/if}
 							{#if c.level && band}
 								<p class="level">

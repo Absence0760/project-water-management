@@ -6,9 +6,9 @@
 // the model into the page's cards, header line, sparkline and chart series.
 // Pure, so the page stays markup and the numbers are unit-tested. A card's
 // figures are the run's (issue #173); its capacity is the model's now, and
-// when the dam has been edited since the run the card says so (damChange,
-// issue #444), as the Network's drawing does.
-import { DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
+// when the dam's own settings have been edited since the run the card says so
+// (damChange, issue #444), as the Network's drawing does.
+import { CROP_SUPPLY_DEFAULTS, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, SUPPLY_DEFAULTS, WATER_SOURCE_DEFAULTS, fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
 import { pctOfCapacity, type DamLevel } from '$lib/components/overview/damLevels';
 import { fmtDay, fmtNum } from '$lib/format/number';
@@ -20,10 +20,15 @@ const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0
 type NodeLike = { id: string; name?: string; kind?: string; damCapacityM3?: unknown; damMinPct?: unknown };
 
 /**
- * The fields that change what a run works out for a dam, each with what it
- * is about in words. Absent on one side (a run saved before the field
- * existed) means the default for the WP-3.5 and development fields, and is
- * not compared for the rest.
+ * The dam's own settings that change what a run works out for it, each with
+ * what it is about in words: the dam's fields and how its own unit draws on
+ * it (the supply rule and its switch levels, the crops' water source and
+ * supply table). Absent on one side (a run saved before the field existed)
+ * means the default for the WP-3.5, development and supply fields, and is not
+ * compared for the rest. Edits elsewhere that change what reaches the dam or
+ * what is asked of it (a unit upstream, its bed losses, the crops and their
+ * areas, another unit's pipe from this dam) are not checked: this is the
+ * dam's own settings only, and the badge says so.
  */
 const DAM_FIELDS: readonly [string, string][] = [
 	['damMinPct', 'minimum level'],
@@ -40,9 +45,19 @@ const DAM_FIELDS: readonly [string, string][] = [
 	['damSedimentPctPerYear', 'capacity over time'],
 	['damInServiceFrom', 'capacity over time'],
 	['pctUpstreamToDam', 'what flows into it'],
-	['pctRunoffToDam', 'what flows into it']
+	['pctRunoffToDam', 'what flows into it'],
+	['supplyRule', 'how its unit draws on it'],
+	['supplyTriggerPct', 'how its unit draws on it'],
+	['supplyStopPct', 'how its unit draws on it'],
+	['cropWaterSource', 'how its unit draws on it'],
+	['cropShareDam', 'how its unit draws on it'],
+	['cropShareRiver', 'how its unit draws on it'],
+	['cropShareRemote', 'how its unit draws on it']
 ];
-const DAM_DEFAULTS: Record<string, unknown> = { ...DAM_STORAGE_DEFAULTS, ...DEVELOPMENT_DEFAULTS };
+const DAM_DEFAULTS: Record<string, unknown> = { ...DAM_STORAGE_DEFAULTS, ...DEVELOPMENT_DEFAULTS, ...SUPPLY_DEFAULTS, ...WATER_SOURCE_DEFAULTS, ...CROP_SUPPLY_DEFAULTS };
+
+/** The card's badge, and the start of damChange's sentence: what the check covers, the dam's own settings only. */
+export const DAM_CHANGED = 'Dam settings changed since the run';
 
 /** How a dam differs between the run's model and the model now (damChange). */
 export interface DamChange {
@@ -50,14 +65,16 @@ export interface DamChange {
 	capacity: { run: number; now: number } | null;
 	/** What else changed, in words ("minimum level", "release rule"). */
 	other: string[];
-	/** One sentence for a badge's title, a tooltip and the drawing's text equivalent. */
+	/** What changed and "Re-run to update.", for after the card's badge. */
+	detail: string;
+	/** One sentence for a badge's title, a tooltip and the drawing's text equivalent: DAM_CHANGED, then the detail. */
 	text: string;
 }
 
 /**
- * Whether a unit's dam has been edited since the run (issue #444): its
- * capacity (added, removed or resized) or anything else the run's dam
- * figures were worked out with. null when it is the same, when the unit had
+ * Whether a unit's dam's own settings have been edited since the run (issue
+ * #444): its capacity (added, removed or resized) or another of DAM_FIELDS.
+ * null when it is the same, when the unit had
  * no dam then and has none now, or when either side is missing (a unit added
  * since the run, a run saved without its model).
  */
@@ -88,7 +105,8 @@ export function damChange(runNode: object | undefined, liveNode: object | undefi
 				? 'dam removed'
 				: `capacity ${fmtVolume(capRun)} in the run, ${fmtVolume(capNow)} now`
 		: '';
-	return { capacity, other, text: `Changed since the run: ${[what, ...other].filter(Boolean).join(', ')}. Re-run to update.` };
+	const detail = `${[what, ...other].filter(Boolean).join(', ')}. Re-run to update.`;
+	return { capacity, other, detail, text: `${DAM_CHANGED}: ${detail}` };
 }
 
 /** damChange for every unit in the model now that the run also has, keyed by node id (only the changed ones). */

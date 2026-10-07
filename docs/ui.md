@@ -1491,14 +1491,19 @@ for every workspace tab. Its own chunk.
   below into view, focus on its **Dam of**, so it is never ten or thirty
   cards down out of reach). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
-- **Changed since the run** (issue #444): a card's figures are the run's,
+- **Dam settings changed since the run** (issue #444): a card's figures are the run's,
   worked out with the dam as the run's own model had it (issue #173), but its
-  head and the header's total capacity are the model's now. When the dam
-  differs from the run's model (`damChange`, the same rule as the Network's
-  mark, [§ Network](#network)), a line under the head says so: a **Changed
-  since the run** badge, then what changed ("capacity 150 000 m³ in the run,
-  200 000 m³ now. Re-run to update."). A run saved without its model can't
-  be compared, so it marks nothing.
+  head and the header's total capacity are the model's now. When the dam's
+  own settings differ from the run's model (`damChange`, the same rule as the Network's
+  mark, [§ Network](#network)), a line under the head says so: a **Dam
+  settings changed since the run** badge, then what changed ("capacity 150 000 m³ in the run,
+  200 000 m³ now. Re-run to update."; "how its unit draws on it" for its
+  unit's supply rule, its switch levels, the crops' water source or supply
+  table). It checks the dam's own settings only, so the badge says so: an
+  edit elsewhere that changes what reaches the dam or what is asked of it (a
+  unit upstream, bed losses in a reach above it, the crops and their areas,
+  another unit's pipe from it) isn't compared, and still needs a re-run. A
+  run saved without its model can't be compared, so it marks nothing.
 - **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
   cards (`dams/DamLevels.svelte`: every column was already on the cards, their
   sparklines or the picked dam's facts line, in the same order; the cards took
@@ -2255,15 +2260,18 @@ itself.
     run's own model (`dams/dams.ts`
     `damChanges`: capacity added, removed or resized by 1 m³ or more, or its
     minimum or starting level, surface area or curve, seepage, release rule,
-    sediment and in-service date, or the shares routed into it; a field the
-    run's model lacks counts as its default, a stored null is a value) adds
+    sediment and in-service date, or the shares routed into it, or how its
+    own unit draws on it (supply rule and switch levels, the crops' water
+    source and supply table); a field the
+    run's model lacks counts as its default, a stored null is a value; only
+    the dam's own settings, never an edit upstream) adds
     its capacity now to the line ("64% full · now 0.20 Mm³", "82% supplied ·
-    no dam now"), or "changed" when the capacity is the same; a dot in the
+    no dam now"), or "dam changed" when the capacity is the same; a dot in the
     drawing's ink on its symbol's corner; the sentence in its tooltip and the
-    drainage tree ("Changed since the run: capacity 150 000 m³ in the run,
+    drainage tree ("Dam settings changed since the run: capacity 150 000 m³ in the run,
     200 000 m³ now. Re-run to update."); a **Since the run** group in the key
-    ("Dam changed: re-run to update"); and a read-out line under the caption
-    ("Marked: a dam edited since that run. The colour and % are the run's;
+    ("Dam settings changed: re-run to update"); and a read-out line under the caption
+    ("Marked: a dam whose own settings were edited since that run. The colour and % are the run's;
     “now” is the capacity in the model today. Run the model again to update
     them."). An unchanged unit's line stays the colour's figure alone, and a
     plain drawing has no run figures, so no mark.

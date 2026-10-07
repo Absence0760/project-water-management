@@ -105,7 +105,7 @@
 	const changedCount = $derived(colouring?.changed?.size ?? 0);
 	const changedSentence = $derived(
 		changedCount
-			? `Marked: ${changedCount === 1 ? 'a dam' : `${changedCount} dams`} edited since that run. The colour and % are the run's; “now” is the capacity in the model today. Run the model again to update them.`
+			? `Marked: ${changedCount === 1 ? 'a dam' : `${changedCount} dams`} whose own settings were edited since that run. The colour and % are the run's; “now” is the capacity in the model today. Run the model again to update them.`
 			: ''
 	);
 	const legend = $derived(colouring?.legend ?? []);
@@ -389,7 +389,7 @@
 			{#if changedCount}
 				<ul class="legend">
 					<li class="key-h">Since the run</li>
-					<li><svg width="18" height="18" viewBox="-10 -10 20 20"><rect class="farm dam" x="-9" y="-6" width="15" height="15" rx="3" /><circle class="changed-mark" cx="6" cy="-6" r="3.5" /></svg> Dam changed: re-run to update</li>
+					<li><svg width="18" height="18" viewBox="-10 -10 20 20"><rect class="farm dam" x="-9" y="-6" width="15" height="15" rx="3" /><circle class="changed-mark" cx="6" cy="-6" r="3.5" /></svg> Dam settings changed: re-run to update</li>
 				</ul>
 			{/if}
 		{/if}

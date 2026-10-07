@@ -449,10 +449,10 @@ describe('metaLine (a node’s second label line)', () => {
 		expect(metaLine({ node: farm(0), cumulativeAreaKm2: 12 }, { text: '82% supplied' })).toBe('82% supplied');
 	});
 
-	it('coloured, edited since the run: the capacity now, or "changed" when the capacity is the same (issue #444)', () => {
+	it('coloured, edited since the run: the capacity now, or "dam changed" when the capacity is the same (issue #444)', () => {
 		expect(metaLine({ node: farm(200_000), cumulativeAreaKm2: 12 }, { text: '64% full' }, { capacity: true })).toBe('64% full · now 0.20 Mm³');
 		expect(metaLine({ node: farm(0), cumulativeAreaKm2: 12 }, { text: '82% supplied' }, { capacity: true })).toBe('82% supplied · no dam now');
-		expect(metaLine({ node: farm(150_000), cumulativeAreaKm2: 12 }, { text: '64% full' }, { capacity: false })).toBe('64% full · changed');
+		expect(metaLine({ node: farm(150_000), cumulativeAreaKm2: 12 }, { text: '64% full' }, { capacity: false })).toBe('64% full · dam changed');
 		// A plain drawing is today's model: nothing to mark.
 		expect(metaLine({ node: farm(200_000), cumulativeAreaKm2: 12 }, undefined, { capacity: true })).toBe('12.0 km² · 0.20 Mm³');
 	});

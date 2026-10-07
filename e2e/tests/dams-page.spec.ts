@@ -380,12 +380,12 @@ test('a dam resized since the run: the Network’s drawing shows today’s capac
 	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand) · now 0\.20 Mm³$/);
 	await expect(node('Upper farm')).toHaveAttribute('data-changed', 'true');
 	await expect(node('Upper farm').getByTestId('dam-changed-mark')).toHaveCount(1);
-	await expect(node('Upper farm').locator('title')).toContainText('Changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
+	await expect(node('Upper farm').locator('title')).toContainText('Dam settings changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
 	// The unchanged dam isn't marked.
 	await expect(node('Lower farm').locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
 	await expect(node('Lower farm')).not.toHaveAttribute('data-changed');
-	await expect(page.getByTestId('changed-since-run')).toHaveText('Marked: a dam edited since that run. The colour and % are the run\'s; “now” is the capacity in the model today. Run the model again to update them.');
-	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('. Changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
+	await expect(page.getByTestId('changed-since-run')).toHaveText('Marked: a dam whose own settings were edited since that run. The colour and % are the run\'s; “now” is the capacity in the model today. Run the model again to update them.');
+	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByRole('listitem').filter({ hasText: 'Upper farm' })).toContainText('. Dam settings changed since the run: capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
 	// Coloured by dam level (the % of the run's capacity), the same.
 	await colourBy.selectOption({ label: 'Dam level, end of latest run' });
 	await expect(node('Upper farm').locator('text.meta')).toHaveText(/^\d+%(,| full).* · now 0\.20 Mm³$/);
@@ -398,7 +398,7 @@ test('a dam resized since the run: the Network’s drawing shows today’s capac
 	await openDams(page, project.id);
 	await expect(page.getByTestId('dams-summary')).toHaveText('2 dams · 290\u202f000 m³ capacity · latest run “Baseline”, ran today');
 	await expect(card(page, 'Upper farm').locator('.card-head .cap')).toHaveText('200\u202f000 m³');
-	await expect(card(page, 'Upper farm').getByTestId('dam-changed')).toHaveText('Changed since the run capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
+	await expect(card(page, 'Upper farm').getByTestId('dam-changed')).toHaveText('Dam settings changed since the run capacity 150\u202f000 m³ in the run, 200\u202f000 m³ now. Re-run to update.');
 	await expect(card(page, 'Lower farm').getByTestId('dam-changed')).toHaveCount(0);
 
 	// A new run with the new capacity clears the marks.
