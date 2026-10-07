@@ -410,7 +410,7 @@ test('the over/under-use chart: every unit and source with a volume in the listâ
 	await expectNoViolations(page);
 });
 
-test('hidden from the sidebar by default, it opens from the Summary and from Hydrological units, with the run and the unit', async ({ page, owner }) => {
+test('in the sidebar by default, it also opens from the Summary and from Hydrological units, with the run and the unit', async ({ page, owner }) => {
 	test.setTimeout(90_000);
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
@@ -421,13 +421,14 @@ test('hidden from the sidebar by default, it opens from the Summary and from Hyd
 
 	// The Summary: a link to the comparison, for the run it shows.
 	await page.goto(`/projects/${p.id}`);
-	await expect(sections.getByRole('link', { name: 'Allocations' })).toHaveCount(0);
+	// Shown in the sidebar until a person hides it (DEFAULT_HIDDEN_TABS, issue #444: the client couldn't find it).
+	await expect(sections.getByRole('link', { name: 'Allocations' })).toBeVisible();
 	const fromSummary = page.getByRole('link', { name: /^Registered vs modelled use\s+Allocations$/ });
 	await expect(fromSummary).toHaveAttribute('href', `?tab=allocations&run=${runId}`);
 	await fromSummary.click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();
 	await expect(compareCard(page)).toBeVisible();
-	// Hidden, it still shows in the sidebar while it is open.
+	// The sidebar marks it while it is open.
 	await expect(sections.getByRole('link', { name: 'Allocations' })).toHaveAttribute('aria-current', 'page');
 
 	// Hydrological units: under the unit results, and on each unit's card with a registered volume, picking that unit.

@@ -4,9 +4,9 @@
 // they don't use from their sidebar, within what their role sees. The Summary
 // always stays, a hidden section still opens from a link, "Hidden (n)" brings
 // them back, and the choice is the account's, so it holds after a reload and
-// in another catchment. Until a person chooses, History, Allocations and
-// Applications are hidden (DEFAULT_HIDDEN_TABS); Reset to default brings that
-// default back, while showing every section is kept as a choice of its own.
+// in another catchment. Until a person chooses, History and Applications
+// are hidden (DEFAULT_HIDDEN_TABS; Allocations shows since issue #444); Reset
+// to default brings that default back, while showing every section is kept as a choice of its own.
 // Synthetic data only.
 import type { Page, Response } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -26,7 +26,7 @@ async function sectionNames(page: Page) {
 
 const EVERY = ['Project', 'Applications', 'History', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 // Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS), and again after Reset to default.
-const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
+const DEFAULT_HIDDEN = ['Applications', 'History'];
 const DEFAULTS = EVERY.filter((t) => !DEFAULT_HIDDEN.includes(t));
 const without = (...names: string[]) => EVERY.filter((t) => !names.includes(t));
 
@@ -46,9 +46,9 @@ test.describe('1440×960', () => {
 		const project = await createProject(page.request, 'Own sections');
 		const other = await createProject(page.request, 'Own sections, another catchment');
 		await page.goto(`/projects/${project.id}`);
-		// No choice of their own yet: History, Allocations and Applications are hidden, and counted.
+		// No choice of their own yet: History and Applications are hidden, and counted (Allocations shows, issue #444).
 		await expect.poll(() => sectionNames(page)).toEqual(DEFAULTS);
-		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (3)');
+		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		expect(await storedChoice(page)).toBeNull();
 
 		await menuButton(page).click();
@@ -73,20 +73,20 @@ test.describe('1440×960', () => {
 		// The first choice starts from the default.
 		const saved = nextSave(page);
 		await panel(page).getByRole('checkbox', { name: 'Crops & demand' }).uncheck();
-		expect(await sent(saved)).toEqual(['allocations', 'applications', 'history', 'crops']);
+		expect(await sent(saved)).toEqual(['applications', 'history', 'crops']);
 		const savedAgain = nextSave(page);
 		await panel(page).getByRole('checkbox', { name: 'History' }).check();
 		expect((await savedAgain).status()).toBe(200);
-		expect(await sent(savedAgain)).toEqual(['allocations', 'applications', 'crops']);
+		expect(await sent(savedAgain)).toEqual(['applications', 'crops']);
 		await expect(panel(page).getByRole('button', { name: 'Reset to default' })).toBeEnabled();
 
-		const mine = without('Allocations', 'Applications', 'Crops & demand');
+		const mine = without('Applications', 'Crops & demand');
 		await expect.poll(() => sectionNames(page)).toEqual(mine);
-		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (3)');
+		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		// The sidebar shows the icon and a count, and the button stays on the head's line beside the role
-		// badge ("Hidden (3)" in words wrapped it onto a line of its own).
-		await expect(menuButton(page).locator('.count')).toHaveText('3');
-		await expect(menuButton(page).getByText('Hidden (3)')).toHaveClass(/visually-hidden/);
+		// badge ("Hidden (2)" in words wrapped it onto a line of its own).
+		await expect(menuButton(page).locator('.count')).toHaveText('2');
+		await expect(menuButton(page).getByText('Hidden (2)')).toHaveClass(/visually-hidden/);
 		const badge = (await page.getByTestId('project-role').boundingBox())!;
 		const btn = (await menuButton(page).boundingBox())!;
 		expect(Math.abs(btn.y + btn.height / 2 - (badge.y + badge.height / 2))).toBeLessThan(4);
@@ -106,24 +106,24 @@ test.describe('1440×960', () => {
 		await page.goto(`/projects/${project.id}?tab=crops`);
 		await expect(page.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
 		await expect(nav(page).getByRole('link', { name: 'Crops & demand' })).toHaveAttribute('aria-current', 'page');
-		await expect.poll(() => sectionNames(page)).toEqual(without('Allocations', 'Applications'));
+		await expect.poll(() => sectionNames(page)).toEqual(without('Applications'));
 
 		// "Hidden (n)" brings them back one at a time; more can go.
 		// Each click's save is awaited before the next nextSave() listens: the saves go one after another
 		// (SectionsMenu.svelte save()), so an unawaited one could land after Reset's listener and be taken for it.
 		await menuButton(page).click();
 		const shown = nextSave(page);
-		await panel(page).getByRole('checkbox', { name: 'Allocations' }).check();
-		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
-		await expect(nav(page).getByRole('link', { name: 'Allocations' })).toBeVisible();
-		expect(await sent(shown)).toEqual(['applications', 'crops']);
+		await panel(page).getByRole('checkbox', { name: 'Applications' }).check();
+		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (1)');
+		await expect(nav(page).getByRole('link', { name: 'Applications' })).toBeVisible();
+		expect(await sent(shown)).toEqual(['crops']);
 		const hid = nextSave(page);
 		await panel(page).getByRole('checkbox', { name: 'Transfers' }).uncheck();
-		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (3)');
+		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		await expect(nav(page).getByRole('link', { name: 'Transfers' })).toHaveCount(0);
-		expect(await sent(hid)).toEqual(['applications', 'crops', 'transfers']);
+		expect(await sent(hid)).toEqual(['crops', 'transfers']);
 
-		// Reset to default forgets the choice: the default three are hidden again, not every section shown.
+		// Reset to default forgets the choice: the default two are hidden again, not every section shown.
 		const reset = nextSave(page);
 		await panel(page).getByRole('button', { name: 'Reset to default' }).click();
 		expect(await sent(reset)).toBeNull();
@@ -132,7 +132,7 @@ test.describe('1440×960', () => {
 		await expect(panel(page).getByRole('checkbox', { name: 'Transfers' })).toBeChecked();
 		await panel(page).getByRole('button', { name: 'Done' }).click();
 		await expect(panel(page)).toBeHidden();
-		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (3)');
+		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		expect(await storedChoice(page)).toBeNull();
 		await page.reload();
 		// Crops & demand is open, and in the default anyway.
@@ -168,7 +168,7 @@ test.describe('1440×960', () => {
 		await panel(page).getByRole('button', { name: 'Reset to default' }).click();
 		expect(await sent(reset)).toBeNull();
 		await expect.poll(() => sectionNames(page)).toEqual(DEFAULTS);
-		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (3)');
+		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		await page.reload();
 		await expect.poll(() => sectionNames(page)).toEqual(DEFAULTS);
 	});
@@ -183,21 +183,21 @@ test.describe('1440×960', () => {
 		await v.setViewportSize({ width: 1440, height: 960 });
 		await v.goto(`/projects/${project.id}`);
 		await expect(v.getByTestId('project-role')).toHaveText('viewer');
-		// Of the default three, only Allocations is in what the role shows, so only it is counted.
-		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (1)');
-		await expect(nav(v).getByRole('link', { name: 'Allocations' })).toHaveCount(0);
+		// Of the default two, neither is in what the role shows, so nothing is counted, and Allocations shows (issue #444).
+		await expect(menuButton(v)).toHaveAccessibleName('Choose sections');
+		await expect(nav(v).getByRole('link', { name: 'Allocations' })).toBeVisible();
 
 		// Only the sections the role shows are offered: no model inputs, no Applications.
 		await menuButton(v).click();
 		await expect(panel(v).getByRole('checkbox', { name: 'Network' })).toHaveCount(0);
 		await expect(panel(v).getByRole('checkbox', { name: 'Applications' })).toHaveCount(0);
 		await expect(panel(v).getByRole('checkbox', { name: 'History' })).toHaveCount(0);
-		await panel(v).getByRole('checkbox', { name: 'Allocations' }).check();
-		await expect(nav(v).getByRole('link', { name: 'Allocations' })).toBeVisible();
-		await expect(menuButton(v)).toHaveAccessibleName('Choose sections');
+		await panel(v).getByRole('checkbox', { name: 'Allocations' }).uncheck();
+		await expect(nav(v).getByRole('link', { name: 'Allocations' })).toHaveCount(0);
+		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (1)');
 		await panel(v).getByRole('checkbox', { name: 'Dams' }).uncheck();
 		await expect(nav(v).getByRole('link', { name: 'Dams' })).toHaveCount(0);
-		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (1)');
+		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (2)');
 
 		// With the inputs shown, they join the menu; History, hidden by the default the choice started from,
 		// stays hidden, and so does one they hide now.
@@ -206,16 +206,16 @@ test.describe('1440×960', () => {
 		await menuButton(v).click();
 		await expect(panel(v).getByRole('checkbox', { name: 'Network' })).toBeChecked();
 		await expect(panel(v).getByRole('checkbox', { name: 'History' })).not.toBeChecked();
-		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (2)');
+		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (3)');
 		await panel(v).getByRole('checkbox', { name: 'Transfers' }).uncheck();
 		await expect(nav(v).getByRole('link', { name: 'Network' })).toBeVisible();
 		await expect(nav(v).getByRole('link', { name: 'Transfers' })).toHaveCount(0);
 		await expect(nav(v).getByRole('link', { name: 'History' })).toHaveCount(0);
-		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (3)');
+		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (4)');
 		// Turned off again, Transfers and History are out of what the role shows, so they aren't counted.
 		await panel(v).getByRole('button', { name: 'Done' }).click();
 		await v.getByLabel('Show model inputs').uncheck();
-		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (1)');
+		await expect(menuButton(v)).toHaveAccessibleName('Choose sections: Hidden (2)');
 		await expectNoViolations(v);
 	});
 });
@@ -228,11 +228,11 @@ test.describe('390×844', () => {
 		const project = await createProject(page.request, 'Own sections on a phone');
 		await page.goto(`/projects/${project.id}`);
 		await page.getByRole('button', { name: /^Project sections:/ }).click();
-		// The default three hidden, said in words here.
-		await expect(menuButton(page)).toHaveText('Choose sections: Hidden (3)');
+		// The default two hidden, said in words here.
+		await expect(menuButton(page)).toHaveText('Choose sections: Hidden (2)');
 		await menuButton(page).click();
 		await panel(page).getByRole('checkbox', { name: 'Dams' }).uncheck();
-		await expect(menuButton(page)).toHaveText('Choose sections: Hidden (4)');
+		await expect(menuButton(page)).toHaveText('Choose sections: Hidden (3)');
 		await expect(nav(page).getByRole('link', { name: 'Dams' })).toHaveCount(0);
 		await expectNoViolations(page);
 		// Escape closes only the dialog; the Sections menu it opened from stays open.

@@ -269,7 +269,7 @@
 	     open (its link here went in issue #177). -->
 	<ul class="more" aria-label="More about this project">
 		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
-		<!-- Allocations is hidden from the sidebar until chosen (tabs.ts DEFAULT_HIDDEN_TABS), so this is its way in (issue #444). -->
+		<!-- A way into Allocations from the Summary, for the run it shows (issue #444); it is in the sidebar too unless the person hid it. -->
 		{#if visibleTabs.includes('allocations')}
 			<li><a href={allocationsHref(shown?.id)}>Registered vs modelled use <span aria-hidden="true">→</span> Allocations</a></li>
 		{/if}

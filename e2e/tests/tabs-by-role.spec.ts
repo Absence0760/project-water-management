@@ -22,7 +22,7 @@ const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
 // The Map is a core tab since #326 D3: a viewer sees it without the inputs.
 const SHORT = ['Project', 'Map', 'Data', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 // What each shows by default: the role's set less the sections hidden until chosen.
-const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
+const DEFAULT_HIDDEN = ['Applications', 'History'];
 const byDefault = (tabs: string[]) => tabs.filter((t) => !DEFAULT_HIDDEN.includes(t));
 
 /** The strip's tab names, in order. */
