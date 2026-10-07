@@ -11,7 +11,8 @@
 	// targets with their reporting window and assurance of supply. The run is
 	// `run=` (a picker in the header), else the newest run, as on the Summary.
 	// The page flows in the window's one scroll (as the Dams page): the three
-	// least supplied cards show, the rest behind "Show all N hydrological
+	// least supplied cards and every unit below the supply target or short this
+	// week show, the units meeting it behind "Show all N hydrological
 	// units" (no card list scrolls inside itself), and on a wide page the chart
 	// sticks beside the cards, under the "On this page" menu, as they are read
 	// down. The tables below grow with their rows rather than scrolling in a box.
@@ -25,7 +26,6 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
-	import { foldList } from '$lib/components/common/fold';
 	import { runHref } from '$lib/components/overview/attention';
 	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
@@ -40,9 +40,10 @@
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
+	import { allocationsHref } from '$lib/components/allocations/links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
-	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
+	import { BAND_WORDS, cardFacts, daysShort, foldCards, foldNote, pickUnit, previousRunOf, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { hasHumanImpacts, loadHumanImpacts, usersTableOnSupply } from '$lib/components/runs/humanImpacts';
@@ -52,13 +53,16 @@
 		projectId,
 		editor,
 		runs,
-		readonly
+		readonly,
+		showAllocations = false
 	}: {
 		projectId: string;
 		editor: ModelEditor;
 		/** The page's runs list (null if it couldn't be loaded). */
 		runs: RunMeta[] | null;
 		readonly: boolean;
+		/** The role sees Allocations: link each unit's registered volume there (it is hidden from the sidebar by default). */
+		showAllocations?: boolean;
 	} = $props();
 
 	// Which units have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
@@ -208,6 +212,8 @@
 	const runText = $derived(meta ? `run “${runName(meta)}”, ran ${ranAgo(meta.createdAt)}` : null);
 	const headerLine = $derived(supplySummary(totals, modelUnits, runText, weekEnd));
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
+	/** The units the run compared with a registered volume (RunSummary.allocations): their cards link to it on Allocations. */
+	const registered = $derived(new Set(showAllocations ? (summary?.allocations?.nodes ?? []).map((n) => n.nodeId) : []));
 
 	// --- picking a unit: a link (`unit=<id>`, so it can be shared and Back returns); stacked, the chart comes into view ---
 	let pageW = $state(0);
@@ -227,11 +233,14 @@
 		void goto(`?${q}`, { noScroll: true, keepFocus: true });
 	}
 
-	// --- the fold: the least supplied few cards (and the picked one), the rest behind "Show all N hydrological units" ---
+	// --- the fold: the least supplied few cards, every unit below the target or short this week, and the
+	// picked one; the units meeting the target behind "Show all N hydrological units" (supply.ts foldCards) ---
 	/** A card is about a third of the chart's height beside it; stacked, three keep the chart near the first screen. */
 	const CAP = 3;
 	let open = $state(false);
-	const fold = $derived(foldList(cards, (c) => c.nodeId, picked?.nodeId ?? null, open, CAP));
+	const fold = $derived(foldCards(cards, picked?.nodeId ?? null, open, CAP));
+	/** Whether the list folds at all: it does while the units meeting the target are two or more. */
+	const folds = $derived(foldCards(cards, picked?.nodeId ?? null, false, CAP).hidden > 0);
 	// A fixed plot height: taller beside the cards, where the panel sits level with the first three.
 	const chartH = $derived(side ? 420 : 260);
 
@@ -386,14 +395,16 @@
 												<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
 												{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="unit-map-link">Show on map</a>{/if}
 												<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>
+												{#if registered.has(c.nodeId)}<a href={allocationsHref(run.id, { unit: c.nodeId })} aria-label="{c.name}: registered vs modelled use">Registered use</a>{/if}
 											</p>
 										{/if}
 									</li>
 								{/each}
 							</ul>
-							{#if open || fold.hidden}
+							{#if folds}
+								{#if !open}<p class="fold-note small muted" data-testid="unit-fold-note">{foldNote(fold.hidden, weekShort !== null)}</p>{/if}
 								<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="unit-cards" onclick={() => (open = !open)}>
-									{open ? `Show the ${CAP} least supplied` : `Show all ${cards.length} hydrological units`}
+									{open ? 'Show only the units to look into first' : `Show all ${cards.length} hydrological units`}
 								</button>
 							{/if}
 						</section>
@@ -420,6 +431,9 @@
 					<h2 class="group-h">Tables for this run</h2>
 					<section class="panel" id="res-farms" aria-labelledby="res-farms-h">
 						<UnitResultsTable farms={summary.farms} days={historyDays(run)} {nodeOrder} startDate={run.startDate} endDate={historyEnd(run)} title="Hydrological unit results" headingId="res-farms-h" />
+						{#if showAllocations}
+							<p class="alloc-link small"><a href={allocationsHref(run.id)}>Registered vs modelled use, for each unit <span aria-hidden="true">→</span> Allocations</a></p>
+						{/if}
 					</section>
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
@@ -456,6 +470,9 @@
 <style>
 	.supply-page {
 		container: supply-page / inline-size;
+	}
+	.alloc-link {
+		margin: 0.75rem 0 0;
 	}
 	.run-pick select {
 		max-width: min(22rem, 60vw);
@@ -684,6 +701,9 @@
 	.more {
 		align-self: flex-start;
 		margin-top: 0.6rem;
+	}
+	.fold-note {
+		margin: 0.6rem 0 0;
 	}
 	/* The page is the one scroll: the run's tables (the unit results, curtailment and assurance of supply) grow
 	   with their rows instead of scrolling inside the global 70vh cap; they still scroll sideways on a narrow screen. */

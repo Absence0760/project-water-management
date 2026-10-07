@@ -15,6 +15,7 @@
 	import { attention, runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
 	import { supplyHref } from '$lib/components/supply/links';
+	import { allocationsHref } from '$lib/components/allocations/links';
 	import { checklist, checklistMode } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
@@ -268,6 +269,10 @@
 	     open (its link here went in issue #177). -->
 	<ul class="more" aria-label="More about this project">
 		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
+		<!-- Allocations is hidden from the sidebar until chosen (tabs.ts DEFAULT_HIDDEN_TABS), so this is its way in (issue #444). -->
+		{#if visibleTabs.includes('allocations')}
+			<li><a href={allocationsHref(shown?.id)}>Registered vs modelled use <span aria-hidden="true">→</span> Allocations</a></li>
+		{/if}
 	</ul>
 {/snippet}
 

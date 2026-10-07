@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '$lib/api/types';
 import { supplyBars } from '$lib/components/overview/supplyBars';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
+import { fmtPct } from '$lib/format/number';
 import { SUPPLY_ANCHORS, supplyAnchor, supplyHref } from './links';
-import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
+import { cardFacts, daysShort, foldCards, foldNote, needsLook, pickUnit, previousRunOf, shortRanges, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
 
 const farm = (nodeId: string, fraction: number, demand = 100): FarmSummary => ({
 	nodeId,
@@ -125,6 +126,49 @@ describe('unitCards', () => {
 		expect(cards.find((c) => c.nodeId === 'mid')).toMatchObject({ daysShort: null, cutM3Day: 0, weekShort: null });
 		// An older run without the tables: nothing made up.
 		expect(unitCards(summary(farms), ids, names, null).find((c) => c.nodeId === 'worst')).toMatchObject({ daysShort: null, cutM3Day: null });
+	});
+});
+
+describe('the card fold', () => {
+	const ids = (cards: UnitCard[]) => cards.map((c) => c.nodeId);
+	const many = (short: number, met: number) => [
+		...Array.from({ length: short }, (_, i) => farm(`s${String(i).padStart(2, '0')}`, 0.5 + i * 0.01)),
+		...Array.from({ length: met }, (_, i) => farm(`m${String(i).padStart(2, '0')}`, 1))
+	];
+	const cardsOf = (farms: FarmSummary[], week: Map<string, number> | null = null) => unitCards(summary(farms), new Set(), new Map(), week);
+
+	it('never hides a unit below the target or short this week', () => {
+		expect(needsLook({ fraction: SUPPLY_TARGET - 0.001, weekShort: null })).toBe(true);
+		expect(needsLook({ fraction: SUPPLY_TARGET, weekShort: 0 })).toBe(false);
+		expect(needsLook({ fraction: 1, weekShort: 2 })).toBe(true);
+		expect(needsLook({ fraction: null, weekShort: null })).toBe(false);
+	});
+
+	it('shows every short unit, not just three, and folds the units meeting the target', () => {
+		const cards = cardsOf(many(10, 20));
+		const f = foldCards(cards, null, false, 3);
+		expect(ids(f.shown)).toEqual(cards.slice(0, 10).map((c) => c.nodeId));
+		expect(f.hidden).toBe(20);
+		expect(foldCards(cards, null, true, 3)).toEqual({ shown: cards, hidden: 0 });
+	});
+
+	it('keeps the three least supplied when fewer are short, a unit short this week wherever it sits, and the picked unit', () => {
+		const cards = cardsOf(many(1, 10), new Map([['m07', 2]]));
+		const f = foldCards(cards, 'm09', false, 3);
+		expect(ids(f.shown)).toEqual(['s00', 'm00', 'm01', 'm07', 'm09']);
+		expect(f.hidden).toBe(6);
+	});
+
+	it('shows the list whole when folding would leave out one card or none', () => {
+		expect(foldCards(cardsOf(many(0, 4)), null, false, 3).hidden).toBe(0);
+		expect(foldCards(cardsOf(many(9, 1)), null, false, 3)).toMatchObject({ hidden: 0 });
+		expect(foldCards(cardsOf(many(9, 1)), null, false, 3).shown).toHaveLength(10);
+	});
+
+	it('says what the fold leaves out', () => {
+		const target = fmtPct(SUPPLY_TARGET, 0);
+		expect(foldNote(6, true)).toBe(`6 more meet the ${target} supply target or have no irrigation demand, and none is short this week.`);
+		expect(foldNote(2, false)).toBe(`2 more meet the ${target} supply target or have no irrigation demand.`);
 	});
 });
 
