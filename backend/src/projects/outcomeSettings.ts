@@ -115,15 +115,17 @@ export function resolveOutcomes(settings: unknown): OutcomeSettings {
  * assessEwrRules). 400 otherwise. Checked only when the patch changes the
  * site, so a stored site whose table or gauge later goes doesn't block
  * saving anything else; the Runs tab falls back to the outlet and says so.
+ * `field` names the setting in the message (settings.ewrHeadline uses the
+ * same rules, ewrHeadlineSettings.ts).
  */
-export async function checkOutcomeSite(db: Db, projectId: string, siteNodeId: string, ewrRules: unknown): Promise<void> {
+export async function checkOutcomeSite(db: Db, projectId: string, siteNodeId: string, ewrRules: unknown, field = 'outcomes.siteNodeId'): Promise<void> {
 	const { rows } = await db.query<{ kind: string; downstream_node_id: string | null }>(
 		'SELECT kind, downstream_node_id FROM node WHERE project_id = $1 AND id = $2',
 		[projectId, siteNodeId]
 	);
 	const n = rows[0];
-	if (!n) throw new ApiError(400, 'outcomes.siteNodeId: no such hydrological unit in this project');
-	if (n.kind !== 'gauge' || n.downstream_node_id === null) throw new ApiError(400, 'outcomes.siteNodeId: the site is the outlet (null) or a gauge above it');
+	if (!n) throw new ApiError(400, `${field}: no such hydrological unit in this project`);
+	if (n.kind !== 'gauge' || n.downstream_node_id === null) throw new ApiError(400, `${field}: the site is the outlet (null) or a gauge above it`);
 	const tables = Array.isArray(ewrRules) ? (ewrRules as unknown[]) : [];
-	if (!tables.some((t) => isObj(t) && t.siteNodeId === siteNodeId)) throw new ApiError(400, 'outcomes.siteNodeId: that gauge has no Reserve rule table');
+	if (!tables.some((t) => isObj(t) && t.siteNodeId === siteNodeId)) throw new ApiError(400, `${field}: that gauge has no Reserve rule table`);
 }
