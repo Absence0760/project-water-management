@@ -1593,6 +1593,16 @@ own beside the dam (series `river_take@crops`, and with a pool
 `river_pool@crops` and `river_pool_evaporation@crops`); the supply rule then
 serves the unit's dam-sourced demand objects only.
 
+Bed losses (engine ≥ 1.75.0, migration 203, issue #444,
+[model.md §2.6b](./model.md)): every node carries `reachLossFrac` (0–0.5, the
+share of the flow it passes downstream lost in the reach to the next node)
+and `reachLossMaxM3Day` (≥ 0 or `null` = no cap). A body without them gets 0
+and `null` (no loss, no change to any run). `PUT` refuses a share outside
+0–0.5, a negative cap, and a share on the outlet, which has no reach below it.
+A run with bed losses stores `reach_loss` (m³/day) on each node that has them,
+and `summary.waterBalance` and the water account gain `reachLossM3`; the
+run warns that the EWR is still read from the natural flow before the losses.
+
 The crop supply table (engine ≥ 1.73.0, migration 202, issue #408,
 [model.md §2.7k](./model.md)): every node carries `cropShareDam`,
 `cropShareRiver`, `cropShareRemote` (0–1 or `null`), `cropRemoteNodeId` (a

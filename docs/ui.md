@@ -2404,8 +2404,13 @@ itself.
   Dam fields whose outlet capacity its release rule uses), **Routing**,
   **Supply** (with Water for the crops and the hands-off flow), **Irrigation**,
   **Demand objects** (after the supply their "Water for" names), **Combined
-  boreholes (one capacity)** and **Individual boreholes** side by side, and
-  **Land cover**. Each is a bordered card with its title in a tinted header
+  boreholes (one capacity)** and **Individual boreholes** side by side,
+  **Land cover**, and last **Bed losses in the reach below** (engine ≥
+  1.75.0, [model.md §2.6b](./model.md); on every kind of node, gauges and
+  other water users too): the share of the flow lost (at most 50 %) and the
+  most lost in a day, under a note saying where the water goes. On the outlet
+  both are read-only (no reach below it) unless a share is left there to
+  clear; the cap is read-only while the share is 0 %. Each is a bordered card with its title in a tinted header
   band, so one section's fields don't run into the next's; the card itself
   stays `--surface`, since read-only inputs are `--surface-2`.
 - **Fields that don't apply** show read-only with the reason as their hint,

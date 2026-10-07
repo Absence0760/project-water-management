@@ -150,6 +150,8 @@ data](./api.md#model-data)).
 | `ewr_site` | (none: b023 checks the EWR at every gauge) | Gauges (migration 086, engine ≥ 1.5.0, [model.md §2.7b](./model.md)): whether the EWR is assessed here. `true` (default, every existing row); `false` only on a gauge (CHECK `node_ewr_site_gauge`), never the outlet (a model rule the API applies on save). False = the gauge charges nobody and a Reserve rule table there is skipped |
 | `ga_property_area_ha` | (none) | Farms and other users with boreholes (migration 089, engine ≥ 1.12.0, [model.md §2.7d](./model.md)): the property's size, ha (0 to 10 000 000), for the GN 538 groundwater volume. NULL (default, every existing row) = unknown: the run shows the 40 000 m³/a ceiling and warns |
 | `ga_rate_m3_ha_year` | (none) | Same: the GN 538 Table 2 rate for the property's quaternary, m³/ha/a, CHECK one of 0, 45, 75, 150, 275, 400. NULL = not looked up. Volume = min(area × rate, 40 000), context only |
+| `reach_loss_frac` | (none: b023 routes every outflow whole) | Any node (migration 203, engine ≥ 1.75.0, issue #444, [model.md §2.6b](./model.md)): the share f (0–0.5, CHECK `node_reach_loss_frac_range`) of the flow the node passes downstream lost into the river bed in the reach to the next node, out of the catchment. 0 (default, every existing row) = none. The API refuses one on the outlet (`modelRuleIssues`, `reachLossOutlet`), which has no reach below it |
+| `reach_loss_max_m3_day` | (none) | The reach's loss at most, m³/day (≥ 0, finite, CHECK `node_reach_loss_max_size`); NULL (default) = no cap. Read only with `reach_loss_frac` > 0 |
 
 Every percentage is stored as a **fraction 0–1** (CHECK constraints enforce the
 range).
