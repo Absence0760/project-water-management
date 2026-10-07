@@ -107,7 +107,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				handsOffEwr: z.boolean().default(false),
 				divertMonthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
-				// Bed losses in the reach below (engine ≥ 1.75.0, issue #444): the share of the flow lost (0–0.5) and the
+				// Bed losses in the reach below (engine ≥ 1.75.0, issue #444): the share of the flow lost (0–1; above half without a cap the run warns) and the
 				// daily cap (null = none). Any kind of node; none on the outlet is a model rule (reachLossOutlet).
 				reachLossFrac: z.number().finite().min(0).max(REACH_LOSS_FRAC_MAX).default(0),
 				reachLossMaxM3Day: nonNeg.nullable().default(null),
