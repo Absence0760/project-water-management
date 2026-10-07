@@ -90,13 +90,15 @@ describe('TABLE_FIELDS', () => {
 		for (const k of ['boreholeCapacityM3Day', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays', 'gaPropertyAreaHa']) expect(keys).not.toContain(k);
 		// … and the seepage destination and outlet (WP-3.5).
 		for (const k of ['damSeepageReturnPct', 'damOutletCapacityM3Day']) expect(keys).not.toContain(k);
-		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 10);
+		// … and the bed losses in the reach below (engine 1.75.0).
+		for (const k of ['reachLossFrac', 'reachLossMaxM3Day']) expect(keys).not.toContain(k);
+		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 12);
 	});
 });
 
 describe('isVolume', () => {
 	it('marks the m³ and m³/day fields, whose columns need room for large values (River to dam is m³/s, a small number)', () => {
-		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'boreholeCapacityM3Day']);
+		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'boreholeCapacityM3Day', 'reachLossMaxM3Day']);
 	});
 });
 
@@ -116,6 +118,27 @@ describe('River to dam in m³/s', () => {
 		expect(fieldUnused(divert, { pctUpstreamToDam: 0.99 })).toBeNull();
 		expect(fieldUnused(divert, { pctUpstreamToDam: 0 })).toBeNull();
 		expect(fieldUnused(NODE_FIELDS.find((f) => f.key === 'damCapacityM3')!, { pctUpstreamToDam: 1 })).toBeNull();
+	});
+});
+
+describe('bed losses in the reach below (engine 1.75.0)', () => {
+	const share = NODE_FIELDS.find((x) => x.key === 'reachLossFrac')!;
+	const cap = NODE_FIELDS.find((x) => x.key === 'reachLossMaxM3Day')!;
+
+	it('is a percentage up to 50 %, and a nullable cap, both in the one-node form only', () => {
+		expect(share.unit).toBe('%');
+		expect(share.max).toBe(50);
+		expect(cap.nullable).toBe(true);
+		expect(TABLE_FIELDS.some((f) => f.group === 'reach')).toBe(false);
+		expect(GROUPS.reach).toBe('Bed losses in the reach below');
+	});
+
+	it('is not used on the outlet, unless a share is left there to clear; the cap not without a share', () => {
+		expect(fieldUnused(share, { pctUpstreamToDam: 0, downstreamNodeId: null })).toMatch(/^Not used: the outlet has no reach below it/);
+		expect(fieldUnused(share, { pctUpstreamToDam: 0, downstreamNodeId: null, reachLossFrac: 0.1 })).toBeNull();
+		expect(fieldUnused(share, { pctUpstreamToDam: 0, downstreamNodeId: 'g' })).toBeNull();
+		expect(fieldUnused(cap, { pctUpstreamToDam: 0, downstreamNodeId: 'g', reachLossFrac: 0 })).toMatch(/^Not used: no bed losses/);
+		expect(fieldUnused(cap, { pctUpstreamToDam: 0, downstreamNodeId: 'g', reachLossFrac: 0.2 })).toBeNull();
 	});
 });
 

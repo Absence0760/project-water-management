@@ -51,7 +51,9 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'otherUse', label: 'Other users’ use', title: 'Other water users: taken − returned (Mm³)', value: (r) => opt(r.otherUseM3), optional: true },
 	{ key: 'streamDepletion', label: 'Stream depletion', title: 'Taken from the river by borehole pumping (Mm³)', value: (r) => opt(r.streamDepletionM3), optional: true },
 	{ key: 'seepageLost', label: 'Seepage lost', title: 'Dam seepage lost from the catchment rather than returned below the dam (Mm³)', value: (r) => opt(r.damSeepageLostM3), optional: true },
+	{ key: 'poolEvaporation', label: 'Pool evaporation', title: 'Evaporation from the river abstractions’ pools (Mm³); their storage is in the start and end storage', value: (r) => opt(r.poolEvaporationM3), optional: true },
 	{ key: 'conveyanceLoss', label: 'Off-take losses', title: 'River off-takes: taken − delivered, lost from the catchment on the way (Mm³)', value: (r) => opt(r.conveyanceLossM3), optional: true },
+	{ key: 'reachLoss', label: 'Bed losses', title: 'Lost into the river bed in the reaches between hydrological units, out of the catchment (Mm³)', value: (r) => opt(r.reachLossM3), optional: true },
 	{ key: 'outflow', label: 'Outflow', title: 'Simulated outflow at the outlet (Mm³)', value: (r) => r.outflowM3 * MM3 },
 	{ key: 'closing', label: 'End storage', title: 'Σ dam storage at the end (Mm³)', value: (r) => r.closingStorageM3 * MM3 },
 	{ key: 'residual', label: 'Residual (m³)', title: 'The equation’s left side − its right side (every gain − every loss − the change in storage); should be 0', value: (r) => r.residualM3 }
@@ -67,7 +69,7 @@ export function balanceEquation(cols: readonly BalanceColumn[]): string {
 	const plus = (k: string, w: string) => (has(k) ? ` + ${w}` : '');
 	return (
 		`Start storage + hydrological unit runoff + transfers${plus('groundwater', 'groundwater')}${plus('storageSet', 'storage set')} + rain on dams = ` +
-		`consumptive use${plus('otherUse', 'other users’ use')}${plus('streamDepletion', 'stream depletion')} + dam evaporation${plus('seepageLost', 'seepage lost')} + outflow + end storage`
+		`consumptive use${plus('otherUse', 'other users’ use')}${plus('streamDepletion', 'stream depletion')} + dam evaporation${plus('poolEvaporation', 'pool evaporation')}${plus('seepageLost', 'seepage lost')}${plus('conveyanceLoss', 'off-take losses')}${plus('reachLoss', 'bed losses')} + outflow + end storage`
 	);
 }
 

@@ -37,7 +37,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	demandFactor: true, partDemandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
 	gaPropertyAreaHa: true, gaRateM3HaYear: true,
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
-	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true,
+	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true, reachLossFrac: true, reachLossMaxM3Day: true,
 	cropWaterSource: true, cropRiverPumpM3Day: true, cropRiverPoolM3: true,
 	cropShareDam: true, cropShareRiver: true, cropShareRemote: true, cropRemoteNodeId: true, cropRemoteCapM3Day: true
 };
@@ -107,6 +107,8 @@ const RUN_KEYS = [
 	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',
+	// Bed losses in the reach below a node (engine 1.75.0, issue #444)
+	'reach_loss',
 	// Gap filling of the observed flow records (engine 1.23.0, issue #66)
 	'observed_flow_fill', 'observed_flow_filled', 'observed_flow_other_fill', 'observed_flow_other_filled',
 	// The scored record's per-day quality flags (engine 1.48.0, CR-18)

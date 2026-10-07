@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { cropSupplyIssues, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { cropSupplyIssues, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -209,6 +209,12 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a hydrological unit has a dam';
 			if (bad) issues.push({ area: 'network', itemId: n.id, message: `${label}: dam survey curve: ${bad}.` });
 		}
+		// Bed losses in the reach below (engine ≥ 1.75.0), as the API checks them: a share up to 50 %, a cap ≥ 0, none on the outlet.
+		if (!inRange(n.reachLossFrac ?? 0, 0, REACH_LOSS_FRAC_MAX))
+			issues.push({ area: 'network', itemId: n.id, message: `${label}: the share of the flow lost in the reach below must be between 0% and ${REACH_LOSS_FRAC_MAX * 100}%.` });
+		if (!inRange(n.reachLossMaxM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the most lost in the reach below in a day can't be negative.` });
+		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0)
+			issues.push({ area: 'network', itemId: n.id, message: `${label}: the outlet has no reach below it in the model; set its bed losses to 0%.` });
 		// Development over the run (engine ≥ 1.30.0), as the API checks it.
 		const development = developmentIssue(n);
 		if (development) issues.push({ area: 'network', itemId: n.id, message: `${label}: ${development}` });

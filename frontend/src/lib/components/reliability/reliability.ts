@@ -71,6 +71,7 @@ export const ACCOUNT_LINES: AccountLine[] = [
 	{ key: 'damSeepageLostM3', label: 'Dam seepage lost from the catchment', side: 'out', optional: true },
 	{ key: 'streamDepletionM3', label: 'Stream depletion (boreholes)', side: 'out', optional: true },
 	{ key: 'conveyanceLossM3', label: 'River off-takes: lost on the way', side: 'out', optional: true },
+	{ key: 'reachLossM3', label: 'Bed losses in the reaches', side: 'out', optional: true },
 	{ key: 'outflowM3', label: 'Outflow at the outlet', side: 'out' },
 	{ key: 'storageChangeM3', label: 'Change in dam storage', side: 'storage' },
 	{ key: 'residualM3', label: 'Residual (in − out − change in storage)', side: 'check' },
