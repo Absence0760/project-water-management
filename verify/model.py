@@ -1133,14 +1133,14 @@ def run(doc: dict) -> dict:
     ewr = [float(settings["ewrPragmaticM3PerDay"][m]) for m in wm]
     k_lake = settings.get("lakeEvapFactorMonthly") or [settings["lakeEvapFactor"]] * 12
 
-    # Bed losses in the reach below each node (§2.6b): the share f clamped to [0, 0.5], the cap (None = none);
+    # Bed losses in the reach below each node (§2.6b): the share f clamped to [0, 1], the cap (None = none);
     # none below the outlet, for f = 0 or a cap of 0.
     reach: dict[str, tuple[float, float]] = {}
     for x in nodes:
         f_ = x.get("reachLossFrac") or 0
         if f_ == 0 or x.get("downstreamNodeId") is None:
             continue
-        f_ = min(max(f_, 0.0), 0.5) if isinstance(f_, (int, float)) and math.isfinite(f_) else 0.0
+        f_ = min(max(f_, 0.0), 1.0) if isinstance(f_, (int, float)) and math.isfinite(f_) else 0.0
         c_ = x.get("reachLossMaxM3Day")
         c_ = c_ if isinstance(c_, (int, float)) and math.isfinite(c_) and c_ >= 0 else math.inf
         if f_ > 0 and c_ > 0:
@@ -1151,8 +1151,13 @@ def run(doc: dict) -> dict:
         return min(c_, f_ * q) if q > 0 else 0.0
 
     def reach_gross(xid, v):
+        # A reach losing the whole flow (f = 1) asks the claim plus its cap; with no cap nothing can arrive, so no gross-up.
         f_, c_ = reach[xid]
-        return min(v / (1 - f_), v + c_) if v > 0 else v
+        if not v > 0:
+            return v
+        if f_ >= 1:
+            return v if c_ == math.inf else v + c_
+        return min(v / (1 - f_), v + c_)
 
     # Senior users' requirement fragmented to the farms upstream (§2.7c).
     seniors = sorted((u for u in users if u.get("userPriority", "senior") != "junior"), key=lambda u: u["id"])
