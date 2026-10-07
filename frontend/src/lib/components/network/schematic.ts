@@ -2,6 +2,8 @@
 // outflow gauge at the bottom and headwaters at the top, in grid units
 // (col, row) that the SVG scales to pixels.
 import type { NetworkNode } from '@water-management/engine';
+import { fmtNum } from '$lib/format/number';
+import { fmtVolume, hasDam } from './fields';
 
 export interface SchematicNode {
 	node: NetworkNode;
@@ -701,4 +703,22 @@ export function bandCrossings(l: SchematicLayout, row: number): number[] {
 		cols.add(a.row === row || e.via === undefined ? a.col : e.via);
 	}
 	return [...cols].sort((x, y) => x - y);
+}
+
+/**
+ * A node's second label line. Plain: "outflow · " at the outlet, its area
+ * with everything upstream, and its dam's capacity. Coloured (`colour`, the
+ * drawing's colour by supply or dam level): the figure it is coloured by
+ * ("82% supplied", "64% full", the run's), and when the dam was edited since
+ * that run (issue #444: with the colour's figure alone an edit was
+ * invisible) its capacity now ("now 0.20 Mm³", "no dam now"), or "changed"
+ * for an edit that left the capacity alone. The area and the capacity of an
+ * unchanged dam stay in the tooltip when coloured: with them as well, the line
+ * ran into the next column's label.
+ */
+export function metaLine(ln: Pick<SchematicNode, 'node' | 'cumulativeAreaKm2'>, colour?: { text: string }, changed: { capacity: boolean } | null = null): string {
+	const n = ln.node;
+	const dam = hasDam(n) ? fmtVolume(n.damCapacityM3) : '';
+	if (colour) return [colour.text, changed ? (changed.capacity ? (dam ? `now ${dam}` : 'no dam now') : 'changed') : ''].filter(Boolean).join(' · ');
+	return `${n.downstreamNodeId === null ? 'outflow · ' : ''}${fmtNum(ln.cumulativeAreaKm2, 1)} km²${dam ? ` · ${dam}` : ''}`;
 }

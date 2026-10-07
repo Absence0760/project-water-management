@@ -10,6 +10,7 @@ import {
 	estimatedWidths,
 	labelBox,
 	measuredWidths,
+	metaLine,
 	paperBands,
 	polylineHits,
 	routeAround,
@@ -432,5 +433,27 @@ describe('distinctShortNames', () => {
 
 	it('leaves two identical names identical', () => {
 		expect(distinctShortNames(['Same very long unit name', 'Same very long unit name'])).toEqual(['Same very long u…', 'Same very long u…']);
+	});
+});
+
+describe('metaLine (a node’s second label line)', () => {
+	const farm = (damCapacityM3: number, down: string | null = 'Out'): NetworkNode => ({ ...node('F', down, 2), damCapacityM3 });
+
+	it('plain: the outlet word, the area upstream and the dam', () => {
+		expect(metaLine({ node: farm(150_000), cumulativeAreaKm2: 12.34 })).toBe('12.3 km² · 0.15 Mm³');
+		expect(metaLine({ node: farm(0, null), cumulativeAreaKm2: 40 })).toBe('outflow · 40.0 km²');
+	});
+
+	it('coloured: the colour’s figure alone while the dam is as the run had it', () => {
+		expect(metaLine({ node: farm(150_000), cumulativeAreaKm2: 12 }, { text: '64% full' })).toBe('64% full');
+		expect(metaLine({ node: farm(0), cumulativeAreaKm2: 12 }, { text: '82% supplied' })).toBe('82% supplied');
+	});
+
+	it('coloured, edited since the run: the capacity now, or "changed" when the capacity is the same (issue #444)', () => {
+		expect(metaLine({ node: farm(200_000), cumulativeAreaKm2: 12 }, { text: '64% full' }, { capacity: true })).toBe('64% full · now 0.20 Mm³');
+		expect(metaLine({ node: farm(0), cumulativeAreaKm2: 12 }, { text: '82% supplied' }, { capacity: true })).toBe('82% supplied · no dam now');
+		expect(metaLine({ node: farm(150_000), cumulativeAreaKm2: 12 }, { text: '64% full' }, { capacity: false })).toBe('64% full · changed');
+		// A plain drawing is today's model: nothing to mark.
+		expect(metaLine({ node: farm(200_000), cumulativeAreaKm2: 12 }, undefined, { capacity: true })).toBe('12.0 km² · 0.20 Mm³');
 	});
 });
