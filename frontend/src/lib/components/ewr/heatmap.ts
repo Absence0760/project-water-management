@@ -1,28 +1,32 @@
 // Pure logic for the EWR compliance heat map: binning, legend and summaries.
-import type { EwrCompliance, EwrComplianceGrid } from '@water-management/engine';
+import { ewrBand, type EwrBand, type EwrCompliance, type EwrComplianceGrid } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
+import { bandLabels, EWR_BANDS } from './bands';
 
 export type HeatMetric = 'pct' | 'volume';
 
-/** Bin 0 = fully met; 1–4 = increasingly bad; null = no simulated days. */
+/**
+ * A cell's class: `% of days not met` is read by the EWR traffic light (green,
+ * amber, red: the portfolio's bands, engine reserve/trafficLight.ts); the
+ * shortfall volume, which has no pass mark, by a blue ramp relative to the
+ * grid's largest month (`v0`–`v4`).
+ */
+export type HeatClass = EwrBand | 'v0' | 'v1' | 'v2' | 'v3' | 'v4';
+
+/** Bin 0 = no shortfall; 1–4 = increasingly large; the volume ramp's steps. */
 export type Bin = 0 | 1 | 2 | 3 | 4;
 
-/** Upper bounds (inclusive) of bins 1–3 for "% of days not met"; bin 4 is the rest. */
-export const PCT_BREAKS = [10, 25, 50] as const;
+/** Upper bounds (inclusive) of the volume ramp's bins 1–3, in % of the grid's largest month; bin 4 is the rest. */
+export const VOLUME_BREAKS = [10, 25, 50] as const;
 
 /** Share of days in a cell with the EWR not met, 0–100; null when no days were simulated. */
 export function cellPct(daysNotMet: number, days: number): number | null {
 	return days > 0 ? (100 * daysNotMet) / days : null;
 }
 
-/** % of days → bin: 0 → 0, (0,10] → 1, (10,25] → 2, (25,50] → 3, (50,100] → 4. */
-export function binPct(pct: number | null): Bin | null {
-	if (pct == null || !Number.isFinite(pct)) return null;
-	if (pct <= 0) return 0;
-	if (pct <= PCT_BREAKS[0]) return 1;
-	if (pct <= PCT_BREAKS[1]) return 2;
-	if (pct <= PCT_BREAKS[2]) return 3;
-	return 4;
+/** A month's band by the share of its days not met; null when it has no simulated days. */
+export function bandPct(daysNotMet: number, days: number): EwrBand | null {
+	return ewrBand(daysNotMet, days);
 }
 
 /**
@@ -33,32 +37,30 @@ export function binPct(pct: number | null): Bin | null {
 export function binVolume(m3: number, max: number): Bin {
 	if (!(m3 > 0) || !(max > 0)) return 0;
 	const f = (100 * m3) / max;
-	return binPct(f) as Bin;
+	if (f <= VOLUME_BREAKS[0]) return 1;
+	if (f <= VOLUME_BREAKS[1]) return 2;
+	if (f <= VOLUME_BREAKS[2]) return 3;
+	return 4;
 }
 
 export interface LegendEntry {
-	bin: Bin;
+	cls: HeatClass;
 	label: string;
 }
 
 /** Legend entries for the current metric (volume labels use the grid's max). */
 export function legend(metric: HeatMetric, max = 0): LegendEntry[] {
 	if (metric === 'pct') {
-		return [
-			{ bin: 0, label: 'Met every day' },
-			{ bin: 1, label: '≤ 10% of days' },
-			{ bin: 2, label: '10–25%' },
-			{ bin: 3, label: '25–50%' },
-			{ bin: 4, label: '> 50%' }
-		];
+		const l = bandLabels();
+		return EWR_BANDS.map((cls) => ({ cls, label: l[cls] }));
 	}
 	const v = (f: number) => fmtVolume(max * f);
 	return [
-		{ bin: 0, label: 'No shortfall' },
-		{ bin: 1, label: `≤ ${v(0.1)}` },
-		{ bin: 2, label: `${v(0.1)}–${v(0.25)}` },
-		{ bin: 3, label: `${v(0.25)}–${v(0.5)}` },
-		{ bin: 4, label: `> ${v(0.5)}` }
+		{ cls: 'v0', label: 'No shortfall' },
+		{ cls: 'v1', label: `≤ ${v(0.1)}` },
+		{ cls: 'v2', label: `${v(0.1)}–${v(0.25)}` },
+		{ cls: 'v3', label: `${v(0.25)}–${v(0.5)}` },
+		{ cls: 'v4', label: `> ${v(0.5)}` }
 	];
 }
 

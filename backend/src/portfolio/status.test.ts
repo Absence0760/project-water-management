@@ -1,6 +1,7 @@
 // The portfolio's traffic light (D11), its unknown reasons, and how a row is
 // shaped from what the query read (WP-2.14, docs/api.md § Portfolio).
 import { afterEach, describe, expect, it } from 'vitest';
+import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
 import { toPortfolioProject, type PortfolioRow } from './portfolio.js';
 import { ageDays, EWR_THRESHOLDS, ewrFigure, ewrStatus, isStale } from './status.js';
 
@@ -11,6 +12,10 @@ afterEach(() => {
 });
 
 describe('ewrStatus', () => {
+	it('uses the engine’s traffic light, the bands the workspace’s EWR compliance by month draws', () => {
+		expect(EWR_THRESHOLDS).toBe(EWR_TRAFFIC_LIGHT);
+	});
+
 	it('green below 5 %, amber below 20 %, red from 20 % (of 30 days: 1 green, 2–5 amber, 6+ red)', () => {
 		expect(EWR_THRESHOLDS).toEqual({ green: 5, amber: 20 });
 		expect(ewrStatus(0, 30)).toBe('green');

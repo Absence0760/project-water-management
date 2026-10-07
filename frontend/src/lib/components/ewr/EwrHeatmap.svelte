@@ -1,6 +1,9 @@
 <!--
 	EWR compliance heat map: water-year rows × Oct…Sep columns, one cell per
-	month, coloured by % of days the EWR was not met (or shortfall volume).
+	month, coloured by % of days the EWR was not met in the EWR traffic light's
+	three bands (green, amber, red: the portfolio's, engine reserve/trafficLight.ts),
+	or by shortfall volume on a blue ramp. The number is written in every month
+	that missed a day, so the colour is never the only cue.
 	It is a real <table>, so screen readers get the numbers directly; arrow
 	keys move a single focus through the cells and a readout shows the detail.
 	Input: RunSummary.ewrCompliance (engine 0.3.0+).
@@ -12,7 +15,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
 	import {
-		binPct,
+		bandPct,
 		binVolume,
 		cellPct,
 		fmtCompact,
@@ -22,7 +25,7 @@
 		monthProfile,
 		totals,
 		worstYears,
-		type Bin,
+		type HeatClass,
 		type HeatMetric
 	} from './heatmap';
 
@@ -60,7 +63,7 @@
 		notMet: number;
 		m3: number;
 		pct: number | null;
-		bin: Bin | null;
+		cls: HeatClass | null;
 		text: string;
 	}
 
@@ -69,9 +72,10 @@
 		const notMet = grid?.daysNotMet[r]?.[m] ?? 0;
 		const m3 = grid?.shortfallM3[r]?.[m] ?? 0;
 		const pct = cellPct(notMet, days);
-		const bin = days === 0 ? null : metric === 'pct' ? binPct(pct) : binVolume(m3, max);
-		const text = days === 0 || bin === 0 ? '' : metric === 'pct' ? fmtNum(pct, 0) : fmtCompact(m3);
-		return { days, notMet, m3, pct, bin, text };
+		const cls: HeatClass | null = days === 0 ? null : metric === 'pct' ? bandPct(notMet, days) : `v${binVolume(m3, max)}`;
+		// Blank only when the month met the EWR every day (no shortfall): a month that missed one says how much.
+		const text = days === 0 || notMet === 0 ? '' : metric === 'pct' ? fmtNum(pct, 0) : fmtCompact(m3);
+		return { days, notMet, m3, pct, cls, text };
 	}
 
 	/** Calendar year of a water-year row + month column (Oct–Dec belong to the start year). */
@@ -81,7 +85,7 @@
 		const c = cell(r, m);
 		const when = `${WATER_YEAR_MONTHS[m]} ${calYear(r, m)}`;
 		if (c.days === 0) return `${when}: not simulated`;
-		return `${when}: EWR not met on ${c.notMet} of ${c.days} days (${fmtNum(c.pct, 0)}%), shortfall ${fmtVolume(c.m3)}`;
+		return `${when}: EWR not met on ${c.notMet} of ${c.days} days (${fmtNum(c.pct, 0)}%, ${bandPct(c.notMet, c.days)}), shortfall ${fmtVolume(c.m3)}`;
 	}
 
 	function onKey(e: KeyboardEvent) {
@@ -159,8 +163,8 @@
 		{/if}
 
 		<ul class="legend" aria-label="Colour key">
-			{#each keyItems as k (k.bin)}
-				<li><span class="swatch b{k.bin}" aria-hidden="true"></span>{k.label}</li>
+			{#each keyItems as k (k.cls)}
+				<li><span class="swatch {k.cls}" aria-hidden="true"></span>{k.label}</li>
 			{/each}
 			<li><span class="swatch none" aria-hidden="true"></span>Not simulated</li>
 		</ul>
@@ -188,7 +192,7 @@
 								{@const c = cell(r, m)}
 								<td
 									id="{uid}-c-{r}-{m}"
-									class={c.bin === null ? 'none' : `b${c.bin}`}
+									class={c.cls ?? 'none'}
 									tabindex={focus.r === r && focus.m === m ? 0 : -1}
 									onfocus={() => (focus = { r, m })}
 									onmouseenter={() => (hover = { r, m })}
@@ -222,13 +226,14 @@
 				A day counts when this hydrological unit is charged part of the shortfall at an EWR site below it (runs before engine 0.17.0: when its reach shortfall was below zero).
 			{/if}
 			Cells show {metric === 'pct' ? '% of the month’s days' : 'shortfall volume (k = thousand m³, M = million m³)'}; blank = met every
-			day. The "All years" row is the share of days not met in that month across all years.{print ? '' : ' Use the arrow keys to move between months.'}
+			day.{metric === 'pct' ? ' The bands are the default EWR traffic light (provisional until the hydrologist confirms them), the portfolio’s for a team that hasn’t set its own.' : ''} The "All years" row is the share of days not met in that month across all years.{print ? '' : ' Use the arrow keys to move between months.'}
 		</p>
 	{/if}
 </section>
 
 <style>
-	/* Sequential blue ramp (validated ordinal: light end ≥ 2:1 on the surface). */
+	/* The volume metric: a sequential blue ramp (validated ordinal: light end ≥ 2:1 on the surface).
+	   % of days not met uses the status tokens instead (.green/.amber/.red below), as the portfolio's pills. */
 	.ewr-heatmap {
 		--heat-0: var(--surface);
 		--heat-1: #86b6ef;
@@ -374,23 +379,44 @@
 	.heat tfoot td {
 		border-top: 1px solid var(--border);
 	}
-	.b0 {
+	/* The traffic light: the status tokens' soft fill, a stronger edge and the token as ink (the
+	   portfolio's StatusPill), so each band holds ≥ 4.5:1 for its number in both themes. */
+	.green {
+		background: var(--success-soft);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 45%, transparent);
+		color: var(--success);
+		font-weight: 600;
+	}
+	.amber {
+		background: var(--warning-soft);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 55%, transparent);
+		color: var(--warning);
+		font-weight: 600;
+	}
+	/* A 2 px edge: the worst band reads apart from amber without telling red from green. */
+	.red {
+		background: var(--danger-soft);
+		box-shadow: inset 0 0 0 2px var(--danger);
+		color: var(--danger);
+		font-weight: 600;
+	}
+	.v0 {
 		background: var(--heat-0);
 		box-shadow: inset 0 0 0 1px var(--border);
 	}
-	.b1 {
+	.v1 {
 		background: var(--heat-1);
 		color: var(--heat-ink-1);
 	}
-	.b2 {
+	.v2 {
 		background: var(--heat-2);
 		color: var(--heat-ink-2);
 	}
-	.b3 {
+	.v3 {
 		background: var(--heat-3);
 		color: var(--heat-ink-3);
 	}
-	.b4 {
+	.v4 {
 		background: var(--heat-4);
 		color: var(--heat-ink-4);
 	}
