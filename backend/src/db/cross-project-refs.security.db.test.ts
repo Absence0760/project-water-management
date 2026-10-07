@@ -966,8 +966,40 @@ async function divideProposal(h: World, r: World, field: 'outletFeatureId' | 'fe
 	}
 }
 
+/**
+ * settings.ewrHeadline naming a gauge (issue #444): the world's model gets a
+ * gauge above the outlet for the call, with a synthetic Reserve rule table
+ * there (the site must have one), and both are taken out again afterwards so
+ * no other case sees them. `r`'s gauge is put in `r`'s own model, so the
+ * attack names a real gauge, only of the other project.
+ */
+const gaugeIds = new Map<string, string>();
+const gaugeOf = (w: World) => gaugeIds.get(w.projectId) ?? (gaugeIds.set(w.projectId, randomUUID()), gaugeIds.get(w.projectId)!);
+const ruleTable = (siteNodeId: string) => ({
+	siteNodeId,
+	source: 'Synthetic table',
+	component: 'total',
+	unit: 'mcm',
+	points: [10, 50, 90],
+	ewr: Array.from({ length: 12 }, () => [1.5, 1, 0.5]),
+	naturalSource: 'run',
+	natural: null,
+	scale: 1
+});
+async function judgeByGauge(h: World, r: World): Promise<Res> {
+	const withGauge = (w: World) => modelOf(w, { nodes: [...modelOf(w).nodes, node('Weir', w.outletId, { id: gaugeOf(w), kind: 'gauge', areaKm2: 0 })] });
+	for (const w of new Set([h, r])) expect((await dual.call('PUT', `/projects/${w.projectId}/model`, withGauge(w))).status).toBe(200);
+	try {
+		return await dual.call('PATCH', `/projects/${h.projectId}`, { settings: { ewrRules: [ruleTable(gaugeOf(h))], ewrHeadline: { source: 'ruleTable', siteNodeId: gaugeOf(r) } } });
+	} finally {
+		expect((await dual.call('PATCH', `/projects/${h.projectId}`, { settings: { ewrRules: [], ewrHeadline: { source: 'auto' } } })).status).toBe(200);
+		for (const w of new Set([h, r])) expect((await dual.call('PUT', `/projects/${w.projectId}/model`, modelOf(w))).status).toBe(200);
+	}
+}
+
 /** Write routes whose body names another row, each sent with A's row (control) and B's (attack). */
 const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
+	'PATCH /projects/:id settings.ewrHeadline.siteNodeId': judgeByGauge,
 	'POST /projects/:id/scenarios baseRunId': (h, r) => dual.call('POST', `/projects/${h.projectId}/scenarios`, { name: `S ${randomUUID()}`, baseRunId: r.runId }),
 	'POST /projects/:id/publication runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/publication`, { runId: r.run2Id }),
 	'POST /projects/:id/evidence runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/evidence`, { runId: r.runId, reason: 'Cross-project sweep' }),
@@ -1162,6 +1194,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'outlooks/schema.ts:baseRunId': 'checked by seasonal_outlook_guard (the SQL case) and outlooks.db.test.ts; the route needs a multi-year record',
 	'outlooks/schema.ts:outlookId': 'a job payload: jobs/trust.security.db.test.ts',
 	'projects/outcomeSettings.ts:siteNodeId': 'checkOutcomeSite: outcomeSettings.db.test.ts refuses another project’s node',
+	'projects/ewrHeadlineSettings.ts:siteNodeId': ['PATCH /projects/:id settings.ewrHeadline.siteNodeId'],
 	'projects/settings.ts:calibrationSiteNodeId': 'checkCalibrationSite: projects/calibrationSite.db.test.ts refuses another project’s node',
 	'projects/document.ts:siteNodeId': 'a node of the file’s own model, moved to its fresh id on import (projectFileProblems refuses any other): series/site.db.test.ts',
 	'projects/routes.ts:teamId': 'a team, not a project row: teams/teams.security.db.test.ts',
