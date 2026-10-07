@@ -97,7 +97,7 @@ test('Run model with unsaved edits asks to save first, then runs the saved edits
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Bar run');
 	await openTransfers(page, project.id);
-	// The edits are made on Transfers and the run started from Runs & results, the only Run model.
+	// The edits are made on Transfers and the run started from Runs & results, where the tab's own run form takes the header Run model's place.
 	const run = page.getByTestId('section-header').getByRole('button', { name: 'Run model', exact: true });
 	const toRuns = async () => {
 		await sections(page).getByRole('link', { name: 'Runs & results' }).click();
