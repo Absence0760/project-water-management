@@ -20,6 +20,7 @@ import { EWR_BINDING_SERIES } from '../network/bindingSeries';
 import { canMove, farmRules, readRuleVolumes, transferRuleKey } from '../network/transferSeries';
 import { transferActiveMonths, transferDailyLimit } from '../network/transferRates';
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
+import { reachLossDay, reachLossOf, REACH_LOSS_SERIES, SENIOR_REACH_LOSS_SERIES } from '../network/reachLoss';
 import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
@@ -43,7 +44,9 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
  * Daily balance identities and bounds, every node, every day:
  * - every value finite (observed flow may be NaN on missing days, the Reserve
  *   rule requirement outside complete months);
- * - routed inflow = Σ upstream outflow (gauges pass it through);
+ * - routed inflow = Σ upstream outflow less the bed losses of the reaches
+ *   between (engine ≥ 1.75.0; gauges pass it through), each loss MIN(cap,
+ *   f × outflow) as the node's setting gives it;
  * - farm balance H + I + J + rain on dam + Q[t−1] = U + G − T + evaporation
  *   + Q (T = return flow β·(1 − e)·G, audit N1; rain on the dam and
  *   evaporation from it, audit N2; seepage is part of U, less the share lost
@@ -367,17 +370,38 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const U = get.get(`${n.id}|outflow`)!;
 		// Series looked up once per node, not per day: this runs on every saved run.
 		const upU = ups.map((u) => get.get(`${u.id}|outflow`)!);
+		// Bed losses in the reaches from them (engine ≥ 1.75.0, docs/model.md §2.6b): null for a reach without.
+		const upL = ups.map((u) => get.get(`${u.id}|${REACH_LOSS_SERIES.key}`) ?? null);
 		const upAAs = ups.map((u) => get.get(`${u.id}|ewr_shortfall`)!);
 		const routed = n.kind === 'gauge' ? U : get.get(`${n.id}|inflow_upstream`)!;
 		for (let t = 0; t < out.days; t++) {
 			let H = 0;
-			for (const a of upU) H += a[t]!;
+			for (let k = 0; k < upU.length; k++) H += upL[k] ? upU[k]![t]! - upL[k]![t]! : upU[k]![t]!;
 			if (Math.abs(routed[t]! - H) > tol(H))
 				return `${n.id} day ${t}: routed inflow ${H} ≠ upstream sum`;
 		}
+		// The bed losses of the reach below this node: the setting's MIN(cap, f × outflow), every day, and out of the catchment.
+		const L = get.get(`${n.id}|${REACH_LOSS_SERIES.key}`);
+		const reach = reachLossOf(n, []).reachLoss;
+		if (!!L !== !!reach) return `${n.id}: ${L ? 'a bed-loss series without bed losses' : 'bed losses without a bed-loss series'}`;
+		// The senior claims' share of them: only on a node with bed losses, never negative nor more than the requirement passing it.
+		const SL = get.get(`${n.id}|${SENIOR_REACH_LOSS_SERIES.key}`);
+		if (SL && !reach) return `${n.id}: a senior claims' bed-loss series without bed losses`;
+		if (SL) {
+			const zs = get.get(`${n.id}|senior_requirement`);
+			if (!zs) return `${n.id}: a senior claims' bed-loss series without a senior requirement`;
+			for (let t = 0; t < out.days; t++) if (SL[t]! < 0 || SL[t]! > zs[t]! + tol(zs[t]!)) return `${n.id} day ${t}: senior claims' bed losses ${SL[t]} outside [0, the requirement ${zs[t]}]`;
+		}
+		if (L && reach) {
+			for (let t = 0; t < out.days; t++) {
+				const want = reachLossDay(reach, U[t]!);
+				if (L[t]! < 0 || Math.abs(L[t]! - want) > tol(want)) return `${n.id} day ${t}: bed losses ${L[t]} ≠ MIN(cap, f × outflow ${U[t]}) = ${want}`;
+				totOut += L[t]!;
+			}
+		}
 		if (n.kind === 'gauge') continue;
 		if (n.kind === 'user') {
-			const bad = checkUserDay(n, bores.get(n.id) ?? [], toEpochDay(out.startDate), get, ups.map((u) => u.id), out.days);
+			const bad = checkUserDay(n, bores.get(n.id) ?? [], toEpochDay(out.startDate), get, ups, out.days);
 			if (bad) return bad;
 			const G = get.get(`${n.id}|supplied`)!;
 			const T = get.get(`${n.id}|return_flow`)!;
@@ -581,6 +605,12 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 }
 
 /**
+ * The senior users' requirement a node passes, less the claims' share of the bed losses in the reach below it
+ * (`senior_reach_loss`, engine ≥ 1.75.0, docs/model.md §2.6b), what they need below the reach.
+ */
+const arrivingSenior = (zs: number, claimsLost: ArrayLike<number> | undefined, t: number): number => (claimsLost ? zs - Math.min(zs, claimsLost[t]!) : zs);
+
+/**
  * One other water user's day (WP-1.33, docs/model.md §2.7c): it takes
  * 0 ≤ G ≤ D from what reaches it, G = MIN(D, H) when senior and
  * MIN(D, MAX(0, H − Zs)) when junior (Zs = the senior requirement passing it);
@@ -588,14 +618,15 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
  * MIN(U − Z, 0) with Z the upstream requirement (it has no share of its own);
  * a senior user takes its demand out of the senior requirement below it.
  */
-function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<ModelInput['model']['boreholes']>, day0: number, get: SeriesMap, ups: string[], days: number): string | null {
+function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<ModelInput['model']['boreholes']>, day0: number, get: SeriesMap, ups: readonly NetworkNode[], days: number): string | null {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
 	const [D, G, W, H, U, T, Z, AA] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'outflow', 'return_flow', 'ewr_cumulative', 'ewr_shortfall'].map(g);
 	if (!D || !G || !W || !H || !U || !T || !Z || !AA) return `${n.id}: user series missing`;
 	const r = Math.min(Math.max(Number.isFinite(n.userReturnPct) ? n.userReturnPct! : 0, 0), 1);
 	const senior = (n.userPriority ?? 'senior') !== 'junior';
 	const Zs = g('senior_requirement');
-	const upZs = ups.map((u) => get.get(`${u}|senior_requirement`));
+	const upZs = ups.map((u) => get.get(`${u.id}|senior_requirement`));
+	const upLost = ups.map((u) => get.get(`${u.id}|${SENIOR_REACH_LOSS_SERIES.key}`));
 	// Boreholes (WP-1.34): G = river take + groundwater; the river part follows the priority rule.
 	const GW = g('groundwater_used');
 	const DEP = g('baseflow_depletion');
@@ -612,7 +643,7 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	for (let t = 0; t < days; t++) {
 		const where = `${n.id} day ${t}`;
 		let zIn = 0;
-		for (const a of upZs) zIn += a?.[t] ?? 0;
+		for (let k = 0; k < upZs.length; k++) zIn += arrivingSenior(upZs[k]?.[t] ?? 0, upLost[k], t);
 		const h = H[t]!;
 		const d = D[t]!;
 		const gw = GW?.[t] ?? 0;
@@ -1361,7 +1392,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const ZS = g('senior_requirement');
 		const PASSED = g('passed_for_senior');
 		if (ZS && !PASSED) return `${n.id}: working column passed_for_senior missing`;
-		const upZS = input.model.nodes.filter((u) => u.downstreamNodeId === n.id).map((u) => get.get(`${u.id}|senior_requirement`));
+		const upNodes = input.model.nodes.filter((u) => u.downstreamNodeId === n.id);
+		const upZS = upNodes.map((u) => get.get(`${u.id}|senior_requirement`));
+		const upLost = upNodes.map((u) => get.get(`${u.id}|${SENIOR_REACH_LOSS_SERIES.key}`));
 		// Boreholes (WP-1.34, WP-3.9).
 		const bore = boreholeOf(n, bores.get(n.id) ?? [], []).borehole;
 		const replay = boreholeReplay(bore, day0);
@@ -1673,7 +1706,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (ZS) {
 				// Senior users below (WP-1.33): the farm passes MIN(Zs, H + I) below the dam, and keeps nothing back without them.
 				let zIn = 0;
-				for (const a of upZS) zIn += a![t]!;
+				for (let k = 0; k < upZS.length; k++) zIn += arrivingSenior(upZS[k]![t]!, upLost[k], t);
 				const zs = ZS[t]!;
 				const pass = PASSED![t]!;
 				if (zs < zIn - tol(zIn)) return `${where}: senior requirement ${zs} below the ${zIn} arriving from upstream`;

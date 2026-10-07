@@ -3,6 +3,7 @@
 // checks, and a zod-free runtime validator the backend can call on a request
 // body (or mirror in zod). Pure: no I/O.
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
+import { REACH_LOSS_FRAC_MAX } from '../network/reachLoss';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
 import { isIsoDate } from '../calendar';
@@ -244,6 +245,12 @@ const CROP_SOURCE = ['cropWaterSource', 'cropRiverPumpM3Day', 'cropRiverPoolM3']
  * node, which an applicant's view may hide), not a scenario's.
  */
 const CROP_SUPPLY = ['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropRemoteCapM3Day'] as const;
+/**
+ * Bed losses in the reach below a node (engine ≥ 1.75.0, issue #444,
+ * docs/model.md §2.6b): the share of the flow lost and its daily cap. Any
+ * kind of node; a property of the river, so a baseline assumption.
+ */
+const REACH = ['reachLossFrac', 'reachLossMaxM3Day'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -253,9 +260,9 @@ const CROP_SUPPLY = ['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropR
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY],
-	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
-	gauge: ['name', 'ewrSite']
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE, ...CROP_SUPPLY, ...REACH],
+	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES, ...REACH],
+	gauge: ['name', 'ewrSite', ...REACH]
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
 
 export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
@@ -263,10 +270,11 @@ export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
 /**
  * node.set fields that are baseline assumptions even on the applicant's own
  * node (classifyOp): land and flow share split the catchment's natural
- * runoff, where the EWR is assessed is the Reserve's, and a dam's survey and
- * sediment rate (engine ≥ 1.30.0) describe the dam as it is, never a proposal.
+ * runoff, where the EWR is assessed is the Reserve's, a dam's survey and
+ * sediment rate (engine ≥ 1.30.0) describe the dam as it is, never a
+ * proposal, and the river bed's losses (engine ≥ 1.75.0) are the river's.
  */
-export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite', 'damSurveyDate', 'damSedimentPctPerYear'];
+export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite', 'damSurveyDate', 'damSedimentPctPerYear', ...REACH];
 
 const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	name,
@@ -319,6 +327,8 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	cropShareRiver: nullable(frac),
 	cropShareRemote: nullable(frac),
 	cropRemoteCapM3Day: nullable(nonNeg),
+	reachLossFrac: range(0, REACH_LOSS_FRAC_MAX),
+	reachLossMaxM3Day: nullable(nonNeg),
 	ewrSite: boolean
 };
 
@@ -1125,6 +1135,8 @@ const NODE_OPTIONAL = new Set<string>([
 	// No crop supply table unless given (engine ≥ 1.73.0); a new node names no other unit's dam.
 	...CROP_SUPPLY,
 	'cropRemoteNodeId',
+	// No bed losses in the reach below unless given (engine ≥ 1.75.0).
+	...REACH,
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,

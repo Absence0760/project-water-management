@@ -158,6 +158,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Needs hydrologist (engine 1.73.0, issue #408)"
 	},
 	{
+		"id": "R4",
+		"source": "finding",
+		"severity": "Low (reaches with bed losses, engine 1.75.0)",
+		"title": "Bed losses in a reach run on choices the hydrologist hasn't confirmed, and the EWR is still read from the natural flow before them",
+		"status": "Needs hydrologist (engine 1.75.0, issue #444)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

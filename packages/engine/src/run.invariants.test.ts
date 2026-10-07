@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { OPERATING_DEFAULTS, upgradeLegacyModel, type ModelInput } from './project';
-import { randomInput, Rng, withoutRiverSources } from './testing/fuzz';
+import { randomInput, Rng, withoutReachLosses, withoutRiverSources } from './testing/fuzz';
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
 import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 import { clientCatchmentDirs } from './testing/client-catchment-fixture';
@@ -64,8 +64,9 @@ describe('engine invariants on random networks', () => {
 		// time reliability counted as failed, and more days of it in the base run than the doubled one
 		// (0.98343 → 0.98481). A unit that pumped all it was asked for now leaves the dam supplying `rem`
 		// itself (network/boreholes.ts groundwaterDay), so a top-up day is short by no more than an ulp of its demand.
+		// Engine 1.75.0's generator gives seed 11421 bed losses (their own stream); they are taken off so it is the network it was found on.
 		for (const [seed, id] of [[1774, 'n14'], [11421, 'n14']] as const) {
-			const input = droughtBoreholesAsSupplemental(randomInput(seed));
+			const input = droughtBoreholesAsSupplemental(withoutReachLosses(randomInput(seed)));
 			expect(input.model.boreholes!.some((b) => b.nodeId === id && b.mode === 'supplemental' && b.target === 'dam'), `seed ${seed}`).toBe(true);
 			const base = structuredClone(input);
 			for (const n of base.model.nodes) n.returnFlowFraction = 0;
@@ -97,6 +98,8 @@ describe('engine invariants on random networks', () => {
 		// Engine 1.65.0's generator puts some of this seed's demands on river abstractions (n7's among them), and an
 		// off-take serves only the dam side's demand; they go back to the dam so n7 still takes the off-take water.
 		withoutRiverSources(input);
+		// Engine 1.75.0's generator gives it bed losses too (their own stream); taken off the same way.
+		withoutReachLosses(input);
 		const out = runModel(input);
 		expect(out.series.some((s) => s.key === 'offtake_in' && s.nodeId === 'n7' && s.values.some((v) => v > 0))).toBe(true);
 		const get = new Map(out.series.map((s) => [`${s.nodeId}|${s.key}`, s.values]));
@@ -132,8 +135,9 @@ describe('engine invariants on random networks', () => {
 		// Engine 1.32.0's generator gives some of these seeds hands-off flows and River to dam by month (4197
 		// and 15979 among them); they are taken off, as for seed 25, so the shallow dam still fills and empties
 		// as it did and the evaporation limiter is still exercised.
+		// Engine 1.75.0's generator gives 7686 bed losses (their own stream); taken off the same way.
 		for (const seed of [4197, 7686, 15979, 17277]) {
-			const input = randomInput(seed);
+			const input = withoutReachLosses(randomInput(seed));
 			for (const n of input.model.nodes) Object.assign(n, OPERATING_DEFAULTS);
 			expect(checkDoubledCropAreas(input), `seed ${seed}`).toBeNull();
 			expect(checkAll(input, seed), `seed ${seed}`).toBeNull();
@@ -204,8 +208,10 @@ describe('engine invariants on random networks', () => {
 	it('F8 regression: the seeds where display order changed EWR "days not met" are order-invariant', () => {
 		// Found by the order-invariance check: rounded engine (0.3.x) on 70 … 18130,
 		// unrounded (0.4.0) on 103 … 395. Fixed in network/simulate.ts (review F8).
+		// Engine 1.75.0's generator gives some of them bed losses (70, 1648, 148, 321, 389; their own stream): taken off, so each
+		// is the network the order dependence was found on (order invariance with bed losses is the fuzz soak's).
 		for (const seed of [70, 599, 1648, 2685, 6655, 8046, 18130, 103, 125, 145, 148, 207, 232, 321, 342, 389, 395]) {
-			const input = randomInput(seed);
+			const input = withoutReachLosses(randomInput(seed));
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 	});
@@ -232,8 +238,9 @@ describe('engine invariants on random networks', () => {
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		expect(checkOrderInvariance(randomInput(14313), runModel(randomInput(14313)), 14313), 'seed 14313').toBeNull();
+		// 15426 has bed losses from engine 1.75.0's generator; taken off as above.
 		for (const [seed, opts] of [[9051, {}], [11240, {}], [15426, {}]] as const) {
-			const input = randomInput(seed, opts);
+			const input = withoutReachLosses(randomInput(seed, opts));
 			expect(checkEwrAttribution(input, runModel(input)), `seed ${seed}`).toBeNull();
 		}
 	});
@@ -249,13 +256,14 @@ describe('engine invariants on random networks', () => {
 		// the catchment area, and so every natural flow, differed in the last bit;
 		// 5703, 15208: a dam ran dry in one order and kept a residue with a surface
 		// in the other; 17355: an other user's EWR days not met, 209 vs 210.
+		// Engine 1.75.0's generator gives 3899 bed losses (their own stream); taken off as above, here and below.
 		for (const seed of [3899, 5703, 6326, 7077, 7094, 7599, 10525, 15208, 17002, 17355, 19035]) {
-			const input = randomInput(seed);
+			const input = withoutReachLosses(randomInput(seed));
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}`).toBeNull();
 		}
 		// 1087, 1269 (engine 1.74.1, the release soak): a missing irrigation system's warning named whichever crop came first.
 		for (const seed of [3321, 4260, 9912, 18288, 18330, 19214, 3899, 7094, 1087, 1269]) {
-			const input = randomInput(seed);
+			const input = withoutReachLosses(randomInput(seed));
 			expect(checkOrderInvariance(input, runModel(input), seed), `seed ${seed}, GR4J`).toBeNull();
 		}
 	});
