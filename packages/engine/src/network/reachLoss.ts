@@ -10,14 +10,18 @@
 // 689/16 §6.2.3.1): it doesn't become groundwater and doesn't come back to
 // the network. The loss is never negative, never decreases as the flow
 // rises and is never more than the flow (eWater Source practice note on
-// losses). f = 0, the default, is no loss and no plan entry, so every model
+// losses). f = 1 with cap = Bedloss × 10⁶ ÷ days in the month is WRSM's fixed
+// monthly Bedloss, MIN(Bedloss, flow), exactly. f = 0, the default, is no loss and no plan entry, so every model
 // without it runs to the bit as before. Pure; the plan (../run.ts), the
 // simulation (./simulate.ts) and the self-checks (../verify/checks.ts) read a
 // reach through these functions, so a stored setting means the same to each.
 import type { NetworkNode } from '../project';
 
-/** The largest share of the flow a reach may lose (docs/model.md §2.6b): a reach never runs dry from bed losses alone. */
-export const REACH_LOSS_FRAC_MAX = 0.5;
+/** The largest share of the flow a reach may lose (docs/model.md §2.6b): all of it, up to the cap (WRSM's Bedloss). */
+export const REACH_LOSS_FRAC_MAX = 1;
+
+/** Above this share without a cap the run warns (docs/model.md §2.6b): more than half the flow lost is rarely meant. */
+export const REACH_LOSS_FRAC_WARN = 0.5;
 
 /** The run series a node with bed losses in the reach below it leaves (any kind of node but the outlet). */
 export const REACH_LOSS_SERIES = {
@@ -37,7 +41,7 @@ export const SENIOR_REACH_LOSS_SERIES = {
 	unit: 'm³/day'
 } as const;
 
-/** A reach's losses as the simulation runs them: the share f (0 < f ≤ 0.5) and the daily cap (m³/day; Infinity = none). */
+/** A reach's losses as the simulation runs them: the share f (0 < f ≤ 1) and the daily cap (m³/day; Infinity = none). */
 export interface PlanReachLoss {
 	frac: number;
 	maxM3Day: number;
@@ -50,7 +54,8 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
  * clamped to [0, REACH_LOSS_FRAC_MAX] and its cap (null / absent = none;
  * not a size ≥ 0 = none, with a warning). Nothing for the outlet, which has
  * no reach below it in the model (warned when set), for a share of 0 or a
- * cap of 0.
+ * cap of 0. A share above REACH_LOSS_FRAC_WARN with no cap runs, with a
+ * warning.
  */
 export function reachLossOf(n: NetworkNode, warnings: string[]): { reachLoss?: PlanReachLoss } {
 	const raw = n.reachLossFrac;
@@ -69,6 +74,8 @@ export function reachLossOf(n: NetworkNode, warnings: string[]): { reachLoss?: P
 		else warnings.push(`${where}: bed losses cap ${String(cap)} m³/day is not a size ≥ 0; no cap`);
 	}
 	if (!(frac > 0) || !(maxM3Day > 0)) return {};
+	if (frac > REACH_LOSS_FRAC_WARN && maxM3Day === Infinity)
+		warnings.push(`${where}: more than half the flow lost in the reach below it; check this is meant (with a cap this is how WRSM's Bedloss is expressed)`);
 	return { reachLoss: { frac, maxM3Day } };
 }
 
@@ -83,10 +90,13 @@ export function reachLossDay(p: PlanReachLoss, q: number): number {
  * What must leave the node for `x` to arrive at the bottom of the reach: the
  * inverse of q − reachLossDay(q), MIN(x / (1 − f), x + cap). Since the
  * arriving flow never falls as q rises, a node passing at least this much
- * delivers at least x.
+ * delivers at least x. A reach that loses all of any flow (f = 1, no cap)
+ * delivers nothing whatever is passed, so the claim isn't grossed up (x
+ * itself) rather than asking upstream to pass an unbounded flow.
  */
 export function reachGross(p: PlanReachLoss, x: number): number {
 	if (!(x > 0)) return x;
+	if (p.frac >= 1) return p.maxM3Day === Infinity ? x : x + p.maxM3Day;
 	const a = x / (1 - p.frac);
 	const b = x + p.maxM3Day;
 	return a < b ? a : b;

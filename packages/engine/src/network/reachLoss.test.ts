@@ -104,10 +104,27 @@ describe('the reach arithmetic', () => {
 		expect(reachLossOf(node('U', 'user', 'G', { reachLossFrac: 0.1, reachLossMaxM3Day: 40 }), w)).toEqual({ reachLoss: { frac: 0.1, maxM3Day: 40 } });
 		expect(reachLossOf(node('G', 'gauge', null, { reachLossFrac: 0.3 }), w)).toEqual({});
 		expect(w[0]).toBe('gauge "G": bed losses below the outlet are ignored (the model has no reach below it)');
-		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.9 }), w)).toEqual({ reachLoss: { frac: REACH_LOSS_FRAC_MAX, maxM3Day: Infinity } });
-		expect(w[1]).toBe('unit "A": bed losses 0.9 of the flow are not in [0, 0.5]; using 0.5');
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 1.5, reachLossMaxM3Day: 100 }), w)).toEqual({ reachLoss: { frac: REACH_LOSS_FRAC_MAX, maxM3Day: 100 } });
+		expect(w[1]).toBe('unit "A": bed losses 1.5 of the flow are not in [0, 1]; using 1');
 		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.2, reachLossMaxM3Day: -1 }), w)).toEqual({ reachLoss: { frac: 0.2, maxM3Day: Infinity } });
 		expect(w[2]).toBe('unit "A": bed losses cap -1 m³/day is not a size ≥ 0; no cap');
+		expect(w).toHaveLength(3);
+	});
+
+	it('warns, never refuses, more than half the flow lost without a cap; with a cap (WRSM’s Bedloss) or at half, no warning', () => {
+		const w: string[] = [];
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.8 }), w)).toEqual({ reachLoss: { frac: 0.8, maxM3Day: Infinity } });
+		expect(w).toEqual(['unit "A": more than half the flow lost in the reach below it; check this is meant (with a cap this is how WRSM\'s Bedloss is expressed)']);
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 1, reachLossMaxM3Day: 2000 }), w)).toEqual({ reachLoss: { frac: 1, maxM3Day: 2000 } });
+		expect(reachLossOf(node('A', 'farm', 'G', { reachLossFrac: 0.5 }), w)).toEqual({ reachLoss: { frac: 0.5, maxM3Day: Infinity } });
+		expect(w).toHaveLength(1);
+	});
+
+	it('all of the flow (f = 1): the loss is MIN(cap, flow); the gross-up is the claim plus the cap, and none without a cap', () => {
+		expect(reachLossDay({ frac: 1, maxM3Day: 300 }, 200)).toBe(200);
+		expect(reachLossDay({ frac: 1, maxM3Day: 300 }, 5000)).toBe(300);
+		expect(reachGross({ frac: 1, maxM3Day: 300 }, 800)).toBe(1100);
+		expect(reachGross({ frac: 1, maxM3Day: Infinity }, 800)).toBe(800);
 	});
 });
 
@@ -127,6 +144,22 @@ describe('bed losses in a run (engine 1.75.0)', () => {
 		expect(acct.reachLossM3).toBe(2800);
 		expect(Math.abs(acct.residualM3)).toBeLessThan(1e-9);
 		expect(acct.outM3).toBe(acct.inM3);
+	});
+
+	it('f = 1 with cap = Bedloss × 10⁶ ÷ days in the month is WRSM2000’s fixed monthly Bedloss, day by day', () => {
+		// A January Bedloss of 0.062 Mm³ is 2 000 m³ a day; WRSM loses MIN(Bedloss ÷ days, flow) and passes the rest.
+		const bedlossMm3 = 0.062;
+		const cap = (bedlossMm3 * 1e6) / 31;
+		const o = run(input([node('G', 'gauge', null), node('A', 'farm', 'G', { reachLossFrac: 1, reachLossMaxM3Day: cap })], null));
+		passed(o);
+		const wrsm = NATURAL.map((q) => Math.min(cap, q));
+		expect(col(o, 'A', 'reach_loss')).toEqual(wrsm);
+		// Day 0's 1 000 m³ is below the day's Bedloss: all of it is lost and nothing reaches the gauge.
+		col(o, 'A', 'reach_loss').forEach((v, t) => expect(v).toBeCloseTo([1000, 2000, 2000, 0][t]!, 6));
+		expect(col(o, null, 'simulated_outflow')).toEqual(NATURAL.map((q, t) => q - wrsm[t]!));
+		col(o, null, 'simulated_outflow').forEach((v, t) => expect(v).toBeCloseTo([0, 8000, 1000, 0][t]!, 6));
+		expect(col(o, null, 'simulated_outflow')[0]).toBe(0);
+		expect(o.summary.warnings.some((x) => x.includes('more than half the flow'))).toBe(false);
 	});
 
 	it('the daily cap binds on the wet days', () => {

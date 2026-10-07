@@ -1354,7 +1354,7 @@ export interface NetworkNode {
 	gaRateM3HaYear?: number | null;
 	/**
 	 * Any node but the outlet (engine ≥ 1.75.0, issue #444, docs/model.md
-	 * §2.6b): the share f (0–0.5) of the flow this node passes downstream that
+	 * §2.6b): the share f (0–1) of the flow this node passes downstream that
 	 * is lost in the reach between it and the next node, into the river bed
 	 * and banks: loss = MIN(`reachLossMaxM3Day`, f × outflow). The lost water
 	 * leaves the catchment (it doesn't come back as baseflow). 0 / absent =
