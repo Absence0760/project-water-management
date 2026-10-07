@@ -1417,7 +1417,8 @@ for every workspace tab. Its own chunk.
   every total of dam sizes, stays the entered capacity. A dam whose fields
   change nothing reads exactly as before.
 - **Cards** (`damCards`), emptiest first (the levels' order), then any dam
-  without a level in node order: the name, capacity, % full at the end of the
+  without a level in node order: the name, the capacity in the model now
+  ("no dam now" once removed), % full at the end of the
   run, "below 30%" / "at its minimum level" in words, the change over the
   run's last 30 days in words with ▲/▼ ("down 11 pp in 30 days",
   `changeWords`), a sparkline of the last 365 days as % of capacity
@@ -1446,6 +1447,14 @@ for every workspace tab. Its own chunk.
   below into view, focus on its **Dam of**, so it is never ten or thirty
   cards down out of reach). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
+- **Changed since the run** (issue #444): a card's figures are the run's,
+  worked out with the dam as the run's own model had it (issue #173), but its
+  head and the header's total capacity are the model's now. When the dam
+  differs from the run's model (`damChange`, the same rule as the Network's
+  mark, [§ Network](#network)), a line under the head says so: a **Changed
+  since the run** badge, then what changed ("capacity 150 000 m³ in the run,
+  200 000 m³ now. Re-run to update."). A run saved without its model can't
+  be compared, so it marks nothing.
 - **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
   cards (`dams/DamLevels.svelte`: every column was already on the cards, their
   sparklines or the picked dam's facts line, in the same order; the cards took
@@ -1475,6 +1484,20 @@ for every workspace tab. Its own chunk.
   Summary's **30 days / 1 year / All** switch (`FLOW_WINDOWS`, opens on a
   year). A line above it: % full and the volume on the last day, the lowest
   in the last year and the days at the minimum level.
+- **Assurance of supply: <unit>** under the chart (issue #444,
+  `reliability/NodeAssurance.svelte`): a dam has no assurance of its own, so
+  it is labelled as the unit's ("The hydrological unit's supply, which this
+  dam serves"): the unit's reliability in one line over the reporting window
+  ("92% of demand days fully met · 88% of the demand volume supplied · 7 of
+  10 water years met (70%)"), a strip of stress classes Oct … Sep (each
+  calendar month's supplied ÷ demand with the window's years pooled, classed
+  by the run's own thresholds, in Assurance of supply's ramp with the class
+  name in every cell), a legend line, how many months of the whole run fell
+  in each class, and **<unit> on Hydrological units** (`supplyHref`, the
+  unit picked, `#res-farm`; not for a unit removed since the run). A run
+  before engine 0.32.0 says it wasn't computed. Beside the cards the panel
+  sticks, so the plot gives up the assurance's height (never under 240 px)
+  and the panel stays the height it was, inside a 1120×800 window.
 - **Layout**: the cards column sits beside the chart once the page is 56rem
   wide (a container query on the page, not the viewport), the plot a fixed
   420 px and the chart panel sticky (`top: --header-h + 0.75rem`), so it
@@ -2181,6 +2204,25 @@ itself.
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
+  - **Dams edited since the coloured run** (issue #444): the drawing is
+    always today's model, but a coloured unit's label line is the colour's
+    figure, so an edited capacity used to look unchanged. The colour and the
+    figure stay the run's (issue #173); a unit whose dam differs from the
+    run's own model (`dams/dams.ts`
+    `damChanges`: capacity added, removed or resized by 1 m³ or more, or its
+    minimum or starting level, surface area or curve, seepage, release rule,
+    sediment and in-service date, or the shares routed into it; a field the
+    run's model lacks counts as its default, a stored null is a value) adds
+    its capacity now to the line ("64% full · now 0.20 Mm³", "82% supplied ·
+    no dam now"), or "changed" when the capacity is the same; a dot in the
+    drawing's ink on its symbol's corner; the sentence in its tooltip and the
+    drainage tree ("Changed since the run: capacity 150 000 m³ in the run,
+    200 000 m³ now. Re-run to update."); a **Since the run** group in the key
+    ("Dam changed: re-run to update"); and a read-out line under the caption
+    ("Marked: a dam edited since that run. The colour and % are the run's;
+    “now” is the capacity in the model today. Run the model again to update
+    them."). An unchanged unit's line stays the colour's figure alone, and a
+    plain drawing has no run figures, so no mark.
   - The **Tables** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
     Escape right after opening would otherwise leave it open.
@@ -2277,7 +2319,8 @@ itself.
   one, its corners rounded (`routePath`); `transferPathData` picks. Labels
   (ui-playbook § 3, "Labels on diagrams"): each node's **name** (12.5 px,
   semibold, `--text`) over its **figure** (11 px, `--text-muted`: area and
-  dam, or the colouring's "82% supplied"), both with a halo in the drawing's
+  dam, or the colouring's "82% supplied", with "now 0.20 Mm³" for a dam
+  edited since the run, `schematic.ts` `metaLine`), both with a halo in the drawing's
   ground colour on screen (not on paper, where it doubled every name in the
   PDF's text). The room each label takes (column spacing, the transfers'
   obstacles) is its width measured in the drawing's own font, never less than
@@ -5860,7 +5903,17 @@ read it before.
   page** in the panel's head (`?tab=dams&dam=<nodeId>`), the [Dams](#dams)
   storage chart with its capacity and minimum lines. Until 2026-09-29
   (issue #175) the panel drew its own *Dam storage* chart behind a switch, a
-  weaker copy of that one with neither line.
+  weaker copy of that one with neither line. Under the chart, the unit's
+  **Assurance of supply** (issue #444, `reliability/NodeAssurance.svelte`,
+  shared with the [Dams](#dams) page): its reliability in one line over the
+  reporting window, dated (days met, the demand volume supplied and the water
+  years met; the volume share is the window's, so the dates say which), a
+  strip of stress classes by calendar month (Oct … Sep, the window's years
+  pooled, `nodeAssurance`), the legend, the months of the whole run in each
+  class, and **Every year by month, in Assurance of supply below**, a link to
+  `#res-assurance` below, whose grid opens on the picked unit. Beside the
+  cards the plot gives up the assurance's height (never under 240 px), so
+  the sticky panel keeps its size and the first screen at 1440×960.
 - **Layout.** The page flows in the window's one scroll; nothing on it
   scrolls inside itself. From 56rem of page width the cards are a column
   beside the chart (a fixed 420 px plot; 260 px stacked). The three least
@@ -6022,13 +6075,41 @@ read it before.
      record against the simulated flow there, `runs/RunCharts.svelte` from
      the node's `observed_flow` and `outflow` series), calibration (its
      *Compared with* and the NSE card name the gauge when scored there; with
-     where the parameters came from), the **water balance** by water year
+     where the parameters came from; under its statistics the **calibration
+     check**, below), the **water balance** by water year
      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
      hydrologist hands a client first, its own section since issue #137;
      described under [Self-checks](#self-checks); a line under its equation
      links to River & reserve's **Water account** for the same run, the
      catchment's own), runoff model, WR2012
      check, EWR vs observed, plausibility checks.
+     The **calibration check** (issue #444, `calibration/CalibrationCheck.svelte`,
+     sums in `calibration/calibrationCheck.ts`), inside `#res-calibration`
+     under the statistics, where a hydrologist calibrating reads the fit, so it
+     takes no menu entry of its own: one chart per gauge the run has an
+     observed record for (the outlet, then the calibration site), "Calibration
+     check at &lt;gauge&gt;: observed, simulated, natural and upstream demand",
+     four lines on one axis in the page's flow unit (Runs & results' one
+     m³/s / m³/day switch, shared with the hydrograph through `RunCharts`'s
+     `modelTail` snippet; demand converted the same), a log switch and the last 3 years with the
+     whole record a click away, none hidden at first. *Natural* is the outlet's
+     `natural_flow`, or inside the network the sum of the contributing units'
+     `runoff` plus `landcover_reduction` (their natural runoff before land
+     cover; the site itself counts when it is a unit); *Upstream demand* sums
+     the abstraction `demand` of every unit and other water user above the
+     gauge (the unrestricted demand, before any drought restriction, the
+     boreholes' share included); *Simulated* is the outlet's `simulated_outflow` or the gauge's
+     `outflow`. A how-to-read line heads it: simulated should track observed;
+     natural sits above simulated by roughly the use upstream; where demand
+     rises and simulated drops below natural, abstraction is biting. The
+     series come through the Runs cache six at a time once the lower groups
+     render (after the hydrograph has painted), with a count while they load
+     and a retry on failure. A run saved without its model has no network to
+     sum over: the outlet's chart only, with no demand line, and its caption
+     says why. Other gauges' records aren't in the run, so they
+     get a chart only once picked as the calibration site (Settings →
+     Calibration record → Scored at). The hydrograph above keeps its own
+     lines (natural hidden at first); the check adds the use beside them.
   3. **Record**: notes & evidence (with the run's inputs), the validation
      statement, publication: sign-off, after the results. The **validation
      statement** (`#res-validation`, menu entry **Validation**;
@@ -6758,7 +6839,8 @@ read it before.
   columns after rain used. The summary CSV lists the 12 monthly factors,
   and the map's month table when it was on.
 - **Assurance of supply** (`#res-assurance`, on Hydrological units after the
-  curtailment table, under *Units & users* on the Runs tab until issue #17;
+  curtailment table; its stress grid opens on the unit `unit=` picks, and
+  follows a new pick (issue #444); under *Units & users* on the Runs tab until issue #17;
   `reliability/AssurancePanel.svelte`, helpers in
   `reliability/reliability.ts`, in the Hydrological units chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
