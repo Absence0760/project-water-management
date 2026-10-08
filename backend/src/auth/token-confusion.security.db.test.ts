@@ -451,7 +451,7 @@ describe('where the backend reads a credential (source sweep)', () => {
 		// Confirmed with the current step's code; the sign-in below uses the next step's (within the window, never a replay).
 		expect((await u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(key, totpStep(Date.now())) })).status).toBe(200);
 		const r = await post('/auth/login', { email: u.email, password: 'correct horse' });
-		expect(r.body).toEqual({ mfaRequired: true });
+		expect(r.body).toEqual({ mfaRequired: true, methods: ['totp'] });
 		const challenge = (r.setCookie ?? '').split(/,(?=\s*wm_)/).map((c) => c.trim().split(';')[0]!).find((p) => p.startsWith('wm_mfa='))!;
 		expect(challenge, r.setCookie ?? '').toBeTruthy();
 		const value = challenge.slice('wm_mfa='.length);

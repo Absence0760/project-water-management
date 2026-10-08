@@ -7,7 +7,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { OWNER_E2E_URL } from './env.ts';
+import { hashEmailCode, type EmailCodePurpose } from '../../backend/src/auth/emailCode.ts';
+import { E2E_APP_ENCRYPTION_KEY, OWNER_E2E_URL } from './env.ts';
 
 interface PgClient {
 	connect(): Promise<void>;
@@ -105,6 +106,38 @@ export async function mfaResetState(email: string): Promise<{ waiting: boolean; 
 			[email]
 		);
 		return r.rows[0] ? { waiting: r.rows[0].waiting, endReason: r.rows[0].end_reason } : null;
+	});
+}
+
+/**
+ * Replace the live emailed two-step code of `email` (206) with `code`, as the
+ * last send would have mailed it: e2e mail goes to the server's log, and the
+ * code is stored only as an HMAC (backend/src/auth/emailCode.ts) under the
+ * e2e servers' key. Call it after the page's send has answered, since every
+ * send replaces the code.
+ */
+export async function plantEmailCode(email: string, code: string, purpose: EmailCodePurpose): Promise<void> {
+	await withDb(async (db) => {
+		const id = (await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1', [email])).rows[0]?.id;
+		if (!id) throw new Error(`no user ${email}`);
+		const r = await db.query(`UPDATE mfa_email_code SET code_hash = $2, purpose = $3, expires_at = now() + interval '10 minutes' WHERE user_id = $1`, [
+			id,
+			hashEmailCode(id, purpose, code, { APP_ENCRYPTION_KEY: E2E_APP_ENCRYPTION_KEY }),
+			purpose
+		]);
+		if (r.rowCount !== 1) throw new Error(`no code was sent to ${email}`);
+	});
+}
+
+/**
+ * Move the emailed-code send log of `email` back two minutes, as if a minute
+ * had passed since the last send (the server allows one a minute, 206), so a
+ * spec can press "Send again" without waiting; the page's own countdown is
+ * moved with Playwright's clock.
+ */
+export async function ageEmailCodeSends(email: string): Promise<void> {
+	await withDb(async (db) => {
+		await db.query(`UPDATE mfa_email_send SET sent_at = sent_at - interval '2 minutes' WHERE user_id = (SELECT id FROM app_user WHERE email = $1)`, [email]);
 	});
 }
 

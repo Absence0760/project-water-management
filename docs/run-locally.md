@@ -251,20 +251,27 @@ neither that banner nor the Account page's warning shows. The DB tests and the e
 set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test
 the feature with it on and off.
 
-**Lost phone and recovery codes** (205; security.md § Two-step sign-in →
-Recovery): at the sign-in's code step, **Lost your phone? Use a recovery
-code**, then **Lost your phone and your recovery codes?** emails a
-confirmation link (Mailpit, `pnpm dev:mail:up`, http://localhost:8026).
-Opening it starts the 3-day wait; the worker (`pnpm dev:full`, or one
-`pnpm dev:jobs:tick`) sends the daily reminders and completes it. To finish
-one now, end its wait in the database and tick:
+**Codes by email** (206) need no phone: turn them on from the same panel
+and the codes land in Mailpit (`pnpm dev:mail:up`, http://localhost:8026),
+or in the backend's console with `MAIL_TRANSPORT=log`. Sends are a minute
+apart and at most five an hour per account, as in production; to send again
+sooner locally, `pnpm dev:db:psql`, then
+`DELETE FROM mfa_email_send WHERE user_id = '…';`.
+
+**Can't get a code and lost the recovery codes** (205; security.md §
+Two-step sign-in → Recovery): at the sign-in's code step, the recovery code
+link, then **Lost your phone and your recovery codes?** (or, for codes by
+email alone, **Can’t get the email and lost your recovery codes?**) emails a
+confirmation link (Mailpit). Opening it starts the 3-day wait; the worker
+(`pnpm dev:full`, or one `pnpm dev:jobs:tick`) sends the daily reminders and
+completes it. To finish one now, end its wait in the database and tick:
 `pnpm dev:db:psql` then `UPDATE mfa_reset SET effective_at = now() WHERE ended_at IS NULL AND confirmed_at IS NOT NULL;`.
 
 Without a phone, a code for a secret is one line in the backend workspace:
 `pnpm -C backend exec tsx -e "import('./src/auth/totp.ts').then(t => console.log(t.totp(t.base32Decode(process.argv[1]), Date.now())))" <SECRET>`
 (the key the Account page shows, spaces removed). Lost the codes and the
 app locally? `pnpm dev:db:psql`, then
-`DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…';`.
+`DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; DELETE FROM user_email_otp WHERE user_id = '…';`.
 
 ## Alerts
 

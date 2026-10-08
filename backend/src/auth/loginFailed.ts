@@ -45,7 +45,11 @@ export type LoginFailureRoute =
 	// Recovering a lost second factor (205): `locked` on the request cap, `invalid_link` on a dead link.
 	| '/auth/mfa/reset'
 	| '/auth/mfa/reset/confirm'
-	| '/auth/mfa/reset/cancel';
+	| '/auth/mfa/reset/cancel'
+	// Codes by email (206).
+	| '/auth/mfa/email/enrol'
+	| '/auth/mfa/email/confirm'
+	| '/auth/mfa/email';
 
 /** Log `{"event":"login_failed","route","reason"}`: nothing that names a person. */
 export function logLoginFailed(route: LoginFailureRoute, reason: LoginFailureReason): void {

@@ -202,7 +202,17 @@ export const en = {
 	// A team admin removed it.
 	'mail.mfaReset.admin.subject': 'Your two-step sign-in was removed — {product}',
 	'mail.mfaReset.admin.heading': 'Your two-step sign-in was removed',
-	'mail.mfaReset.admin.body': 'An admin of the team “{team}” removed two-step sign-in from the {product} account {email}, and every device was signed out.'
+	'mail.mfaReset.admin.body': 'An admin of the team “{team}” removed two-step sign-in from the {product} account {email}, and every device was signed out.',
+	// A two-step sign-in code by email (206, auth/mfa-routes.ts).
+	'mail.mfaCode.subject': 'Your sign-in code — {product}',
+	'mail.mfaCode.heading': 'Your code',
+	'mail.mfaCode.signIn': 'Someone signed in to the {product} account {email} with its password. To finish signing in, enter this code:',
+	'mail.mfaCode.confirm': 'To confirm what you are doing in {product} as {email}, enter this code:',
+	'mail.mfaCode.enrol': 'To turn on sign-in codes by email for the {product} account {email}, enter this code on your Account page:',
+	'mail.mfaCode.expires': 'The code works once, for 10 minutes.',
+	'mail.mfaCode.never': 'Never give this code to anyone, including someone who says they are from {product}. We will never ask you for it.',
+	'mail.mfaCode.notYouSignIn': 'If this wasn’t you, someone knows your password: change it on your Account page straight away.',
+	'mail.mfaCode.notYou': 'If this wasn’t you, change your password on your Account page straight away.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -229,6 +239,8 @@ export const sections: Record<string, string> = {
 		'Email: sent once an account has been deleted, from the account page’s “Delete my account”, saying what was deleted and what was kept (the law asks us to tell the person what we did). {list} is the names of the catchments and teams they left, joined with “and”.',
 	'mail.mfaReset':
 		'Emails about removing two-step sign-in (a code from an authenticator app on the phone, asked for after the password) when someone lost their phone and recovery codes. “confirm” lines: the link that starts a 3-day wait; “pending” lines: sent when the wait starts and once a day after, with a link to cancel; “done” lines: the wait is over; “admin” lines: an admin of the person’s team removed it at once. {date} is a date like “3 Oct 2026”, {time} a time like “14:05 SAST”; {team} is the team’s name.',
+	'mail.mfaCode':
+		'Email: a six-digit code for two-step sign-in, sent instead of a code from an authenticator app. It goes out when someone signs in with the right password, when they confirm an action that needs a recent code, and when they turn this on from the Account page. The code itself is shown on its own line below the text.',
 	'mail.pack':
 		'Evidence pack emails: sent to the catchment’s editors and to the applicant when an evidence pack (a frozen, signed copy of the evidence report for a water-use licence application) is issued or withdrawn. {version} and {previous} are numbers; {code} is a short code like “3f2a-91bc-07de”; {project} is the catchment; {what} is one of the “what” lines; {name} is the application’s name (or the “name” line, for baseline evidence).'
 };

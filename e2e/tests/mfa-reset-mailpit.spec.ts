@@ -223,7 +223,7 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 	expect((await member.context.request.get(`${API_URL}/auth/me`)).status()).toBe(200);
 
 	// The admin's session gave its code 11 minutes ago: the action asks for a fresh one.
-	await context.addCookies([{ name: 'wm_session', value: sessionToken(owner.id, { otpAt: Date.now() - 11 * 60_000 }), domain: 'localhost', path: '/' }]);
+	await context.addCookies([{ name: 'wm_session', value: sessionToken(owner.id, { amr: ['pwd', 'otp'], otp_at: Date.now() - 11 * 60_000 }), domain: 'localhost', path: '/' }]);
 	await page.goto(`/teams/${teamId}`);
 	const action = page.getByRole('button', { name: 'Reset two-step sign-in for Phone Loser' });
 	await action.click();

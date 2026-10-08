@@ -318,4 +318,22 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.mfaReset.admin.heading': 'Jou tweestap-intekening is verwyder',
 	// An admin of the team “{team}” removed two-step sign-in from the {product} account {email}, and every device was signed out.
 	'mail.mfaReset.admin.body': '’n Administrateur van die span “{team}” het tweestap-intekening van die {product}-rekening {email} verwyder, en elke toestel is uitgeteken.',
+	// Your sign-in code — {product}
+	'mail.mfaCode.subject': 'Jou intekenkode — {product}',
+	// Your code
+	'mail.mfaCode.heading': 'Jou kode',
+	// Someone signed in to the {product} account {email} with its password. To finish signing in, enter this code:
+	'mail.mfaCode.signIn': 'Iemand het by die {product}-rekening {email} ingeteken met die rekening se wagwoord. Tik hierdie kode in om die intekening te voltooi:',
+	// To confirm what you are doing in {product} as {email}, enter this code:
+	'mail.mfaCode.confirm': 'Tik hierdie kode in om te bevestig wat jy in {product} as {email} doen:',
+	// To turn on sign-in codes by email for the {product} account {email}, enter this code on your Account page:
+	'mail.mfaCode.enrol': 'Tik hierdie kode op jou Rekening-bladsy in om intekenkodes per e-pos vir die {product}-rekening {email} aan te skakel:',
+	// The code works once, for 10 minutes.
+	'mail.mfaCode.expires': 'Die kode werk een keer en bly 10 minute geldig.',
+	// Never give this code to anyone, including someone who says they are from {product}. We will never ask you for it.
+	'mail.mfaCode.never': 'Moet hierdie kode nooit vir iemand gee nie, ook nie vir iemand wat sê hy is van {product} nie. Ons sal jou nooit daarvoor vra nie.',
+	// If this wasn’t you, someone knows your password: change it on your Account page straight away.
+	'mail.mfaCode.notYouSignIn': 'As dit nie jy was nie, ken iemand jou wagwoord: verander dit dadelik op jou Rekening-bladsy.',
+	// If this wasn’t you, change your password on your Account page straight away.
+	'mail.mfaCode.notYou': 'As dit nie jy was nie, verander jou wagwoord dadelik op jou Rekening-bladsy.',
 };

@@ -2101,31 +2101,40 @@ Every step is an ordinary app action by an owner unless it says "operator".
     person asks at the sign-in's code step (**Lost your phone and your
     recovery codes?**: an emailed link, then a 3-day wait with a cancel
     link in every email), or, in a team, a team admin removes it at once
-    from the team's member list. Use this only when neither can: the
-    person can't reach the account's inbox and has no team admin, or can't
-    wait three days and has no team admin. A reset link alone would be a way
-    round the second factor for anyone who holds the inbox, which is why the
-    self-service path waits; this path has no wait, so identity is checked
-    by hand. Confirm who is asking out of band (a call to a number the WUA
-    or consultancy has on file, not one in the request), then, as the
-    schema owner, in one transaction:
-    `SELECT mfa_remove_factors('…'); UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…'; INSERT INTO account_security_event (user_id, kind) VALUES ('…', 'mfa.reset_by_operator');`
-    (`mfa_remove_factors`, 205, removes every second factor of the account
-    and ends a waiting reset; the watermark signs out every session, a
-    thief's included; the event is in the person's own security log and
-    data export). They sign in with the password and set up a new
-    authenticator on the Account page; if they are an owner, team admin or
-    assessor, they need it before those actions again. If the password may
-    be known to someone else too, have them reset it first. Record the
-    request and how identity was checked in the operator log.
+    from the team's member list (for a member below admin only: an admin's
+    factor is never reset by another admin). Use this only when neither
+    can: the person can't reach the account's inbox and has no team admin
+    (or is a team admin), or can't wait three days and has no team admin. A
+    reset link alone would be a way round the second factor for anyone who
+    holds the inbox, which is why the self-service path waits; this path
+    has no wait, so identity is checked by hand. Confirm who is asking out
+    of band (a call to a number the WUA or consultancy has on file, not one
+    in the request), then, as the schema owner, in one transaction:
+    `SELECT mfa_remove_factors('…', now()); INSERT INTO account_security_event (user_id, kind) VALUES ('…', 'mfa.reset_by_operator');`
+    (`mfa_remove_factors`, 205 and 206, removes every second factor of the
+    account, the authenticator and codes by email alike, with the recovery
+    codes and any live emailed code, ends a waiting reset, and moves the
+    session watermark, which signs out every session, a thief's included;
+    the event is in the person's own security log and data export). They
+    sign in with the password and set up a factor again on the Account
+    page; where their roles need it, they need it before those actions
+    again. If the password may be known to someone else too, have them
+    reset it first. Record the request and how identity was checked in the
+    operator log.
 15. **`APP_ENCRYPTION_KEY` leaked, or must change** (operator). The key seals
-    every TOTP secret; a new one can't open the old rows. Edit
-    `app_encryption_key` with sops and apply (§ Rotating a secret), then, as
-    the schema owner,
-    `SELECT mfa_remove_factors(id) FROM app_user WHERE id IN (SELECT user_id FROM user_totp);`
-    (every second factor, and any waiting reset, 205) and tell every person who had two-step sign-in on to set it up again
-    (owners, team admins and assessors can't do those actions until they
-    have). Their security log keeps the history.
+    every TOTP secret; a new one can't open the old rows. Edit `app_encryption_key` with sops and apply
+    (§ Rotating a secret), then, as the schema owner, take the
+    authenticators off through the one removal, which keeps everyone's
+    codes by email and their recovery codes while that factor stays on:
+    `SELECT mfa_remove_factor(user_id, 'totp', now()) FROM user_totp;`
+    (`mfa_remove_factor`, 205 and 206: with no other factor left it removes
+    the recovery codes too, and either way it signs the account out) and
+    tell every person who had an authenticator to set it up again
+    (the actions that need it, always or where a project or team requires
+    it, are refused until they have). Their security log keeps the history. Codes by email (206) need
+    nothing: only a code sent in the last 10 minutes stops matching (the
+    HMAC key comes from the same setting), and the next one is sent under the
+    new key.
 16. **A licence record past its closing date** (operator; the "This licence
     record can now be deleted" email, or a review that went unanswered;
     [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing

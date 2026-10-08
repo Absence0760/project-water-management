@@ -8,7 +8,7 @@ and dev database are left alone.
 
 ```bash
 pnpm dev:db:up            # docker Postgres on :5434 (once per session)
-pnpm dev:s3:up && pnpm dev:mail:up   # MinIO + Mailpit, for server-report.spec.ts, and Mailpit for alerts-mailpit.spec.ts and mfa-reset-mailpit.spec.ts (each skips, saying so, without them; never in CI)
+pnpm dev:s3:up && pnpm dev:mail:up   # MinIO + Mailpit, for server-report.spec.ts, and Mailpit for alerts-mailpit.spec.ts, mfa-email-mailpit.spec.ts and mfa-reset-mailpit.spec.ts (each skips, saying so, without them; never in CI)
 pnpm test:e2e:install     # once: download Playwright's Chromium
 pnpm test:e2e             # the whole suite, headless
 pnpm test:e2e:ui          # Playwright UI mode (watch, time-travel debugging)
@@ -30,9 +30,14 @@ pnpm -C e2e e2e:list      # list the tests without running them
    the two-step sign-in requirement on (`MFA_REQUIRED` unset, as in
    production; the first has it off) against the same database:
    `mfa-required.spec.ts` sends the browser's API calls there, so a real
-   server refuses an owner's action, and so does `mfa-reset-mailpit.spec.ts`,
-   since this backend sends its mail through Mailpit (`MAIL_TRANSPORT=smtp`;
-   without Mailpit a send fails, is logged and the request still succeeds). The frontend is a **production build**, not
+   server refuses an owner's action. That second backend mails through
+   Mailpit (SMTP :1026), so `mfa-email-mailpit.spec.ts` reads the emailed
+   two-step codes there (206) and `mfa-reset-mailpit.spec.ts` a reset's
+   emails (205); without Mailpit a send fails and is logged (a code send
+   answers 503, anything else still succeeds); the first prints mail to its
+   log. Both run with a test-only `APP_ENCRYPTION_KEY` (`support/env.ts`
+   `E2E_APP_ENCRYPTION_KEY`), so a spec without Mailpit can plant an
+   emailed code it knows (`support/db.ts` `plantEmailCode`). The frontend is a **production build**, not
    the Vite dev server: `support/build-site.ts` runs `vite build` with the
    checkout's API URL (`http://localhost:3101`) baked in as `PUBLIC_API_URL` (it
    is `$env/static/public`), written to `frontend/build-e2e/` (with
@@ -212,9 +217,9 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `support/shards.ts`, `shard-list.ts`, `shard-timings.ts`, `../shard-timings.json` | CI's time-balanced shards: the packing (tested by `shards.test.ts`), one shard's `--test-list`, the report job's check and timings, and `pnpm gen:e2e:timings` (§ CI) |
 | `support/global-setup.ts` | Rebuilds the checkout's e2e database |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
-| `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the first backend's log (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make. For a second-factor reset (205): `endMfaResetWait` (the 3-day wait ends now, for the next tick), `mfaResetState`, and `keepRecoveryCodes` (leave n codes) |
+| `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the first backend's log (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make. `plantEmailCode` replaces an account's live emailed two-step code with one the spec knows (206; HMAC under the e2e `APP_ENCRYPTION_KEY`), and `ageEmailCodeSends` moves its send log back a minute, so "Send again" needs no wait. For a second-factor reset (205): `endMfaResetWait` (the 3-day wait ends now, for the next tick), `mfaResetState`, and `keepRecoveryCodes` (leave n codes) |
 | `support/mailpit.ts` | Reads the emails the second backend (:3201) and the worker's tick send, from Mailpit's API: `waitForEmail(to, subject)` (polls until it arrives), `linkIn(email, prefix)` (the one link to a page), `mailpitUp()` for the skip |
-| `support/session.ts` | Mints a session token the way the backend signs one, for states the API can't make on demand: an unconfirmed account's session, an invitee, and (`otpAt`) a session whose code is older than a fresh-code action allows |
+| `support/session.ts` | Mints a session token the way the backend signs one, for states the API can't make on demand: an unconfirmed account's session, an invitee, and (`amr`, `otp_at`) a session whose code is older than a fresh-code action allows |
 | `support/static-server.ts`, `support/site.ts` | Serves the e2e frontend build on the site port, routed by CloudFront's `spa_rewrite` function itself (run from `infra/s3_cloudfront.tf` through `infra/scripts/cloudfront-functions.mjs`, so the two can't drift): `index.html` for an extension-less path (the SPA fallback), `/welcome` and the other prerendered pages from their HTML, the build's files as they are, the function's 404 page for a path with an extension outside the build's file locations (`/nope.pdf`), and a plain 404, as S3 answers, for a missing file inside them. `support/site.test.ts` (`pnpm -C e2e test`) pins each case. No dependencies |
 | `support/a11y.ts` | The shared axe scan every spec uses (`expectNoViolations(page, { tags?, rules?, include? })`, WCAG 2.0–2.2 A/AA tags by default; don't call `AxeBuilder` directly). It runs `axe.run()` in the page (legacy mode) and keeps node details for violations only: the default `runPartial` mode opens a blank page per scan and ships every passing node across the protocol, 2–3× slower (the glossary 5.5 s → 2.3 s). Legacy mode skips cross-origin frames, and the app has none, so the scan refuses a page with a frame |
 | `support/referenceData.ts` | Which panels' test ids need which reference-data loader, and the check (`referenceData.test.ts`, `pnpm test`) that every test reading one calls it itself (§ Rules for writing specs) |

@@ -2876,25 +2876,37 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Goes with the account (cascade) and is in the data-subject export
   (`preferences`).
 
-### Two-step sign-in (150_mfa.sql)
+### Two-step sign-in (150_mfa.sql, 206_mfa_email_code.sql)
 
 | Table | Holds |
 | --- | --- |
 | `user_totp` | One row per account with an authenticator: `user_id` (primary key, cascade), `secret_enc` (the TOTP secret sealed by the backend, AES-256-GCM under `APP_ENCRYPTION_KEY` with the account id as authenticated data; `auth/secretBox.ts`), `confirmed_at` (null while enrolment waits for its first code; an unconfirmed row signs nobody in and satisfies no requirement), `last_used_step` (the last 30-second step a code was accepted for; earlier or equal steps are refused, so a code can't be replayed), `created_at` |
 | `user_recovery_code` | The account's unused recovery codes: `(user_id, code_hash)` (primary key; SHA-256 of the normalised code, 32 bytes), `created_at`. Ten at a time; a used one is deleted, a new set replaces the old |
 | `mfa_throttle` | The code throttle, per account: `user_id` (primary key, cascade), `failures`, `locked_until`, `last_attempt_at`. Deny-all policy; only `app_mfa_attempt(free, base, max)` and `app_mfa_succeeded()` (SECURITY DEFINER, the current user only) touch it, like `login_throttle` |
-| `account_security_event` | The account's own security log: `id`, `user_id` (cascade), `kind` (`mfa.enrolled`, `mfa.disabled`, `mfa.recovery_used`, `mfa.recovery_regenerated`), `created_at`. Append-only |
+| `account_security_event` | The account's own security log: `id`, `user_id` (cascade), `kind` (`mfa.enrolled`, `mfa.disabled` (the authenticator removed), `mfa.recovery_used`, `mfa.recovery_regenerated`, and since 206 `mfa.email_enrolled`, `mfa.email_disabled`), `created_at`. Append-only |
+| `user_email_otp` | Codes by email (206): one row per account that turned them on: `user_id` (primary key, cascade), `confirmed_at` (null while the first emailed code is awaited; an unconfirmed row signs nobody in and satisfies no requirement), `created_at` |
+| `mfa_email_code` | The live emailed code (206), one per account: `user_id` (primary key, cascade), `code_hash` (HMAC-SHA256 under a key derived from `APP_ENCRYPTION_KEY`, over the account, the purpose and the code; 32 bytes; null once used), `purpose` (`enrol` or `use`), `expires_at` (10 minutes after the send); all three null together. The row stays as the send limit's lock. Deny-all; only `app_mfa_email_send(hash, purpose, ttl, gap, per_hour)`, `app_mfa_email_use(hash, purpose)` and `app_mfa_email_void()` (SECURITY DEFINER, the current user only) touch it |
+| `mfa_email_send` | When codes were emailed (206), for the send limits (a minute apart, five an hour): `id`, `user_id` (cascade; index `(user_id, sent_at)`), `sent_at` (index, for the day-old prune). Deny-all; only `app_mfa_email_send` writes it |
 
-- RLS: `user_totp` is the account's own row for every command
-  (`user_totp_own`); `user_recovery_code` its own rows for select, insert
-  and delete (no update grant); `account_security_event` its own rows for
-  select and insert only (no update or delete grant, even for its owner).
-  Proven with positive controls in `src/auth/mfa.db.test.ts`.
+- RLS: `user_totp` and `user_email_otp` are the account's own row for
+  every command (`user_totp_own`, `user_email_otp_own`);
+  `user_recovery_code` its own rows for select, insert and delete (no
+  update grant); `account_security_event` its own rows for select and
+  insert only (no update or delete grant, even for its owner);
+  `mfa_throttle`, `mfa_email_code` and `mfa_email_send` deny-all. Proven
+  with positive controls in `src/auth/mfa.db.test.ts` and
+  `src/auth/mfa-email.db.test.ts`.
+- "Is two-step on" is one query, `hasConfirmedFactor` (`auth/stepUp.ts`): a
+  confirmed `user_totp` or `user_email_otp` row. Recovery codes are one set
+  per account, made when the first factor is confirmed and deleted with the
+  last.
 - `audit_event` isn't used for these: it is a project's log (`project_id`
   not null), and these events belong to no project.
-- All four go with the account (cascade). The data-subject export has
-  `twoStepSignIn` (when it was added and confirmed, and how many recovery
-  codes are left, never the secret or the hashes) and `securityEvents`.
+- All seven go with the account (cascade). The data-subject export has
+  `twoStepSignIn` (when the authenticator was added and confirmed, and how
+  many recovery codes are left, never the secret or the hashes),
+  `twoStepEmail` (the same for codes by email, never the code or the send
+  log) and `securityEvents`.
 - The session JWT's `amr` (`["pwd"]` or `["pwd", "otp"]`) is not stored:
   the requirement reads it from the request ([security.md § Two-step
   sign-in](./security.md#two-step-sign-in)).

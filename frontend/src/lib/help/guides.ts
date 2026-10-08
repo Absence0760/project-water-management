@@ -1240,7 +1240,7 @@ export const GUIDES: Guide[] = [
 							'For an application with registered volumes, press **Run at full authorised use**, so page 1 carries the [[full-authorised-use|impact against full authorised use]].',
 							'Press **Create evidence pack**. The pack’s page opens: a draft, with its checklist under **Where this pack stands**.',
 							'In Appendix B.2, the applicant’s specialist presses **Sign off this evidence pack…**, fills in their registration and ticks every confirmation. An assessor may add a second sign-off as a review.',
-							'Once every line of the checklist is ticked, an editor presses **Issue pack** and confirms. Signing and issuing ask for a fresh code from the authenticator app.',
+							'Once every line of the checklist is ticked, an editor presses **Issue pack** and confirms. Signing and issuing ask for a fresh code, from the authenticator app or by email.',
 							'The server then prints the pack’s PDF, builds its [[reproduction-bundle]] and re-runs it; the pack page shows each as it lands. Hand the [[pack-short-code|short code]] to whoever needs to check the pack, use **Send to the authority…** for the full pack, and **Share link…** for the public.'
 						]
 					},

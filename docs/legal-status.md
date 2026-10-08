@@ -487,6 +487,17 @@ cl. 3). The licensing ones are rows in
   unchanged: a clarification, not a material change, so it brings no
   `LEGAL_VERSION` bump of its own (it shares the 2026-10-01 text with any
   bump made that day).
+- 2026-10-08: codes by email as a second factor (206_mfa_email_code.sql).
+  Privacy §3 adds the code we last emailed (a keyed one-way hash, until used
+  or 10 minutes old) and that sign-in codes count among the account emails
+  in the security records, §7 their retention (the code 10 minutes, when they were sent a
+  day), §9 that a code can be emailed; Terms § sign-off: the fresh code may
+  come from the app or by email. New personal data kept, as 2026-10-01's
+  two-step entry was, so by that precedent this is material: **the
+  `LEGAL_VERSION` bump is still to make**, once, when the combined two-step
+  PR (opt-in requirement, recovery, codes by email) lands, with the
+  re-acceptance notice's "what changed" list naming it. Not bumped on this
+  branch so the three parts don't each bump it.
 - 2026-10-01: two-step sign-in (issue #282, 150_mfa.sql). Privacy §3 lists
   the authenticator key (stored encrypted), the recovery codes (one-way
   hashes), wrong-code counts and the account's own record of turning it on

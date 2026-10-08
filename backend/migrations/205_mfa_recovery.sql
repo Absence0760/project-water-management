@@ -11,28 +11,35 @@
 --      Nothing changes yet: a confirmation link goes to the account's
 --      address. Following it (single use, 1 hour) starts a 3-day wait: the
 --      factor keeps working, and the start, a daily reminder and the end are
---      emailed, each with a cancel link that needs no sign-in. Any sign-in
---      with a code cancels it, and so does turning the factor off. At the end
+--      emailed, each with a cancel link that needs no sign-in. Any right
+--      code cancels it (a sign-in, a step-up, or turning a factor off). At the end
 --      the tick removes every second factor of the account and signs every
 --      session out. So a thief with the password and the inbox still has to
 --      get past three days of emails to the owner.
---   2. A team admin, at once, for a member of their team (with a code from
---      the last 10 minutes; never themselves).
+--   2. A team admin, at once, for a member of their team below admin (with a
+--      code from the last 10 minutes; never themselves, never another admin).
 --
 -- mfa_reset is the person's own to read and nobody's to write: a person who
 -- could UPDATE their row could move effective_at to now and skip the wait.
 -- Every write goes through the SECURITY DEFINER functions below, each of
 -- which checks the state it moves from. The cancel links' hashes and the
 -- request cap are reachable only through those functions (owner-only
--- tables). mfa_remove_factors is the one place a second factor is removed,
--- whoever removes it (turning it off, a completed reset, a team admin).
+-- tables). mfa_remove_factors is the one place every second factor is
+-- removed, whoever removes them (a completed reset, a team admin, the
+-- operator, or the owner turning off their last one), and mfa_remove_factor
+-- the one place the owner turns off one of several (206 adds the emailed
+-- code to all three functions here).
 
 -- ---------------------------------------------------------------------------
 -- One place for "every second factor of the account"
 -- ---------------------------------------------------------------------------
 -- Whether the account has a second factor that signs in (a confirmed
--- authenticator). A new kind of factor is added here and in
--- mfa_remove_factors, nowhere else.
+-- authenticator; 206 adds a confirmed emailed code). A new kind of factor is
+-- added here, in mfa_remove_factors and in mfa_remove_factor, nowhere else.
+-- Invoker's rights: the API's hasConfirmedFactor (auth/stepUp.ts) calls it as
+-- water_app, where RLS shows only the caller's own factor rows, and the
+-- definer functions below call it as the owner, for any account. So the two
+-- can't disagree.
 CREATE FUNCTION mfa_has_factor(p_user uuid) RETURNS boolean
 	LANGUAGE sql STABLE SET search_path = public
 	AS $$
@@ -40,10 +47,13 @@ CREATE FUNCTION mfa_has_factor(p_user uuid) RETURNS boolean
 	$$;
 
 -- Remove every second factor of the account (the authenticator and the
--- recovery codes), and end a reset that was waiting, since nothing is left
--- for it to remove. Not granted to water_app: only the SECURITY DEFINER
--- functions here call it, each after its own check (the person themselves,
--- a reset that came due, a team admin). Defined after mfa_reset below.
+-- recovery codes), end a reset that was waiting, since nothing is left for
+-- it to remove, and sign out every session (p_watermark, from the API's
+-- clock as every watermark; 067's trigger keeps the later one). Not granted
+-- to water_app: only the SECURITY DEFINER functions here call it, each after
+-- its own check (the person themselves, a reset that came due, a team
+-- admin), and the operator as the schema owner (deployment.md § Runbooks 14).
+-- Defined after mfa_reset below.
 
 -- ---------------------------------------------------------------------------
 -- A reset of the second factor, asked for by the person
@@ -124,12 +134,15 @@ ALTER TABLE account_security_event ADD CONSTRAINT account_security_event_kind_ch
 	'mfa.reset_by_operator'     -- the operator removed it, as the schema owner (deployment.md § Runbooks 14)
 ));
 
-CREATE FUNCTION mfa_remove_factors(p_user uuid) RETURNS void
+CREATE FUNCTION mfa_remove_factors(p_user uuid, p_watermark timestamptz) RETURNS void
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
 	DECLARE
 		v_ended integer;
 	BEGIN
+		IF p_watermark IS NULL THEN
+			RAISE EXCEPTION 'mfa_remove_factors: a watermark is required' USING ERRCODE = '22023';
+		END IF;
 		DELETE FROM user_recovery_code WHERE user_id = p_user;
 		DELETE FROM user_totp WHERE user_id = p_user;
 		DELETE FROM mfa_reset_cancel c USING mfa_reset r WHERE c.reset_id = r.id AND r.user_id = p_user AND r.ended_at IS NULL;
@@ -139,9 +152,40 @@ CREATE FUNCTION mfa_remove_factors(p_user uuid) RETURNS void
 		IF v_ended > 0 THEN
 			INSERT INTO account_security_event (user_id, kind) VALUES (p_user, 'mfa.reset_cancelled');
 		END IF;
+		UPDATE app_user SET sessions_revoked_at = p_watermark WHERE id = p_user;
 	END
 	$$;
-REVOKE ALL ON FUNCTION mfa_has_factor(uuid), mfa_remove_factors(uuid) FROM PUBLIC;
+
+-- The owner turns off one factor (p_method: 'totp'; 206 adds 'email'). While
+-- another is still on, only that one goes: the recovery codes stand in for any
+-- factor, so they stay, and a waiting reset stays too (the route that called
+-- this took a right code first, and a right code ends a waiting reset on its
+-- own: app_mfa_reset_cancel_own). With the last one, everything goes through
+-- mfa_remove_factors. Every session is signed out either way, so none that
+-- signed in with the factor outlives it. True while a factor is still on.
+CREATE FUNCTION mfa_remove_factor(p_user uuid, p_method text, p_watermark timestamptz) RETURNS boolean
+	LANGUAGE plpgsql SET search_path = public
+	AS $$
+	BEGIN
+		IF p_watermark IS NULL THEN
+			RAISE EXCEPTION 'mfa_remove_factor: a watermark is required' USING ERRCODE = '22023';
+		END IF;
+		IF p_method = 'totp' THEN
+			DELETE FROM user_totp WHERE user_id = p_user;
+		ELSE
+			RAISE EXCEPTION 'mfa_remove_factor: unknown factor %', p_method USING ERRCODE = '22023';
+		END IF;
+		IF NOT mfa_has_factor(p_user) THEN
+			PERFORM mfa_remove_factors(p_user, p_watermark);
+			RETURN false;
+		END IF;
+		UPDATE app_user SET sessions_revoked_at = p_watermark WHERE id = p_user;
+		RETURN true;
+	END
+	$$;
+REVOKE ALL ON FUNCTION mfa_has_factor(uuid), mfa_remove_factors(uuid, timestamptz), mfa_remove_factor(uuid, text, timestamptz) FROM PUBLIC;
+-- The one test the API makes (hasConfirmedFactor): invoker's rights, so RLS limits it to the caller's own rows.
+GRANT EXECUTE ON FUNCTION mfa_has_factor(uuid) TO water_app;
 
 -- End the account's waiting reset, if any, without removing anything: its
 -- cancel links go, and the log says so. Not granted; the functions below call it.
@@ -166,15 +210,17 @@ REVOKE ALL ON FUNCTION mfa_reset_end(uuid, text) FROM PUBLIC;
 -- ---------------------------------------------------------------------------
 -- The person's own steps (as the account: app.current_user_id)
 -- ---------------------------------------------------------------------------
--- Turn two-step sign-in off (DELETE /auth/mfa/totp, after a right code).
-CREATE FUNCTION app_mfa_remove_own_factors() RETURNS void
+-- Turn one of the person's own factors off (DELETE /auth/mfa/totp, 206's
+-- DELETE /auth/mfa/email, after a right code): mfa_remove_factor. True while
+-- another factor is still on.
+CREATE FUNCTION app_mfa_remove_own_factor(p_method text, p_watermark timestamptz) RETURNS boolean
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 	AS $$
 	BEGIN
 		IF app_current_user_id() IS NULL THEN
-			RAISE EXCEPTION 'app_mfa_remove_own_factors: not allowed' USING ERRCODE = '42501';
+			RAISE EXCEPTION 'app_mfa_remove_own_factor: not allowed' USING ERRCODE = '42501';
 		END IF;
-		PERFORM mfa_remove_factors(app_current_user_id());
+		RETURN mfa_remove_factor(app_current_user_id(), p_method, p_watermark);
 	END
 	$$;
 
@@ -365,9 +411,8 @@ CREATE FUNCTION app_mfa_reset_complete(p_id uuid, p_watermark timestamptz)
 			RETURN;
 		END IF;
 		DELETE FROM mfa_reset_cancel c WHERE c.reset_id = p_id;
-		PERFORM mfa_remove_factors(v_user);
-		-- The watermark only moves forward (067's trigger keeps the later one).
-		UPDATE app_user u SET sessions_revoked_at = p_watermark WHERE u.id = v_user;
+		-- Every factor, and the watermark (067's trigger keeps the later one).
+		PERFORM mfa_remove_factors(v_user, p_watermark);
 		INSERT INTO account_security_event (user_id, kind) VALUES (v_user, 'mfa.reset_completed');
 		RETURN QUERY SELECT u.email, u.locale::text FROM app_user u WHERE u.id = v_user;
 	END
@@ -399,6 +444,9 @@ CREATE FUNCTION app_mfa_reset_purge(p_keep interval) RETURNS integer
 -- database sees them. Returns one row:
 --   'not_found'    the caller isn't the team's admin, or the person isn't in the team
 --   'self'         the caller named themselves (they use the self-service reset)
+--   'admin'        the member is an admin of the team too: an admin's factor is
+--                  never reset by another admin (operator decision, 2026-10-08),
+--                  only by the self-service reset or the operator
 --   'not_enrolled' the member has no second factor
 --   'done'         removed, the member's sessions signed out; their address and language for the email
 CREATE FUNCTION app_mfa_team_reset(p_team uuid, p_user uuid, p_watermark timestamptz)
@@ -420,19 +468,22 @@ CREATE FUNCTION app_mfa_team_reset(p_team uuid, p_user uuid, p_watermark timesta
 			RETURN QUERY SELECT 'self'::text, NULL::citext, NULL::text;
 			RETURN;
 		END IF;
+		IF EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = p_team AND m.user_id = p_user AND m.role = 'admin') THEN
+			RETURN QUERY SELECT 'admin'::text, NULL::citext, NULL::text;
+			RETURN;
+		END IF;
 		IF NOT mfa_has_factor(p_user) THEN
 			RETURN QUERY SELECT 'not_enrolled'::text, NULL::citext, NULL::text;
 			RETURN;
 		END IF;
-		PERFORM mfa_remove_factors(p_user);
-		UPDATE app_user u SET sessions_revoked_at = p_watermark WHERE u.id = p_user;
+		PERFORM mfa_remove_factors(p_user, p_watermark);
 		INSERT INTO account_security_event (user_id, kind) VALUES (p_user, 'mfa.reset_by_admin');
 		RETURN QUERY SELECT 'done'::text, u.email, u.locale::text FROM app_user u WHERE u.id = p_user;
 	END
 	$$;
 
 REVOKE ALL ON FUNCTION
-	app_mfa_remove_own_factors(),
+	app_mfa_remove_own_factor(text, timestamptz),
 	app_mfa_reset_cancel_own(),
 	app_mfa_reset_request(bytea, interval, integer, interval),
 	app_mfa_reset_confirm(bytea, interval, bytea),
@@ -445,7 +496,7 @@ REVOKE ALL ON FUNCTION
 	app_mfa_team_reset(uuid, uuid, timestamptz)
 FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
-	app_mfa_remove_own_factors(),
+	app_mfa_remove_own_factor(text, timestamptz),
 	app_mfa_reset_cancel_own(),
 	app_mfa_reset_request(bytea, interval, integer, interval),
 	app_mfa_reset_confirm(bytea, interval, bytea),

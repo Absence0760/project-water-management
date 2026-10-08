@@ -18,4 +18,32 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+5 strings: 5 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### login
+
+The sign-in page.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `ec9da085` | Can’t get the email and lost your recovery codes? |  |  |
+
+### account.two-step
+
+The account page’s “Two-step sign-in” box: after the password, a 6-digit code from an authenticator app on the phone (Google Authenticator, Microsoft Authenticator, Aegis: app names stay as they are). Setting it up (scan a QR code or type a key), the ten recovery codes (each signs in once if the phone is lost), new codes, turning it off. “Two-step sign-in” is the feature’s name: one consistent term.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `7842bac5` | Someone asked to remove two-step sign-in from your account, saying they can’t get a code. It will be removed at {when}, unless it’s cancelled. | Keep: {when} |  |
+| `e96926b3` | If that wasn’t you, cancel it now with a code from your authenticator app or your email, then change your password. |  |  |
+| `45395f8d` | You’re running out of recovery codes. Make a new set now, so a lost phone or email can’t lock you out. |  |  |
+
+### error
+
+A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `972426a2` | A team admin can’t remove another admin’s two-step sign-in. They can remove it themselves when they sign in, after a 3-day wait. |  |  |

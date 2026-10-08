@@ -12,7 +12,7 @@
 // gets through.
 import { decodeJwt } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { actForAuthority, anon, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, asOwner, DECISION, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { SESSION_COOKIE } from './session.js';
 import { base32Decode, totp } from './totp.js';
@@ -349,7 +349,7 @@ describe('signing a run follows the project’s setting', () => {
 	it('the setting on, an editor without an authenticator: cannotSign says set one up, and the sign-off is refused 403 mfa_required', async () => {
 		const read = await editor.call('GET', at(ownProjectId, ownRunId));
 		expect(read.status).toBe(200);
-		expect(read.body.cannotSign).toMatch(/two-step sign-in: set up an authenticator/);
+		expect(read.body.cannotSign).toMatch(/two-step sign-in: set it up on your Account page/);
 		const confirmed = read.body.statement.confirmations.map((k: { id: string }) => k.id);
 		expect(await editor.call('POST', at(ownProjectId, ownRunId), signed(read.body.statementSha256, confirmed))).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
 		expect((await editor.call('GET', at(ownProjectId, ownRunId))).body.signoffs).toEqual([]);
@@ -357,6 +357,21 @@ describe('signing a run follows the project’s setting', () => {
 
 	it('the setting on, an enrolled signer on a password-only session: cannotSign says sign in again', async () => {
 		expect((await enrolledOwner.call('GET', at(ownProjectId, ownRunId))).body.cannotSign).toMatch(/sign in again/);
+	});
+
+	it('codes by email count as the signer’s factor (206): cannotSign is null on the session the emailed code gave, and says sign in again on a password-only one', async () => {
+		const signer = await signUp('SuEmailSigner');
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		expect((await enrolledOwner.call('POST', `/projects/${ownProjectId}/members`, { email: signer.email, role: 'editor' })).status).toBe(201);
+		vi.stubEnv('MFA_REQUIRED', 'true');
+		// Without a factor yet (negative control): set one up.
+		expect((await signer.call('GET', at(ownProjectId, ownRunId))).body.cannotSign).toMatch(/set it up on your Account page/);
+		expect((await signer.call('POST', '/auth/mfa/email/enrol', { password: 'correct horse' })).status).toBe(202);
+		const code = lastMailTo(signer.email)!.text.match(/^(\d{6})$/m)![1]!;
+		const confirmed = await anon('POST', '/auth/mfa/email/confirm', { code }, signer.cookie);
+		expect(confirmed.status).toBe(200);
+		expect((await anon('GET', at(ownProjectId, ownRunId), undefined, sessionOf(confirmed.headers))).body.cannotSign).toBeNull();
+		expect((await signer.call('GET', at(ownProjectId, ownRunId))).body.cannotSign).toMatch(/sign in again/);
 	});
 
 	it('positive control: the same signer, signed in with a code, may sign, and the sign-off is made', async () => {

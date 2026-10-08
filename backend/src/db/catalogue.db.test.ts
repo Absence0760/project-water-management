@@ -337,6 +337,10 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// Resets of a lost second factor and the cap on asking (205_mfa_recovery): the person's own.
 	'mfa_reset.user_id': 'cascade',
 	'mfa_reset_quota.user_id': 'cascade',
+	// Codes by email are the person's own too (206_mfa_email_code.sql).
+	'user_email_otp.user_id': 'cascade',
+	'mfa_email_code.user_id': 'cascade',
+	'mfa_email_send.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
 };
 

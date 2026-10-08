@@ -95,28 +95,54 @@ export const af: Catalogue = {
 	'6476ae31': 'Vee tans uit…',
 	// {n} recovery code left. / {n} recovery codes left.
 	'4aaaac52': { one: '{n} herstelkode oor.', other: '{n} herstelkodes oor.' },
+	// We emailed you a code. It works for 10 minutes.
+	'd8c6fbd5': 'Ons het vir jou ’n kode ge-e-pos. Dit bly 10 minute geldig.',
 	// Enter your current password.
 	'f555922c': 'Tik jou huidige wagwoord in.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
+	// Enter the 6-digit code from the email.
+	'8cb9ab8a': 'Tik die 6-syferkode uit die e-pos in.',
 	// Enter the 6-digit code from your authenticator app.
 	'7feb1b8c': 'Tik die 6-syferkode van jou verifikasie-app in.',
 	// The removal is cancelled. Two-step sign-in stays on.
 	'98d4403a': 'Die verwydering is gekanselleer. Tweestap-intekening bly aan.',
+	// Codes by email are on.
+	'1d8d9cfd': 'Kodes per e-pos is aan.',
+	// The authenticator app is on.
+	'6cbb604d': 'Die verifikasie-app is aan.',
+	// Make new recovery codes
+	'2cd1bc62': 'Skep nuwe herstelkodes',
+	// Remove the authenticator app
+	'74fb1a16': 'Verwyder die verifikasie-app',
+	// Turn off codes by email
+	'eb083566': 'Skakel kodes per e-pos af',
+	// Enter a code.
+	'20fafe8f': 'Tik ’n kode in.',
+	// The authenticator app is removed.
+	'f8b3c676': 'Die verifikasie-app is verwyder.',
+	// Codes by email are off.
+	'7067a2c9': 'Kodes per e-pos is af.',
 	// Two-step sign-in is off.
 	'7aa9d2cc': 'Tweestap-intekening is af.',
 	// Water Management recovery codes for {email}
 	'e65b3921': 'Water Management-herstelkodes vir {email}',
-	// Each code works once, in place of a code from your authenticator app.
-	'16b901ba': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app.',
+	// Each code works once, in place of a code from your authenticator app or your email.
+	'49c661fe': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app of jou e-pos.',
+	// Sending…
+	'967aa5dd': 'Stuur tans…',
+	// Send again (in {n} s)
+	'a875e674': 'Stuur weer (oor {n} s)',
+	// Email me a code
+	'01a688f1': 'E-pos vir my ’n kode',
 	// Two-step sign-in
 	'67ca1ae1': 'Tweestap-intekening',
 	// A project or team you manage requires two-step sign-in, or you take part in licence decisions, which always need it. Set it up here.
 	'9512751d': '’n Projek of span wat jy bestuur, vereis tweestap-intekening, of jy neem deel aan lisensiebesluite, wat dit altyd nodig het. Stel dit hier op.',
 	// Your recovery codes
 	'950aa263': 'Jou herstelkodes',
-	// Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.
-	'083eca42': 'Hou hulle op ’n veilige plek, weg van jou foon af. As jy jou foon verloor, teken elke kode jou een keer in. Hulle sal nie weer gewys word nie.',
+	// Keep these somewhere safe, away from your phone and your email. If you can’t get a code, each one signs you in once. They won’t be shown again.
+	'3ca7220c': 'Bêre hulle op ’n veilige plek, weg van jou foon en jou e-pos. As jy nie ’n kode kan kry nie, teken elkeen jou een keer in. Hulle word nie weer gewys nie.',
 	// The download could not be loaded. Copy the codes from the list below instead.
 	'ac2f42d0': 'Die aflaai kon nie gelaai word nie. Kopieer eerder die kodes uit die lys hieronder.',
 	// Download the codes
@@ -131,42 +157,54 @@ export const af: Catalogue = {
 	'3e7d8f8f': 'Kon nie hier kopieer nie. Laai hulle af, of skryf hulle neer.',
 	// On
 	'60e47df0': 'Aan',
-	// Signing in asks for a code from your authenticator app after your password.
-	'fdc7e615': 'Wanneer jy inteken, word ná jou wagwoord ’n kode van jou verifikasie-app gevra.',
-	// You’re running out of recovery codes. Make a new set while you still have your phone, so a lost phone can’t lock you out.
-	'4dc9b6a1': 'Jou herstelkodes raak op. Skep ’n nuwe stel terwyl jy nog jou foon het, sodat ’n verlore foon jou nie kan uitsluit nie.',
 	// Make a new set
 	'3f861156': 'Skep ’n nuwe stel',
-	// Someone asked to remove two-step sign-in from your account because the phone was lost. It will be removed at {when}, unless it’s cancelled.
-	'0c1cff1b': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder omdat die foon verlore is. Dit sal om {when} verwyder word, tensy dit gekanselleer word.',
-	// If that wasn’t you, cancel it now with a code from your authenticator app, then change your password.
-	'31487baf': 'As dit nie jy was nie, kanselleer dit nou met ’n kode van jou verifikasie-app, en verander dan jou wagwoord.',
 	// Cancel the removal
 	'6703e968': 'Kanselleer die verwydering',
+	// After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.
+	'b6f90a9c': 'Ná jou wagwoord kom ’n tweede stap: ’n 6-syferkode. Iemand wat jou wagwoord uitvind, kan steeds nie inkom nie. Kies hoe jy die kode kry; jy kan albei aanskakel.',
 	// This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.
 	'c08216a1': 'Hierdie blaaier het ingeteken voordat tweestap-intekening opgestel is. Teken uit en weer in voordat jy iets doen wat dit nodig het.',
-	// Code from your authenticator app
-	'8dcd2213': 'Kode van jou verifikasie-app',
-	// Code from your authenticator app, or a recovery code
-	'a0fb5ebd': 'Kode van jou verifikasie-app, of ’n herstelkode',
-	// Make new recovery codes
-	'2cd1bc62': 'Skep nuwe herstelkodes',
-	// Turn off two-step sign-in
-	'ecddfcbd': 'Skakel tweestap-intekening af',
-	// New recovery codes
-	'3695d1ea': 'Nuwe herstelkodes',
+	// Authenticator app
+	'744f34d3': 'Verifikasie-app',
+	// Off
+	'0dc6b4aa': 'Af',
+	// Stronger
+	'3b06b3cd': 'Sterker',
+	// A code from an app on your phone, such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.
+	'1b137731': '’n Kode van ’n app op jou foon, soos Google Authenticator, Microsoft Authenticator of Aegis. Net jou foon kan die kodes maak.',
+	// Remove
+	'21a5901d': 'Verwyder',
+	// Set up the app
+	'179105cc': 'Stel die app op',
+	// Code by email
+	'6d0090d9': 'Kode per e-pos',
+	// Easier
+	'8e289988': 'Makliker',
+	// We email a code to {email} each time. Easier, but less safe: whoever can read your email can also reset your password, so with codes by email your inbox guards your account. Keep your email account secure.
+	'7af10615': 'Ons e-pos elke keer ’n kode na {email}. Makliker, maar minder veilig: wie jou e-pos kan lees, kan ook jou wagwoord terugstel, so met kodes per e-pos hang jou rekening se veiligheid van jou inkassie af. Hou jou e-posrekening veilig.',
 	// Turn off
 	'cd03e04b': 'Skakel af',
-	// Add a second step to signing in: after your password, a 6-digit code from an authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Aegis). Someone who learns your password still can’t get in.
-	'c11c725f': 'Voeg ’n tweede stap by wanneer jy inteken: ná jou wagwoord, ’n 6-syferkode van ’n verifikasie-app op jou foon (soos Google Authenticator, Microsoft Authenticator of Aegis). Iemand wat jou wagwoord uitvind, kan dan steeds nie inkom nie.',
-	// Set up two-step sign-in
-	'6580af84': 'Stel tweestap-intekening op',
+	// Finish turning on
+	'31453bc4': 'Voltooi aanskakeling',
+	// Turn on
+	'65a0c5a7': 'Skakel aan',
+	// Turn on codes by email
+	'7baf539a': 'Skakel kodes per e-pos aan',
+	// Set up the authenticator app
+	'e1d327d3': 'Stel die verifikasie-app op',
 	// Current password
 	'8eedf1f3': 'Huidige wagwoord',
 	// Checking…
 	'732bdad5': 'Kontroleer tans…',
 	// Continue
 	'ab43d664': 'Gaan voort',
+	// We emailed a code to {email}. It works for 10 minutes.
+	'6b682727': 'Ons het ’n kode na {email} ge-e-pos. Dit bly 10 minute geldig.',
+	// Code from the email
+	'4082756f': 'Kode uit die e-pos',
+	// Send again
+	'f5910557': 'Stuur weer',
 	// Scan this code with your authenticator app.
 	'79170ef4': 'Skandeer hierdie kode met jou verifikasie-app.',
 	// QR code for your authenticator app
@@ -175,14 +213,20 @@ export const af: Catalogue = {
 	'3e40e69a': 'Kan jy dit nie skandeer nie? Tik eerder hierdie sleutel in die app in:',
 	// Enter the code the app shows
 	'96778761': 'Tik die kode in wat die app wys',
-	// Turn on two-step sign-in
-	'd9156f01': 'Skakel tweestap-intekening aan',
+	// Turn on the authenticator app
+	'7a8a0030': 'Skakel die verifikasie-app aan',
+	// Recovery codes
+	'c901fa44': 'Herstelkodes',
+	// New recovery codes
+	'3695d1ea': 'Nuwe herstelkodes',
+	// Code from your authenticator app or your email
+	'4b632513': 'Kode van jou verifikasie-app of jou e-pos',
+	// Code from your authenticator app or your email, or a recovery code
+	'346151bd': 'Kode van jou verifikasie-app of jou e-pos, of ’n herstelkode',
 	// Right away
 	'52eea1c1': 'Dadelik',
 	// Once a day (06:00)
 	'983ec4ee': 'Een keer ’n dag (06:00)',
-	// Off
-	'0dc6b4aa': 'Af',
 	// Dam running low
 	'25f39a9c': 'Dam raak laag',
 	// River flow at risk in the forecast
@@ -269,8 +313,6 @@ export const af: Catalogue = {
 	'307ccd54': 'E-posbevestiging',
 	// Please confirm your email address. We sent a link to
 	'1ec5e7a0': 'Bevestig asseblief jou e-posadres. Ons het ’n skakel gestuur na',
-	// Sending…
-	'967aa5dd': 'Stuur tans…',
 	// Resend email
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
@@ -1599,28 +1641,34 @@ export const af: Catalogue = {
 	'04f58c9d': 'Hierdie lopie is nie deur die modellopie self gestoor nie, so dit kan nie afgeteken word nie, en geen besluit kan daaroor geneem word nie. Vee dit uit en laat dit weer loop.',
 	// You are the only owner of a project or the only admin of a team. Hand it to someone else first.
 	'72b3c72f': 'Jy is die enigste eienaar van ’n projek of die enigste administrateur van ’n span. Gee dit eers aan iemand anders oor.',
-	// That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.
-	'adb80c07': 'Daardie kode is nie reg nie. Tik die nuutste kode van jou verifikasie-app in, of een van jou herstelkodes.',
+	// That code isn’t right. Enter the newest code from your authenticator app or your email, or one of your recovery codes.
+	'03c7e607': 'Daardie kode is nie reg nie. Tik die nuutste kode van jou verifikasie-app of jou e-pos in, of een van jou herstelkodes.',
 	// Too many wrong codes. Try again in {wait}.
 	'c7ae688e': 'Te veel verkeerde kodes. Probeer weer oor {wait}.',
 	// Your sign-in timed out. Enter your email and password again.
 	'af1c1fed': 'Jou intekening het verval. Tik weer jou e-posadres en wagwoord in.',
-	// Two-step sign-in is already on. Turn it off first to set up another authenticator app.
-	'0343cbd2': 'Tweestap-intekening is reeds aan. Skakel dit eers af om ’n ander verifikasie-app op te stel.',
+	// This is already on. Turn it off first to set it up again.
+	'6d59b4f6': 'Dit is reeds aan. Skakel dit eers af om dit weer op te stel.',
 	// Start setting up two-step sign-in again.
 	'362ea51a': 'Begin weer om tweestap-intekening op te stel.',
-	// This needs two-step sign-in. Set up an authenticator app on your Account page first.
-	'32d75bec': 'Hiervoor is tweestap-intekening nodig. Stel eers op jou rekeningbladsy ’n verifikasie-app op.',
-	// This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.
-	'380b94ff': 'Hiervoor is tweestap-intekening nodig. Teken uit, en teken dan weer in met ’n kode van jou verifikasie-app.',
 	// You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.
 	'65455dcb': 'Jy het vandag al ’n paar keer hiervoor gevra. Kyk in jou inkassie en gemorspos, of probeer môre weer.',
+	// This needs two-step sign-in. Set it up on your Account page first.
+	'2a311dd6': 'Dit het tweestap-intekening nodig. Stel dit eers op jou Rekening-bladsy op.',
+	// This needs two-step sign-in. Sign out, then sign in again with a code.
+	'9d6d2ca6': 'Dit het tweestap-intekening nodig. Teken uit en teken dan weer met ’n kode in.',
+	// We just emailed you a code. You can ask for another in {wait}.
+	'5edf5f13': 'Ons het pas vir jou ’n kode ge-e-pos. Jy kan oor {wait} vir nog een vra.',
+	// We couldn’t send the email. Try again in a minute.
+	'74fb1c93': 'Ons kon nie die e-pos stuur nie. Probeer oor ’n minuut weer.',
 	// You have posted 10 comments in the last hour. Wait a while, then try again.
 	'2ae5aea1': 'Jy het die afgelope uur 10 kommentare geplaas. Wag ’n rukkie en probeer dan weer.',
 	// Too many sign-in attempts from your network. Wait a few minutes, then try again.
 	'3c2a05a7': 'Te veel pogings om van jou netwerk af in te teken. Wag ’n paar minute en probeer dan weer.',
 	// {n} minute / {n} minutes
 	'a60f17d2': { one: '{n} minuut', other: '{n} minute' },
+	// {n} second / {n} seconds
+	'3d0ad24e': { one: '{n} sekonde', other: '{n} sekondes' },
 	// Couldn’t reach the server. Check your connection and try again.
 	'058318a7': 'Kon nie die bediener bereik nie. Kyk jou verbinding na en probeer weer.',
 	// Something went wrong on our side. Try again in a moment.
@@ -1915,16 +1963,28 @@ export const af: Catalogue = {
 	'ba861fd4': 'E-pos vir my ’n skakel',
 	// Back to the code
 	'69cb4275': 'Terug na die kode',
+	// We emailed you a 6-digit code. It works for 10 minutes. Check your spam folder if it isn’t there.
+	'11962fca': 'Ons het vir jou ’n 6-syferkode ge-e-pos. Dit bly 10 minute geldig. Kyk in jou gemorspos as dit nie daar is nie.',
+	// We’ll email a 6-digit code to the address you signed in with.
+	'd5419f3e': 'Ons e-pos ’n 6-syferkode na die adres waarmee jy ingeteken het.',
+	// Send code
+	'fc840afc': 'Stuur kode',
 	// Recovery code
 	'd01c975f': 'Herstelkode',
 	// One of the codes you saved when you set up two-step sign-in. Each works once.
 	'ea77aa7b': 'Een van die kodes wat jy gestoor het toe jy tweestap-intekening opgestel het. Elkeen werk een keer.',
+	// Code from your authenticator app
+	'8dcd2213': 'Kode van jou verifikasie-app',
 	// Open the app on your phone and enter the 6-digit code it shows for Water Management.
 	'fa62aa3c': 'Maak die app op jou foon oop en tik die 6-syferkode in wat dit vir Water Management wys.',
+	// Email me a code instead
+	'09eeb9c3': 'E-pos eerder vir my ’n kode',
 	// Use a code from the app instead
 	'a43288ae': 'Gebruik eerder ’n kode van die app',
 	// Lost your phone? Use a recovery code
 	'3023ae8f': 'Foon verloor? Gebruik ’n herstelkode',
+	// Can’t get the email? Use a recovery code
+	'd69c9b84': 'Kry jy nie die e-pos nie? Gebruik ’n herstelkode',
 	// Forgot password?
 	'e2619568': 'Wagwoord vergeet?',
 	// Signing in…

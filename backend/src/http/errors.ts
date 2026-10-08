@@ -84,6 +84,11 @@ export const ERROR_CODES = [
 	'mfa_step_up',
 	// Asked for a reset of a lost second factor too often today (205, auth/mfa-reset-routes.ts).
 	'mfa_reset_limit',
+	// A team admin tried to remove another admin's second factor (205, teams/mfa-reset-routes.ts): only a member below admin.
+	'mfa_reset_admin',
+	// Codes by email (206, auth/mfa-routes.ts): a send limit (params.seconds), and a send that failed.
+	'mfa_email_wait',
+	'mfa_email_failed',
 	// A comment through a share link (166_public_participation, share/routes.ts): 10 an hour per account.
 	'comment_throttled'
 ] as const;

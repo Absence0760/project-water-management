@@ -1,23 +1,37 @@
 // Two-step sign-in: who needs a second factor, and for what (docs/security.md
-// § Two-step sign-in). Opt-in since the operator's decision of 2026-10-08,
-// which replaced the role-based requirement of 2026-10-01 (issue #282):
+// § Two-step sign-in). Three parts, decided by the operator on 2026-10-08:
 //
-// - Opt-in, per project and per team (204_mfa_opt_in). An owner's actions
-//   (members, invites, API keys, data feeds, share links, deleting the
-//   project: anything gated on requireRole(…, 'owner')) need it only when the
-//   project requires it, or its team does; a team admin's (requireTeamRole(…,
-//   'admin')) only when the team does. A run's sign-off follows the
-//   project's setting too (requireProjectFreshCode). Off by default.
-// - Always, whatever the settings: the actions that reach people outside the
-//   team, where a stolen password would do harm the team can't undo:
-//   publishing to farmers (a restriction, a notice, an outlook, and
-//   withdrawing an outlook), deciding an application, endorsing a published
-//   baseline, recording a signer's registration check, and signing, issuing
-//   and withdrawing an evidence pack (requireStepUp / requireFreshCode).
-// - Turning a project's or team's setting on needs the person to be signed in
-//   with a second factor themselves (requireOwnSecondFactor), so a project
-//   can't lock everyone out at once. Turning it off is an owner's (admin's)
-//   action under the setting, so it is stepped up by the setting itself.
+// 1. Who must use it (204_mfa_opt_in), opt-in since 2026-10-08, which
+//    replaced the role-based requirement of 2026-10-01 (issue #282):
+//    - Opt-in, per project and per team. An owner's actions (members,
+//      invites, API keys, data feeds, share links, deleting the project:
+//      anything gated on requireRole(…, 'owner')) need it only when the
+//      project requires it, or its team does; a team admin's
+//      (requireTeamRole(…, 'admin')) only when the team does. A run's
+//      sign-off follows the project's setting too (requireProjectFreshCode).
+//      Off by default.
+//    - Always, whatever the settings: the actions that reach people outside
+//      the team, where a stolen password would do harm the team can't undo:
+//      publishing to farmers (a restriction, a notice, an outlook, and
+//      withdrawing an outlook), deciding an application, endorsing a
+//      published baseline, recording a signer's registration check, and
+//      signing, issuing and withdrawing an evidence pack (requireStepUp /
+//      requireFreshCode). A team admin removing a member's lost factor
+//      (teams/mfa-reset-routes.ts) always needs a fresh code too: it takes a
+//      factor off someone else's account.
+//    - Turning a project's or team's setting on needs the person to be signed
+//      in with a second factor themselves (requireOwnSecondFactor), so a
+//      project can't lock everyone out at once. Turning it off is an owner's
+//      (admin's) action under the setting, so the setting itself steps it up.
+// 2. Which factors count: an authenticator app (150) or a code by email
+//    (206_mfa_email_code), either one; a recovery code stands in for both.
+//    "Has a factor" is one test, SQL mfa_has_factor (hasConfirmedFactor
+//    below calls it), so the API and the database functions can't disagree.
+// 3. Recovering a lost factor (205_mfa_recovery, auth/mfaReset.ts): the
+//    person, by an emailed link and a 3-day wait, or a team admin at once.
+//    Every right code (a sign-in, a step-up, either factor) ends a waiting
+//    reset. Every removal goes through SQL mfa_remove_factors (all factors)
+//    or mfa_remove_factor (the owner's one of several).
 //
 // Where it is checked: requireRole(…, 'owner') and requireTeamRole(…, 'admin')
 // call requireProjectStepUp / requireTeamStepUp after the role check passes
@@ -34,7 +48,7 @@
 //
 // A fresh code (licensing positions item 9, provisional position, pre-counsel
 // research, 2026-10-01): a sign-off (of a run or an evidence pack), issuing a
-// pack and withdrawing one also need a code from the authenticator within the
+// pack and withdrawing one also need a code (from the app or by email) within the
 // last ten minutes (FRESH_CODE_MS), not only at sign-in: a sign-off publishes
 // a professional statement under a real name on the public verify page, so a
 // session left open on a shared computer mustn't make one. requireFreshCode
@@ -72,13 +86,16 @@ export function mfaRequired(env: Record<string, string | undefined> = process.en
 }
 
 /**
- * Whether `userId` has a confirmed second factor (an authenticator app). The
- * one place the step-up asks "is the account enrolled", so another kind of
- * factor is added here.
+ * Whether `userId` has a confirmed second factor of any kind: an
+ * authenticator app (user_totp, 150) or codes by email (user_email_otp, 206).
+ * An unconfirmed one (enrolment waiting for its first code) doesn't count.
+ * The SQL function mfa_has_factor (205, 206) is the one definition, which
+ * the reset and team-admin functions use too; invoker's rights, so read as
+ * the account (RLS shows only its own rows) it answers for the account only.
  */
 export async function hasConfirmedFactor(db: Db, userId: string): Promise<boolean> {
 	const { rows } = await db.query<{ enrolled: boolean }>(
-		'SELECT EXISTS (SELECT 1 FROM user_totp WHERE user_id = $1 AND confirmed_at IS NOT NULL) AS enrolled',
+		'SELECT mfa_has_factor($1) AS enrolled',
 		[userId]
 	);
 	return rows[0]?.enrolled ?? false;
@@ -87,7 +104,7 @@ export async function hasConfirmedFactor(db: Db, userId: string): Promise<boolea
 /**
  * The 403 this request would get for want of a second factor, or null when it
  * has one (or the requirement is off, or there is no request). `mfa_required`:
- * the person has no authenticator yet (set one up on the Account page).
+ * the person has no second factor yet (set one up on the Account page).
  * `mfa_step_up`: they have one, but this session signed in before it was
  * added: sign in again. A read can say so ahead of the action (a sign-off's
  * `cannotSign`), so nobody fills in a form the server will refuse. For the
@@ -97,10 +114,10 @@ export async function stepUpRefusal(db: Db, why = 'this needs two-step sign-in')
 	const auth = requestAuth.getStore();
 	if (!auth || !mfaRequired()) return null;
 	if (!(await hasConfirmedFactor(db, auth.userId))) {
-		return ApiError.coded(403, 'mfa_required', `${why}: set up an authenticator app on your Account page first`);
+		return ApiError.coded(403, 'mfa_required', `${why}: set it up on your Account page first`);
 	}
 	if (!auth.amr.includes('otp')) {
-		return ApiError.coded(403, 'mfa_step_up', `${why}: sign out and sign in again with a code from your authenticator app`);
+		return ApiError.coded(403, 'mfa_step_up', `${why}: sign out and sign in again with a code`);
 	}
 	return null;
 }
@@ -161,7 +178,7 @@ export async function requireStepUp(db: Db): Promise<void> {
 }
 
 /**
- * requireStepUp, and a code from the authenticator within the last ten
+ * requireStepUp, and a code (from the app or by email) within the last ten
  * minutes (FRESH_CODE_MS): 401 `mfa_fresh_code` otherwise, which the client
  * answers by asking for a code (POST /auth/mfa/step-up) and trying again. For
  * a sign-off and for issuing or withdrawing an evidence pack. Off with the
@@ -172,7 +189,7 @@ export async function requireFreshCode(db: Db, now = Date.now()): Promise<void> 
 	const auth = requestAuth.getStore();
 	if (!auth || !mfaRequired()) return;
 	if (!freshCode(auth.otpAt ?? null, now)) {
-		throw ApiError.coded(401, 'mfa_fresh_code', 'this needs a code from your authenticator app from the last 10 minutes: enter one, then try again');
+		throw ApiError.coded(401, 'mfa_fresh_code', 'this needs a code from the last 10 minutes (from your authenticator app or your email): enter one, then try again');
 	}
 }
 

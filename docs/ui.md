@@ -101,30 +101,43 @@ is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
 
 **Two-step sign-in** (`lib/components/account/TwoStepSignIn.svelte`, issue
-#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
-`GET /auth/mfa`). Off: one line on what it does and **Set up two-step
-sign-in**, which asks for the current password (**Continue**), then shows
-two numbered steps: the QR code for the authenticator app, drawn in the page
-(`account/qr.ts`, uqr; black on white in both themes, with its quiet zone,
-220 px; the encoder loads only at that moment) with the key in groups of
-four to type instead, and **Enter the code the app shows** with **Turn on
-two-step sign-in**. Then the ten recovery codes, once, in a highlighted box
-whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them), **Copy the codes** (the same text on the clipboard; a status line says whether it worked) and **I’ve
-saved them**. On: an **On** badge, how many recovery codes are left, a line
-when this browser signed in before it was set up, and **New recovery codes**
-/ **Turn off**, each opening one code field (the app's code; turning off
-also takes a recovery code). At two codes or fewer a warning suggests a new
-set while the phone is still at hand, with **Make a new set**
-(`lib/auth/mfaReset.ts` `fewRecoveryCodes`). While a reset of the factor
-waits (205, `pendingReset`), an alert says when it takes effect and, if
-that wasn't them, to cancel it: **Cancel the removal** asks for a code
-from the app (`POST /auth/mfa/step-up`, which ends the reset). Someone whose roles need it (`GET /auth/mfa`
-`required`: an owner or admin of a project or team that requires it, or
-someone who takes part in licence decisions, which always need it) without
-it sees a warning saying so (and, on the workspace, once an action is
-refused, the two-step sign-in banner, § Invitations below, which links
-here: the panel is `#two-step`). Errors are worded from their
-codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
+#282, codes by email 206, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
+`GET /auth/mfa`). One line on what it does ("choose how you get the code;
+you can turn on both"), then the two ways as rows, each with its name, an
+**On** / **Off** badge in words, and a word on its strength: **Authenticator
+app** (**Stronger**, first: only your phone can make the codes) and **Code
+by email** (**Easier**, with the honest tradeoff beside the button: whoever
+can read your email can also reset your password, so with codes by email
+your inbox guards your account). The app's **Set up the app** asks for the
+current password (**Continue**), then shows two numbered steps: the QR code
+for the authenticator app, drawn in the page (`account/qr.ts`, uqr; black on
+white in both themes, with its quiet zone, 220 px; the encoder loads only at
+that moment) with the key in groups of four to type instead, and **Enter
+the code the app shows** with **Turn on the authenticator app**. Email's
+**Turn on** asks for the current password, then **Code from the email**
+(focused) with **Turn on codes by email** and **Send again (in N s)**, which
+counts down the minute the server allows between sends
+(`lib/auth/resendTimer.svelte.ts`; a pending one shows **Finish turning
+on**). The first way turned on brings the ten recovery codes, once, in a
+highlighted box whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them), **Copy the codes** (the same text on the clipboard; a status line says whether it worked) and **I’ve
+saved them**; a second way keeps the same set. With either on: **Remove** /
+**Turn off** on its row, a **Recovery codes** part with how many are left
+and **New recovery codes**, and a line when this browser signed in before
+two-step sign-in was set up. At two codes or fewer a warning suggests a new
+set, with **Make a new set** (`lib/auth/mfaReset.ts` `fewRecoveryCodes`).
+While a reset of the factors waits (205, `pendingReset`), an alert says
+when it takes effect and, if that wasn't them, to cancel it: **Cancel the
+removal** asks for a code from the app or the email (`POST
+/auth/mfa/step-up`, which ends the reset). Each action opens one code field
+(from the app or the email; removing a way also takes a recovery code),
+with **Email me a code** beside it while codes by email are on. Someone
+whose roles need it (`GET /auth/mfa` `required`: an owner or admin of a
+project or team that requires it, or someone who takes part in licence
+decisions, which always need it) without it sees a warning saying so (and,
+on the workspace, once an action is refused, the two-step sign-in banner, §
+Invitations below, which links here: the panel is `#two-step`). Errors are
+worded from their codes (`mfa_code_wrong`, `mfa_locked`, `mfa_email_wait`
+in seconds, …). The sign-in page's second step
 is under § Sign-in pages.
 
 **Delete my account** (issue #112; `lib/components/account/DeleteAccount.svelte`,
@@ -504,28 +517,36 @@ under a dead-invitation warning).
   server also turns whitespace runs into one space and drops control and
   bidi override characters before storing it.
 
-- **Two-step sign-in** (issue #282). For an account with an authenticator,
-  a right password turns the form into its second step: a **Two-step
-  sign-in** heading and **Code from your authenticator app** (numeric,
-  `autocomplete="one-time-code"`, focused), **Sign in**, and **Lost your
-  phone? Use a recovery code**, which swaps the field for **Recovery code**
-  (and back). A wrong code, the 5-minute challenge running out (back to the
-  password step) and the code lockout are alerts worded from their codes.
-- **Lost phone and recovery codes** (205_mfa_recovery,
+- **Two-step sign-in** (issue #282, codes by email 206). For an account
+  with a second factor, a right password turns the form into its second
+  step, a **Two-step sign-in** heading, on the account's first way (the app
+  when it has one): **Code from your authenticator app** (numeric,
+  `autocomplete="one-time-code"`, focused) and **Sign in**; or, by email, a
+  line saying where the code goes and **Send code**, after which **Code
+  from the email** (focused) and **Sign in** appear and the button becomes
+  **Send again (in N s)**, counting down the minute between sends. Below,
+  the other ways as links: **Email me a code instead** / **Use a code from
+  the app instead** when the account has both, and **Lost your phone? Use a
+  recovery code** (with email only, **Can’t get the email? Use a recovery
+  code**), which swaps the field for **Recovery code**. A wrong code, the
+  5-minute challenge running out (back to the password step), the code
+  lockout and a send too soon are alerts worded from their codes.
+- **No code and no recovery codes** (205_mfa_recovery,
   [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery).
   In recovery-code mode the code step also offers **Lost your phone and
-  your recovery codes?**, which swaps the form for a panel (its heading
-  takes focus): two-step sign-in can be removed, it takes 3 days, a link is
-  emailed to confirm and every day after so it can be cancelled, and a team
-  admin can do it at once. **Email me a link** (`POST /auth/mfa/reset`)
-  answers *Check your email* (open the link within 1 hour; nothing changes
-  until then), or, while a reset already waits, when it takes effect.
-  **Back to the code** returns. The emailed links open two pages of the
-  sign-in family (`routes/mfa-reset/`, translated, open signed in or out,
-  the token dropped from the address bar and `referrer` off, as the
-  password reset page): **Remove two-step sign-in** (`/mfa-reset`) explains
-  the wait and starts it only on **Start the 3-day wait**, so a mail
-  scanner opening the link starts nothing; **Keep two-step sign-in**
+  your recovery codes?** (with codes by email alone, **Can’t get the email
+  and lost your recovery codes?**), which swaps the form for a panel (its
+  heading takes focus): two-step sign-in can be removed, it takes 3 days, a
+  link is emailed to confirm and every day after so it can be cancelled,
+  and a team admin can do it at once. **Email me a link** (`POST
+  /auth/mfa/reset`) answers *Check your email* (open the link within 1
+  hour; nothing changes until then), or, while a reset already waits, when
+  it takes effect. **Back to the code** returns. The emailed links open two
+  pages of the sign-in family (`routes/mfa-reset/`, translated, open signed
+  in or out, the token dropped from the address bar and `referrer` off, as
+  the password reset page): **Remove two-step sign-in** (`/mfa-reset`)
+  explains the wait and starts it only on **Start the 3-day wait**, so a
+  mail scanner opening the link starts nothing; **Keep two-step sign-in**
   (`/mfa-reset/cancel`) cancels it on **Cancel the removal**, then says to
   change both passwords if it wasn't them. A dead link says so.
 
@@ -8977,7 +8998,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   answers `401 mfa_fresh_code`, a dialog asks for a code from the
   authenticator app (or a recovery code), sends it to `POST
   /auth/mfa/step-up`, and the action goes through without being started
-  again; Cancel leaves it undone.
+  again; Cancel leaves it undone. With codes by email on (it reads `GET
+  /auth/mfa`), **Email me a code instead** (or, without the app, **Email me
+  a code**) sends one (`POST /auth/mfa/email/send`) and counts down to
+  **Send again**; the same field takes it.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
