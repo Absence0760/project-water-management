@@ -17,7 +17,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
-import { requireStepUp } from '../auth/stepUp.js';
+import { requireOwnSecondFactor, requireProjectStepUp } from '../auth/stepUp.js';
 import { checkCalibrationSite } from './calibrationSite.js';
 import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
@@ -57,6 +57,10 @@ type ProjectRow = {
 	rerun_queued_for: Date | null;
 	/** The caller acts for the responsible authority (163, app_acts_for_authority): editor or above and marked by an owner. */
 	acts_for_authority: boolean;
+	/** The project's own two-step sign-in setting (204_mfa_opt_in). */
+	require_mfa: boolean;
+	/** Whether its owner actions need two-step sign-in: its setting or its team's (app_project_requires_mfa); getProject only. */
+	mfa_required?: boolean;
 };
 
 const summary = (r: ProjectRow) => ({
@@ -89,7 +93,11 @@ const full = (r: ProjectRow) => ({
 	},
 	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null,
 	// Whether the caller may record the authority's decision and endorse a baseline (163).
-	actsForAuthority: r.acts_for_authority
+	actsForAuthority: r.acts_for_authority,
+	// Two-step sign-in (204_mfa_opt_in, auth/stepUp.ts): the project's own setting, and whether
+	// its owner actions need it (that setting or its team's).
+	requireMfa: r.require_mfa,
+	mfaRequired: r.mfa_required ?? r.require_mfa
 });
 
 // RLS already limits rows to projects the user can see (directly or via a
@@ -97,7 +105,7 @@ const full = (r: ProjectRow) => ({
 // visible to team members (team RLS), so it may be null for direct members.
 const SELECT_PROJECT = `
 	SELECT p.id, p.name, p.description, p.time_zone, p.wua_name, p.settings, p.created_at, p.updated_at, p.team_id,
-		t.name AS team_name, app_project_role(p.id) AS role, app_acts_for_authority(p.id) AS acts_for_authority,
+		t.name AS team_name, app_project_role(p.id) AS role, app_acts_for_authority(p.id) AS acts_for_authority, p.require_mfa,
 		-- Data freshness and last run for the project list, in the same query
 		-- (both subqueries use the (project_id…) indexes; no N+1 from the client).
 		-- Freshness is recorded rain (catchment or CHIRPS): what a run is driven
@@ -137,6 +145,8 @@ const PatchBody = z.object({
 		.optional()
 		.transform((s) => (s === '' ? null : s)),
 	settings: SettingsPatch.optional(),
+	/** Owner actions need two-step sign-in (204_mfa_opt_in). Owner only; turning it on needs a session signed in with a second factor. */
+	requireMfa: z.boolean().optional(),
 	/** Why the settings changed, kept with the revision (ignored without settings). */
 	reason: Reason
 });
@@ -193,7 +203,8 @@ function publicRecordKept() {
 }
 
 async function getProject(db: import('../db/tx.js').Db, id: string) {
-	const { rows } = await db.query<ProjectRow>(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
+	// The team's two-step setting through a definer: someone shared a team project directly can't read the team row.
+	const { rows } = await db.query<ProjectRow>(`SELECT q.*, app_project_requires_mfa(q.id) AS mfa_required FROM (${SELECT_PROJECT} WHERE p.id = $1) q`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
 	return rows[0];
 }
@@ -220,13 +231,24 @@ const withoutRunPolicy = (settings: unknown) => {
  * saved, not the keys sent.
  */
 const onlyRunPolicy = (body: z.infer<typeof PatchBody>, stored: unknown, next: unknown) =>
-	body.name === undefined &&
+	(next === undefined && onlyMfaSetting(body)) ||
+	(body.name === undefined &&
 	body.description === undefined &&
 	body.timeZone === undefined &&
 	body.wuaName === undefined &&
 	body.teamId === undefined &&
 	next !== undefined &&
-	stableJson(withoutRunPolicy(next)) === stableJson(withoutRunPolicy(mergeSettings(stored)));
+	stableJson(withoutRunPolicy(next)) === stableJson(withoutRunPolicy(mergeSettings(stored))));
+
+/** A patch of the two-step sign-in setting alone: no input changes, so updated_at stays. */
+const onlyMfaSetting = (body: z.infer<typeof PatchBody>) =>
+	body.requireMfa !== undefined &&
+	body.name === undefined &&
+	body.description === undefined &&
+	body.timeZone === undefined &&
+	body.wuaName === undefined &&
+	body.teamId === undefined &&
+	body.settings === undefined;
 
 export const projectRoutes = new Hono<AuthEnv>()
 	.get('/', async (c) =>
@@ -309,7 +331,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const body = PatchBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, body.teamId !== undefined ? 'owner' : 'editor');
+			// Moving the project and its two-step setting are an owner's; both are stepped up where the project
+			// requires it now, so turning the requirement off needs it (auth/stepUp.ts).
+			await requireRole(db, id, body.teamId !== undefined || body.requireMfa !== undefined ? 'owner' : 'editor');
 			if (body.teamId) await requireTeamContributor(db, body.teamId);
 			if (body.teamId !== undefined) {
 				// Someone who owns the project only through the current team would
@@ -323,6 +347,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// A settings change is a revision of the project's inputs (history/record.ts).
 			const before = body.settings ? await beginSettingsChange(db, id) : null;
 			const current = await getProject(db, id);
+			// Turning it on: only someone signed in with a second factor, so it can't lock everyone out at once.
+			const mfaChange = body.requireMfa !== undefined && body.requireMfa !== current.require_mfa;
+			if (mfaChange && body.requireMfa) await requireOwnSecondFactor(db);
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
 			if (dqError) throw new ApiError(400, dqError);
@@ -369,14 +396,16 @@ export const projectRoutes = new Hono<AuthEnv>()
 					wua_name = CASE WHEN $9 THEN $10 ELSE wua_name END,
 					settings = COALESCE($4::jsonb, settings),
 					team_id = CASE WHEN $5 THEN $6::uuid ELSE team_id END,
-					updated_at = CASE WHEN $7 THEN updated_at ELSE now() END
+					updated_at = CASE WHEN $7 THEN updated_at ELSE now() END,
+					require_mfa = COALESCE($11, require_mfa)
 				 WHERE id = $1`,
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
 					body.teamId !== undefined, body.teamId ?? null, onlyRunPolicy(body, current.settings, settings), body.timeZone ?? null,
-					body.wuaName !== undefined, body.wuaName ?? null]
+					body.wuaName !== undefined, body.wuaName ?? null, body.requireMfa ?? null]
 			);
 			mustChange(changed);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
+			if (mfaChange) await recordAudit(db, id, 'project.mfa_requirement', { on: body.requireMfa });
 			if (signOff === 'signed') {
 				await recordAudit(db, id, 'calibration_rules.signed_off', { revision: settings!.calibrationRules.revision, fullName: settings!.calibrationRules.signedOff!.by });
 			} else if (signOff === 'withdrawn') {
@@ -590,8 +619,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'farmer');
 			const self = userId === c.get('userId');
 			if (!self && role !== 'owner') throw new ApiError(403, 'requires owner role');
-			// Removing someone else is an owner's action: two-step sign-in (auth/stepUp.ts). Leaving isn't.
-			if (!self) await requireStepUp(db);
+			// Removing someone else is an owner's action: two-step sign-in where the project requires it (auth/stepUp.ts). Leaving isn't.
+			if (!self) await requireProjectStepUp(db, id);
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastOwner(db, id, userId);
 			// Recorded before the delete: afterwards someone who left can no

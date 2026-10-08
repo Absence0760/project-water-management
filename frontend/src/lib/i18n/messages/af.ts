@@ -37,6 +37,10 @@ export const af: Catalogue = {
 	'bb72711c': 'Gebruik hoogstens 200 karakters.',
 	// The two passwords don’t match.
 	'd62a92b9': 'Die twee wagwoorde stem nie ooreen nie.',
+	// Enter a display name.
+	'a7f2031b': 'Tik ’n vertoonnaam in.',
+	// Use at most 100 characters.
+	'c5951029': 'Gebruik hoogstens 100 karakters.',
 	// Enter your password.
 	'fed4dc29': 'Tik jou wagwoord in.',
 	// Delete my account
@@ -105,8 +109,8 @@ export const af: Catalogue = {
 	'16b901ba': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app.',
 	// Two-step sign-in
 	'67ca1ae1': 'Tweestap-intekening',
-	// You’re a project owner, team admin or assessor, so publishing, deciding applications and managing members need two-step sign-in. Set it up here.
-	'174d5a26': 'Omdat jy ’n projekeienaar, spanadministrateur of beoordelaar is, het jy tweestap-intekening nodig om te publiseer, oor aansoeke te besluit en lede te bestuur. Stel dit hier op.',
+	// A project or team you manage requires two-step sign-in, or you take part in licence decisions, which always need it. Set it up here.
+	'9512751d': '’n Projek of span wat jy bestuur, vereis tweestap-intekening, of jy neem deel aan lisensiebesluite, wat dit altyd nodig het. Stel dit hier op.',
 	// Your recovery codes
 	'950aa263': 'Jou herstelkodes',
 	// Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.
@@ -223,22 +227,6 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
-	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
-	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
-	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
-	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
-	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
-	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
-	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
-	// Licence records, and the names they keep, are kept until a set date and then deleted.
-	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
-	// Outside the organisation, registered water use is shown only as totals, never with a name.
-	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
-	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
-	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
-	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
-	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -269,6 +257,22 @@ export const af: Catalogue = {
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
 	'265915f3': 'Maak toe',
+	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
+	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
+	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
+	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
+	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
+	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
+	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
+	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
+	// Licence records, and the names they keep, are kept until a set date and then deleted.
+	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
+	// Outside the organisation, registered water use is shown only as totals, never with a name.
+	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
+	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
+	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
+	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
+	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
 	// Hide (password field)
 	'2bd339e0': 'Versteek',
 	// Show (password field)
@@ -1613,10 +1617,6 @@ export const af: Catalogue = {
 	'9df7013d': 'Iets het verkeerd geloop. Probeer weer.',
 	// The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.
 	'25601c1d': 'Die herinnering om jou e-posadres te bevestig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
-	// Enter a display name.
-	'a7f2031b': 'Tik ’n vertoonnaam in.',
-	// Use at most 100 characters.
-	'c5951029': 'Gebruik hoogstens 100 karakters.',
 	// Email
 	'43352167': 'E-pos',
 	// Status

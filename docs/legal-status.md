@@ -561,3 +561,11 @@ cl. 3). The licensing ones are rows in
   before them. The rivers load gate
   (`scripts/release/map-data-gates.mjs`) now checks for the clause as well
   as the Exhibit B statement.
+- 2026-10-08: Privacy §9 says who must use two-step sign-in under the
+  operator's decision of 2026-10-08 (opt-in per project and team, always
+  for publishing to farmers, licence decisions and evidence packs;
+  security.md § Two-step sign-in, 204_mfa_opt_in), instead of "project
+  owners, team admins and assessors". It describes a safeguard, collects no
+  new personal information and gives no new purpose: a clarification, not a
+  material change, so no `LEGAL_VERSION` bump. The operator may judge
+  otherwise, since the safeguard is now narrower by default.

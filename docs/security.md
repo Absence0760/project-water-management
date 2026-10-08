@@ -118,7 +118,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 
 TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`. One phished
 password could otherwise publish a restriction to a catchment's farmers or
-decide a licence application.
+decide a licence application. Required for those actions, and opt-in per
+project and team for the rest (`204_mfa_opt_in.sql`, 2026-10-08).
 
 - **What it is.** An account can add an authenticator app (Account page,
   `POST /auth/mfa/totp/enrol` then `…/confirm`). From then on a right
@@ -175,39 +176,85 @@ decide a licence application.
   nobody can clear their own count. Each wrong code logs `login_failed`
   with reason `bad_code`, counted by the login-failed alarm. The WAF's
   per-IP limit on `/api/auth/*` covers `/api/auth/mfa/verify` too.
-- **Who must use it.** Project owners, team admins and assessors
-  (`auth/stepUp.ts`). `requireRole(…, 'owner')` and
-  `requireTeamRole(…, 'admin')` call `requireStepUp` after the role check
-  passes (so an outsider still gets 404 and learns nothing), and so do the
-  editor-level actions those roles exist for: publishing to farmers (`POST`
-  and `PATCH …/publication`, publishing and withdrawing an outlook),
-  recording the authority's decision on an application (`…/decide`),
-  endorsing a published baseline (`…/publication/:pubId/endorse`), issuing
-  or withdrawing an evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
-  `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
-  needs an authenticator: a sign-off is the professional record an
-  authority relies on, and without it is only as strong as the signer's
-  password (operator decision, 2026-10-01). The owner and admin checks a route makes by hand are
-  stepped up too: removing someone else from a project or a team (leaving
-  isn't), and an owner making or revoking a share link of any kind. A guard
-  (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
-  `rank.owner` comparison in the backend and fails unless its file calls
-  `requireStepUp` or is listed with why it gates no action. Without an authenticator the answer is
-  `403 mfa_required` ("set one up on your Account page"); with one but a
-  password-only session, `403 mfa_step_up` ("sign in again"). The check
-  reads the session's `amr` from the request's `requestAuth`
-  (AsyncLocalStorage, set by `requireUser`) and the account's confirmed
-  factor, so a factor turned off since sign-in no longer counts. Work
-  outside a request (the job runner) isn't stepped up: no job kind needs
-  more than editor, and the request that queued it was checked. Everyone
-  else may turn it on, and is asked for a code at sign-in once they have.
-  `GET /auth/mfa` says whether the person's roles need it (`required`,
-  false while the switch below is off, so the prompts say what the routes
-  do).
+- **Who must use it.** Opt-in per project and team, and always for the
+  actions that reach people outside the team (`auth/stepUp.ts`,
+  `204_mfa_opt_in.sql`). The operator's decision of 2026-10-08, replacing
+  the role-based requirement of 2026-10-01 (every project owner, team admin
+  and assessor, and every signer): a requirement on every owner made a
+  first-time owner set up an authenticator before they could invite a
+  colleague to their own catchment, for actions whose harm stays inside the
+  team (the team can see and undo who was added, what key was made), so it
+  is the team's choice now.
+  - **Opt-in.** `project.require_mfa` and `team.require_mfa`, off by
+    default. An owner sets the project's, a team admin the team's (`PATCH
+    /projects/:id { requireMfa }`, `PATCH /teams/:id { requireMfa }`; the
+    switch on the Project page and in the team settings). Where the project
+    requires it, or its team does (`app_project_requires_mfa`, a definer, so
+    an owner shared a team project directly, who can't read the team row,
+    is still held to it), its owners need a session signed in with a code
+    before any owner action: `requireRole(…, 'owner')` calls
+    `requireProjectStepUp` after the role check passes (so an outsider still
+    gets 404 and learns nothing): members, invites, API keys, data feeds,
+    share links, deleting the project, and the owner checks a route makes
+    by hand (removing someone else from the project, leaving isn't; an
+    owner making or revoking a share link of any kind). A run's sign-off
+    (`POST …/runs/:runId/signoffs`) follows the project's setting too, with
+    its fresh code (below): with the setting off it needs neither. Where
+    the team requires it, `requireTeamRole(…, 'admin')` calls
+    `requireTeamStepUp`, and removing someone else from the team is stepped
+    up too; the team's setting also covers the owner actions on every team
+    project.
+  - **Always, whatever the settings.** The actions that reach farmers, the
+    public or a licence decision, where a phished password does harm the
+    team can't undo: publishing to farmers (`POST` and `PATCH
+    …/publication`, publishing and withdrawing an outlook), recording the
+    authority's decision on an application (`…/decide`), endorsing a
+    published baseline (`…/publication/:pubId/endorse`), recording a
+    signer's registration check (`…/registration-checks`), and signing,
+    issuing and withdrawing an evidence pack (`requireFreshCode`, below).
+    The legal reasoning of 2026-10-01 stands for these: a pack's sign-off
+    is a professional statement under a real name on the public verify
+    page, which an authority relies on, so it is only as strong as the
+    signer's password without a second factor (a false one would be a GN
+    R267 reg 20 offence by whoever made it, and a POPIA s19 failure by us),
+    and a published restriction or a recorded decision reaches people who
+    can't check who made it.
+  - **Turning a setting on** needs the person turning it on to be signed in
+    with a second factor themselves (`requireOwnSecondFactor`, the same
+    `403 mfa_required` / `mfa_step_up`, so the prompt below shows), so a
+    project can't lock out everyone at once. **Turning it off** is an
+    owner's (admin's) action under the setting, so it is stepped up by the
+    setting itself. Both are recorded in the history
+    (`project.mfa_requirement`, `team.mfa_requirement` on each team
+    project); only an owner may change the project's column, even through
+    the database (`project_require_mfa_guard`, since `project_update` lets
+    an editor update the row; `team_update` is admin-only already).
+  - **The guards.** `auth/stepUp.test.ts` finds every hand-rolled `'owner'`
+    / `'admin'` / `rank.owner` comparison in the backend and fails unless
+    its file calls a step-up (`requireProjectStepUp`, `requireTeamStepUp`
+    or `requireStepUp`) or is listed with why it gates no action, and
+    checks that each always-required route still calls the unconditional
+    check. Without an authenticator the answer is `403 mfa_required` ("set
+    one up on your Account page"); with one but a password-only session,
+    `403 mfa_step_up` ("sign in again"). The check reads the session's
+    `amr` from the request's `requestAuth` (AsyncLocalStorage, set by
+    `requireUser`) and whether the account has a confirmed factor
+    (`hasConfirmedFactor`), so a factor turned off since sign-in no longer
+    counts. Work outside a request (the job runner) isn't stepped up: no
+    job kind needs more than editor, and the request that queued it was
+    checked. Everyone may turn two-step sign-in on for their account, and
+    is asked for a code at sign-in once they have. `GET /auth/mfa` says
+    whether the person's roles need it (`required`: an owner or admin
+    where a project or team requires it, a member acting for a responsible
+    authority, or an assessor; false while the switch below is off, so the
+    prompts say what the routes do). Any editor may publish to farmers, so
+    an editor isn't told up front; the refused action prompts.
 - **A fresh code for signing, issuing and withdrawing** (licensing
   positions item 9; provisional position, pre-counsel research,
-  2026-10-01). A sign-off (of a run or an evidence pack, the applicant's
-  specialist's included), issuing a pack and withdrawing one also need a
+  2026-10-01). A sign-off of an evidence pack (the applicant's
+  specialist's included), issuing a pack and withdrawing one, and a run's
+  sign-off where the project requires two-step sign-in
+  (`requireProjectFreshCode`), also need a
   code from the authenticator **within the last 10 minutes**, not only at
   sign-in: a sign-off publishes a professional statement under a real name
   on the public verify page, and a session left open on a shared computer
@@ -228,11 +275,13 @@ decide a licence application.
   a two-step one. Off with the switch below. Tests:
   `auth/stepUp.db.test.ts` (each action at 11 minutes, the step-up and the
   control), `lib/api/client.test.ts` (the retry).
-- **The prompt.** Only a refused action prompts, never the role alone (the
-  operator's decision, 2026-10-03, replacing the up-front banner of
-  2026-10-01: a project that never does a protected action is never asked,
-  and one that does meets the prompt at that action, which the API refuses
-  as before, so nothing is less protected). A `403 mfa_required` or
+- **The prompt.** Only a refused action prompts, never the role or a
+  project's setting alone (the operator's decision, 2026-10-03, replacing
+  the up-front banner of 2026-10-01, and kept by the opt-in of 2026-10-08: a
+  project that never does a protected action is never asked, and one that
+  does meets the prompt at that action, which the API refuses, so nothing is
+  less protected). Turning a project's or team's requirement on without a
+  second factor is refused the same way, so it prompts too. A `403 mfa_required` or
   `mfa_step_up` from any request (the API client's `onError`) shows a banner
   (`layout/MfaBanner.svelte`, its own chunk, mounted by
   `routes/+layout.svelte`; the state is `lib/auth/mfaPrompt.svelte.ts`):
@@ -243,7 +292,8 @@ decide a licence application.
   again when the tab comes back into view) only clears a refusal it shows
   resolved; its `required` still tells the Account page which roles need it.
   End to end against a server with the requirement on:
-  `e2e/tests/mfa-required.spec.ts` (a second e2e API, `MFA_API_URL`). The banner is English
+  `e2e/tests/mfa-required.spec.ts` (a second e2e API, `MFA_API_URL`: the
+  Project page's switch refused, the prompt, set up, the switch on). The banner is English
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal
   (every refused action brings it back, operator's decision, 2026-10-01), and
@@ -254,12 +304,17 @@ decide a licence application.
   signing out forgets the dismissal. Tests: `lib/auth/mfaPrompt.test.ts`,
   `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
   so the spec plays the production answers with `page.route`).
-  Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
-  the same person signed in with a code as the positive control; outsiders
-  and viewers still get their 404 and 403).
+  Tests: `auth/stepUp.db.test.ts` (with the setting off, an owner's and a
+  team admin's actions and a run's sign-off on a password; with the
+  project's or team's on, each refused without, with the same person signed
+  in with a code as the positive control; the always-required actions
+  refused with the setting off; turning it on without a factor refused;
+  outsiders and viewers still get their 404 and 403).
 - **The switch.** `MFA_REQUIRED=false` turns the requirement off for the
-  backend's DB tests and the e2e API server, whose hundreds of owner
-  fixtures sign in with a password; `stepUp.db.test.ts` turns it back on.
+  backend's DB tests and the e2e API server, whose hundreds of fixtures
+  publish, decide and sign with a password; `stepUp.db.test.ts` turns it
+  back on. With it off, so is the check on turning a project's or team's
+  setting on, and the settings themselves have no effect.
   Lambda refuses `false` at startup (`config/production.ts`) and so does the
   check itself (`mfaRequired`). Local dev requires it unless
   `.env.development.local` says otherwise (run-locally.md).

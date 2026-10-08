@@ -1320,7 +1320,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   | Variable | Value |
   | --- | --- |
   | `APP_ENCRYPTION_KEY` | The sops key `app_encryption_key` (32+ alphanumeric characters), in the API's runtime secret. Seals two-step sign-in's TOTP secrets (AES-256-GCM, `auth/secretBox.ts`); the API refuses a missing, short or `dev-only-` value at cold start. Rotate only if it leaked ([§ Runbooks](#runbooks) 15) |
-  | `MFA_REQUIRED` | Unset (or `true`). The API and worker refuse `false` at cold start: owners, team admins and assessors always need two-step sign-in in production (`auth/stepUp.ts`) |
+  | `MFA_REQUIRED` | Unset (or `true`). The API and worker refuse `false` at cold start: in production, publishing to farmers, licence decisions and evidence packs always need two-step sign-in, and owners' and team admins' actions do where a project or team requires it (`auth/stepUp.ts`, 204_mfa_opt_in) |
   | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links and the "Was this useful?" links (151). Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
   | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
@@ -2105,8 +2105,8 @@ Every step is an ordinary app action by an owner unless it says "operator".
     `DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…';`
     (the last line signs out every session, a thief's included). They sign
     in with the password and set up a new authenticator on the Account
-    page; if they are an owner, team admin or assessor, they need it before
-    those actions again. If the password may be known to someone else too,
+    page; the actions that need it (always, or where a project or team
+    requires it) wait until they have. If the password may be known to someone else too,
     have them reset it first. Record the request and how identity was
     checked in the operator log.
 15. **`APP_ENCRYPTION_KEY` leaked, or must change** (operator). The key seals
@@ -2114,8 +2114,8 @@ Every step is an ordinary app action by an owner unless it says "operator".
     `app_encryption_key` with sops and apply (§ Rotating a secret), then, as
     the schema owner, `DELETE FROM user_recovery_code; DELETE FROM user_totp;`
     and tell every person who had two-step sign-in on to set it up again
-    (owners, team admins and assessors can't do those actions until they
-    have). Their security log keeps the history.
+    (the actions that need it, always or where a project or team requires
+    it, are refused until they have). Their security log keeps the history.
 16. **A licence record past its closing date** (operator; the "This licence
     record can now be deleted" email, or a review that went unanswered;
     [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing

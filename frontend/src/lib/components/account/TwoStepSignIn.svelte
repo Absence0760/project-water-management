@@ -4,8 +4,9 @@
 	// docs/security.md § Two-step sign-in). Off: set it up (the password, then
 	// a QR code drawn here, or the key typed in, then the first code), and the
 	// ten recovery codes, shown once. On: how many recovery codes are left, a
-	// new set, and turning it off, each with a code. A project owner, team
-	// admin or assessor is told their role needs it.
+	// new set, and turning it off, each with a code. Someone whose roles need
+	// it (an owner or admin where a project or team requires it, or someone
+	// who takes part in licence decisions; GET /auth/mfa `required`) is told so.
 	import { onMount, tick } from 'svelte';
 	import { api, ApiError, type MfaStatus } from '$lib/api';
 	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
@@ -183,7 +184,7 @@
 	{:else if status}
 		{#if status.required && !status.enrolled}
 			<div class="alert alert-warning required" role="note">
-				{t('You’re a project owner, team admin or assessor, so publishing, deciding applications and managing members need two-step sign-in. Set it up here.')}
+				{t('A project or team you manage requires two-step sign-in, or you take part in licence decisions, which always need it. Set it up here.')}
 			</div>
 		{/if}
 

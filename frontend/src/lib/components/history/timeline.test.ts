@@ -280,6 +280,15 @@ describe('what an item says', () => {
 		expect(eventLine(ev('map.subcatchments_saved', { pieces: 1 }))).toBe('Saved 1 sub-catchment from clicks on the rivers');
 	});
 
+	it('writes the project’s and the team’s two-step sign-in requirement turned on and off (204)', () => {
+		expect(eventLine(ev('project.mfa_requirement', { on: true }))).toBe('Required two-step sign-in for the project’s owners');
+		expect(eventLine(ev('project.mfa_requirement', { on: false }))).toBe('Stopped requiring two-step sign-in for the project’s owners');
+		expect(eventLine(ev('team.mfa_requirement', { team: 'Upper WUA', on: true }))).toBe(
+			'Required two-step sign-in for the team “Upper WUA”: its owners, and the owners of its projects'
+		);
+		expect(eventLine(ev('team.mfa_requirement', { team: 'Upper WUA', on: false }))).toBe('Stopped requiring two-step sign-in for the team “Upper WUA”');
+	});
+
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {
 		const from = { green: 5, amber: 20, source: 'default' };
 		const to = { green: 2.5, amber: 12.5, source: 'team' };

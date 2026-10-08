@@ -156,7 +156,7 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: secret(32) }
 	},
 	MFA_REQUIRED: {
-		why: 'false turns off the second-factor requirement for owners, team admins and assessors (auth/stepUp.ts) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
+		why: 'false turns off the second-factor requirement (auth/stepUp.ts: the actions that always need it, and owners\' and team admins\' where a project or team requires it) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
 		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
 	},
 	REGISTRATION_CHECK_REQUIRED: {

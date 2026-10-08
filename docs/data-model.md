@@ -744,6 +744,11 @@ the result change?", and put back any earlier version.
   for a role change, `self` for a leaver, `via: 'invite'` for an accepted
   invite, which app_accept_invites records; `team.deleted` has `members`;
   each written on every project of the team),
+  `project.mfa_requirement` (`{ on }`: an owner turned the project's
+  two-step sign-in requirement on or off) and `team.mfa_requirement`
+  (`{ teamId, team, on }`, a team admin the team's, on every project of the
+  team; 204, [§ Requiring two-step
+  sign-in](#requiring-two-step-sign-in-204_mfa_opt_insql)),
   and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
@@ -2885,8 +2890,31 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   `twoStepSignIn` (when it was added and confirmed, and how many recovery
   codes are left, never the secret or the hashes) and `securityEvents`.
 - The session JWT's `amr` (`["pwd"]` or `["pwd", "otp"]`) is not stored:
-  the requirement for owners, team admins and assessors reads it from the
-  request ([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+  the requirement reads it from the request ([security.md § Two-step
+  sign-in](./security.md#two-step-sign-in)).
+
+### Requiring two-step sign-in (204_mfa_opt_in.sql)
+
+Opt-in per project and team since the operator's decision of 2026-10-08
+([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+
+- `project.require_mfa`, `team.require_mfa` (boolean, not null, default
+  `false`): the project's owner actions (and a run's sign-off), or the
+  team's admin actions and the owner actions on every team project, need a
+  session signed in with a code. Every member reads them; an owner changes
+  the project's (`project_require_mfa_guard` refuses water_app's change by
+  anyone below owner, since `project_update` lets an editor update the
+  row), a team admin the team's (`team_update` is admin-only). The API
+  refuses turning one on to someone not signed in with a second factor.
+- `app_project_requires_mfa(project)` (SECURITY DEFINER, `search_path`
+  pinned, EXECUTE to water_app only): the project's setting or its team's,
+  null for a non-member. A definer, because someone shared a team project
+  directly can't read the team row (`team_select`) and must still be held
+  to it.
+- Changes are audited: `project.mfa_requirement` (`{ on }`) and
+  `team.mfa_requirement` (`{ teamId, team, on }`, on each of the team's
+  projects). Neither is a model input, so neither moves the project's
+  `updated_at`; a copy and the project document don't carry it.
 
 ### Languages (080_language.sql)
 

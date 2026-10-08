@@ -233,6 +233,17 @@ Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
 sign-in, `amr` in the session, and the requirement for project owners, team
 admins and assessors at the route (security.md § Two-step sign-in). Open:
 
+- [x] **Opt-in per project and team** (operator decision, 2026-10-08,
+      replacing the role-based requirement of 2026-10-01). Owners' and team
+      admins' actions, and a run's sign-off, need it only where the project
+      or its team turns it on (`project.require_mfa`, `team.require_mfa`,
+      204_mfa_opt_in; off by default); publishing to farmers, deciding an
+      application, endorsing a baseline, recording a registration check and
+      signing, issuing and withdrawing an evidence pack always do. Turning
+      it on needs the person's own second factor. So the 2026-10-01
+      decision below (every signer of a run) now holds only where the
+      project requires it; a pack's signers always.
+
 - [x] **No app-wide prompt yet** (done 2026-10-01). A banner on the
       workspace (`layout/MfaBanner.svelte`, from `GET /auth/mfa`
       `required && !enrolled`, and from any `403 mfa_required`) links to the

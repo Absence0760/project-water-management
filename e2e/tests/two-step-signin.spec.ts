@@ -4,8 +4,8 @@
 // shown once), then sign in with a code from it and, the phone lost, with a
 // recovery code. The codes are made here from the secret the page shows, with
 // the backend's own RFC 6238 code (backend/src/auth/totp.ts, by path: it
-// imports nothing but node:crypto). The requirement for owners, team admins
-// and assessors is off on the e2e server (MFA_REQUIRED=false,
+// imports nothing but node:crypto). The requirement (opt-in per project and
+// team, always for the actions that reach outsiders) is off on the e2e server (MFA_REQUIRED=false,
 // playwright.config.ts) and tested in backend/src/auth/stepUp.db.test.ts.
 import type { Page } from '@playwright/test';
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';

@@ -47,13 +47,14 @@ counts on the account's code throttle first: the 5th wrong code in a row
 answers `429 mfa_locked` (`params.seconds`, `Retry-After`) for a minute,
 doubling to 15, right codes included. The session JWT carries `amr`:
 `["pwd"]`, or `["pwd", "otp"]` once signed in with a code, and `otp_at`,
-when the session last gave a code: a sign-off (of a run or a pack), issuing
-and withdrawing a pack answer `401 mfa_fresh_code` when it is more than 10
-minutes old; send a code to `POST /auth/mfa/step-up`, then the action again.
+when the session last gave a code: a sign-off of a pack, issuing and
+withdrawing a pack (and a run's sign-off where the project requires two-step
+sign-in) answer `401 mfa_fresh_code` when it is more than 10 minutes old;
+send a code to `POST /auth/mfa/step-up`, then the action again.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor (false while `MFA_REQUIRED=false`); `sessionVerified`, this session signed in with a code (signed in) |
+| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person's roles need it: an owner of a project that requires it (its own setting or its team's), an admin of a team that does, a member acting for a responsible authority, or an assessor (false while `MFA_REQUIRED=false`); `sessionVerified`, this session signed in with a code (signed in) |
 | POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
 | POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
 | DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
@@ -61,21 +62,28 @@ minutes old; send a code to `POST /auth/mfa/step-up`, then the action again.
 | POST | `/auth/mfa/verify` | `{ code }` (app or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
 | POST | `/auth/mfa/step-up` | `{ code }` (app or recovery code) | `200 { ok, usedRecoveryCode? }` + this browser's session reissued with `amr: ["pwd", "otp"]` and `otp_at` now: what a sign-off, issuing or withdrawing an evidence pack need within 10 minutes (their `401 mfa_fresh_code`; [security.md § Two-step sign-in](./security.md#two-step-sign-in) → A fresh code). `400 mfa_code_wrong`; `403 mfa_required` no authenticator (signed in) |
 
-**Actions that need it.** Project owners, team admins and assessors must
-sign in with a code before: any route that needs the owner role (members,
-invites, API keys, data feeds, share links, renaming a team project,
-deleting a project), any that needs team admin (and removing someone else
-from a team; removing someone else from a project; an owner making or
-revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
-`POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
-recording the authority's decision on an application (`POST …/scenarios/:sid/decide`),
-endorsing a published baseline (`POST …/publication/:pubId/endorse`), issuing or
-withdrawing an evidence pack, and signing a run or a pack (`POST
-…/runs/:runId/signoffs`, `POST …/packs/:packId/signoffs`: every signer, since
-any editor may sign). Checked after the role, so an outsider still
-gets `404` and a viewer `403` without a code: `403 mfa_required` (no
-authenticator yet: set one up) or `403 mfa_step_up` (one is set up, but this
-session signed in with the password only: sign in again).
+**Actions that need it** (opt-in since 2026-10-08; [security.md § Two-step
+sign-in](./security.md#two-step-sign-in)). Where a project requires it
+(`project.requireMfa`, or its team's `team.requireMfa`; `project.mfaRequired`
+says which applies), its owners sign in with a code before any route that
+needs the owner role (members, invites, API keys, data feeds, share links,
+renaming a team project, deleting a project; removing someone else from the
+project; an owner making or revoking any share link), and its editors before
+signing a run (`POST …/runs/:runId/signoffs`). Where a team requires it, its
+admins do before any route that needs team admin (and removing someone else
+from the team), and on every team project as its owners. With both off (the
+default) those need nothing more than the password. **Always**, whatever the
+settings: publishing to farmers (`POST` / `PATCH …/publication`, `POST
+…/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`), recording
+the authority's decision on an application (`POST …/scenarios/:sid/decide`),
+endorsing a published baseline (`POST …/publication/:pubId/endorse`),
+recording a signer's registration check (`POST
+…/members/:userId/registration-checks`), and signing, issuing or withdrawing
+an evidence pack (`POST …/packs/:packId/signoffs`, `…/issue`, `…/withdraw`).
+Checked after the role, so an outsider still gets `404` and a viewer `403`
+without a code: `403 mfa_required` (no authenticator yet: set one up) or
+`403 mfa_step_up` (one is set up, but this session signed in with the
+password only: sign in again).
 
 **Email links.** Tokens are 32 random bytes (43 base64url chars), single-use,
 stored only as SHA-256 hashes. Links point at `SITE_URL`:
@@ -359,7 +367,7 @@ the frontend catalogue (same contract: add, never rename):
 | `mfa_already_enrolled` | 409 | `POST /auth/mfa/totp/enrol` with an authenticator already on |
 | `mfa_not_started` | 409 | `POST /auth/mfa/totp/confirm` with nothing started |
 | `mfa_not_enrolled` | 409 | turning off, or new recovery codes, with two-step sign-in off |
-| `mfa_required` | 403 | an owner's, team admin's or assessor's action, or a sign-off, without an authenticator set up |
+| `mfa_required` | 403 | an action that needs two-step sign-in (an owner's or team admin's where the project or team requires it, or one that always does), or turning a project's or team's requirement on, without an authenticator set up |
 | `mfa_step_up` | 403 | the same with one set up, from a session signed in with the password only |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
 | `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
@@ -392,7 +400,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects/outcomes` | – | `{ projects: PortfolioProject[] }`: the [portfolio](#portfolio)'s figures for every project you can see (below) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
+| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId?, requireMfa? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows; `403 mfa_required` / `mfa_step_up` turning `requireMfa` on without being signed in with a second factor (below) | editor (owner when `teamId` or `requireMfa` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { packs } }` for a project with an evidence pack past draft (issued, superseded or withdrawn: its verify link must keep answering; 112, [Evidence packs](#evidence-packs)), checked first; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
@@ -456,6 +464,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).
+- **Two-step sign-in** (204_mfa_opt_in; [§ Two-step sign-in](#two-step-sign-in)):
+  `project.requireMfa` (boolean, default `false`) is the project's own
+  setting; `project.mfaRequired` (on `GET`/`PATCH /projects/:id`, create,
+  import, copy; not in the list) is whether its owner actions need two-step
+  sign-in, by that setting or its team's (read through a definer, so an
+  owner shared the project directly, who can't read the team, sees it too).
+  `PATCH { requireMfa }` is owner only. Turning it on answers `403
+  mfa_required` / `mfa_step_up` unless the caller is signed in with a second
+  factor, so a project can't lock everyone out; turning it off is an owner
+  action under the setting, so it is stepped up while it is on. A change
+  records `project.mfa_requirement` (`{ on }`); one that changes nothing
+  records nothing, and neither moves `updatedAt` (no model input). A copy
+  and the project document don't carry it.
 - `PATCH { teamId }` moves the project into a team where you're a member or
   admin (`404 team not found` if you're not in it, `403 requires team member`
   if you're a team viewer) or, with `null`, back to personal. Owner only.
@@ -1125,7 +1146,7 @@ email show them by the project role they give, viewer / editor / owner
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
 | POST | `/teams` | `{ name }` | `201 { team }` (you become its admin); `400` a name that shows as nothing or is over 200 characters once cleaned ([§ Projects](#projects)) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
-| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } }, privacyContact?: { name, email, postal? } \| null }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing. `privacyContact` sets or (`null`) removes the privacy contact (below) | admin |
+| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } }, privacyContact?: { name, email, postal? } \| null, requireMfa?: boolean }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing. `privacyContact` sets or (`null`) removes the privacy contact (below). `requireMfa` turns the team's two-step sign-in requirement on or off (below) | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
@@ -1138,7 +1159,15 @@ email show them by the project role they give, viewer / editor / owner
   re-roling and removing a member (or their leaving, or accepting a team
   invite), and deleting the team, record `team_member.added/role/removed` /
   `team.deleted` on each of the team's projects (072).
-- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds, privacyContact }` — `role` is
+- **Two-step sign-in** (204_mfa_opt_in): `team.requireMfa` (boolean,
+  default `false`): the team's admin actions, and an owner's on every team
+  project, need a session signed in with a code ([§ Two-step
+  sign-in](#two-step-sign-in)). Turning it on answers `403 mfa_required` /
+  `mfa_step_up` unless the admin is signed in with a second factor; turning
+  it off is an admin action under the setting, so it is stepped up while it
+  is on. A change records `team.mfa_requirement` (`{ teamId, team, on }`) on
+  each of the team's projects; one that changes nothing records nothing.
+- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds, privacyContact, requireMfa }` — `role` is
   **your** role in the team. `settings` is the stored document
   (055_team_settings): `{ portfolio?: { thresholds?: { green, amber } } }`.
   `portfolioThresholds = { green, amber, source: 'team' | 'default' }` is what
@@ -2690,7 +2719,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12, or the unverified-run one, security.md § Run stamps), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps); `403 mfa_required` / `mfa_step_up` without two-step sign-in (§ Two-step sign-in) | editor |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps); `403 mfa_required` / `mfa_step_up` without two-step sign-in where the project requires it (`project.mfaRequired`; § Two-step sign-in), and then also `401 mfa_fresh_code` for a code more than 10 minutes old | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
