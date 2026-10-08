@@ -231,7 +231,11 @@ one line since migration 189 (api.md § Model data). Left, found on the way:
 
 Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
 sign-in, `amr` in the session, and the requirement for project owners, team
-admins and assessors at the route (security.md § Two-step sign-in). Open:
+admins and assessors at the route (security.md § Two-step sign-in). Codes
+by email as a second factor, beside or instead of the app, built 2026-10-08
+(206_mfa_email_code.sql; security.md § Two-step sign-in → Code by email);
+its `LEGAL_VERSION` bump waits for the combined two-step PR (legal-status.md,
+2026-10-08). Open:
 
 - [x] **No app-wide prompt yet** (done 2026-10-01). A banner on the
       workspace (`layout/MfaBanner.svelte`, from `GET /auth/mfa`

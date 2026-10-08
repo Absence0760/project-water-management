@@ -443,6 +443,30 @@ describe('the send limits', () => {
 		expect((await u.call('POST', '/auth/mfa/email/send')).status).toBe(202);
 	});
 
+	it('a send the transport refuses answers 503 mfa_email_failed and still counts, so a failing transport can’t be hammered', async () => {
+		const u = await emailEnrolled('MeMailDown');
+		await pastGap(u.id);
+		const before = mailCount(u.email);
+		vi.stubEnv('MAIL_TRANSPORT', 'refused-for-the-test');
+		expect(await u.call('POST', '/auth/mfa/email/send')).toMatchObject({ status: 503, body: { code: 'mfa_email_failed' } });
+		vi.unstubAllEnvs();
+		expect(mailCount(u.email)).toBe(before);
+		expect(await u.call('POST', '/auth/mfa/email/send')).toMatchObject({ status: 429, body: { code: 'mfa_email_wait' } });
+		// Positive control: past the minute, the next send goes, and its code works.
+		await pastGap(u.id);
+		expect((await u.call('POST', '/auth/mfa/email/send')).status).toBe(202);
+		expect((await anon('POST', '/auth/mfa/step-up', { code: codeIn(u.email) }, u.cookie)).status).toBe(200);
+	});
+
+	it('the send log keeps a day: older rows go at the next send, newer stay', async () => {
+		const u = await emailEnrolled('MePrune');
+		await asOwner('DELETE FROM mfa_email_send WHERE user_id = $1', [u.id]);
+		await asOwner(`INSERT INTO mfa_email_send (user_id, sent_at) SELECT $1, now() - i FROM unnest(ARRAY[interval '25 hours', interval '23 hours', interval '2 hours']) i`, [u.id]);
+		expect((await u.call('POST', '/auth/mfa/email/send')).status).toBe(202);
+		const kept = await asOwner(`SELECT round(extract(epoch FROM now() - sent_at) / 3600)::int AS h FROM mfa_email_send WHERE user_id = $1 ORDER BY sent_at`, [u.id]);
+		expect(kept.map((r) => r.h)).toEqual([23, 2, 0]);
+	});
+
 	it('the limits are per account: one account at its cap doesn’t hold another back', async () => {
 		const a = await emailEnrolled('MeCapA');
 		const b = await emailEnrolled('MeCapB');

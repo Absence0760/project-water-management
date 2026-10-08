@@ -146,7 +146,7 @@ pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); r
 pnpm test:backend:perf      # backend wall-clock budgets and the V8 deopt stress run of the assurance of supply (issue #192; same caveat)
 pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s, ~4 min); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:backend:v8-osr    # does this Node still miscompile the pre-fix assurance loop (issue #232)? [--rev <rev>] [--node <bin>] [-- <V8 flags>]; alone, minutes, not in CI
-pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
+pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts and mfa-email-mailpit.spec.ts dev:mail:up)
 
 pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm setup runs it);
                              # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)

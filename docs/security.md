@@ -198,6 +198,13 @@ farmers or decide a licence application.
   under the account's row lock (parallel sends queue; one goes), answering
   `429 mfa_email_wait` with `params.seconds` and `Retry-After`; a send the
   transport refused answers `503 mfa_email_failed` and still counts. The
+  limits are per account, so someone who knows the password can spend the
+  hour's five sends from the sign-in challenge and keep the owner's code
+  email back for up to an hour; the recovery codes (or the app, if on) are
+  the way in meanwhile, and the password should be changed, since it is
+  known. On an account with both factors a six-digit guess is tried against
+  the app and the email under one throttle count, so a guesser gets one more
+  valid code per attempt; with the lockout the odds stay negligible. The
   email has no link (the code is typed where it was asked for) and keeps
   the code out of the subject (a lock screen's preview); it says what the
   code is for, so one nobody asked for stands out ("someone knows your
