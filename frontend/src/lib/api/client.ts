@@ -461,6 +461,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					settings?: Partial<ProjectSettings>;
 					/** Move into a team you're in, or null for personal. Owner only. */
 					teamId?: string | null;
+					/** Owner actions need two-step sign-in (204_mfa_opt_in). Owner only; turning it on needs your own second factor. */
+					requireMfa?: boolean;
 					/** Why the settings changed, kept in the history (only with `settings`). */
 					reason?: string;
 				}
@@ -587,6 +589,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Whom to ask about the team's projects' personal information (team admin, 168); null removes it. */
 			setPrivacyContact: (id: string, privacyContact: { name: string; email: string; postal: string | null } | null) =>
 				request<{ team: Team }>('PATCH', t(id), { privacyContact }).then((r) => r.team),
+			/** Admin actions, and an owner's on every team project, need two-step sign-in (team admin, 204_mfa_opt_in). */
+			setRequireMfa: (id: string, requireMfa: boolean) => request<{ team: Team }>('PATCH', t(id), { requireMfa }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
 			/** Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136). */
 			addMember: (id: string, email: string, role: TeamRole) =>

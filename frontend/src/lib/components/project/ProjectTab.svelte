@@ -30,6 +30,7 @@
 	import { DEFAULT_TIME_ZONE, projectContext } from './project';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
+	import TwoStepPanel from './TwoStepPanel.svelte';
 
 	let {
 		project,
@@ -193,6 +194,8 @@
 			<FarmersPanel projectId={project.id} {isOwner} farms={editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => ({ id: n.id, name: n.name }))} />
 			<!-- Read-only links to the published baseline for people outside the project (WP-2.3 phase 2): owners only. -->
 			{#if isOwner}<ShareLinksPanel projectId={project.id} />{/if}
+			<!-- Whether its owners' actions need two-step sign-in (204_mfa_opt_in): owners only. -->
+			{#if isOwner}<TwoStepPanel {project} {onProjectChange} />{/if}
 			<!-- How long the licence record (and the names it keeps) is kept (161): editors read it, owners record the outcome. -->
 			{#if canEdit}<LicenceRecordPanel projectId={project.id} {isOwner} />{/if}
 		</div>

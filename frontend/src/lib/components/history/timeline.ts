@@ -417,6 +417,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Created an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
 		case 'api_key.revoked':
 			return `Revoked an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
+		// Two-step sign-in required, or no longer (204_mfa_opt_in): the project's, or its team's (on each team project).
+		case 'project.mfa_requirement':
+			return s.on ? 'Required two-step sign-in for the project’s owners' : 'Stopped requiring two-step sign-in for the project’s owners';
+		case 'team.mfa_requirement':
+			return s.on
+				? `Required two-step sign-in for the team “${str(s.team)}”: its owners, and the owners of its projects`
+				: `Stopped requiring two-step sign-in for the team “${str(s.team)}”`;
 		// A team admin changed the portfolio's traffic lights (D11, 055): recorded on each team project.
 		case 'team_thresholds.changed':
 			return `Changed the portfolio traffic lights of the team “${str(s.team)}” from ${trafficLights(s.from)} to ${trafficLights(s.to)}`;

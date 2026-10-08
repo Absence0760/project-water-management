@@ -280,7 +280,7 @@
 	<p>
 		Connections are encrypted. Passwords are stored only as a strong one-way hash, and the links we email are stored only as hashes
 		too. You can add two-step sign-in (a code from an authenticator app after your password); its key is stored encrypted and its
-		recovery codes only as hashes, and project owners, team admins and assessors must use it. The database itself enforces who can see each project’s rows, so one organisation’s information can’t reach another’s.
+		recovery codes only as hashes. It is required for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. The database itself enforces who can see each project’s rows, so one organisation’s information can’t reach another’s.
 		Access to the systems is limited to what running the service needs. If a breach affects your personal information, we will
 		tell you and the Information Regulator as POPIA s22 requires.
 	</p>

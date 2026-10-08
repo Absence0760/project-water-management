@@ -113,10 +113,12 @@ whose heading takes focus: **Download the codes** (a text file, through the down
 saved them**. On: an **On** badge, how many recovery codes are left, a line
 when this browser signed in before it was set up, and **New recovery codes**
 / **Turn off**, each opening one code field (the app's code; turning off
-also takes a recovery code). A project owner, team admin or assessor without
-it sees a warning that their actions need it (and, on the workspace, the
-two-step sign-in banner, § Invitations below, which links here:
-the panel is `#two-step`). Errors are worded from their
+also takes a recovery code). Someone whose roles need it (`GET /auth/mfa`
+`required`: an owner or admin of a project or team that requires it, or
+someone who takes part in licence decisions, which always need it) without
+it sees a warning saying so (and, on the workspace, once an action is
+refused, the two-step sign-in banner, § Invitations below, which links
+here: the panel is `#two-step`). Errors are worded from their
 codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
 is under § Sign-in pages.
 
@@ -1756,6 +1758,21 @@ it scrolls, and isn't fitted to the window.
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
+- **Two-step sign-in** (204_mfa_opt_in, `project/TwoStepPanel.svelte`),
+  owners only, under Share links: a **Require two-step sign-in** switch
+  (`auth-extras/RequireTwoStep.svelte`, shared with the team settings; its
+  words in `auth-extras/requireTwoStep.ts`) with **On** / **Off** beside
+  the track, off by default, saved when switched. Below it, in plain
+  words: members who manage this project need an authenticator app (its
+  owners, before managing members, invites, share links, API keys or data
+  feeds or deleting it, and anyone signing a run); a line when its team
+  requires it whatever the switch says; that publishing to farmers,
+  deciding applications, endorsing a baseline and evidence packs always
+  need it; and, while it's off and this session signed in without a code,
+  that turning it on needs one first. Turning it on without a second
+  factor is refused (`403 mfa_required` / `mfa_step_up`): the error shows
+  under the switch, the switch goes back, and the workspace's banner
+  offers to set one up (`e2e/tests/mfa-required.spec.ts`).
 - **Licence record** (161, `project/LicenceRecordPanel.svelte`, words in
   `project/licenceRecord.ts`), editors and owners, under Share links
   (heading id `licence-record`, the target of the licence-record emails):
@@ -2137,7 +2154,10 @@ reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
 in the team's projects, POPIA s18(1)(b), 168: admins edit *Name or office*,
 *Email address* and *Postal address (optional)*, *Save contact* and
 *Remove*; members read it, "Only owners can change it."; farmers see it from
-the farm menu and invitations name it), and **Leave or delete** (*Leave team* for everyone, the only admin
+the farm menu and invitations name it), **Two-step sign-in** (204: the
+same **Require two-step sign-in** switch as the Project page's, for admins,
+saying that members who manage the team need an authenticator app; members
+read *On* / *Off* and "Only owners can change it."), and **Leave or delete** (*Leave team* for everyone, the only admin
 told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
 and asks in a confirmation dialog). The URL opens it (the project list's
 team note, "Change them on the team page", links there), and closing it drops the
@@ -9689,7 +9709,9 @@ then.
   [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
   `routes/+layout.svelte` beside the other banners, on the workspace's
   pages only, English: not on the account, farm, alert or sign-in pages).
-  Only after a request is refused, never for the role alone (2026-10-03): a
+  Only after a request is refused, never for the role or a project's
+  setting alone (2026-10-03, kept by the opt-in of 2026-10-08; a refused
+  attempt to turn a project's or team's requirement on counts): a
   `403 mfa_required` shows "That needs two-step sign-in, and you haven't set
   it up yet…" and **Set up two-step sign-in**, linking to the Account page's
   panel (`/account#two-step`); a `403 mfa_step_up` shows **Sign in again**,

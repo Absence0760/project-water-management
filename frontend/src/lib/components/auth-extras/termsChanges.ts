@@ -23,6 +23,14 @@ export function changesSince<T>(changes: readonly TermsChange<T>[], accepted: st
 // (session.user.termsVersion) is shown every change since, so two versions landing between deploys never
 // hide the first one's changes (persona-wua-manager, round 4). An account that accepted none sees them all.
 export const TERMS_CHANGES: readonly TermsChange<Msg>[] = [
+	// Privacy §9: who must use two-step sign-in (opt-in per project and team; always for publishing to farmers, licence
+	// decisions and evidence packs; the operator's decision, docs/legal-status.md, 2026-10-08).
+	{
+		version: '2026-10-08',
+		items: [
+			msg('Two-step sign-in is now required only for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. Anyone can still turn it on for their own account.')
+		]
+	},
 	// The Terms §9 clause on map data licensed to us (HydroRIVERS' end-user terms, docs/legal-status.md, 2026-10-02).
 	{
 		version: '2026-10-03',

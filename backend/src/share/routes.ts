@@ -25,7 +25,7 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
-import { requireStepUp } from '../auth/stepUp.js';
+import { requireProjectStepUp } from '../auth/stepUp.js';
 
 /** Whether the caller is an owner of the project (directly or as team admin). */
 async function ownerHere(db: Db, projectId: string): Promise<boolean> {
@@ -160,8 +160,8 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 				if (rank[role] >= rank.editor) await shareablePack(db, id, body.targetId!);
 				else await shareableApplicantPack(db, id, body.targetId!);
 			} else await shareableScenario(db, id, body.targetId!, await requireRole(db, id, 'contributor'), userId);
-			// An owner's link to anything is an owner's action: two-step sign-in (auth/stepUp.ts; a baseline link got it in requireRole).
-			if (body.targetKind !== undefined && (await ownerHere(db, id))) await requireStepUp(db);
+			// An owner's link to anything is an owner's action: two-step sign-in where the project requires it (auth/stepUp.ts; a baseline link got it in requireRole).
+			if (body.targetKind !== undefined && (await ownerHere(db, id))) await requireProjectStepUp(db, id);
 			const kind = body.targetKind ?? null;
 			const { token, hash } = newToken();
 			const { rows } = await db.query<{ id: string }>(
@@ -185,8 +185,8 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const { id, linkId } = c.req.param();
 			const role = await requireRole(db, id, 'contributor');
-			// An owner manages every link: an owner's action, so two-step sign-in (auth/stepUp.ts).
-			if (rank[role] >= rank.owner) await requireStepUp(db);
+			// An owner manages every link: an owner's action, so two-step sign-in where the project requires it (auth/stepUp.ts).
+			if (rank[role] >= rank.owner) await requireProjectStepUp(db, id);
 			if (!UUID.test(linkId)) throw new ApiError(404, 'not found');
 			// RLS: a link the caller may manage (the owner: all; module comment).
 			const { rows: found } = await db.query<{ label: string; revoked: boolean; target_kind: string | null }>(

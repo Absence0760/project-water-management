@@ -174,8 +174,8 @@ behind shows up in `pnpm test`.
 
 **Example · Showcase (every feature)**, owned by `demo@example.com` in the
 demo team (so analyst@ edits it), exists so you can click on anything and
-find an example of it. Sign in as demo@ (password `demo-password`); owner
-pages ask for two-step sign-in unless `MFA_REQUIRED=false` is in
+find an example of it. Sign in as demo@ (password `demo-password`);
+publishing, deciding and evidence packs ask for two-step sign-in unless `MFA_REQUIRED=false` is in
 `backend/.env.development.local` ([Two-step sign-in](#two-step-sign-in)).
 farmer2@ farms two of its units and applicant@ is a contributor on a third.
 It is seeded after the others, through the app's own API
@@ -233,16 +233,19 @@ The TOTP secrets are sealed with `APP_ENCRYPTION_KEY`, a `dev-only-`
 placeholder in the committed `backend/.env.development`; changing it voids
 every authenticator set up against your local database.
 
-**Owners, team admins and assessors need it here too**, as in production:
-an owner's actions (members, invites, API keys, data feeds, share links,
-deleting a project), a team admin's, publishing to farmers, deciding an
-application and issuing or withdrawing an evidence pack answer
-`403 mfa_required` until the account has an authenticator, and
-`403 mfa_step_up` from a session signed in before it was added. The seeded
+**The requirement is on here too**, as in production: publishing to
+farmers, deciding an application, endorsing a baseline, recording a
+registration check and signing, issuing or withdrawing an evidence pack
+always, and an owner's actions (members, invites, API keys, data feeds,
+share links, deleting a project), a team admin's and a run's sign-off
+where the project or team turns on **Require two-step sign-in** (off by
+default; Project page, team settings), answer `403 mfa_required` until the
+account has an authenticator, and `403 mfa_step_up` from a session signed
+in before it was added. The seeded
 demo accounts (`pnpm seed:examples`) start without one: set one up on the
 Account page, or, to try those actions without a phone, put
 `MFA_REQUIRED=false` in `backend/.env.development.local` and restart the
-backend (Lambda refuses that setting). With it on, an owner without one sees
+backend (Lambda refuses that setting). With it on, a refused action shows
 a banner on the workspace pages linking to the Account page; with it off,
 neither that banner nor the Account page's warning shows. The DB tests and the e2e API server
 set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test

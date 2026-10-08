@@ -89,9 +89,10 @@ export default defineConfig({
 				// far past the sign-up throttle's 10 an hour (backend/src/auth/signupThrottle.ts;
 				// its own tests are in the backend). Lambda refuses the setting.
 				SIGNUP_THROTTLE: 'off',
-				// TEST-ONLY: the second-factor requirement for owners, team admins and
-				// assessors off (backend/src/auth/stepUp.ts). Hundreds of specs make a
-				// project owner who signs in with a password only; two-step sign-in
+				// TEST-ONLY: the second-factor requirement off (backend/src/auth/stepUp.ts:
+				// the actions that always need it, and owners' and team admins' where a
+				// project or team requires it). Hundreds of specs publish, decide or sign
+				// as someone who signs in with a password only; two-step sign-in
 				// itself (enrolment, the sign-in step, recovery codes) works the same
 				// either way and is tested in two-step-signin.spec.ts, and the
 				// requirement in backend/src/auth/stepUp.db.test.ts. Lambda refuses it.
@@ -105,8 +106,9 @@ export default defineConfig({
 			}
 		},
 		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the
-		// same database: mfa-required.spec.ts sends the browser's API calls here, so a real server refuses an
-		// owner's action and the page meets the real 403 (the requirement itself: backend/src/auth/stepUp.db.test.ts).
+		// same database: mfa-required.spec.ts sends the browser's API calls here, so a real server refuses
+		// turning a project's requirement on and the page meets the real 403 (the requirement itself:
+		// backend/src/auth/stepUp.db.test.ts).
 		{
 			command: 'pnpm -C ../backend exec tsx src/server.ts',
 			url: `${MFA_API_URL}/health`,

@@ -33,7 +33,7 @@ export interface MfaStatus {
 	enrolledAt: string | null;
 	/** Unused recovery codes left. */
 	recoveryCodesLeft: number;
-	/** The person holds a role that needs two-step sign-in (stepUp.ts): a project owner, a team admin or an assessor. */
+	/** The person's roles need two-step sign-in (stepUp.ts): an owner or admin where the project or team requires it, or someone who decides for an authority. */
 	required: boolean;
 }
 
@@ -47,16 +47,24 @@ export async function isEnrolled(db: Db, userId: string): Promise<boolean> {
 }
 
 /**
- * Whether the person holds a role that needs two-step sign-in: owner of a
- * project (directly, or as admin of its team), admin of a team, or an
- * assessor (an editor or owner of a project that has a submitted or decided
- * application, 045). What the Account page says; the routes check the action
- * itself (stepUp.ts), so this only informs.
+ * Whether the person's roles need two-step sign-in (stepUp.ts, opt-in since
+ * 2026-10-08): owner of a project (directly, or as admin of its team) that
+ * requires it, by its own setting or its team's (app_project_requires_mfa);
+ * admin of a team that requires it; or someone whose actions always need it
+ * whatever the settings: a member acting for the responsible authority (163:
+ * deciding applications, endorsing a baseline, recording registration
+ * checks) or an assessor (an editor or owner of a project that has a
+ * submitted or decided application, 045). Publishing to farmers always needs
+ * it too, but any editor may publish, so an editor isn't told so up front:
+ * the refused action prompts (the workspace's banner). What the Account page
+ * says; the routes check the action itself, so this only informs. As the
+ * person (withUser): RLS limits the projects to theirs.
  */
 export async function holdsRequiredRole(db: Db, userId: string): Promise<boolean> {
 	const { rows } = await db.query<{ required: boolean }>(
-		`SELECT EXISTS (SELECT 1 FROM project_member WHERE user_id = $1 AND role = 'owner')
-			OR EXISTS (SELECT 1 FROM team_member WHERE user_id = $1 AND role = 'admin')
+		`SELECT EXISTS (SELECT 1 FROM project p WHERE app_project_role(p.id) = 'owner' AND app_project_requires_mfa(p.id))
+			OR EXISTS (SELECT 1 FROM team_member m JOIN team t ON t.id = m.team_id WHERE m.user_id = $1 AND m.role = 'admin' AND t.require_mfa)
+			OR EXISTS (SELECT 1 FROM project_member WHERE user_id = $1 AND acts_for_authority)
 			OR EXISTS (
 				SELECT 1 FROM scenario s
 				WHERE s.origin = 'applicant' AND s.status IN ('submitted', 'decided')

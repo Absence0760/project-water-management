@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The Require two-step sign-in switch (auth-extras/RequireTwoStep.svelte, project/TwoStepPanel.svelte, its words) on the Project page and the team settings, 204_mfa_opt_in: the build measured 1813 KB gzipped against a 1813 KB ceiling, so this leaves room for it rather than none"
+}

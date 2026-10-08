@@ -8,7 +8,7 @@ import { accountByEmail, countInvites, inviteByEmail } from '../invites/invites.
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES, type TeamRole } from './access.js';
-import { requireStepUp } from '../auth/stepUp.js';
+import { requireOwnSecondFactor, requireTeamStepUp } from '../auth/stepUp.js';
 import { readJson } from '../http/body.js';
 import { teamName } from '../http/visibleName.js';
 import { recordTeamAudit } from '../history/record.js';
@@ -52,7 +52,7 @@ export async function memberSubject(db: Db, teamId: string, userId: string): Pro
 const TEAM_SUMMARY = `t.id, t.name, app_team_role(t.id) AS role, t.created_at AS "createdAt",
 	(SELECT count(*)::int FROM team_member m WHERE m.team_id = t.id) AS "memberCount",
 	(SELECT count(*)::int FROM project p WHERE p.team_id = t.id) AS "projectCount",
-	t.settings, t.privacy_contact_name, t.privacy_contact_email, t.privacy_contact_postal`;
+	t.settings, t.privacy_contact_name, t.privacy_contact_email, t.privacy_contact_postal, t.require_mfa AS "requireMfa"`;
 
 type TeamRow = { settings: unknown; privacy_contact_name: string | null; privacy_contact_email: string | null; privacy_contact_postal: string | null };
 
@@ -74,11 +74,33 @@ async function getTeam(db: Db, id: string) {
 
 const TeamPatch = z
 	// privacyContact: the organisation's privacy contact (168, POPIA s18(1)(b)); null removes it.
-	.object({ name: teamName.optional(), settings: TeamSettingsPatch.optional(), privacyContact: PrivacyContactInput.nullable().optional() })
+	// requireMfa: a team admin's actions, and an owner's on every team project, need two-step sign-in (204_mfa_opt_in).
+	.object({
+		name: teamName.optional(),
+		settings: TeamSettingsPatch.optional(),
+		privacyContact: PrivacyContactInput.nullable().optional(),
+		requireMfa: z.boolean().optional()
+	})
 	.strict()
-	.refine((b) => b.name !== undefined || b.settings !== undefined || b.privacyContact !== undefined, {
-		message: 'nothing to change: send name, settings or privacyContact'
+	.refine((b) => b.name !== undefined || b.settings !== undefined || b.privacyContact !== undefined || b.requireMfa !== undefined, {
+		message: 'nothing to change: send name, settings, privacyContact or requireMfa'
 	});
+
+/**
+ * Turn the team's two-step sign-in requirement on or off (admin; the caller
+ * checked, and stepped up where the team requires it already, which covers
+ * turning it off). Turning it on needs the admin's own second factor
+ * (stepUp.ts requireOwnSecondFactor). Records `team.mfa_requirement` on each
+ * of the team's projects; a save that changes nothing records nothing.
+ */
+async function setRequireMfa(db: Db, id: string, on: boolean) {
+	const { rows } = await db.query<{ name: string; require_mfa: boolean }>('SELECT name, require_mfa FROM team WHERE id = $1 FOR UPDATE', [id]);
+	if (!rows[0]) throw new ApiError(404, 'not found');
+	if (rows[0].require_mfa === on) return;
+	if (on) await requireOwnSecondFactor(db);
+	mustChange(await db.query('UPDATE team SET require_mfa = $2 WHERE id = $1', [id, on]));
+	await recordTeamAudit(db, id, 'team.mfa_requirement', { teamId: id, team: rows[0].name, on });
+}
 
 /**
  * Change the team's settings (admin; the caller checked). Records
@@ -140,6 +162,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 			await requireTeamRole(db, id, 'admin');
 			if (body.name !== undefined) mustChange(await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]));
 			if (body.settings) await patchSettings(db, id, body.settings);
+			if (body.requireMfa !== undefined) await setRequireMfa(db, id, body.requireMfa);
 			if (body.privacyContact !== undefined) {
 				const pc = body.privacyContact;
 				mustChange(
@@ -226,8 +249,8 @@ export const teamRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireTeamRole(db, id, 'viewer');
 			if (userId !== c.get('userId') && role !== 'admin') throw new ApiError(403, 'requires team admin');
-			// Removing someone else is a team admin's action: two-step sign-in (auth/stepUp.ts). Leaving isn't.
-			if (userId !== c.get('userId')) await requireStepUp(db);
+			// Removing someone else is a team admin's action: two-step sign-in where the team requires it (auth/stepUp.ts). Leaving isn't.
+			if (userId !== c.get('userId')) await requireTeamStepUp(db, id);
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastAdmin(db, id, userId);
 			// Recorded before the row goes, while the leaver can still write events on the team's projects.

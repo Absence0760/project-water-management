@@ -491,6 +491,17 @@ describe('teams client', () => {
 		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: null } } } });
 	});
 
+	it('turns a team’s two-step sign-in requirement on and off, and a project’s (204)', async () => {
+		const f = mockFetch(200, { team: { id: 't/1', requireMfa: true }, project: { id: 'p/1', requireMfa: true } });
+		const api = createApi('', f);
+		expect((await api.teams.setRequireMfa('t/1', true)).requireMfa).toBe(true);
+		await api.teams.setRequireMfa('t/1', false);
+		await api.projects.update('p/1', { requireMfa: true });
+		expect(call(f, 0)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { requireMfa: true } });
+		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { requireMfa: false } });
+		expect(call(f, 2)).toEqual({ url: '/projects/p%2F1', method: 'PATCH', body: { requireMfa: true } });
+	});
+
 	it('sets or removes a team’s privacy contact, and reads a project’s (168)', async () => {
 		const contact = { name: 'IO', email: 'io@example.org', postal: null };
 		const f = mockFetch(200, { team: { id: 't/1', privacyContact: contact } });
