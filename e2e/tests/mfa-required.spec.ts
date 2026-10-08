@@ -43,12 +43,12 @@ test('with the requirement on, an owner is prompted only when the server refuses
 	// Set it up from the banner's link.
 	await banner.getByRole('link', { name: 'Set up two-step sign-in' }).click();
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
-	await panel.getByRole('button', { name: 'Set up two-step sign-in' }).click();
+	await panel.getByRole('button', { name: 'Set up the app' }).click();
 	await panel.getByLabel('Current password').fill(PASSWORD);
 	await panel.getByRole('button', { name: 'Continue' }).click();
 	const secret = (await panel.locator('[data-totp-secret]').getAttribute('data-totp-secret'))!;
 	await panel.getByLabel('Enter the code the app shows').fill(hotp(base32Decode(secret)!, totpStep(Date.now())));
-	await panel.getByRole('button', { name: 'Turn on two-step sign-in' }).click();
+	await panel.getByRole('button', { name: 'Turn on the authenticator app' }).click();
 	await panel.getByRole('button', { name: 'I’ve saved them' }).click();
 	await expect(panel).toHaveAttribute('data-two-step', 'on');
 

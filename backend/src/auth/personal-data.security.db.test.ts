@@ -26,7 +26,7 @@ import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, DECISION, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
 import { APP_USER_EXPORTED, USER_FK_COVERAGE } from './export.js';
@@ -367,9 +367,12 @@ beforeAll(async () => {
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);
 	// Two-step sign-in (150, issue #282), last, since it makes signing in two-step: an authenticator they set up
-	// (user_totp, user_recovery_code, account_security_event), then a wrong code (mfa_throttle).
+	// (user_totp, user_recovery_code, account_security_event), codes by email, then a wrong code (mfa_throttle).
 	const enrol = await call(subject, 'POST', '/auth/mfa/totp/enrol', { password: 'correct horse' });
 	await call(subject, 'POST', '/auth/mfa/totp/confirm', { code: totp(base32Decode(enrol.secret)!, Date.now()) });
+	// Codes by email beside it (206): user_email_otp, and a code sent (mfa_email_code, mfa_email_send).
+	await call(subject, 'POST', '/auth/mfa/email/enrol', { password: 'correct horse' });
+	await call(subject, 'POST', '/auth/mfa/email/confirm', { code: lastMailTo(subject.email)!.text.match(/^(\d{6})$/m)![1] });
 	expect((await subject.call('POST', '/auth/mfa/recovery-codes', { code: 'AAAAA-AAAAA' })).status).toBe(400);
 	// Enrolling checked the password, which cleared the mistyped one's count: mistype it again (login_throttle).
 	expect((await anon('POST', '/auth/login', { email: subject.email, password: 'wrong horse' })).status).toBe(401);

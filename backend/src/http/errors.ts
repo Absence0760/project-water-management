@@ -82,6 +82,9 @@ export const ERROR_CODES = [
 	'mfa_not_enrolled',
 	'mfa_required',
 	'mfa_step_up',
+	// Codes by email (206, auth/mfa-routes.ts): a send limit (params.seconds), and a send that failed.
+	'mfa_email_wait',
+	'mfa_email_failed',
 	// A comment through a share link (166_public_participation, share/routes.ts): 10 an hour per account.
 	'comment_throttled'
 ] as const;

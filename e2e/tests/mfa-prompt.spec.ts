@@ -70,7 +70,7 @@ test('an owner without an authenticator is not prompted for the role alone; a re
 	await expect(page).toHaveURL('/account#two-step');
 	const panel = page.locator('#two-step');
 	await expect(panel).toHaveAttribute('data-two-step', 'off');
-	await expect(panel.getByRole('button', { name: 'Set up two-step sign-in' })).toBeVisible();
+	await expect(panel.getByRole('button', { name: 'Set up the app' })).toBeVisible();
 	// The Account page is translated and says it in its own panel: no English banner over it.
 	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
 });

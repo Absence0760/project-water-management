@@ -330,6 +330,10 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'user_recovery_code.user_id': 'cascade',
 	'mfa_throttle.user_id': 'cascade',
 	'account_security_event.user_id': 'cascade',
+	// Codes by email are the person's own too (206_mfa_email_code.sql).
+	'user_email_otp.user_id': 'cascade',
+	'mfa_email_code.user_id': 'cascade',
+	'mfa_email_send.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
 };
 

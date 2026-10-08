@@ -26,9 +26,11 @@ describe('createApi', () => {
 
 	// Two-step sign-in (issue #282): a right password for an account with an authenticator buys no session yet.
 	it('login answers a challenge when the account has two-step sign-in, and verify sends the code', async () => {
-		const f = mockFetch(200, { mfaRequired: true });
+		const f = mockFetch(200, { mfaRequired: true, methods: ['totp', 'email'] });
 		const api = createApi('http://x', f);
-		await expect(api.auth.login('a@b.c', 'pw')).resolves.toEqual({ mfaRequired: true });
+		await expect(api.auth.login('a@b.c', 'pw')).resolves.toEqual({ mfaRequired: true, methods: ['totp', 'email'] });
+		// An older server names no methods: the app.
+		await expect(createApi('http://x', mockFetch(200, { mfaRequired: true })).auth.login('a@b.c', 'pw')).resolves.toEqual({ mfaRequired: true, methods: ['totp'] });
 		const user = { id: '1', email: 'a@b.c', displayName: 'A' };
 		const g = mockFetch(200, { user });
 		await expect(createApi('http://x', g).auth.mfa.verify('123456')).resolves.toEqual({ user });
@@ -42,12 +44,25 @@ describe('createApi', () => {
 		['confirm', (a: ReturnType<typeof createApi>) => a.auth.mfa.confirm('123456'), 'POST', '/auth/mfa/totp/confirm', { code: '123456' }],
 		['disable', (a: ReturnType<typeof createApi>) => a.auth.mfa.disable('123456'), 'DELETE', '/auth/mfa/totp', { code: '123456' }],
 		['regenerate', (a: ReturnType<typeof createApi>) => a.auth.mfa.regenerate('123456'), 'POST', '/auth/mfa/recovery-codes', { code: '123456' }],
-		['stepUp', (a: ReturnType<typeof createApi>) => a.auth.mfa.stepUp('123456'), 'POST', '/auth/mfa/step-up', { code: '123456' }]
+		['stepUp', (a: ReturnType<typeof createApi>) => a.auth.mfa.stepUp('123456'), 'POST', '/auth/mfa/step-up', { code: '123456' }],
+		['email.enrol', (a: ReturnType<typeof createApi>) => a.auth.mfa.email.enrol('pw'), 'POST', '/auth/mfa/email/enrol', { password: 'pw' }],
+		['email.confirm', (a: ReturnType<typeof createApi>) => a.auth.mfa.email.confirm('123456'), 'POST', '/auth/mfa/email/confirm', { code: '123456' }],
+		['email.disable', (a: ReturnType<typeof createApi>) => a.auth.mfa.email.disable('123456'), 'DELETE', '/auth/mfa/email', { code: '123456' }]
 	] as const)('mfa.%s calls %s %s with its body', async (_name, call, method, path, body) => {
 		const f = mockFetch(200, { secret: 'S', uri: 'otpauth://x', recoveryCodes: ['A'] });
 		await call(createApi('http://x', f));
 		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
 		expect([init.method, url, JSON.parse(init.body as string)]).toEqual([method, `http://x${path}`, body]);
+	});
+
+	it.each([
+		['emailSignInCode', (a: ReturnType<typeof createApi>) => a.auth.mfa.emailSignInCode(), '/auth/mfa/challenge/email'],
+		['email.send', (a: ReturnType<typeof createApi>) => a.auth.mfa.email.send(), '/auth/mfa/email/send']
+	] as const)('mfa.%s POSTs %s and returns when the next may go', async (_name, call, path) => {
+		const f = mockFetch(202, { resendInSeconds: 60, expiresInSeconds: 600 });
+		await expect(call(createApi('http://x', f))).resolves.toEqual({ resendInSeconds: 60, expiresInSeconds: 600 });
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect([init.method, url]).toEqual(['POST', `http://x${path}`]);
 	});
 
 	// The app-wide two-step sign-in prompt hears of a 403 mfa_* from any request this way (lib/auth/mfaPrompt.svelte.ts).

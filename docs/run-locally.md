@@ -248,11 +248,18 @@ neither that banner nor the Account page's warning shows. The DB tests and the e
 set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test
 the feature with it on and off.
 
+**Codes by email** (206) need no phone: turn them on from the same panel
+and the codes land in Mailpit (`pnpm dev:mail:up`, http://localhost:8026),
+or in the backend's console with `MAIL_TRANSPORT=log`. Sends are a minute
+apart and at most five an hour per account, as in production; to send again
+sooner locally, `pnpm dev:db:psql`, then
+`DELETE FROM mfa_email_send WHERE user_id = '…';`.
+
 Without a phone, a code for a secret is one line in the backend workspace:
 `pnpm -C backend exec tsx -e "import('./src/auth/totp.ts').then(t => console.log(t.totp(t.base32Decode(process.argv[1]), Date.now())))" <SECRET>`
 (the key the Account page shows, spaces removed). Lost the codes and the
 app locally? `pnpm dev:db:psql`, then
-`DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…';`.
+`DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; DELETE FROM user_email_otp WHERE user_id = '…';`.
 
 ## Alerts
 

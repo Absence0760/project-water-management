@@ -61,6 +61,14 @@ export const API_URL = `http://localhost:${API_PORT}`;
 /** A second API with the two-step sign-in requirement on (playwright.config.ts; mfa-required.spec.ts), on the same database. */
 export const MFA_API_PORT = 3201 + E2E_SLOT;
 export const MFA_API_URL = `http://localhost:${MFA_API_PORT}`;
+/**
+ * The e2e API servers' APP_ENCRYPTION_KEY (playwright.config.ts), set here so a
+ * spec can plant an emailed two-step code it knows (support/db.ts
+ * plantEmailCode): the code is stored as an HMAC under a key from it
+ * (backend/src/auth/emailCode.ts), and e2e mail goes to the server's log.
+ * A test-only value for the throwaway e2e database; it seals nothing real.
+ */
+export const E2E_APP_ENCRYPTION_KEY = 'e2e-only-app-encryption-key-000000000000000000';
 export const WEB_URL = `http://localhost:${WEB_PORT}`;
 
 /**

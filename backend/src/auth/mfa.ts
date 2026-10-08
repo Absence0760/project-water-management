@@ -6,13 +6,14 @@
 // proved), so RLS shows it only its own rows.
 import type { Db } from '../db/tx.js';
 import { open, seal } from './secretBox.js';
+import { hasConfirmedFactor } from './stepUp.js';
+import { EMAIL_CODE_SEND, EMAIL_CODE_TTL_SECONDS, hashEmailCode, newEmailCode, normaliseEmailCode, type EmailCodePurpose } from './emailCode.js';
 import {
 	base32Encode,
 	hashRecoveryCode,
 	newRecoveryCode,
 	newTotpSecret,
 	normaliseRecoveryCode,
-	normaliseTotp,
 	otpauthUri,
 	RECOVERY_CODE_COUNT,
 	verifyTotp
@@ -25,25 +26,55 @@ import {
  */
 export const MFA_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: '15 minutes' } as const;
 
-export type SecurityEventKind = 'mfa.enrolled' | 'mfa.disabled' | 'mfa.recovery_used' | 'mfa.recovery_regenerated';
+export type SecurityEventKind =
+	| 'mfa.enrolled'
+	| 'mfa.disabled'
+	| 'mfa.recovery_used'
+	| 'mfa.recovery_regenerated'
+	| 'mfa.email_enrolled'
+	| 'mfa.email_disabled';
+
+/** A second factor: the authenticator app (150) or a code by email (206). */
+export type MfaMethod = 'totp' | 'email';
 
 export interface MfaStatus {
-	/** An authenticator is set up (its first code confirmed). */
+	/** Two-step sign-in is on: at least one factor is confirmed. */
 	enrolled: boolean;
+	/** When the first factor still on was confirmed. */
 	enrolledAt: string | null;
+	/** The confirmed factors, the app first. */
+	methods: MfaMethod[];
+	/** Emailed codes are being turned on: a code went out and hasn't come back yet. */
+	emailPending: boolean;
 	/** Unused recovery codes left. */
 	recoveryCodesLeft: number;
 	/** The person holds a role that needs two-step sign-in (stepUp.ts): a project owner, a team admin or an assessor. */
 	required: boolean;
 }
 
-/** Whether `userId` has a confirmed authenticator. */
-export async function isEnrolled(db: Db, userId: string): Promise<boolean> {
-	const { rows } = await db.query<{ enrolled: boolean }>(
-		'SELECT EXISTS (SELECT 1 FROM user_totp WHERE user_id = $1 AND confirmed_at IS NOT NULL) AS enrolled',
+/** Whether `userId` has a confirmed second factor of any kind (stepUp.ts hasConfirmedFactor). */
+export const isEnrolled = hasConfirmedFactor;
+
+interface FactorRows {
+	totp_at: Date | null;
+	email_at: Date | null;
+	email_pending: boolean;
+}
+
+async function factorRows(db: Db, userId: string): Promise<FactorRows> {
+	const { rows } = await db.query<FactorRows>(
+		`SELECT (SELECT confirmed_at FROM user_totp WHERE user_id = $1) AS totp_at,
+			(SELECT confirmed_at FROM user_email_otp WHERE user_id = $1) AS email_at,
+			EXISTS (SELECT 1 FROM user_email_otp WHERE user_id = $1 AND confirmed_at IS NULL) AS email_pending`,
 		[userId]
 	);
-	return rows[0]?.enrolled ?? false;
+	return rows[0] ?? { totp_at: null, email_at: null, email_pending: false };
+}
+
+/** The confirmed second factors of `userId`, the app first: what the sign-in challenge offers. */
+export async function confirmedMethods(db: Db, userId: string): Promise<MfaMethod[]> {
+	const f = await factorRows(db, userId);
+	return [...(f.totp_at ? (['totp'] as const) : []), ...(f.email_at ? (['email'] as const) : [])];
 }
 
 /**
@@ -68,16 +99,16 @@ export async function holdsRequiredRole(db: Db, userId: string): Promise<boolean
 }
 
 export async function mfaStatus(db: Db, userId: string): Promise<MfaStatus> {
-	const { rows } = await db.query<{ confirmed_at: Date | null; codes: number }>(
-		`SELECT (SELECT confirmed_at FROM user_totp WHERE user_id = $1) AS confirmed_at,
-			(SELECT count(*)::int FROM user_recovery_code WHERE user_id = $1) AS codes`,
-		[userId]
-	);
-	const confirmedAt = rows[0]?.confirmed_at ?? null;
+	const f = await factorRows(db, userId);
+	const { rows } = await db.query<{ codes: number }>('SELECT count(*)::int AS codes FROM user_recovery_code WHERE user_id = $1', [userId]);
+	const confirmed = [f.totp_at, f.email_at].filter((d): d is Date => d !== null);
+	const first = confirmed.length ? new Date(Math.min(...confirmed.map((d) => d.getTime()))) : null;
 	return {
-		enrolled: confirmedAt !== null,
-		enrolledAt: confirmedAt?.toISOString() ?? null,
-		recoveryCodesLeft: confirmedAt ? (rows[0]?.codes ?? 0) : 0,
+		enrolled: first !== null,
+		enrolledAt: first?.toISOString() ?? null,
+		methods: [...(f.totp_at ? (['totp'] as const) : []), ...(f.email_at ? (['email'] as const) : [])],
+		emailPending: f.email_pending,
+		recoveryCodesLeft: first ? (rows[0]?.codes ?? 0) : 0,
 		required: await holdsRequiredRole(db, userId)
 	};
 }
@@ -126,10 +157,12 @@ export async function replaceRecoveryCodes(db: Db, userId: string): Promise<stri
 
 /**
  * Check a typed code and, if right, use it up: a TOTP code moves the
- * factor's last used step forward (so it can't be used again), a recovery
- * code is deleted. `pending`: check against an unconfirmed enrolment (the
- * confirm step) instead of the confirmed factor. `recovery`: whether a
- * recovery code is accepted here. Returns how it matched, or null.
+ * factor's last used step forward (so it can't be used again), an emailed
+ * code is spent (app_mfa_email_use), a recovery code is deleted. Six digits
+ * are tried against the authenticator first, then against the live emailed
+ * code. `pending`: check against an unconfirmed authenticator (its confirm
+ * step) instead of the confirmed factors. `recovery`: whether a recovery code
+ * is accepted here. Returns how it matched, or null.
  */
 export async function useCode(
 	db: Db,
@@ -137,29 +170,71 @@ export async function useCode(
 	code: string,
 	opts: { pending?: boolean; recovery?: boolean } = {},
 	nowMs = Date.now()
-): Promise<'totp' | 'recovery' | null> {
-	if (normaliseTotp(code)) {
+): Promise<MfaMethod | 'recovery' | null> {
+	const six = normaliseEmailCode(code);
+	if (six) {
 		const { rows } = await db.query<{ secret_enc: Buffer; last_used_step: string | null }>(
 			`SELECT secret_enc, last_used_step FROM user_totp WHERE user_id = $1 AND (confirmed_at IS NULL) = $2 FOR UPDATE`,
 			[userId, !!opts.pending]
 		);
 		const row = rows[0];
-		if (!row) return null;
-		const step = verifyTotp(open(row.secret_enc, userId), code, nowMs, row.last_used_step === null ? null : Number(row.last_used_step));
-		if (step === null) return null;
-		await db.query('UPDATE user_totp SET last_used_step = $2 WHERE user_id = $1', [userId, step]);
-		return 'totp';
+		if (row) {
+			const step = verifyTotp(open(row.secret_enc, userId), six, nowMs, row.last_used_step === null ? null : Number(row.last_used_step));
+			if (step !== null) {
+				await db.query('UPDATE user_totp SET last_used_step = $2 WHERE user_id = $1', [userId, step]);
+				return 'totp';
+			}
+		}
+		if (opts.pending) return null;
+		// An emailed code counts only while emailed codes are on (a code sent to confirm them is 'enrol', never 'use').
+		const { rows: email } = await db.query('SELECT 1 FROM user_email_otp WHERE user_id = $1 AND confirmed_at IS NOT NULL', [userId]);
+		if (!email.length) return null;
+		return (await spendEmailCode(db, userId, 'use', six)) ? 'email' : null;
 	}
 	const recovery = opts.recovery && !opts.pending ? normaliseRecoveryCode(code) : null;
 	if (!recovery) return null;
-	// Only while an authenticator is confirmed: a code left from an earlier enrolment can't stand in for none.
+	// Only while a factor is confirmed: a code left from an earlier enrolment can't stand in for none.
 	if (!(await isEnrolled(db, userId))) return null;
 	const { rowCount } = await db.query('DELETE FROM user_recovery_code WHERE user_id = $1 AND code_hash = $2', [userId, hashRecoveryCode(recovery)]);
 	return rowCount ? 'recovery' : null;
 }
 
-/** Turn two-step sign-in off: the authenticator and every recovery code go. */
-export async function removeFactor(db: Db, userId: string): Promise<void> {
-	await db.query('DELETE FROM user_recovery_code WHERE user_id = $1', [userId]);
-	await db.query('DELETE FROM user_totp WHERE user_id = $1', [userId]);
+/** Spend the live emailed code if it is `code` (already six digits) for `purpose` and still in time. As the account. */
+export async function spendEmailCode(db: Db, userId: string, purpose: EmailCodePurpose, code: string): Promise<boolean> {
+	const { rows } = await db.query<{ ok: boolean }>('SELECT app_mfa_email_use($1, $2) AS ok', [hashEmailCode(userId, purpose, code), purpose]);
+	return rows[0]?.ok ?? false;
+}
+
+/**
+ * A new emailed code for `userId` (as the account), replacing the live one,
+ * unless a send limit holds it back: `{ code }` to email now, or
+ * `{ waitSeconds }` (nothing stored; send nothing).
+ */
+export async function newEmailCodeFor(db: Db, userId: string, purpose: EmailCodePurpose): Promise<{ code: string } | { waitSeconds: number }> {
+	const code = newEmailCode();
+	const { rows } = await db.query<{ wait: number }>('SELECT app_mfa_email_send($1, $2, $3::interval, $4::interval, $5) AS wait', [
+		hashEmailCode(userId, purpose, code),
+		purpose,
+		`${EMAIL_CODE_TTL_SECONDS} seconds`,
+		`${EMAIL_CODE_SEND.gapSeconds} seconds`,
+		EMAIL_CODE_SEND.perHour
+	]);
+	const wait = rows[0]?.wait ?? 0;
+	return wait > 0 ? { waitSeconds: wait } : { code };
+}
+
+/**
+ * Remove one factor. Recovery codes stay while another factor is still
+ * confirmed (they stand in for any of them), and go with the last one.
+ * Returns whether a factor is still on.
+ */
+export async function removeFactor(db: Db, userId: string, method: MfaMethod): Promise<boolean> {
+	if (method === 'totp') await db.query('DELETE FROM user_totp WHERE user_id = $1', [userId]);
+	else {
+		await db.query('DELETE FROM user_email_otp WHERE user_id = $1', [userId]);
+		await db.query('SELECT app_mfa_email_void()');
+	}
+	const left = await isEnrolled(db, userId);
+	if (!left) await db.query('DELETE FROM user_recovery_code WHERE user_id = $1', [userId]);
+	return left;
 }

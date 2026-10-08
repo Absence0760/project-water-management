@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { accountDeletedMail, erratumNoticeMail, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { accountDeletedMail, erratumNoticeMail, mfaCodeMail, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -316,5 +316,35 @@ describe('erratumNoticeMail (issue #103, the known-defect procedure)', () => {
 		const m = erratumNoticeMail('o@example.com', { ...base, erratum: { ...erratum, keyedOn: 'fit' } });
 		expect(m.text).toContain('3 runs in Upper dam use parameters from an automatic calibration made by engine 0.16.0 up to (not including) 0.19.0');
 		expect(erratumNoticeMail('o@example.com', { ...base, runCount: 1, erratum: { ...erratum, keyedOn: 'fit' } }).text).toContain('1 run in Upper dam uses parameters');
+	});
+});
+
+describe('the two-step sign-in code by email (206)', () => {
+	it('carries the code on its own line and in the HTML, no link and no button, and not in the subject', () => {
+		for (const reason of ['sign-in', 'confirm', 'enrol'] as const) {
+			const m = mfaCodeMail('ann@example.com', '012345', reason);
+			expect(m.kind).toBe('mfa_code');
+			expect(m.subject).toBe('Your sign-in code — Water Management');
+			expect(m.subject).not.toContain('012345');
+			expect(m.text).toMatch(/^012345$/m);
+			expect(m.html).toContain('>012345</p>');
+			expect(m.text).not.toMatch(/https?:\/\//);
+			expect(m.html).not.toContain('<a ');
+			expect(m.text).toContain('works once, for 10 minutes');
+			expect(m.text).toContain('Never give this code to anyone');
+		}
+	});
+
+	it('says what the code is for, so one nobody asked for stands out', () => {
+		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('Someone signed in to the Water Management account ann@example.com with its password');
+		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('someone knows your password');
+		expect(mfaCodeMail('ann@example.com', '012345', 'enrol').text).toContain('turn on sign-in codes by email');
+		expect(mfaCodeMail('ann@example.com', '012345', 'confirm').text).toContain('To confirm what you are doing');
+	});
+
+	it('is sent in the account’s language (English where a line has no translation yet)', () => {
+		const m = mfaCodeMail('ann@example.com', '012345', 'sign-in', 'af');
+		expect(m.html).toMatch(/<html lang="(af|en)">/);
+		expect(m.text).toMatch(/^012345$/m);
 	});
 });

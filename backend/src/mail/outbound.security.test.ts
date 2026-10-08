@@ -112,7 +112,9 @@ const builders: Record<string, () => Mail[]> = {
 	licenceRecordMail: () =>
 		(['review', 'closes'] as const).flatMap((event) =>
 			[false, true].map((operator) => templates.licenceRecordMail(TO, { projectId: 'p1', projectName: EVIL, event, dueOn: '2031-10-01', operator }))
-		)
+		),
+	// A two-step sign-in code by email (206, auth/mfa-routes.ts): no user text but the address; each reason.
+	mfaCodeMail: () => (['sign-in', 'confirm', 'enrol'] as const).map((reason) => templates.mfaCodeMail(TO, '012345', reason))
 };
 
 const exportedBuilders = [...Object.entries(templates), ...Object.entries(alertTemplates)]
@@ -140,7 +142,8 @@ describe('every email template, against hostile names', () => {
 			packSentMail: 'pack_sent',
 			accountDeletedMail: 'account_deleted',
 			erratumNoticeMail: 'erratum_notice',
-			licenceRecordMail: 'licence_record'
+			licenceRecordMail: 'licence_record',
+			mfaCodeMail: 'mfa_code'
 		};
 		expect(Object.keys(expected).sort()).toEqual(Object.keys(builders).sort());
 		for (const [name, build] of Object.entries(builders)) for (const m of build()) expect(m.kind, name).toBe(expected[name]);
@@ -159,7 +162,7 @@ describe('every email template, against hostile names', () => {
 			const tags = new Set([...m.html.matchAll(/<\/?([a-z0-9]+)/gi)].map((t) => t[1]!.toLowerCase()));
 			for (const t of tags) expect(['html', 'head', 'meta', 'title', 'body', 'main', 'h1', 'p', 'a', 'br', 'span']).toContain(t);
 			// The text alternative keeps it readable, and it's plain text (no HTML part leaks into it).
-			if (name !== 'verifyEmailMail' && name !== 'resetPasswordMail' && name !== 'accountExistsMail') {
+			if (name !== 'verifyEmailMail' && name !== 'resetPasswordMail' && name !== 'accountExistsMail' && name !== 'mfaCodeMail') {
 				expect(m.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
 				expect(m.text).toContain('<script>alert(1)</script>');
 			}

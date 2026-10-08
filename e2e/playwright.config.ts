@@ -9,7 +9,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
 import { DEM_FIXTURE } from './support/dem.ts';
 import { WATER_FIXTURE } from './support/water.ts';
-import { API_PORT, API_URL, APP_E2E_URL, MFA_API_PORT, MFA_API_URL, WEB_PORT, WEB_URL } from './support/env.ts';
+import { API_PORT, API_URL, APP_E2E_URL, E2E_APP_ENCRYPTION_KEY, MFA_API_PORT, MFA_API_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 // The site under test is `vite build` output with the e2e API URL baked in
 // (support/build-site.ts), served with the SPA fallback like CloudFront. Not
@@ -96,6 +96,8 @@ export default defineConfig({
 				// either way and is tested in two-step-signin.spec.ts, and the
 				// requirement in backend/src/auth/stepUp.db.test.ts. Lambda refuses it.
 				MFA_REQUIRED: 'false',
+				// Known to the specs, which plant emailed two-step codes under it (support/db.ts plantEmailCode).
+				APP_ENCRYPTION_KEY: E2E_APP_ENCRYPTION_KEY,
 				// The pack specs sign with invented registrations nobody checked against a register (167_signers).
 				REGISTRATION_CHECK_REQUIRED: 'false',
 				// Delineation on, against the committed synthetic DEM (invented terrain; map-delineate.spec.ts).
@@ -118,10 +120,15 @@ export default defineConfig({
 				DATABASE_URL: APP_E2E_URL,
 				ALLOWED_ORIGINS: WEB_URL,
 				SITE_URL: WEB_URL,
-				MAIL_TRANSPORT: 'log',
+				// Mail through Mailpit (as local dev and CI's e2e job run it): mfa-email-mailpit.spec.ts reads
+				// the emailed two-step codes there. Nothing else this server serves sends mail.
+				MAIL_TRANSPORT: 'smtp',
+				SMTP_HOST: '127.0.0.1',
+				SMTP_PORT: '1026',
 				PASSWORD_HASH_FAST: '1',
 				SIGNUP_THROTTLE: 'off',
-				REGISTRATION_CHECK_REQUIRED: 'false'
+				REGISTRATION_CHECK_REQUIRED: 'false',
+				APP_ENCRYPTION_KEY: E2E_APP_ENCRYPTION_KEY
 			}
 		},
 		DEV_SERVER

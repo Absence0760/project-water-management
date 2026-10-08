@@ -2102,7 +2102,8 @@ Every step is an ordinary app action by an owner unless it says "operator".
     is asking out of band (a call to a number the WUA or consultancy has on
     file, not one in the request), then, as the schema owner, in one
     transaction:
-    `DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…';`
+    `DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; DELETE FROM user_email_otp WHERE user_id = '…'; UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…';`
+    (`user_email_otp`: codes by email, 206; clear it too, or a person who lost the inbox stays locked out)
     (the last line signs out every session, a thief's included). They sign
     in with the password and set up a new authenticator on the Account
     page; if they are an owner, team admin or assessor, they need it before
@@ -2112,10 +2113,14 @@ Every step is an ordinary app action by an owner unless it says "operator".
 15. **`APP_ENCRYPTION_KEY` leaked, or must change** (operator). The key seals
     every TOTP secret; a new one can't open the old rows. Edit
     `app_encryption_key` with sops and apply (§ Rotating a secret), then, as
-    the schema owner, `DELETE FROM user_recovery_code; DELETE FROM user_totp;`
-    and tell every person who had two-step sign-in on to set it up again
+    the schema owner, `DELETE FROM user_totp; DELETE FROM user_recovery_code WHERE user_id NOT IN (SELECT user_id FROM user_email_otp WHERE confirmed_at IS NOT NULL);`
+    (recovery codes are plain SHA-256, not under the key: they stay for anyone who still has codes by email on)
+    and tell every person who had an authenticator to set it up again
     (owners, team admins and assessors can't do those actions until they
-    have). Their security log keeps the history.
+    have). Their security log keeps the history. Codes by email (206) need
+    nothing: only a code sent in the last 10 minutes stops matching (the
+    HMAC key comes from the same setting), and the next one is sent under the
+    new key.
 16. **A licence record past its closing date** (operator; the "This licence
     record can now be deleted" email, or a review that went unanswered;
     [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing

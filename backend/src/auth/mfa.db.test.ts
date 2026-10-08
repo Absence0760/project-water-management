@@ -128,7 +128,7 @@ describe('signing in with two steps', () => {
 	it('a right password buys a challenge, not a session, and says nothing more', async () => {
 		const r = await login(u);
 		expect(r.status).toBe(200);
-		expect(r.body).toEqual({ mfaRequired: true });
+		expect(r.body).toEqual({ mfaRequired: true, methods: ['totp'] });
 		expect(r.session).toBeUndefined();
 		expect(r.challenge).toBeDefined();
 		// The challenge can't stand in for a session, nor a session for a challenge.

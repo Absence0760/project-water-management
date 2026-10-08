@@ -100,11 +100,18 @@ export interface User {
 	farmNoticeCurrent?: boolean;
 }
 
+/** A second factor: an authenticator app, or a code by email (206; docs/api.md § Two-step sign-in). */
+export type MfaMethod = 'totp' | 'email';
+
 /** GET /auth/mfa: two-step sign-in on the Account page (issue #282, docs/api.md § Two-step sign-in). */
 export interface MfaStatus {
-	/** An authenticator app is set up. */
+	/** Two-step sign-in is on: an authenticator app, codes by email, or both. */
 	enrolled: boolean;
 	enrolledAt: string | null;
+	/** The factors that are on, the app first. */
+	methods: MfaMethod[];
+	/** Codes by email are being turned on: a code went out and hasn't come back yet. */
+	emailPending: boolean;
 	/** Unused recovery codes left (0 when off). */
 	recoveryCodesLeft: number;
 	/** The person is a project owner, team admin or assessor: those actions need it. */
@@ -113,9 +120,17 @@ export interface MfaStatus {
 	sessionVerified: boolean;
 }
 
-/** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */
+/** POST /auth/login for an account with two-step sign-in: no session yet, enter a code (api.auth.mfa.verify). */
 export interface MfaChallenge {
 	mfaRequired: true;
+	/** The factors the account has, the app first (an older server sends none: the app). */
+	methods: MfaMethod[];
+}
+
+/** A code was emailed (202): when another may be asked for, and how long this one works. */
+export interface EmailCodeSent {
+	resendInSeconds: number;
+	expiresInSeconds: number;
 }
 
 export interface UserPreferences {

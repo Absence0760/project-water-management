@@ -15,7 +15,7 @@ import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { dummyHash, hashPassword, needsRehash, verifyPassword } from './password.js';
 import { clearSession, issueMfaChallenge, issueSession, revokeSession } from './session.js';
-import { isEnrolled } from './mfa.js';
+import { confirmedMethods } from './mfa.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
@@ -378,7 +378,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			await attemptSucceeded(db, body.email, device);
 			await storeRehash(db, row.id, row.password_hash, upgraded);
 			const user = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
-			return user ? { user, twoStep: await isEnrolled(db, row.id) } : undefined;
+			return user ? { user, methods: await confirmedMethods(db, row.id) } : undefined;
 		});
 		if (!found) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		const { user } = found;
@@ -387,14 +387,16 @@ export const authRoutes = new Hono<AuthEnv>()
 		// it tells nothing to someone who doesn't know it. The sign-in page
 		// offers the link again (POST /resend-confirmation).
 		if (user.email_verified_at === null) throw ApiError.coded(403, 'email_unconfirmed', 'confirm your email address first: open the link we emailed you');
-		// Two-step sign-in (issue #282, auth/mfa-routes.ts): with an
-		// authenticator, the password buys a 5-minute challenge, not a
-		// session; POST /auth/mfa/verify trades it and a code for one (and
-		// sets the device cookie then). Nothing about the account is said
-		// before the code.
-		if (found.twoStep) {
+		// Two-step sign-in (issue #282, auth/mfa-routes.ts): with a second
+		// factor, the password buys a 5-minute challenge, not a session; POST
+		// /auth/mfa/verify trades it and a code for one (and sets the device
+		// cookie then). `methods` says which factors the account has (the app,
+		// codes by email, 206), so the page can offer "Email me a code" (POST
+		// /auth/mfa/challenge/email); nothing else about the account is said
+		// before the code. `mfaRequired` stays for older clients.
+		if (found.methods.length) {
 			await issueMfaChallenge(c, row.id);
-			return c.json({ mfaRequired: true as const });
+			return c.json({ mfaRequired: true as const, methods: found.methods });
 		}
 		await issueSession(c, row.id);
 		issueDevice(c, row.email, row.sessions_revoked_at);

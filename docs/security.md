@@ -116,17 +116,22 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 
 ## Two-step sign-in
 
-TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`. One phished
-password could otherwise publish a restriction to a catchment's farmers or
-decide a licence application.
+TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`; and a code
+by email as a second factor beside or instead of the app, `206_mfa_email_code.sql`
+(operator decision, 2026-10-08: hydrologists find authenticator apps hard).
+One phished password could otherwise publish a restriction to a catchment's
+farmers or decide a licence application.
 
 - **What it is.** An account can add an authenticator app (Account page,
-  `POST /auth/mfa/totp/enrol` then `…/confirm`). From then on a right
-  password at `POST /auth/login` buys no session: it answers
-  `{ mfaRequired: true }` and sets a **5-minute challenge** cookie
+  `POST /auth/mfa/totp/enrol` then `…/confirm`), codes by email (below), or
+  both. From then on a right password at `POST /auth/login` buys no
+  session: it answers `{ mfaRequired: true, methods }` (`methods`, the
+  factors the account has, `totp` and/or `email`, so the page can offer
+  "Email me a code"; `mfaRequired` stays for older clients) and sets a
+  **5-minute challenge** cookie
   (`wm_mfa`, `HttpOnly`, `SameSite=Strict`), and `POST /auth/mfa/verify`
-  trades the challenge and a code (six digits from the app, or a recovery
-  code) for the session and the trusted-device cookie. The challenge is a
+  trades the challenge and a code (six digits from the app or the email, or
+  a recovery code) for the session and the trusted-device cookie. The challenge is a
   JWT under the session key with **its own issuer**, so it never passes as
   a session nor a session as it; it is good once (its `jti` goes into
   `revoked_session`), and a password reset voids it like a session (the
@@ -135,12 +140,18 @@ decide a licence application.
   code (accepted).
 - **The session says how it signed in.** The JWT carries `amr` (RFC 8176):
   `["pwd"]`, or `["pwd", "otp"]` after a code (from verify, or from
-  confirming an enrolment on this browser). A token without `amr` (from
-  before) is password-only; an unknown value makes the token invalid.
-  Changing the password keeps the session's `amr`; turning two-step sign-in
-  off moves the session watermark (every other session is signed out, so
-  none signed in with a code outlives it and counts again after a later
-  re-enrolment) and reissues this browser's session as `["pwd"]`.
+  confirming an enrolment on this browser). `otp` covers an emailed code
+  too: RFC 8176's `otp` is any one-time password, and the method isn't a
+  claim (an unknown `amr` value makes a token invalid, so none was added;
+  the security log records which factor was turned on or off). A token
+  without `amr` (from before) is password-only; an unknown value makes the
+  token invalid.
+  Changing the password keeps the session's `amr`; turning a factor off
+  moves the session watermark (every other session is signed out, so none
+  signed in with it outlives it and counts again after a later
+  re-enrolment) and reissues this browser's session: as `["pwd", "otp"]`
+  while another factor is still on (the person just gave a code), else
+  `["pwd"]`.
 - **The code.** `auth/totp.ts`, on `node:crypto` (an HMAC-SHA1, the
   dynamic truncation and a modulus, RFC 4226 § 5.3), 6 digits, 30-second
   steps, one step either side of now. A step at or before the last one
@@ -154,18 +165,67 @@ decide a licence application.
   (`auth/secretBox.ts`). `APP_ENCRYPTION_KEY` is an API runtime secret (the
   sops key `app_encryption_key`, § Runtime secrets); the committed dev value
   is a `dev-only-` placeholder `check:env` pins and the API refuses in
-  production. Rotating it voids every authenticator: clear `user_totp` and
-  `user_recovery_code` as the schema owner and have each person set theirs
-  up again (deployment.md § Runbooks).
-- **Recovery codes.** Ten, shown once when the authenticator is confirmed
-  or when a new set is made (`POST /auth/mfa/recovery-codes`, which needs a
-  code from the app): 10 characters from a 30-letter alphabet without
-  look-alikes (about 49 bits each), stored as SHA-256, each deleted when
-  used. Only while an authenticator is confirmed.
-- **Enrolment needs the password.** `…/enrol` checks the current password
-  through the sign-in lockout, as changing the password does, so a stolen
-  session can't put its own authenticator on the account and lock its owner
-  out. Turning it off needs a code from the app or a recovery code.
+  production. Rotating it voids every authenticator: clear `user_totp` (and
+  the recovery codes of accounts left with no factor) as the schema owner
+  and have each person set theirs up again (deployment.md § Runbooks). Codes by email survive a rotation:
+  only a live code (10 minutes) stops matching, and the next send is under
+  the new key.
+- **Code by email** (`206_mfa_email_code.sql`, `auth/emailCode.ts`,
+  `auth/mfa-routes.ts`). Turned on from the Account page with the current
+  password (`POST /auth/mfa/email/enrol`, through the sign-in lockout like
+  the app's), which emails a code to the account's confirmed address;
+  `…/email/confirm` takes it back and the factor is on. At sign-in, `POST
+  /auth/mfa/challenge/email` (public: the `wm_mfa` challenge is the
+  credential, as for verify) emails a code, and `…/mfa/verify` takes it like
+  an app code; signed in, `POST /auth/mfa/email/send` emails one for the
+  step-up, for turning a factor off and for new recovery codes. The code: six
+  digits from `crypto.randomInt`, **10 minutes**, good once, one live code
+  per account (a new send replaces it, whatever it was for), bound to its
+  purpose (`enrol` confirms a pending factor, `use` everything else). It is
+  stored as an **HMAC-SHA256 under a key derived from `APP_ENCRYPTION_KEY`**
+  (HKDF-SHA256 with its own `info`, over the account id, the purpose and the
+  code), not a plain SHA-256: a six-digit code has under 20 bits, so anyone
+  who read the table (a backup, a leaked dump, an SQL injection) could try
+  all million against a plain digest in a moment, account id mixed in or
+  not; under a key the database never sees, the stored value is useless
+  alone. The code table and the send log are deny-all; only
+  `app_mfa_email_send`, `app_mfa_email_use` and `app_mfa_email_void`
+  (SECURITY DEFINER, the current user only) write them, so nobody can plant a
+  code of their choosing or skip the limits. **Every check goes through the
+  code throttle** like an app code (a wrong emailed code counts the same).
+  **Send limits** (an email costs money, and a stream of them is abuse): a
+  minute between sends and at most five in a rolling hour per account,
+  under the account's row lock (parallel sends queue; one goes), answering
+  `429 mfa_email_wait` with `params.seconds` and `Retry-After`; a send the
+  transport refused answers `503 mfa_email_failed` and still counts. The
+  email has no link (the code is typed where it was asked for) and keeps
+  the code out of the subject (a lock screen's preview); it says what the
+  code is for, so one nobody asked for stands out ("someone knows your
+  password"). **The tradeoff, said on the Account page:** whoever reads the
+  inbox can also reset the password (§ Password reset), so with codes by
+  email the inbox alone guards the account, where the app needs the phone
+  too. The app stays the stronger factor and is offered first; codes by
+  email still stop a phished or reused password from working on its own.
+  Tests: `auth/mfa-email.db.test.ts` (enrolment needs the password; the
+  right, wrong, expired, reused and replaced code; the throttle; the send
+  limits and the race; step-up and the fresh code; RLS with positive
+  controls, the edges), `auth/emailCode.test.ts`, `mail/templates.test.ts`,
+  `lib/auth/codeMethods.test.ts`, and end to end with the emails really
+  sent, `e2e/tests/mfa-email-mailpit.spec.ts` (turning it on, signing in,
+  Send again, a pack sign-off's fresh code, both ways on, turning it off).
+- **Recovery codes.** Ten, shown once when the first factor (of either
+  kind) is confirmed or when a new set is made (`POST
+  /auth/mfa/recovery-codes`, which needs a code from the app or by email):
+  10 characters from a 30-letter alphabet without look-alikes (about 49
+  bits each), stored as SHA-256, each deleted when used. One set per
+  account, kept while any factor is confirmed: adding a second factor shows
+  none (`recoveryCodes: null`), and removing one keeps them while the other
+  stays; they go with the last factor.
+- **Enrolment needs the password.** `…/totp/enrol` and `…/email/enrol`
+  check the current password through the sign-in lockout, as changing the
+  password does, so a stolen session can't put its own factor on the
+  account and lock its owner out. Turning a factor off needs a code (from
+  the app, by email, or a recovery code).
 - **Code throttle.** Every code check (sign-in, confirm, turn off, new
   codes) counts on the account's `mfa_throttle` row first, in its own
   transaction under a row lock, like `login_throttle`: the 5th wrong code in
@@ -176,7 +236,11 @@ decide a licence application.
   with reason `bad_code`, counted by the login-failed alarm. The WAF's
   per-IP limit on `/api/auth/*` covers `/api/auth/mfa/verify` too.
 - **Who must use it.** Project owners, team admins and assessors
-  (`auth/stepUp.ts`). `requireRole(…, 'owner')` and
+  (`auth/stepUp.ts`). Either factor counts: `hasConfirmedFactor(db,
+  userId)` (`auth/stepUp.ts`) is the one "is two-step on" check, true for
+  a confirmed app or confirmed codes by email, and the requirement, the
+  sign-in challenge, `GET /auth/mfa`, a sign-off's `cannotSign` and
+  recovery codes all go through it. `requireRole(…, 'owner')` and
   `requireTeamRole(…, 'admin')` call `requireStepUp` after the role check
   passes (so an outsider still gets 404 and learns nothing), and so do the
   editor-level actions those roles exist for: publishing to farmers (`POST`
@@ -208,7 +272,7 @@ decide a licence application.
   positions item 9; provisional position, pre-counsel research,
   2026-10-01). A sign-off (of a run or an evidence pack, the applicant's
   specialist's included), issuing a pack and withdrawing one also need a
-  code from the authenticator **within the last 10 minutes**, not only at
+  code (from the app or by email) **within the last 10 minutes**, not only at
   sign-in: a sign-off publishes a professional statement under a real name
   on the public verify page, and a session left open on a shared computer
   mustn't make one (a false one would be a GN R267 reg 20 offence by whoever
@@ -221,7 +285,9 @@ decide a licence application.
   it is older than 10 minutes (or more than a minute ahead), after
   `requireStepUp`, so enrolment still comes first (`403 mfa_required` before
   a first sign-off). The workspace asks for a code in a dialog
-  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`),
+  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`;
+  with codes by email on, **Email me a code instead** sends one through
+  `POST /auth/mfa/email/send`, which the same field takes),
   POSTs it to `/auth/mfa/step-up` (same throttle as every code check; a
   recovery code works and is recorded) and sends the action again, once
   (`lib/api/client.ts`). The step-up also turns a password-only session into
@@ -263,16 +329,18 @@ decide a licence application.
   Lambda refuses `false` at startup (`config/production.ts`) and so does the
   check itself (`mfaRequired`). Local dev requires it unless
   `.env.development.local` says otherwise (run-locally.md).
-- **RLS.** `user_totp` and `user_recovery_code` are the account's own rows
-  for every command; `account_security_event` (enrolled, turned off, a
-  recovery code used, new codes) is the account's own and append-only
-  (no update or delete, even for its owner, so a thief can't erase that they
-  turned it off); `mfa_throttle` is deny-all. `auth/mfa.db.test.ts` proves
-  each, with the owner's own rows as the positive control.
+- **RLS.** `user_totp`, `user_email_otp` and `user_recovery_code` are the
+  account's own rows for every command; `account_security_event` (a factor
+  turned on or off, a recovery code used, new codes) is the account's own
+  and append-only (no update or delete, even for its owner, so a thief
+  can't erase that they turned it off); `mfa_throttle`, `mfa_email_code` and
+  `mfa_email_send` are deny-all. `auth/mfa.db.test.ts` and
+  `auth/mfa-email.db.test.ts` prove each, with the owner's own rows as the
+  positive control.
 - **Lost phone and codes.** The operator, after verifying who is asking,
-  deletes the account's `user_totp` and `user_recovery_code` rows as the
-  schema owner (deployment.md § Runbooks); the person then signs in with the
-  password and sets up again.
+  deletes the account's `user_totp`, `user_email_otp` and
+  `user_recovery_code` rows as the schema owner (deployment.md § Runbooks);
+  the person then signs in with the password and sets up again.
 
 ## Sign-up by invitation
 
@@ -2878,7 +2946,8 @@ PDF someone else asked for kept the person as a recipient
 | Elevation-model requests per account, for the hourly and running caps (184) | `dem_attempt` | 1 day | Deleted | – |
 | Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
 | Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
-| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
+| Codes by email (206): whether they are on and since when; the live emailed code (HMAC under `APP_ENCRYPTION_KEY`, with its purpose and expiry); when codes were emailed, for the send limits; the factor own row only under RLS, the code and the log deny-all; in the export as `twoStepEmail` (never the code or the send log) | `user_email_otp`, `mfa_email_code`, `mfa_email_send` | The factor until turned off; a code until used, replaced or 10 minutes old (then cleared); sends a day | Deleted | – |
+| The account's own security log: an authenticator or codes by email turned on or off, a recovery code used, new codes (150, 206); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |

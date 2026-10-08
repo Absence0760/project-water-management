@@ -153,6 +153,7 @@ one to the job the test runs in:
 | `e2e/tests/evidence-pack.spec.ts` | MinIO (it issues packs) | e2e shards |
 | `e2e/tests/server-report.spec.ts` | MinIO + Mailpit | e2e shards |
 | `e2e/tests/alerts-mailpit.spec.ts` | Mailpit | e2e shards |
+| `e2e/tests/mfa-email-mailpit.spec.ts` | Mailpit | e2e shards |
 
 `render.origin.db.test.ts` needs no database but is in the db project
 (`.db.test.ts`) on purpose: `db-test` already needs a browser for
