@@ -5245,6 +5245,15 @@ two.
   - While it runs there is a progress bar (`role="progressbar"`) with the
     stage and the best score so far. **Cancel** stops the worker at once and
     discards it.
+  - The choices, the running fit and its result live in the workspace page's
+    `FitSession` (`lib/calibration/fitSession.svelte.ts`), not the panel, as
+    the unsaved settings do: opening another tab leaves the fit running, and
+    coming back shows its progress or result with the same choices. Leaving
+    the project with a fit running, or (for an editor) a result not yet
+    applied, asks first in the leave guard's dialog ("an automatic fit still
+    running" / "an automatic fit not yet applied to the form"); leaving
+    anyway, or opening another project, cancels it and resets the choices.
+    **Discard result** drops a result without applying it.
   - The result shows the engine's plain-language notes (for example "wet-year
     behaviour is weakly constrained"), current against fitted parameters, and
     a scores table. Its columns are current parameters, fitted, then each
@@ -5321,7 +5330,9 @@ two.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the save bar then shows "Unsaved changes to the settings". Nothing is
-    stored until Save.
+    stored until Save. The result stays shown, its button then reading
+    **Apply to form again**, and the unsaved settings take over the leave
+    guard from the fit.
     Below the panel, **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`) shows the record: model and time,
     objective, seed, model runs, engine version, the record and window fitted
