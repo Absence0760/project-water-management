@@ -3730,7 +3730,10 @@ kept fit is the server's too.
   (no observed record, a pan preset under a monthly PE row, selecting by
   the other record with only one, or a fit estimated past 4 minutes: "lower
   the model runs per fit or the starts"). **At most 1 queued or running per
-  user** (`429`). A project keeps its newest **20** runs of the rules (an
+  user**, across all their projects (`429`). Its `error` says where the
+  running one is: "…in this project" when it's this project's, else "…in the
+  project “*name*”, and only one at a time is allowed" (`pendingCalibrationMessage`,
+  `calibration/store.ts`), so a run elsewhere doesn't read as running here. A project keeps its newest **20** runs of the rules (an
   applied one is never deleted). Each case job gets 2 attempts.
 - `AutoCalibration = { id, trigger ('manual' | 'new_data'), status
   ('running' | 'complete' | 'failed'), rulesRevision, rules, plan: {

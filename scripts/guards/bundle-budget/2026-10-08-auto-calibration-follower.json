@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Automated calibration's follower (autoFollow.svelte.ts: one project at a time, stale replies dropped): measured 1810 KB locally on main @ 2e06fae65 + this change (+1 KB); CI ~1 KB above local. Headroom ~0-1 KB in CI."
+}

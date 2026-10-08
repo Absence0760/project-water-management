@@ -162,12 +162,28 @@ export function planCalibration(input: ModelInput, maxSeconds = AUTO_CASE_SECOND
 }
 
 /** Queued or running automated calibration jobs the user has, in any project they can see. One request at a time per user. */
-export async function pendingCalibrationJobs(db: Db): Promise<number> {
+export async function pendingCalibrationJobs(db: Db): Promise<{ projectId: string; projectName: string | null }[]> {
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('auto_calibration_job_cap:' || app_current_user_id()::text, 0))`);
-	const { rows } = await db.query<{ n: number }>(
-		`SELECT count(*)::int AS n FROM job WHERE kind = 'auto_calibration' AND acting_user_id = app_current_user_id() AND status IN ('queued', 'running', 'failed')`
+	// The project's name only while the user can still see it (RLS); a project they've since left has none.
+	const { rows } = await db.query<{ projectId: string; projectName: string | null }>(
+		`SELECT j.project_id AS "projectId", p.name AS "projectName"
+		   FROM job j LEFT JOIN project p ON p.id = j.project_id
+		  WHERE j.kind = 'auto_calibration' AND j.acting_user_id = app_current_user_id() AND j.status IN ('queued', 'running', 'failed')
+		  ORDER BY j.created_at`
 	);
-	return rows[0]?.n ?? 0;
+	return rows;
+}
+
+/**
+ * Why the cap refuses another run: where the user's queued or running one is,
+ * so a run in another project doesn't read as if it were running in this one.
+ */
+export function pendingCalibrationMessage(projectId: string, pending: { projectId: string; projectName: string | null }[]): string {
+	const here = pending.some((p) => p.projectId === projectId);
+	const elsewhere = pending.find((p) => p.projectId !== projectId);
+	if (here || !elsewhere) return 'an automated calibration is already queued or running in this project; wait for it to finish';
+	const where = elsewhere.projectName ? `in the project “${elsewhere.projectName}”` : 'in another project';
+	return `you already have an automated calibration queued or running ${where}, and only one at a time is allowed; wait for it to finish, then start this one`;
 }
 
 /**

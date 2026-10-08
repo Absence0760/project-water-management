@@ -5418,7 +5418,13 @@ two.
     calibration rules** asks the server (disabled while the rules have unsaved
     edits, and for viewers); the latest run, whoever or whatever started it
     ("Started by …" / "Queued by new data"), shows "Fitting *i* of *n* on the
-    server…" while its jobs run (followed every 1.5 s), then the notes, the
+    server…" while its jobs run (followed every 1.5 s by
+    `lib/calibration/autoFollow.svelte.ts`, one project at a time: opening
+    another project, or leaving Settings, drops any reply still in flight for
+    the last one and stops its polling, so one project's run never shows in
+    another's panel). A person has one run at a time across their projects:
+    pressing Run in a second project while one runs elsewhere shows the
+    server's refusal naming that project. Then the notes, the
     water years left out by rule, a **Fits the rules tried** table (fit,
     *Kept* / *Passed* / *Not kept*, the held-out score, natural MAR, the
     filters, why not kept) and the kept fit's parameters. A run whose job
