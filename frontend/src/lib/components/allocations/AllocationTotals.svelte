@@ -7,13 +7,14 @@
 	// unit, name or registration number.
 	import type { AllocationComparisonTotals, AllocationTotal } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { SOURCE_LABEL, STATUS_LABEL, totalsSentence, waterYearLabel } from './allocations';
 
 	let { totals, years, runLabel, loading }: { totals: AllocationTotal[] | null; years: AllocationComparisonTotals | null; runLabel: string | null; loading: boolean } = $props();
 </script>
 
 <section class="panel" aria-labelledby="alloc-totals-h" data-testid="allocation-totals">
-	<h2 id="alloc-totals-h">Registered water use in this catchment</h2>
+	<h2 id="alloc-totals-h">Registered water use in this catchment <HelpTip key="allocation-viewer-access" /></h2>
 	<p class="muted">
 		This catchment’s registered volumes are shown to viewers as totals per water source, and only where at least 5 registered users hold one, so no farm’s volume can be
 		read from them. The organisation’s editors and owners see each farm.

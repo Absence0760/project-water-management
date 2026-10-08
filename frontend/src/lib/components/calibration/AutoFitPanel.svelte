@@ -179,9 +179,9 @@
 								<tr>
 									<th scope="col">Fit</th>
 									<th scope="col">Result</th>
-									<th scope="col" class="num">Held-out score</th>
-									<th scope="col" class="num">Natural MAR (Mm³/a)</th>
-									<th scope="col">Filters</th>
+									<th scope="col" class="num">Held-out score <HelpTip key="calibration-selection-score" label="About the held-out score" /></th>
+									<th scope="col" class="num">Natural MAR (Mm³/a) <HelpTip key="wr2012-check" label="About the natural MAR" /></th>
+									<th scope="col">Filters <HelpTip key="calibration-rule-filters" label="About the filters" /></th>
 									<th scope="col">Why not kept</th>
 								</tr>
 							</thead>

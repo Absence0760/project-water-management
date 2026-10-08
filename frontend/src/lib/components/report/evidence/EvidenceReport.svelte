@@ -25,6 +25,7 @@
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
 	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
 	import { effectiveSettings, monthlyRows, settingsRows, type RunSettings } from '$lib/components/report/inputs';
@@ -607,8 +608,8 @@
 					<p class="na" data-testid="evidence-allocations-na">{al.notAssessed}</p>
 				{:else}
 					<dl class="kv">
-						<div><dt>Allocation mode</dt><dd>{modeText(al.modeA)}{app && al.modeB !== al.modeA ? ` (baseline); ${modeText(al.modeB)} (application)` : ''}</dd></div>
-						<div><dt>Counted as within</dt><dd>{useBandText(al.toleranceA ?? al.toleranceB)} of the registered volume{app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB ? ` (baseline); ${useBandText(al.toleranceB)} (application)` : ''}</dd></div>
+						<div><dt>Allocation mode <HelpTip key="allocation-mode" /></dt><dd>{modeText(al.modeA)}{app && al.modeB !== al.modeA ? ` (baseline); ${modeText(al.modeB)} (application)` : ''}</dd></div>
+						<div><dt>Counted as within <HelpTip key="allocation-band" /></dt><dd>{useBandText(al.toleranceA ?? al.toleranceB)} of the registered volume{app && al.toleranceA !== null && al.toleranceB !== null && al.toleranceA !== al.toleranceB ? ` (baseline); ${useBandText(al.toleranceB)} (application)` : ''}</dd></div>
 						<div><dt>Registered volumes on no unit of the run{app ? 's' : ''}</dt><dd>{al.notMatchedA}{app && al.notMatchedB !== null && al.notMatchedB !== al.notMatchedA ? ` (application ${al.notMatchedB})` : ''}<span class="sub">counted, not compared</span></dd></div>
 					</dl>
 					<p class="small muted">
@@ -636,7 +637,7 @@
 							caption="Over and under use of the registered volumes."
 						/>
 					{/if}
-					<h3>Whole water years against the registered volume</h3>
+					<h3>Whole water years against the registered volume <HelpTip key="registered-vs-modelled" /></h3>
 					<div class="table-wrap">
 						<table class="data compact" data-testid="evidence-allocations">
 							<thead>
@@ -698,7 +699,7 @@
 					</div>
 					{#if al.units.some((u) => u.sources.some((x) => x.capA || x.capB))}
 						<!-- evidence-6: a capped run's cap, per unit and source (RunSummary.allocations); an older pack's document has none. -->
-						<h3>What the cap held back</h3>
+						<h3>What the cap held back <HelpTip key="cap-held-back" /></h3>
 						<p class="small muted">
 							A capped run holds each unit’s use to its registered volume and its licence’s months of use and maximum rate. A day counts when the source took all the room
 							the licence left it and the unit still went short; it is put to the limit that set the room that day.
@@ -861,18 +862,18 @@
 				{:else}
 					<p class="small">Errata: none recorded for these runs’ engines in docs/engine-errata.md.</p>
 				{/if}
-				<h3>B.2 Sign-off</h3>
+				<h3>B.2 Sign-off <HelpTip key={frozen ? 'pack-signoff' : 'signoff-statement'} label="About the sign-off" /></h3>
 				{#if signoffs && signoffTarget}
 					<SignoffSection {projectId} target={signoffTarget} list={signoffs} onchange={(n) => onsignoffchange?.(n)} />
 				{:else}
 					<p class="na">Not signed.</p>
 				{/if}
-				<h3>B.3 Disclaimer</h3>
+				<h3>B.3 Disclaimer <HelpTip key="report-disclaimer" /></h3>
 				<Disclaimer />
-				<h3>B.4 Verify and reproduce</h3>
+				<h3>B.4 Verify and reproduce <HelpTip key="pack-short-code" label="About verifying a pack" /></h3>
 				{#if verify}
 					<dl class="kv" data-testid="evidence-verify">
-						<div class="wide"><dt>Manifest SHA-256</dt><dd class="mono hash">{verify.sha256}</dd></div>
+						<div class="wide"><dt>Manifest SHA-256 <HelpTip key="manifest-hash" /></dt><dd class="mono hash">{verify.sha256}</dd></div>
 						<div><dt>Verify code</dt><dd class="mono">{verify.code}</dd></div>
 						<div><dt>Verify page</dt><dd class="mono hash">{verify.url}</dd></div>
 					</dl>
@@ -1093,6 +1094,10 @@
 		background: var(--surface);
 	}
 	@media print {
+		/* A help button means nothing on paper (the pack's own page and its server PDF print this). */
+		.evidence :global(.helptip) {
+			display: none;
+		}
 		tfoot :is(th, td) {
 			position: static;
 		}

@@ -112,6 +112,7 @@
 	id="set-evaporation"
 	variant="inline"
 	title="Evaporation from the map"
+	helpKey="evaporation-from-map"
 	what="evaporation summary"
 	bodyGrid
 	{notice}

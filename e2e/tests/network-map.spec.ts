@@ -71,8 +71,8 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	// The dam at the end of the run (its storage series, fetched for the picked farm).
 	await expect(c).toContainText(/Dam at end of run\s*\d+%/);
 	await expect(c).toContainText(/Flow share\s*\d+(\.\d)?%/);
-	await expect(c).toContainText('Drains intoOutflow gauge');
-	await expect(c).toContainText('Dam150\u202f000 m³');
+	await expect(c).toContainText(/Drains into\s*Outflow gauge/);
+	await expect(c).toContainText(/Dam\s*150\u202f000 m³/);
 	await expect(c.getByRole('link', { name: '20.00 ha, 1 crop' })).toHaveAttribute('href', /[?&]farm=/);
 	await expectNoViolations(page);
 
@@ -258,7 +258,7 @@ test('after a dam capacity edit the card’s Dam at end of run agrees with the m
 	const tile = card(page).locator('.tile').filter({ hasText: 'Dam at end of run' });
 	await expect(tile.locator('.t-v')).toHaveText(`${mapPct}%`);
 	await expect(tile.locator('.t-s')).toHaveText('of 150\u202f000 m³ in the run');
-	await expect(card(page)).toContainText('Dam75\u202f000 m³');
+	await expect(card(page)).toContainText(/Dam\s*75\u202f000 m³/);
 });
 
 test('without a run there is nothing to colour by, so the menu isn’t offered', async ({ page, owner }) => {

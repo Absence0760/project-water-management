@@ -75,7 +75,8 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 		['set-feeds', 'Data feeds']
 	] as const) {
 		await page.goto(`/projects/${project.id}?tab=settings#${id}`);
-		await expect(page.locator(`#${id}`).getByRole('heading', { level: 2, name, exact: true })).toBeInViewport();
+		// Not exact: a panel's heading may carry its ⓘ tip ("API keys About API keys"); the id scopes it.
+		await expect(page.locator(`#${id}`).getByRole('heading', { level: 2, name })).toBeInViewport();
 		await expect(automation).toHaveAttribute('aria-current', 'location');
 	}
 });

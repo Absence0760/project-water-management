@@ -7,6 +7,7 @@
 	// page compares runs. Nothing is stored and no run slot is used. The
 	// dialog is modal, so the edits can't change under an answer: each opening
 	// works the preview out again.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onDestroy, untrack } from 'svelte';
 	import type { MetricDelta } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
@@ -146,7 +147,7 @@
 						</ul>
 					</div>
 				{/if}
-				<p class="muted period">Over {fmtDay(e.startDate)} to {fmtDay(e.endDate)}, engine {e.engineVersion}.</p>
+				<p class="muted period">Over {fmtDay(e.startDate)} to {fmtDay(e.endDate)}, engine {e.engineVersion}. <HelpTip key="unsaved-preview" label="About this preview" /></p>
 				{#if unchanged}<p data-testid="unsaved-preview-unchanged">These edits don't change any of the figures below.</p>{/if}
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div class="table-wrap" tabindex="0" role="region" aria-label="The figures, last run and with your edits">

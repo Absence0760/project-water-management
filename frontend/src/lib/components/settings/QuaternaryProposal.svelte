@@ -7,6 +7,7 @@
 	only; Save keeps it, as for any typed value. Never fills anything by itself.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
 	import { api, type QuaternaryLookup } from '$lib/api';
 	import { parseDegrees } from '$lib/components/map/mapData';
@@ -84,7 +85,7 @@
 
 <div class="proposal" data-testid="quaternary-proposal">
 		<form class="pick" onsubmit={lookUp} novalidate aria-labelledby="{uid}-h">
-			<h3 id="{uid}-h" class="sub-h">Propose from the map</h3>
+			<h3 id="{uid}-h" class="sub-h">Propose from the map <HelpTip key="quaternary-lookup" label="About the quaternary lookup" /></h3>
 			{#if pointsError}<p class="err" role="alert">The map’s features couldn’t be loaded ({pointsError}); type the coordinates instead.</p>{/if}
 			<div class="field">
 				<label for="{uid}-pt">Look up at</label>

@@ -76,7 +76,8 @@ test('a help tip works from the keyboard alone and is announced to screen reader
 	const tip = page.getByRole('button', { name: 'About capacity', exact: true }).first();
 	const controls = (await tip.getAttribute('aria-controls'))!;
 	const live = page.locator(`[id="${controls}"]`);
-	await expect(live).toHaveAttribute('role', 'status');
+	// A polite live region without role="status": a status is the page's own message ("Saved.").
+	await expect(live).not.toHaveAttribute('role', 'status');
 	await expect(live).toHaveAttribute('aria-live', 'polite');
 	await expect(live).toBeEmpty();
 	await expect(tip).toHaveAttribute('aria-expanded', 'false');
@@ -152,7 +153,7 @@ test('the help contents: groups under headings, the glossary one link per topic 
 
 	// Each group's name is a heading, not a link, and names its list of links;
 	// the group holding the page you're on is the one open.
-	await expect(nav.getByRole('heading', { level: 2 })).toHaveText(['Start here', 'How it works', 'How to', 'Pages, one by one', 'Reference']);
+	await expect(nav.getByRole('heading', { level: 2 })).toHaveText(['Start here', 'How it works', 'How to', 'Using the results', 'Pages, one by one', 'Reference']);
 	await expect(nav.getByRole('link', { name: /^(Start here|How it works|How to|Pages, one by one|Reference)$/i })).toHaveCount(0);
 	await expect(nav.getByRole('button', { name: 'Reference' })).toHaveAttribute('aria-expanded', 'true');
 	const reference = nav.getByRole('list', { name: 'Reference' });
@@ -244,6 +245,7 @@ for (const viewport of [
 			['/help/guides/the-whole-process', 'Start here'],
 			['/help/guides/how-calibration-works', 'How it works'],
 			['/help/guides/add-a-transfer', 'How to'],
+			['/help/guides/issue-an-evidence-pack', 'Using the results'],
 			['/help/guides/applications-page', 'Pages, one by one'],
 			['/help/glossary/input-data', 'Reference']
 		] as const) {
@@ -260,7 +262,7 @@ for (const viewport of [
 		await page.goto('/help');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		const seen = new Set<string>();
-		for (const group of ['Start here', 'How it works', 'How to', 'Pages, one by one', 'Reference']) {
+		for (const group of ['Start here', 'How it works', 'How to', 'Using the results', 'Pages, one by one', 'Reference']) {
 			const button = nav.getByRole('button', { name: group });
 			await button.focus();
 			await page.keyboard.press('Enter');

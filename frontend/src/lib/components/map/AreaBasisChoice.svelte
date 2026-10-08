@@ -5,6 +5,7 @@
 	when the piece holds pans; nothing is chosen silently, gross until changed.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { MapAreaBasis } from '$lib/api/types';
 	import { basisOptions } from './areaBasis';
 
@@ -25,7 +26,7 @@
 </script>
 
 <fieldset class="basis" data-testid={testid}>
-	<legend>Which area</legend>
+	<legend>Which area <HelpTip key="area-basis" /></legend>
 	{#each options as o (o.value)}
 		<label class="choice">
 			<input type="radio" name="{uid}-basis" value={o.value} bind:group={basis} data-basis={o.value} />

@@ -5,6 +5,7 @@
 	// switches a kind on, nothing is sent. The rule editor loads on demand
 	// (its own chunk), so the workspace doesn't carry it.
 	import { onMount } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type AlertEvent } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import { eventKindName, eventText, outOfDateText } from './alerts';
@@ -52,9 +53,9 @@
 	}
 </script>
 
-<section class="panel alerts" aria-labelledby="alerts-h" data-ready={events !== null || error !== null ? 'true' : undefined}>
+<section class="panel alerts" aria-labelledby="alerts-h-t" data-ready={events !== null || error !== null ? 'true' : undefined}>
 	<div class="panel-head">
-		<h2 id="alerts-h">Active alerts</h2>
+		<h2 id="alerts-h"><span id="alerts-h-t">Active alerts</span> <HelpTip key="alert-rules" label="About alerts" /></h2>
 		{#if events?.length}<span class="muted">{events.length} firing</span>{/if}
 	</div>
 	{#if error}

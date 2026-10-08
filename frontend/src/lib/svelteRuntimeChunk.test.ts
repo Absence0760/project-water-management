@@ -31,6 +31,8 @@ describe('the Svelte runtime chunk', () => {
 		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-data.ts')).toBe('help-articles-data');
 		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-licensing.ts')).toBe('help-articles-licensing');
 		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-ewr.ts')).toBe('help-articles-ewr');
+		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-results.ts')).toBe('help-articles-results');
+		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-fit.ts')).toBe('help-articles-fit');
 		for (const id of ['/repo/frontend/src/lib/help/articles.ts', '/repo/frontend/src/lib/help/content.ts', '/repo/frontend/src/lib/help/tips.ts']) {
 			expect(helpArticlesChunk(id), id).toBeUndefined();
 		}

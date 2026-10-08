@@ -9,6 +9,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Member } from '$lib/api';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { session } from '$lib/auth/session.svelte';
 	import {
 		describeSchedule,
@@ -120,6 +121,7 @@
 	<p class="hint muted">
 		Email a PDF of the latest run’s report to project members every week or month. The link needs the member to sign in, and the PDF is kept
 		for 7 days. A schedule sends as the editor who last saved it.
+		<HelpTip key="report-pdf" label="About report PDFs and schedules" />
 	</p>
 
 	{#if loadError}

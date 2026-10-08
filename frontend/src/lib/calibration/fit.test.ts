@@ -1,5 +1,6 @@
 import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, rainCheckLimits, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { tipFor } from '$lib/help/tips';
 import {
 	applyReport,
 	benchmarkRows,
@@ -327,6 +328,10 @@ describe('validationRecordOptions', () => {
 
 	it('has a row for every score the engine reports', () => {
 		expect(SCORE_ROWS.map((r) => r.key).sort()).toEqual(Object.keys(scores(0)).filter((k) => k !== 'days').sort());
+	});
+
+	it('gives every score row a help tip that exists', () => {
+		for (const r of SCORE_ROWS) expect(tipFor(r.help), `${r.key} → ${r.help}`).toBeDefined();
 	});
 });
 

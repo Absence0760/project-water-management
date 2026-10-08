@@ -33,6 +33,7 @@
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
 	import AllocationForm from './AllocationForm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import AllocationImport from './AllocationImport.svelte';
 	import AllocationTotals from './AllocationTotals.svelte';
 	import type { AllocationComparisonTotals } from '$lib/api';
@@ -324,7 +325,7 @@
 	{:else}
 	{#if !run}
 		<section class="panel" aria-labelledby="alloc-compare-h" data-testid="allocation-compare">
-			<h2 id="alloc-compare-h">Modelled use vs registered volume</h2>
+			<h2 id="alloc-compare-h">Modelled use vs registered volume <HelpTip key="registered-vs-modelled" /></h2>
 			<p class="muted">Run the model to compare its use with the registered volumes.</p>
 		</section>
 	{:else}
@@ -353,7 +354,7 @@
 						<div class="first">
 							<section class="panel list-card" aria-labelledby="alloc-compare-h">
 								<div class="panel-head">
-									<h2 id="alloc-compare-h">Modelled use vs registered volume</h2>
+									<h2 id="alloc-compare-h">Modelled use vs registered volume <HelpTip key="registered-vs-modelled" /></h2>
 									<span class="muted small">Each hydrological unit and source, mean water year{tally ? ` · ${tally}` : ''}</span>
 								</div>
 								<ul class="units" id="alloc-units" aria-label="Hydrological units, the ones to look into first">
@@ -415,6 +416,7 @@
 									<p class="hint muted" data-testid="allocation-band-note">
 										“Within band” is within ±{fmtNum(comparison.tolerance * 100, 0)} % of the registered volume. A part year compares the days the run covers with the
 										registered volume prorated to them, and isn’t counted in the whole water years.
+										<HelpTip key="allocation-band" />
 									</p>
 									{#if pickedCap.length}
 										<div class="cap-years" data-testid="allocation-cap-years">
@@ -454,7 +456,7 @@
 						</div>
 					{:else}
 						<section class="panel" aria-labelledby="alloc-compare-h">
-							<h2 id="alloc-compare-h">Modelled use vs registered volume</h2>
+							<h2 id="alloc-compare-h">Modelled use vs registered volume <HelpTip key="registered-vs-modelled" /></h2>
 							<p class="muted" data-testid="allocation-compare-empty">This run has no modelled abstraction and no registered volume to compare.</p>
 						</section>
 					{/if}
@@ -465,7 +467,7 @@
 
 	<section class="panel" aria-labelledby="alloc-list-h">
 		<div class="panel-head">
-			<h2 id="alloc-list-h">Registered volumes</h2>
+			<h2 id="alloc-list-h">Registered volumes <HelpTip key="registered-volume" label="About registered volumes" /></h2>
 			{#if data && !data.canSeeHolders && data.allocations.length}<span class="muted small">Names of registered users are shown to editors only.</span>{/if}
 		</div>
 		<LoadState {loading} {error} retry={load}>
@@ -522,7 +524,7 @@
 				{/if}
 
 				{#if data.sources.length}
-					<h3 class="sub-h">Imported files</h3>
+					<h3 class="sub-h">Imported files <HelpTip key="warms-import" label="About importing registered volumes" /></h3>
 					<ul class="sources">
 						{#each data.sources as s (s.id)}
 							<li>
@@ -585,7 +587,7 @@
 
 	{#if isOwner && data}
 		<section class="panel" aria-labelledby="alloc-viewers-h" data-testid="allocation-viewer-units">
-			<h2 id="alloc-viewers-h">What viewers see</h2>
+			<h2 id="alloc-viewers-h">What viewers see <HelpTip key="allocation-viewer-access" label="About what viewers see" /></h2>
 			<label class="check">
 				<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget.checked)} />
 				Viewers see each farm’s registered volumes

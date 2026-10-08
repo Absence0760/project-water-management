@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	// One scenario (docs/ui.md § Scenarios): the "Based on run X" banner, its
 	// changes (ops) with their class and the server's check, the red
@@ -404,7 +405,7 @@
 	<p class="banner" data-testid="scenario-base">
 		Based on run <strong>{s.baseRun.label || 'Untitled run'}</strong>{#if s.baseRun.createdAt}{' '}(run {fmtDate(s.baseRun.createdAt, true)}{baseMeta?.published || isApplication ? ', published' : ''}){/if}.
 		Created by {s.owner ?? FORMER_MEMBER}.
-		The base can't be deleted or trimmed while this scenario exists.
+		The base can't be deleted or trimmed while this scenario exists. <HelpTip key="base-run" label="About the run a scenario starts from" />
 	</p>
 	{#if error}
 		<div class="alert alert-error" role="alert">
@@ -456,9 +457,9 @@
 		</p>
 	{/if}
 
-	<section aria-labelledby="changes-h">
+	<section aria-labelledby="changes-h-t">
 		<div class="changes-head">
-			<h3 id="changes-h">Changes</h3>
+			<h3 id="changes-h"><span id="changes-h-t">Changes</span> <HelpTip key="scenario-change" label="About scenario changes" /></h3>
 			{#if editable}<button type="button" class="btn btn-sm" disabled={!past.length || busy} onclick={undo}>Undo</button>{/if}
 		</div>
 		{#if s.ops.length}
@@ -473,6 +474,7 @@
 				<div class="override-open">
 					<button type="button" class="btn" onclick={() => (overriding = true)}>Edit in the model tables</button>
 					<span class="hint">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
+					<HelpTip key="override-mode" label="About override mode" />
 				</div>
 				<OpForm input={effective} onadd={add} disabled={saving} {projectId} />
 			{/if}
@@ -482,7 +484,7 @@
 
 	{#if baseNodes.length && !isApplication && (editable || s.ownedNodeIds.length)}
 		<fieldset class="owned">
-			<legend>The proposer's hydrological units{ownable.some((g) => g.legend !== 'Hydrological units') ? ' and users' : ''}</legend>
+			<legend>The proposer's hydrological units{ownable.some((g) => g.legend !== 'Hydrological units') ? ' and users' : ''} <HelpTip key="change-class" label="About proposals and baseline assumptions" /></legend>
 			<p class="hint">
 				Changes to the ticked units and users (and to any the scenario adds) are the proposal; changes to anything else are
 				baseline assumptions. Ticking one says whose a change is; it doesn't limit where a change applies (a change to a crop
@@ -513,7 +515,7 @@
 	{#if editable && !isApplication && !overriding}
 		<details class="rebase">
 			<summary>Rebase onto another run</summary>
-			<p class="hint">Apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say).</p>
+			<p class="hint">Apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say). <HelpTip key="base-run" label="About rebasing a scenario" /></p>
 			{#if rebaseChoices.length}
 				<div class="form-row">
 					<div class="field">
@@ -582,9 +584,9 @@
 {/if}
 
 {#if yieldFarms.length}
-	<section class="panel" aria-labelledby="scenario-yield-h">
+	<section class="panel" aria-labelledby="scenario-yield-h-t">
 		<div class="panel-head">
-			<h2 id="scenario-yield-h">Yield under this scenario</h2>
+			<h2 id="scenario-yield-h"><span id="scenario-yield-h-t">Yield under this scenario</span> <HelpTip key="firm-yield" /></h2>
 		</div>
 		<div class="field">
 			<label for="scenario-yield-node">Dam</label>

@@ -4,6 +4,7 @@
 	// only: nothing here blocks a save or a run. Each warning names the
 	// features it is about as buttons that pick them on the map and in the
 	// list (`onpick`); without `onpick` the names are plain text.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { MapFeature, MapNodeArea } from '$lib/api/types';
 	import { KIND_LABEL } from './mapData';
 	import { mapChecks } from './mapChecks';
@@ -38,14 +39,14 @@
 <section class={heading ? 'panel' : 'bare'} aria-labelledby={heading ? `${uid}-h` : undefined} data-testid="map-checks">
 	{#if heading}
 		<div class="panel-head">
-			<h2 id="{uid}-h">Checks</h2>
+			<h2 id="{uid}-h">Checks <HelpTip key="map-checks" /></h2>
 			{#if checks.length}
 				<span class="small muted" data-testid="map-checks-count">{checks.length} {checks.length === 1 ? 'warning' : 'warnings'}</span>
 			{/if}
 		</div>
 	{/if}
 	{#if checks.length}
-		<p class="small muted intro">Warnings only: none of them stops you saving or running the model.</p>
+		<p class="small muted intro">Warnings only: none of them stops you saving or running the model.{#if !heading}{' '}<HelpTip key="map-checks" />{/if}</p>
 		<ul class="checks" id="{uid}-list">
 			{#each shown as c (c.id)}
 				<li class="check" data-check={c.id}>

@@ -2,6 +2,7 @@
 	// Which team (if any) owns the project, and — for owners — moving it into
 	// one of your teams or back to personal.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, hasTeamRole, type Member, type Project, type Team } from '$lib/api';
@@ -61,8 +62,8 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="team-h">
-	<div class="panel-head"><h2 id="team-h">Team</h2></div>
+<section class="panel" aria-labelledby="team-h-t">
+	<div class="panel-head"><h2 id="team-h"><span id="team-h-t">Team</span> <HelpTip key="team" label="About teams" /></h2></div>
 	{#if project.team}
 		<p class="owner-line">
 			{#if project.team.name}

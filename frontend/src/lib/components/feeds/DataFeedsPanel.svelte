@@ -6,6 +6,7 @@
 	Part of the Settings tab's chunk. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
@@ -254,7 +255,7 @@
 <!-- Its #set-feeds anchor is on the wrapper in SettingsTab.svelte, which lazy-loads this panel. -->
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
-		<h2 id="{uid}-h" tabindex="-1" bind:this={heading}>Data feeds</h2>
+		<h2 id="{uid}-h" tabindex="-1" bind:this={heading}>Data feeds <HelpTip key="data-feeds" /></h2>
 		{#if data?.mode === 'fixtures'}<span class="badge badge-warn" title="FEED_SOURCE=fixtures: feeds read synthetic sample files, not the real sources">Sample data</span>{/if}
 	</div>
 	<p class="hint muted">
@@ -359,7 +360,7 @@
 				{#if draft.source === 'dws'}
 					<NearestGauges {projectId} current={draft.station} onuse={useStation} />
 					<div class="field">
-						<label for="{uid}-station">DWS station</label>
+						<label for="{uid}-station">DWS station <HelpTip key="dws-flow" /></label>
 						<input
 							id="{uid}-station"
 							type="text"
@@ -377,7 +378,7 @@
 					{#if draft.source === 'chirps'}
 						<div class="form-row">
 							<div class="field">
-								<label for="{uid}-product">Daily product</label>
+								<label for="{uid}-product">Daily product <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
 								<select id="{uid}-product" bind:value={draft.product} aria-describedby="{uid}-product-h">
 									<option value="sat">sat: from 1998, with preliminary days</option>
 									<option value="rnl">rnl: from 1981, final days only</option>

@@ -7,6 +7,7 @@
 	// counts straight away and fills in the rest when its portfolio arrives.
 	// Beside the cards, what a team is and what each role may do.
 	import { onMount } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
@@ -157,8 +158,8 @@
 					{/snippet}
 				</LoadState>
 			</div>
-			<aside class="panel about" aria-labelledby="about-h">
-				<h2 id="about-h">How teams work</h2>
+			<aside class="panel about" aria-labelledby="about-h-t">
+				<h2 id="about-h"><span id="about-h-t">How teams work</span> <HelpTip key="team" label="About teams" /></h2>
 				<p class="small">A team owns catchments together: everyone in it gets the team's projects, as the role they hold.</p>
 				<dl class="roles">
 					<div><dt>{roleTitle('viewer')}</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>

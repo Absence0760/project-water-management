@@ -212,7 +212,8 @@ test('only a team admin edits the EWR traffic lights; a member reads which apply
 	const theirs = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'EWR traffic lights' });
 	await expect(theirs).toContainText('amber under 12.5 %');
 	await expect(theirs).toContainText('Only owners can change them.');
-	await expect(theirs.getByRole('button')).toHaveCount(0);
+	// No control but the ⓘ help tip (named "About …").
+	await expect(theirs.getByRole('button', { name: /^(?!About )/ })).toHaveCount(0);
 	await expect(theirs.getByRole('spinbutton')).toHaveCount(0);
 
 	// Back to the defaults, after a reload (the saved values come from the server; `settings` keeps the sheet open).

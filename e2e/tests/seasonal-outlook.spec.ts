@@ -198,7 +198,8 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await expect(theirs).toHaveAttribute('data-state', 'complete');
 	await expect(theirs.getByTestId('outlook-planning')).toHaveText((await planning.innerText()).trim());
 	await expect(theirs.getByTestId('outlook-table').locator('tbody tr')).toHaveCount(4);
-	await expect(theirs.getByRole('button', { name: /outlook/ })).toHaveCount(0);
+	// Neither run button (Run seasonal outlook / Run a new outlook); the ⓘ tips (About the seasonal outlook…) stay.
+	await expect(theirs.getByRole('button', { name: /^Run .*outlook/ })).toHaveCount(0);
 });
 
 /**
@@ -325,4 +326,3 @@ test('the review triggers show for the review date, and a level published to far
 	await expect(farmer.page.locator('h1')).toHaveText('Upper farm');
 	await expect(farmer.page.getByTestId('farm-outlook')).toHaveCount(0);
 });
-

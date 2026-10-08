@@ -11,6 +11,7 @@
 	rather than copying it (balanceHref).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
@@ -43,8 +44,8 @@
 	const worstResidual = $derived(rows.reduce((m, r) => Math.max(m, Math.abs(r.residualM3) / Math.max(r.scaleM3, 1)), 0));
 </script>
 
-<section class="water-account" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Water account</h3>
+<section class="water-account" aria-labelledby="{uid}-h-t">
+	<h3 id="{uid}-h"><span id="{uid}-h-t">Water account</span> <HelpTip key="water-account" /></h3>
 	{#if !account}
 		<p class="muted" data-testid="account-not-computed">{notComputedText(engineVersion)}</p>
 	{:else}

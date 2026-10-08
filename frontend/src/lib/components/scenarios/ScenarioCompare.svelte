@@ -9,6 +9,7 @@
 	// a rebased scenario's older run is still compared with its own base.
 	// Under it, the scenario run's validation statement (WP-3.13), folded shut.
 	// The head links to the run's evidence report (issue #71).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { base } from '$app/paths';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { untrack } from 'svelte';
@@ -68,9 +69,9 @@
 	const compareHref = $derived(data ? compareTabHref({ projectId, runId: data.a.run.id }, { projectId, runId: data.b.run.id }) : '');
 </script>
 
-<section class="panel" aria-labelledby="sc-compare-h">
+<section class="panel" aria-labelledby="sc-compare-h-t">
 	<div class="panel-head">
-		<h2 id="sc-compare-h">Scenario against its base</h2>
+		<h2 id="sc-compare-h"><span id="sc-compare-h-t">Scenario against its base</span> <HelpTip key="run-comparison" label="About comparing runs" /></h2>
 		{#if data}
 			<span class="acts">
 				<a class="btn btn-sm" href={compareHref}>Open the full comparison</a>

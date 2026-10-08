@@ -12,6 +12,7 @@
 	show the swing of each factor.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onDestroy } from 'svelte';
 	import { SENSITIVITY_THRESHOLDS, type SensitivityResult } from '@water-management/engine';
 	import { api } from '$lib/api';
@@ -70,8 +71,8 @@
 	const hasReserve = $derived(result?.sites.some((s) => s.hasRuleTable) ?? false);
 </script>
 
-<section aria-labelledby="{uid}-h" data-testid="sensitivity-panel">
-	<h3 id="{uid}-h">Sensitivity runs</h3>
+<section aria-labelledby="{uid}-h-t" data-testid="sensitivity-panel">
+	<h3 id="{uid}-h"><span id="{uid}-h-t">Sensitivity runs</span> <HelpTip key="sensitivity-runs" /></h3>
 	<p class="muted small">
 		How far EWR compliance moves when one input the record can't settle is changed at a time: rain ±10 %, the pan coefficient and the dam
 		evaporation factor ±15 %, abstraction ±30 %, and the dams starting empty or full. The runoff parameters stay this run's. A result whose
@@ -105,7 +106,7 @@
 				</div>
 			{/if}
 		</div>
-		<p class="muted small">The thresholds are provisional defaults (80 %, decided 2026-10-01), not yet confirmed by the catchment’s hydrologist: a rule table and the pragmatic EWR carry no pass mark of their own.</p>
+		<p class="muted small">The thresholds are provisional defaults (80 %, decided 2026-10-01), not yet confirmed by the catchment’s hydrologist: a rule table and the pragmatic EWR carry no pass mark of their own. <HelpTip key="sensitivity-verdict" /></p>
 
 		<ul class="verdicts" data-testid="sensitivity-verdicts">
 			{#each verdicts as v (v.key)}

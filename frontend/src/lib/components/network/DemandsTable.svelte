@@ -7,6 +7,7 @@
 	// sheet its row's Edit opens, and the crops' demand comes from their
 	// planted areas (the farm drawer). Edits go into the shared ModelEditor.
 	import type { ProjectSettings } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type AllocationList } from '$lib/api';
@@ -172,8 +173,8 @@
 						<th scope="col" class="sticky">Demand</th>
 						<th scope="col">Unit</th>
 						<th scope="col">Kind</th>
-						<th scope="col">Water from</th>
-						<th scope="col">Supply order</th>
+						<th scope="col">Water from <HelpTip key="demandObject.waterSource" /></th>
+						<th scope="col">Supply order <HelpTip key="demandObject.priority" /></th>
 						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}<br /><span class="u">{uv.label}</span></th>{/each}
 						<th scope="col" class="num">Mean<br /><span class="u">{uv.label}</span></th>
 						<th scope="col" class="num">Annual<br /><span class="u">Mm³/a</span></th>

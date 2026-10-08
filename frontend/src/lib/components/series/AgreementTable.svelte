@@ -4,6 +4,7 @@
 	// by colour. On the Data page (`fold`) the table flows with the page: the
 	// flagged years and the latest few, the rest behind "Show all N water
 	// years". Elsewhere (Runs) it scrolls in a box, a focusable named region.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { OBSERVED_FLOW_LABEL, waterYearLabel, type ObservedAgreement } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
 	import { agreementFold } from './agreementFold';
@@ -23,7 +24,7 @@
 </script>
 
 <div class="agreement">
-	<svelte:element this={`h${headingLevel}`} id="{uid}-h">Gauge vs logger agreement</svelte:element>
+	<svelte:element this={`h${headingLevel}`} id="{uid}-h">Gauge vs logger agreement <HelpTip key="gauge-logger-agreement" /></svelte:element>
 	<p class="muted small">
 		Two instruments on the same river should roughly agree. A year where one reads a small fraction of the other usually means a
 		problem at one instrument (damaged or silted weir, rating change, bypass, zero-filled gaps). Calibrate against the record you

@@ -13,6 +13,7 @@
 	// editors an owner marked as acting for the responsible authority (163),
 	// record.
 	import { onMount } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '$lib/api';
 	import { REGISTRATION_BODIES, registrationBody as bodyInfo, registrationCategoriesOf, type RegistrationBodyCode } from '@water-management/engine';
 	import { session } from '$lib/auth/session.svelte';
@@ -93,9 +94,9 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="regcheck-h" data-testid="registration-checks">
+<section class="panel" aria-labelledby="regcheck-h-t" data-testid="registration-checks">
 	<div class="panel-head">
-		<h2 id="regcheck-h">Registration checks</h2>
+		<h2 id="regcheck-h"><span id="regcheck-h-t">Registration checks</span> <HelpTip key="registration-check" label="About registration checks" /></h2>
 	</div>
 	<p class="muted small">
 		Before a signer’s evidence pack is issued, someone at your organisation looks their registration up on the public register and records it here. The

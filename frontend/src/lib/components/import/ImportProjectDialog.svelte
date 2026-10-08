@@ -15,6 +15,7 @@
 	// project (importReport.ts; the Overview's Import record shows them).
 	// `source` only picks the wording and what the picker offers; the file's
 	// type decides how it is read, so either entry point takes either kind.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { version } from '$app/environment';
 	import { base } from '$app/paths';
 	import { api, ApiError, type ImportResult, type Team } from '$lib/api';
@@ -306,7 +307,7 @@
 					A Water Balance Tool <strong>b023</strong> workbook (<span class="mono">.xlsm</span>, or
 					<span class="mono">.xlsx</span>) becomes a new project: its network, hydrological units, crops, transfers, settings and
 					[Flow data] series. It's read here in your browser; only the project is sent. Formulas and macros are never run,
-					and the per-farm result sheets aren't imported. Up to {WORKBOOK_MAX_MB} MB.
+					and the per-farm result sheets aren't imported. Up to {WORKBOOK_MAX_MB} MB. <HelpTip key="workbook-import" />
 				</p>
 			{:else}
 				<p class="muted small">

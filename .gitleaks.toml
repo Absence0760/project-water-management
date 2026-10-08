@@ -24,4 +24,8 @@ regexes = [
   # A model field's name after "key:" (issue #444, bed losses), reviewed 2026-10-07: generic-api-key matched it in
   # frontend/src/lib/components/network/fields.ts and its test on main's push scan of #445.
   '''^reachLossMaxM3Day$''',
+  # Two run-summary field names after "key:" (the help tips PR), reviewed 2026-10-08: generic-api-key matched them
+  # in frontend/src/lib/components/supply/UnitResultsTable.svelte's column list when its lines gained a help key.
+  '''^avgSuppliedM3Day$''',
+  '''^avgDeficitM3Day$''',
 ]

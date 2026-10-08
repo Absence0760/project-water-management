@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	// The per-unit table of one run: whole-record demand, supply, deficit,
 	// share supplied (with its bar) and EWR charge, sortable, with the totals.
 	// Moved from the Runs tab's summary to Units & supply (issue #17); the
@@ -56,13 +57,13 @@
 	}
 	const ariaSort = (k: FarmSortKey) => (sortKey === k ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined);
 
-	const COLS: { key: FarmSortKey; label: string; unit: string; title: string }[] = [
-		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean abstraction demand over the run: the crop water requirement after effective rainfall ÷ irrigation efficiency (what the hydrological unit takes to meet it).' },
-		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.' },
-		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).' },
-		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; hydrological units under ${SUPPLY_TARGET * 100} % are flagged.` },
-		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day charged', title: 'Mean share of the shortfall at the EWR sites below this hydrological unit that is charged to it, pro rata to its net impact, as a positive volume, as in the curtailment table (engine 0.17.0; older runs: the reach shortfall it adds).' }, // gitleaks:allow (a field name, not a secret)
-		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this hydrological unit was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
+	const COLS: { key: FarmSortKey; label: string; unit: string; title: string; help: string }[] = [
+		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean abstraction demand over the run: the crop water requirement after effective rainfall ÷ irrigation efficiency (what the hydrological unit takes to meet it).', help: 'irrigation-demand' },
+		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.', help: 'irrigation-supplied' },
+		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).', help: 'irrigation-deficit' },
+		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; hydrological units under ${SUPPLY_TARGET * 100} % are flagged.`, help: 'fraction-supplied' },
+		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day charged', title: 'Mean share of the shortfall at the EWR sites below this hydrological unit that is charged to it, pro rata to its net impact, as a positive volume, as in the curtailment table (engine 0.17.0; older runs: the reach shortfall it adds).', help: 'ewr-charge' }, // gitleaks:allow (a field name, not a secret)
+		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this hydrological unit was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).', help: 'ewr-days-not-met' }
 	];
 </script>
 
@@ -96,6 +97,7 @@
 							<button type="button" class="sort" onclick={() => sortBy(col.key)}>
 								{#if sortKey === col.key}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}{col.label}<br /><span class="u">{col.unit}</span>
 							</button>
+							<HelpTip key={col.help} />
 						</th>
 					{/each}
 				</tr>

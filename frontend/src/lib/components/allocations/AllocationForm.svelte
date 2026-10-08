@@ -5,6 +5,7 @@
 	// only they send a holder name (decision D3).
 	import { api, type Allocation, type AllocationInput } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { parseNum } from '$lib/format/number';
 	import { AUTHORISATION_LABEL, conditionsFromText, monthShort, PURPOSE_LABEL, SOURCE_LABEL, WATER_USE_LABEL, WATER_YEAR_MONTHS } from './allocations';
 
@@ -129,13 +130,13 @@
 		</div>
 		<div class="pair">
 			<div class="field">
-				<label for="af-auth">Authorisation</label>
+				<span class="label"><label for="af-auth">Authorisation</label> <HelpTip key="authorisation-type" /></span>
 				<select id="af-auth" bind:value={draft.authorisation}>
 					{#each Object.entries(AUTHORISATION_LABEL) as [v, l] (v)}<option value={v}>{l}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
-				<label for="af-use">Water use</label>
+				<span class="label"><label for="af-use">Water use</label> <HelpTip key="s21-water-use" label="About taking and storing water" /></span>
 				<select
 					id="af-use"
 					bind:value={draft.waterUse}
@@ -163,7 +164,7 @@
 			</div>
 			{#if !storageOnly}
 				<div class="field">
-					<label for="af-volume">Volume (m³ per year)</label>
+					<span class="label"><label for="af-volume">Volume (m³ per year)</label> <HelpTip key="registered-volume" label="About registered volumes" /></span>
 					<input id="af-volume" type="text" inputmode="decimal" required bind:value={draft.volume} />
 				</div>
 			{/if}
@@ -199,7 +200,7 @@
 			<input id="af-ref" type="text" maxlength="500" bind:value={draft.reference} />
 		</div>
 		<fieldset class="conditions">
-			<legend>Licence conditions <span class="muted">(optional; a cap run keeps to the months and the rate)</span></legend>
+			<legend>Licence conditions <span class="muted">(optional; a cap run keeps to the months and the rate)</span> <HelpTip key="licence-conditions" /></legend>
 			<div class="field">
 				<span class="lbl" id="af-months-l">Months water may be taken</span>
 				<div class="months" role="group" aria-labelledby="af-months-l" data-testid="allocation-months">

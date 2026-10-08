@@ -404,7 +404,7 @@
 	</div>
 	{#if askProvenance}
 		<div class="field">
-			<label for={id('provenance')}>CHIRPS product and version</label>
+			<label for={id('provenance')}>CHIRPS product and version <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
 			<select id={id('provenance')} bind:value={provenanceKey} onchange={() => (provenanceTouched = true)} aria-describedby={id('provenance-h')}>
 				<option value="">Not known</option>
 				{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
@@ -446,7 +446,7 @@
 	{/if}
 	{#if subDailyText !== null}
 		<fieldset class="mode" data-testid="day-boundary">
-			<legend>This file has several readings a day. Add them up into days from</legend>
+			<legend>This file has several readings a day. Add them up into days from <HelpTip key="day-boundary" /></legend>
 			<label
 				><input type="radio" name="{idPrefix}-boundary" value="08:00" checked={dayBoundary === '08:00'} onchange={() => onBoundary('08:00')} /> 08:00 to 08:00,
 				booked to the day it starts (the manual-gauge day)</label
@@ -463,7 +463,7 @@
 	{/if}
 	{#if target}
 		<fieldset class="mode">
-			<legend>“{target.name || kindLabel(target.kind)}” already exists ({target.startDate} → {seriesEnd(target)})</legend>
+			<legend>“{target.name || kindLabel(target.kind)}” already exists ({target.startDate} → {seriesEnd(target)}) <HelpTip key="series-update-mode" /></legend>
 			<label><input type="radio" name="{idPrefix}-mode" value="merge" bind:group={mode} /> Append / update: add new days, correct overlapping ones</label>
 			<label><input type="radio" name="{idPrefix}-mode" value="replace" bind:group={mode} /> Replace the whole series with this file</label>
 		</fieldset>
@@ -524,7 +524,7 @@
 				{@const d = parsed.dws}
 				{@const dropped = d.gaps.code + d.gaps.negative + d.gaps.blank}
 				<div class="wide">
-					<dt>DWS export</dt>
+					<dt>DWS export <HelpTip key="dws-flow" /></dt>
 					<dd data-testid="dws-summary">
 						{fmtNum(d.rows)} rows{#if d.column}, {d.column}{/if}.
 						{#if dropped}

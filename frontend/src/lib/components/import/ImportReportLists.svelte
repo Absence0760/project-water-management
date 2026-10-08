@@ -6,6 +6,7 @@
 	// reviewer reads later is what the importer showed. Everything here comes
 	// from the file (farm names, formula text), so it is rendered as text only:
 	// plain interpolation, never {@html}.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 	import { location } from './workbookFile';
 
@@ -70,7 +71,7 @@
 {/snippet}
 
 <section class="report" aria-labelledby="{idPrefix}-notes-h">
-	<h3 id="{idPrefix}-notes-h">Importer notes</h3>
+	<h3 id="{idPrefix}-notes-h">Importer notes <HelpTip key="workbook-import" label="About the import and its report" /></h3>
 	{#if notes.length}
 		<p class="hint muted">
 			{notes.length === 1 ? 'One note' : `${notes.length} notes`}{warnings ? `, ${warnings} of them ${warnings === 1 ? 'a warning' : 'warnings'}` : ''}. Read them before relying on a run.

@@ -57,6 +57,7 @@
 	import PackSendDialog from '$lib/components/packs/PackSendDialog.svelte';
 	import PackActions from '$lib/components/packs/PackActions.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
 
@@ -245,19 +246,21 @@
 			{#if manifestUrl}<a class="btn" href={manifestUrl} download={manifestFileName(pack.shortCode)} data-testid="pack-manifest-download">Download manifest</a>{/if}
 			{#if bundleUrl}<a class="btn" href={bundleUrl} data-testid="pack-bundle-download">Download reproduction bundle</a>{/if}
 			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
-			{#if canShare}<button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="pack-share-open">Share link…</button>{/if}
-			{#if canEdit && pack.status === 'issued'}<button type="button" class="btn" onclick={() => (sendOpen = true)} data-testid="pack-send-open">Send to the authority…</button>{/if}
+			{#if canShare}<span class="with-tip"><button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="pack-share-open">Share link…</button><HelpTip key="pack-share-link" label="About sharing a pack by link" /></span>{/if}
+			{#if canEdit && pack.status === 'issued'}<span class="with-tip"><button type="button" class="btn" onclick={() => (sendOpen = true)} data-testid="pack-send-open">Send to the authority…</button><HelpTip key="send-to-authority" label="About sending a pack to the authority" /></span>{/if}
 			{#if project}<NotesDrawer {projectId} target={{ kind: 'pack', packId: pack.id, name: `evidence pack v${pack.version}`, audiences: packAudiences(pack.status === 'issued') }} />{/if}
 			<p class="muted small">
 				Version {pack.version}{pack.supersedesId ? ' (replaces an earlier version)' : ''} · code <span class="mono" data-testid="pack-code">{pack.shortCode}</span> · manifest SHA-256
-				<span class="mono hash">{pack.manifestSha256}</span>. {#if pack.pdfSha256}PDF SHA-256 <span class="mono hash">{pack.pdfSha256}</span>{pack.pdfPages ? ` (${pack.pdfPages} pages)` : ''}.{:else}No server PDF recorded yet: Download PDF prints this page in the browser.{/if}
+				<span class="mono hash">{pack.manifestSha256}</span>. <HelpTip key="manifest-hash" label="About the manifest and its SHA-256" />
+				{#if pack.pdfSha256}PDF SHA-256 <span class="mono hash">{pack.pdfSha256}</span>{pack.pdfPages ? ` (${pack.pdfPages} pages)` : ''}.{:else}No server PDF recorded yet: Download PDF prints this page in the browser.{/if}
+				<HelpTip key="pack-pdf" label="About the evidence pack’s PDF" />
 				{#if pack.bundleSha256}Reproduction bundle SHA-256 <span class="mono hash" data-testid="pack-bundle-sha">{pack.bundleSha256}</span> (re-run it with
-					<span class="mono">pnpm reproduce:pack</span>).{/if}
+					<span class="mono">pnpm reproduce:pack</span>). <HelpTip key="reproduction-bundle" label="About the reproduction bundle" />{/if}
 			</p>
 			{#if detail.errataFoundSince.length}
 				{@const since = errataFoundSinceNote(pack)}
 				<div class="alert alert-warning errata-alert" role="note" data-testid="pack-errata-since">
-					<strong>{since.heading}:</strong>
+					<strong>{since.heading}:</strong> <HelpTip key="errata-since" label="About errata found since" />
 					<ul class="errata-since">{#each detail.errataFoundSince as e (e.id)}<li><strong>{e.id}</strong> {e.summary}</li>{/each}</ul>
 					<p class="small">{since.note}</p>
 				</div>
@@ -332,6 +335,11 @@
 		margin: 0;
 		flex-basis: 100%;
 		overflow-wrap: anywhere;
+	}
+	.with-tip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 	.errata-alert {
 		flex-basis: 100%;

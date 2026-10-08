@@ -485,8 +485,9 @@
 						checked={!!s.lakeEvapFactorMonthly}
 						onchange={(e) => setLakeMonthlyOn(e.currentTarget.checked)}
 					/>
-					Vary it by month <HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
+					Vary it by month
 				</label>
+				<HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
 			</div>
 		</div>
 		<div class="field lake-preset">
@@ -603,7 +604,7 @@
 			</div>
 		</div>
 		<fieldset class="plain x2">
-			<legend>Groundwater exchange (X2)</legend>
+			<legend>Groundwater exchange (X2) <HelpTip key="gr4j" label="About groundwater exchange (X2)" /></legend>
 			<label class="check">
 				<input type="checkbox" disabled={readonly} checked={draft.x2Open} onchange={(e) => setX2Open(e.currentTarget.checked)} />
 				Let the catchment gain or lose groundwater

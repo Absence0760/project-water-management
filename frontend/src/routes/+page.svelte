@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -392,7 +393,7 @@
 						>.{:else}A team owner can change them on the <a href="{base}/teams/{selectedTeam.id}">team page</a>.{/if}
 				</p>
 			{/if}
-			
+
 			<NeedsAttention
 				{flagged}
 				loading={outcomes === null && !outcomesFailed}
@@ -502,7 +503,7 @@
 			<input id="np-name" required maxlength="200" placeholder="e.g. Upper Breede — 2026 baseline" bind:value={newName} />
 		</div>
 		<div class="field">
-			<label for="np-team">Belongs to</label>
+			<span class="label"><label for="np-team">Belongs to</label> <HelpTip key="team" label="About teams" /></span>
 			<select id="np-team" bind:value={newTeamId} aria-describedby="np-team-hint">
 				<option value="">Personal</option>
 				{#each addableTeams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
@@ -588,7 +589,7 @@
 			{/if}
 		</p>
 		<div class="field">
-			<label for="cp-name">Name of the copy</label>
+			<span class="label"><label for="cp-name">Name of the copy</label> <HelpTip key="project-copy" label="About copying a project" /></span>
 			<input id="cp-name" required maxlength="200" bind:value={copyName} />
 		</div>
 	</form>

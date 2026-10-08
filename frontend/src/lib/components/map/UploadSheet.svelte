@@ -14,6 +14,7 @@
 	widens for the table; on a phone each row is a card of labelled fields.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, ApiError, type MapFeatureKind, type MapImportPreview, type MapImportProblem, type MapSource } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { areaText, GEO_MAX_BYTES, importProblems, KIND_LABEL, KIND_NODES, problemText } from './mapData';
@@ -160,7 +161,7 @@
 	{#if !review}
 		<form id={formId} onsubmit={readFile} novalidate>
 			<div class="field">
-				<label for="{uid}-file">GeoJSON file <span class="u">(WGS84, at most 5 MB)</span></label>
+				<label for="{uid}-file">GeoJSON file <span class="u">(WGS84, at most 5 MB)</span> <HelpTip key="map-geojson-upload" label="About the GeoJSON checks" /></label>
 				<input
 					id="{uid}-file"
 					type="file"

@@ -13,6 +13,7 @@
 	without reading the map's pixels.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { KeyItem } from './mapList';
@@ -78,12 +79,13 @@
 <div class="key-row" data-testid="map-results" data-view={results.on ? results.view : 'kind'} data-fill-theme={dark ? 'dark' : 'light'} data-ready={results.on ? (results.ready ? 'true' : 'false') : undefined}>
 	{#if results.run}
 		<div class="pickers small">
-			<label class="pick">
-				<span>Colour areas by</span>
-				<select value={results.view} onchange={(e) => pickView(e.currentTarget.value as MapView)} data-testid="map-measure">
+			<!-- label for=, not a wrapping label: a tip inside one would be the label's first labelable element and take the select's name. -->
+			<div class="pick">
+				<span><label for="map-measure">Colour areas by</label> <HelpTip key="map-results" /></span>
+				<select id="map-measure" value={results.view} onchange={(e) => pickView(e.currentTarget.value as MapView)} data-testid="map-measure">
 					{#each VIEW_OPTIONS as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
 				</select>
-			</label>
+			</div>
 			{#if canEdit && results.runs.length > 1}
 				<label class="pick">
 					<span>Run</span>

@@ -12,6 +12,7 @@
 <script lang="ts">
 	import { DEMAND_NORMS, DEMAND_PCT_FLOOR_M3_DAY, EQUITABLE_SHARE_FOOTNOTE, type CurtailmentSummary } from '@water-management/engine';
 	import { shareThePain, type StageCell } from './shareThePain';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 
 	let {
 		curtailment,
@@ -38,7 +39,7 @@
 {/snippet}
 
 <section class="share-board" aria-labelledby="share-board-heading" data-testid="share-the-pain">
-	<h4 id="share-board-heading">Share the pain</h4>
+	<h4 id="share-board-heading">Share the pain <HelpTip key="share-the-pain" /></h4>
 	<p class="muted small" data-testid="share-intro">
 		Each group's supply as a share of its own demand over the same days, in two steps: what it got, and what is left once the
 		EWR is met too.

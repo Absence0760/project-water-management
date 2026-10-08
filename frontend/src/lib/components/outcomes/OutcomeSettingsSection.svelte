@@ -6,6 +6,7 @@
 	// run. The cut-offs' defaults are placeholders pending the hydrologist
 	// (plan.md O1; the client agreed, issue #90), and the section says so while
 	// they are in use. The year-class method's default is confirmed (O2).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { DEFAULT_OUTCOME_RISK_CUTOFFS, YEAR_CLASS_QUINTILE_MIN_YEARS, type YearClassMethod } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import type { OutcomeSettings } from '$lib/api/types';
@@ -43,13 +44,13 @@
 	const pct = (v: number) => `${Math.round(v * 1000) / 10} %`;
 </script>
 
-<section class="panel" aria-labelledby="out-h" data-testid="outcome-settings">
+<section class="panel" aria-labelledby="out-h-t" data-testid="outcome-settings">
 	<div class="panel-head">
-		<h2 id="out-h">Outcome matrix</h2>
+		<h2 id="out-h"><span id="out-h-t">Outcome matrix</span> <HelpTip key="outcome-matrix" /></h2>
 		<span class="muted small">How the Runs tab reads a demand sweep by class of year</span>
 	</div>
 	<div class="field">
-		<label for="out-method">Water-year classes</label>
+		<label for="out-method">Water-year classes <HelpTip key="year-class" /></label>
 		<select id="out-method" disabled={readonly} bind:value={value.yearClassMethod} aria-describedby="out-method-h">
 			{#each METHODS as m (m.value)}
 				<option value={m.value}>{m.label}</option>
@@ -64,7 +65,7 @@
 		{@const pair = value.riskCutoffs[m.id]}
 		<fieldset class="metric">
 			<legend>
-				{m.legend}
+				{m.legend} <HelpTip key="outcome-risk" label="About the risk cut-offs: {m.legend}" />
 				{#if !pair}<span class="badge badge-warn" data-testid="cutoffs-pending-{m.id}">Provisional defaults, not yet confirmed by the catchment’s hydrologist</span>{/if}
 			</legend>
 			<label class="check">

@@ -4,8 +4,8 @@
 // the source) is in articles.ts under the same id; content.ts joins the two
 // for the glossary and search. The farm view's words are in farmer.ts.
 //
-// Split so a HelpTip loads only this (~11 KB gzip) and not the glossary's
-// long text (~34 KB): lib/help/content.test.ts keeps HelpTip.svelte off
+// Split so a HelpTip loads only this (~22 KB gzip, 2026-10-08) and not the glossary's
+// long text (~110 KB in six modules): lib/help/content.test.ts keeps HelpTip.svelte off
 // content.ts and articles.ts, and keeps this file free of run-time imports.
 // Adding an entry: add it here and in articles.ts (the tests fail until
 // both have it); the order here is the glossary's order within a topic.
@@ -63,6 +63,114 @@ export const TIPS: HelpTipText[] = [
 		category: 'basics'
 	},
 	{
+		id: 'team',
+		term: 'Team',
+		short: 'A group that owns catchments together: each member has the same role on every team project as they hold in the team.',
+		category: 'basics'
+	},
+	{
+		id: 'invitation',
+		term: 'Invitation',
+		short: 'Adding someone by email sends an invitation: they join, with the role named, only once they accept it. It lapses after 7 days.',
+		category: 'basics'
+	},
+	{
+		id: 'farmer-link',
+		term: 'Farmer and their linked units',
+		short: 'A farmer reads only the hydrological units an owner links to them, from the published run: never another unit, nor the model.',
+		category: 'basics'
+	},
+	{
+		id: 'applying-party',
+		term: 'Applying party and specialist',
+		short: 'Applicants in one applying party share their licence applications; the party’s specialist signs their evidence packs.',
+		category: 'basics'
+	},
+	{
+		id: 'registration-check',
+		term: 'Registration check',
+		short: 'A record that someone looked a specialist signer up on the public professional register. The app itself checks nothing.',
+		category: 'basics'
+	},
+	{
+		id: 'licence-record',
+		term: 'Licence record (how long names are kept)',
+		short: 'Issued evidence packs and signed-off runs keep their signers’ names until three years after the licence ends or is refused.',
+		category: 'basics'
+	},
+	{
+		id: 'share-link',
+		term: 'Share link',
+		short: 'A read-only link for someone outside the project, opened without signing in, to the published baseline, an application or a pack.',
+		category: 'basics'
+	},
+	{
+		id: 'project-copy',
+		term: 'Copy of a project',
+		short: 'A new, separate project with the model, settings and input series of another. Runs, notes and members are not copied.',
+		category: 'basics'
+	},
+	{
+		id: 'project-file',
+		term: 'Project file (JSON)',
+		short: 'The whole project in one JSON file: model, settings and input series, without runs. Importing it makes a new project.',
+		category: 'basics'
+	},
+	{
+		id: 'project-time-zone',
+		term: 'Project time zone',
+		short: 'The time zone the project’s downloads, alerts and farm pages count days in. Africa/Johannesburg unless changed.',
+		category: 'basics'
+	},
+	{
+		id: 'import-record',
+		term: 'Import record',
+		short: 'What the importer noted, and what it couldn’t map, when the project was imported from a file, kept as it was shown then.',
+		category: 'basics'
+	},
+	{
+		id: 'change-history',
+		term: 'Change history and restoring',
+		short: 'Every saved change to the model, settings, data, members and publications, with who, when and why. Restoring adds a new change.',
+		category: 'basics'
+	},
+	{
+		id: 'notes',
+		term: 'Notes',
+		short: 'Plain-text notes kept on a hydrological unit, a run, a settings group or the project, read by the project team.',
+		category: 'basics'
+	},
+	{
+		id: 'api-key',
+		term: 'API key',
+		short: 'A secret a logger gateway or a script uses to push daily readings into this project’s series without signing in. It writes series only.',
+		category: 'basics'
+	},
+	{
+		id: 'alert-rules',
+		term: 'Alert rules',
+		short: 'Which alert emails a catchment sends, and at what level. Nothing is sent until an editor switches a kind on.',
+		category: 'basics'
+	},
+	{
+		id: 'ewr-traffic-light',
+		term: 'EWR status (traffic light)',
+		short: 'Green, amber or red by the share of the last 30 days the outlet’s EWR was not met: by default green under 5 %, amber under 20 %.',
+		category: 'basics'
+	},
+	{
+		id: 'needs-attention',
+		term: 'Needs attention',
+		short: 'The catchments in view to look at first, most urgent first: a red EWR, units short, alerts firing, failing feeds or old figures.',
+		category: 'basics'
+	},
+	{
+		id: 'privacy-contact',
+		term: 'Privacy contact',
+		short: 'Whom people ask about the personal information in a team’s projects. Team owners set it; members and farmers can read it.',
+		category: 'basics'
+	},
+	{
 		id: 'published-baseline',
 		term: 'Published baseline',
 		short: 'The run an editor publishes for the people outside the model: farmers read their figures from it, and licence applications start from it.',
@@ -72,6 +180,57 @@ export const TIPS: HelpTipText[] = [
 		id: 'scenario',
 		term: 'Scenario',
 		short: 'A named list of changes to a run (a bigger dam, a new crop, less rain) that runs and compares against that run without copying the project.',
+		category: 'licensing'
+	},
+	// ---- Scenario changes, their classes and cumulative impact (scenarios, Assess together)
+	{
+		id: 'base-run',
+		term: 'Base run',
+		short: 'The saved run a scenario starts from: its changes apply to that run’s stored inputs, never to the live model.',
+		category: 'licensing'
+	},
+	{
+		id: 'scenario-change',
+		term: 'Scenario change (override)',
+		short: 'One edit in a scenario’s list: set a field, add or remove an element, scale rain or demand. Each applies to what the ones before it left.',
+		category: 'licensing'
+	},
+	{
+		id: 'change-class',
+		term: 'Proposal or baseline assumption',
+		short: 'Each change is a Proposal (the change being assessed) or a Baseline assumption (it changes what the river is taken to be today).',
+		category: 'licensing'
+	},
+	{
+		id: 'override-mode',
+		term: 'Edit in the model tables (override mode)',
+		short: 'Edit a scenario in the Network, Crops and Transfers tables; Record turns your edits into scenario changes. The live model is untouched.',
+		category: 'licensing'
+	},
+	{
+		id: 'scale-demand',
+		term: 'Scale demand',
+		short: 'A change that multiplies irrigation or other users’ demand (0–200 %) for chosen units and months. Crop areas stay as they are.',
+		units: '% of what they’d take',
+		category: 'licensing'
+	},
+	{
+		id: 'scale-series',
+		term: 'Scale rainfall or daily A-pan',
+		short: 'A change that multiplies one rain series or the daily A-pan series by a % change, over the whole record or between two dates.',
+		units: '%',
+		category: 'licensing'
+	},
+	{
+		id: 'cumulative-assessment',
+		term: 'Assess together (cumulative impact)',
+		short: 'Several applications on one baseline, each alone and all together, so their combined effect on the river and existing users shows.',
+		category: 'licensing'
+	},
+	{
+		id: 'cumulative-interaction',
+		term: 'Interaction (cumulative impact)',
+		short: 'The change with every application together, less the changes each makes alone added up. Zero means their effects simply add.',
 		category: 'licensing'
 	},
 	{
@@ -84,6 +243,174 @@ export const TIPS: HelpTipText[] = [
 		id: 'evidence-pack',
 		term: 'Evidence pack',
 		short: 'An application’s evidence report frozen as a signed, versioned document with a short code anyone can check against the app.',
+		category: 'licensing'
+	},
+	// ---- Evidence, packs and registered volumes (evidence reports, packs, sign-off, allocations)
+	{
+		id: 'evidence-report',
+		term: 'Evidence report',
+		short: 'The licensing report of one run: the nominated baseline alone, or an application against it. A draft until it is issued as a pack.',
+		category: 'licensing'
+	},
+	{
+		id: 'pack-issue-checks',
+		term: 'Checks that stop issue',
+		short: 'What an evidence report must pass before it can become a pack and be issued. A failing check names its units and the way out.',
+		category: 'licensing'
+	},
+	{
+		id: 'pack-lifecycle',
+		term: 'Evidence pack lifecycle',
+		short: 'Draft, signed, issued, then superseded by a new version or withdrawn with a public reason. An issued pack is never edited or deleted.',
+		category: 'licensing'
+	},
+	{
+		id: 'manifest-hash',
+		term: 'Manifest and manifest SHA-256',
+		short: 'The pack’s frozen content and its fingerprint: any change to the evidence changes the hash; its status and sign-offs don’t.',
+		category: 'licensing'
+	},
+	{
+		id: 'pack-short-code',
+		term: 'Short code and verify page',
+		short: 'The first 12 digits of the manifest hash. Anyone can enter it on the public verify page to see if the pack still stands.',
+		category: 'licensing'
+	},
+	{
+		id: 'pack-pdf',
+		term: 'Evidence pack PDF',
+		short: 'The issued pack printed once by the server and stored under its own SHA-256, which the verify page shows.',
+		category: 'licensing'
+	},
+	{
+		id: 'reproduction-bundle',
+		term: 'Reproduction bundle',
+		short: 'A ZIP of both runs’ inputs, results and the manifest, built at issue, that anyone can re-run offline to get the same results.',
+		category: 'licensing'
+	},
+	{
+		id: 'errata-since',
+		term: 'Errata found since',
+		short: 'Known engine bugs recorded after a pack was drafted or issued that apply to its runs. Listed apart; never added to the pack.',
+		category: 'licensing'
+	},
+	{
+		id: 'signoff-statement',
+		term: 'Professional sign-off',
+		short: 'A registered professional’s permanent statement about one run or pack: ten confirmations, bound by a hash to the exact words shown.',
+		category: 'licensing'
+	},
+	{
+		id: 'pack-signoff',
+		term: 'Signing an evidence pack',
+		short: 'The applicant’s specialist signs the draft (an assessor may add a review); issue then waits for a current registration check.',
+		category: 'licensing'
+	},
+	{
+		id: 'report-disclaimer',
+		term: 'Report disclaimer',
+		short: 'Model estimates, not an authorisation to use water, and the operator accepts no responsibility: printed on every report and export.',
+		category: 'licensing'
+	},
+	{
+		id: 'responsible-authority',
+		term: 'Responsible authority and endorsement',
+		short: 'Who decides the licence (DWS or a CMA), and whether a member acting for it endorsed the published baseline. The report says both.',
+		category: 'licensing'
+	},
+	{
+		id: 'full-authorised-use',
+		term: 'Impact against full authorised use',
+		short: 'The application judged with every holder taking their full registered volume, beside the impact against today’s modelled use.',
+		category: 'licensing'
+	},
+	{
+		id: 'licence-impact-year-class',
+		term: 'Impact by year class',
+		short: 'The change in dry, middle and wet years: an annual waterfall at the outlet and the months below the Reserve, baseline vs application.',
+		category: 'licensing'
+	},
+	{
+		id: 'pack-share-link',
+		term: 'Share link to an evidence pack',
+		short: 'A read-only link for people without an account: the pack’s standing and river figures, never a farm, a name or the full report.',
+		category: 'licensing'
+	},
+	{
+		id: 'send-to-authority',
+		term: 'Send to the authority',
+		short: 'Emails the members acting for the responsible authority a link to the issued pack. The email carries no file and no download link.',
+		category: 'licensing'
+	},
+	{
+		id: 'applicant-copy',
+		term: 'Applicant’s printable copy',
+		short: 'A PDF of the applicant’s own view of an issued pack, other users’ figures withheld. Not the pack: it has its own hash.',
+		category: 'licensing'
+	},
+	{
+		id: 'restriction-notice',
+		term: 'Restriction notice',
+		short: 'The WUA’s own notice (level, cut and words), published with the baseline for farmers. The app never writes restriction wording.',
+		category: 'licensing'
+	},
+	{
+		id: 'registered-volume',
+		term: 'Registered volume (allocation)',
+		short: 'One volume a year from one water source under one authorisation, for a hydrological unit or other water user. Not an entitlement.',
+		units: 'm³ a year',
+		category: 'licensing'
+	},
+	{
+		id: 'authorisation-type',
+		term: 'Authorisation',
+		short: 'How a volume is held: a WARMS registration, a licence, a general authorisation, Schedule 1, or existing lawful use, claimed or verified.',
+		category: 'licensing'
+	},
+	{
+		id: 's21-water-use',
+		term: 'Water use: taking (s21a) or storing (s21b)',
+		short: 'A take is a volume a year; a dam’s storage is a row of its own, compared only with the dam’s capacity, never counted as a take.',
+		category: 'licensing'
+	},
+	{
+		id: 'licence-conditions',
+		term: 'Licence conditions',
+		short: 'Months of use, a maximum rate and conditions in words. Only a cap run keeps to the months and the rate; the words are only shown.',
+		units: 'm³/s',
+		category: 'licensing'
+	},
+	{
+		id: 'warms-import',
+		term: 'Importing registered volumes (WARMS)',
+		short: 'A CSV of a WARMS extract or the template, matched to units by registration number, property or name. Removable as one import.',
+		category: 'licensing'
+	},
+	{
+		id: 'registered-vs-modelled',
+		term: 'Modelled use vs registered volume',
+		short: 'Each unit’s modelled use per water year beside its registered volume: above, within or below the band. Modelled, not metered.',
+		units: 'm³ a water year',
+		category: 'licensing'
+	},
+	{
+		id: 'registered-storage',
+		term: 'Registered storage vs dam capacity',
+		short: 'A unit’s registered dam storage (s21b) beside the capacity the run modelled: over, under or unregistered. Arithmetic only.',
+		units: 'm³',
+		category: 'licensing'
+	},
+	{
+		id: 'cap-held-back',
+		term: 'What the cap held back',
+		short: 'In a cap run, the days a unit went short because its year’s volume was used up, it hit the maximum rate, or the month was closed.',
+		units: 'days',
+		category: 'licensing'
+	},
+	{
+		id: 'allocation-viewer-access',
+		term: 'Who sees registered volumes',
+		short: 'Owners and editors see every volume and name; viewers only totals held by 5 or more users, unless an owner allows more. Names never.',
 		category: 'licensing'
 	},
 	{
@@ -783,6 +1110,42 @@ export const TIPS: HelpTipText[] = [
 		category: 'fit'
 	},
 	{
+		id: 'calibration-objective',
+		term: 'Objective (what a fit optimises)',
+		short: 'The score the search maximises. Choose it by what the fit will feed, before seeing any score: KGE′ by default, a low-flow one for EWR.',
+		category: 'fit'
+	},
+	{
+		id: 'validation-tests',
+		term: 'Validation tests (held-out scores)',
+		short: 'Scores on days a fit never saw: the record’s second half, the wettest years after fitting the driest, or a second instrument.',
+		category: 'fit'
+	},
+	{
+		id: 'calibration-search',
+		term: 'Search: model runs, starts and seed',
+		short: 'How hard the optimiser looks: model runs per search (1 500), separate searches from their own seeds (5), and a seed that makes it repeat.',
+		category: 'fit'
+	},
+	{
+		id: 'fit-benchmarks',
+		term: 'Benchmarks (mean flow and climatology)',
+		short: 'Two naive simulations scored on the same days: the mean flow every day, and each calendar day’s smoothed average. A model should beat both.',
+		category: 'fit'
+	},
+	{
+		id: 'score-interval',
+		term: 'Score range (90 %, by water year)',
+		short: 'The bracketed range beside a score: its 5th–95th percentile with whole water years resampled 1 000 times. Wide = the record can’t pin it.',
+		category: 'fit'
+	},
+	{
+		id: 'record-representativeness',
+		term: 'How representative the record is',
+		short: 'How many water years a fit scored and where each year’s rain sits in the long-term record: dry, near normal or wet.',
+		category: 'fit'
+	},
+	{
 		id: 'uncertainty-bands',
 		term: 'Uncertainty bands (behavioural ensemble)',
 		short: 'How far a run’s results move across every parameter set and forcing the data can’t rule out: 5–95 % bands, never below 30 kept sets.',
@@ -816,6 +1179,14 @@ export const TIPS: HelpTipText[] = [
 		category: 'fit'
 	},
 	{
+		id: 'wr2012-fit-statistics',
+		term: 'WR2012 fit statistics',
+		short: 'Five statistics of annual and monthly flow, observed against simulated, each with its % difference and a good-fit band. Never optimised.',
+		units: 'Mm³ ; %',
+		category: 'fit',
+		fields: ['stats.wr2012Fit']
+	},
+	{
 		id: 'calibration-exclusions',
 		term: 'Calibration exclusions',
 		short: 'Water years or date ranges left out of every calibration score, each with a reason that runs keep on record.',
@@ -835,6 +1206,31 @@ export const TIPS: HelpTipText[] = [
 		short: 'Rules saved before any fit is seen: which years to leave out, which fits to try and which one to keep. The fit then picks itself.',
 		category: 'fit',
 		fields: ['settings.calibrationRules']
+	},
+	{
+		id: 'calibration-selection-score',
+		term: 'Selection score (which fit the rules keep)',
+		short: 'The one score, on one held-out test, that every fit the rules try is compared on. The best passing fit is kept. Match it to the use.',
+		category: 'fit'
+	},
+	{
+		id: 'flagged-year-rule',
+		term: 'Flagged-year exclusion rule',
+		short: 'Leaves a whole water year out of every fit when more than this share of its observed days carry a quality flag. Default 20 %.',
+		units: '%',
+		category: 'fit'
+	},
+	{
+		id: 'calibration-rule-filters',
+		term: 'Filters a kept fit must pass',
+		short: 'A fit is only kept if its natural MAR is inside the WR2012 band and its parameters are in the typical range. If none passes, none is kept.',
+		category: 'fit'
+	},
+	{
+		id: 'rules-on-new-data',
+		term: 'Calibration rules on new data',
+		short: 'What happens when new observed or rain data arrives: nothing (default), run the rules and keep the report, or also apply the kept fit.',
+		category: 'fit'
 	},
 	{
 		id: 'fit-record',
@@ -935,6 +1331,26 @@ export const TIPS: HelpTipText[] = [
 		term: 'Demand left',
 		short: 'Share of a hydrological unit’s demand left to irrigate once supply is shared fairly and the EWR supply cut is made.',
 		units: '% of demand',
+		category: 'results'
+	},
+	{
+		id: 'curtailment-targets',
+		term: 'Curtailment targets (total change)',
+		short: 'How much each hydrological unit’s supply would change to share water fairly and meet the EWR. Negative = reduce. Not a restriction.',
+		units: 'm³/day; l/s',
+		category: 'results'
+	},
+	{
+		id: 'share-the-pain',
+		term: 'Share the pain',
+		short: 'Each group’s supply as a share of its own demand in two steps: what it got, and what is left once its EWR charge is met.',
+		units: '% of demand',
+		category: 'results'
+	},
+	{
+		id: 'report-pdf',
+		term: 'Report PDF',
+		short: 'Download PDF prints the page in your browser; Generate PDF has the server print the same pages, to download or by email.',
 		category: 'results'
 	},
 	{
@@ -1267,6 +1683,201 @@ export const TIPS: HelpTipText[] = [
 		units: 'mm/yr; M.m³/yr',
 		category: 'data'
 	},
+	// The Map tab and the values it proposes, the data feeds and the uploads.
+	{
+		id: 'catchment-map',
+		term: 'Catchment map',
+		short: 'The project’s geography: boundary, parcels, dams, gauges and rivers. It proposes values; none reaches the model until you accept it.',
+		category: 'data'
+	},
+	{
+		id: 'map-geojson-upload',
+		term: 'GeoJSON upload',
+		short: 'Map features from a GeoJSON file in WGS84 longitude/latitude, checked on the server; any problem refuses the whole file.',
+		category: 'data'
+	},
+	{
+		id: 'map-area',
+		term: 'Area from the map',
+		short: 'A polygon’s area on the WGS84 ellipsoid, worked out by the server. Use sets a hydrological unit’s area to it, as a model revision.',
+		units: 'km²',
+		category: 'data'
+	},
+	{
+		id: 'area-basis',
+		term: 'Gross or effective area (pans)',
+		short: 'Gross: the whole delineated area. Effective: less what drains into pans (closed depressions), if you model them as not contributing.',
+		units: 'km²',
+		category: 'data'
+	},
+	{
+		id: 'map-snap',
+		term: 'Snap to features',
+		short: 'A corner placed within 12 px of another feature’s corner or edge lands exactly on it; Follow edges also takes the corners between.',
+		category: 'data'
+	},
+	{
+		id: 'trace-dam',
+		term: 'Trace a dam',
+		short: 'Proposes a dam’s outline from satellite water occurrence (JRC Global Surface Water, 1984–2024) around a click inside its water.',
+		category: 'data'
+	},
+	{
+		id: 'map-checks',
+		term: 'Map checks',
+		short: 'Warnings where the map and the model disagree: units with no parcel, features outside the boundary, overlaps, areas 10 % apart.',
+		category: 'data'
+	},
+	{
+		id: 'map-results',
+		term: 'Results on the map',
+		short: 'Colours each parcel and dam polygon by one run’s figure: days short, curtailment, dam level or use against allocation, in words too.',
+		category: 'data'
+	},
+	{
+		id: 'elevation-model',
+		term: 'Elevation model (DEM)',
+		short: 'Copernicus GLO-30, a 30 m global elevation model: it shades the Relief layer, and delineation routes water over it.',
+		category: 'data'
+	},
+	{
+		id: 'delineation',
+		term: 'Delineation',
+		short: 'The catchment draining to a point on a river, from the elevation model: depressions filled, flow routed cell to cell (D8), outlined.',
+		units: 'km²',
+		category: 'data'
+	},
+	{
+		id: 'terrain-channels',
+		term: 'Terrain channels',
+		short: 'The rivers as the elevation model routes them, drawn while delineating: the lines to click. Mapped rivers can sit hundreds of metres off.',
+		category: 'data'
+	},
+	{
+		id: 'outlet-placement',
+		term: 'Outlet placement on the channel',
+		short: 'A clicked outlet moves onto the elevation model’s channel: the one matching a nearby mapped river’s area, else the most-drained cell.',
+		category: 'data'
+	},
+	{
+		id: 'sub-catchments',
+		term: 'Sub-catchments, one per click',
+		short: 'Each click on a river gets the land that drains to it before reaching any other click: its incremental catchment, from the terrain.',
+		category: 'data'
+	},
+	{
+		id: 'start-from-map',
+		term: 'Start the model from the map',
+		short: 'On an empty model: proposes the units, their areas and their order from the boundary and the dams, abstraction points and gauges.',
+		category: 'data'
+	},
+	{
+		id: 'divide-model',
+		term: 'Divide the model from the map',
+		short: 'For a model with units: proposes each unit’s own area, what it drains into and its dam’s runoff share, beside its value now.',
+		category: 'data'
+	},
+	{
+		id: 'dam-siting',
+		term: 'Dam siting: on the river or off-channel',
+		short: 'Whether a dam sits on the river or is filled by a pump or furrow. Start and Divide place its unit and propose its dam shares by it.',
+		category: 'data'
+	},
+	{
+		id: 'river-network',
+		term: 'River network (HydroRIVERS)',
+		short: 'Mapped river reaches with Strahler order and area upstream, for reference; add a reach to the project’s rivers one at a time.',
+		category: 'data'
+	},
+	{
+		id: 'quaternary-lookup',
+		term: 'Quaternary lookup (propose from the map)',
+		short: 'Finds the quaternary catchment holding a point and proposes its area, MAP, MAR and monthly flows for the WR2012 check, value by value.',
+		category: 'data'
+	},
+	{
+		id: 'synthetic-data',
+		term: 'Synthetic test data',
+		short: 'Invented reference data the app ships for development and tests. Anything proposed from it is marked; never use it for a real catchment.',
+		category: 'data'
+	},
+	{
+		id: 'dam-proposals',
+		term: 'Dam values from the register and the map',
+		short: 'A dam’s capacity from the register of dams (registered dams within 1 km) and its full-supply area from its polygon on the map.',
+		category: 'data'
+	},
+	{
+		id: 'cultivated-area',
+		term: 'Cultivated area from land cover',
+		short: 'The cropland ESA WorldCover maps in a unit’s parcels, proposed as one crop’s planted area. It never says which crop, or if irrigated.',
+		units: 'ha',
+		category: 'data'
+	},
+	{
+		id: 'evaporation-from-map',
+		term: 'Evaporation from the map',
+		short: 'An evaporation grid’s 12 monthly means averaged over the boundary: ET₀ goes to GR4J’s monthly PE, A-pan to the A-pan row, unconverted.',
+		units: 'mm/month',
+		category: 'data'
+	},
+	{
+		id: 'data-feeds',
+		term: 'Data feeds',
+		short: 'Rain and gauge flow fetched daily into a series: CHIRPS, the CHIRPS-GEFS forecast or a DWS gauge. A missing day never erases data.',
+		category: 'data'
+	},
+	{
+		id: 'boundary-rain',
+		term: 'Rain from the catchment boundary',
+		short: 'A CHIRPS feed averaging the 0.05° cells the boundary covers, each weighted by the share of it inside, rather than a box around it.',
+		units: 'mm/day',
+		category: 'data'
+	},
+	{
+		id: 'chirps-gefs',
+		term: 'CHIRPS-GEFS forecast',
+		short: 'A 16-day daily rain forecast on the CHIRPS grid, issued daily; each issue replaces the last in the forecast rainfall series.',
+		units: 'mm/day',
+		category: 'data'
+	},
+	{
+		id: 'chirps-version',
+		term: 'CHIRPS product and version',
+		short: 'Which CHIRPS a series holds: v2.0 (usual in b023) or v3.0, sat or rnl. One series holds one; two are never spliced together.',
+		category: 'data'
+	},
+	{
+		id: 'dws-flow',
+		term: 'DWS gauge flow',
+		short: 'A DWS river gauge’s verified daily mean flow in m³/s, from a data feed or an exported table. Verified data lags by months.',
+		units: 'm³/s',
+		category: 'data'
+	},
+	{
+		id: 'data-freshness',
+		term: 'Data up to, and Behind',
+		short: 'A series’ last day with a value. Rain or A-pan a run is driven by is Behind once that day is more than 7 days ago.',
+		category: 'data'
+	},
+	{
+		id: 'day-boundary',
+		term: 'Day boundary of sub-daily readings',
+		short: 'How several readings a day add up into days: 08:00 to 08:00, booked to the day it starts (the manual-gauge day), or midnight to midnight.',
+		category: 'data'
+	},
+	{
+		id: 'series-update-mode',
+		term: 'Append / update or replace',
+		short: 'Append / update adds new days and corrects overlapping ones; Replace overwrites the whole series. Overwritten values stay in History.',
+		category: 'data'
+	},
+	{
+		id: 'workbook-import',
+		term: 'b023 workbook import',
+		short: 'Turns a b023 workbook into a new project, read in your browser: network, units, crops, transfers, settings and Flow data series.',
+		category: 'data'
+	},
 
 	// ---- Run results ------------------------------------------------------------
 	{
@@ -1276,6 +1887,169 @@ export const TIPS: HelpTipText[] = [
 		units: 'fraction 0–1',
 		category: 'results',
 		fields: ['summary.fractionSupplied']
+	},
+	{
+		id: 'flow-duration-curve',
+		term: 'Flow-duration curve (Q10–Q95)',
+		short: 'Flow against the share of days it is equalled or exceeded. Q95 is the flow exceeded on 95 % of days: a low flow; Q10 a high one.',
+		units: 'm³/s or m³/day',
+		category: 'results'
+	},
+	// ---- Comparing runs, uncertainty, planning outputs, yield and forecasts
+	{
+		id: 'run-comparison',
+		term: 'Run comparison (baseline and what-if)',
+		short: 'A baseline beside up to two what-if runs. Every change is the what-if minus the baseline (B − A): green better, red worse.',
+		category: 'results'
+	},
+	{
+		id: 'run-matching',
+		term: 'How runs are matched',
+		short: 'Runs line up by id first, then by name: a unit renamed between runs is still the same unit; across a copy the same name is the same unit.',
+		category: 'results'
+	},
+	{
+		id: 'input-diff',
+		term: 'What changed (input differences)',
+		short: 'Every difference between two runs’ inputs, in words: network, crops, transfers, settings and series, with who saved each change.',
+		category: 'results'
+	},
+	{
+		id: 'one-run-feature',
+		term: 'Read as 0: a feature only one run has',
+		short: 'A river pump, boreholes, a release rule or land cover in one run only reads as 0 in the other: that run moved none of that water.',
+		category: 'results'
+	},
+	{
+		id: 'compare-takeaways',
+		term: 'Takeaways (material changes)',
+		short: 'Plain sentences under What changes, only for material changes: a day a year below the EWR, a point of demand supplied, 5 % of outflow.',
+		category: 'results'
+	},
+	{
+		id: 'paired-band',
+		term: 'Paired uncertainty band (B − A)',
+		short: 'The change between two runs under each parameter set of run A’s ensemble: the change’s own uncertainty, with what both share cancelled.',
+		category: 'results'
+	},
+	{
+		id: 'ensemble-acceptance',
+		term: 'Ensemble rule: sample and acceptance tests',
+		short: 'How an uncertainty ensemble is drawn and which parameter sets it keeps (skill, WR2012 flag, low-flow bias), fixed before it runs.',
+		category: 'results'
+	},
+	{
+		id: 'sensitivity-runs',
+		term: 'Sensitivity runs',
+		short: 'EWR compliance re-run with one uncertain input changed at a time: rain, pan coefficient, dam evaporation, abstraction, starting storage.',
+		category: 'results'
+	},
+	{
+		id: 'sensitivity-verdict',
+		term: 'Sensitivity verdict and threshold',
+		short: 'Meets, or below, the threshold when every sensitivity run agrees; not determinable when their range crosses it. 80 % by default.',
+		units: '% of days or months',
+		category: 'results'
+	},
+	{
+		id: 'demand-level',
+		term: 'Demand levels',
+		short: 'Percentages of today’s demand to run side by side (100, 85, 70 by default); each scales every hydrological unit’s irrigation demand.',
+		units: '% of today’s demand',
+		category: 'results'
+	},
+	{
+		id: 'year-class',
+		term: 'Water-year class',
+		short: 'Complete water years ranked by natural flow at the outlet and split into terciles (dry, normal, wet) or, with 25 years or more, quintiles.',
+		category: 'results'
+	},
+	{
+		id: 'outcome-matrix',
+		term: 'Outcome matrix',
+		short: 'For each demand level and water-year class, how the river fared in those years of the record: a historical tally, not a forecast.',
+		category: 'results'
+	},
+	{
+		id: 'outcome-risk',
+		term: 'Outcome risk cut-offs',
+		short: 'Where a cell turns from lower to increasing to high risk: months met ≥ 90 % / ≥ 75 %, or days below the EWR ≤ 5 % / ≤ 20 %.',
+		units: '%',
+		category: 'results'
+	},
+	{
+		id: 'seasonal-outlook',
+		term: 'Seasonal outlook',
+		short: 'The season run from the catchment’s state on the decision date with each past year’s weather, at a few demand levels.',
+		category: 'results'
+	},
+	{
+		id: 'analogue-years',
+		term: 'Analogue years',
+		short: 'The past water years whose weather a seasonal outlook replays: each one the record holds whole, except the season’s own.',
+		category: 'results'
+	},
+	{
+		id: 'outlook-season',
+		term: 'Decision date and season end',
+		short: 'The first and last days a seasonal outlook covers; it starts from the state the day before. 1 October to 30 April by default.',
+		category: 'results'
+	},
+	{
+		id: 'planning-figure',
+		term: 'Planning figure and planning share',
+		short: 'The highest demand level that met the requirement in full in at least the planning share of analogue years (80 % by default).',
+		category: 'results'
+	},
+	{
+		id: 'review-triggers',
+		term: 'Review triggers',
+		short: 'For each band of total dam storage on the review date, the highest demand level the past years supported for the rest of the season.',
+		category: 'results'
+	},
+	{
+		id: 'outlook-publish',
+		term: 'Publishing an outlook level to farmers',
+		short: 'The level the WUA has set, published from an outlook: each linked farmer sees what it gave their own unit, until the season ends.',
+		category: 'results'
+	},
+	{
+		id: 'firm-yield',
+		term: 'Historical firm yield',
+		short: 'The largest steady draft a dam meets on every day of the record, with the rest of the network running as modelled.',
+		units: 'm³/day',
+		category: 'results'
+	},
+	{
+		id: 'yield-assurance',
+		term: 'Yield at an assurance',
+		short: 'The largest draft that fails in at most a set share of water years: 98 % fails in at most 1 year in 50. Firm allows no failure day.',
+		category: 'results'
+	},
+	{
+		id: 'draft-pattern',
+		term: 'Draft pattern',
+		short: 'How a yield’s draft is spread over the year: the same every day, or shaped like the unit’s own irrigation demand by month.',
+		category: 'results'
+	},
+	{
+		id: 'storage-yield-curve',
+		term: 'Storage–yield curve',
+		short: 'The yield at 11 dam capacities from 0 to twice the dam’s own, at the chosen pattern and assurance: what a raise would add.',
+		units: 'm³ → m³/day',
+		category: 'results'
+	},
+	{
+		id: 'forecast-run',
+		term: 'Forecast run',
+		short: 'A run that carries on past the record on forecast rain. Its forecast days stay out of every total; the Forecast panel reads them alone.',
+		category: 'results'
+	},
+	{
+		id: 'unsaved-preview',
+		term: 'Preview of unsaved edits',
+		short: 'The last run worked out again with your unsaved edits laid over it, in your browser, and compared with it. Nothing is saved or stored.',
+		category: 'results'
 	},
 
 	// ---- Goodness of fit ---------------------------------------------------------
@@ -1334,6 +2108,21 @@ export const TIPS: HelpTipText[] = [
 		units: '%',
 		category: 'fit',
 		fields: ['stats.volumeErrorPct']
+	},
+	{
+		id: 'fdc-signatures',
+		term: 'Flow-duration signatures (high, mid-slope, low)',
+		short: 'Bias of the top 2 % of flows, of the flow-duration curve’s slope from 20 to 70 % exceedance, and of the low 30 %. 0 is ideal.',
+		units: '%',
+		category: 'fit'
+	},
+	{
+		id: 'annual-volumes',
+		term: 'Annual water balance (calibration)',
+		short: 'Observed and simulated volume per water year, over the days with an observation only, and how far apart they are.',
+		units: 'Mm³ ; %',
+		category: 'fit',
+		fields: ['stats.annualVolumes']
 	},
 	{
 		id: 'in-sample',

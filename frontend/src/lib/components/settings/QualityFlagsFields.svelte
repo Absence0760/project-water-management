@@ -95,7 +95,7 @@
 	{/each}
 	<div class="uses">
 		<div class="field">
-			<label for="{uid}-above">Days above the highest gauging</label>
+			<label for="{uid}-above">Days above the highest gauging <HelpTip key="quality-flags" label="About how flagged days are treated" /></label>
 			<select id="{uid}-above" bind:value={value.aboveRating} disabled={readonly}>
 				{#each ABOVE_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 			</select>

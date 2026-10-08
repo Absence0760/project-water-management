@@ -16,6 +16,7 @@
 	from until it is saved.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { MapPosition, MinOccurrence } from '$lib/api/types';
 	import { areaText, KIND_LABEL, POINT_KINDS } from '../mapData';
 	import { cutText, type Draft } from './draft.svelte';
@@ -151,7 +152,7 @@
 		{:else if draft.mode === 'split'}
 			<h2 class="bar-h" id="{uid}-h">Splitting “{name}”</h2>
 		{:else if draft.mode === 'place' && tracing}
-			<h2 class="bar-h" id="{uid}-h">Tracing a dam</h2>
+			<h2 class="bar-h" id="{uid}-h">Tracing a dam <HelpTip key="trace-dam" /></h2>
 			<label class="share small">
 				Water in at least
 				<select bind:value={minOccurrence} data-testid="map-trace-share">
@@ -160,7 +161,7 @@
 				of the observations
 			</label>
 		{:else if draft.mode === 'place' && delineating}
-			<h2 class="bar-h" id="{uid}-h">Delineating a catchment</h2>
+			<h2 class="bar-h" id="{uid}-h">Delineating a catchment <HelpTip key="delineation" /></h2>
 			{#if onsubcatchments}<DelineateChoice value="one" onchange={(v) => v === 'clicks' && onsubcatchments()} />{/if}
 		{:else if draft.mode === 'place'}
 			<h2 class="bar-h" id="{uid}-h"><label for="{uid}-what">Placing a point</label></h2>
@@ -191,6 +192,7 @@
 				><input type="checkbox" bind:checked={draft.snapOn} data-testid="map-snap" /> Snap to features{#if altTip}<span class="alt-tip muted" data-testid="map-snap-alt"><span aria-hidden="true">(Alt: exact)</span><span class="visually-hidden">{altTip}</span></span>{/if}</label
 			>
 			{#if canFollow}<label><input type="checkbox" bind:checked={draft.follow} disabled={!draft.snapOn} data-testid="map-follow" /> Follow edges</label>{/if}
+			<HelpTip key="map-snap" label="About snapping and following edges" />
 		</div>
 	{/if}
 	{#if problem && (draft.phase === 'review' || draft.coords.length)}<p class="problem small row-full" data-testid="map-draw-problem">{problem}</p>{/if}

@@ -13,6 +13,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
+	import RichText from '$lib/components/help/RichText.svelte';
 	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { CATEGORY_TITLES, HELP, countryNames, helpFor } from '$lib/help/content';
 	import { glossaryPath, topicForSlug } from '$lib/help/glossaryLinks';
@@ -146,7 +147,7 @@
 					</h2>
 					<p class="short">{e.short}</p>
 					{#each paragraphs(e.long) as para, i (i)}
-						<p class="long">{para}</p>
+						<p class="long"><RichText text={para} /></p>
 					{/each}
 					{#if e.countries?.length || e.units || e.aliases?.length || e.related?.length}
 						<dl class="meta">

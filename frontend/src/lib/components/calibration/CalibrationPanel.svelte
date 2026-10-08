@@ -21,6 +21,7 @@
 	} from './metrics';
 	import { calibrationSample } from './sample';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 
 	let {
 		calibration,
@@ -63,11 +64,11 @@
 		</p>
 	{:else}
 		<p class="note muted in-sample" data-fit-status={sample.status}>
-			<strong>{sample.label}.</strong> {sample.note}
+			<strong>{sample.label}.</strong> {sample.note} <HelpTip key="stats.fitStatus" label="About in-sample scores" />
 		</p>
 		<dl class="window">
 			<div>
-				<dt>Window</dt>
+				<dt>Window <HelpTip key="calibration-window" /></dt>
 				<dd>
 					{describeWindow(calibration.windowStart ?? requestedStart, calibration.windowEnd ?? requestedEnd)}
 					{#if !requestedStart && !requestedEnd && !legacy}<span class="muted">(no window set: whole overlap)</span>{/if}
@@ -110,7 +111,7 @@
 			{#each rows as r (r.key)}
 				<li class="metric">
 					<div class="top">
-						<span class="label" id="{uid}-{r.key}">{r.label}</span>
+						<span class="label" id="{uid}-{r.key}">{r.label}</span> <HelpTip key={`stats.${r.key}`} label="About {r.label}" />
 					</div>
 					<div class="value">{r.value}{#if r.unit}<small>{r.unit}</small>{/if}</div>
 					<p class="help">{r.help}</p>
@@ -130,7 +131,7 @@
 		{/if}
 
 		{#if years.length}
-			<h4 id="{uid}-y">Annual water balance</h4>
+			<h4 id="{uid}-y">Annual water balance <HelpTip key="stats.annualVolumes" /></h4>
 			<div class="table-wrap">
 				<table class="data" aria-labelledby="{uid}-y">
 					<thead>

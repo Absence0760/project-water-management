@@ -124,6 +124,7 @@
 	prefix="dam-proposals"
 	variant="page"
 	title="Proposed from the register and the map"
+	helpKey="dam-proposals"
 	what="proposals"
 	{notice}
 	{loading}

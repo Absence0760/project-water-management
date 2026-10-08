@@ -6,6 +6,7 @@
 	any drawing is; nothing is saved here.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { MapGeometry } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { parseShape } from './parseShape';
@@ -62,7 +63,7 @@
 <Dialog bind:open title="Paste a shape" side>
 	<form id={formId} onsubmit={use} novalidate>
 		<div class="field">
-			<label for="{uid}-text">GeoJSON or WKT</label>
+			<label for="{uid}-text">GeoJSON or WKT <HelpTip key="map-geojson-upload" label="About the shapes it takes" /></label>
 			<textarea
 				id="{uid}-text"
 				rows="8"

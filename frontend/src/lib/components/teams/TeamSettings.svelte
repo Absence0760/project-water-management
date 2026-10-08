@@ -6,6 +6,7 @@
 	// thresholds or delete. Leaving and deleting are the page's (they need its
 	// members and navigate away), so they come in as callbacks.
 	import { untrack } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { base } from '$app/paths';
 	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
 	import { api, type Team } from '$lib/api';
@@ -164,8 +165,8 @@
 		</section>
 	{/if}
 
-	<section class="part" aria-labelledby="pt-h">
-		<h3 id="pt-h">EWR traffic lights</h3>
+	<section class="part" aria-labelledby="pt-h-t">
+		<h3 id="pt-h"><span id="pt-h-t">EWR traffic lights</span> <HelpTip key="ewr-traffic-light" label="About the EWR traffic lights" /></h3>
 		<p class="small rule">
 			A catchment's EWR status in the <a href="{base}/?owner=team:{team.id}&sort=status">project list</a> counts the days in the last 30 its outlet
 			EWR was not met: {thresholdsRule(team.portfolioThresholds)}.
@@ -224,8 +225,8 @@
 		{/if}
 	</section>
 
-	<section class="part" aria-labelledby="pc-h">
-		<h3 id="pc-h">Privacy contact</h3>
+	<section class="part" aria-labelledby="pc-h-t">
+		<h3 id="pc-h"><span id="pc-h-t">Privacy contact</span> <HelpTip key="privacy-contact" label="About the privacy contact" /></h3>
 		<p class="small rule">
 			Your organisation decides about the personal information in the team's projects. Name the person or office people should ask about
 			it: farmers see it from their farm page's menu, and invitations to the team and its projects name it (POPIA s18).

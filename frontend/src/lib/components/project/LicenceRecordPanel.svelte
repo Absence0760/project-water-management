@@ -6,6 +6,7 @@
 	// ProjectTab renders it for editors and owners only). Provisional position
 	// (pre-counsel research, 2026-10-01).
 	import { onMount } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type LicenceRecord } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { formOf, formProblem, OUTCOME_LABEL, outcomeBody, recordStatus, type OutcomeForm } from './licenceRecord';
@@ -71,9 +72,9 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="licence-record" data-testid="licence-record">
+<section class="panel" aria-labelledby="licence-record-t" data-testid="licence-record">
 	<div class="panel-head">
-		<h2 id="licence-record">Licence record</h2>
+		<h2 id="licence-record"><span id="licence-record-t">Licence record</span> <HelpTip key="licence-record" label="About the licence record" /></h2>
 	</div>
 	<p class="muted small intro">
 		An issued evidence pack and a signed-off run keep the names of the people who made and signed them, also after their accounts are

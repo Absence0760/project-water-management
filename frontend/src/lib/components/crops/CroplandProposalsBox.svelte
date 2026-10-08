@@ -122,6 +122,7 @@
 	prefix="cropland"
 	variant="drawer"
 	title="From land cover"
+	helpKey="cultivated-area"
 	what="land-cover summary"
 	{notice}
 	{loading}

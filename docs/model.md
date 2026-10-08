@@ -6232,7 +6232,9 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   - **year-balanced KGE′**: the mean KGE′ over the water years with at least
     30 scored days (Fowler et al. 2018; issue #1 item 5). Each year counts
     once, so a few wet years can't dominate the score;
-  - **non-parametric KGE** (Pool et al. 2018);
+  - **non-parametric KGE** (`kgeNp`, Pool et al. 2018): the Spearman rank
+    correlation, the shape of the flow-duration curve and the bias, so it
+    leans less on the rating at the extremes than KGE′ does;
   - **NSE on √Q** (medium flows);
   - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows);
   - **the mean of KGE′(Q) and KGE′(1/(Q + ε))** (`kgeLowHigh`, engine ≥
@@ -6240,13 +6242,25 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     the same ε added to observed and simulated flows (Pushpalatha et al.
     2012; Garcia et al. 2017). The inverse-flow half weights recessions and
     low flows, the plain half keeps the peaks and the water balance, so
-    neither end is traded away. **The suggested objective when the fit feeds
-    an EWR (low-flow) decision**; the default stays KGE′. Because ε scales
+    neither end is traded away. One of the two **low-flow objectives for a
+    fit that feeds an EWR (low-flow) decision**; the default stays KGE′.
+    Because ε scales
     with the flows, the score doesn't depend on the flow unit. A simulation
     with no flow at all has no score (the KGE′ half needs a positive mean).
 
   KGE is never applied to log flows (Santos et al. 2018); on 1/(Q + ε) it
   is, since those stay positive and its bias and CV terms keep their meaning.
+
+  **Choosing one.** Choose the objective for what the fit will feed, before
+  any score is seen: KGE′ for the water balance, peaks and events; for EWR,
+  low-flow and assurance figures, `kgeLowHigh` where the gauge's low flows
+  are well rated, or `kgeNp` where the rating at the extremes is uncertain
+  (the client catchment's choice, [plan.md](./plan.md) #12, with a KGE′ fit
+  kept for peak-flow questions). Scores of different objectives don't
+  compare, so running several and keeping the best-looking one is choosing
+  by the score, which the calibration rules (§2.10j) exist to stop; there,
+  the selection score is what picks the kept fit and should match the use.
+  The help's *Objective* entry says the same to the reader.
 - **Reported with every fit** (`FitScores`): all of the above, plain NSE, the
   volume error, and the Yilmaz et al. (2008) flow-duration signatures:
   - %BiasFHV: volume of the top 2 % of flows;

@@ -79,15 +79,18 @@
 
 	<div class="grid">
 		<div class="field">
-			<label class="check">
-				<input
-					type="checkbox"
-					disabled={readonly}
-					checked={value.exclusions.maxFlaggedShare !== null}
-					onchange={(e) => setExclusion(e.currentTarget.checked)}
-				/>
-				Leave out a water year by its flagged days
-			</label>
+			<div class="tip-row">
+				<label class="check">
+					<input
+						type="checkbox"
+						disabled={readonly}
+						checked={value.exclusions.maxFlaggedShare !== null}
+						onchange={(e) => setExclusion(e.currentTarget.checked)}
+					/>
+					Leave out a water year by its flagged days
+				</label>
+				<HelpTip key="flagged-year-rule" label="About the flagged-year rule" />
+			</div>
 			{#if value.exclusions.maxFlaggedShare !== null}
 				<label for="{uid}-share">When more than this share of its observed days are flagged <span class="u">(%)</span></label>
 				<NumberInput
@@ -102,11 +105,11 @@
 		</div>
 
 		<div class="field">
-			<label for="{uid}-score">Keep the fit with the best</label>
+			<label for="{uid}-score">Keep the fit with the best <HelpTip key="calibration-selection-score" label="About the selection score" /></label>
 			<select id="{uid}-score" bind:value={value.selection.score} disabled={readonly}>
 				{#each OBJECTIVES as o (o)}<option value={o}>{name(o)}</option>{/each}
 			</select>
-			<label for="{uid}-test" class="sub">on the held-out test</label>
+			<label for="{uid}-test" class="sub">on the held-out test <HelpTip key="validation-tests" label="About the validation tests" /></label>
 			<select id="{uid}-test" bind:value={value.selection.test} disabled={readonly}>
 				{#each SELECTION_TESTS as t (t)}<option value={t}>{SELECTION_TEST_LABEL[t]}</option>{/each}
 			</select>
@@ -115,7 +118,7 @@
 
 	<div class="grid">
 		<fieldset class="plain group">
-			<legend class="sub">Pan coefficients to fit under</legend>
+			<legend class="sub">Pan coefficients to fit under <HelpTip key="pan-coefficient" label="About the pan coefficients to fit under" /></legend>
 			{#each pans as p (p.id)}
 				<label class="check">
 					<input
@@ -129,7 +132,7 @@
 			{/each}
 		</fieldset>
 		<fieldset class="plain group">
-			<legend class="sub">Bounds</legend>
+			<legend class="sub">Bounds <HelpTip key="calibration-bounds" label="About the parameter ranges" /></legend>
 			{#each CALIBRATION_BOUNDS as b (b)}
 				<label class="check">
 					<input
@@ -143,7 +146,7 @@
 			{/each}
 		</fieldset>
 		<fieldset class="plain group">
-			<legend class="sub">Objectives</legend>
+			<legend class="sub">Objectives <HelpTip key="calibration-objective" label="About choosing an objective" /></legend>
 			{#each OBJECTIVES as o (o)}
 				<label class="check">
 					<input
@@ -157,7 +160,7 @@
 			{/each}
 		</fieldset>
 		<fieldset class="plain group">
-			<legend class="sub">Filters a kept fit must pass</legend>
+			<legend class="sub">Filters a kept fit must pass <HelpTip key="calibration-rule-filters" label="About the filters" /></legend>
 			<label class="check">
 				<input type="checkbox" disabled={readonly} bind:checked={value.filters.wr2012Mar} />
 				Natural MAR inside the WR2012 band
@@ -170,7 +173,7 @@
 	</div>
 	<div class="grid" data-testid="rules-search">
 		<div class="field">
-			<label for="{uid}-budget">Model runs per fit</label>
+			<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
 			<NumberInput id="{uid}-budget" min={RULE_BUDGET_MIN} max={RULE_BUDGET_MAX} step={50} disabled={readonly} bind:value={() => value.run.budget, (v) => (value.run = { ...value.run, budget: v ?? RULE_BUDGET_MIN })} />
 		</div>
 		<div class="field">
@@ -184,15 +187,18 @@
 	</div>
 	<div class="grid" data-testid="rules-after">
 		<div class="field">
-			<label for="{uid}-new-data">When new observed or rain data arrives</label>
+			<label for="{uid}-new-data">When new observed or rain data arrives <HelpTip key="rules-on-new-data" label="About running the rules on new data" /></label>
 			<select id="{uid}-new-data" bind:value={value.after.onNewData} disabled={readonly}>
 				{#each ON_NEW_DATA as o (o)}<option value={o}>{ON_NEW_DATA_LABEL[o]}</option>{/each}
 			</select>
 		</div>
-		<label class="check">
-			<input type="checkbox" disabled={readonly} bind:checked={value.after.ensemble} />
-			After a kept fit is applied, run the model and the uncertainty ensemble around it
-		</label>
+		<div class="tip-row">
+			<label class="check">
+				<input type="checkbox" disabled={readonly} bind:checked={value.after.ensemble} />
+				After a kept fit is applied, run the model and the uncertainty ensemble around it
+			</label>
+			<HelpTip key="uncertainty-bands" label="About the uncertainty ensemble" />
+		</div>
 	</div>
 	<p class="hint" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}). The seed, starts and model runs are rules too: trying another seed after a result is a rule change, with its own revision.</p>
 
@@ -202,7 +208,7 @@
 				<button type="button" class="btn btn-sm" onclick={() => (value.signedOff = null)}>Withdraw the sign-off</button>
 			{:else}
 				<div class="field">
-					<label for="{uid}-by">Your name, as a signature</label>
+					<label for="{uid}-by">Your name, as a signature <HelpTip key="calibration-rules" label="About signing off the rules" /></label>
 					<input id="{uid}-by" type="text" maxlength={SIGNED_OFF_BY_MAX} bind:value={signBy} placeholder="e.g. Dr A. Hydrologist" />
 				</div>
 				<!-- The server dates it and records your account in the project's history, whatever date is sent. -->
@@ -307,5 +313,11 @@
 		.btn {
 			min-height: 44px;
 		}
+	}
+	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
+	.tip-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 </style>

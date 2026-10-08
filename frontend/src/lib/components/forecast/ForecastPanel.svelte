@@ -4,6 +4,7 @@
 	// supplied, and the outlet's EWR at risk. Everything else on the page
 	// covers the days before them; this panel says so, and words every figure
 	// as what the model expects, not what will happen.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { ForecastSummary } from '@water-management/engine';
 	import { forecastHeading, forecastRows, outletLine } from './forecast';
 
@@ -12,9 +13,9 @@
 	const rows = $derived(forecastRows(forecast, nodeNames));
 </script>
 
-<section class="panel forecast" id="res-forecast" aria-labelledby="forecast-h" data-testid="forecast-panel">
+<section class="panel forecast" id="res-forecast" aria-labelledby="forecast-h-t" data-testid="forecast-panel">
 	<div class="panel-head">
-		<h3 id="forecast-h">Forecast</h3>
+		<h3 id="forecast-h"><span id="forecast-h-t">Forecast</span> <HelpTip key="forecast-run" /></h3>
 		<span class="tag tag-warn">Modelled on forecast rain, not measured</span>
 	</div>
 	<p>{forecastHeading(forecast)}</p>

@@ -18,6 +18,7 @@
 	the panel's data-state attribute says which, for the e2e spec.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
 	import { onDestroy, untrack } from 'svelte';
 	import type { EwrRuleTable, NetworkNode, ProjectSettings } from '@water-management/engine';
@@ -191,8 +192,8 @@
 	const fmtBound = (c: { bounds: string; nYears: number }) => `${c.bounds} · ${c.nYears} ${c.nYears === 1 ? 'year' : 'years'}`;
 </script>
 
-<section aria-labelledby="outcome-h" data-testid="outcome-matrix" data-state={dataState}>
-	<h3 id="outcome-h">Outcome matrix</h3>
+<section aria-labelledby="outcome-h-t" data-testid="outcome-matrix" data-state={dataState}>
+	<h3 id="outcome-h"><span id="outcome-h-t">Outcome matrix</span> <HelpTip key="outcome-matrix" /></h3>
 	<p class="muted small lead">
 		This run’s inputs at a few demand levels, by class of water year: how often the river’s requirement was met in past years of each
 		kind. Historical, not a forecast; the choice of level is the WUA’s.
@@ -210,7 +211,7 @@
 					<label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
 					<input id="outcome-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outcome-levels-h" aria-invalid={!!parsed.error} />
 				</div>
-				<p class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it).</p>
+				<p class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it). <HelpTip key="demand-level" /></p>
 				<div class="action-row">
 					<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
 				</div>
@@ -262,7 +263,9 @@
 			<div class="badges">
 				{#if view.metricLabel}<span class="badge" data-testid="outcome-metric">Measure: {view.metricLabel}</span>{/if}
 				<span class="badge">{view.method === 'quintiles' ? 'Quintiles' : 'Terciles'} of {view.nYears} complete water years</span>
+				<HelpTip key="year-class" />
 				{#if view.cutoffsPending}<span class="badge badge-warn" data-testid="cutoffs-pending">Provisional risk cut-offs, not yet confirmed by the catchment’s hydrologist</span>{/if}
+				<HelpTip key="outcome-risk" />
 			</div>
 			{#if view.siteMissing}
 				<p class="alert alert-warning" data-testid="outcome-site-missing">{view.siteMissing}</p>

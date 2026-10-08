@@ -3,6 +3,7 @@
 	// glance (issue #17, option A · A2). Edit opens its full form (the node
 	// sheet); a farm's planted areas open in the farm drawer.
 	import type { NetworkNode } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
@@ -84,17 +85,17 @@
 	{/if}
 
 	<dl>
-		{#if !isOutlet}<div><dt>Drains into</dt><dd>{downstream}</dd></div>{/if}
+		{#if !isOutlet}<div><dt>Drains into<HelpTip key="node.downstreamNodeId" /></dt><dd>{downstream}</dd></div>{/if}
 		{#if node.kind === 'user'}
-			<div><dt>Takes</dt><dd>{describeUser(node)}</dd></div>
+			<div><dt>Takes<HelpTip key="element-user" /></dt><dd>{describeUser(node)}</dd></div>
 		{:else}
-			<div><dt>Catchment area</dt><dd class="num">{fmtNum(node.areaKm2 || 0, 2)} km²</dd></div>
+			<div><dt>Catchment area<HelpTip key="node.areaKm2" /></dt><dd class="num">{fmtNum(node.areaKm2 || 0, 2)} km²</dd></div>
 		{/if}
 		{#if node.kind === 'farm'}
-			<div><dt>Flow share</dt><dd class="num">{share === null ? '–' : fmtPct(share, 1)}</dd></div>
-			<div><dt>Dam</dt><dd class="num">{hasDam(node) ? `${fmtNum(node.damCapacityM3)} m³` : 'No dam'}</dd></div>
+			<div><dt>Flow share<HelpTip key="flow-share" /></dt><dd class="num">{share === null ? '–' : fmtPct(share, 1)}</dd></div>
+			<div><dt>Dam<HelpTip key="node.damCapacityM3" /></dt><dd class="num">{hasDam(node) ? `${fmtNum(node.damCapacityM3)} m³` : 'No dam'}</dd></div>
 			<div>
-				<dt>Irrigated</dt>
+				<dt>Irrigated<HelpTip key="crop-area" /></dt>
 				<dd>
 					<a href={farmHref}>
 						{#if planting?.planted}

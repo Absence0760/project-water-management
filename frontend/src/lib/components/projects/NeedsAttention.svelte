@@ -5,6 +5,7 @@
 	// (fewer on a narrow page); the rest are a sort away. Colour repeats the
 	// words, never replaces them.
 	import { base } from '$app/paths';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { Flagged } from './outcomes';
 
 	let {
@@ -28,9 +29,9 @@
 	const more = $derived(flagged.length - cards.length);
 </script>
 
-<section class="attention" aria-labelledby="att-h" aria-busy={loading}>
+<section class="attention" aria-labelledby="att-h-t" aria-busy={loading}>
 	<div class="head">
-		<h2 id="att-h">Needs attention</h2>
+		<h2 id="att-h"><span id="att-h-t">Needs attention</span> <HelpTip key="needs-attention" /></h2>
 		{#if !loading && !failed}
 			<span class="count" data-testid="attention-count">{flagged.length} of {shown}</span>
 			{#if flagged.length}<a class="all" href={allHref} data-sveltekit-noscroll data-sveltekit-keepfocus

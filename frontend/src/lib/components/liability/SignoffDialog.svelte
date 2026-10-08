@@ -14,6 +14,7 @@
 	import { tick, untrack } from 'svelte';
 	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffKind, type SignoffList } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import {
 		BLOCKED_CATEGORIES_NOTE,
@@ -153,7 +154,7 @@
 			<p class="alert alert-warning" data-testid="signoff-public">{PACK_SIGNER_PUBLIC}</p>
 			{#if kinds.length > 1}
 				<fieldset class="kind">
-					<legend>You sign as</legend>
+					<legend>You sign as <HelpTip key="pack-signoff" label="About signing an evidence pack" /></legend>
 					{#each kinds as k (k)}
 						<label class="check"><input type="radio" name="{uid}-kind" value={k} bind:group={kind} data-testid="signoff-kind-{k}" /> <span>{SIGNOFF_KIND_LABEL[k]}{k === 'review' ? ': a second sign-off; issuing still needs the specialist’s' : ': the professional responsible for the evidence'}</span></label>
 					{/each}
@@ -201,7 +202,7 @@
 		</div>
 		<label>What this sign-off covers <textarea bind:value={scope} maxlength="1000" rows="2" required placeholder="e.g. the hydrology section of the WULA technical report for the proposed dam"></textarea></label>
 		<fieldset>
-			<legend>I confirm that:</legend>
+			<legend>I confirm that: <HelpTip key="signoff-statement" label="About the professional sign-off" /></legend>
 			{#each statement.confirmations as c (c.id)}
 				<label class="check">
 					<input type="checkbox" checked={ticked.has(c.id)} onchange={(e) => toggle(c.id, e.currentTarget.checked)} />

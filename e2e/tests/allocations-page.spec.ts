@@ -236,7 +236,8 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await expect(header(v).getByRole('link', { name: '+ Add volume', exact: true })).toHaveCount(0);
 	await expect(detail(v)).toContainText('SYN-G1000');
 	await expect(detail(v)).not.toContainText('Invented Holdings');
-	await expect(detail(v).getByRole('button')).toHaveCount(0);
+	// No control but the ⓘ help tips (named "About …").
+	await expect(detail(v).getByRole('button', { name: /^(?!About )/ })).toHaveCount(0);
 	await expect(volumesCard(v)).not.toContainText('Invented Holdings');
 	await expect(volumesCard(v).getByText('Names of registered users are shown to editors only.')).toBeVisible();
 	// A sheet link doesn't open for a viewer.

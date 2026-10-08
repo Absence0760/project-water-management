@@ -7,6 +7,7 @@
 	copying it (accountHref).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { balanceColumns, balanceEquation, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
@@ -30,7 +31,7 @@
 </script>
 
 <section aria-labelledby="{uid}-wb">
-	<h3 id="{uid}-wb">Water balance by water year</h3>
+	<h3 id="{uid}-wb">Water balance by water year <HelpTip key="water-account" /></h3>
 	{#if balance.length === 0}
 		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
 	{:else}

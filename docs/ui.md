@@ -8973,8 +8973,8 @@ Part of the workspace, so English, like the rest of the Applicant view
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, then five groups, *Start here*,
-*How it works*, *How to*, *Pages, one by one* and *Reference*, the last the glossary's index and
+(`help/HelpNav.svelte`: the overview, then six groups, *Start here*,
+*How it works*, *How to*, *Using the results*, *Pages, one by one* and *Reference*, the last the glossary's index and
 one link per topic) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
 indented under a thin rule, so a group reads as a block (issue #162). One
@@ -9112,7 +9112,11 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   linked under the wrong topic, goes on to its topic page
   (`glossaryLinks.test.ts` fails on any app link still written the old way).
   An entry shows its short and full text, units, where it applies, other
-  names and related terms, but not its `source` (a workbook sheet,
+  names and related terms. The full text is rendered
+  with the guides' markup (`help/RichText.svelte`: `**bold**`, `*stress*`,
+  `[[glossary-id]]`, `[[guide:id|label]]`; until 2026-10-08 the asterisks
+  showed as typed), and `guides.test.ts` fails on a link in it that doesn't
+  resolve. It doesn't show its `source` (a workbook sheet,
   `docs/model.md §…`, an audit finding, an issue): that is for maintainers,
   kept in the data, and `content.test.ts` fails if the reader-facing text
   names a developer document or issue. The
@@ -9120,12 +9124,47 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   months, winter thresholds, recession curve, pulse index) became one
   **Legacy runoff model** entry (`legacy-runoff-model`) when engine 1.0.0
   removed the model; it still explains a stored legacy run's daily columns.
+- **ⓘ coverage** (2026-10-08): the hydrologist workspace carries a tip on
+  every choice and non-obvious number a reader would ask about (calibration
+  rules and Fit automatically, run results and scores, scenarios and run
+  comparison, uncertainty and outlooks, yield, evidence packs, allocations
+  and curtailment, the Map and its proposals, data feeds and import, the
+  project, members, teams, API keys, alerts and history), each opening an
+  entry with the method, how to read it and how to choose. The farmer-facing
+  pages (translated, § Language) and the public verify page (the glossary
+  needs sign-in) carry none, and nor do pages printed to PDF where a tip
+  would print without a print rule (the pack and the applicant's copy have
+  one). *Objective* (`calibration-objective`) and *Selection score*
+  (`calibration-selection-score`) say how to choose what a fit optimises and
+  what picks the kept fit. Placing a tip without breaking e2e: a tip inside
+  a heading that names a region would change the region's name, so the
+  heading's text sits in its own `<span id="…-t">` and `aria-labelledby`
+  points at the span; a tip never sits inside a wrapping `<label>` (no
+  `for=`): a label holds only its own control, and the tip's button, being
+  labelable, could become the label's control and take a select's name (it
+  did on the Map key), so the tip follows the label, both in a `.tip-row`, or
+  the label uses `for=` (`content.test.ts` fails on one inside); a tip whose
+  default "About …" label would also match
+  an existing `getByLabel` or button name gets its own `label`; a test that
+  a viewer has no controls excludes the tips by name (`/^(?!About )/`); and
+  a tip's bubble is a polite live region (`aria-live`) without
+  `role="status"`, so a panel's own status ("Saved.") stays its only one
+  (until 2026-10-08 every form with a tip held a second, empty status). A key
+  computed in a loop (`key={row.help}`) isn't seen by `content.test.ts`, so
+  its list has a test of its own (`lib/calibration/fit.test.ts`,
+  `components/calibration/metrics.test.ts`).
 - **Search** (`/help/search?q=`): results update as you type in the box at
   the head of the page, which keeps focus; guides first, then glossary terms,
   each a list in columns (the overview's guide list: three across at 1440, so
   a common word's ~50 terms start on the first screen), one column on a phone.
   When both kinds match, **Guides (n)** and **Glossary terms (n)** under the
-  count jump to each list.
+  count jump to each list. The six best guides show, then **Show all n
+  guides** (2026-10-08: a common word such as "dam" is in most guides' text,
+  and the whole list pushed the glossary terms off the first screen at
+  1440); *How to* splits likewise into *How to* (building and calibrating a
+  model, the setup steps' guides) and *Using the results* (comparing runs,
+  scenarios, uncertainty, the season's demand level, sharing and evidence
+  packs), so one open group still fits a 1280×800 window.
 
 ## Farmer view (`/farm`)
 
@@ -9681,8 +9720,8 @@ the catalogue, [§ Language](#language)); both unit-tested.
   too), "(no API key sends it now)" once a person wrote over the key's days
   (issue #120: a hand-uploaded series has none), each with its level (dam % of capacity;
   days, a feed's past its own usual delay, defaulting by source, a series'
-  with no new reading past yesterday's, 2 by default; failures, jobs or
-  units short in the last 7 days; range-checked in the form and by the
+  with no new reading past yesterday's, 2 by default; a feed's failures in
+  a row, dead jobs in 24 hours, units short in the last 7 days; range-checked in the form and by the
   API; while staleness alerts are on for anything, an unsaved feed's or
   series' rule shows as on, since the next evaluation switches it on and
   Save writes every row), a

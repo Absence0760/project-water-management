@@ -214,8 +214,12 @@
 	details {
 		margin-top: 0.6rem;
 	}
+	/* 24 px targets (WCAG 2.2 SC 2.5.8): at its 18 px text height the next
+	   section's heading tip sat inside its target's circle. */
 	summary {
 		cursor: pointer;
 		font-size: 0.875rem;
+		min-height: 24px;
+		line-height: 24px;
 	}
 </style>

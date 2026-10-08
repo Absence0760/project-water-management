@@ -15,11 +15,12 @@ import { TAB_LABELS, type TabId as WorkspaceTabId } from '$lib/workspace/tabs';
 import { helpFor } from './content';
 import type { ShotId } from './pictures';
 
-export type GuideKind = 'start' | 'howto' | 'concept' | 'page';
+export type GuideKind = 'start' | 'howto' | 'use' | 'concept' | 'page';
 
 export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 	start: 'Start here',
 	howto: 'How to',
+	use: 'Using the results',
 	concept: 'How it works',
 	page: 'Pages, one by one'
 };
@@ -463,7 +464,131 @@ export const GUIDES: Guide[] = [
 			}
 		],
 		terms: ['units', 'rain-final', 'chirps-bias'],
-		related: ['rain-gap-filling', 'how-calibration-works']
+		related: ['rain-gap-filling', 'how-calibration-works', 'load-data-feeds']
+	},
+	{
+		id: 'load-data-feeds',
+		title: 'Load rainfall and flow automatically with data feeds',
+		summary: 'Attach a CHIRPS, CHIRPS-GEFS or DWS feed, set one up from the catchment boundary, and read whether each is keeping up.',
+		kind: 'howto',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'What a feed does',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A [[data-feeds|data feed]] fetches one source once a day and merges its new days into one series: [[chirps|CHIRPS]] daily rainfall, the [[chirps-gefs|CHIRPS-GEFS]] 16-day forecast, or a [[dws-flow|DWS gauge’s]] verified daily flow. A day the source has no value for never erases what is there. Runs read the series as they read an uploaded one.'
+					}
+				]
+			},
+			{
+				heading: 'Rain over the catchment boundary',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Put the catchment boundary on the **Map** (delineate, draw or upload it).',
+							'Open **Settings & calibration → Data feeds** and press **Use the catchment boundary** (the Map’s own link opens it too).',
+							'Read the proposal: the CHIRPS cells the boundary covers, the share of each inside it and its weight. A boundary over about 2 500 km² needs feeds for its parts.',
+							'An owner presses **Apply**. The feed attaches into the CHIRPS series; if that series already holds a record, it goes into a separate series to compare beside the old one, which you switch off once satisfied.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'See [[boundary-rain|rain from the catchment boundary]] for how the cells are weighted.'
+					}
+				]
+			},
+			{
+				heading: 'Attach a feed by hand',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Press **Attach a feed** (owners) and choose the **Source**, then **Into series**: the kind of series it writes. CHIRPS goes into the CHIRPS series, so it fills the days catchment rain is blank; into catchment rain it becomes the catchment rain itself, used raw.',
+							'For CHIRPS, choose the **Daily product**: *sat* from 1998, with preliminary days, or *rnl* from 1981, final days only (see [[chirps-version|CHIRPS product and version]]). Without a start date the feed reads the last 60 days, then keeps up.',
+							'For CHIRPS and the forecast, give the **Area**: grid cells (latitude, longitude, an optional weight, one a line) or a bounding box (south, west, north, east). A box on the coast can leave out sea cells.',
+							'For DWS flow, pick from **Nearest gauging stations** (river gauges within 50 km of the outlet, with the years their record covers) or type the station code, such as A2H012.',
+							'If the series already has data, the form asks: use a separate series, or fill only its empty days. Then press **Attach feed**, and **Run now** to fetch at once rather than wait for the daily run.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Verified DWS flow lags by months and is revised in arrears: it suits calibration, not day-to-day operation.'
+					}
+				]
+			},
+			{
+				heading: 'Is it keeping up?',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'Each card says its state in words: **OK**, **Stale** (no new day for longer than the source usually takes), **Failing** (with the reason), **Waiting** or **Off**, and when its last data and last check were.',
+							'A warning above the list counts the feeds that need attention, and the Projects page lists failing feeds under **Needs attention**.',
+							'A **Sample data** badge means this server reads invented sample files, not the real sources ([[synthetic-data]]).',
+							'The Data tab marks a rain series **Behind** once its last day is more than a week old ([[data-freshness]]).'
+						]
+					}
+				]
+			}
+		],
+		terms: ['data-feeds', 'boundary-rain', 'chirps-version', 'dws-flow', 'chirps-gefs'],
+		related: ['add-data', 'start-from-the-map']
+	},
+	{
+		id: 'start-from-the-map',
+		title: 'Start a catchment from the map',
+		summary: 'Delineate or draw the boundary, place the dams and gauges, and let the map propose the units, their areas and their order.',
+		kind: 'howto',
+		tab: 'map',
+		sections: [
+			{
+				heading: 'Before you start',
+				blocks: [
+					{
+						type: 'p',
+						text: 'This works on a model with no hydrological units yet. With an [[elevation-model|elevation model]] on the server, each unit’s area and order come from the terrain; without one, you get the units with no areas, to type on the Network. Nothing reaches the model until you tick it.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On the **Map**, press **Start from the map** (or the link on the empty map). Step one is the boundary.',
+							'**Delineate from the outlet**: the terrain channels appear; click the one at the catchment’s outlet. The outlet is moved onto the channel ([[outlet-placement]]), and the catchment above it is proposed. Check it against the relief and the mapped rivers, then **Accept as the catchment boundary**. Or draw the boundary, or upload it as GeoJSON.',
+							'Place each dam at its wall, each abstraction point where water leaves the river, and the gauges, with **Place a point** or by drawing a dam’s outline. On a dam outline’s card, set its [[dam-siting|siting]] if it is filled by a pump or a furrow.',
+							'In the sheet, say what each point is (a unit with a dam, a unit at an abstraction point, another water user, a gauge in the network, or not in the model) and which gauge is the outlet, then propose.',
+							'Read the proposal. Each unit’s piece is tinted and numbered on the map, and its card gives its own area, its whole catchment above, what it drains into and, for a dam, the runoff and inflow shares. Read the warnings: dropped points and their reasons, a much larger channel beside a point.',
+							'Tick the values to take (**Tick every value** takes them all), choose [[area-basis|gross or effective]] areas where a piece holds pans, name the units, and apply. One model revision writes them, with each area saved as its unit’s parcel.',
+							'Follow the data step’s links in order: rain from the boundary, the nearest gauging stations, the dams from the register, cultivated area from land cover, then run the model.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'The areas come from a 30 m global elevation model, not a survey. In flat land a divide can be hundreds of metres out; check each piece against the map before you tick it.'
+					}
+				]
+			},
+			{
+				heading: 'A model that already has units',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Use **Divide the model** instead ([[divide-model]]): say which unit each point stands for, and each unit’s own area and order are proposed beside its values now. Or click the rivers with **Sub-catchments, one per click** ([[sub-catchments]]), save the pieces as areas, link each to its unit and **Use** its [[map-area|area]].'
+					}
+				]
+			}
+		],
+		terms: ['start-from-map', 'delineation', 'terrain-channels', 'outlet-placement', 'dam-siting', 'area-basis'],
+		related: ['map-page', 'build-the-network', 'load-data-feeds']
 	},
 	{
 		id: 'add-a-transfer',
@@ -625,7 +750,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'On **Settings & calibration → Calibration record**, set the calibration flow series, window and exclusions first. The fit uses the form as it stands.',
-							'Go to the **Fit automatically** panel and choose the **Objective**. KGE′ is the default; year-balanced KGE′ stops a few wet years dominating; NSE on log Q favours low flows; the mean of KGE′ on Q and on 1/Q weighs low and high flows together, the one to use when the fit feeds an EWR (low-flow) decision.',
+							'Go to the **Fit automatically** panel and choose the **Objective** by what the fit will feed (see *Choosing an objective* below), before you see any score.',
 							'Choose **Bounds**: Wide, or Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down.',
 							'Leave **Model runs per fit** (1 500) and **Starts** (5) at their defaults unless you have a reason. Each start is a separate search from its own seed and the best is kept; the notes say when starts reach nearly the same score with scattered parameters.',
 							'Keep **Validate** (split-sample and dry → wet) ticked. With both a gauge and a logger, you can also score the fit against the record it doesn’t use (**Also validate against**).',
@@ -643,6 +768,34 @@ export const GUIDES: Guide[] = [
 				]
 			},
 			{
+				heading: 'Choosing an objective',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Each [[calibration-objective|objective]] weighs the record differently, so choose it by what the fit will feed, and before you see any score:'
+					},
+					{
+						type: 'list',
+						items: [
+							'**KGE′** (default): the overall water balance, peaks and events.',
+							'**Year-balanced KGE′**: a record where a few wet years would otherwise dominate.',
+							'**Mean of KGE′(Q) and KGE′(1/Q)**: EWR, low-flow and assurance-of-supply decisions, when the gauge’s low flows are well rated.',
+							'**Non-parametric KGE**: the same decisions when the rating at the extremes is uncertain. It reads the rank order and the shape of the flow-duration curve, so it is less sensitive to rating error.',
+							'**NSE on √Q or log Q**: mainly to compare with older studies that used them.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Don’t fit several objectives and keep the one whose score looks best. Scores of different objectives don’t compare, and choosing after seeing them is the overfitting the [[calibration-rules]] exist to stop. To try several, list them in the rules: every fit is then judged on one [[calibration-selection-score|selection score]] on a held-out test, chosen in advance.'
+					},
+					{
+						type: 'p',
+						text: 'Check a low-flow fit for volume too: the [[wr2012-fit-statistics]] and KGE′ are reported beside every fit.'
+					}
+				]
+			},
+			{
 				heading: 'Afterwards',
 				blocks: [
 					{
@@ -652,7 +805,7 @@ export const GUIDES: Guide[] = [
 				]
 			}
 		],
-		terms: ['auto-calibration', 'calibration-bounds', 'kge', 'wr2012-penalty'],
+		terms: ['auto-calibration', 'calibration-objective', 'validation-tests', 'calibration-bounds', 'calibration-search', 'kge', 'wr2012-penalty'],
 		related: ['how-calibration-works', 'calibrate-by-hand', 'check-against-wr2012']
 	},
 	{
@@ -778,7 +931,7 @@ export const GUIDES: Guide[] = [
 		id: 'compare-runs',
 		title: 'Compare runs and try what-ifs',
 		summary: 'Set up to two what-ifs against a baseline: which inputs changed, what that did to the results, and every figure in full.',
-		kind: 'howto',
+		kind: 'use',
 		tab: 'compare',
 		sections: [
 			{
@@ -810,6 +963,297 @@ export const GUIDES: Guide[] = [
 		],
 		terms: ['run', 'project'],
 		related: ['create-a-project', 'run-and-read-results']
+	},
+	{
+		id: 'try-a-what-if',
+		title: 'Model a what-if with a scenario',
+		summary: 'Describe a change as a scenario on a saved run, keep the proposal apart from the assumptions, run it and read what it does.',
+		kind: 'use',
+		tab: 'scenarios',
+		sections: [
+			{
+				heading: 'Before you start',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A [[scenario]] is a list of [[scenario-change|changes]] on a [[base-run]]: the inputs that run stored, never the live model. Start from the run the change should be judged against, usually the [[published-baseline|published run]]. Each change is labelled a **Proposal** or a **Baseline assumption** ([[change-class]]): to see a proposal’s effect alone, settle the baseline assumptions (a corrected setting, new rain data) in the project first and run it again, then start the scenario on that run.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On **Scenarios**, press **+ New scenario**, name it after the change (“Upper dam +20 %”) and pick its **Base run**.',
+							'Tick **The proposer’s hydrological units**: the units whose owner is proposing the change. Changes to them, and anything the scenario adds, are the proposal.',
+							'Add each change under **Add a change**: pick the kind, the target and the new value. It reads in words against the value it replaces. For many edits at once, **Edit in the model tables** and **Record** them ([[override-mode]]).',
+							'Check the list: a red **Baseline assumptions changed** callout means some change alters what the river is taken to be today; a change marked **Doesn’t apply** must be fixed or removed before the scenario can run.',
+							'Press **Run scenario**. **Scenario against its base** shows the headline results, each hydrological unit, [[assurance-of-supply]] and the daily series against the base run, every change as scenario − base.',
+							'For a dam, read **Yield under this scenario** ([[firm-yield]]). For how sure the change is, open the full comparison and compute the [[paired-band|paired band]] ([[guide:read-the-uncertainty]]).'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'To test a demand restriction, use [[scale-demand|Scale demand]] (one change for the whole catchment, or for chosen units and months) rather than editing crop areas: it scales what each unit would take and leaves the crops as they are. To test a wetter or drier climate, [[scale-series|scale every rain series]] the project has, one change each.'
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'A change applies to the base run’s stored inputs. When the model or the data move on, **Rebase onto another run** carries the changes to a newer run and lists any that no longer apply.'
+					}
+				]
+			}
+		],
+		terms: ['scenario', 'base-run', 'scenario-change', 'change-class', 'scale-demand', 'run-comparison'],
+		related: ['scenarios-page', 'compare-runs', 'read-the-uncertainty']
+	},
+	{
+		id: 'read-the-uncertainty',
+		title: 'Read how sure a result is',
+		summary: 'Uncertainty bands, sensitivity runs and the paired band: what each answers about EWR compliance, and how to run and read it.',
+		kind: 'use',
+		tab: 'river',
+		sections: [
+			{
+				heading: 'Three questions, three tools',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'**How far could this result be off, given what the flow record can’t rule out?** The [[uncertainty-bands]]: many parameter sets that all fit the record acceptably, run through the whole model, with the 5–95 % range of what they give.',
+							'**Which uncertain input moves it most?** The [[sensitivity-runs]]: rain, the pan coefficient, dam evaporation, abstraction and the dams’ starting storage, each changed alone, with a verdict on whether EWR compliance holds across the range.',
+							'**How sure is the change between two runs?** The [[paired-band|paired band]]: the change under each kept parameter set, so the uncertainty both runs share cancels.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'On **River & reserve**, open **Uncertainty** from the page’s menu.',
+							'Under **Run an ensemble**, set the rule before looking at any band ([[ensemble-acceptance]]): the number of parameter sets, the bounds and the three tests a set must pass. For an evidence report, use the rule the project declared ([[evidence-uncertainty-rule]]). Press **Run ensemble** and keep the tab open while the browser runs the sets.',
+							'Read **Parameter sets kept** and the coverage line first. With fewer than 30 kept there is no band; with coverage of the held-out record below 70 % the band is too narrow to trust. Then read each result’s 5 %, median and 95 % beside this run’s own value.',
+							'Under **Sensitivity runs**, press **Run sensitivity**. Read the verdict at each EWR site ([[sensitivity-verdict]]), then the tornado: the factor with the longest bar is the one better data would settle first.',
+							'To weigh a change, open **Compare runs** with the run that has the ensemble as the baseline and the what-if beside it, and press **Compute the paired band** under **Uncertainty**.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Each tool leaves something out. The bands vary the runoff parameters, the pan coefficient, the rain source and the record judged against, never the abstraction or the dams’ starting storage; the sensitivity runs vary those one at a time and never together. A result that holds under both is well supported; one that is “not determinable with current data” says what to measure next.'
+					}
+				]
+			}
+		],
+		terms: ['uncertainty-bands', 'ensemble-acceptance', 'sensitivity-runs', 'sensitivity-verdict', 'paired-band'],
+		related: ['fit-automatically', 'compare-runs', 'river-page']
+	},
+	{
+		id: 'plan-the-season',
+		title: 'Weigh a season’s demand level',
+		summary: 'Run the outcome matrix and the seasonal outlook at a few demand levels, read how past years went at each, and publish the level the WUA sets.',
+		kind: 'use',
+		tab: 'river',
+		sections: [
+			{
+				heading: 'What the two panels answer',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Both run the catchment at a few [[demand-level|demand levels]] (100, 85 and 70 % of today’s demand by default) and count how past years went. The [[outcome-matrix]] looks at the whole record, split into [[year-class|dry, normal and wet years]]: how the river fares at each level in each kind of year. The [[seasonal-outlook]] starts from the catchment as it stands on the decision date (dams, soil, the runoff model’s stores) and runs the coming season with the weather of each past year ([[analogue-years]]). Neither forecasts the weather, and neither recommends a level: the WUA decides.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Run the model on the latest data. Both panels need an ordinary run, not a scenario or forecast run.',
+							'In **Settings & calibration**, check **Outcome matrix** (how years are classed and the [[outcome-risk|risk cut-offs]]) and **Seasonal outlook** (the [[outlook-season|season]], the planning share and the review date).',
+							'On **River & reserve**, under **Outcome matrix**, type the levels and press **Run demand sweep**. Read across a row for one level in every kind of year, and down a column for every level in one kind of year.',
+							'Under **Seasonal outlook**, type the levels (and a monthly plan, if the WUA is considering one) and press **Run seasonal outlook**. Read each level’s season-end storage, demand met and days below the EWR as the median with its 10–90 % range, and the [[planning-figure]].',
+							'For a mid-season check, read the [[review-triggers]]: the level each band of total dam storage on the review date supported in past years.',
+							'Once the WUA has decided, pick **Level the WUA has set** under **Farmers** and press **Publish to farmers** ([[outlook-publish]]).'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'A lower demand level doesn’t always mean fewer days below the EWR: part of the water irrigated from a dam drains back to the river on dry days. With fewer than 10 analogue years the outlook gives no ranges and no planning figure.'
+					}
+				]
+			}
+		],
+		terms: ['demand-level', 'outcome-matrix', 'seasonal-outlook', 'planning-figure', 'review-triggers'],
+		related: ['river-page', 'run-and-read-results']
+	},
+	{
+		id: 'share-with-a-team',
+		title: 'Set up a team and share a project',
+		summary: 'Make a team for your colleagues, give each a role, move a catchment into it, and share single projects with people outside it.',
+		kind: 'use',
+		tab: 'project',
+		sections: [
+			{
+				heading: 'Make the team',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Open **Teams** in the sidebar and press **New team**. Name it after the consultancy, department or WUA; you are its owner.',
+							'On the team’s page, under **Members**, type a colleague’s email and pick a **Role**, then press **Add**. Each person gets an [[invitation]] and joins once they accept it.',
+							'Repeat for each colleague. The pending invitations are listed under the form, with **Resend** and **Revoke**; an invitation works for 7 days.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'A [[team]] role holds on every team project: a **viewer** reads them, an **editor** edits and runs them, and an **owner** owns them and manages the team. Change a member’s role from the list at any time.'
+					}
+				]
+			},
+			{
+				heading: 'Put a catchment in the team',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'For a new catchment, pick the team under **Belongs to** in the **New project** dialog.',
+							'For an existing one, open it, go to its **Project** page and, under **Team**, choose the team in **Move to** and press **Move**. Only the project’s owners can move it.',
+							'Everyone in the team now has the project with their team role. People listed under **Shared directly with** keep their own access too.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'An owner only through the team can’t make the project personal again: add yourself under Members as an owner first.'
+					}
+				]
+			},
+			{
+				heading: 'Share one project with someone outside the team',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'**A colleague or client who works on the model**: add them under **Members** on the Project page with a [[roles|role]]. Anyone with a role is a member of that project only.',
+							'**A farmer**: press **Invite farmers** under **Farmers** and tick their hydrological units. They read only those units, from the published run ([[farmer-link]]).',
+							'**Someone who only needs to look** (a forum, an NGO): make a [[share-link]] under **Share links**. It opens the published baseline without signing in, for as long as you choose.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'Every addition, role change and link is recorded on the [[change-history|History]] page with who made it.'
+					}
+				]
+			}
+		],
+		terms: ['team', 'roles', 'invitation', 'share-link'],
+		related: ['project-page', 'create-a-project']
+	},
+	{
+		id: 'push-logger-data',
+		title: 'Push logger data with an API key',
+		summary: 'Let a logger gateway or a script add daily readings to a project’s series without signing in, and keep an eye on it.',
+		kind: 'howto',
+		tab: 'settings',
+		sections: [
+			{
+				heading: 'Make a key',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Make sure the series exists: upload its record once on the **Data** tab, with the name the gateway will send. A key creates a series only when the project has none of that kind.',
+							'As an owner, open **Settings & calibration** and go to **API keys**.',
+							'Give the key a **Name** that says where it runs (“Weir logger gateway”), choose how long it **Works for**, and under **What it may write** choose **Only these series** and tick the ones it feeds.',
+							'Press **Make key** and copy the key at once: it is shown only this once. Store it in the gateway’s own settings, never in a shared file.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Send the readings',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The gateway sends each day’s readings to the ingest address with the key, as in the example request shown under the new key: the series’ kind and name, its unit, the first date and one value a day. Only the days sent change, in the series’ own units, and sending the same days again changes nothing, so a gateway can safely resend the last week every day.'
+					},
+					{
+						type: 'p',
+						text: 'Each push shows in **History** as **API key “name”**. When the project re-runs automatically, a push that changed days queues a run. A push that looks wrong (a negative value, a value far above the record’s usual range, or a series it had to create) is still stored, but holds the automatic runs until a person runs the model.'
+					}
+				]
+			},
+			{
+				heading: 'Keep an eye on it',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'The key’s row shows when it was **Last used**.',
+							'Switch on **API data behind** in the Summary’s alert rules to be emailed when a series the key sends stops getting readings ([[alert-rules]]).',
+							'If a key leaks or the gateway is retired, press **Revoke**: the key is refused from its next request. Make a new key for a replacement gateway.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['api-key', 'alert-rules', 'change-history'],
+		related: ['add-data']
+	},
+	{
+		id: 'issue-an-evidence-pack',
+		title: 'Issue an evidence pack',
+		summary: 'Turn a run’s evidence report into a signed, hashed pack with a short code that anyone can check on the public verify page.',
+		kind: 'use',
+		tab: 'runs',
+		sections: [
+			{
+				heading: 'Before you start',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'The baseline must be the project’s [[evidence-run|nominated evidence run]]. For an [[application]], run the application on that baseline.',
+							'Declare the [[evidence-uncertainty-rule|uncertainty rule]] under Settings, Evidence, and run an ensemble to it, so the report has bands to cite.',
+							'The signer needs two-step sign-in, and, while the project requires it, a current [[pack-signoff|registration check]] recorded on the **Project** page.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Open the [[evidence-report]]: **Evidence report** beside **Report** on Runs & results, or from the head of a scenario’s comparison.',
+							'Read the checks at the top. Fix every one marked “stops issue” ([[pack-issue-checks]]), run the model again and nominate the new run if the baseline changed, then read **Expect questions about**.',
+							'For an application with registered volumes, press **Run at full authorised use**, so page 1 carries the [[full-authorised-use|impact against full authorised use]].',
+							'Press **Create evidence pack**. The pack’s page opens: a draft, with its checklist under **Where this pack stands**.',
+							'In Appendix B.2, the applicant’s specialist presses **Sign off this evidence pack…**, fills in their registration and ticks every confirmation. An assessor may add a second sign-off as a review.',
+							'Once every line of the checklist is ticked, an editor presses **Issue pack** and confirms. Signing and issuing ask for a fresh code from the authenticator app.',
+							'The server then prints the pack’s PDF, builds its [[reproduction-bundle]] and re-runs it; the pack page shows each as it lands. Hand the [[pack-short-code|short code]] to whoever needs to check the pack, use **Send to the authority…** for the full pack, and **Share link…** for the public.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Issuing is public and permanent: the verify page shows the signers’ names and registrations, and an issued pack is never edited or deleted. A change of evidence is **New version…**; a pack that shouldn’t stand is **Withdraw…**, with a reason anyone holding the code can read.'
+					}
+				]
+			}
+		],
+		terms: ['evidence-pack', 'pack-lifecycle', 'manifest-hash', 'pack-short-code', 'pack-signoff', 'errata-since'],
+		related: ['applications-page', 'run-and-read-results']
 	},
 
 	// ---- How it works -------------------------------------------------------
@@ -1041,9 +1485,14 @@ export const GUIDES: Guide[] = [
 						items: [
 							'**KGE′** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
 							'**Year-balanced KGE′**: each water year counts once, so a few wet years can’t dominate a drought-heavy record.',
-							'**Non-parametric KGE**, **NSE on √Q** (medium flows) and **NSE on log Q** (low flows).',
+							'**Non-parametric KGE**: rank correlation, the flow-duration curve’s shape and the bias, so less sensitive to rating error at the extremes.',
+							'**NSE on √Q** (medium flows) and **NSE on log Q** (low flows).',
 							'**Mean of KGE′(Q) and KGE′(1/Q)**: half the score on the flows, half on their inverses, so recessions and low flows count as much as the peaks. Suggested when the fit feeds an EWR (low-flow) decision.'
 						]
+					},
+					{
+						type: 'p',
+						text: 'Choose the [[calibration-objective|objective]] by what the fit will feed, before seeing any score, never by which one scores best: scores of different objectives don’t compare.'
 					}
 				]
 			},
@@ -1350,9 +1799,23 @@ export const GUIDES: Guide[] = [
 						text: 'Owners and editors see every volume. Viewers see only catchment totals per water source held by five or more users, until an owner ticks **Viewers see each farm’s registered volumes** under **What viewers see**.'
 					}
 				]
+			},
+			{
+				heading: 'Reading the comparison',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'The list puts first the units to look into: each unit and water source with its status over a mean water year. Pick one to see its water years, the [[allocation-band|band]] and its registered volumes.',
+							'Each water year reads above registered, within band, below registered, or no registered volume ([[registered-vs-modelled]]). A part year is compared with the volume prorated to its days and isn’t counted with the whole years.',
+							'A dam’s registered storage (a [[s21-water-use|s21(b) row]]) is set against the dam’s modelled capacity, never against the year’s use ([[registered-storage]]).',
+							'After a cap run, the picked unit says on how many days the cap held use back, and why ([[cap-held-back]]).'
+						]
+					}
+				]
 			}
 		],
-		terms: ['allocation-mode', 'allocation-band', 'water-year'],
+		terms: ['registered-volume', 'authorisation-type', 'registered-vs-modelled', 'licence-conditions', 'warms-import', 'allocation-mode', 'allocation-band', 'allocation-viewer-access', 'water-year'],
 		related: ['run-and-read-results', 'units-page']
 	},
 	{
@@ -1367,7 +1830,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'The Network is the model’s schematic: what drains into what. The [[map]] is the geography: the catchment boundary, each unit’s area, the farm parcels, dams, gauges and rivers. A model builds and runs without it; with it, areas come from the drawing instead of being typed, and results can be read on the map.'
+						text: 'The Network is the model’s schematic: what drains into what. The [[catchment-map|map]] is the geography: the catchment boundary, each unit’s area, the farm parcels, dams, gauges and rivers. A model builds and runs without it; with it, areas come from the drawing instead of being typed, and results can be read on the map.'
 					}
 				]
 			},
@@ -1391,8 +1854,8 @@ export const GUIDES: Guide[] = [
 				]
 			}
 		],
-		terms: ['map', 'quaternary', 'catchment-area', 'farm-area'],
-		related: ['build-the-network']
+		terms: ['catchment-map', 'delineation', 'map-area', 'area-basis', 'map-checks', 'map-results', 'quaternary', 'farm-area'],
+		related: ['start-from-the-map', 'build-the-network']
 	},
 	{
 		id: 'dams-page',

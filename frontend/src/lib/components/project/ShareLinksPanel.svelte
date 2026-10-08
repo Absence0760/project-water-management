@@ -16,6 +16,7 @@
 	// it is one issued evidence pack's links, on the pack's page: its editors
 	// list, make and withdraw them.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
 	import { api, SHARE_LABEL_MAX, type PackStatus, type ScenarioStatus, type ShareLink } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -125,7 +126,7 @@
 	}
 </script>
 
-<section class:panel={!targeted} aria-labelledby={targeted ? undefined : 'share-h'} data-testid={pack ? 'pack-share' : scenario ? 'scenario-share' : undefined}>
+<section class:panel={!targeted} aria-labelledby={targeted ? undefined : 'share-h-t'} data-testid={pack ? 'pack-share' : scenario ? 'scenario-share' : undefined}>
 	{#if pack}
 		<p class="muted small intro" id="share-what">
 			A read-only link to {pack.name} for someone outside the project (an NGO, a catchment forum), signed out. They see what the verify
@@ -149,7 +150,7 @@
 		{/if}
 	{:else}
 		<div class="panel-head">
-			<h2 id="share-h">Share links</h2>
+			<h2 id="share-h"><span id="share-h-t">Share links</span> <HelpTip key="share-link" label="About share links" /></h2>
 		</div>
 		<p class="muted small intro">
 			A read-only link to the published baseline for someone outside the project: the catchment’s reserve status and the WUA’s notice,

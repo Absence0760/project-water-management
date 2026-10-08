@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	// The human-impact tables of a run (engine ≥ 0.22.0): land cover (WP-1.35),
 	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
@@ -50,7 +51,7 @@
 </script>
 
 {#if objects.length}
-	<h3>Demand objects</h3>
+	<h3>Demand objects <HelpTip key="summary.demandObjects" /></h3>
 	<p class="muted small">
 		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops, or from a river abstraction of their own when their water source is the river (daily averages over the run).
 		Their demand is part of the hydrological unit’s.
@@ -118,7 +119,7 @@
 {/if}
 
 {#if takes.length}
-	<h3 id="river-takes-h">River abstractions</h3>
+	<h3 id="river-takes-h">River abstractions <HelpTip key="summary.riverTakes" label="About river abstractions" /></h3>
 	<p class="muted small">
 		Demands on the hydrological units that pump from the river at the unit (below its dam, when it has one), each with its own pump (daily averages over the run).
 		{#if takesLimited}The demand a pump left unmet counts only days the river or its pool had the water; on other days the river is what ran short.{/if}
@@ -166,7 +167,7 @@
 
 {#if summary.landCover}
 	{@const lc = summary.landCover}
-	<h3>Land cover</h3>
+	<h3>Land cover <HelpTip key="land-cover" /></h3>
 	<p class="muted small">
 		Invasive plants and forestry took {fmtNum(lc.reductionM3Day)} m³/day of natural flow on average{lc.fractionOfNatural !== null ? ` (${fmtPct(lc.fractionOfNatural, 1)} of it)` : ''}
 		before it reached the hydrological units. Low flows are the flow exceeded 75 % of the days ({fmtNum(lc.lowFlowThresholdM3Day)} m³/day).
@@ -196,7 +197,7 @@
 {/if}
 
 {#if pumping.length}
-	<h3>Groundwater</h3>
+	<h3>Groundwater <HelpTip key="borehole" /></h3>
 	{#if !annual.length}
 		<!-- A run before engine 0.36.0 has no annual figures: the daily means only. -->
 		<p class="muted small">
@@ -313,7 +314,7 @@
 {/if}
 
 {#if users && summary.users?.length}
-	<h3>Other water users</h3>
+	<h3>Other water users <HelpTip key="element-user" /></h3>
 	<p class="muted small">Towns, industry and unlisted users taking water from the river (daily averages over the run).</p>
 	<div class="table-wrap">
 		<table class="data users">
@@ -349,7 +350,7 @@
 {/if}
 
 {#if pumpUsers.length}
-	<h3 id="user-pumps-h">Other water users’ pumps</h3>
+	<h3 id="user-pumps-h">Other water users’ pumps <HelpTip key="user-pump" /></h3>
 	<p class="muted small">
 		What each other water user with a pump capacity took from the river, and the demand its pump left unmet on days the river had it (daily averages over the run).
 	</p>

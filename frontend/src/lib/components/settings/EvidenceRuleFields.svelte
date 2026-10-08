@@ -11,6 +11,7 @@
 	at its size ceiling.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import {
 		declaredRuleText,
 		ENSEMBLE_MEMBERS_MAX,
@@ -73,7 +74,7 @@
 	{#if value}
 		<div class="grid">
 			<div class="field">
-				<label for="{uid}-members">Members</label>
+				<label for="{uid}-members">Members <HelpTip key="uncertainty-bands" label="About the ensemble" /></label>
 				<NumberInput
 					id="{uid}-members"
 					min={ENSEMBLE_MEMBERS_MIN}
@@ -86,7 +87,7 @@
 				<span class="hint" id="{uid}-members-h">Parameter sets sampled, {ENSEMBLE_MEMBERS_MIN} to {ENSEMBLE_MEMBERS_MAX}.</span>
 			</div>
 			<div class="field">
-				<label for="{uid}-bounds">Bounds</label>
+				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" label="About the search range" /></label>
 				<select
 					id="{uid}-bounds"
 					disabled={readonly}
@@ -111,10 +112,10 @@
 			</div>
 		</div>
 		<fieldset class="plain">
-			<legend class="sub">A parameter set is kept when it passes</legend>
+			<legend class="sub">A parameter set is kept when it passes <HelpTip key="evidence-uncertainty-rule" label="About the acceptance tests" /></legend>
 			<div class="grid">
 				<div class="field">
-					<label for="{uid}-obj">Skill score</label>
+					<label for="{uid}-obj">Skill score <HelpTip key="calibration-objective" label="About choosing the skill measure" /></label>
 					<select
 						id="{uid}-obj"
 						disabled={readonly}

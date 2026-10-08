@@ -12,6 +12,16 @@
 
 	const q = $derived(page.url.searchParams.get('q')?.trim() ?? '');
 	const guides = $derived(searchGuides(q));
+	// The best few guides, then the rest on request: a common word ("dam")
+	// appears somewhere in most guides, and the full list pushed the glossary
+	// terms off the first screen. A new search shows the few again.
+	const GUIDES_SHOWN = 6;
+	let allGuides = $state(false);
+	$effect(() => {
+		void q;
+		allGuides = false;
+	});
+	const shownGuides = $derived(allGuides ? guides : guides.slice(0, GUIDES_SHOWN));
 	const terms = $derived(q ? searchHelp(q) : []);
 </script>
 
@@ -40,13 +50,16 @@
 		<section aria-labelledby="res-guides">
 			<h2 id="res-guides">Guides</h2>
 			<ul class="results">
-				{#each guides as g (g.id)}
+				{#each shownGuides as g (g.id)}
 					<li>
 						<a href="{base}/help/guides/{g.id}">{g.title}</a>
 						<p>{g.summary}</p>
 					</li>
 				{/each}
 			</ul>
+			{#if guides.length > shownGuides.length}
+				<button type="button" class="btn btn-sm more" onclick={() => (allGuides = true)}>Show all {guides.length} guides</button>
+			{/if}
 		</section>
 	{/if}
 	{#if terms.length}
@@ -105,6 +118,9 @@
 	}
 	.results a {
 		font-weight: 600;
+	}
+	.more {
+		margin-top: 0.6rem;
 	}
 	.results p {
 		margin: 0.2rem 0 0;

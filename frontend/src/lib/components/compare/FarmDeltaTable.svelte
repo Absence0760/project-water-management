@@ -5,6 +5,7 @@
 	// runs' farm summaries, a feature column (river pumping, groundwater) joins
 	// when either run has it, a farm without the feature reading as 0
 	// (delta.ts farmFeatureMetrics).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { FarmSummary, RunComparison } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import Delta from './Delta.svelte';
@@ -114,6 +115,7 @@
 	{#if zeroNotes.length}
 		<p class="muted small" data-testid="farm-feature-note">
 			{#each zeroNotes as c, i (c.key)}{i ? ' ' : ''}{c.label}: a run with {c.none} at a hydrological unit reads as 0 there (“none”).{/each}
+			<HelpTip key="one-run-feature" label="About features only one run has" />
 		</p>
 	{/if}
 {/if}
