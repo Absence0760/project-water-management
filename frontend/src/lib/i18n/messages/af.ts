@@ -257,6 +257,8 @@ export const af: Catalogue = {
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
 	'265915f3': 'Maak toe',
+	// Two-step sign-in is now required only for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. Anyone can still turn it on for their own account.
+	'fac7fd5e': 'Tweestap-intekening word nou slegs vereis vir publisering aan boere, vir lisensiebesluite en bewyspakkette, en vir die bestuur van ’n projek of span wat dit aanskakel. Enigiemand kan dit steeds vir hul eie rekening aanskakel.',
 	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
 	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
 	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
