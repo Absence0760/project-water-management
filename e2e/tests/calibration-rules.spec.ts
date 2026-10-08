@@ -128,3 +128,88 @@ test('the flagged-days rule: its checkbox sits beside its words, and off and on 
 	await leaveOut.check();
 	await expect(share).toHaveValue('35');
 });
+
+test('a running run of the rules stays with its project: another project never shows it, and its polling stops there', async ({ page, owner }) => {
+	void owner;
+	const a = await seedRunnableProject(page.request, 'Rules run here');
+	const b = await seedRunnableProject(page.request, 'Rules not run here');
+	for (const p of [a, b]) await updateSettings(page.request, p.id, { runoffModel: 'gr4j' });
+	// Every poll of one run (A's, under any project's address), to show they stop once another project is open.
+	const polls: string[] = [];
+	page.on('request', (r) => {
+		if (r.method() === 'GET' && r.url().includes('/auto-calibrations/')) polls.push(r.url());
+	});
+	// The page's own clock, so the 1.5 s polls are stepped through rather than waited for.
+	await page.clock.install();
+	await page.goto(`/projects/${a.id}?tab=settings`);
+	const auto = page.getByRole('region', { name: /^Automated calibration/ });
+	const sections = page.getByRole('navigation', { name: 'Project sections' });
+	const fitting = auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ });
+	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
+	await expect(fitting).toBeVisible();
+	await page.clock.runFor(1_600);
+	await expect.poll(() => polls.length).toBeGreaterThan(0);
+
+	// Through the project list to B: the workspace closes, A's polling ends, and B shows no run.
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
+	await page.getByRole('link', { name: 'Rules not run here', exact: true }).click();
+	await sections.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
+	const seen = polls.length;
+	await page.clock.runFor(6_000);
+	await expect(auto.getByTestId('auto-result')).toHaveCount(0);
+	await expect(fitting).toHaveCount(0);
+	expect(polls.length).toBe(seen);
+
+	// Straight from B back to A (Back, the same workspace page reused): A's run is still followed.
+	await page.evaluate(() => history.go(-3));
+	await expect(page).toHaveURL(new RegExp(`/projects/${a.id}\\?tab=settings`));
+	await expect(fitting).toBeVisible();
+	// Hold A's next poll on the wire, then go straight on to B: the reply lands after B is open,
+	// the race a slow network makes. Nothing of A's may show on B, and A's polling must end with it.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	let holding!: () => void;
+	const isHeld = new Promise<void>((r) => (holding = r));
+	let first = true;
+	await page.route(`**/projects/${a.id}/auto-calibrations/*`, async (route) => {
+		if (first) {
+			first = false;
+			holding();
+			await held;
+		}
+		await route.continue();
+	});
+	await page.clock.runFor(1_600);
+	await isHeld;
+	const bLoaded = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().endsWith(`/projects/${b.id}/auto-calibrations`));
+	await page.evaluate(() => history.go(3));
+	await (await bLoaded).finished();
+	await expect(page).toHaveURL(new RegExp(`/projects/${b.id}\\?tab=settings`));
+	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
+	const seenAgain = polls.length;
+	const stale = page.waitForResponse((r) => r.url().includes(`/projects/${a.id}/auto-calibrations/`));
+	release();
+	await (await stale).finished();
+	// Let the page take the reply in before the clock moves on (two round trips to its event loop).
+	for (let i = 0; i < 2; i++) await page.evaluate(() => new Promise((r) => setTimeout(r, 0)));
+	await page.clock.runFor(6_000);
+	await expect(auto.getByTestId('auto-result')).toHaveCount(0);
+	await expect(fitting).toHaveCount(0);
+	await expect(auto.getByRole('alert')).toHaveCount(0);
+	expect(polls.length).toBe(seenAgain);
+	// One run at a time per person: B says where the running one is, rather than seeming to run here too.
+	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
+	await expect(auto.getByRole('alert')).toHaveText(
+		'you already have an automated calibration queued or running in the project “Rules run here”, and only one at a time is allowed; wait for it to finish, then start this one'
+	);
+	await expect(auto.getByTestId('auto-result')).toHaveCount(0);
+
+	// Back on A, the run finishes and shows there.
+	await runJobsTick({ projects: [a.id], schedule: false });
+	await page.evaluate(() => history.go(-3));
+	await expect(page).toHaveURL(new RegExp(`/projects/${a.id}\\?tab=settings`));
+	await page.clock.runFor(1_600);
+	await expect(auto.getByRole('table', { name: 'Fits the rules tried' })).toBeVisible();
+	await expect(fitting).toHaveCount(0);
+});

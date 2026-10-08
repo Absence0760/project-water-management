@@ -10,7 +10,7 @@
 <script lang="ts">
 	import { rulesLines, waterYearLabel, type CalibrationRules } from '@water-management/engine';
 	import { api } from '$lib/api';
-	import type { AutoCalibration } from '$lib/api/types';
+	import { AutoCalibrationFollower } from '$lib/calibration/autoFollow.svelte';
 	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from '$lib/calibration/autoFit';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -41,11 +41,12 @@
 	} = $props();
 
 	const uid = $props.id();
-	let latest = $state.raw<AutoCalibration | null>(null);
-	let error = $state<string | null>(null);
-	let busy = $state(false);
-	let runError = $state<string | null>(null);
-	let timer: ReturnType<typeof setTimeout> | undefined;
+	// Loads and follows the latest run, one project at a time (lib/calibration/autoFollow.svelte.ts).
+	const follower = new AutoCalibrationFollower(api.autoCalibrations);
+	const latest = $derived(follower.latest);
+	const error = $derived(follower.error);
+	const busy = $derived(follower.busy);
+	const runError = $derived(follower.runError);
 
 	const unsaved = $derived(rulesUnsaved(savedRules, formRules));
 	const runState = $derived(latest ? autoState(latest) : null);
@@ -55,63 +56,18 @@
 	const kept = $derived(latest && latest.chosen !== null ? latest.cases[latest.chosen]! : null);
 	const blocker = $derived(latest ? applyBlocker(latest, { rulesUnsaved: unsaved, formDirty, readonly }) : null);
 
-	/** Follow a running calibration until it completes, fails or its job stops. */
-	async function follow(id: string) {
-		clearTimeout(timer);
-		try {
-			latest = await api.autoCalibrations.get(projectId, id);
-			if (autoState(latest).kind === 'running') timer = setTimeout(() => follow(id), 1500);
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		}
+	function start() {
+		if (canStart) void follower.start();
 	}
 
-	async function load() {
-		try {
-			const [first] = await api.autoCalibrations.list(projectId);
-			latest = first ?? null;
-			if (first && autoState(first).kind === 'running') timer = setTimeout(() => follow(first.id), 1500);
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		}
+	function apply() {
+		if (latest && !blocker) void follower.apply(onApplied);
 	}
 
-	async function start() {
-		if (!canStart) return;
-		busy = true;
-		error = null;
-		runError = null;
-		try {
-			const res = await api.autoCalibrations.start(projectId);
-			latest = res.calibration;
-			await follow(res.calibration.id);
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		} finally {
-			busy = false;
-		}
-	}
-
-	async function apply() {
-		if (!latest || blocker) return;
-		busy = true;
-		error = null;
-		try {
-			const res = await api.autoCalibrations.apply(projectId, latest.id);
-			latest = res.calibration;
-			runError = res.runError;
-			await onApplied();
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		} finally {
-			busy = false;
-		}
-	}
-
+	// Another project, or the panel closing, drops whatever the last one had in flight.
 	$effect(() => {
-		void projectId;
-		load();
-		return () => clearTimeout(timer);
+		follower.open(projectId);
+		return () => follower.close();
 	});
 </script>
 

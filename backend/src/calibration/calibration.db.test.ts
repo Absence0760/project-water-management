@@ -240,6 +240,66 @@ describe('POST /projects/:id/auto-calibrations', () => {
 	});
 });
 
+describe('each project sees only its own runs of the rules', () => {
+	it('an owner of two projects reads, follows and applies a run only under its own project', async () => {
+		const owner = await signUp('AutocalTwoProjects');
+		const a = await calibratable(owner, quickRules(), 'Autocal A');
+		const b = await calibratable(owner, quickRules(), 'Autocal B');
+		const started = await owner.call('POST', `/projects/${a.projectId}/auto-calibrations`, {});
+		expect(started.status).toBe(202);
+		const id = started.body.calibration.id as string;
+		// Positive control: A lists and follows it, running.
+		const listA = await owner.call('GET', `/projects/${a.projectId}/auto-calibrations`);
+		expect(listA.body.calibrations.map((x: { id: string }) => x.id)).toEqual([id]);
+		expect((await owner.call('GET', `/projects/${a.projectId}/auto-calibrations/${id}`)).body.calibration.status).toBe('running');
+		// B, which the same person owns, lists nothing and can't reach A's run by its id.
+		const listB = await owner.call('GET', `/projects/${b.projectId}/auto-calibrations`);
+		expect(listB.status).toBe(200);
+		expect(listB.body.calibrations).toEqual([]);
+		expect((await owner.call('GET', `/projects/${b.projectId}/auto-calibrations/${id}`)).status).toBe(404);
+		await drain();
+		const done = (await owner.call('GET', `/projects/${a.projectId}/auto-calibrations/${id}`)).body.calibration;
+		expect(done.status).toBe('complete');
+		expect(done.chosen).not.toBeNull();
+		// Nor can A's kept fit be applied through B: B's settings stay as they were.
+		const before = (await owner.call('GET', `/projects/${b.projectId}`)).body.project.settings;
+		expect((await owner.call('POST', `/projects/${b.projectId}/auto-calibrations/${id}/apply`, {})).status).toBe(404);
+		const after = (await owner.call('GET', `/projects/${b.projectId}`)).body.project.settings;
+		expect(after.gr4j).toEqual(before.gr4j);
+		expect(after.fitRecord ?? null).toEqual(before.fitRecord ?? null);
+	});
+
+	it('one run at a time per person: a second project is refused naming where the first runs, then runs apart once it finishes', async () => {
+		const owner = await signUp('AutocalBothRun');
+		const a = await calibratable(owner, quickRules(), 'Autocal both A');
+		const b = await calibratable(owner, quickRules(), 'Autocal both B');
+		const ra = (await owner.call('POST', `/projects/${a.projectId}/auto-calibrations`, {})).body.calibration.id as string;
+		// While A's runs, B says where it is, so it doesn't read as running in B too; A itself says so of A.
+		const refusedB = await owner.call('POST', `/projects/${b.projectId}/auto-calibrations`, {});
+		expect(refusedB.status).toBe(429);
+		expect(refusedB.body.error).toBe(
+			'you already have an automated calibration queued or running in the project “Autocal both A”, and only one at a time is allowed; wait for it to finish, then start this one'
+		);
+		const refusedA = await owner.call('POST', `/projects/${a.projectId}/auto-calibrations`, {});
+		expect(refusedA.status).toBe(429);
+		expect(refusedA.body.error).toBe('an automated calibration is already queued or running in this project; wait for it to finish');
+		expect((await owner.call('GET', `/projects/${b.projectId}/auto-calibrations`)).body.calibrations).toEqual([]);
+		await drain();
+		const rb = await owner.call('POST', `/projects/${b.projectId}/auto-calibrations`, {});
+		expect(rb.status).toBe(202);
+		await drain();
+		for (const [p, mine, other] of [
+			[a.projectId, ra, rb.body.calibration.id as string],
+			[b.projectId, rb.body.calibration.id as string, ra]
+		] as const) {
+			const list = (await owner.call('GET', `/projects/${p}/auto-calibrations`)).body.calibrations as { id: string; status: string }[];
+			expect(list.map((x) => x.id)).toEqual([mine]);
+			expect(list[0]!.status).toBe('complete');
+			expect((await owner.call('GET', `/projects/${p}/auto-calibrations/${other}`)).status).toBe(404);
+		}
+	});
+});
+
 describe('new data queues the calibration rules (after.onNewData)', () => {
 	const merge = (owner: User, projectId: string) =>
 		owner.call('POST', `/projects/${projectId}/series/merge`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2014-09-29', values: [4, 0, 9] });

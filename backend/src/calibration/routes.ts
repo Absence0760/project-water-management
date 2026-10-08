@@ -30,6 +30,7 @@ import {
 	insertCalibration,
 	listCalibrations,
 	pendingCalibrationJobs,
+	pendingCalibrationMessage,
 	planCalibration,
 	recordAppliedRun,
 	startCalibrationEnsemble
@@ -67,7 +68,7 @@ export const autoCalibrationRoutes = new Hono<AuthEnv>()
 		const { calibration, job } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			const pending = await pendingCalibrationJobs(db);
-			if (pending >= AUTO_CALIBRATION_JOBS_PER_USER) throw new ApiError(429, 'you already have an automated calibration queued or running; wait for it to finish');
+			if (pending.length >= AUTO_CALIBRATION_JOBS_PER_USER) throw new ApiError(429, pendingCalibrationMessage(id, pending));
 			// The case jobs refuse an input that changed since this plan, so the plan's own hash is the one stored.
 			return insertCalibration(db, id, { trigger: 'manual', rules, plan, inputSha256: inputSha256(input) });
 		});
