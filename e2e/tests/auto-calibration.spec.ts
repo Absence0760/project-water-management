@@ -5,6 +5,7 @@ import { addMember, putSeries, seedRunnableProject, syntheticFlow, updateSetting
 import { expect, test } from '../support/fixtures.ts';
 import { anySaveBar, saveSettings, settingsBar } from '../support/settings.ts';
 import { ungroup } from '../support/format.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 test('fitting GR4J fills the form, and only Save stores it', async ({ page, owner }) => {
 	void owner;
@@ -92,6 +93,42 @@ test('a fit can be cancelled, leaving the form untouched', async ({ page, owner 
 	await expect(fit.getByRole('progressbar')).toHaveCount(0);
 	await expect(page.getByLabel(/^Production store capacity X1/)).toHaveValue('350');
 	await expect(anySaveBar(page)).toHaveCount(0);
+});
+
+test('a fit keeps running, and its result waits, while another tab is open', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Auto-calibration tab change');
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const tabs = page.getByRole('navigation', { name: 'Project sections' });
+	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await fit.getByLabel('Model runs per fit').fill('60');
+	await fit.getByLabel('Starts').fill('2');
+	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
+	await expect(fit.getByRole('progressbar', { name: 'Calibration progress' })).toBeVisible();
+
+	// Off to another tab mid-fit and back: the choices are kept, and the result is there.
+	await tabs.getByRole('link', { name: 'Network', exact: true }).click();
+	await expect(fit).toHaveCount(0);
+	await tabs.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(fit.getByLabel('Starts')).toHaveValue('2');
+	const params = fit.getByRole('table', { name: 'Parameters', exact: true });
+	await expect(params).toBeVisible();
+
+	// Leaving the project with the result unapplied asks first.
+	const projectsLink = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' });
+	await projectsLink.click();
+	await answerConfirm(page, false, 'You have unsaved changes (an automatic fit not yet applied to the form). Leave and go to All projects? They will be lost.');
+	await expect(params).toBeVisible();
+
+	// Applied, the fit itself no longer asks (the unsaved settings do, as before); discarded, nothing is left.
+	await fit.getByRole('button', { name: 'Apply to form' }).click();
+	await expect(fit.getByRole('button', { name: 'Apply to form again' })).toBeVisible();
+	await projectsLink.click();
+	await answerConfirm(page, false, 'You have unsaved changes (settings). Leave and go to All projects? They will be lost.');
+	await fit.getByRole('button', { name: 'Discard result' }).click();
+	await expect(params).toHaveCount(0);
+	await expect(fit.getByRole('button', { name: 'Fit automatically', exact: true })).toBeEnabled();
 });
 
 test('a viewer can fit but not apply', async ({ page, owner, signIn }) => {

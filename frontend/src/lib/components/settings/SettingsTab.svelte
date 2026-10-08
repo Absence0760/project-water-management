@@ -65,6 +65,7 @@
 	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
+	import type { FitSession } from '$lib/calibration/fitSession.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import { api, type Project } from '$lib/api';
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
@@ -111,6 +112,7 @@
 		project,
 		editor,
 		draft,
+		fit,
 		seriesKinds = null,
 		gaugeRecords = null,
 		chirpsSource,
@@ -126,6 +128,8 @@
 		 * discards and previews them with the model's edits, so this form has no save bar of its own.
 		 */
 		draft: SettingsDraft;
+		/** Fit automatically's choices, progress and result, held by the workspace page so a tab change keeps them (calibration/fitSession.svelte.ts). */
+		fit: FitSession;
 		/** Kinds of the project's input series, to limit the calibration flow choices. */
 		seriesKinds?: string[] | null;
 		/** The flow records attached to gauges inside the network (084_gauge_records), for the calibration site's choices; null = not known. */
@@ -972,6 +976,7 @@
 			calibrationFlowKind={s.calibrationFlowKind}
 			{readonly}
 			onApply={applyFit}
+			session={fit}
 		/>
 		{#if s.fitRecord}
 			<FitProvenance

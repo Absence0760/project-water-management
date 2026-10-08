@@ -3,7 +3,9 @@
 	parameters to the observed record in a Web Worker, shows the fit next to
 	its validation, and can write the result into the Settings form, with a
 	fit record of how it was made (issue #4). It never saves: the user reviews
-	the form and saves it.
+	the form and saves it. Its choices, the running fit and the result live in
+	the workspace's FitSession (lib/calibration/fitSession.svelte.ts), so they
+	outlast this panel when another tab opens.
 -->
 <script lang="ts">
 	import {
@@ -12,17 +14,11 @@
 		MAX_STARTS,
 		OBJECTIVES,
 		calibrationSeriesKey,
-		type CalibrationBounds,
 		type CalibrationFlowKind,
-		type CalibrationProgress,
 		type CalibrationReport,
 		type FitRecord,
-		type ObjectiveId,
 		type ProjectModel,
-		type ProjectSettings,
-		type SeriesOrigin,
-		type SeriesProvenance,
-		type ApanDailyFingerprint
+		type ProjectSettings
 	} from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
@@ -57,7 +53,8 @@
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '$lib/calibration/wr2012Fit';
-	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
+	import { startFit } from '$lib/calibration/runner';
+	import type { FitSession } from '$lib/calibration/fitSession.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -71,7 +68,8 @@
 		seriesKinds = null,
 		calibrationFlowKind = null,
 		readonly,
-		onApply
+		onApply,
+		session
 	}: {
 		projectId: string;
 		x2Open: boolean;
@@ -87,55 +85,38 @@
 		readonly: boolean;
 		/** Writes the fit into the form, with its record (never saves). */
 		onApply: (report: CalibrationReport, record: FitRecord) => void;
+		/** The workspace's fit: choices, progress and result, kept across tab changes. */
+		session: FitSession;
 	} = $props();
 
 	const uid = $props.id();
-	let objective = $state<ObjectiveId>('kgePrime');
-	let bounds = $state<CalibrationBounds>('wide');
-	let budget = $state<number | null>(1500);
-	let validate = $state(true);
-	// Shown and recorded: the same seed, inputs and engine version reproduce the fit.
-	let seed = $state<number | null>(1);
-	const seedProblem = $derived(seedError(seed));
+	const seedProblem = $derived(seedError(session.seed));
 	// Several searches from different seeds: nearly equal scores with scattered
 	// parameters show what the record can't pin down (calibration research CR-2).
-	let starts = $state<number | null>(DEFAULT_STARTS);
-	const startsOk = $derived(starts !== null && Number.isInteger(starts) && starts >= 1 && starts <= MAX_STARTS);
-	// The running fit's starts, for its progress bar.
-	let runStarts = 1;
-	let validationRecord = $state<CalibrationFlowKind | null>(null);
+	const startsOk = $derived(session.starts !== null && Number.isInteger(session.starts) && session.starts >= 1 && session.starts <= MAX_STARTS);
 	// Offered only when the project has both a gauge and a logger record.
 	const recordOptions = $derived(validationRecordOptions(seriesKinds, calibrationFlowKind));
-	const chosenRecord = $derived(validationRecord && recordOptions.includes(validationRecord) ? validationRecord : null);
+	const chosenRecord = $derived(session.validationRecord && recordOptions.includes(session.validationRecord) ? session.validationRecord : null);
 	// Seeded from the defaults up front, so the checkbox bindings never see a missing key.
-	let picked = $state<Record<string, boolean>>(untrack(() => Object.fromEntries(fitParams(x2Open).map((p) => [p.key, p.checked]))));
-	let status = $state<'idle' | 'loading' | 'running' | 'done' | 'error'>('idle');
-	let progress = $state<CalibrationProgress | null>(null);
-	let report = $state.raw<CalibrationReport | null>(null);
-	let error = $state<string | null>(null);
-	let handle: FitHandle | null = null;
-	// What the shown report was run on, for its fit record.
-	let ran: {
-		settings: ProjectSettings;
-		validate: boolean;
-		validationRecord: CalibrationFlowKind | null;
-		chirpsSource?: SeriesProvenance | null;
-		apanDaily?: ApanDailyFingerprint | null;
-		observedOrigin?: SeriesOrigin | null;
-	} | null = null;
+	untrack(() => {
+		if (!Object.keys(session.picked).length) session.picked = Object.fromEntries(fitParams(x2Open).map((p) => [p.key, p.checked]));
+	});
+	const status = $derived(session.status);
+	const report = $derived(session.report);
+	const progress = $derived(session.progress);
 
 	const params = $derived(fitParams(x2Open));
 	// Keep the user's ticks; a parameter new to the list (another model, or X2
 	// once exchange is on) starts at its default.
 	$effect(() => {
-		const prev = untrack(() => picked);
-		picked = Object.fromEntries(params.map((p) => [p.key, prev[p.key] ?? p.checked]));
+		const prev = untrack(() => session.picked);
+		session.picked = Object.fromEntries(params.map((p) => [p.key, prev[p.key] ?? p.checked]));
 	});
-	const free = $derived(params.filter((p) => picked[p.key]).map((p) => p.key));
+	const free = $derived(params.filter((p) => session.picked[p.key]).map((p) => p.key));
 	// The WR2012 MAR penalty (Settings → WR2012 check) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
-	const runs = $derived(totalRuns(budget ?? 0, validate, penalty, startsOk ? starts! : 1));
-	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && !seedProblem && startsOk && status !== 'running' && status !== 'loading');
+	const runs = $derived(totalRuns(session.budget ?? 0, session.validate, penalty, startsOk ? session.starts! : 1));
+	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && startsOk && !session.busy);
 	const columns = $derived(report ? scoreColumns(report) : []);
 	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.19.0, CR-5); none on an older report.
 	const benchCols = $derived(benchmarkColumns(columns));
@@ -143,61 +124,51 @@
 	const climWarning = $derived(report ? climatologyWarning(columns, report.objective) : null);
 	const benchSource = $derived(report ? benchmarkSourceNote(columns) : null);
 	const anyInterval = $derived(columns.some((c) => c.intervals));
-	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty, runStarts)) : 0);
+	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, session.runValidate, penalty, session.runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
 
-	async function start() {
+	function start() {
+		const { budget, seed, starts, objective, bounds, validate } = session;
 		if (!canStart || budget === null || seed === null || starts === null) return;
-		status = 'loading';
-		error = null;
-		report = null;
-		progress = null;
-		try {
-			const server = await api.runs.modelInput(projectId);
-			const form = settings();
-			const input = fitInput(server, form, model?.());
-			// The CHIRPS series' label as the server loaded it: the record's forcing keeps it (issue #40c).
-			// And the daily A-pan series it runs on (issue #45), by the hash a run's snapshot records.
-			const context = {
-				settings: form,
-				validate,
-				validationRecord: chosenRecord,
-				chirpsSource: chirpsSourceOfInput(server.series),
-				apanDaily: await apanDailyOfValues(server.series.evap_apan_mm)
-			};
-			status = 'running';
-			runStarts = starts;
-			handle = startFit({ input, model: 'gr4j', objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
-			report = await handle.result;
+		const validationRecord = chosenRecord;
+		let server: Awaited<ReturnType<typeof api.runs.modelInput>>;
+		let input: ReturnType<typeof fitInput>;
+		void session.start(
+			async () => {
+				server = await api.runs.modelInput(projectId);
+				const form = settings();
+				input = fitInput(server, form, model?.());
+				// The CHIRPS series' label as the server loaded it: the record's forcing keeps it (issue #40c).
+				// And the daily A-pan series it runs on (issue #45), by the hash a run's snapshot records.
+				return {
+					settings: form,
+					validate,
+					validationRecord,
+					chirpsSource: chirpsSourceOfInput(server.series),
+					apanDaily: await apanDailyOfValues(server.series.evap_apan_mm)
+				};
+			},
+			() => {
+				session.runStarts = starts;
+				session.runValidate = validate;
+				const f = free;
+				return startFit({ input, model: 'gr4j', objective, bounds, budget, free: f, validate, seed, starts, validationRecord: validationRecord ?? undefined }, (p) => (session.progress = p));
+			},
 			// The fitted record's source and given unit as the server loaded it (107_series_source.sql); undefined when it didn't say.
 			// At the calibration site: the outlet's record, or a gauge's (engine ≥ 1.41.0).
-			const fitted = server.series[calibrationSeriesKey(report.flowKind as CalibrationFlowKind, report.siteNodeId)];
-			ran = { ...context, ...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin } : {}) };
-			status = 'done';
-		} catch (e) {
-			if (e instanceof FitCancelled) {
-				status = 'idle';
-				return;
-			}
-			error = e instanceof Error ? e.message : String(e);
-			status = 'error';
-		} finally {
-			handle = null;
-		}
-	}
-
-	function cancel() {
-		handle?.cancel();
+			(r) => server.series[calibrationSeriesKey(r.flowKind as CalibrationFlowKind, r.siteNodeId)]?.origin
+		);
 	}
 
 	function apply() {
-		if (report && ran) onApply(report, fitRecordFor(report, ran.settings, ran));
+		const { report: r, ran } = session;
+		if (!r || !ran) return;
+		onApply(r, fitRecordFor(r, ran.settings, ran));
+		session.applied = true;
 	}
 
 	const fmtParam = (v: number | undefined) => (v === undefined ? '–' : fmtNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 3));
 	const paramLabel = (key: string) => params.find((p) => p.key === key)?.label ?? key;
-
-	$effect(() => () => handle?.cancel());
 </script>
 
 <section class="fit" aria-labelledby="{uid}-h">
@@ -213,30 +184,30 @@
 		<div class="controls">
 			<div class="field">
 				<label for="{uid}-obj">Objective <HelpTip key="calibration-objective" label="About what to optimise" /></label>
-				<select id="{uid}-obj" bind:value={objective} disabled={status === 'running'}>
+				<select id="{uid}-obj" bind:value={session.objective} disabled={status === 'running'}>
 					{#each OBJECTIVES as o (o)}<option value={o}>{objectiveName(o)}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
 				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
-				<select id="{uid}-bounds" bind:value={bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
+				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
 					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
 				</select>
-				<span class="hint" id="{uid}-bounds-h">{boundsHint(bounds)}</span>
+				<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
-				<NumberInput id="{uid}-budget" min={50} max={10_000} step={50} bind:value={budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
+				<NumberInput id="{uid}-budget" min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
 				<span class="hint" id="{uid}-budget-h">{fmtNum(runs)} runs in all. Default 1 500.</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-seed">Seed</label>
-				<NumberInput id="{uid}-seed" min={0} max={SEED_MAX} step={1} bind:value={seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
+				<NumberInput id="{uid}-seed" min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
 				<span class="hint" id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-starts">Starts</label>
-				<NumberInput id="{uid}-starts" min={1} max={MAX_STARTS} step={1} bind:value={starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
+				<NumberInput id="{uid}-starts" min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
 				<span class="hint" id="{uid}-starts-h">
 					{startsOk
 						? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
@@ -247,14 +218,14 @@
 				<legend>Parameters to fit <HelpTip key="gr4j" label="About the GR4J parameters" /></legend>
 				{#each params as p (p.key)}
 					<label class="check">
-						<input type="checkbox" bind:checked={picked[p.key]} disabled={status === 'running'} />
+						<input type="checkbox" bind:checked={session.picked[p.key]} disabled={status === 'running'} />
 						{p.label}
 					</label>
 				{/each}
 			</fieldset>
 			<div class="tip-row">
 				<label class="check validate">
-					<input type="checkbox" bind:checked={validate} disabled={status === 'running'} />
+					<input type="checkbox" bind:checked={session.validate} disabled={status === 'running'} />
 					Validate: split-sample and dry → wet tests (two more fits)
 				</label>
 				<HelpTip key="validation-tests" label="About the validation tests" />
@@ -262,7 +233,7 @@
 			{#if recordOptions.length}
 				<div class="field">
 					<label for="{uid}-record">Also validate against</label>
-					<select id="{uid}-record" bind:value={validationRecord} disabled={status === 'running'} aria-describedby="{uid}-record-h">
+					<select id="{uid}-record" bind:value={session.validationRecord} disabled={status === 'running'} aria-describedby="{uid}-record-h">
 						<option value={null}>No other record</option>
 						{#each recordOptions as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
 					</select>
@@ -277,7 +248,7 @@
 		{/if}
 		<div class="row">
 			{#if status === 'running' || status === 'loading'}
-				<button type="button" class="btn" onclick={cancel} disabled={status === 'loading'}>Cancel</button>
+				<button type="button" class="btn" onclick={() => session.cancel()} disabled={status === 'loading'}>Cancel</button>
 			{:else}
 				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart}>Fit automatically</button>
 			{/if}
@@ -301,9 +272,10 @@
 				<p class="muted small" aria-live="polite">
 					{#if progress}{stageText(progress)}: {fmtNum(progress.evaluations)} of {fmtNum(progress.budget)} runs · best {fmtNum(progress.best, 3)}{:else}Starting…{/if}
 				</p>
+				<p class="muted small">You can open other tabs while it runs; the fit carries on and its result waits here.</p>
 			</div>
 		{:else if status === 'error'}
-			<div class="alert alert-error" role="alert">{error}</div>
+			<div class="alert alert-error" role="alert">{session.error}</div>
 		{/if}
 
 		{#if report}
@@ -463,12 +435,19 @@
 						<p class="muted small">{representativenessKey(rep)} Any limit this implies is listed with the notes above.</p>
 					</section>
 				{/if}
-				{#if !readonly}
-					<div class="row">
-						<button type="button" class="btn btn-primary" onclick={apply}>Apply to form</button>
-						<span class="muted small">Fills in the fitted parameters and records this fit with them; nothing is saved until you save your changes.</span>
-					</div>
-				{/if}
+				<div class="row">
+					{#if !readonly}
+						<button type="button" class="btn btn-primary" onclick={apply}>{session.applied ? 'Apply to form again' : 'Apply to form'}</button>
+					{/if}
+					<button type="button" class="btn" onclick={() => session.discard()}>Discard result</button>
+					{#if !readonly}
+						<span class="muted small" data-testid="fit-apply-hint">
+							{session.applied
+								? 'The fitted parameters are in the form, with this fit’s record. Save your changes to keep them.'
+								: 'Fills in the fitted parameters and records this fit with them; nothing is saved until you save your changes. The result stays here while you look at other tabs.'}
+						</span>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	{/if}

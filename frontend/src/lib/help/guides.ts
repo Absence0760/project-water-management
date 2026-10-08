@@ -754,7 +754,7 @@ export const GUIDES: Guide[] = [
 							'Choose **Bounds**: Wide, or Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down.',
 							'Leave **Model runs per fit** (1 500) and **Starts** (5) at their defaults unless you have a reason. Each start is a separate search from its own seed and the best is kept; the notes say when starts reach nearly the same score with scattered parameters.',
 							'Keep **Validate** (split-sample and dry → wet) ticked. With both a gauge and a logger, you can also score the fit against the record it doesn’t use (**Also validate against**).',
-							'Press **Fit automatically**. A progress bar shows the stage and the best score so far; **Cancel** stops it.',
+							'Press **Fit automatically**. A progress bar shows the stage and the best score so far; **Cancel** stops it. You can open other tabs while it runs: the fit carries on, and its result waits on this page.',
 							'Read the result: the notes, current vs fitted parameters, and the scores table. The shaded validation columns are the honest measure.',
 							'Press **Apply to form**, then save the settings. Nothing is stored until you save.',
 							'Run the model with the new parameters.'

@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Fit automatically kept across tab changes (FitSession on the workspace page, Discard result, leave guard): measured 1810 KB locally on main @ 2e06fae65 + this change (+1 KB); CI ~1 KB above local. Headroom ~0-1 KB in CI."
+}

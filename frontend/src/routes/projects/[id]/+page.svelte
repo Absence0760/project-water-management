@@ -53,6 +53,7 @@
 	import { issueHref } from '$lib/model/validate';
 	import { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
 	import { SettingsDraft } from '$lib/components/settings/settingsDraft.svelte';
+	import { FitSession } from '$lib/calibration/fitSession.svelte';
 	import type { UnsavedEdits } from '$lib/preview/overlay';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import SaveBar from '$lib/components/model/SaveBar.svelte';
@@ -154,6 +155,11 @@
 	// The Settings & calibration form's unsaved settings: held here for the same reasons, so a tab
 	// change keeps them and the one save bar saves them (settings/settingsDraft.svelte.ts).
 	const settings = new SettingsDraft();
+	// Fit automatically's choices, running fit and result: held here too, so a fit keeps running and its
+	// result waits to be applied while another tab is open (calibration/fitSession.svelte.ts).
+	const fit = new FitSession();
+	// Leaving the workspace ends the fit's worker.
+	$effect(() => () => fit.reset(null));
 	// The number fields on this page holding text they can't take (common/invalidFields): this page's
 	// own registry, which a scenario's override mode (with its own) keeps out of the save bar.
 	const invalidFields = provideInvalidFields();
@@ -173,6 +179,11 @@
 	guardUnsaved({ dirty: () => editor.dirty, what: 'model edits' });
 	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
 	guardUnsaved({ dirty: () => settings.dirty, what: 'settings' });
+	// A running fit, or a result an editor hasn't applied to the form yet: a viewer's result can't be applied, so only a running one asks.
+	guardUnsaved({
+		dirty: () => (canEdit ? fit.unapplied : fit.busy),
+		what: () => (fit.busy ? 'an automatic fit still running' : 'an automatic fit not yet applied to the form')
+	});
 	// A number field holding text it can't take (common/invalidFields) is gone with its page or its
 	// tab (the field unmounts), so any change of page or of the URL's query asks; a #fragment doesn't.
 	guardUnsaved({
@@ -403,6 +414,8 @@
 		error = null;
 		notFound = false;
 		applicantProject = null;
+		// Another project's fit doesn't carry over (its worker stops now, before the load); a reload of this one keeps it.
+		if (fit.projectId !== projectId) fit.reset(projectId);
 		try {
 			// Everything a tab's first render needs, behind one loading gate, so no
 			// tab (or the Overview checklist) flashes an empty state. On a full page
@@ -948,6 +961,7 @@
 								project={project!}
 								{editor}
 								draft={settings}
+								{fit}
 								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
 								gaugeRecords={series?.flatMap((x) => (x.siteNodeId ? [{ kind: x.kind, siteNodeId: x.siteNodeId }] : [])) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
