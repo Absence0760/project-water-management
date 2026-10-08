@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "PR #450, help tips across the workspace and the calibration objective guide: measured 1809 KB locally on main @ 6e961eadc (at the ceiling), 1810 KB in CI run 37823691563 (+1 over). Headroom ~1 KB in CI."
+}
