@@ -120,7 +120,7 @@
 </script>
 
 {#snippet headerContext()}<span data-testid="project-context">{context}</span>{/snippet}
-{#snippet headerActions()}<DownloadMenu items={projectDownloads} /><HelpTip key="project-file" label="About the project file" />{/snippet}
+{#snippet headerActions()}<DownloadMenu items={projectDownloads} />{/snippet}
 
 <div class="project-page" bind:this={body}>
 	<div class="grid">

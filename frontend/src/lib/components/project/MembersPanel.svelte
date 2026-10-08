@@ -252,16 +252,18 @@
 								{/if}
 								{#if m.role === 'editor' || m.role === 'owner'}
 									{#if isOwner}
-										<label class="authority small">
-											<input
-												type="checkbox"
-												checked={m.actsForAuthority ?? false}
-												disabled={busy === m.userId}
-												onchange={(e) => setAuthority(m, e.currentTarget.checked)}
-											/>
-											Acts for the responsible authority
+										<div class="tip-row">
+											<label class="authority small">
+												<input
+													type="checkbox"
+													checked={m.actsForAuthority ?? false}
+													disabled={busy === m.userId}
+													onchange={(e) => setAuthority(m, e.currentTarget.checked)}
+												/>
+												Acts for the responsible authority
+											</label>
 											<HelpTip key="responsible-authority" label="About acting for the responsible authority" />
-										</label>
+										</div>
 									{:else if m.actsForAuthority}
 										<span class="muted small authority">Acts for the responsible authority</span>
 									{/if}
@@ -408,5 +410,11 @@
 		.sub-email {
 			display: block;
 		}
+	}
+	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
+	.tip-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 </style>

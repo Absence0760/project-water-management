@@ -252,11 +252,13 @@
 					</label>
 				{/each}
 			</fieldset>
-			<label class="check validate">
-				<input type="checkbox" bind:checked={validate} disabled={status === 'running'} />
-				Validate: split-sample and dry → wet tests (two more fits)
+			<div class="tip-row">
+				<label class="check validate">
+					<input type="checkbox" bind:checked={validate} disabled={status === 'running'} />
+					Validate: split-sample and dry → wet tests (two more fits)
+				</label>
 				<HelpTip key="validation-tests" label="About the validation tests" />
-			</label>
+			</div>
 			{#if recordOptions.length}
 				<div class="field">
 					<label for="{uid}-record">Also validate against</label>
@@ -579,5 +581,11 @@
 		.btn {
 			min-height: 44px;
 		}
+	}
+	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
+	.tip-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 </style>

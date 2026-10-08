@@ -485,8 +485,9 @@
 						checked={!!s.lakeEvapFactorMonthly}
 						onchange={(e) => setLakeMonthlyOn(e.currentTarget.checked)}
 					/>
-					Vary it by month <HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
+					Vary it by month
 				</label>
+				<HelpTip key="settings.lakeEvapFactorMonthly" label="About varying the dam evaporation factor by month" />
 			</div>
 		</div>
 		<div class="field lake-preset">

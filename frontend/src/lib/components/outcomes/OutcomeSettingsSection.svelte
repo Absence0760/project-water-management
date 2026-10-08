@@ -65,7 +65,7 @@
 		{@const pair = value.riskCutoffs[m.id]}
 		<fieldset class="metric">
 			<legend>
-				{m.legend} <HelpTip key="outcome-risk" />
+				{m.legend} <HelpTip key="outcome-risk" label="About the risk cut-offs: {m.legend}" />
 				{#if !pair}<span class="badge badge-warn" data-testid="cutoffs-pending-{m.id}">Provisional defaults, not yet confirmed by the catchment’s hydrologist</span>{/if}
 			</legend>
 			<label class="check">

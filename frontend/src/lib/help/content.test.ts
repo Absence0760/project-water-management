@@ -235,6 +235,17 @@ describe('help content', () => {
 		}
 		// HelpTip looks keys up in the tips alone (tipFor), so that is what must find them.
 		for (const k of used) expect(tipFor(k), `HelpTip key "${k}"`).toBeDefined();
+
+		// Never inside a wrapping <label> (no for=): a label holds only its own control, and the tip's
+		// button, being labelable, can become the label's control and take a select's name (Map key).
+		const inLabel: string[] = [];
+		for (const f of files) {
+			const src = readFileSync(f, 'utf8');
+			for (const m of src.matchAll(/<label\b(?![^>]*\bfor=)[^>]*>((?:(?!<\/label\s*>|<label\b)[\s\S])*)<\/label\s*>/g)) {
+				if (m[1]!.includes('<HelpTip')) inLabel.push(`${f.slice(root.length)}:${src.slice(0, m.index).split('\n').length}`);
+			}
+		}
+		expect(inLabel).toEqual([]);
 	});
 });
 

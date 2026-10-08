@@ -9139,7 +9139,12 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   what picks the kept fit. Placing a tip without breaking e2e: a tip inside
   a heading that names a region would change the region's name, so the
   heading's text sits in its own `<span id="…-t">` and `aria-labelledby`
-  points at the span; a tip whose default "About …" label would also match
+  points at the span; a tip never sits inside a wrapping `<label>` (no
+  `for=`): a label holds only its own control, and the tip's button, being
+  labelable, could become the label's control and take a select's name (it
+  did on the Map key), so the tip follows the label, both in a `.tip-row`, or
+  the label uses `for=` (`content.test.ts` fails on one inside); a tip whose
+  default "About …" label would also match
   an existing `getByLabel` or button name gets its own `label`; a test that
   a viewer has no controls excludes the tips by name (`/^(?!About )/`); and
   a tip's bubble is a polite live region (`aria-live`) without

@@ -259,7 +259,7 @@
 {/snippet}
 
 <form class="op-form" onsubmit={submit} aria-labelledby="op-form-h-t" novalidate>
-	<h3 id="op-form-h"><span id="op-form-h-t">Add a change</span> <HelpTip key="scenario-change" label="About scenario changes" /></h3>
+	<h3 id="op-form-h"><span id="op-form-h-t">Add a change</span> <HelpTip key="scenario-change" label="About the kinds of change" /></h3>
 	<div class="form-row">
 		<div class="field">
 			<label for="op-kind">Kind of change</label>

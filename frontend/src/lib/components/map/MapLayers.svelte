@@ -91,11 +91,14 @@
 <section class="layers" aria-labelledby="{uid}-h" data-testid="map-layers">
 	<h2 class="layers-h" id="{uid}-h">Layers</h2>
 	<p class="visually-hidden" role="status" data-testid="map-layers-status">{status}</p>
-	<label class="toggle">
-		<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
-		<span class="swatch" style:--qt={quaternaryColour(dark)} aria-hidden="true"></span>
-		Quaternary catchments <HelpTip key="quaternary-lookup" label="About the quaternary catchments" />
-	</label>
+	<div class="tip-row">
+		<label class="toggle">
+			<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
+			<span class="swatch" style:--qt={quaternaryColour(dark)} aria-hidden="true"></span>
+			Quaternary catchments
+		</label>
+		<HelpTip key="quaternary-lookup" label="About the quaternary catchments" />
+	</div>
 	{#if quaternaries.on}
 		<div class="qt small" data-testid="map-quaternaries">
 			{#if quaternaries.nothingAround}
@@ -120,11 +123,14 @@
 			{/if}
 		</div>
 	{/if}
-	<label class="toggle">
-		<input type="checkbox" checked={rivers.on} onchange={(e) => toggle('rivers', e.currentTarget.checked)} data-testid="map-layer-rivers" />
-		<span class="swatch rn-swatch" style:--rn={riverNetworkColour(dark)} aria-hidden="true"></span>
-		River network <HelpTip key="river-network" />
-	</label>
+	<div class="tip-row">
+		<label class="toggle">
+			<input type="checkbox" checked={rivers.on} onchange={(e) => toggle('rivers', e.currentTarget.checked)} data-testid="map-layer-rivers" />
+			<span class="swatch rn-swatch" style:--rn={riverNetworkColour(dark)} aria-hidden="true"></span>
+			River network
+		</label>
+		<HelpTip key="river-network" />
+	</div>
 	{#if rivers.on}
 		<div class="qt small" data-testid="map-rivers">
 			{#if rivers.nothingAround}
@@ -177,11 +183,14 @@
 		</div>
 	{/if}
 	{#if relief}
-		<label class="toggle">
-			<input type="checkbox" checked={relief.on} onchange={(e) => toggle('relief', e.currentTarget.checked)} data-testid="map-layer-relief" />
-			<span class="swatch relief-swatch" aria-hidden="true"></span>
-			Relief <HelpTip key="elevation-model" label="About the relief and the elevation model" />
-		</label>
+		<div class="tip-row">
+			<label class="toggle">
+				<input type="checkbox" checked={relief.on} onchange={(e) => toggle('relief', e.currentTarget.checked)} data-testid="map-layer-relief" />
+				<span class="swatch relief-swatch" aria-hidden="true"></span>
+				Relief
+			</label>
+			<HelpTip key="elevation-model" label="About the relief and the elevation model" />
+		</div>
 		{#if relief.on && relief.failed}
 			<p class="err small" role="alert" data-testid="map-relief-error">The relief couldn’t be loaded, so the map is drawn without it.</p>
 		{:else if relief.on}
@@ -279,5 +288,11 @@
 	}
 	.err {
 		color: var(--danger);
+	}
+	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
+	.tip-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 </style>

@@ -59,11 +59,13 @@
 </script>
 
 <div class="crop-supply" data-testid="crop-supply-{node.id}">
-	<label class="check">
-		<input type="checkbox" disabled={readonly} checked={on} onchange={(e) => toggle(e.currentTarget.checked)} />
-		Split the crops’ water between sources
+	<div class="tip-row">
+		<label class="check">
+			<input type="checkbox" disabled={readonly} checked={on} onchange={(e) => toggle(e.currentTarget.checked)} />
+			Split the crops’ water between sources
+		</label>
 		<HelpTip key="node.cropShareDam" />
-	</label>
+	</div>
 	{#if on}
 		<div class="sources" role="group" aria-labelledby={id('caption')}>
 			<p class="caption" id={id('caption')}>Share of the crop demand asked of each source. A source that can’t give its share leaves a deficit; it doesn’t pass to another.</p>
@@ -210,5 +212,11 @@
 		.field select {
 			min-height: 44px;
 		}
+	}
+	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
+	.tip-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 </style>

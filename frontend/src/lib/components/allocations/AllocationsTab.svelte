@@ -587,7 +587,7 @@
 
 	{#if isOwner && data}
 		<section class="panel" aria-labelledby="alloc-viewers-h" data-testid="allocation-viewer-units">
-			<h2 id="alloc-viewers-h">What viewers see <HelpTip key="allocation-viewer-access" /></h2>
+			<h2 id="alloc-viewers-h">What viewers see <HelpTip key="allocation-viewer-access" label="About what viewers see" /></h2>
 			<label class="check">
 				<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget.checked)} />
 				Viewers see each farm’s registered volumes

@@ -79,16 +79,18 @@
 
 	<div class="grid">
 		<div class="field">
-			<label class="check">
-				<input
-					type="checkbox"
-					disabled={readonly}
-					checked={value.exclusions.maxFlaggedShare !== null}
-					onchange={(e) => setExclusion(e.currentTarget.checked)}
-				/>
-				Leave out a water year by its flagged days
+			<div class="tip-row">
+				<label class="check">
+					<input
+						type="checkbox"
+						disabled={readonly}
+						checked={value.exclusions.maxFlaggedShare !== null}
+						onchange={(e) => setExclusion(e.currentTarget.checked)}
+					/>
+					Leave out a water year by its flagged days
+				</label>
 				<HelpTip key="flagged-year-rule" label="About the flagged-year rule" />
-			</label>
+			</div>
 			{#if value.exclusions.maxFlaggedShare !== null}
 				<label for="{uid}-share">When more than this share of its observed days are flagged <span class="u">(%)</span></label>
 				<NumberInput
@@ -190,11 +192,13 @@
 				{#each ON_NEW_DATA as o (o)}<option value={o}>{ON_NEW_DATA_LABEL[o]}</option>{/each}
 			</select>
 		</div>
-		<label class="check">
-			<input type="checkbox" disabled={readonly} bind:checked={value.after.ensemble} />
-			After a kept fit is applied, run the model and the uncertainty ensemble around it
+		<div class="tip-row">
+			<label class="check">
+				<input type="checkbox" disabled={readonly} bind:checked={value.after.ensemble} />
+				After a kept fit is applied, run the model and the uncertainty ensemble around it
+			</label>
 			<HelpTip key="uncertainty-bands" label="About the uncertainty ensemble" />
-		</label>
+		</div>
 	</div>
 	<p class="hint" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}). The seed, starts and model runs are rules too: trying another seed after a result is a rule change, with its own revision.</p>
 
@@ -309,5 +313,11 @@
 		.btn {
 			min-height: 44px;
 		}
+	}
+	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
+	.tip-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 </style>

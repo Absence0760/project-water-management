@@ -1050,7 +1050,7 @@
 	/>
 {/snippet}
 
-{#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span> <HelpTip key="catchment-map" label="About the catchment map" />{/snippet}
+{#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerStatus()}
 	{#if setupSteps}
 		<MapSetupPill
