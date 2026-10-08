@@ -24,8 +24,14 @@ function secret(): string {
 
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 
-export function sessionToken(userId: string): string {
+/**
+ * `otpAt`: a session that signed in with a code at that time (epoch ms; `amr` ["pwd", "otp"], `otp_at`), for the
+ * state no API call can make on demand: a code older than the 10 minutes a fresh-code action needs
+ * (mfa-reset-mailpit.spec.ts, the fresh-code dialog). The account must have a confirmed authenticator.
+ */
+export function sessionToken(userId: string, { otpAt }: { otpAt?: number } = {}): string {
 	const now = Math.floor(Date.now() / 1000);
-	const body = `${b64({ alg: 'HS256' })}.${b64({ iat_ms: Date.now(), sub: userId, iss: 'water-management', iat: now, exp: now + 3600, jti: randomUUID() })}`;
+	const otp = otpAt === undefined ? {} : { amr: ['pwd', 'otp'], otp_at: otpAt };
+	const body = `${b64({ alg: 'HS256' })}.${b64({ iat_ms: Date.now(), ...otp, sub: userId, iss: 'water-management', iat: now, exp: now + 3600, jti: randomUUID() })}`;
 	return `${body}.${createHmac('sha256', secret()).update(body).digest('base64url')}`;
 }

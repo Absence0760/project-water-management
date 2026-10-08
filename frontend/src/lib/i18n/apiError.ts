@@ -55,6 +55,7 @@ const CODES: Record<string, Msg> = {
 	mfa_not_enrolled: msg('Two-step sign-in is off.'),
 	mfa_required: msg('This needs two-step sign-in. Set up an authenticator app on your Account page first.'),
 	mfa_step_up: msg('This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.'),
+	mfa_reset_limit: msg('You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.'),
 	comment_throttled: msg('You have posted 10 comments in the last hour. Wait a while, then try again.'),
 	// Not from the API: the WAF's sign-in CAPTCHA (client.ts CAPTCHA_REQUIRED), on a page that can't show the puzzle.
 	captcha_required: msg('Too many sign-in attempts from your network. Wait a few minutes, then try again.')

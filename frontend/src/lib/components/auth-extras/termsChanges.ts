@@ -23,6 +23,13 @@ export function changesSince<T>(changes: readonly TermsChange<T>[], accepted: st
 // (session.user.termsVersion) is shown every change since, so two versions landing between deploys never
 // hide the first one's changes (persona-wua-manager, round 4). An account that accepted none sees them all.
 export const TERMS_CHANGES: readonly TermsChange<Msg>[] = [
+	// Removing two-step sign-in after a lost phone (205_mfa_recovery, docs/legal-status.md, 2026-10-08).
+	{
+		version: '2026-10-08',
+		items: [
+			msg('If you lose your phone and ask us to remove two-step sign-in, or a team admin removes it, we keep a record of the request and how it ended for 90 days, and the record that it happened with your account.')
+		]
+	},
 	// The Terms §9 clause on map data licensed to us (HydroRIVERS' end-user terms, docs/legal-status.md, 2026-10-02).
 	{
 		version: '2026-10-03',

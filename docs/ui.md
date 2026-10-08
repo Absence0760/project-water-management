@@ -109,11 +109,16 @@ two numbered steps: the QR code for the authenticator app, drawn in the page
 220 px; the encoder loads only at that moment) with the key in groups of
 four to type instead, and **Enter the code the app shows** with **Turn on
 two-step sign-in**. Then the ten recovery codes, once, in a highlighted box
-whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them) and **I’ve
+whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them), **Copy the codes** (the same text on the clipboard; a status line says whether it worked) and **I’ve
 saved them**. On: an **On** badge, how many recovery codes are left, a line
 when this browser signed in before it was set up, and **New recovery codes**
 / **Turn off**, each opening one code field (the app's code; turning off
-also takes a recovery code). A project owner, team admin or assessor without
+also takes a recovery code). At two codes or fewer a warning suggests a new
+set while the phone is still at hand, with **Make a new set**
+(`lib/auth/mfaReset.ts` `fewRecoveryCodes`). While a reset of the factor
+waits (205, `pendingReset`), an alert says when it takes effect and, if
+that wasn't them, to cancel it: **Cancel the removal** asks for a code
+from the app (`POST /auth/mfa/step-up`, which ends the reset). A project owner, team admin or assessor without
 it sees a warning that their actions need it (and, on the workspace, the
 two-step sign-in banner, § Invitations below, which links here:
 the panel is `#two-step`). Errors are worded from their
@@ -504,6 +509,23 @@ under a dead-invitation warning).
   phone? Use a recovery code**, which swaps the field for **Recovery code**
   (and back). A wrong code, the 5-minute challenge running out (back to the
   password step) and the code lockout are alerts worded from their codes.
+- **Lost phone and recovery codes** (205_mfa_recovery,
+  [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery).
+  In recovery-code mode the code step also offers **Lost your phone and
+  your recovery codes?**, which swaps the form for a panel (its heading
+  takes focus): two-step sign-in can be removed, it takes 3 days, a link is
+  emailed to confirm and every day after so it can be cancelled, and a team
+  admin can do it at once. **Email me a link** (`POST /auth/mfa/reset`)
+  answers *Check your email* (open the link within 1 hour; nothing changes
+  until then), or, while a reset already waits, when it takes effect.
+  **Back to the code** returns. The emailed links open two pages of the
+  sign-in family (`routes/mfa-reset/`, translated, open signed in or out,
+  the token dropped from the address bar and `referrer` off, as the
+  password reset page): **Remove two-step sign-in** (`/mfa-reset`) explains
+  the wait and starts it only on **Start the 3-day wait**, so a mail
+  scanner opening the link starts nothing; **Keep two-step sign-in**
+  (`/mfa-reset/cancel`) cancels it on **Cancel the removal**, then says to
+  change both passwords if it wasn't them. A dead link says so.
 
 - **The security check** (the WAF's sign-in CAPTCHA, issue #126;
   [security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha)). Only when
@@ -2129,6 +2151,18 @@ editors edit them, owners own them and manage the team. A team viewer doesn't ge
 New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
+
+**Reset two-step** (admins, on every row but their own, beside Remove;
+205_mfa_recovery, [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery):
+for a member who lost their phone and their recovery codes. A confirm
+dialog says to do it only when sure it's them asking (in person, on a
+call), and what it does: the member's authenticator and codes stop
+working, they're signed out everywhere, anyone with their password can
+sign in as them until they set it up again, and they get an email; it is
+recorded in the history of the team's projects. The API asks the admin for
+a code from the last 10 minutes first (the workspace's code dialog). Done,
+a status line says so. Its accessible name is *Reset two-step sign-in for
+<name>*.
 
 **Team settings** (`?settings=1`, a side sheet,
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the

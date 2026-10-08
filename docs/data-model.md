@@ -744,6 +744,9 @@ the result change?", and put back any earlier version.
   for a role change, `self` for a leaver, `via: 'invite'` for an accepted
   invite, which app_accept_invites records; `team.deleted` has `members`;
   each written on every project of the team),
+  `team_member.mfa_reset` (205: a team admin removed a member's lost
+  second factor; the same subject as `team_member.removed`, on every
+  project of the team; the member's access is unchanged),
   and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
@@ -2887,6 +2890,43 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - The session JWT's `amr` (`["pwd"]` or `["pwd", "otp"]`) is not stored:
   the requirement for owners, team admins and assessors reads it from the
   request ([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+
+### Recovering a lost second factor (205_mfa_recovery.sql)
+
+| Table | Holds |
+| --- | --- |
+| `mfa_reset` | A person's request to remove their lost factor: `id`, `user_id` (cascade), `requested_at`, `confirm_hash` (SHA-256 of the emailed confirmation token; cleared once used or ended), `confirm_expires_at` (1 hour), `confirmed_at` and `effective_at` (the link was followed: the 3-day wait ends then), `notified_at` (the last email of the wait), `ended_at` and `end_reason` (`completed`, `cancel_link`, `code_used`, `factor_removed`, `unconfirmed`). One not-ended row per account (partial unique index) |
+| `mfa_reset_cancel` | The cancel links: `token_hash` (primary key, SHA-256), `reset_id` (cascade), `created_at`. One per email of the wait (the start and each reminder), all valid until the reset ends, then deleted |
+| `mfa_reset_quota` | The cap on asking: `user_id` (cascade), `sent_at`; 3 in 24 hours, rows gone after a day |
+
+- RLS: `mfa_reset` is the person's own to **read** (`mfa_reset_own_select`)
+  and nobody's to write: `water_app` has only `SELECT`, so no one can move
+  `effective_at` to skip the wait. `mfa_reset_cancel` and `mfa_reset_quota`
+  are owner-only (RLS on, no policy, no grant). Every write goes through a
+  SECURITY DEFINER function that checks the state it moves from:
+  `app_mfa_reset_request` (as the person, with a live sign-in challenge;
+  `issued`, `pending`, `capped` or `not_enrolled`), `app_mfa_reset_confirm`
+  and `app_mfa_reset_cancel` (the emailed tokens, no person),
+  `app_mfa_reset_cancel_own` (a code was just given), `app_mfa_reset_due`,
+  `app_mfa_reset_remind`, `app_mfa_reset_complete` and
+  `app_mfa_reset_purge` (the tick; completing refuses a reset whose
+  `effective_at` hasn't passed), `app_mfa_team_reset` (a team admin, for a
+  member of their team, never themselves) and `app_mfa_remove_own_factors`
+  (turning it off). Proven with positive controls in
+  `src/auth/mfa-reset.db.test.ts`.
+- **One place removes a second factor:** `mfa_remove_factors(p_user uuid)`
+  (not granted to `water_app`; the functions above call it), which deletes
+  every factor of the account (today `user_totp` and `user_recovery_code`)
+  and ends a waiting reset. `mfa_has_factor(p_user uuid)` is the one test of
+  whether an account has one. A new kind of factor is added to both.
+- `account_security_event.kind` gains `mfa.reset_requested`,
+  `mfa.reset_confirmed`, `mfa.reset_cancelled`, `mfa.reset_completed` and
+  `mfa.reset_by_admin`; a team admin's reset is also `team_member.mfa_reset`
+  on each of the team's projects (§ Change history).
+- Retention: an ended reset is deleted 90 days after it ended (the tick,
+  `app_mfa_reset_purge`); the security log keeps that it happened. The
+  data-subject export has `twoStepSignInResets` (the dates and how each
+  ended, never a hash).
 
 ### Languages (080_language.sql)
 

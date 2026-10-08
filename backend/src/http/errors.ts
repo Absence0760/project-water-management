@@ -82,6 +82,8 @@ export const ERROR_CODES = [
 	'mfa_not_enrolled',
 	'mfa_required',
 	'mfa_step_up',
+	// Asked for a reset of a lost second factor too often today (205, auth/mfa-reset-routes.ts).
+	'mfa_reset_limit',
 	// A comment through a share link (166_public_participation, share/routes.ts): 10 an hour per account.
 	'comment_throttled'
 ] as const;

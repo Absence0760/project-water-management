@@ -380,7 +380,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				/** The sign-in's second step, after login answered MfaChallenge. 401 mfa_challenge_expired: sign in again. */
 				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code }),
 				/** A code again inside the session, for the actions that need one from the last 10 minutes (401 mfa_fresh_code). */
-				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code })
+				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code }),
+				/**
+				 * Recovering a lost phone and recovery codes (205_mfa_recovery, docs/api.md § Two-step sign-in).
+				 * `request`: at the sign-in's code step (the challenge cookie): a confirmation link is emailed (`sent`),
+				 * or a confirmed reset already waits (`pending`); 429 mfa_reset_limit, 401 mfa_challenge_expired.
+				 * `confirm` / `cancel`: the emailed links' tokens; 400 link_invalid.
+				 */
+				reset: {
+					request: () => request<{ sent: true } | { pending: true; effectiveAt: string }>('POST', '/auth/mfa/reset'),
+					confirm: (token: string) => request<{ effectiveAt: string }>('POST', '/auth/mfa/reset/confirm', { token }),
+					cancel: (token: string) => request<{ cancelled: true }>('POST', '/auth/mfa/reset/cancel', { token })
+				}
 			},
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a
@@ -598,6 +609,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Remove a member (admin), or yourself to leave the team. */
 			removeMember: (id: string, userId: string) =>
 				request<void>('DELETE', `${t(id)}/members/${enc(userId)}`),
+			/** Remove a member's lost second factor at once (admin, a code from the last 10 minutes; never yourself). 204. */
+			resetMemberMfa: (id: string, userId: string) => request<void>('POST', `${t(id)}/members/${enc(userId)}/mfa-reset`),
 			/** Every team catchment you can see, with its latest figures (WP-2.14). */
 			portfolio: (id: string) => request<Portfolio>('GET', `${t(id)}/portfolio`)
 		},

@@ -68,6 +68,46 @@ export async function plantEmailToken(email: string, purpose: 'reset' | 'verify'
 	return token;
 }
 
+/**
+ * Recovering a lost second factor (205_mfa_recovery): the account's waiting
+ * reset's 3-day wait ends now, so the next worker tick completes it (the wait
+ * is moved in the database, never slept).
+ */
+export async function endMfaResetWait(email: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(
+			`UPDATE mfa_reset r SET effective_at = now() - interval '1 second' FROM app_user u
+			 WHERE u.id = r.user_id AND u.email = $1 AND r.ended_at IS NULL AND r.confirmed_at IS NOT NULL`,
+			[email]
+		);
+		if (r.rowCount !== 1) throw new Error(`no waiting reset for ${email}`);
+	});
+}
+
+/** Leave the account `n` unused recovery codes (as if the rest had been used), for the Account page's count and warning. */
+export async function keepRecoveryCodes(email: string, n: number): Promise<void> {
+	await withDb((db) =>
+		db.query(
+			`DELETE FROM user_recovery_code c USING app_user u
+			 WHERE u.id = c.user_id AND u.email = $1
+			   AND c.code_hash NOT IN (SELECT code_hash FROM user_recovery_code WHERE user_id = u.id ORDER BY code_hash LIMIT $2)`,
+			[email, n]
+		)
+	);
+}
+
+/** How the account's latest reset stands: whether it waits, and how it ended. */
+export async function mfaResetState(email: string): Promise<{ waiting: boolean; endReason: string | null } | null> {
+	return withDb(async (db) => {
+		const r = await db.query<{ waiting: boolean; end_reason: string | null }>(
+			`SELECT r.confirmed_at IS NOT NULL AND r.ended_at IS NULL AS waiting, r.end_reason FROM mfa_reset r JOIN app_user u ON u.id = r.user_id
+			 WHERE u.email = $1 ORDER BY r.requested_at DESC LIMIT 1`,
+			[email]
+		);
+		return r.rows[0] ? { waiting: r.rows[0].waiting, endReason: r.rows[0].end_reason } : null;
+	});
+}
+
 /** An account's id by its address (a sign-up answers without one until the address is confirmed, issue #57). */
 export async function userIdByEmail(email: string): Promise<string> {
 	return withDb(async (db) => {

@@ -111,6 +111,8 @@ export interface MfaStatus {
 	required: boolean;
 	/** This session signed in with a code. */
 	sessionVerified: boolean;
+	/** A confirmed reset of the factor is waiting (205_mfa_recovery): when it takes effect. Null when none. */
+	pendingReset: { effectiveAt: string } | null;
 }
 
 /** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */

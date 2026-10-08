@@ -25,6 +25,7 @@ import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { splitHalves } from '../__tests__/routeSamples.js';
+import { base32Decode, totp } from '../auth/totp.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -1044,6 +1045,18 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 		projectsOf: (c) => [c.teamProjects[0]!]
 	},
 	{
+		// A team admin removes a member's lost second factor (205_mfa_recovery): recorded on the team's projects, and in the
+		// member's own security log (auth/mfa-reset.db.test.ts).
+		route: `POST ${T}/members/:userId/mfa-reset`,
+		records: ['team_member.mfa_reset'],
+		call: async (c) => {
+			const { secret } = (await c.mate.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' })).body;
+			expect((await c.mate.call('POST', '/auth/mfa/totp/confirm', { code: totp(base32Decode(secret)!, Date.now()) })).status).toBe(200);
+			return c.admin.call('POST', `${team(c)}/members/${c.mate.id}/mfa-reset`);
+		},
+		projectsOf: inTeam
+	},
+	{
 		route: `PATCH ${T}/members/:userId`,
 		records: ['team_member.role'],
 		call: (c) => c.admin.call('PATCH', `${team(c)}/members/${c.mate.id}`, { role: 'admin' }),
@@ -1146,6 +1159,10 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/mfa/recovery-codes', exempt: 'a new set of the caller’s own recovery codes; recorded as mfa.recovery_regenerated in the account’s own security log' },
 	{ route: 'POST /auth/mfa/step-up', exempt: 'a code again inside the caller’s own session (a sign-off, issuing or withdrawing a pack need one from the last 10 minutes); a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/mfa/verify', exempt: 'signs the caller in with a code; a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
+	// Recovering a lost second factor (205_mfa_recovery): the account's own, in its own security log, never a project's.
+	{ route: 'POST /auth/mfa/reset', exempt: 'asks for a reset of the caller’s own lost second factor (emails a link); recorded as mfa.reset_requested in the account’s own security log' },
+	{ route: 'POST /auth/mfa/reset/confirm', exempt: 'starts the 3-day wait from the emailed link; recorded as mfa.reset_confirmed in the account’s own security log' },
+	{ route: 'POST /auth/mfa/reset/cancel', exempt: 'ends a waiting reset from an emailed cancel link; recorded as mfa.reset_cancelled in the account’s own security log' },
 	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },
 	{ route: 'POST /auth/invite-info', exempt: 'reads what an invite token is for, to show on the sign-up page; writes nothing' },

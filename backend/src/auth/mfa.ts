@@ -5,6 +5,7 @@
 // (withUser, or a transaction acting as the account a sign-in challenge
 // proved), so RLS shows it only its own rows.
 import type { Db } from '../db/tx.js';
+import { pendingReset } from './mfaReset.js';
 import { open, seal } from './secretBox.js';
 import {
 	base32Encode,
@@ -25,7 +26,18 @@ import {
  */
 export const MFA_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: '15 minutes' } as const;
 
-export type SecurityEventKind = 'mfa.enrolled' | 'mfa.disabled' | 'mfa.recovery_used' | 'mfa.recovery_regenerated';
+export type SecurityEventKind =
+	| 'mfa.enrolled'
+	| 'mfa.disabled'
+	| 'mfa.recovery_used'
+	| 'mfa.recovery_regenerated'
+	// Recovering a lost factor (205_mfa_recovery; auth/mfaReset.ts). Written by its SECURITY DEFINER functions, not by recordSecurityEvent.
+	| 'mfa.reset_requested'
+	| 'mfa.reset_confirmed'
+	| 'mfa.reset_cancelled'
+	| 'mfa.reset_completed'
+	| 'mfa.reset_by_admin'
+	| 'mfa.reset_by_operator';
 
 export interface MfaStatus {
 	/** An authenticator is set up (its first code confirmed). */
@@ -35,6 +47,8 @@ export interface MfaStatus {
 	recoveryCodesLeft: number;
 	/** The person holds a role that needs two-step sign-in (stepUp.ts): a project owner, a team admin or an assessor. */
 	required: boolean;
+	/** A confirmed reset of the factor is waiting (205, auth/mfaReset.ts): when it takes effect. Null when none. */
+	pendingReset: { effectiveAt: string } | null;
 }
 
 /** Whether `userId` has a confirmed authenticator. */
@@ -78,7 +92,8 @@ export async function mfaStatus(db: Db, userId: string): Promise<MfaStatus> {
 		enrolled: confirmedAt !== null,
 		enrolledAt: confirmedAt?.toISOString() ?? null,
 		recoveryCodesLeft: confirmedAt ? (rows[0]?.codes ?? 0) : 0,
-		required: await holdsRequiredRole(db, userId)
+		required: await holdsRequiredRole(db, userId),
+		pendingReset: await pendingReset(db, userId)
 	};
 }
 
@@ -158,8 +173,13 @@ export async function useCode(
 	return rowCount ? 'recovery' : null;
 }
 
-/** Turn two-step sign-in off: the authenticator and every recovery code go. */
-export async function removeFactor(db: Db, userId: string): Promise<void> {
-	await db.query('DELETE FROM user_recovery_code WHERE user_id = $1', [userId]);
-	await db.query('DELETE FROM user_totp WHERE user_id = $1', [userId]);
+/**
+ * Turn the signed-in person's two-step sign-in off: every second factor goes
+ * (the authenticator and every recovery code), and a reset that was waiting
+ * ends with it. Through mfa_remove_factors (205_mfa_recovery), the one place
+ * a second factor is removed, which a completed reset and a team admin's
+ * reset use too: a new kind of factor is added there, nowhere else.
+ */
+export async function removeOwnFactors(db: Db): Promise<void> {
+	await db.query('SELECT app_mfa_remove_own_factors()');
 }

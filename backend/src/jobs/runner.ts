@@ -4,7 +4,8 @@
 // alert checks (app_alert_schedule) that are due, then claim and run due
 // jobs one at a time until none are due or the time budget is spent, then
 // send the alert mails those jobs queued (alerts/send.ts) and the evidence
-// pack notices (evidence/notices.ts). Every transport ends
+// pack notices (evidence/notices.ts), and complete or remind the resets of a
+// lost second factor (auth/mfaReset.ts). Every transport ends
 // here: the local worker loop (worker.ts), `pnpm dev:jobs:tick`, the memory
 // transport (tests), and the production worker Lambda (lambda-worker.ts).
 import { sendAlerts, type SendResult } from '../alerts/send.js';
@@ -23,6 +24,7 @@ import { handlers as builtInHandlers } from './handlers/index.js';
 import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
 import type { ClaimedJob, HandlerRegistry } from './registry.js';
 import { logEvent } from '../logging/logEvent.js';
+import { type MfaResetTickResult, runMfaResets } from '../auth/mfaReset.js';
 
 /** Default lease: longer than any job may run (the worker Lambda's timeout is 300 s). */
 export const DEFAULT_LEASE_SECONDS = 360;
@@ -211,6 +213,8 @@ export interface TickResult {
 	erratumNotices: ErratumNoticeResult & { purged: number; queued: number };
 	/** The licence record's review and closing notices (161_licence_record): owners and the operator, at most once each. */
 	licenceRecords: LicenceRecordResult;
+	/** Resets of a lost second factor (205_mfa_recovery, auth/mfaReset.ts): completed, reminded, purged. */
+	mfaResets: MfaResetTickResult;
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -239,7 +243,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
 		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
 		erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },
-		licenceRecords: { due: 0, sent: 0, skipped: 0, failed: 0 }
+		licenceRecords: { due: 0, sent: 0, skipped: 0, failed: 0 },
+		mfaResets: { completed: 0, reminded: 0, purged: 0, failed: 0 }
 	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
@@ -280,6 +285,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	result.erratumNotices = { purged: erratumPurged, queued: erratumQueued, ...(await sendErratumNotices()) };
 	// A licence record's review is due, or its closing date passed (161): asked, never deleted.
 	result.licenceRecords = await sendLicenceRecordNotices();
+	// A reset of a lost second factor whose 3-day wait is over is completed here, and a waiting one's daily reminder sent.
+	result.mfaResets = await runMfaResets();
 	result.stats = await withoutUser(queueStats);
 	return result;
 }

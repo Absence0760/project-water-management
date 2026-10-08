@@ -73,7 +73,8 @@ sides share.
   in), not the Vite dev server. CI runs it as 14 shards on one shared build
   ([e2e/README.md](../e2e/README.md)).
 - **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
-  http://localhost:8026, `pnpm dev:mail:up`).
+  http://localhost:8026, `pnpm dev:mail:up`); the e2e specs that read real
+  emails (alerts, server reports, a second-factor reset) need it.
 - **MinIO**: docker-compose, S3-compatible storage for report PDFs and
   evidence packs' reproduction bundles (issuing a pack needs it; API
   **9002**, console http://localhost:9003, `pnpm dev:s3:up`; the community

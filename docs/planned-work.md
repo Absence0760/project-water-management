@@ -96,7 +96,7 @@ Status: ⬜ not started · 🚧 partly there · ✅ done · ❌ dropped.
 
 | Feature | Why | Effort |
 | --- | --- | --- |
-| 🚧 **SSO / MFA** (MFA: #282) | **MFA built** (#282, PR #317): TOTP with recovery codes, required for owners, team admins and assessors, opt-in for everyone else ([security.md](./security.md)). SSO waits for a signed CMA or consultancy that asks. Was: Agencies and larger consultancies use Microsoft Entra ID; MFA for admins. | M |
+| 🚧 **SSO / MFA** (MFA: #282) | **MFA built** (#282, PR #317): TOTP with recovery codes, required for owners, team admins and assessors, opt-in for everyone else, with self-service recovery of a lost phone and codes (an emailed link and a 3-day wait) or a team admin's reset (205) ([security.md](./security.md)). SSO waits for a signed CMA or consultancy that asks. Was: Agencies and larger consultancies use Microsoft Entra ID; MFA for admins. | M |
 | ✅ **Background jobs** | Queue (SQS) for batch runs, stochastic ensembles, report rendering — anything beyond the 30 s Lambda budget. — **Done early** (WP-2.8, #10): an SQS job queue (in-process locally) for re-runs, sweeps, outlooks, yield, report renders and feed fetches ([architecture.md](./architecture.md)). | M |
 | ⬜ **Run storage in S3** | A full multi-decade run is several MB of output; move per-series arrays to compressed S3 objects once runs accumulate (DB keeps summaries). | M |
 | ❌ **Unit preferences** | **Dropped (2026-09-30):** the UI already uses the unit SA practice expects in each place (m³/s flow, m³/day demand, l/s + m³/day curtailment, Mm³/a annual, ML on farmer pages), and uploads convert on save. Was: m³/day vs ML/day vs l/s vs m³/s; Mm³/a for annual volumes. | S |

@@ -172,7 +172,37 @@ export const en = {
 		'Kept with your name: a sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.',
 	'mail.deleted.backups': 'Copies in our backups are deleted as the backups expire, within 35 days.',
 	'mail.deleted.action': 'Read the privacy notice',
-	'mail.deleted.notYou': 'If you didn’t delete your account, contact us straight away: the privacy notice says how.'
+	'mail.deleted.notYou': 'If you didn’t delete your account, contact us straight away: the privacy notice says how.',
+
+	// Recovering a lost second factor (205_mfa_recovery; auth/mfaReset.ts). The confirmation link, asked for at the sign-in's code step.
+	'mail.mfaReset.confirm.subject': 'Confirm removing two-step sign-in — {product}',
+	'mail.mfaReset.confirm.heading': 'Remove two-step sign-in from your account?',
+	'mail.mfaReset.confirm.body': 'Someone signed in to the {product} account {email} with the right password and said they have lost their phone and their recovery codes.',
+	'mail.mfaReset.confirm.wait': 'If you confirm, two-step sign-in is removed after a 3-day wait. Until then your authenticator app keeps working, and we email you every day with a link to cancel.',
+	'mail.mfaReset.confirm.action': 'Confirm and start the 3-day wait',
+	'mail.mfaReset.confirm.expires': 'This link expires in 1 hour and works once.',
+	'mail.mfaReset.confirm.notYou': 'If this wasn’t you, don’t open the link: someone knows your password. Choose a new one with “Forgot password?” on the sign-in page.',
+	// The wait: when it starts, and once a day until it ends. Each carries a cancel link.
+	'mail.mfaReset.pending.subject': 'Two-step sign-in will be removed on {date} — {product}',
+	'mail.mfaReset.pending.heading': 'Two-step sign-in will be removed from your account',
+	'mail.mfaReset.pending.started': 'A request to remove two-step sign-in from the {product} account {email} was confirmed from this inbox.',
+	'mail.mfaReset.pending.reminder': 'A request to remove two-step sign-in from the {product} account {email} is still waiting.',
+	'mail.mfaReset.pending.when': 'Two-step sign-in will be removed from your account on {date} at {time}, and every device will be signed out. Until then your authenticator app keeps working.',
+	'mail.mfaReset.pending.code': 'Signing in with a code from your authenticator app, or with a recovery code, also cancels it.',
+	'mail.mfaReset.pending.action': 'Not you? Cancel it',
+	'mail.mfaReset.pending.noSignIn': 'The cancel link works without signing in, until two-step sign-in is removed.',
+	'mail.mfaReset.pending.notYou': 'If this wasn’t you, cancel it now and choose a new password: someone knows yours and can read this inbox.',
+	// The wait is over.
+	'mail.mfaReset.done.subject': 'Two-step sign-in was removed — {product}',
+	'mail.mfaReset.done.heading': 'Two-step sign-in was removed from your account',
+	'mail.mfaReset.done.body': 'The 3-day wait is over: two-step sign-in was removed from the {product} account {email}, and every device was signed out.',
+	'mail.mfaReset.done.next': 'Sign in with your password, then set up two-step sign-in again on your Account page.',
+	'mail.mfaReset.done.action': 'Sign in',
+	'mail.mfaReset.done.notYou': 'If this wasn’t you, choose a new password straight away with “Forgot password?” on the sign-in page, and contact us: the privacy notice says how.',
+	// A team admin removed it.
+	'mail.mfaReset.admin.subject': 'Your two-step sign-in was removed — {product}',
+	'mail.mfaReset.admin.heading': 'Your two-step sign-in was removed',
+	'mail.mfaReset.admin.body': 'An admin of the team “{team}” removed two-step sign-in from the {product} account {email}, and every device was signed out.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -197,6 +227,8 @@ export const sections: Record<string, string> = {
 	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.',
 	'mail.deleted':
 		'Email: sent once an account has been deleted, from the account page’s “Delete my account”, saying what was deleted and what was kept (the law asks us to tell the person what we did). {list} is the names of the catchments and teams they left, joined with “and”.',
+	'mail.mfaReset':
+		'Emails about removing two-step sign-in (a code from an authenticator app on the phone, asked for after the password) when someone lost their phone and recovery codes. “confirm” lines: the link that starts a 3-day wait; “pending” lines: sent when the wait starts and once a day after, with a link to cancel; “done” lines: the wait is over; “admin” lines: an admin of the person’s team removed it at once. {date} is a date like “3 Oct 2026”, {time} a time like “14:05 SAST”; {team} is the team’s name.',
 	'mail.pack':
 		'Evidence pack emails: sent to the catchment’s editors and to the applicant when an evidence pack (a frozen, signed copy of the evidence report for a water-use licence application) is issued or withdrawn. {version} and {previous} are numbers; {code} is a short code like “3f2a-91bc-07de”; {project} is the catchment; {what} is one of the “what” lines; {name} is the application’s name (or the “name” line, for baseline evidence).'
 };

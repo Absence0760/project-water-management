@@ -210,6 +210,32 @@
 		}
 	}
 
+	/**
+	 * A member lost their phone and their recovery codes (205_mfa_recovery): remove their second factor now,
+	 * instead of their own 3-day wait. The API asks the admin for a fresh code first (the client's code dialog).
+	 */
+	let notice = $state<string | null>(null);
+	async function resetMfa(m: TeamMember) {
+		const ok = await confirmDialog({
+			title: 'Remove two-step sign-in?',
+			message: `Remove two-step sign-in from ${m.displayName} (${m.email})? Do this only when you're sure it's them asking, for example in person or on a call: their authenticator app and recovery codes stop working, they're signed out everywhere, and anyone with their password can then sign in as them until they set it up again. They get an email, and it's recorded in the history of the team's projects.`,
+			confirmLabel: 'Remove two-step sign-in',
+			danger: true
+		});
+		if (!ok) return;
+		busy = m.userId;
+		error = null;
+		notice = null;
+		try {
+			await api.teams.resetMemberMfa(teamId, m.userId);
+			notice = `Two-step sign-in was removed from ${m.displayName}. They can sign in with their password and set it up again.`;
+		} catch (err) {
+			error = msg(err);
+		} finally {
+			busy = null;
+		}
+	}
+
 	/** From the settings sheet: close it, then ask in the confirm dialog (never two modals stacked). */
 	async function askDelete() {
 		// A delete already on its way: the sheet reopened meanwhile doesn't send a second one.
@@ -311,6 +337,7 @@
 			</header>
 
 			{#if error && !settingsOpen}<div class="alert alert-error" role="alert">{error}</div>{/if}
+			<p class="status-line" role="status" aria-live="polite" data-reset-done={notice ? '' : undefined}>{notice ?? ''}</p>
 
 			<div class="team-body">
 				<div class="cols">
@@ -391,16 +418,29 @@
 												{/if}
 											</td>
 											<td class="act">
-												{#if isAdmin && m.userId !== me}
-													<button
-														type="button"
-														class="btn btn-sm btn-danger"
-														disabled={busy === m.userId}
-														onclick={() => remove(m)}
-														aria-label="Remove {m.displayName}"
-													>
-														Remove
-													</button>
+{#if isAdmin && m.userId !== me}
+													<div class="act-btns">
+																										<button
+															type="button"
+															class="btn btn-sm"
+															disabled={busy === m.userId}
+															onclick={() => resetMfa(m)}
+															aria-label="Reset two-step sign-in for {m.displayName}"
+															title="For a member who lost their phone and recovery codes"
+															data-reset-mfa
+														>
+															Reset two-step
+														</button>
+														<button
+															type="button"
+															class="btn btn-sm btn-danger"
+															disabled={busy === m.userId}
+															onclick={() => remove(m)}
+															aria-label="Remove {m.displayName}"
+														>
+															Remove
+														</button>
+													</div>
 												{/if}
 											</td>
 										</tr>
@@ -640,6 +680,19 @@
 		text-align: right;
 		width: 1%;
 		white-space: nowrap;
+	}
+	/* Two actions on a narrow column: they stack rather than widen the table. */
+	.act-btns {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.35rem;
+	}
+	.status-line {
+		margin: 0 0 0.75rem;
+	}
+	.status-line:empty {
+		display: none;
 	}
 	select {
 		text-transform: capitalize;

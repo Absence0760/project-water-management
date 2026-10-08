@@ -142,6 +142,9 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'user_recovery_code.user_id': { excluded: 'secrets (recovery code hashes); how many are left is in twoStepSignIn' },
 	'mfa_throttle.user_id': { excluded: 'a count of wrong two-step sign-in codes for the lockout, a day at most' },
 	'account_security_event.user_id': { section: 'securityEvents' },
+	// Recovering a lost second factor (205): when each reset was asked for, confirmed, ended and why; never a token hash.
+	'mfa_reset.user_id': { section: 'twoStepSignInResets' },
+	'mfa_reset_quota.user_id': { excluded: 'when the person asked for a reset, counted for the daily cap only; gone after a day (the request itself is in twoStepSignInResets)' },
 	'yield_result.created_by': { excluded: 'the project’s yield result; its maker only' }
 };
 
@@ -297,6 +300,12 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			`SELECT kind, created_at AS "createdAt" FROM account_security_event WHERE user_id = $1 ORDER BY created_at DESC, id DESC`,
 			[userId]
 		);
+		// Resets of a lost second factor (205): own rows under RLS, without the confirmation link's hash.
+		const { rows: twoStepSignInResets } = await db.query(
+			`SELECT requested_at AS "requestedAt", confirmed_at AS "confirmedAt", effective_at AS "effectiveAt", ended_at AS "endedAt", end_reason AS "endReason"
+			 FROM mfa_reset WHERE user_id = $1 ORDER BY requested_at DESC, id`,
+			[userId]
+		);
 		// The registration checks the host recorded (167_signers): own rows under RLS.
 		const { rows: registrationChecks } = await db.query(
 			`SELECT project_id AS "projectId", registration_body AS "registrationBody", registration_category AS "registrationCategory", registration_no AS "registrationNo",
@@ -330,6 +339,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			erratumNotices,
 			preferences: prefs,
 			twoStepSignIn,
+			twoStepSignInResets,
 			securityEvents,
 			reportSubscriptions: rest.reportSubscriptions,
 			// Without a publication's per-farm figures (the decision log, issue #119): the project's figures about others' farms.

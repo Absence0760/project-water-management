@@ -277,6 +277,8 @@ export type AuditKind =
 	| 'team_member.added'
 	| 'team_member.role'
 	| 'team_member.removed'
+	// A team admin removed a member's second factor (205_mfa_recovery, teams/mfa-reset-routes.ts).
+	| 'team_member.mfa_reset'
 	| 'team.deleted'
 	| 'restore';
 

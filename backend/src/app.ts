@@ -10,6 +10,7 @@ import { requireUser, type AuthEnv } from './auth/middleware.js';
 import { emailAuthRoutes } from './auth/email-routes.js';
 import { authRoutes } from './auth/routes.js';
 import { mfaRoutes } from './auth/mfa-routes.js';
+import { mfaResetRoutes } from './auth/mfa-reset-routes.js';
 import { compareRoutes } from './compare/routes.js';
 import { exportRoutes } from './export/routes.js';
 import { farmerRoutes } from './farms/routes.js';
@@ -63,6 +64,7 @@ import { assessmentRoutes } from './assessments/routes.js';
 import { autoCalibrationRoutes } from './calibration/routes.js';
 import { outlookRoutes } from './outlooks/routes.js';
 import { teamRoutes } from './teams/routes.js';
+import { teamMfaResetRoutes } from './teams/mfa-reset-routes.js';
 import { yieldRoutes } from './yield/routes.js';
 
 /**
@@ -156,6 +158,8 @@ export function createApp() {
 
 	app.route('/auth', authRoutes);
 	app.route('/auth', mfaRoutes);
+	// Recovering a lost second factor (205): the challenge cookie or an emailed token is the credential.
+	app.route('/auth', mfaResetRoutes);
 	app.route('/auth', emailAuthRoutes);
 	// The headless report renderer's sign-in: the render token is the credential.
 	app.route('/auth', renderSessionRoutes);
@@ -238,6 +242,7 @@ export function createApp() {
 	const teams = new Hono<AuthEnv>();
 	teams.use('*', requireUser);
 	teams.route('/', teamRoutes);
+	teams.route('/', teamMfaResetRoutes);
 	teams.route('/', teamInviteRoutes);
 	teams.route('/', portfolioRoutes);
 	app.route('/teams', teams);

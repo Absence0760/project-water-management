@@ -17,6 +17,8 @@
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
+	import { afterResetAskFailed, resetAsked, type ResetAsked } from '$lib/auth/mfaReset';
+	import { fmtStampTime } from '$lib/components/farm/format';
 
 	// Dev-only shortcut to the seeded demo account; never in a production build.
 	const DEMO = import.meta.env.DEV ? { email: 'demo@example.com', password: 'demo-password' } : null;
@@ -118,6 +120,47 @@
 		}
 	}
 
+	// Lost the phone and the recovery codes too (205_mfa_recovery): ask for a
+	// reset. A confirmation link is emailed; following it starts a 3-day wait
+	// (docs/security.md § Two-step sign-in → Recovery). Needs the live
+	// challenge, so it is offered only here, after the password.
+	let lost = $state(false);
+	let asked = $state<ResetAsked | null>(null);
+	let lostHeading: HTMLHeadingElement | undefined = $state();
+
+	async function showLost() {
+		lost = true;
+		asked = null;
+		error = null;
+		await tick();
+		lostHeading?.focus();
+	}
+
+	async function backToCode() {
+		lost = false;
+		error = null;
+		await tick();
+		codeInput?.focus();
+	}
+
+	async function askReset() {
+		busy = true;
+		error = null;
+		try {
+			asked = resetAsked(await api.auth.mfa.reset.request());
+		} catch (err) {
+			// The 5 minutes ran out: back to the first step, as for a code.
+			if (afterResetAskFailed(err) === 'password') {
+				step = 'password';
+				lost = false;
+				password = '';
+			}
+			error = errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function toggleRecovery() {
 		useRecovery = !useRecovery;
 		code = '';
@@ -138,6 +181,8 @@
 				step = 'code';
 				code = '';
 				useRecovery = false;
+				lost = false;
+				asked = null;
 				password = '';
 				await tick();
 				codeInput?.focus();
@@ -225,7 +270,28 @@
 			}}
 		/>
 	{/if}
-	{#if step === 'code'}
+	{#if step === 'code' && lost}
+		<section class="lost" aria-labelledby="lost-h" data-mfa-lost>
+			<h2 id="lost-h" class="step-title" tabindex="-1" bind:this={lostHeading}>{t('Lost your phone and your recovery codes?')}</h2>
+			{#if asked?.kind === 'sent'}
+				<div class="notice" role="status" data-reset-sent>
+					<p class="notice-title">{t('Check your email')}</p>
+					<p>{t('We sent a link to the address on your account. Open it within 1 hour to start the 3-day wait. Nothing changes until you do.')}</p>
+				</div>
+			{:else if asked?.kind === 'pending'}
+				<div class="notice" role="status" data-reset-pending>
+					<p class="notice-title">{t('Two-step sign-in is already being removed')}</p>
+					<p>{t('It will be removed at {when}. Then sign in with your password alone, and set it up again on your Account page.', { when: fmtStampTime(asked.effectiveAt) })}</p>
+				</div>
+			{:else}
+				<p>{t('We can remove two-step sign-in from your account, so you can sign in with your password and set it up again.')}</p>
+				<p>{t('To keep your account safe, this takes 3 days. We email you a link to confirm. Once you open it, two-step sign-in is removed 3 days later, and we email you every day until then, so you can cancel it if it wasn’t you.')}</p>
+				<p class="muted">{t('If you’re in a team, a team admin can remove it for you straight away.')}</p>
+				<button type="button" class="btn btn-primary" onclick={askReset} disabled={busy}>{busy ? t('Sending…') : t('Email me a link')}</button>
+			{/if}
+			<button type="button" class="linkish" onclick={backToCode}>{t('Back to the code')}</button>
+		</section>
+	{:else if step === 'code'}
 		<form onsubmit={submitCode} novalidate aria-labelledby="code-h">
 			<h2 id="code-h" class="step-title">{t('Two-step sign-in')}</h2>
 			<div class="field">
@@ -243,6 +309,9 @@
 			<button type="button" class="linkish" onclick={toggleRecovery}>
 				{useRecovery ? t('Use a code from the app instead') : t('Lost your phone? Use a recovery code')}
 			</button>
+			{#if useRecovery}
+				<button type="button" class="linkish" onclick={showLost} data-mfa-lost-link>{t('Lost your phone and your recovery codes?')}</button>
+			{/if}
 		</form>
 	{:else}
 	<form onsubmit={submit}>
@@ -304,6 +373,14 @@
 	.hint {
 		font-size: 1rem;
 		color: var(--text-2);
+	}
+	.lost {
+		display: grid;
+		gap: 0.6rem;
+		justify-items: start;
+	}
+	.lost p {
+		margin: 0;
 	}
 	.linkish {
 		align-self: flex-start;
