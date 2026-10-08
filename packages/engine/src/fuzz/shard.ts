@@ -8,6 +8,12 @@
 // seed in its contiguous slice of the range, so the shards together cover
 // exactly the seeds the single test did. FUZZ_CASES / FUZZ_SEED /
 // FUZZ_MAX_FAILURES work as before (a soak: FUZZ_CASES=20000 pnpm test).
+//
+// Each shard's timeout is a hang guard, not a budget: FUZZ_MS_PER_CASE per
+// case (default 600, ~3x a case alone), at least 2 minutes. A release soak
+// (scripts/release/engine-build.mjs) raises it to RELEASE_MS_PER_CASE: a slow
+// CI runner once took ~0.4 s a case, timing out three 400-case shards with
+// every invariant holding and stopping web@0.1.6.
 import { describe, expect, it } from 'vitest';
 import { randomInput, shrink } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
@@ -18,6 +24,13 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
 const CASES = Number(env.FUZZ_CASES ?? 400);
 const SEED0 = Number(env.FUZZ_SEED ?? 1);
 const MAX_FAILURES = Number(env.FUZZ_MAX_FAILURES ?? 3);
+const MS_PER_CASE = Number(env.FUZZ_MS_PER_CASE ?? 600);
+
+/** A shard's timeout: `msPerCase` a case, never under 2 minutes; a malformed value takes the default. */
+export function shardTimeoutMs(cases: number, msPerCase = MS_PER_CASE): number {
+	const per = Number.isFinite(msPerCase) && msPerCase > 0 ? msPerCase : 600;
+	return Math.max(120_000, cases * per);
+}
 
 /**
  * The rule a failure message names, without node ids and day numbers, so shrinking keeps the same failure.
@@ -50,6 +63,6 @@ export function fuzzShard(i: number, n = SHARDS): void {
 				failures.push(`seed ${seed}: ${bad}\n  shrunk: ${checkAll(small, seed)}\n  repro: ${JSON.stringify(small)}`);
 			}
 			expect(failures.join('\n\n')).toBe('');
-		}, Math.max(120_000, (to - from) * 600)); // ~0.2 s a case alone, 3x for a loaded machine (a release soak runs 500 a shard)
+		}, shardTimeoutMs(to - from)); // ~0.2 s a case alone; a hang guard (see the top), the release's far looser
 	});
 }

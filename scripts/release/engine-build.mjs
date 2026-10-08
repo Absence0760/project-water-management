@@ -34,6 +34,16 @@ export function soakCasesOf(argv) {
 	return n;
 }
 
+/**
+ * The soak's per-case timeout for a release (FUZZ_MS_PER_CASE, packages/engine/src/fuzz/shard.ts):
+ * 2 s a case, ~10x a case alone, so only a hang stops a release, never a slow runner (one at
+ * ~0.4 s a case timed out web@0.1.6's 400-case shards under the 0.6 s default).
+ */
+export const RELEASE_MS_PER_CASE = 2_000;
+
+/** The engine suite's environment: the soak widened to `soakCases`, with the release's timeout. */
+export const suiteEnv = (soakCases, env = process.env) => ({ ...env, FUZZ_CASES: String(soakCases), FUZZ_MS_PER_CASE: String(RELEASE_MS_PER_CASE) });
+
 /** The record, in the shape parseEngineBuild accepts. */
 export function buildRecord({ version, gitSha, invariantsPassed, soakCases }) {
 	if (!/^[0-9a-f]{7,40}$/.test(gitSha)) throw new Error(`not a git SHA: ${JSON.stringify(gitSha)}`);
@@ -48,7 +58,7 @@ function main() {
 	const version = engineVersionOf(readFileSync(new URL('../../packages/engine/src/version.ts', import.meta.url), 'utf8'));
 	// The checked-out commit (the released one): on a manual run GITHUB_SHA is main's head, not the tag's.
 	const gitSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim();
-	const run = spawnSync('pnpm', ['-C', 'packages/engine', 'test'], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, FUZZ_CASES: String(soakCases) } });
+	const run = spawnSync('pnpm', ['-C', 'packages/engine', 'test'], { cwd: ROOT, stdio: 'inherit', env: suiteEnv(soakCases) });
 	if (run.status !== 0) {
 		console.error(`The engine suite failed (exit ${run.status ?? run.signal}): no build record, and no release.`);
 		process.exit(1);

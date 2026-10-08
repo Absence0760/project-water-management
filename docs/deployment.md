@@ -1055,7 +1055,10 @@ Every report's validation statement names the engine build's own test results
 (WP-3.14). The build job of both release workflows makes that record before it
 builds, with `scripts/release/engine-build.mjs --soak-cases N` (1 600 cases for
 the web, 2 000 for the backend): the engine's unit suite with its random-network
-soak widened to N, on this commit. A failing suite fails the release. The
+soak widened to N, on this commit, each shard's timeout loosened to 2 s a case
+(`FUZZ_MS_PER_CASE`, `RELEASE_MS_PER_CASE`; the plain suite's is 0.6 s): the
+timeout is a hang guard, and a slow runner at ~0.4 s a case once timed out
+`web@0.1.6`'s shards with every invariant holding. A failing suite fails the release. The
 script puts the record (`{version, gitSha, invariantsPassed, soakCases}`) in
 `$GITHUB_ENV` as `ENGINE_BUILD`:
 

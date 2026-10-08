@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { buildRecord, engineVersionOf, envLine, soakCasesOf } from './engine-build.mjs';
+import { buildRecord, engineVersionOf, envLine, RELEASE_MS_PER_CASE, soakCasesOf, suiteEnv } from './engine-build.mjs';
 
 test('reads ENGINE_VERSION from the engine’s version module', () => {
 	const source = readFileSync(new URL('../../packages/engine/src/version.ts', import.meta.url), 'utf8');
@@ -23,4 +23,13 @@ test('writes one ENGINE_BUILD line the site build can parse back', () => {
 	assert.equal(line.split('\n').length, 2, 'a single line');
 	assert.deepEqual(JSON.parse(line.slice('ENGINE_BUILD='.length)), record);
 	assert.throws(() => buildRecord({ ...record, gitSha: 'main' }), /not a git SHA/);
+});
+
+test('runs the soak with the release’s loose per-case timeout, keeping the rest of the environment', () => {
+	const env = suiteEnv(1600, { PATH: '/bin', FUZZ_MS_PER_CASE: '1' });
+	assert.equal(env.FUZZ_CASES, '1600');
+	assert.equal(env.FUZZ_MS_PER_CASE, String(RELEASE_MS_PER_CASE));
+	assert.equal(env.PATH, '/bin');
+	// A hang guard only: 5x the slowest runner seen (~0.4 s a case, web@0.1.6).
+	assert.ok(RELEASE_MS_PER_CASE >= 2_000);
 });

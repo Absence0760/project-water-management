@@ -233,9 +233,12 @@ off-take keeps). They run in
   `FUZZ_CASES=20000 pnpm -C packages/engine exec vitest run src/fuzz`
   (2026-09-26, engine 1.0.0: 20 000 cases clean with `FUZZ_MAX_FAILURES=100`).
   The web release runs it at 1 600 cases (`scripts/release/engine-build.mjs`,
-  `deploy-frontend.yml`), under the shards' time budget of about 0.2 s a
-  case (`fuzz/shard.ts`): raise that budget before raising the release's
-  count. The
+  `deploy-frontend.yml`). Each shard's timeout is a hang guard, not a
+  budget: `FUZZ_MS_PER_CASE` a case (0.6 s by default, about 3x a case
+  alone; never under 2 minutes; `fuzz/shard.ts` `shardTimeoutMs`), and the
+  release raises it to 2 s a case (`RELEASE_MS_PER_CASE`), since a slow
+  runner at ~0.4 s a case once timed out `web@0.1.6`'s shards with every
+  invariant holding. The
   determinism check compares outputs value by value (`sameOutput`), not by
   serialising them twice, which cost as much as a run. A shard is fixed,
   CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with

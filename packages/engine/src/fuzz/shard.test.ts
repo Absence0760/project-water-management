@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ruleOf, shardRange, SHARDS } from './shard';
+import { ruleOf, shardRange, shardTimeoutMs, SHARDS } from './shard';
 
 describe('shardRange', () => {
 	it('splits the seeds into contiguous slices that cover the range exactly once', () => {
@@ -26,4 +26,16 @@ describe('ruleOf', () => {
 		expect(ruleOf(msg)).toBe(msg);
 		// ~20 s before; the timeout is a hang guard, not a budget (linear time takes a millisecond).
 	}, 5_000);
+});
+
+describe('shardTimeoutMs', () => {
+	it('gives each case its share, never under 2 minutes', () => {
+		expect(shardTimeoutMs(400, 600)).toBe(240_000);
+		expect(shardTimeoutMs(100, 600)).toBe(120_000);
+		expect(shardTimeoutMs(400, 2_000)).toBe(800_000);
+	});
+
+	it('falls back to 600 ms a case on a malformed FUZZ_MS_PER_CASE, never a zero or NaN timeout', () => {
+		for (const bad of [NaN, 0, -5, Infinity]) expect(shardTimeoutMs(400, bad)).toBe(240_000);
+	});
 });
