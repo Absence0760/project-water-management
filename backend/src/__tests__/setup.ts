@@ -17,9 +17,9 @@ process.env.MAIL_TRANSPORT = 'memory';
 process.env.SIGNUP_THROTTLE = 'off';
 // Seals TOTP secrets (auth/secretBox.ts).
 process.env.APP_ENCRYPTION_KEY = 'test-only-app-encryption-key-00000000000';
-// TEST-ONLY: the second-factor requirement for owners, team admins and
-// assessors off (auth/stepUp.ts): the fixtures sign owners in with a password
-// only. stepUp.db.test.ts turns it back on. Lambda refuses the setting.
+// TEST-ONLY: the second-factor requirement off (auth/stepUp.ts: the actions
+// that always need it, and owners' and team admins' where a project or team
+// requires it): the fixtures publish, decide and sign with a password only. stepUp.db.test.ts turns it back on. Lambda refuses the setting.
 process.env.MFA_REQUIRED = 'false';
 // Their fixtures sign packs with invented registrations nobody checked (167_signers); evidence/packs.db.test.ts turns it back on for its issue test.
 process.env.REGISTRATION_CHECK_REQUIRED = 'false';

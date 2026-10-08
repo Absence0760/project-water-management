@@ -257,6 +257,17 @@ describe('the setting itself', () => {
 		await expect(withUser(editor.id, (db) => db.query('UPDATE project SET require_mfa = true WHERE id = $1', [projectId]))).rejects.toMatchObject({ code: '42501' });
 	});
 
+	it('a team member below admin may not change the team’s: 403 for the role; an outsider 404', async () => {
+		const member = await signUp('SuTeamMember');
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		expect((await owner.call('POST', `/teams/${openTeamId}/members`, { email: member.email, role: 'member' })).status).toBe(201);
+		vi.stubEnv('MFA_REQUIRED', 'true');
+		const r = await member.call('PATCH', `/teams/${openTeamId}`, { requireMfa: true });
+		expect(r.status, JSON.stringify(r.body)).toBe(403);
+		expect(r.body.code).toBeUndefined();
+		expect((await direct.call('PATCH', `/teams/${openTeamId}`, { requireMfa: true })).status).toBe(404);
+	});
+
 	it('both changes are in the project’s history, and a save that changes nothing records nothing', async () => {
 		// Turned on in beforeAll; now off again, then off once more.
 		expect((await anon('PATCH', `/projects/${ownProjectId}`, { requireMfa: false }, enrolledOwnerTwoStep)).status).toBe(200);

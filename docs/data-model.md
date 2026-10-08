@@ -1141,7 +1141,10 @@ results for plausibility; and that they read its known limitations
   sign-off of a pack that isn't a draft. `signoff_same_project` checks both
   targets. `signoff_select` (from 045) shows a pack's sign-off to whoever
   reads the pack. [§ Evidence packs](#evidence-packs-112_evidence_packsql).
-- **Not yet**: MFA on signing (Step 4). A signer's sign-offs are in their
+- Two-step sign-in on signing: a pack's sign-off always needs it with a
+  code from the last 10 minutes, a run's where the project requires it
+  (204; [security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+  A signer's sign-offs are in their
   data export (`app_subject_export`, 054; the registration columns since
   092; `packId` since 112). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.

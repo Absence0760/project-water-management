@@ -14,7 +14,7 @@
 // two-step-signin.spec.ts. The requirement itself (who is refused what, with
 // the setting on or off) is in backend/src/auth/stepUp.db.test.ts.
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';
-import { createProject, PASSWORD } from '../support/api.ts';
+import { acceptInvites, addMember, createProject, PASSWORD } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL, MFA_API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -69,4 +69,16 @@ test('with the requirement on, turning on a project’s two-step requirement nee
 	await expect(toggle).toBeChecked();
 	await expect(panel.locator('[data-require-two-step]')).toHaveAttribute('data-require-two-step', 'on');
 	expect(await saved()).toMatchObject({ requireMfa: true, mfaRequired: true });
+});
+
+test('the Project page’s two-step panel is the owners’: an editor doesn’t get it', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Editor farm');
+	const editor = await signIn('Two-step editor');
+	await addMember(page.request, project.id, editor.user.email, 'editor');
+	await acceptInvites(editor.user.email, project.id);
+	await openProject(page, project.id);
+	await expect(page.locator('[data-require-two-step]')).toHaveCount(1);
+	await openProject(editor.page, project.id);
+	await expect(editor.page.locator('[data-require-two-step]')).toHaveCount(0);
 });

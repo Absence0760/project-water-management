@@ -249,8 +249,10 @@ run in parallel after WP-4.1.
 ### WP-4.2 Session context and MFA
 
 > **Partly built (issue #282, 2026-10-01).** TOTP with recovery codes, the
-> two-step sign-in, `amr` in the session JWT and the requirement for project
-> owners, team admins and assessors exist now, without organisations: the
+> two-step sign-in, `amr` in the session JWT and the requirement (always for
+> publishing to farmers, licence decisions and evidence packs, and opt-in per
+> project and team for owners' and team admins' actions, 204_mfa_opt_in,
+> 2026-10-08) exist now, without organisations: the
 > check is at the route (`auth/stepUp.ts`, from the request's `amr`), not in
 > RLS, and the tables are `user_totp`, `user_recovery_code`,
 > `mfa_throttle` and `account_security_event` (150_mfa.sql;

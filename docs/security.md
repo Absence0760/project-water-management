@@ -3530,10 +3530,11 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     ECSA or SACNASP register, and printed "self-declared"; the report prints
     the chosen register's address beside each signature); dam
     safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
-    finding on lawfulness and doesn't verify the app's software; signing
-    doesn't require two-step sign-in (it is the signer's choice, § Two-step
-    sign-in; requiring it for every signer waits on a decision,
-    followups.md), so a sign-off is as strong as the signer's sign-in. The typed name and registration are personal data: the
+    finding on lawfulness and doesn't verify the app's software. Signing a
+    pack always needs two-step sign-in and a code from the last 10 minutes;
+    signing a run does where the project requires two-step sign-in (opt-in,
+    204_mfa_opt_in; § Two-step sign-in), and otherwise a run's sign-off is
+    as strong as the signer's password. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
     with the account cleared, until the closing date of the licence record it
     supports (161; [§ Personal information](#personal-information-popia)).
