@@ -101,7 +101,9 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   cooldown at 50 and 70 seconds; time moved in the database, never slept).
 - **Credentials never stand in for each other.** Most of the app's
   credentials share one shape (43 base64url characters, stored as SHA-256:
-  verify, reset, invite, share, render and unsubscribe tokens), so each is
+  verify, reset, invite, share, render and unsubscribe tokens, and a
+  second-factor reset's confirm and cancel tokens, 205, each in its own
+  table: `mfa_reset.confirm_hash`, `mfa_reset_cancel`), so each is
   looked up only in its own table and, for email tokens, for its own purpose.
   The backend reads a credential in exactly three places: the `wm_session`
   cookie (`auth/session.ts`), `Authorization: Bearer` on `/ingest/*` only
@@ -162,7 +164,11 @@ project and team for the rest (`204_mfa_opt_in.sql`, 2026-10-08).
   or when a new set is made (`POST /auth/mfa/recovery-codes`, which needs a
   code from the app): 10 characters from a 30-letter alphabet without
   look-alikes (about 49 bits each), stored as SHA-256, each deleted when
-  used. Only while an authenticator is confirmed.
+  used. Only while an authenticator is confirmed. Made harder to lose
+  (205): the Account page offers them as a text file and on the clipboard
+  (both made in the browser; the server sends them once, `no-store`), says
+  how many are left, and warns at two or fewer to make a new set while the
+  phone is at hand.
 - **Enrolment needs the password.** `…/enrol` checks the current password
   through the sign-in lockout, as changing the password does, so a stolen
   session can't put its own authenticator on the account and lock its owner
@@ -323,11 +329,77 @@ project and team for the rest (`204_mfa_opt_in.sql`, 2026-10-08).
   recovery code used, new codes) is the account's own and append-only
   (no update or delete, even for its owner, so a thief can't erase that they
   turned it off); `mfa_throttle` is deny-all. `auth/mfa.db.test.ts` proves
-  each, with the owner's own rows as the positive control.
-- **Lost phone and codes.** The operator, after verifying who is asking,
-  deletes the account's `user_totp` and `user_recovery_code` rows as the
-  schema owner (deployment.md § Runbooks); the person then signs in with the
-  password and sets up again.
+  each, with the owner's own rows as the positive control. A reset of a
+  lost factor (`mfa_reset`, 205) is the person's own to read and nobody's to
+  write; its cancel links and request cap are owner-only (Recovery, below).
+- **Recovery** (operator decision, 2026-10-08; `205_mfa_recovery.sql`,
+  `auth/mfaReset.ts`, `auth/mfa-reset-routes.ts`,
+  `teams/mfa-reset-routes.ts`). A lost phone with the recovery codes is a
+  recovery code at sign-in. A lost phone *and* lost codes has three ways
+  out, the first two without the operator:
+  - **The person, with a wait.** At the sign-in's code step (**Lost your
+    phone and your recovery codes?**), `POST /auth/mfa/reset` needs the
+    live `wm_mfa` challenge, so the password was proven a moment ago, and
+    reveals nothing a person without the password could learn (the
+    challenge is what only a right password buys). It changes nothing: it
+    emails a confirmation link to the account's address (its own token
+    kind, SHA-256 in `mfa_reset.confirm_hash`, single use, 1 hour; a new
+    request voids an unused one). Following it starts a **3-day wait**
+    (`effective_at = now + 72 h`, the constant `MFA_RESET_WAIT`: no
+    environment can shorten it). During the wait the factor keeps working;
+    the start, a reminder every 24 hours (none in the last 2 hours) and the
+    end are emailed, each with a **cancel link that needs no sign-in**
+    (another token kind, `mfa_reset_cancel`, one per email, all valid until
+    the reset ends). Any successful code (`…/verify` or `…/step-up`, a
+    recovery code too) cancels it, and so does turning the factor off. So a
+    thief who has the password *and* the inbox still has to get past three
+    days of emails to the owner, any one of which stops it; one who has
+    only the password gets a link mailed to the owner, which the email
+    says means the password is known. At `effective_at` the job worker's
+    tick (`runMfaResets`, every transport's tick; not a job kind, since a
+    job belongs to a project) completes it in one transaction:
+    `app_mfa_reset_complete` refuses a reset whose wait isn't over, removes
+    every second factor through `mfa_remove_factors`, moves the session
+    watermark (every session signed out) and logs it; then the completion
+    email goes. Abuse limits: one reset waits at a time per account (a
+    partial unique index), 3 requests per account in 24 hours (each an
+    email: SES bills it; `mfa_reset_quota`, `429 mfa_reset_limit`, logged as
+    `login_failed` `locked`), dead links logged as `login_failed`
+    `invalid_link`. If the start email can't be sent, the reset is marked
+    unnotified (`app_mfa_reset_notice_failed`) and the next tick sends a
+    reminder with a cancel link at once. The confirm and cancel pages act only on a button, so a
+    mail scanner that opens a link starts or stops nothing.
+  - **A team admin, at once.** `POST /teams/:id/members/:userId/mfa-reset`:
+    team admin (two-step sign-in, as every admin action) and a code from
+    the last 10 minutes (`requireFreshCode`); never the admin themselves
+    (`409`: they use the self-service path); someone outside the team gets
+    the usual `404`, and so does an admin naming someone not in it.
+    `app_mfa_team_reset` checks the facts again in the database, removes
+    every factor through `mfa_remove_factors`, signs the member out
+    everywhere and logs `mfa.reset_by_admin`; the route records
+    `team_member.mfa_reset` on each of the team's projects and emails the
+    member. Any member, another admin included (a team's admins are equals). An admin can thus take a member's factor away; it gives them
+    nothing they couldn't do already (an admin owns every team project),
+    and the member, emailed, sees it in their security log.
+  - **The operator, last** (deployment.md § Runbooks 14): when the person
+    can't reach the inbox or can't wait and has no team admin, after
+    checking who is asking out of band.
+
+  `mfa_remove_factors(p_user)` is the **one place a second factor is
+  removed** (turning it off, a completed reset, a team admin, the
+  operator), and `mfa_has_factor(p_user)` the one test that an account has
+  one; neither is granted to `water_app`. The reset's steps are in the
+  person's security log (`mfa.reset_requested`, `…_confirmed`,
+  `…_cancelled`, `…_completed`, `…_by_admin`, `…_by_operator`). RLS:
+  `mfa_reset` is the person's own to read and nobody's to write (only
+  `SELECT` is granted), so no one can move `effective_at` to skip the
+  wait; `mfa_reset_cancel` and `mfa_reset_quota` are owner-only. Tests:
+  `auth/mfa-reset.db.test.ts` (the lifecycle, the reminders, every cancel,
+  the dead and reused links, the cap, one at a time, RLS with positive
+  controls, the team admin's reset and its refusals),
+  `auth/token-confusion.security.db.test.ts` (both new tokens in every
+  slot), `mail/templates.test.ts` (the emails, the date in South African
+  time under skewed time zones), `e2e/tests/mfa-reset.spec.ts`.
 
 ## Sign-up by invitation
 
@@ -595,7 +667,8 @@ across Lambda instances and whatever the request came through (issue #126):
 | `POST /auth/login` (and `change-password`'s current-password check) | 5 free attempts, then a lock of 1 minute doubling to 15 minutes; a trusted device counts on its own record | `005_login_throttle.sql`, `070_login_device_trust.sql`, `auth/routes.ts` `LOGIN_THROTTLE` ([§ Authentication](#authentication)) |
 | `POST /auth/forgot-password` | 1 reset email a minute, 10 a day (plus 10 per trusted device) | `app_issue_email_token`, `078_account_mail_cap.sql` (Mail-bombing throttle above) |
 | `POST /auth/resend-confirmation`, `POST /auth/resend-verification`, a sign-up with a taken address | the same cooldown and daily cap, on verification emails | the same |
-| `POST /auth/reset-password`, `POST /auth/verify-email` | none per account, by design: the account isn't known until a token matches, and a token is 256 random bits, single-use and short-lived, so guessing one is not a feasible attack at any rate; malformed tokens are refused before any database work | `auth/tokens.ts`, `auth/email-routes.ts` |
+| `POST /auth/mfa/reset` (a reset of a lost second factor, 205) | 3 requests (each an email) per account in 24 hours, under a per-account advisory lock; only with a live sign-in challenge, so only after a right password; one reset waits at a time, which bounds its reminders to one a day | `app_mfa_reset_request`, `205_mfa_recovery.sql` (§ Two-step sign-in → Recovery) |
+| `POST /auth/reset-password`, `POST /auth/verify-email`, `POST /auth/mfa/reset/confirm`, `POST /auth/mfa/reset/cancel` | none per account, by design: the account isn't known until a token matches, and a token is 256 random bits, single-use and short-lived, so guessing one is not a feasible attack at any rate; malformed tokens are refused before any database work | `auth/tokens.ts`, `auth/email-routes.ts` |
 
 `POST /auth/register` is the one auth limit keyed by client address (sign-up
 has no account yet; above), with a global ceiling that doesn't depend on it.
@@ -619,7 +692,9 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
   current password is `bad_password` on `/auth/change-password`, and "Delete
   my account"'s password on `/auth/me`, issue #112), `locked`
   (refused by the lockout before the password is checked), and `invalid_link`
-  (a malformed, used, expired or unknown reset or verification token).
+  (a malformed, used, expired or unknown reset or verification token, or a
+  second-factor reset's confirm or cancel link; `locked` on
+  `/auth/mfa/reset` is its daily cap).
 - *No personal data:* the line holds the route's pattern and the reason only,
   never the typed address, an account id, the client address or a token; the
   logger's signature takes two closed unions, so a caller can't pass one.
@@ -2933,7 +3008,8 @@ PDF someone else asked for kept the person as a recipient
 | Elevation-model requests per account, for the hourly and running caps (184) | `dem_attempt` | 1 day | Deleted | – |
 | Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
 | Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
-| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
+| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150), a reset of a lost factor asked for, confirmed, cancelled, completed, or done by a team admin or the operator (205); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
+| Resets of a lost second factor (205): when asked for, confirmed and ended, and how; the confirm and cancel links' hashes (SHA-256); requests counted for the daily cap | `mfa_reset`, `mfa_reset_cancel`, `mfa_reset_quota` | An ended reset 90 days (the tick, `app_mfa_reset_purge`); a link's hash until used or the reset ends; counts 24 hours | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |

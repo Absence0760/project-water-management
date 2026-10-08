@@ -268,4 +268,54 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.deleted.action': 'Lees die privaatheidskennisgewing',
 	// If you didn’t delete your account, contact us straight away: the privacy notice says how.
 	'mail.deleted.notYou': 'As jy nie jou rekening uitgevee het nie, kontak ons dadelik: die privaatheidskennisgewing sê hoe.',
+	// Confirm removing two-step sign-in — {product}
+	'mail.mfaReset.confirm.subject': 'Bevestig dat tweestap-intekening verwyder word — {product}',
+	// Remove two-step sign-in from your account?
+	'mail.mfaReset.confirm.heading': 'Verwyder tweestap-intekening van jou rekening?',
+	// Someone signed in to the {product} account {email} with the right password and said they have lost their phone and their recovery codes.
+	'mail.mfaReset.confirm.body': 'Iemand het met die regte wagwoord by die {product}-rekening {email} ingeteken en gesê dat hulle hul foon en hul herstelkodes verloor het.',
+	// If you confirm, two-step sign-in is removed after a 3-day wait. Until then your authenticator app keeps working, and we email you every day with a link to cancel.
+	'mail.mfaReset.confirm.wait': 'As jy bevestig, word tweestap-intekening ná ’n wagtyd van 3 dae verwyder. Tot dan werk jou verifikasie-app steeds, en ons e-pos jou elke dag met ’n skakel om dit te kanselleer.',
+	// Confirm and start the 3-day wait
+	'mail.mfaReset.confirm.action': 'Bevestig en begin die wagtyd van 3 dae',
+	// This link expires in 1 hour and works once.
+	'mail.mfaReset.confirm.expires': 'Hierdie skakel verval oor 1 uur en werk net een keer.',
+	// If this wasn’t you, don’t open the link: someone knows your password. Choose a new one with “Forgot password?” on the sign-in page.
+	'mail.mfaReset.confirm.notYou': 'As dit nie jy was nie, moenie die skakel oopmaak nie: iemand ken jou wagwoord. Kies ’n nuwe een met “Wagwoord vergeet?” op die intekenbladsy.',
+	// Two-step sign-in will be removed on {date} — {product}
+	'mail.mfaReset.pending.subject': 'Tweestap-intekening word op {date} verwyder — {product}',
+	// Two-step sign-in will be removed from your account
+	'mail.mfaReset.pending.heading': 'Tweestap-intekening sal van jou rekening verwyder word',
+	// A request to remove two-step sign-in from the {product} account {email} was confirmed from this inbox.
+	'mail.mfaReset.pending.started': '’n Versoek om tweestap-intekening van die {product}-rekening {email} te verwyder, is van hierdie inkassie af bevestig.',
+	// A request to remove two-step sign-in from the {product} account {email} is still waiting.
+	'mail.mfaReset.pending.reminder': '’n Versoek om tweestap-intekening van die {product}-rekening {email} te verwyder, is nog hangende.',
+	// Two-step sign-in will be removed from your account on {date} at {time}, and every device will be signed out. Until then your authenticator app keeps working.
+	'mail.mfaReset.pending.when': 'Tweestap-intekening sal op {date} om {time} van jou rekening verwyder word, en jy sal op elke toestel uitgeteken word. Tot dan werk jou verifikasie-app steeds.',
+	// Signing in with a code from your authenticator app, or with a recovery code, also cancels it.
+	'mail.mfaReset.pending.code': 'As jy met ’n kode van jou verifikasie-app of met ’n herstelkode inteken, word dit ook gekanselleer.',
+	// Not you? Cancel it
+	'mail.mfaReset.pending.action': 'Nie jy nie? Kanselleer dit',
+	// The cancel link works without signing in, until two-step sign-in is removed.
+	'mail.mfaReset.pending.noSignIn': 'Die kanselleerskakel werk sonder dat jy inteken, totdat tweestap-intekening verwyder is.',
+	// If this wasn’t you, cancel it now and choose a new password: someone knows yours and can read this inbox.
+	'mail.mfaReset.pending.notYou': 'As dit nie jy was nie, kanselleer dit nou en kies ’n nuwe wagwoord: iemand ken joune en kan hierdie inkassie lees.',
+	// Two-step sign-in was removed — {product}
+	'mail.mfaReset.done.subject': 'Tweestap-intekening is verwyder — {product}',
+	// Two-step sign-in was removed from your account
+	'mail.mfaReset.done.heading': 'Tweestap-intekening is van jou rekening verwyder',
+	// The 3-day wait is over: two-step sign-in was removed from the {product} account {email}, and every device was signed out.
+	'mail.mfaReset.done.body': 'Die wagtyd van 3 dae is verby: tweestap-intekening is van die {product}-rekening {email} verwyder, en elke toestel is uitgeteken.',
+	// Sign in with your password, then set up two-step sign-in again on your Account page.
+	'mail.mfaReset.done.next': 'Teken in met jou wagwoord, en stel dan tweestap-intekening weer op jou rekeningbladsy op.',
+	// Sign in
+	'mail.mfaReset.done.action': 'Teken in',
+	// If this wasn’t you, choose a new password straight away with “Forgot password?” on the sign-in page, and contact us: the privacy notice says how.
+	'mail.mfaReset.done.notYou': 'As dit nie jy was nie, kies dadelik ’n nuwe wagwoord met “Wagwoord vergeet?” op die intekenbladsy, en kontak ons: die privaatheidskennisgewing sê hoe.',
+	// Your two-step sign-in was removed — {product}
+	'mail.mfaReset.admin.subject': 'Jou tweestap-intekening is verwyder — {product}',
+	// Your two-step sign-in was removed
+	'mail.mfaReset.admin.heading': 'Jou tweestap-intekening is verwyder',
+	// An admin of the team “{team}” removed two-step sign-in from the {product} account {email}, and every device was signed out.
+	'mail.mfaReset.admin.body': '’n Administrateur van die span “{team}” het tweestap-intekening van die {product}-rekening {email} verwyder, en elke toestel is uitgeteken.',
 };

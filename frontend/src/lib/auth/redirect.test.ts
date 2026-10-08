@@ -69,6 +69,16 @@ describe('routeAccess', () => {
 		expect(routeAccess('/alerts', '', false)).toBe('login');
 	});
 
+	it('opens a second-factor reset’s confirm and cancel links signed in or out (205): they are often opened in a browser already signed in', () => {
+		for (const p of ['/mfa-reset', '/mfa-reset/cancel']) {
+			expect(routeAccess(p, '', false)).toBe('show');
+			expect(routeAccess(p, '', true)).toBe('show');
+		}
+		expect(isPublicPath('/app/mfa-reset/cancel', '/app')).toBe(true);
+		expect(routeAccess('/mfa-resets', '', false)).toBe('login');
+		expect(routeAccess('/login', '', true)).toBe('leave');
+	});
+
 	it('opens a share link signed in or out, on its own screen', () => {
 		expect(routeAccess('/share', '', false)).toBe('show');
 		expect(routeAccess('/share', '', true)).toBe('show');

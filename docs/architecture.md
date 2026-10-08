@@ -714,9 +714,14 @@ alerts plug in as a further kind.
   it hasn't swept with its current range (`app_erratum_sweep`, queuing one email per erratum,
   project and owner whose project holds a run it may affect) and sends the queued known-bug
   emails (`errata/notices.ts`, 153; [legal/known-defect-procedure.md](./legal/known-defect-procedure.md)).
+  Last, it completes the resets of a lost second factor whose 3-day wait is
+  over and sends the waiting ones' daily reminders (`auth/mfaReset.ts`
+  `runMfaResets`, 205; a step of the tick, not a job kind, since a job
+  belongs to a project and a reset to an account;
+  [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery).
   Each tick also purges finished jobs
   after 30 days, settled pack notices and erratum notices after 30, report rows after 8, and invites 90 days past their expiry
-  (`app_purge_invites`, 048).
+  (`app_purge_invites`, 048), and ended second-factor resets after 90 days (`app_mfa_reset_purge`, 205).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
   5), or on a failure no retry can fix (bad input, a lost role, no handler),

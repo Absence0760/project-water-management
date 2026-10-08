@@ -371,6 +371,10 @@ beforeAll(async () => {
 	const enrol = await call(subject, 'POST', '/auth/mfa/totp/enrol', { password: 'correct horse' });
 	await call(subject, 'POST', '/auth/mfa/totp/confirm', { code: totp(base32Decode(enrol.secret)!, Date.now()) });
 	expect((await subject.call('POST', '/auth/mfa/recovery-codes', { code: 'AAAAA-AAAAA' })).status).toBe(400);
+	// Asking for a reset of the factor at the sign-in's code step (205_mfa_recovery): mfa_reset, mfa_reset_quota.
+	const signIn = await anon('POST', '/auth/login', { email: subject.email, password: 'correct horse' });
+	const challenge = signIn.headers.getSetCookie().find((c) => c.startsWith('wm_mfa='))!.split(';')[0]!;
+	expect((await anon('POST', '/auth/mfa/reset', undefined, challenge)).status).toBe(202);
 	// Enrolling checked the password, which cleared the mistyped one's count: mistype it again (login_throttle).
 	expect((await anon('POST', '/auth/login', { email: subject.email, password: 'wrong horse' })).status).toBe(401);
 }, 120_000);

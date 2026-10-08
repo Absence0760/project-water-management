@@ -437,6 +437,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'team_member.removed':
 			if (s.accountDeleted) return `${who} deleted their account and left the team “${str(s.team)}”`;
 			return s.self ? `${who} left the team “${str(s.team)}”` : `Removed ${who} (${role(s.teamRole)}) from the team “${str(s.team)}”`;
+		// A team admin removed a member's lost second factor (205_mfa_recovery): their access is unchanged.
+		case 'team_member.mfa_reset':
+			return `Removed two-step sign-in from ${who} (a member of the team “${str(s.team)}”) after a lost phone`;
 		case 'team.deleted':
 			return `Deleted the team “${str(s.team)}”: its ${plural(num(s.members) ?? 0, 'member')} no longer reach this project through it`;
 		default:

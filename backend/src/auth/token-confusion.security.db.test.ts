@@ -3,7 +3,8 @@
 // most share one shape (32 random bytes, 43 base64url characters, stored as
 // SHA-256, auth/tokens.ts): an email verify and reset token, an invite token,
 // a share link's token, a render token, an alert unsubscribe token and an
-// alert's "Was this useful?" token (151_alert_feedback); beside
+// alert's "Was this useful?" token (151_alert_feedback), and a second-factor
+// reset's confirmation and cancel tokens (205_mfa_recovery); beside
 // them an API key (`wm_<prefix>_<secret>`), a session cookie and a render
 // session cookie (both JWTs). Each is only ever looked up where it was
 // stored, for the purpose it was issued. This file proves it as a matrix:
@@ -49,6 +50,9 @@ const KINDS = [
 	'apiKey',
 	'session',
 	'renderSession',
+	// Recovering a lost second factor (205_mfa_recovery): the emailed link that starts the 3-day wait, and a cancel link.
+	'mfaResetConfirm',
+	'mfaResetCancel',
 	// Not credentials, but they pass the token format check (43 base64url
 	// characters): the API key's secret without its prefix, and the session
 	// JWT's signature. Neither is stored anywhere, so neither opens anything.
@@ -116,6 +120,18 @@ const SLOTS: { name: string; own: Kind[]; run: (cred: string) => Promise<Res>; a
 		own: ['reset'],
 		run: (cred) => post('/auth/reset-password', { token: cred, password: 'a brand new password' }),
 		accepted: (r) => r.status === 204
+	},
+	{
+		name: 'body: POST /auth/mfa/reset/confirm',
+		own: ['mfaResetConfirm'],
+		run: (cred) => post('/auth/mfa/reset/confirm', { token: cred }),
+		accepted: (r) => r.status === 200
+	},
+	{
+		name: 'body: POST /auth/mfa/reset/cancel',
+		own: ['mfaResetCancel'],
+		run: (cred) => post('/auth/mfa/reset/cancel', { token: cred }),
+		accepted: (r) => r.status === 200
 	},
 	{
 		name: 'body: POST /auth/invite-info',
@@ -225,6 +241,22 @@ beforeAll(async () => {
 	expect(key.status).toBe(201);
 	creds.apiKey = key.body.secret;
 	creds.apiKeySecret = creds.apiKey.split('_').slice(2).join('_');
+	// mfaResetConfirm and mfaResetCancel: two accounts with an authenticator ask for a reset at the sign-in's code
+	// step; one link is kept unused, the other confirmed for its first cancel link.
+	const resetLink = async (name: string) => {
+		const u = await signUp(name);
+		const { secret } = (await u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' })).body;
+		expect((await u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(base32Decode(secret)!, totpStep(Date.now())) })).status).toBe(200);
+		const login = await post('/auth/login', { email: u.email, password: 'correct horse' });
+		const ch = (login.setCookie ?? '').split(/,(?=\s*wm_)/).map((c) => c.trim().split(';')[0]!).find((p) => p.startsWith('wm_mfa='))!;
+		expect((await anon('POST', '/auth/mfa/reset', undefined, ch)).status).toBe(202);
+		return { u, token: tokenIn(lastMailTo(u.email)) };
+	};
+	creds.mfaResetConfirm = (await resetLink('TCresetConfirm')).token;
+	const canceller = await resetLink('TCresetCancel');
+	expect((await post('/auth/mfa/reset/confirm', { token: canceller.token })).status).toBe(200);
+	creds.mfaResetCancel = tokenIn(lastMailTo(canceller.u.email));
+	expect(creds.mfaResetCancel).not.toBe(canceller.token);
 	// session, and its bare signature.
 	creds.session = jwtOf(owner.cookie);
 	creds.sessionSignature = creds.session.split('.')[2]!;

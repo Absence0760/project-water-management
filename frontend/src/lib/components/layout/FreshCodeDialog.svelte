@@ -48,7 +48,7 @@
 
 <Dialog bind:open title="Enter a code from your authenticator">
 	<form id="fresh-code-form" onsubmit={submit} data-testid="fresh-code">
-		<p>Signing off, issuing and withdrawing an evidence pack need a code from your authenticator app from the last 10 minutes.</p>
+		<p>Signing off, issuing and withdrawing an evidence pack, and removing a team member’s two-step sign-in, need a code from your authenticator app from the last 10 minutes.</p>
 		<label for="fresh-code-input">Code</label>
 		<input
 			id="fresh-code-input"

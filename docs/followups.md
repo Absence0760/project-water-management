@@ -267,6 +267,17 @@ admins and assessors at the route (security.md § Two-step sign-in). Open:
       sign-in, The prompt). No change.
 - [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
       "verifikasie-app" and "herstelkode" (§ Afrikaans).
+- [x] **A lost phone and lost recovery codes needed the operator** (done
+      2026-10-08, operator decision; 205_mfa_recovery). The person can ask
+      at the sign-in's code step (an emailed link, then a 3-day wait with a
+      cancel link in every email), a team admin can remove a member's
+      factor at once, and the operator's runbook stays the last resort
+      (security.md § Two-step sign-in → Recovery; deployment.md § Runbooks 14).
+- [x] **Afrikaans for the recovery wording** (205, done 2026-10-08): the new
+      sign-in, Account, `/mfa-reset` pages' and email lines were translated by
+      the i18n-translator agent, checked by the i18n-checker and applied with
+      `pnpm gen:i18n:apply af`. A native speaker's review stays open with the
+      rest (§ Afrikaans).
 
 ## Hydrologist
 

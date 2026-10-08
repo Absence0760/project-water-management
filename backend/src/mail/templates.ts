@@ -3,7 +3,9 @@
 // content. Every interpolated value is HTML-escaped — project and team names
 // and display names are user-controlled and these emails go to addresses the
 // user merely typed in.
-import { LOCALES, mailT, type Locale, type MailTranslator } from './i18n/index.js';
+import { language } from '@water-management/engine/languages';
+import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
+import { LOCALES, mailT, mailLocale, type Locale, type MailTranslator } from './i18n/index.js';
 import type { Mail, MailKind } from './transport.js';
 
 // The farmer-facing emails (verify, reset, the farmer invite) take their
@@ -549,6 +551,83 @@ export function accountDeletedMail(to: string, f: AccountDeletedFacts, locale?: 
 			],
 			action: { label: tr.t('mail.deleted.action'), url: sitePage('/privacy#retention') },
 			footer: [tr.t('mail.deleted.notYou')]
+		},
+		tr
+	);
+}
+
+/**
+ * The steps of recovering a lost second factor (205_mfa_recovery,
+ * auth/mfaReset.ts; docs/security.md § Two-step sign-in → Recovery):
+ * `confirm`: the link that starts the 3-day wait, asked for at the sign-in's
+ * code step. `started` / `reminder`: the wait started, or is still running
+ * (once a day), each with its own cancel link. `done`: the wait is over and
+ * the factor was removed. `admin`: an admin of `team` removed it at once.
+ */
+export type MfaResetFacts =
+	| { stage: 'confirm'; url: string }
+	| { stage: 'started' | 'reminder'; cancelUrl: string; effectiveAt: Date }
+	| { stage: 'done' }
+	| { stage: 'admin'; team: string };
+
+/** When the reset takes effect, as the emails say it: "3 Oct 2026" and "14:05 SAST", in South African time (the app's zone). */
+export function resetWhen(at: Date, locale?: string | null): { date: string; time: string } {
+	const intl = language(mailLocale(locale)).intl;
+	const date = new Intl.DateTimeFormat(intl, { day: 'numeric', month: 'short', year: 'numeric', timeZone: DEFAULT_TIME_ZONE })
+		.formatToParts(at)
+		.map((p) => (p.type === 'day' ? String(Number(p.value)) : p.value))
+		.join('');
+	const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: DEFAULT_TIME_ZONE }).format(at);
+	return { date, time: `${time} SAST` };
+}
+
+export function mfaResetMail(to: string, f: MfaResetFacts, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const v = { email: to, product: PRODUCT };
+	if (f.stage === 'confirm') {
+		return render(
+			'mfa_reset',
+			to,
+			tr.t('mail.mfaReset.confirm.subject', v),
+			{
+				heading: tr.t('mail.mfaReset.confirm.heading'),
+				paragraphs: [tr.t('mail.mfaReset.confirm.body', v), tr.t('mail.mfaReset.confirm.wait')],
+				action: { label: tr.t('mail.mfaReset.confirm.action'), url: f.url },
+				footer: [tr.t('mail.mfaReset.confirm.expires'), tr.t('mail.mfaReset.confirm.notYou')]
+			},
+			tr
+		);
+	}
+	if (f.stage === 'started' || f.stage === 'reminder') {
+		const when = resetWhen(f.effectiveAt, locale);
+		return render(
+			'mfa_reset',
+			to,
+			tr.t('mail.mfaReset.pending.subject', { ...v, date: when.date }),
+			{
+				heading: tr.t('mail.mfaReset.pending.heading'),
+				paragraphs: [
+					tr.t(f.stage === 'started' ? 'mail.mfaReset.pending.started' : 'mail.mfaReset.pending.reminder', v),
+					tr.t('mail.mfaReset.pending.when', when),
+					tr.t('mail.mfaReset.pending.code')
+				],
+				action: { label: tr.t('mail.mfaReset.pending.action'), url: f.cancelUrl },
+				footer: [tr.t('mail.mfaReset.pending.noSignIn'), tr.t('mail.mfaReset.pending.notYou')]
+			},
+			tr
+		);
+	}
+	// What is left: the wait ended ('done'), or a team admin's reset (which names the team).
+	const team = 'team' in f ? f.team : null;
+	return render(
+		'mfa_reset',
+		to,
+		tr.t(team !== null ? 'mail.mfaReset.admin.subject' : 'mail.mfaReset.done.subject', v),
+		{
+			heading: tr.t(team !== null ? 'mail.mfaReset.admin.heading' : 'mail.mfaReset.done.heading'),
+			paragraphs: [team !== null ? tr.t('mail.mfaReset.admin.body', { ...v, team }) : tr.t('mail.mfaReset.done.body', v), tr.t('mail.mfaReset.done.next')],
+			action: { label: tr.t('mail.mfaReset.done.action'), url: sitePage('/login') },
+			footer: [tr.t('mail.mfaReset.done.notYou')]
 		},
 		tr
 	);

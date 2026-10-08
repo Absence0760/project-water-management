@@ -54,6 +54,7 @@ describe('errorText', () => {
 		mfa_not_enrolled: 'Two-step sign-in is off.',
 		mfa_required: 'This needs two-step sign-in. Set up an authenticator app on your Account page first.',
 		mfa_step_up: 'This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.',
+		mfa_reset_limit: 'You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.',
 		comment_throttled: 'You have posted 10 comments in the last hour. Wait a while, then try again.'
 	};
 

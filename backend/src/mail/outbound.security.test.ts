@@ -108,6 +108,15 @@ const builders: Record<string, () => Mail[]> = {
 				})
 			)
 		),
+	// Recovering a lost second factor (205_mfa_recovery, auth/mfaReset.ts): the links carry the hostile text (the
+	// site's own links can't, but the template must escape whatever it is given), the admin's the team's name.
+	// The completion email has no user text and is covered by templates.test.ts.
+	mfaResetMail: () => [
+		templates.mfaResetMail(TO, { stage: 'confirm', url: `http://localhost:7777/mfa-reset?token=${EVIL}` }),
+		templates.mfaResetMail(TO, { stage: 'started', cancelUrl: `http://localhost:7777/mfa-reset/cancel?token=${EVIL}`, effectiveAt: new Date('2026-10-11T12:00:00Z') }),
+		templates.mfaResetMail(TO, { stage: 'reminder', cancelUrl: `http://localhost:7777/mfa-reset/cancel?token=${EVIL}`, effectiveAt: new Date('2026-10-11T12:00:00Z') }),
+		templates.mfaResetMail(TO, { stage: 'admin', team: EVIL })
+	],
 	// The licence record's review and closing notices (161, licence/record.ts), the owners' and the operator's copy.
 	licenceRecordMail: () =>
 		(['review', 'closes'] as const).flatMap((event) =>
@@ -140,7 +149,8 @@ describe('every email template, against hostile names', () => {
 			packSentMail: 'pack_sent',
 			accountDeletedMail: 'account_deleted',
 			erratumNoticeMail: 'erratum_notice',
-			licenceRecordMail: 'licence_record'
+			licenceRecordMail: 'licence_record',
+			mfaResetMail: 'mfa_reset'
 		};
 		expect(Object.keys(expected).sort()).toEqual(Object.keys(builders).sort());
 		for (const [name, build] of Object.entries(builders)) for (const m of build()) expect(m.kind, name).toBe(expected[name]);

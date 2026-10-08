@@ -311,6 +311,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from editor to owner');
 		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (owner) from the team “Upper WUA”');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true }))).toBe('Ben left the team “Upper WUA”');
+		expect(eventLine(ev('team_member.mfa_reset', { ...who, teamRole: 'member' }))).toBe('Removed two-step sign-in from Ben (a member of the team “Upper WUA”) after a lost phone');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true, accountDeleted: true }))).toBe('Ben deleted their account and left the team “Upper WUA”');
 		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
 	});

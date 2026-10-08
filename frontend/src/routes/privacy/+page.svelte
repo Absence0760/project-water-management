@@ -99,6 +99,7 @@
 	<ul>
 		<li><strong>Activity record:</strong> who changed what in a project, and when (the project’s history, kept as an audit trail).</li>
 		<li><strong>Security records:</strong> sign-in attempts per email address, wrong two-step sign-in codes, the number of account emails sent, and your network address as seen by our servers, used to stop password guessing and abuse; and when you turned two-step sign-in on or off or used a recovery code, so you can see it.</li>
+		<li><strong>Removing two-step sign-in after a lost phone:</strong> if you ask us to, when you asked, when you confirmed it from the email, when it was cancelled or done and how, and how many times you asked that day (to limit the emails); or that an admin of your team removed it. The links in those emails are stored only as one-way hashes.</li>
 		<li>
 			<strong>Emails we send you:</strong> which alert emails went out, and whether an address bounced. We don’t track whether you open
 			an email or follow its links: our emails carry no tracking pixels or tracked links.
@@ -207,7 +208,7 @@
 		<li><strong>Your account and settings:</strong> until the account is deleted.</li>
 		<li><strong>Links in emails:</strong> a password-reset link lasts 1 hour, a confirmation link 48 hours, an invitation 7 days (then it is kept, marked expired, for 90 days and deleted).</li>
 		<li><strong>Sign-in attempts and wrong two-step sign-in codes:</strong> forgotten after a day without attempts. <strong>Account-email counts:</strong> 24 hours.</li>
-		<li><strong>Two-step sign-in:</strong> the key and recovery codes until you turn it off (a used recovery code is deleted at once); the record of when you turned it on or off until the account is deleted.</li>
+		<li><strong>Two-step sign-in:</strong> the key and recovery codes until you turn it off (a used recovery code is deleted at once); the record of when you turned it on or off until the account is deleted. A request to remove it after a lost phone: 90 days after it ended (the record that it happened stays with the account); its links until it ends; the count of requests 24 hours.</li>
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
 		<li>
 			<strong>Feedback on alert emails:</strong> an answer and its comment, 1 year after you gave it. A “Was this useful?” link works

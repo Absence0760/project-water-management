@@ -28,7 +28,8 @@ export const TERMS_CHANGES: readonly TermsChange<Msg>[] = [
 	{
 		version: '2026-10-08',
 		items: [
-			msg('Two-step sign-in is now required only for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. Anyone can still turn it on for their own account.')
+			msg('Two-step sign-in is now required only for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. Anyone can still turn it on for their own account.'),
+			msg('If you lose your phone and ask us to remove two-step sign-in, or a team admin removes it, we keep a record of the request and how it ended for 90 days, and the record that it happened with your account.')
 		]
 	},
 	// The Terms §9 clause on map data licensed to us (HydroRIVERS' end-user terms, docs/legal-status.md, 2026-10-02).

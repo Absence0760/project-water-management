@@ -496,6 +496,13 @@ cl. 3). The licensing ones are rows in
   personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
   notice's "what changed" list now names this and the 2026-09-30 deletion
   change (it still listed 2026-09-28's).
+- 2026-10-08: recovering a lost second factor (205_mfa_recovery). Privacy
+  §3 lists what a request to remove two-step sign-in after a lost phone
+  keeps (when it was asked for, confirmed, cancelled or done and how, the
+  day's request count, the emailed links as one-way hashes, a team admin's
+  removal); §7 their retention (an ended request 90 days, the links until
+  it ends, the count 24 hours). New personal data kept: `LEGAL_VERSION`
+  2026-10-08, with its line on the re-acceptance step.
 - 2026-10-01: provisional positions (pre-counsel research, 2026-10-01; not
   legal advice, counsel review #92) on issue #90's D12, evidence that names
   its maker, and D3 (§ Positions taken pending counsel):

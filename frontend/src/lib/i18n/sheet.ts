@@ -21,6 +21,8 @@ export const SECTIONS: Record<string, string> = {
 	'terms-update': 'The page a signed-in person sees after the Terms of use or Privacy notice changed, before anything else: what changed, and a button to accept the new terms (or sign out).',
 	forgot: 'The forgot-password page.',
 	reset: 'The choose-a-new-password page (opened from the reset email).',
+	'mfa-reset':
+		'The pages opened from the emails about removing two-step sign-in (a code from an authenticator app on the phone, asked for after the password) when the phone and the recovery codes are lost: one starts a 3-day wait, the other cancels it. {when} is a time and date like “07:42 on 19 Jan 2024”.',
 	verify: 'The confirm-your-email page (opened from the confirmation email).',
 	banner: 'The strips at the top of every page: until the email address is confirmed, and while an invitation to a catchment or team waits to be accepted.',
 	account: 'The account page: name, language and units, password.',

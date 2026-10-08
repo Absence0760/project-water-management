@@ -6,7 +6,8 @@ const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasures
 	alerts: { scheduled: 0, purged: 0, sent: 7, skipped: 1, failed: 2, digests: 1 },
 	packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
 	erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },
-	licenceRecords: { due: 0, sent: 0, skipped: 0, failed: 0 }
+	licenceRecords: { due: 0, sent: 0, skipped: 0, failed: 0 },
+	mfaResets: { completed: 0, reminded: 0, purged: 0, failed: 0 }
 };
 const runTick = vi.fn(async (_o?: unknown) => tick);
 vi.mock('./jobs/runner.js', () => ({ runTick: (o: unknown) => runTick(o) }));

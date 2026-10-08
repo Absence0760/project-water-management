@@ -106,9 +106,9 @@ export default defineConfig({
 			}
 		},
 		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the
-		// same database: mfa-required.spec.ts sends the browser's API calls here, so a real server refuses
-		// turning a project's requirement on and the page meets the real 403 (the requirement itself:
-		// backend/src/auth/stepUp.db.test.ts).
+		// same database: mfa-required.spec.ts and mfa-reset-mailpit.spec.ts send the browser's API calls here, so a
+		// real server refuses turning a project's requirement on and the page meets the real 403 (the requirement
+		// itself: backend/src/auth/stepUp.db.test.ts).
 		{
 			command: 'pnpm -C ../backend exec tsx src/server.ts',
 			url: `${MFA_API_URL}/health`,
@@ -120,7 +120,10 @@ export default defineConfig({
 				DATABASE_URL: APP_E2E_URL,
 				ALLOWED_ORIGINS: WEB_URL,
 				SITE_URL: WEB_URL,
-				MAIL_TRANSPORT: 'log',
+				// Through Mailpit (SMTP_HOST/SMTP_PORT from backend/.env.development): mfa-reset-mailpit.spec.ts reads the
+				// emails of a second-factor reset (205) from it. Without Mailpit running a send fails, is logged, and the
+				// request still succeeds (mail/transport.ts trySendMail), so mfa-required.spec.ts needs no Mailpit.
+				MAIL_TRANSPORT: 'smtp',
 				PASSWORD_HASH_FAST: '1',
 				SIGNUP_THROTTLE: 'off',
 				REGISTRATION_CHECK_REQUIRED: 'false'

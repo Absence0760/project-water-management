@@ -3,10 +3,13 @@
 	// Two-step sign-in on the Account page (issue #282; docs/ui.md § Account,
 	// docs/security.md § Two-step sign-in). Off: set it up (the password, then
 	// a QR code drawn here, or the key typed in, then the first code), and the
-	// ten recovery codes, shown once. On: how many recovery codes are left, a
-	// new set, and turning it off, each with a code. Someone whose roles need
-	// it (an owner or admin where a project or team requires it, or someone
-	// who takes part in licence decisions; GET /auth/mfa `required`) is told so.
+	// ten recovery codes, shown once, to download or copy. On: how many
+	// recovery codes are left (a warning at two or fewer), a new set, and
+	// turning it off, each with a code; and a reset of a lost factor that is
+	// waiting (205_mfa_recovery), which a code cancels. Someone whose roles
+	// need it (an owner or admin where a project or team requires it, or
+	// someone who takes part in licence decisions; GET /auth/mfa `required`)
+	// is told so.
 	import { onMount, tick } from 'svelte';
 	import { api, ApiError, type MfaStatus } from '$lib/api';
 	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
@@ -14,6 +17,8 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import { t, tn, plural } from '$lib/i18n/locale.svelte';
+	import { fewRecoveryCodes, RECOVERY_CODES_FILE, recoveryCodesText } from '$lib/auth/mfaReset';
+	import { fmtStampTime } from '$lib/components/farm/format';
 	import type { QrDrawing } from './qr';
 
 	// i18n-section: account.two-step.counts
@@ -110,12 +115,13 @@
 	}
 
 	// ---- On: new codes, turning it off ----
-	let action = $state<'regenerate' | 'disable' | null>(null);
+	// 'keep': a reset of the factor is waiting (someone said the phone was lost); a code proves it isn't, and cancels it.
+	let action = $state<'regenerate' | 'disable' | 'keep' | null>(null);
 	let actionCode = $state('');
 	let actionError = $state<string | null>(null);
 	let done = $state<string | null>(null);
 
-	function choose(a: 'regenerate' | 'disable') {
+	function choose(a: 'regenerate' | 'disable' | 'keep') {
 		action = a;
 		actionCode = '';
 		actionError = null;
@@ -137,6 +143,12 @@
 				await load();
 				await tick();
 				codesHeading?.focus();
+			} else if (action === 'keep') {
+				// A code given in the session cancels a waiting reset (POST /auth/mfa/step-up, auth/mfaReset.ts).
+				await api.auth.mfa.stepUp(actionCode.trim());
+				action = null;
+				done = t('The removal is cancelled. Two-step sign-in stays on.');
+				await load();
 			} else {
 				await api.auth.mfa.disable(actionCode.trim());
 				action = null;
@@ -162,9 +174,15 @@
 	 * load, say so; no reload (that would lose the codes, shown once), copy them.
 	 */
 	let downloadFailed = $state(false);
+	const codesText = (list: string[]) =>
+		recoveryCodesText(
+			list,
+			t('Water Management recovery codes for {email}', { email: session.user?.email ?? '' }),
+			t('Each code works once, in place of a code from your authenticator app.')
+		);
 	async function downloadCodes() {
 		if (!codes) return;
-		const text = `${t('Water Management recovery codes for {email}', { email: session.user?.email ?? '' })}\n\n${codes.join('\n')}\n\n${t('Each code works once, in place of a code from your authenticator app.')}\n`;
+		const text = codesText(codes);
 		let download: typeof import('$lib/export/download');
 		try {
 			download = await import('$lib/export/download');
@@ -173,7 +191,19 @@
 			return;
 		}
 		downloadFailed = false;
-		download.saveBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), 'water-management-recovery-codes.txt');
+		download.saveBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), RECOVERY_CODES_FILE);
+	}
+
+	/** "Copy the codes": the same text as the file, on the clipboard. Says whether it worked; the list stays on screen either way. */
+	let copied = $state<'ok' | 'failed' | null>(null);
+	async function copyCodes() {
+		if (!codes) return;
+		try {
+			await navigator.clipboard.writeText(codesText(codes));
+			copied = 'ok';
+		} catch {
+			copied = 'failed';
+		}
 	}
 </script>
 
@@ -200,8 +230,12 @@
 				</ul>
 				<div class="actions">
 					<button type="button" class="btn" onclick={downloadCodes}>{t('Download the codes')}</button>
-					<button type="button" class="btn btn-primary" onclick={() => (codes = null)}>{t('I’ve saved them')}</button>
+					<button type="button" class="btn" onclick={copyCodes}>{t('Copy the codes')}</button>
+					<button type="button" class="btn btn-primary" onclick={() => ((codes = null), (copied = null))}>{t('I’ve saved them')}</button>
 				</div>
+				<p class="copied" role="status" aria-live="polite">
+					{copied === 'ok' ? t('Copied. Paste them somewhere safe, such as a password manager.') : copied === 'failed' ? t('Copying didn’t work here. Download them, or write them down.') : ''}
+				</p>
 			</div>
 		{/if}
 
@@ -210,7 +244,28 @@
 				<span class="badge badge-owner">{t('On')}</span>
 				{t('Signing in asks for a code from your authenticator app after your password.')}
 			</p>
-			<p class="muted">{tn(CODES_LEFT, status.recoveryCodesLeft)}</p>
+			<p class="muted" data-codes-left={status.recoveryCodesLeft}>{tn(CODES_LEFT, status.recoveryCodesLeft)}</p>
+			{#if fewRecoveryCodes(status) && !codes}
+				<div class="alert alert-warning few" role="note" data-few-codes>
+					<p>{t('You’re running out of recovery codes. Make a new set while you still have your phone, so a lost phone can’t lock you out.')}</p>
+					{#if action !== 'regenerate'}
+						<button type="button" class="btn btn-sm" onclick={() => choose('regenerate')}>{t('Make a new set')}</button>
+					{/if}
+				</div>
+			{/if}
+			{#if status.pendingReset}
+				<div class="alert alert-warning" role="alert" data-pending-reset>
+					<p>
+						{t('Someone asked to remove two-step sign-in from your account because the phone was lost. It will be removed at {when}, unless it’s cancelled.', {
+							when: fmtStampTime(status.pendingReset.effectiveAt)
+						})}
+					</p>
+					<p>{t('If that wasn’t you, cancel it now with a code from your authenticator app, then change your password.')}</p>
+					{#if action !== 'keep'}
+						<button type="button" class="btn btn-sm" onclick={() => choose('keep')}>{t('Cancel the removal')}</button>
+					{/if}
+				</div>
+			{/if}
 			{#if !status.sessionVerified}
 				<p class="muted">{t('This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.')}</p>
 			{/if}
@@ -219,7 +274,7 @@
 					{#if actionError}<div class="alert alert-error" role="alert" id="action-error">{actionError}</div>{/if}
 					<div class="field">
 						<label for="action-code">
-							{action === 'regenerate' ? t('Code from your authenticator app') : t('Code from your authenticator app, or a recovery code')}
+							{action === 'regenerate' || action === 'keep' ? t('Code from your authenticator app') : t('Code from your authenticator app, or a recovery code')}
 						</label>
 						<input
 							id="action-code"
@@ -232,7 +287,7 @@
 					</div>
 					<div class="actions">
 						<button class="btn {action === 'disable' ? 'btn-danger' : 'btn-primary'}" type="submit" disabled={busy}>
-							{action === 'regenerate' ? t('Make new recovery codes') : t('Turn off two-step sign-in')}
+							{action === 'regenerate' ? t('Make new recovery codes') : action === 'keep' ? t('Cancel the removal') : t('Turn off two-step sign-in')}
 						</button>
 						<button type="button" class="btn" onclick={() => (action = null)}>{t('Cancel')}</button>
 					</div>
@@ -387,7 +442,19 @@
 		font-size: 0.9rem;
 		color: var(--text-2);
 	}
-	.status:empty {
+	.status:empty,
+	.copied:empty {
 		display: none;
+	}
+	.copied {
+		margin: 0;
+		font-size: 0.9rem;
+	}
+	.alert p {
+		margin: 0 0 0.5rem;
+		max-width: 60ch;
+	}
+	.few {
+		margin-bottom: 0.75rem;
 	}
 </style>

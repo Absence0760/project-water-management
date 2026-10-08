@@ -35,11 +35,12 @@ import {
 	isEnrolled,
 	mfaStatus,
 	recordSecurityEvent,
-	removeFactor,
+	removeOwnFactors,
 	replaceRecoveryCodes,
 	startEnrolment,
 	useCode
 } from './mfa.js';
+import { cancelOwnReset } from './mfaReset.js';
 
 const Code = z.object({ code: z.string().trim().min(1).max(40) });
 const EnrolBody = z.object({ password: z.string().min(1).max(200) });
@@ -150,7 +151,7 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			const via = await useCode(db, userId, body.code, { recovery: true });
 			if (!via) return { kind: 'wrong' as const };
 			if (via === 'recovery') await recordSecurityEvent(db, userId, 'mfa.recovery_used');
-			await removeFactor(db, userId);
+			await removeOwnFactors(db);
 			await recordSecurityEvent(db, userId, 'mfa.disabled');
 			await db.query('SELECT app_mfa_succeeded()');
 			const { rows } = await db.query<{ email: string; sessions_revoked_at: Date | null }>(
@@ -207,6 +208,8 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			if (!via) return null;
 			if (via === 'recovery') await recordSecurityEvent(db, userId, 'mfa.recovery_used');
 			await db.query('SELECT app_mfa_succeeded()');
+			// The owner has their factor: a waiting reset of it ends (auth/mfaReset.ts).
+			await cancelOwnReset(db);
 			// The challenge is good once (revoked_session, 102).
 			await db.query('SELECT app_revoke_session($1, to_timestamp($2))', [challenge.jti, challenge.expiresAt]);
 			const { rows } = await db.query<UserRow & { sessions_revoked_at: Date | null }>(
@@ -240,6 +243,7 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			if (!via) return 'wrong' as const;
 			if (via === 'recovery') await recordSecurityEvent(db, userId, 'mfa.recovery_used');
 			await db.query('SELECT app_mfa_succeeded()');
+			await cancelOwnReset(db);
 			return via;
 		});
 		if (result === 'none') throw ApiError.coded(403, 'mfa_required', 'this needs two-step sign-in: set up an authenticator app on your Account page first');
