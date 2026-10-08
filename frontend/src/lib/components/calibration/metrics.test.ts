@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CalibrationStats } from '@water-management/engine';
 import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, volumeBiasText, waterYearLabel, windowError } from './metrics';
+import { tipFor } from '$lib/help/tips';
 
 const base: CalibrationStats = {
 	days: 100,
@@ -20,6 +21,10 @@ const base: CalibrationStats = {
 };
 
 describe('metricRows', () => {
+	it('gives every tile a help tip under its stats field key (CalibrationPanel places it)', () => {
+		for (const r of metricRows(base)) expect(tipFor(`stats.${r.key}`), r.key).toBeDefined();
+	});
+
 	it('formats values with a plain explanation and no pass mark (calibration research CR-6)', () => {
 		const rows = Object.fromEntries(metricRows(base).map((r) => [r.key, r]));
 		expect(rows.nse!.value).toBe('0.70');

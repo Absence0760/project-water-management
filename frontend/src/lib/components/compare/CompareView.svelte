@@ -19,6 +19,7 @@
 	// has no section header, so it keeps the view's own h1 with the same
 	// action beside it. A what-if is any run: a new one comes from running
 	// the model again or from the Scenarios tab, which the empty state names.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -521,8 +522,8 @@
 	{:else}
 		{#if loaded.length}
 			<div class="summary-grid">
-				<section class="panel outcomes" aria-labelledby="outcomes-h" aria-busy={cmp.b.loading || cmp.c.loading}>
-					<h2 id="outcomes-h">What changes</h2>
+				<section class="panel outcomes" aria-labelledby="outcomes-h-t" aria-busy={cmp.b.loading || cmp.c.loading}>
+					<h2 id="outcomes-h"><span id="outcomes-h-t">What changes</span> <HelpTip key="run-comparison" label="About comparing runs" /></h2>
 					<div class="table-wrap">
 						<table class="data outcomes-table">
 							<caption class="visually-hidden">Headline outcomes of the baseline and each what-if, with each what-if's change from the baseline</caption>
@@ -564,8 +565,8 @@
 						</div>
 					{/if}
 				</section>
-				<section class="panel years" aria-labelledby="years-h">
-					<h2 id="years-h">Days below {yearsBelow}, each year</h2>
+				<section class="panel years" aria-labelledby="years-h-t">
+					<h2 id="years-h"><span id="years-h-t">Days below {yearsBelow}, each year</span> <HelpTip key="ewr-days-not-met" /></h2>
 					<ReserveYearsChart runs={chartRuns} below={yearsBelow} />
 				</section>
 			</div>
@@ -655,17 +656,17 @@
 				</section>
 
 				{#if data.a.scenario || data.b.scenario}
-					<section class="panel" aria-labelledby="overrides-h">
-						<div class="panel-head"><h2 id="overrides-h">Scenario overrides</h2></div>
+					<section class="panel" aria-labelledby="overrides-h-t">
+						<div class="panel-head"><h2 id="overrides-h"><span id="overrides-h-t">Scenario overrides</span> <HelpTip key="change-class" label="About proposals and baseline assumptions" /></h2></div>
 						<Lazy load={loadOverrides}>
 							{#snippet children(ScenarioOverrides)}<ScenarioOverrides data={data!} />{/snippet}
 						</Lazy>
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="changes-h">
+				<section class="panel" aria-labelledby="changes-h-t">
 					<div class="panel-head">
-						<h2 id="changes-h">What changed</h2>
+						<h2 id="changes-h"><span id="changes-h-t">What changed</span> <HelpTip key="input-diff" label="About the input differences" /></h2>
 						<span class="muted small">{data.changes.length} difference{data.changes.length === 1 ? '' : 's'} in the inputs</span>
 					</div>
 					{#if data.attribution}
@@ -708,33 +709,33 @@
 				</div>
 
 				{#if data.comparison.ewrAssurance?.length}
-					<section class="panel" aria-labelledby="reserve-h">
-						<div class="panel-head"><h2 id="reserve-h">Reserve compliance by month</h2></div>
+					<section class="panel" aria-labelledby="reserve-h-t">
+						<div class="panel-head"><h2 id="reserve-h"><span id="reserve-h-t">Reserve compliance by month</span> <HelpTip key="reserve-compliance" /></h2></div>
 						<EwrAssuranceCompare sites={data.comparison.ewrAssurance} />
 						<EwrFdcCompare a={data.a.run.summary.ewrAssurance ?? []} b={data.b.run.summary.ewrAssurance ?? []} labelA="Run A" labelB={data.b.scenario ? `Run B: scenario “${data.b.scenario.name}”` : 'Run B'} />
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="ewr-agreement-h">
-					<div class="panel-head"><h2 id="ewr-agreement-h">EWR test against observed flow</h2></div>
+				<section class="panel" aria-labelledby="ewr-agreement-h-t">
+					<div class="panel-head"><h2 id="ewr-agreement-h"><span id="ewr-agreement-h-t">EWR test against observed flow</span> <HelpTip key="ewr-agreement" /></h2></div>
 					<EwrAgreementCompare {data} />
 				</section>
 
 				{#if data.comparison.plausibility}
-					<section class="panel" aria-labelledby="plausibility-h">
-						<div class="panel-head"><h2 id="plausibility-h">Plausibility checks</h2></div>
+					<section class="panel" aria-labelledby="plausibility-h-t">
+						<div class="panel-head"><h2 id="plausibility-h"><span id="plausibility-h-t">Plausibility checks</span> <HelpTip key="plausibility-checks" /></h2></div>
 						<PlausibilityCompare comparison={data.comparison.plausibility} />
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="farms-h">
-					<div class="panel-head"><h2 id="farms-h">Hydrological units</h2></div>
+				<section class="panel" aria-labelledby="farms-h-t">
+					<div class="panel-head"><h2 id="farms-h"><span id="farms-h-t">Hydrological units</span> <HelpTip key="run-matching" label="About how runs are matched" /></h2></div>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
 
 				{#if data.a.run.summary.supplyAssurance || data.b.run.summary.supplyAssurance}
-					<section class="panel" aria-labelledby="assurance-h">
-						<div class="panel-head"><h2 id="assurance-h">Assurance of supply</h2></div>
+					<section class="panel" aria-labelledby="assurance-h-t">
+						<div class="panel-head"><h2 id="assurance-h"><span id="assurance-h-t">Assurance of supply</span> <HelpTip key="assurance-of-supply" /></h2></div>
 						<AssuranceDeltaTable a={data.a.run.summary.supplyAssurance} b={data.b.run.summary.supplyAssurance} />
 					</section>
 				{/if}

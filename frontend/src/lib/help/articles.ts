@@ -5,7 +5,8 @@
 // through content.ts; a HelpTip never does (tips.ts says why). The "Input
 // data" topic's articles are in articles-data.ts, a chunk of their own
 // (issue #66), and so are "Scenarios and licensing" (articles-licensing.ts)
-// and the EWR topic (articles-ewr.ts); content.ts joins them.
+// and the EWR topic (articles-ewr.ts), "Run results" (articles-results.ts)
+// and "Goodness of fit" (articles-fit.ts); content.ts joins them.
 
 import type { HelpArticle } from './types';
 
@@ -40,6 +41,114 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['project', 'evidence-run', 'application'],
 		source: 'docs/data-model.md § Access control; docs/security.md'
 	},
+	'team': {
+		long: 'A team holds catchments for a consultancy, a department or a WUA. Everyone in it gets every team project with the role they hold in the team: a viewer reads every team project and its runs, an editor edits them (model, data and runs), and an owner owns them (delete, share, move) and manages the team. Someone also shared a project directly gets the higher of the two roles.\n\nA project without a team is personal: only the people listed under Members on its Project page can open it. An owner moves a project into a team, or back to personal, from the Team panel on the Project page; an owner only through the team must first add themselves as a direct owner to make it personal. Only teams where you are an editor or owner are offered, for a new project, a move or a copy.\n\nThe team page lists its projects worst first by their EWR status and holds its members. Team settings hold the name, the EWR traffic-light thresholds, the privacy contact, and leaving or deleting the team; the only owner has to hand over before leaving.',
+		aliases: ['teams', 'team admin', 'team member', 'personal project', 'move to team', 'portfolio'],
+		related: ['roles', 'invitation', 'ewr-traffic-light', 'privacy-contact'],
+		source: 'docs/ui.md § Teams; docs/data-model.md § Teams'
+	},
+	'invitation': {
+		long: 'Adding a person by email, on a project’s Members or Farmers panel or a team’s page, always sends an invitation, whether or not the address has an account. Nobody is made a member unasked, and the person adding never learns whether the address is registered. Someone without an account signs up from the email; someone with one accepts or declines under Your invitations on their account page.\n\nUntil it is accepted, the invitation is listed as pending with who sent it and when it expires, with Resend (which renews it and makes you its sender) and Revoke. It works for 7 days. An invitation whose sender has since lost the right to add people (no longer an owner) can’t be accepted until someone resends it.\n\nA farmer’s invitation names the hydrological units they will be linked to and the language of the email; it is kept apart from the members’ list.',
+		aliases: ['invite', 'pending invitation', 'resend', 'revoke invitation', 'add member'],
+		related: ['roles', 'team', 'farmer-link'],
+		source: 'docs/ui.md § Invitations, § Project; docs/security.md (pending invites retention)'
+	},
+	'farmer-link': {
+		long: 'A farmer is a member with the farmer role, linked by an owner to one or more hydrological units. They read only those units’ figures, from the published run, on the farm view: their dam, their supply, the WUA’s notice and the notes shown to them. They never see another unit’s name or figures, the model, the runs or the members, and the workspace is closed to them.\n\nOwners invite farmers from the Farmers panel on the Project page, one by email or many from a CSV (email, unit, language), and change a farmer’s units or remove them there. A link goes with its unit: deleting the unit in the Network and saving removes the farmer’s access to it (the Network asks first, naming them), and restoring an earlier version doesn’t link them again.\n\nAn applicant can also hold unit links, for an irrigator applying to raise their own dam; they read what a farmer with the same links reads, plus their own applications.',
+		aliases: ['farmer', 'farmers', 'linked farms', 'farm link', 'invite farmers', 'farmer view'],
+		related: ['roles', 'invitation', 'published-baseline', 'notes'],
+		source: 'docs/ui.md § Project (Farmers), § Farmer view; docs/data-model.md'
+	},
+	'applying-party': {
+		long: 'An applicant (a licence applicant or their consultant) shares applications only with the members of their own applying party, so put an applicant and their consultant or client in the same one. An owner types the party in the applicant’s row under Members; blank is none.\n\nA member with a party can be ticked Specialist for this party: the registered professional the applicant appointed. They sign the evidence packs of the party’s applications; an editor still drafts and issues the pack. Nobody who edits the project may also be in an applying party, so the people who build the model and the people who apply against it stay apart.',
+		aliases: ['party', 'specialist', 'consultant', 'applicant party', 'specialist signer'],
+		related: ['roles', 'application', 'pack-signoff', 'registration-check'],
+		source: 'docs/ui.md § Project (Members); docs/data-model.md § Applicants, 167_signers'
+	},
+	'registration-check': {
+		long: 'A specialist who signs an evidence pack declares a professional registration (SACNASP or ECSA). The app can’t confirm it, so someone at your organisation looks it up on the public register and records the check on the Project page: the member, register, category and number, the name on the register, whether they were found, who checked, when, and a note. The register’s address is given beside the form.\n\nThe verify page then says “checked against the register” for that person’s sign-offs; anyone else’s registration reads “self-declared”. An owner, or an editor acting for the responsible authority, records checks. With the owner’s tick box on (the default), issuing an evidence pack waits until each specialist signer has a check from the last year.',
+		aliases: ['SACNASP', 'ECSA', 'professional registration', 'register check', 'self-declared'],
+		related: ['applying-party', 'pack-signoff', 'pack-issue-checks', 'responsible-authority'],
+		source: 'docs/ui.md § Project (Registration checks); 167_signers'
+	},
+	'licence-record': {
+		long: 'An issued evidence pack and a signed-off run keep the names of the people who made and signed them, also after their accounts are deleted, because a licence decision may have to be explained later. They are kept until three years after the licence expires, or three years after the application is refused or withdrawn.\n\nAn owner records the outcome on the Project page: granted (with the date the licence expires), refused or withdrawn, the date it was decided and why (for example the authority’s letter). Until an outcome is recorded, an owner confirms every five years that the record is still needed. Nothing is deleted automatically: once the record is past its closing date, the panel says to ask the operator.',
+		aliases: ['retention', 'licence outcome', 'record retention', 'kept until'],
+		related: ['evidence-pack', 'evidence-run', 'responsible-authority'],
+		source: 'docs/ui.md § Project (Licence record); docs/evidence-pack.md § Retention'
+	},
+	'share-link': {
+		long: 'A share link opens a read-only page without signing in, for someone outside the project such as a catchment forum or an NGO. An owner makes a link to the published baseline on the Project page: who it’s for, and how long it works (1 week, 30 days, 90 days or 1 year). It shows the catchment’s reserve status and the WUA’s notice, never a hydrological unit’s name or figures, or the modeller’s note, and it opens only once a run is published.\n\nThe new address is shown once: copy it then, since it isn’t kept and can’t be shown again. Anyone holding it can open the page until it ends or is withdrawn. Assessors and applicants make links to a submitted application, and editors to an issued evidence pack; while such a link is live, members can post comments for public participation.\n\nThe owner’s list on the Project page holds every public link in the project, with what it opens, when it was made, when it ends and when it was last opened. Withdrawing one stops it at once.',
+		aliases: ['share', 'public link', 'read-only link', 'withdraw link', 'shared view'],
+		related: ['published-baseline', 'application', 'pack-share-link'],
+		source: 'docs/ui.md § Project (Share links), § Share page; docs/security.md'
+	},
+	'project-copy': {
+		long: 'Copy… in a project’s ⋯ menu on the Projects page makes a new project from the model, settings, description, time zone and input series of another. The model gets fresh ids in the same order, so the copy runs exactly as the original. Runs, evidence nominations, notes, members, farmers and the change history are not copied: the copy’s history starts with “Copied from …”, and you are its owner. It stays in the original’s team when you are an editor or owner there, and is personal otherwise. Anyone who can open a project, viewers included, can copy it.\n\nA copy is for a lasting fork: a new baseline, or a project that has to start again without its evidence. To test a change against a run and compare the two, a scenario is lighter: it keeps the change as a list of edits on that run, inside the same project.',
+		aliases: ['copy', 'duplicate', 'fork', 'clone project', 'what-if'],
+		related: ['project', 'scenario', 'project-file'],
+		source: 'docs/api.md § Projects (POST /projects/:id/copy); docs/ui.md § Project list'
+	},
+	'project-file': {
+		long: 'Download → Download project (JSON) on the Project page saves the project as one file: the model, the settings and the input series, with the time zone. Runs, notes, members, farmers and the history stay behind. Every member can download it, viewers included.\n\nImport project file on the Projects page turns such a file (or the workbook importer’s project file, up to 5 MB) into a new project: a preview shows what is in it before anything is sent, and the model can run straight after the import. The import record then keeps what the importer noted.',
+		aliases: ['export', 'JSON', 'project document', 'download project', 'import project'],
+		related: ['project-copy', 'import-record', 'project-time-zone'],
+		source: 'docs/ui.md § Project, § Import a project file; docs/api.md'
+	},
+	'project-time-zone': {
+		long: 'An IANA time zone name, such as Africa/Johannesburg (the default). Every download of the project (CSV, JSON, the workbook, the report PDF) is dated by the calendar day there, so an export made just after local midnight carries today’s date. The same day dates what the server counts for a person: the ages on the project list, the data feeds’ health, the farm page’s freshness and forecast date, and the alerts, with their 06:00 daily summary.\n\nIt doesn’t shift the series: a day of rain or flow stays the day its source gave it. An editor changes it with Save changes; a copy keeps it.',
+		aliases: ['time zone', 'timezone', 'IANA', 'local day'],
+		related: ['project', 'project-file', 'alert-rules'],
+		source: 'docs/ui.md § Project (Time zone); docs/api.md (058_project_time_zone)'
+	},
+	'import-record': {
+		long: 'Only a project made by an import has one. It names the file, when it was imported, who imported it and the importer’s version, then the importer’s notes and, for a b023 workbook, the unmapped report: the sheets and cells it found no place for. It is kept as it was shown at the import, so a reviewer or an assessor can check long afterwards what the importer interpreted. Every member reads it, viewers included.',
+		aliases: ['importer notes', 'unmapped report', 'imported from'],
+		related: ['project-file', 'project'],
+		source: 'docs/ui.md § Project (Import record); 017_project_import'
+	},
+	'change-history': {
+		long: 'Each save of the model or the settings is kept as a version: who saved it, when, the reason they typed beside Save changes, and the lines that changed. Uploads, merges and deletions of series, runs, publications, members, farmer links, invitations, share links, API keys and alert rules are recorded too, with who did each (or which API key). The History tab lists them newest first, filtered by hydrological unit, kind of change or parameter; a field’s “Changed 3×” line links there.\n\nAn editor can restore any earlier version of the model and settings. Restoring saves it as a new change, so nothing is erased and the restore can itself be undone. It needs no unsaved edits, and a restored unit comes back without its farmer links. A run’s Restore these inputs does the same from a run.\n\nSeries values aren’t part of a version. A person’s replace, merge or delete keeps the values it replaced (the newest 5 versions, for up to 180 days), with Restore the earlier values; a data feed’s or an API key’s merge keeps none. Viewers read the history; farmers and applicants never see it.',
+		aliases: ['history', 'audit log', 'audit trail', 'revision', 'restore', 'reason for this change', 'field history', 'version'],
+		related: ['run', 'roles', 'notes'],
+		source: 'docs/ui.md § History, § Field history; docs/data-model.md § Change history and audit log'
+	},
+	'notes': {
+		long: 'Notes keep what lives in people’s heads (“dam raised in 2019 per owner”, “logger moved in March”) against what they are about: a hydrological unit in the Network, a run, a settings group, or the project itself. The count on each notes button opens them in a side sheet; the Project page lists the newest across the project.\n\nEvery member can add one. The author edits their own (marked edited); the author or an editor deletes it, which hides it from everyone but keeps it for the audit trail. Notes are plain text and read by the project team only, except a note on a unit ticked Also show to this unit’s farmers, which its linked farmers read on their farm page. On an application, comments carry their own audience (the assessors, the parties, the team or public participation).\n\nA note goes with its target: deleting a unit or a run deletes its notes. A copy of the project doesn’t take them. A run’s own notes, by contrast, are the modeller’s one written explanation of that run.',
+		aliases: ['note', 'comments', 'recent notes', 'farm-visible note'],
+		related: ['change-history', 'farmer-link', 'run'],
+		source: 'docs/ui.md § Notes; docs/data-model.md § Notes (037_notes.sql)'
+	},
+	'api-key': {
+		long: 'Owners make keys on Settings & calibration, under API keys: a name, how long it works (until revoked, 90 days, 1 or 2 years), and what it may write, any series of the project or only the ones ticked. The key (wm_…) is shown once, with a copyable example request; only a hash of it is kept, so a lost key can’t be shown again, only replaced. The list shows each key’s state, what it writes, who made it and when it was last used.\n\nThe gateway sends daily readings to the ingest endpoint with the key. Only the days sent are merged into the named series, converted to its units, and sending the same days again changes nothing. A key creates a series only when the project has none of that kind; otherwise a person adds the series first. A key can’t read the model, runs, members or anything else, and allows 60 requests a minute. Each merge shows in History as API key “name”, and keeps no copy of the values it replaced.\n\nWhen the project re-runs automatically, a merge that changed days queues a re-run as the key’s creator. A push that looks wrong (a negative value, one above the series’ outlier limit, or a series it created) is still merged, but holds automatic runs until a person runs the model. Revoking a key refuses it from its next request; the row stays. An alert can warn when a series a key sends falls behind.',
+		aliases: ['ingest', 'logger', 'gateway', 'API', 'token', 'push data', 'revoke key', 'WM_INGEST_KEY'],
+		related: ['change-history', 'alert-rules', 'series-source'],
+		source: 'docs/ui.md § API keys; docs/api.md § Ingest; docs/security.md § API keys'
+	},
+	'alert-rules': {
+		long: 'On the Summary, Active alerts lists what is firing now; an editor’s Set up alert emails opens the rules. Each kind has a level:\n\n• Dam low (per unit with a dam): the published figures put the dam below a % of its capacity (30 % unless changed).\n• EWR at risk in the forecast: the newest forecast run has this many days at risk at the outlet (3).\n• Restriction notice: the published restriction or notice changes.\n• Data feed behind and API data behind: a feed this many days past its usual delay, or a series an API key sends with no new reading for this many days (2).\n• Data feed failing (failures in a row), Background jobs failed (in 24 hours) and Hydrological units short (on an automatic publication’s last 7 days).\n\nNothing is sent until a kind is switched on. Each alert is sent once when its figure crosses the level, and again only after it has recovered. Farmers get their own units’ dam alerts and the restriction notices, and viewers may opt in to the model’s alerts; the operational ones go to editors and owners (failing feeds and failed jobs to owners, editors opting in). Each person chooses on their account page whether to get each alert right away, in a daily summary at 06:00 or not at all. What recipients answered to “Was this alert useful?” shows under the rules, without names.',
+		aliases: ['alerts', 'alert emails', 'notifications', 'dam low', 'firing', 'digest'],
+		related: ['api-key', 'project-time-zone', 'published-baseline'],
+		source: 'docs/ui.md § Alerts; docs/api.md § Alerts'
+	},
+	'ewr-traffic-light': {
+		long: 'A catchment’s EWR status is judged at the outlet over the 30 days up to the last day of its figures (the published run, or the latest run when none is published). It is green when the EWR was not met on fewer than 5 % of those days, amber fewer than 20 %, and red otherwise. Those are provisional defaults, still to be confirmed by the catchment’s hydrologist.\n\nA team’s owners can set the team’s own thresholds in Team settings, and every team project is then judged by them; a personal project uses the defaults. The status orders the project list, the team page and Needs attention. It summarises one outlet over one month: read the run’s River & reserve page for the sites and days behind it.',
+		aliases: ['traffic lights', 'EWR status', 'red amber green', 'thresholds', 'status pill'],
+		related: ['ewr-days-not-met', 'team', 'needs-attention'],
+		source: 'docs/ui.md § Project list, § Teams (decision D11)'
+	},
+	'needs-attention': {
+		long: 'At the top of the Projects page, up to four cards name the catchments to look at first and why, most urgent first: a red EWR, hydrological units short this week, alerts firing, an amber EWR, failing or late data feeds, rain recorded after the latest figures, or figures more than 7 days old. A catchment that hasn’t run is not flagged. Show all, most urgent first sorts the whole list the same way.',
+		aliases: ['attention', 'urgent', 'stale figures'],
+		related: ['ewr-traffic-light', 'alert-rules'],
+		source: 'docs/ui.md § Project list (Needs attention)'
+	},
+	'privacy-contact': {
+		long: 'The person or office people ask about the personal information kept in a team’s projects (a name or office, an email address and an optional postal address), as POPIA asks of a responsible party. Team owners set it in Team settings; members read it there, farmers see it from the farm menu, and invitations name it.',
+		aliases: ['POPIA', 'information officer', 'data protection contact'],
+		related: ['team', 'farmer-link'],
+		source: 'docs/ui.md § Teams (Team settings); 168'
+	},
 	'water-year': {
 		long: 'Monthly inputs (A-pan evaporation, crop factors, pragmatic EWR) are entered in water-year order, starting with October. Month pickers (transfer months, dry-season months) show one toggle per month in the same Oct … Sep order.',
 		aliases: ['hydrological year'],
@@ -61,60 +170,11 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['dam-initial', 'calibration'],
 		source: 'b023 Help (Calc. Model date window)'
 	},
-	'calibration-window': {
-		long: 'Hydrologists usually calibrate on a period with reliable observations rather than the whole record; a b023 workbook has its own calibration date range and flow choice. Choose which observed series to compare against (gauge or logger); left empty, the gauge record is used if there is one, else the logger. A fit is scored at the outlet unless you pick a gauge inside the network that has a record attached (Scored at): the fit then compares the simulated flow at that gauge with its record, and so do the run’s calibration statistics; the outlet’s EWR test stays the outlet’s. The fit statistics and the annual volume table only count days inside this window.',
-		aliases: ['calibration period', 'observed flow record'],
-		related: ['calibration', 'nse'],
-		source: 'b023 [Flow Calibration Cfg] date range and flow choice; docs/model.md §2.10, §2.10k'
-	},
-	'gauge-logger-agreement': {
-		long: 'Two instruments on the same river should roughly agree. Each water year, the gauge volume is compared with the logger volume on the days both have a reading. A year is flagged when the ratio is below the lowest ratio or above the highest ratio (defaults 67 % and 150 %), and only when the year has at least the minimum number of shared days (default 90). A flagged year usually means a problem at one instrument, so choose the record you trust as the calibration flow series. The thresholds only change which years are flagged, never the model results. The Data tab’s Data checks also list negative values, outliers and flat stretches in each series, catchment rain that reads 0 where it looks missing (a zero blocks the CHIRPS fallback a blank day gets), and water years whose catchment rain reads far below CHIRPS.',
-		aliases: ['data quality', 'observed flow agreement', 'logger check'],
-		related: ['calibration-window', 'data-quality-limits'],
-		source: 'Not in the workbook; docs/model.md §2.10a'
-	},
-	'data-quality-limits': {
-		long: 'Settings → Data quality holds the limits of the checks the Data tab and every run report. The gauge-vs-logger ratios, the outlier factors (a value this many times the 99th percentile of a series’ positive values, 5 for rain and A-pan, 10 for flow) and the flat-stretch lengths (5 days of one rain value, 7 of A-pan, 14 to 90 of flow depending on the flow and the record’s resolution) only decide what is flagged.\n\nThe zero-rain and low-vs-CHIRPS limits change results, because a run treats a flagged zero run as missing (CHIRPS fills it) and leaves a flagged water year out of the CHIRPS factor fit. By default a zero run is flagged with 60 or more days in the series’ six wettest months, and a water year when its catchment / CHIRPS ratio is below half the record’s usual one. The alternatives come from a hydrologist review for semi-arid catchments: judge a run by the share of the usual annual rain it missed, check it against CHIRPS (a run CHIRPS reads as dry too may be a real dry spell and is not flagged), compare each year with the years around it instead of the whole record, and ask more CHIRPS rain of a year in a wet catchment before judging it. They are off until tested on a semi-arid record with a known drought. A fit made under other limits says its forcing changed.',
-		aliases: ['data checks', 'outlier limit', 'flat-line limit', 'zero-rain rule', 'low vs CHIRPS'],
-		related: ['gauge-logger-agreement', 'rain-catchment'],
-		source: 'Not in the workbook; a simulated hydrologist review (docs/followups.md); docs/model.md §2.10a'
-	},
 	'report-window': {
 		long: 'Pick a critical period — a dry season or a drought year — to see how much each hydrological unit would need to reduce for irrigation to balance and the EWR to be met in that period. A window partly outside the run is clipped to it.\n\nOn Hydrological units, the Reporting window picker above the curtailment table shows the same tables over another period (the last 7, 14 or 30 days, the whole record or a custom range) without changing this setting or re-running: anyone who can see the run can use it.',
 		aliases: ['reporting period', 'shortfall period'],
 		related: ['ewr'],
 		source: 'b023 [Shortfalls] "Set reporting period"; docs/model.md §2.11'
-	},
-
-	'assurance-of-supply': {
-		long: 'Two measures per hydrological unit and other water user (engine 0.32.0). Days met: the share of days with demand when the whole demand was supplied (days without demand don’t count). Water years met: the share of complete water years (1 October to 30 September inside the reporting window; a part year at either end is left out, engine 1.11.0) whose supply reached the annual threshold (Settings, default 90 %, a project choice rather than a standard).\n\nAfter Hashimoto et al. (1982), a failure is a run of consecutive demand days not fully met: the table gives the number of failures, their mean and longest length (resilience) and the mean and largest deficit per failure (vulnerability).\n\nThe definitions are pending review by the project hydrologist.',
-		aliases: ['reliability', 'assurance', 'resilience', 'vulnerability', 'Hashimoto'],
-		related: ['report-window', 'stress-class', 'water-account'],
-		source: 'docs/model.md §2.11a; Hashimoto, Stedinger & Loucks 1982'
-	},
-	'allocation-mode': {
-		long: 'The Allocations tab stores the volumes registered or licensed per unit and water source. WARMS registers per s21 water use: a take (s21a) is a volume a year; a dam’s storage (s21b) is a row of its own, shown as **Storage only (s21b)** and never counted as a take, only against the dam’s capacity. By default they only sit beside a run: the tab compares each water year’s modelled use with them, for the unit you pick beside the list, and for every unit at once under **Show all units’ water years** at the foot of the page. Two modes (engine 1.18.0) make them part of the run.\n\nCap: each unit’s surface-water use (from its dam, its river pump and off-take water) and groundwater use (pumped to the crop and into the dam) per water year (October–September) stays within its registered volumes. The budget is the whole year’s volume, so a unit may take it early and then goes without; its boreholes cover what a capped surface can’t, within the groundwater volume. A source with no registered volume isn’t capped, and nor is a day on which none of the unit’s licences of that source is in force, before its first starts or after its last ends; the use on those days doesn’t count against the year’s volume, which is prorated to the licences’ days (a licence from 1 September caps September at 30/365 of it). The run warns, naming the units and days, so check the licence dates (engine 1.70.0; before, a year with no licence in force was capped at 0). A demand-sized off-take into a capped unit takes only the demand its cap still allows.\n\nFull allocation: each unit’s demand (crops and other demands together) is scaled, year by year, so it asks for exactly its registered volume (both sources), keeping its own seasonal pattern. It shows the river if every registered or licensed volume were taken in full (a registration is not an entitlement), the background for a cumulative assessment. A demand level (a seasonal outlook’s or a demand sweep’s), a scenario’s Scale demand and the abstraction sensitivity case apply after that scaling (engine 1.70.0), so 80 % means 80 % of the registered volume. A unit without a volume, or a water year with no licence in force (engine 1.70.0), keeps its modelled demand, and a level then applies to that.\n\nA cap also keeps to the licence conditions: no water from a source in a month outside its licence’s months, and at most its maximum rate a day (the rate × 86 400 m³). Full allocation doesn’t apply them, and conditions written in words are only shown. How the cap counts water drawn from a dam that boreholes filled is pending the hydrologist.',
-		aliases: ['cap', 'full allocation', 'entitlement', 'registered volume', 'WARMS', 'allocationMode', 's21b', 'registered storage', 'water use'],
-		related: ['allocation-band', 'assurance-of-supply'],
-		source: 'docs/model.md §2.12a; docs/allocations.md'
-	},
-	'allocation-band': {
-		long: 'A water year whose modelled use is more than the registered volume × (1 + band) reads “above registered”, less than × (1 − band) “below registered”, anything between “within band”. It changes only how the comparison reads, never the run’s water. The ±10 % default is a provisional default (2026-10-01), not yet confirmed by the catchment’s hydrologist: it allows for meter and model error, and is not a legal tolerance.',
-		aliases: ['tolerance', 'allocation tolerance', 'within band'],
-		related: ['allocation-mode'],
-		source: 'docs/allocations.md § The comparison'
-	},
-	'stress-class': {
-		long: 'The classes and thresholds come from an experimental node-based workbook, which reported them per hydrological unit and per month. The app grids them per hydrological unit, per other water user and for all of them together, water year by month, over the whole run. A month without demand has no class.',
-		aliases: ['stress', 'supply ratio', 'Low', 'Moderate', 'High', 'Severe', 'Critical'],
-		related: ['assurance-of-supply'],
-		source: 'docs/model.md §4 and §2.11a'
-	},
-	'water-account': {
-		long: 'In: natural flow, rain on the dams, groundwater pumped and net transfers. Out: runoff removed by land cover, natural flow no hydrological unit received (flow shares not summing to 1), consumptive irrigation (supplied − return flow), other users’ net take, dam evaporation, dam seepage lost from the catchment, stream depletion from boreholes and the outflow at the outlet. A dam storage reset, when one is set, counts on the In side. In − out − change in dam storage is the residual, float noise. Seepage that rejoins the river below the dam is shown as a memo. The EWR required and met at each site, per water year, is under the EWR by month grid on River & reserve.',
-		aliases: ['water balance', 'account', 'closure'],
-		related: ['assurance-of-supply', 'dam-evaporation', 'dam-seepage'],
-		source: 'docs/model.md §2.11b'
 	},
 
 	// ---- Network ------------------------------------------------------------
@@ -394,18 +454,6 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['dam-capacity', 'spill'],
 		source: 'b023 farm element sheet'
 	},
-	'working-columns': {
-		long: 'Next to demand, supply, storage and outflow, each hydrological unit records the steps in between, in the order of the workbook’s farm sheet: gross demand, the effective rain used against it and the soil-water store left at the end of the day (mm, engine 0.14.0); upstream inflow into the dam (K) and below it (L); hydrological unit runoff into the dam (M) and below it (N); water diverted back to the dam (O); interim storage before spill (P); below-dam flow not diverted (S); and irrigation return flow (T).\n\nThe hydrological unit’s daily CSV has them in letter order, each header carrying its letter, and the run summary CSV lists every letter’s formula. The results’ “Trace a day” shows them worked out for one hydrological unit and one day. Runs made before engine 0.12.0 don’t have them.',
-		aliases: ['intermediate columns', 'workings', 'FarmTemplate columns'],
-		related: ['balance-check', 'dam-storage', 'return-flow'],
-		source: 'b023 FarmTemplate columns F–AB; docs/model.md §2.7'
-	},
-	'balance-check': {
-		long: 'The balance check (column V) is, for each hydrological unit and day: water in (upstream inflow + runoff + transfers + rain on the dam + groundwater pumped) − water used (supplied − return flow) − dam evaporation − the change in dam storage − outflow (which includes the seepage that returns below the dam) − stream depletion from boreholes − dam seepage lost from the catchment. It must be 0; in practice it is float noise, many orders of magnitude below the flows.\n\nEvery run also runs the checks the test suite runs on thousands of random networks: storage stays between 0 and the dam capacity, supply never exceeds demand, transfers keep to their months, rates, caps and minimum storage, the runoff model’s stores balance, and the EWR grid, hydrological unit summaries and curtailment report add up to the daily series. The results show which passed and, for a failure, the first hydrological unit and date where it broke. A failed check means a bug in the model, not in your data: report it.\n\nTwo tables give the balance per water year, each linking to the other: Runs & results’ Water balance sums the hydrological units (rain, the runoff coefficient, start and end storage, in Mm³), and River & reserve’s water account is the catchment’s, from natural flow, term by term (m³; see Water account). Both have a residual that should be 0; the self-checks say whether every water year’s does.',
-		aliases: ['verification', 'invariants', 'mass balance', 'water balance', 'residual'],
-		related: ['working-columns', 'dam-storage'],
-		source: 'docs/model.md §6 Verification'
-	},
 
 	// ---- Crops and irrigation demand -----------------------------------------
 	'apan': {
@@ -562,67 +610,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['gr4j', 'pan-coefficient'],
 		source: 'Perrin et al. (2003)'
 	},
-	'auto-calibration': {
-		long: 'The search is DDS (Tolson & Shoemaker 2007): it tries a set number of model runs, perturbing all parameters at first and fewer as it homes in, and never leaves each parameter’s allowed range. It runs several separate searches (Starts, default 5), each from its own seed, and keeps the best; nearly equal scores with scattered parameters mean the record can’t pin them down. Every run scores the whole model, hydrological units and dams included, against the observed record over the calibration window.\n\nPick what to optimise: KGE′ (the default), a year-balanced KGE′ that stops a few wet years dominating, a non-parametric KGE, NSE on √Q or log Q for medium and low flows, or the mean of KGE′ on Q and on 1/Q, which weighs low and high flows together (suggested for EWR, low-flow, decisions).\n\nThe fit alone says little. Validation fits again on the first half of the record and scores the second half, then fits on the driest water years and scores the wettest (listed by water year, since they interleave). When the project has a reference gauge on another river covering those years, the years are ranked dry → wet by it, a regional index that is never scored; otherwise by the record’s own flow. The result also says how representative the record is: how many water years it covers and where their rain sits among the run’s long-term rain. With both a gauge and a logger record you can also score the fit against the record it wasn’t fitted to, a second instrument. Those columns are the honest measure. The main scores show a 90 % range in brackets, from resampling whole water years: a wide range means the record can’t pin the score down. A second table sets the model beside two simple benchmarks on the same days, the mean flow every day and each calendar day’s average flow; a model that can’t beat the second adds little beyond the seasonal cycle. With a short record that is mostly drought, the result says so: wet-year behaviour is then weakly constrained. Nothing is saved until you apply the result and save the form.',
-		aliases: ['auto-calibration', 'optimiser', 'DDS', 'split-sample', 'differential split-sample', 'validation', 'KGE′'],
-		related: ['calibration', 'gr4j', 'nse'],
-		source: 'Tolson & Shoemaker (2007); Klemeš (1986); Kling et al. (2012); docs/model.md §2.10b'
-	},
-	'uncertainty-bands': {
-		long: 'One calibrated run gives one number for EWR days not met, curtailment and the annual volumes, but many parameter sets fit the record nearly as well, and the pan coefficient, the rain and the observed record are uncertain too. The ensemble samples them all: a Latin hypercube across the parameter bounds (never the optimiser’s own path), a shift of the pan coefficient (GR4J), station rain with CHIRPS infill or CHIRPS alone, and the gauge or the logger to judge against, where the project has both.\n\nA set is kept only if it passes the rule printed next to the bands: a skill score (KGE′ by default) on the first half of its record, the WR2012 flag on its natural flow, and the low-flow bias. The bands are the 5th to 95th percentiles of the kept sets; with fewer than 30 kept none are shown. The second half of the record is held out: the share of its observations inside the daily band is the coverage, and below 70 % the band is too narrow to trust.\n\nThe server fixes the rule and draws the seed before anything runs, keeps every ensemble started, and re-runs members to check a result before storing it, so a band can’t be picked after the fact. Run comparison bands the difference between two runs member by member: the extra impact of an application, with its own uncertainty.',
-		aliases: ['GLUE', 'uncertainty', 'ensemble', 'Latin hypercube', 'behavioural', 'confidence band', 'coverage'],
-		related: ['auto-calibration', 'wr2012-check', 'calibration-bounds'],
-		source: 'Beven & Binley (1992); McKay et al. (1979); docs/model.md §2.10e; issue #4 phase 9'
-	},
-	'evidence-uncertainty-rule': {
-		long: 'An ensemble’s bands depend on its rule: how many parameter sets it samples, how far it may roam, how far it shifts the pan coefficient, and the skill score, WR2012 flag and low-flow bias a set must pass to be kept. Tried after the bands are seen, those choices could be tuned until a band looks kind to an application. So the project declares the rule first, under Settings › Evidence. An evidence report then cites the first complete ensemble whose options match the rule exactly, and names it; with no rule declared it cites none. The History tab records who declared or changed the rule and when, and a change means a new ensemble must be run to it before a report can cite one. The rule starts from the ensemble’s own defaults: 300 members, typical bounds, pan ±0.1, KGE′ at least 0.5, WR2012 flags up to “query”, low-flow bias within ±50 %.',
-		aliases: ['evidence rule', 'declared rule', 'pre-declared thresholds', 'acceptance thresholds'],
-		related: ['uncertainty-bands', 'calibration-rules', 'calibration-bounds'],
-		source: 'docs/design/evidence-report.md ER3, G4; issue #71'
-	},
-	'calibration-bounds': {
-		long: 'A short or drought-heavy record often can’t pin down X1 (production store) and X3 (routing store): the fit lands outside where GR4J parameters usually sit, because too little of the record constrains them. "Typical" restricts the search to Perrin et al.’s (2003) 80 % range over 429 catchments (X1 100–1200 mm, X3 20–300 mm, X4 1.1–2.9 days), which can make an under-constrained fit land somewhere plausible instead of at an extreme of the wide range. It is a constraint on the search, not evidence the catchment truly falls inside it: read the fit and validation scores either way, and prefer the wide range when the record constrains the parameters well. Recorded with the fit record.',
-		aliases: ['typical range', 'Perrin range', 'wide bounds', 'X1 range', 'X3 range'],
-		related: ['auto-calibration', 'gr4j', 'fit-record'],
-		source: 'Perrin, Michel & Andréassian (2003); issue #4 phase 6'
-	},
 	'wr2012-check': {
 		long: 'WR2012 (Water Resources of South Africa 2012) gives each quaternary catchment a naturalised mean annual runoff (MAR) and mean monthly flows: the river as it would be with no hydrological units, dams or abstraction. Enter them from the study for the quaternary this project lies in, with the period they cover and where they come from. The app doesn’t ship WR2012 data.\n\nEach run then compares its simulated natural flow, never the outflow, with the reference. The reference is scaled to the modelled catchment by the area ratio (the default), or, if you choose it and the quaternary MAP is entered, by the area and the rainfall ratio (the run’s mean annual rain ÷ the quaternary MAP). Runoff doesn’t scale in proportion to rain, so treat the rainfall scaling as a first estimate.\n\nThe report gives the MAR ratio over the complete water years both cover and over the whole run, the 12 monthly ratios with the dry-season months marked, and the correlation of the monthly pattern. A MAR that differs by 10 % is noted, by 25 % (or 15 % wetter) is queried, and by 50 % makes the run unusable for EWR findings until it is explained. The thresholds are editable.\n\nMonthly means are in million m³ per month (not m³/s) and should add up to the MAR within 5 %. A MAR larger than the rain on the quaternary (MAP × area) is rejected.',
 		aliases: ['WR2012', 'naturalised flow', 'naturalized flow', 'MAR', 'quaternary', 'Water Resources of South Africa'],
 		related: ['natural-flow', 'wr2012-penalty', 'gr4j'],
 		source: 'Bailey & Pitman, Water Resources of South Africa 2012 Study (WRC); docs/model.md § WR2012 check',
 		countries: ['ZA']
-	},
-	'wr2012-penalty': {
-		long: 'When it is on, Fit automatically adds weight × |ln(simulated natural MAR ÷ scaled WR2012 MAR)| to the loss it minimises, so a wetter and a drier MAR by the same factor cost the same. It only touches the annual volume, not the daily pattern. When two published natural-MAR estimates disagree, tick “Use a MAR band instead of one target”: the penalty is then 0 inside the band (already at the modelled catchment’s scale) and weight × |ln(simulated MAR ÷ the nearer bound)| outside it.\n\nThe result shows the fit with the penalty and the same fit without it, with the weight, so you can see what matching WR2012 costs the fit to the observed record. A short or impacted observed record can disagree with WR2012 for good reasons; the penalty is a nudge, not a constraint.',
-		aliases: ['soft penalty', 'MAR penalty', 'regularisation'],
-		related: ['wr2012-check', 'auto-calibration'],
-		source: 'docs/model.md § WR2012 check; issue #4 phase 8',
-		countries: ['ZA']
-	},
-	'calibration-exclusions': {
-		long: 'Use one for a period whose data you can’t trust: a suspect rain year, the gauge after a known break, an outage. Excluded days are left out of Fit automatically and of the run’s calibration statistics alike; the model still simulates them. A water year runs from 1 October to 30 September. A reason is required, every run stores the exclusions it applied, and comparing two runs lists any exclusion added, removed or re-reasoned, so dropping an awkward period always leaves a record.',
-		aliases: ['excluded periods', 'exclude water year', 'bad years'],
-		related: ['calibration-window', 'auto-calibration'],
-		source: 'Not in the workbook; docs/model.md §2.10'
-	},
-	'quality-flags': {
-		long: 'A gauge measures water level; a rating curve turns it into flow, and the curve is only checked against field gaugings over the range they cover. Above the highest gauging the flow is the curve extended by judgement, often out by 40 % or more on South African weirs, so a fit that chases those peaks chases the extrapolation. Enter the highest and lowest gauging of each record, with where they come from, under Calibration record. Each observed day then gets one flag: in the gauged range, above the highest gauging, below the lowest (above zero; a dry weir reads zero reliably), suspect (an outlier or flat stretch by the Data checks, under the limits in Settings → Data quality), infilled (a gap-filled value) or missing. Fit automatically censors days above the highest gauging by default: the model only has to reach the highest gauging on them, however high the record reads. Below-rating, suspect and infilled days are left out. The fit shows its scores on all days beside the fit on the clean days, and a data-quality panel with the share of days by flag, the rain on the scored days (gauge reading or infilled) and what the record can’t support, with how wet the scored years were under it. The run’s own calibration statistics still score every observed day. Changing a gauged range or a treatment marks the fit record “Quality flags changed since fit”. A river that really stops trips the flat-stretch check after 90 days of zero flow (by default): if so, score suspect days as recorded. The human-use class is defined but not yet derived.',
-		aliases: ['gauged range', 'highest gauging', 'rating extrapolation', 'censored days', 'suspect days', 'data-quality panel'],
-		related: ['auto-calibration', 'calibration-exclusions', 'fit-record'],
-		source: 'docs/model.md §2.10h; calibration research CR-18, CR-19, CR-22 (Coxon et al. 2015; Kiang et al. 2018; Beven & Westerberg 2011)'
-	},
-	'calibration-rules': {
-		long: 'Each pass of calibrate → review → refit normally needs a person, who chooses the years to leave out, the forcing and the fit to keep after seeing the scores. Chasing the score that way overfits, and an assessor can’t tell a principled choice from a convenient one. Calibration rules make those choices in advance. A water year is left out when more than a set share of its observed days carry a quality flag, and each such exclusion names the rule as its reason. Each listed pan coefficient is fitted with each set of bounds and objective, every fit with the split-sample and dry → wet tests, by a search (seed, starts, model runs) that is part of the rules too. The fit kept is the one with the best score on a held-out test, never the in-sample score, among those whose natural MAR is inside the WR2012 band (when there is a reference) and whose parameters are in the typical range. If none passes, none is kept, and the reasons are listed.\n\nThe server runs the saved rules, one background job per fit, and computes every score itself. Applying the kept fit is the server’s too: it saves the parameters with a record of the rules and every fit tried, runs the model and, when the rules say so, the uncertainty ensemble around the fit. Each change to the rules raises their revision, and a fit made under an older revision can’t be applied, so a rule can’t be adjusted once its result is seen. The rules can also run by themselves when new data arrives, and apply their fit while signed off. The default rules are drafts until the hydrologist signs them off: they type their name as a signature, and saving dates it and records their account in the History tab. A fit picked under draft rules is marked as not evidence.',
-		aliases: ['automated calibration', 'pre-declared rules', 'rule set', 'selection rule', 'sign-off'],
-		related: ['auto-calibration', 'quality-flags', 'fit-record', 'calibration-bounds'],
-		source: 'docs/model.md §2.10j; issue #153; calibration research, “Automated calibration with pre-declared rules”'
-	},
-	'fit-record': {
-		long: 'The record keeps the runoff model, objective, bounds, seed, starts, model runs per fit, calibration window, exclusions, the record fitted to, the forcing (pan coefficient, A-pan, CHIRPS bias correction and the rain-gap settings), the engine version and the time, with every score: the in-sample fit and the split-sample, dry → wet and independent-record validation. The same inputs, engine version and seed give the same fit, so anyone can reproduce it. Each run keeps the record in effect, so its results show which fit produced their parameters. Change a fitted parameter by hand and the record is marked “Parameters edited since fit”: it no longer describes them. Change the forcing and it is marked “Forcing changed since fit”: GR4J’s parameters are only valid for the evaporation and rain they were fitted under. The in-sample score is the fit to the calibration period; judge the parameters by the validation scores.',
-		aliases: ['fit provenance', 'seed', 'parameters edited since fit'],
-		related: ['auto-calibration', 'calibration-exclusions'],
-		source: 'docs/model.md §2.10b'
 	},
 	'catchment-area': {
 		long: 'Set it only when the modelled hydrological units don’t cover the whole catchment and you want rain over the full area. 1 mm over 1 km² = 1 000 m³.',
@@ -645,119 +638,5 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		aliases: ['legacy model', 'b023 recession', 'peak coefficient', 'summer factor', 'winter factor', 'summer months', 'recession curve', 'workbook comparison'],
 		related: ['runoff-model', 'gr4j', 'base-flow'],
 		source: 'docs/model.md §2.4 (retired); docs/engine-audit.md H1; issue #16'
-	},
-
-	// ---- Run results among the EWR tips (the EWR topic itself is in articles-ewr.ts) ----
-	'equitable-share': {
-		long: 'Over the reporting window, the catchment supplied this share of the total demand. A hydrological unit’s equitable share volume is that same share of its own demand, and “above (−) / below (+) equitable share” is that volume minus what it was supplied. The differences cancel across the hydrological units.\n\nIt is a fairness benchmark only: it assumes water can move freely between hydrological units, and ignores where a hydrological unit sits in the network, its storage, licensed or registered volumes and existing lawful use. A positive value is not water the hydrological unit can get: a surplus downstream can’t reach a hydrological unit upstream. Not an allocation or licence condition.\n\nUnder the National Water Act, sharing in a shortage runs through authorisations (s43 compulsory licensing; Schedule 3 item 6 restrictions, which DWS gazettes as % limits on authorised use per sector). A network-aware allocation based on licensed or registered volumes is future work; model demand is not an entitlement, and raising crop factors or areas raises a hydrological unit’s benchmark.',
-		aliases: ['equitable supply fraction', 'target volume', 'fair share', 'reduce / gain'],
-		related: ['demand-left', 'ewr-charge', 'report-window'],
-		source: 'b023 Shortfalls columns K total, M, N; docs/model.md §2.11; docs/engine-audit.md Q11'
-	},
-	'demand-left': {
-		long: 'Volume left ÷ demand, where the volume left is the equitable share minus the EWR supply cut, and never below 0. Shown as a whole %: “no demand” for a hydrological unit without demand, “—” when demand is under 1 m³/day (a % of almost nothing isn’t meaningful), and “<1%” or “>99%” at the ends so neither rounds to 0 or 100. The summary CSV keeps the exact value and a demand_pct_note column.\n\nWhen the EWR supply cut is larger than the hydrological unit’s equitable share, the volume left is 0 and the table flags “EWR cut exceeds this hydrological unit’s equitable share”. The workbook labels this column “reduction of demand required”, but it is the share left.',
-		aliases: ['volume left', 'reduction of demand required', 'demand_pct_note'],
-		related: ['ewr-charge-split', 'report-window'],
-		source: 'b023 Shortfalls columns U, V; docs/model.md §2.11; docs/engine-audit.md Q12, Q13'
-	},
-	'plausibility-checks': {
-		long: 'Every run makes six checks and shows them in the Plausibility checks panel on Runs & results, in its warnings and in the summary CSV:\n\n1. natural flow is at least the observed flow plus the modelled net abstraction, in every water year;\n2. EWR days not met, split between good-rain years (rain mostly from the catchment station) and fallback-rain years (mostly CHIRPS, forecast, spread or blank days);\n3. the double-mass curve of observed flow against rain, to tell new use upstream from a failing gauge;\n4. dry-season low-flow duration curves of the gauge, the logger and the model, overlaid with the latest run of each other runoff model;\n5. recession diagnostics: how fast the record and the model fall in rain-free spells (runs from engine 1.19.0);\n6. validation signatures: base-flow index by two filters, the low-flow duration curve’s slope and bias, and the skill on held-out recessions (runs from engine 1.55.0).\n\nThe dry season is the six calendar months in a row with the lowest mean flow: from the calibration record, else the other observed record, else the simulated natural flow. The thresholds are fixed in the engine, for the hydrologist to confirm.',
-		aliases: ['sanity checks', 'hydrologist checks', 'dry season', 'plausibility'],
-		related: ['plausibility-naturalised', 'plausibility-rain-source', 'plausibility-flow-double-mass', 'plausibility-low-flow', 'plausibility-recession', 'plausibility-signatures'],
-		source: 'Not in the workbook; issue #4 phase 6 review; docs/model.md §2.10d'
-	},
-	'plausibility-naturalised': {
-		long: 'On each water year of the calibration record (300 or more observed days, calibration exclusions left out), the observed volume O plus the modelled net abstraction A rebuilds the natural flow the record implies. A is natural flow less the simulated outflow, from the network’s own water balance, split into use net of return flows (irrigation, other users, boreholes), dams (storage gained plus evaporation less rain on the dam) and land cover.\n\nA year fails when O + A exceeds the simulated natural flow by more than 10 % of the observed volume, the annual error of a well-rated gauging weir (at least 1 % of the record’s mean volume, so a near-dry year doesn’t fail on noise). Since A is natural less simulated outflow, that is the same as the simulated outflow falling short of the observed by that much. A failing year points to natural flow simulated too low (rain, parameters), abstraction over-estimated, or a problem in the record that year.',
-		aliases: ['naturalised flow', 'naturalisation check', 'observed plus abstraction'],
-		related: ['plausibility-checks'],
-		source: 'Not in the workbook; Wessels & Rooseboom (2009); McMillan, Krueger & Freer (2012); docs/model.md §2.10d'
-	},
-	'plausibility-rain-source': {
-		long: 'A day’s rain is a station reading when the catchment rain series has a value the run used as recorded. It is fallback rain when bias-corrected CHIRPS or forecast rain filled it (a blank day, a zero run treated as missing, a listed missing period, a reading set aside after a blank outage), when a multi-day accumulation was spread onto it, or when nothing filled it and it ran dry.\n\nA water year is a fallback-rain year when more than half its rain, or more than half its days, were fallback; every other year is a good-rain year. The panel gives the share of days the outlet EWR was not met in each group and, with a Reserve rule table, the share of months met. The run warns when the groups differ by 10 percentage points or more: part of the EWR result may then come from the rain source rather than the river. It can also be real climate, such as a station out of action through a drought.',
-		aliases: ['fallback years', 'CHIRPS years', 'rain source', 'infilled rainfall years'],
-		related: ['plausibility-checks', 'zero-rain-runs', 'rain-accumulations', 'chirps-bias', 'reserve-compliance'],
-		source: 'Not in the workbook; docs/model.md §2.10d'
-	},
-	'plausibility-flow-double-mass': {
-		long: 'While the catchment, its development and the gauge stay the same, cumulative observed flow plotted against cumulative catchment rain is a straight line; its slope is the runoff ratio. The check uses the calibration record’s water years with 300 or more days having both flow and rain and at least 100 mm of rain (10 such years or no result), and finds breaks as the rain-vs-CHIRPS double-mass check does.\n\nThe runoff ratio falls in a run of dry years on its own, so each break is compared with the simulated outflow over the same days, which has the same rain and fixed development. A change the model shows too is the rain’s. A fall the dry season takes more of points to new use upstream (abstraction and filling dams take a larger share of low flows); a fall the wet season takes more of, or a rise, points to the gauge (a rating change, or floods bypassing or drowning the weir). It is a hint: check the gauge’s records and the development history.',
-		aliases: ['double mass curve flow', 'runoff ratio break', 'gauge failure', 'new upstream use', 'homogeneity of flow'],
-		related: ['plausibility-checks', 'double-mass'],
-		source: 'Not in the workbook; Searcy & Hardison 1960; docs/model.md §2.10d'
-	},
-	'plausibility-low-flow': {
-		long: 'Each curve gives the flow equalled or exceeded on a share of the dry-season days (Q90: 90 % of them). The gauge and the logger are drawn dashed, each on its own days; the simulated outflow and natural flow cover every dry-season day of the run, and the latest run of each other runoff model is drawn beside them when it used the same dry season. "Simulated outflow over" switches the model’s curve to one record’s days only, for a like-for-like comparison.\n\nThe run warns when, on the calibration record’s dry-season days, the simulated Q90 is more than twice or less than half the observed. Low flows are where a gauge is least certain (±50–100 %), so a factor of 2 is beyond gauging error. Flows under 0.001 m³/s count as 0.001.',
-		aliases: ['low flow FDC', 'dry season FDC', 'Q90', 'Q95', 'low-flow duration'],
-		related: ['plausibility-checks', 'plausibility-recession'],
-		source: 'Not in the workbook; McMillan, Krueger & Freer (2012); calibration-research.md CR-16; docs/model.md §2.10d'
-	},
-	'plausibility-recession': {
-		long: 'After rain stops, a river falls at a pace set by how its catchment drains. The check picks those spells out of the calibration record: flow falling day after day for at least 5 days, with at most 1 mm of catchment rain on each day and the day before, starting the second day after the peak, and no missing, zero or excluded day. On each day it takes the rate of fall, −dQ/dt, and plots it against the flow Q on log–log axes, for the record and for the simulated outflow on the very same days, and fits a straight line to each: −dQ/dt = a·Q^b. b = 1 is a single linear store (an exponential recession); a larger b a store that drains faster when full.\n\nThe run warns, as an indicative check, when the model recedes more than twice as fast or slow as the river at the observed points’ median flow, or when b differs by more than 0.5, which points to the routing and groundwater parameters (GR4J X2 and X3) or to abstraction in dry spells. With fewer than 8 spells the fit is too thin to judge, and the run says so instead. The segment rules and the rate estimate (exponential time stepping) follow the TOSSH toolbox’s defaults.',
-		aliases: ['recession analysis', 'recession curve', '-dQ/dt', 'dQ/dt vs Q', 'Brutsaert Nieber', 'recession constant', 'baseflow recession'],
-		related: ['plausibility-checks', 'plausibility-low-flow', 'plausibility-signatures'],
-		source: 'Not in the workbook; Brutsaert & Nieber (1977); Tallaksen (1995); Stoelzle et al. (2013); Roques et al. (2017); Gnann et al. (2021, TOSSH); calibration-research.md CR-13; docs/model.md §2.10d'
-	},
-	'plausibility-signatures': {
-		long: 'The calibration statistics say how closely the model follows the river day by day. These three signatures ask something else: does the model behave like the river in dry weather, where the water in a dry season comes from? They compare the record the calibration statistics score (the calibration site’s gauge when one is set, else the outlet’s) with the simulated outflow on the same days. They only report and warn; none changes a result.\n\n**Base-flow index (BFI)**: the share of the river’s flow that is base flow, the slow drainage from groundwater and soils that keeps a river running between rains, as against quick flow straight after rain. 0.6 means 60 % of the water arrived as base flow. Nobody measures base flow, so a filter separates it from the flow record, and two filters are used: the one South African Reserve work uses (Hughes, Hannart & Watkins 2003: α 0.995, β 0.5, one forward pass) and Eckhardt’s (a 0.98 and a ceiling BFImax of 0.25, his value for perennial rivers on hard-rock aquifers). Each runs over every stretch of 30 or more recorded days, the record and the model over the same stretches. Eckhardt’s index can’t exceed its ceiling, so read it as a comparison between the record and the model, not as the river’s own index. A model whose BFI is too low dries up too fast after rain; too high, it holds its flow too long. The run warns when the two differ by more than 0.15 by either filter.\n\n**Low end of the flow-duration curve**: rank every day’s flow from high to low. Q70 is the flow exceeded on 70 % of days, Q95 the flow exceeded on 95 %, the river in a drought. The slope between them, ln(Q70 ÷ Q95) ÷ 0.25, says how steeply the flow falls away in the driest quarter of days: steep for a river that nearly stops, flat for one fed by steady groundwater. The table shows the observed and simulated slopes and the simulated slope’s bias in %. The low-flow volume bias (%BiasFLV, Yilmaz et al. 2008, the same measure the fit uses) looks at the lowest 30 % of days: how far each curve’s flows sit above its own lowest flow, on log flow, the model’s against the river’s. 0 is a match; the further from 0, either way, the less the model’s driest days look like the river’s. The run warns when either is beyond ±50 %.\n\n**Skill on held-out recessions**: a recession is a rain-free spell in which the river falls day after day. Every third one, in date order, is held out. On each held-out spell the simulated fall from its first day is scored against the river’s, as a skill against no fall at all: 1 is perfect, 0 no better than a flat line, below 0 worse. For comparison, the river’s own recession curve, fitted on the other spells only, is scored the same way (the Observed column): a model close to it recedes about as well as the river’s own law predicts. The model’s parameters were fitted on every scored day, the held-out spells included, so this is a check of shape, not a true blind test. With fewer than 8 spells there are too few to judge; with 8 or more, the run warns below 0.\n\nThe limits are provisional, set in the engine for the hydrologist to confirm.',
-		aliases: ['BFI', 'base flow index', 'baseflow index', 'Eckhardt filter', 'Hughes filter', 'FDC slope', 'low-flow slope', '%BiasFLV', 'held-out recessions', 'split-sample recessions'],
-		related: ['plausibility-checks', 'plausibility-recession', 'plausibility-low-flow'],
-		source: 'Not in the workbook; Hughes, Hannart & Watkins (2003, Water SA 29(1):43); Eckhardt (2005, Hydrological Processes 19:507); Yilmaz, Gupta & Wagener (2008, WRR 44:W09417); calibration-research.md CR-16; docs/model.md §2.10d'
-	},
-
-	// ---- Run results ------------------------------------------------------------
-	'fraction-supplied': {
-		long: 'A quick reliability measure per hydrological unit. It averages over wet and dry years; check the daily deficit to see when the shortfalls happen.',
-		aliases: ['assurance', '% supplied'],
-		related: ['irrigation-supplied', 'irrigation-deficit'],
-		source: 'b023 Shortfalls sheet'
-	},
-
-	// ---- Goodness of fit ---------------------------------------------------------
-	'nse': {
-		long: 'Squared errors make NSE dominated by flood peaks, so a good NSE can hide poor low flows. Look at it alongside PBIAS and the hydrograph.',
-		aliases: ['Nash-Sutcliffe', 'efficiency'],
-		related: ['pbias', 'rmse', 'kge', 'calibration'],
-		source: 'docs/model.md §7'
-	},
-	'pbias': {
-		long: 'Measures volume error regardless of timing — the fit that matters most for allocation questions.',
-		aliases: ['bias', 'volume error'],
-		related: ['nse'],
-		source: 'docs/model.md §7'
-	},
-	'rmse': {
-		long: 'Has the units of flow, so compare it with the mean observed flow to judge its size.',
-		aliases: ['root mean square error'],
-		related: ['nse'],
-		source: 'docs/model.md §7'
-	},
-	'kge': {
-		long: 'Often preferred to NSE because it separates timing, volume and variability errors.',
-		aliases: ['Kling-Gupta'],
-		related: ['nse'],
-		source: 'docs/model.md §7'
-	},
-	'r-squared': {
-		long: 'R² is the square of the correlation between simulated and observed flow. A high R² with a poor NSE usually means the timing is right but the volumes are off — check PBIAS.',
-		aliases: ['R2', 'correlation'],
-		related: ['nse', 'pbias'],
-		source: 'docs/model.md §2.10'
-	},
-	'log-nse': {
-		long: 'Ordinary NSE is dominated by a few big floods. For irrigation and EWR questions the dry-season low flows matter most; log-NSE weights them evenly. A small constant (1 % of mean observed flow) is added before taking logs so zero flows are allowed.',
-		aliases: ['logNSE', 'low flow'],
-		related: ['nse'],
-		source: 'docs/model.md §2.10'
-	},
-	'volume-error': {
-		long: 'The same information as PBIAS with the opposite sign: +10 % means the simulation is 10 % too wet. The annual volume table shows it per water year, which reveals whether an error comes from a few years or is systematic.',
-		aliases: ['volume bias', 'water balance error'],
-		related: ['pbias'],
-		source: 'docs/model.md §2.10'
-	},
-	'in-sample': {
-		long: 'Scores on the days a model was fitted on show how well it fits, not how well it predicts: judge fitted parameters by the fit’s validation scores. A run’s calibration scores are labelled in-sample only when its parameters came from Fit automatically for its runoff model, unchanged since, with the same calibration window, exclusions and flow record (engine 0.39.0).\n\nOtherwise the label says why not: “parameters not fitted” (set by hand, imported or left at their defaults), “parameters edited since the fit”, or “not the period fitted” (another window, other exclusions or the other record). Parameters tuned by hand against the record flatter the model as much as a fit does, so read hand-calibrated scores the same way. A run made before engine 0.39.0 says only “calibration period”.',
-		aliases: ['in sample', 'calibration period', 'parameters not fitted', 'out-of-sample'],
-		related: ['calibration', 'nse', 'pbias'],
-		source: 'docs/model.md §2.10; docs/calibration-research.md'
 	}
 };

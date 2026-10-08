@@ -8,6 +8,7 @@
 	// together, and the interaction (together less the sum of the separate
 	// changes), with a CSV of the raw numbers. Editors only (the tab is the
 	// assessors'; the API refuses anyone else).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
 	import { api, assessmentCheckOf, type Assessment, type AssessmentCheck, type Scenario } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -137,10 +138,10 @@
 	}
 </script>
 
-<section class="panel assess" aria-labelledby="assess-h" data-testid="assess-together">
+<section class="panel assess" aria-labelledby="assess-h-t" data-testid="assess-together">
 	<div class="panel-head">
 		<div class="head-text">
-			<h2 id="assess-h">Assess together</h2>
+			<h2 id="assess-h"><span id="assess-h-t">Assess together</span> <HelpTip key="cumulative-assessment" label="About assessing applications for their combined effect" /></h2>
 			<span class="muted small">
 				Each application on its own and all of them together on their baseline. Two applications that change the same thing, or where
 				one removes what another uses, are refused rather than merged.
@@ -255,7 +256,7 @@
 									<th scope="col" class="num">Baseline</th>
 									{#each report.scenarios as s (s.id)}<th scope="col" class="num">{s.name} alone</th>{/each}
 									<th scope="col" class="num">All together</th>
-									<th scope="col" class="num">Interaction</th>
+									<th scope="col" class="num">Interaction <HelpTip key="cumulative-interaction" label="About the interaction column" /></th>
 								</tr>
 							</thead>
 							<tbody>

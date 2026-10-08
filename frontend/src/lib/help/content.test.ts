@@ -19,7 +19,9 @@ import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series
 import { ARTICLES } from './articles';
 import { DATA_ARTICLES } from './articles-data';
 import { EWR_ARTICLES } from './articles-ewr';
+import { FIT_ARTICLES } from './articles-fit';
 import { LICENSING_ARTICLES } from './articles-licensing';
+import { RESULTS_ARTICLES } from './articles-results';
 import { CATEGORY_TITLES, countryNames, HELP, helpFieldKeys, helpFor, searchHelp } from './content';
 import { FARMER_HELP } from './farmer';
 import { TIPS, tipFor } from './tips';
@@ -165,7 +167,7 @@ describe('help content', () => {
 	it('tags the South African datasets, laws and methods with their country (issue #76)', () => {
 		for (const e of HELP) for (const c of e.countries ?? []) expect(c, e.id).toMatch(/^[A-Z]{2}$/);
 		const za = HELP.filter((e) => e.countries?.includes('ZA')).map((e) => e.id);
-		expect(za.sort()).toEqual(['desktop-reserve-model', 'ga538', 'quaternary', 'wr2012-check', 'wr2012-penalty', 'wr90']);
+		expect(za.sort()).toEqual(['authorisation-type', 'dam-proposals', 'desktop-reserve-model', 'dws-flow', 'ga538', 'quaternary', 'quaternary-lookup', 's21-water-use', 'warms-import', 'wr2012-check', 'wr2012-fit-statistics', 'wr2012-penalty', 'wr90']);
 		expect(countryNames(['ZA'])).toBe('South Africa');
 		// An entry that holds anywhere carries no tag.
 		expect(helpFor('water-balance')!.countries).toBeUndefined();
@@ -271,13 +273,17 @@ describe('the help text split', () => {
 
 	it('gives every tip an article and every article a tip, in the same order', () => {
 		// Each module in the tips' order; articles-data.ts holds exactly the "Input data" topic and
-		// articles-licensing.ts exactly "Scenarios and licensing", articles-ewr.ts exactly the EWR topic.
+		// articles-licensing.ts exactly "Scenarios and licensing", articles-ewr.ts exactly the EWR topic,
+		// articles-results.ts exactly "Run results" and articles-fit.ts exactly "Goodness of fit".
 		const ids = TIPS.map((t) => t.id);
 		const cat = (id: string) => TIPS.find((t) => t.id === id)!.category;
-		expect(Object.keys(ARTICLES)).toEqual(ids.filter((id) => cat(id) !== 'data' && cat(id) !== 'licensing' && cat(id) !== 'ewr'));
+		const own = ['data', 'licensing', 'ewr', 'results', 'fit'];
+		expect(Object.keys(ARTICLES)).toEqual(ids.filter((id) => !own.includes(cat(id))));
 		expect(Object.keys(DATA_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'data'));
 		expect(Object.keys(LICENSING_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'licensing'));
 		expect(Object.keys(EWR_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'ewr'));
+		expect(Object.keys(RESULTS_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'results'));
+		expect(Object.keys(FIT_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'fit'));
 	});
 
 	it('keeps the farm words whole in farmer.ts, with no field keys (no HelpTip shows them)', () => {
@@ -300,11 +306,11 @@ describe('the help text split', () => {
 	it('has HelpTip load only the tips, never the glossary text', () => {
 		const from = imports(read('../components/help/HelpTip.svelte')).map((i) => i.from);
 		expect(from).toContain('$lib/help/tips');
-		expect(from.filter((f) => /^\$lib\/help\/(content|articles|articles-data|articles-ewr|articles-licensing|farmer)\b/.test(f))).toEqual([]);
+		expect(from.filter((f) => /^\$lib\/help\/(content|articles|articles-data|articles-ewr|articles-licensing|articles-results|articles-fit|farmer)\b/.test(f))).toEqual([]);
 	});
 
 	it('keeps the text modules free of run-time imports (their own chunks, loadable by Node)', () => {
-		for (const f of ['./tips.ts', './articles.ts', './articles-data.ts', './articles-licensing.ts', './articles-ewr.ts', './farmer.ts', './types.ts']) {
+		for (const f of ['./tips.ts', './articles.ts', './articles-data.ts', './articles-licensing.ts', './articles-ewr.ts', './articles-results.ts', './articles-fit.ts', './farmer.ts', './types.ts']) {
 			const src = read(f);
 			expect(imports(src).filter((i) => !i.type), f).toEqual([]);
 			expect(src, f).not.toMatch(/\bimport\s*\(/);

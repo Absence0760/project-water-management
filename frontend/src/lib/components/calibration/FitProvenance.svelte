@@ -222,7 +222,7 @@
 		</dl>
 		<div class="table-wrap">
 			<table class="data compact">
-				<caption>{objectiveName(record.objective)}: the fit to the calibration period (in-sample), and on days it never saw</caption>
+				<caption>{objectiveName(record.objective)}: the fit to the calibration period (in-sample), and on days it never saw <HelpTip key="validation-tests" label="About the validation scores" /></caption>
 				<thead>
 					<tr>
 						{#each columns as c (c.id)}

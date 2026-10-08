@@ -15,6 +15,7 @@
 	the request would have.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { tick } from 'svelte';
 	import { api, type DelineationProposal, type DelineationRequest, type DelineationState, type MapFeature } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -234,9 +235,9 @@
 	<span bind:this={bodyEl} hidden></span>
 	{#if asking || !pending}
 		<form id={formId} onsubmit={propose} novalidate data-testid="delineate-form">
-			<p class="lead">The app proposes the catchment that drains to a point on a river, from the elevation model. You decide whether to keep it.</p>
+			<p class="lead">The app proposes the catchment that drains to a point on a river, from the elevation model. You decide whether to keep it. <HelpTip key="delineation" /></p>
 			<fieldset class="from">
-				<legend>The point is</legend>
+				<legend>The point is <HelpTip key="outlet-placement" /></legend>
 				{#each Object.entries(FROM_LABEL) as [value, label] (value)}
 					<label class="radio"><input type="radio" name="{uid}-from" {value} bind:group={from} /> {label}</label>
 				{/each}
@@ -312,7 +313,7 @@
 				</dl>
 			</details>
 			<section aria-labelledby="{uid}-cav-h">
-				<h3 id="{uid}-cav-h" class="sub">Before you accept it</h3>
+				<h3 id="{uid}-cav-h" class="sub">Before you accept it <HelpTip key="elevation-model" label="About the elevation model’s accuracy" /></h3>
 				<ul class="caveats">
 					{#each CAVEATS as c (c)}<li>{c}</li>{/each}
 				</ul>

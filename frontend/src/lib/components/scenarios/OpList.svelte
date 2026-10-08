@@ -6,6 +6,7 @@
 	// (docs/scenarios.md § Classification). Used by the Scenarios tab's
 	// editor (with a remove button per op) and the compare page's Scenario
 	// overrides section (read only).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CLASS_LABEL, type OpItem } from './ops';
 
 	let {
@@ -30,7 +31,7 @@
 
 {#if baseline}
 	<div class="callout" data-testid="baseline-callout">
-		<strong>Baseline assumptions changed</strong>
+		<strong>Baseline assumptions changed <HelpTip key="change-class" label="About proposals and baseline assumptions" /></strong>
 		<span>
 			{baseline === 1 ? '1 change alters' : `${baseline} changes alter`} what the base run assumes (settings, rain, the Reserve, the catchment's split of runoff, or
 			someone else's hydrological unit), not just the proposal. An assessor will want to see why.

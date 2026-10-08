@@ -13,6 +13,7 @@
 	elevation model on the server; without one the sheet says so.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { tick } from 'svelte';
 	import type { NetworkNode } from '@water-management/engine';
 	import { api, type DivideProposal, type DivideTicks, type MapFeature, type StartState } from '$lib/api';
@@ -234,7 +235,7 @@
 		{:else if step === 'points'}
 			<form id="{uid}-points" onsubmit={propose} novalidate data-testid="divide-points">
 				<p class="lead">
-					Say which hydrological unit each point on the map stands for. Each gets its own sub-catchment (what drains to its point and to no point above it) and the point below it, proposed beside its values now; nothing changes until you tick it. A gauge with no node can be added as a new gauge node.
+					Say which hydrological unit each point on the map stands for. Each gets its own sub-catchment (what drains to its point and to no point above it) and the point below it, proposed beside its values now; nothing changes until you tick it. A gauge with no node can be added as a new gauge node. <HelpTip key="divide-model" />
 				</p>
 				{#if candidates.length}
 					<ul class="points">
@@ -419,7 +420,7 @@
 						<dd>{fmtNum(p.cellSizeM, 0)} m</dd>
 						{#if p.pans}<dt>Pans</dt><dd>{p.pans.method}</dd>{/if}
 					</dl>
-					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it (design/delineation.md § Accuracy).</p>
+					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it. <HelpTip key="elevation-model" label="About the elevation model’s accuracy" /></p>
 				</details>
 			</div>
 		{/if}

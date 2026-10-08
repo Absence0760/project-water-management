@@ -7,6 +7,7 @@
 	(WR2012_GOOD_FIT_BANDS in the engine).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { wr2012BandsNote, wr2012FitRows, wr2012FitSummary, type Wr2012FitPeriod } from '$lib/calibration/wr2012Fit';
 
 	let { periods }: { periods: Wr2012FitPeriod[] } = $props();
@@ -20,7 +21,7 @@
 {#if current}
 	<div class="wr2012-fit" data-testid="wr2012-fit">
 		<div class="head">
-			<h4 id="{uid}-h">WR2012 statistics <span class="muted">(monthly flows, hydrological years)</span></h4>
+			<h4 id="{uid}-h">WR2012 statistics <HelpTip key="stats.wr2012Fit" /> <span class="muted">(monthly flows, hydrological years)</span></h4>
 			{#if periods.length > 1}
 				<label class="pick">
 					<span>Period</span>

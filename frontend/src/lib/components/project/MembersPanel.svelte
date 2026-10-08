@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
@@ -163,9 +164,9 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="members-h">
+<section class="panel" aria-labelledby="members-h-t">
 	<div class="panel-head">
-		<h2 id="members-h">{team ? 'Shared directly with' : 'Members'}</h2>
+		<h2 id="members-h"><span id="members-h-t">{team ? 'Shared directly with' : 'Members'}</span> <HelpTip key="roles" label="About roles" /></h2>
 		{#if !isOwner}<span class="muted small">Only owners can manage members.</span>{/if}
 	</div>
 	{#if team}
@@ -219,15 +220,18 @@
 								{/if}
 								{#if m.role === 'contributor'}
 									{#if isOwner}
-										<input
-											class="party"
-											aria-label="Applying party for {m.displayName}"
-											placeholder="Applying party"
-											maxlength="80"
-											value={m.party ?? ''}
-											disabled={busy === m.userId}
-											onchange={(e) => setParty(m, e.currentTarget.value)}
-										/>
+										<span class="party-row">
+											<input
+												class="party"
+												aria-label="Applying party for {m.displayName}"
+												placeholder="Applying party"
+												maxlength="80"
+												value={m.party ?? ''}
+												disabled={busy === m.userId}
+												onchange={(e) => setParty(m, e.currentTarget.value)}
+											/>
+											<HelpTip key="applying-party" label="About applying parties" />
+										</span>
 									{:else if m.party}
 										<span class="muted small party">{m.party}</span>
 									{/if}
@@ -256,6 +260,7 @@
 												onchange={(e) => setAuthority(m, e.currentTarget.checked)}
 											/>
 											Acts for the responsible authority
+											<HelpTip key="responsible-authority" label="About acting for the responsible authority" />
 										</label>
 									{:else if m.actsForAuthority}
 										<span class="muted small authority">Acts for the responsible authority</span>
@@ -285,7 +290,7 @@
 	{#if isOwner}
 		<form class="add form-row" onsubmit={add}>
 			<div class="field grow">
-				<label for="mem-email">Add member by email</label>
+				<span class="label"><label for="mem-email">Add member by email</label> <HelpTip key="invitation" label="About invitations" /></span>
 				<input id="mem-email" type="email" required placeholder="colleague@example.com" bind:value={email} />
 			</div>
 			<div class="field">
@@ -342,6 +347,15 @@
 	select {
 		text-transform: capitalize;
 		min-width: 6.5rem;
+	}
+	.party-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.25rem;
+	}
+	.party-row .party {
+		margin-top: 0;
 	}
 	.party {
 		display: block;

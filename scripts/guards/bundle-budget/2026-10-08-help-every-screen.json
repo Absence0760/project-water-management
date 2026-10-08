@@ -1,0 +1,4 @@
+{
+	"addKb": 77,
+	"why": "In-app help for every screen's choices: ~180 new glossary entries, 9 guides and ~260 HelpTips. Measured locally: main @ 989b6e33b 1729 KB, this branch 1806 KB (+77). The tips chunk every HelpTip loads (lazily, after first render) went 13.8 -> 22.5 KB; the rest is glossary and guide text only /help loads, split so the largest chunk is 38 KB (articles-results.ts, articles-fit.ts)."
+}

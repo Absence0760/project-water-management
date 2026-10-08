@@ -3,10 +3,13 @@
 // water users' senior / junior rows. The browser behaviour is pinned by
 // e2e/tests/share-the-pain.spec.ts.
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EQUITABLE_SHARE_FOOTNOTE, type CurtailmentFarm, type CurtailmentSummary, type CurtailmentUser } from '@water-management/engine';
 import ShareThePainBoard from './ShareThePainBoard.svelte';
 import CurtailmentTable from './CurtailmentTable.svelte';
+
+// The headings and column heads carry help tips, which link into /help under the app's base path.
+vi.mock('$app/paths', () => ({ base: '' }));
 
 const farm = (over: Partial<CurtailmentFarm>): CurtailmentFarm => ({
 	nodeId: 'n',

@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { api, type Note } from '$lib/api';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { noteCounts } from './counts.svelte';
 	import NotesDrawer from './NotesDrawer.svelte';
@@ -30,9 +31,9 @@
 	});
 </script>
 
-<section class="panel" aria-labelledby="recent-notes-h" data-notes-ready={notes !== null || error !== null ? 'true' : undefined}>
+<section class="panel" aria-labelledby="recent-notes-h-t" data-notes-ready={notes !== null || error !== null ? 'true' : undefined}>
 	<div class="panel-head">
-		<h2 id="recent-notes-h">Recent notes</h2>
+		<h2 id="recent-notes-h"><span id="recent-notes-h-t">Recent notes</span> <HelpTip key="notes" label="About notes" /></h2>
 		<NotesDrawer {projectId} target={{ kind: 'project' }} />
 	</div>
 	{#if error}

@@ -186,7 +186,7 @@
 
 		<dl class="stats">
 			<div class="stat">
-				<dt>Parameter sets kept</dt>
+				<dt>Parameter sets kept <HelpTip key="ensemble-acceptance" /></dt>
 				<dd data-testid="kept">{fmtNum(summary.accepted)} of {fmtNum(summary.total)}</dd>
 				<dd class="sub">Rejected: {rejectedText(summary.rejected)}</dd>
 			</div>
@@ -324,7 +324,7 @@
 				</div>
 			</details>
 
-			<h4>Monthly flow-duration curves against the EWR</h4>
+			<h4>Monthly flow-duration curves against the EWR <HelpTip key="flow-duration-curve" /></h4>
 			<BandFdcChart fdc={b.fdc} points={b.fdcPoints} />
 		{/if}
 
@@ -370,6 +370,7 @@
 				<p class="muted small">
 					The server fixes the rule and draws the seed before anything runs, and keeps every ensemble started, so a band can't be chosen after the fact.
 					The browser then runs every member (a few hundred model runs; keep this tab open) and the server re-checks it before storing.
+					<HelpTip key="ensemble-acceptance" />
 				</p>
 				<!-- Aligned at the top, so the labels and boxes line up and the low-flow checkbox hangs under its box. -->
 				<div class="form-row ensemble-row">

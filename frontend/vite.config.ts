@@ -234,8 +234,10 @@ export function svelteRuntimeChunk(id: string): string | undefined {
  * well under the ceiling. Nothing outside /help imports either (content.ts
  * says so), so no other page gains a request. A third module, the
  * "Scenarios and licensing" topic (articles-licensing.ts, 2026-10-02), and a
- * fourth, the EWR topic (articles-ewr.ts, 2026-10-03), are their own chunks
- * for the same reason.
+ * fourth, the EWR topic (articles-ewr.ts, 2026-10-03), and "Run results"
+ * (articles-results.ts) and "Goodness of fit" (articles-fit.ts, 2026-10-08,
+ * when the help for every screen's choices took articles.ts to 63 KB) are
+ * their own chunks for the same reason.
  */
 export function helpArticlesChunk(id: string): string | undefined {
 	if (/\/src\/lib\/help\/articles-data\.ts$/.test(id)) return 'help-articles-data';
@@ -243,6 +245,9 @@ export function helpArticlesChunk(id: string): string | undefined {
 	if (/\/src\/lib\/help\/articles-licensing\.ts$/.test(id)) return 'help-articles-licensing';
 	// The EWR topic (2026-10-03): articles.ts passed the ceiling once more.
 	if (/\/src\/lib\/help\/articles-ewr\.ts$/.test(id)) return 'help-articles-ewr';
+	// "Run results" and "Goodness of fit" (2026-10-08): the help for every screen's choices.
+	if (/\/src\/lib\/help\/articles-results\.ts$/.test(id)) return 'help-articles-results';
+	if (/\/src\/lib\/help\/articles-fit\.ts$/.test(id)) return 'help-articles-fit';
 	return undefined;
 }
 

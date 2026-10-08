@@ -7,6 +7,7 @@
 	// runs current) and saved at once, as the members are. The decision form
 	// fills it in, and the evidence report prints "For: …" from it.
 	import type { ProjectSettings } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type Project, type ResponsibleAuthority } from '$lib/api';
 
 	let {
@@ -53,9 +54,9 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="authority-h" data-testid="authority-panel">
+<section class="panel" aria-labelledby="authority-h-t" data-testid="authority-panel">
 	<div class="panel-head">
-		<h2 id="authority-h">Responsible authority</h2>
+		<h2 id="authority-h"><span id="authority-h-t">Responsible authority</span> <HelpTip key="responsible-authority" label="About the responsible authority" /></h2>
 	</div>
 	<p class="muted small">
 		Who decides this project’s licence applications: the Department of Water and Sanitation, or the catchment management agency the power is

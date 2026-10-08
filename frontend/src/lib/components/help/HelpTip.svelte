@@ -29,7 +29,9 @@
 	// A button, not a hover tooltip, so it works with the keyboard and on touch:
 	// click/Enter/Space toggles, Escape closes and keeps focus on the button,
 	// clicking or tabbing away closes. The text lives in a polite live region
-	// so screen readers announce it when it opens.
+	// so screen readers announce it when it opens: aria-live alone, not
+	// role="status", since a status is a page's own message ("Saved."), and
+	// every form with a tip would otherwise hold a second, empty one beside it.
 	//
 	// The bubble is a manual popover, so it renders in the browser's top layer:
 	// no scroll container (tables scroll sideways) can clip it and no sticky
@@ -143,7 +145,7 @@
 				<path d="M8 7.2v4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
 			</svg>
 		</button>
-		<span id={bubbleId} class="live" role="status" aria-live="polite">
+		<span id={bubbleId} class="live" aria-live="polite">
 			{#if open}
 				<span class="bubble" class:pictured={shot} popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
 					{#if shot}

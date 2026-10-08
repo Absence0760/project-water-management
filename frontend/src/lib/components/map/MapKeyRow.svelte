@@ -13,6 +13,7 @@
 	without reading the map's pixels.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { KeyItem } from './mapList';
@@ -79,7 +80,7 @@
 	{#if results.run}
 		<div class="pickers small">
 			<label class="pick">
-				<span>Colour areas by</span>
+				<span>Colour areas by <HelpTip key="map-results" /></span>
 				<select value={results.view} onchange={(e) => pickView(e.currentTarget.value as MapView)} data-testid="map-measure">
 					{#each VIEW_OPTIONS as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
 				</select>

@@ -9,6 +9,7 @@
 	through the windows looked at.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Run, type RunSeriesRef } from '$lib/api';
@@ -165,7 +166,7 @@
 {#if stored && stored.farms.length > 0}
 	<div class="window-bar" data-testid="report-window">
 		<div class="field">
-			<label for="rw-preset">Reporting window</label>
+			<label for="rw-preset">Reporting window <HelpTip key="report-window" label="About the period the targets cover" /></label>
 			<select id="rw-preset" value={choice.preset} disabled={!!unavailable} aria-describedby="rw-status" onchange={(e) => pickPreset(e.currentTarget.value as WindowPreset)}>
 				{#each WINDOW_PRESETS as p (p.preset)}
 					<option value={p.preset}>{p.label}{p.preset === 'project' ? ` (${stored.reportStart} to ${stored.reportEnd})` : ''}</option>

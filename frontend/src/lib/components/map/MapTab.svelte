@@ -49,6 +49,7 @@
 	// #326 C3, docs/design/start-from-map.md): units at the dams and
 	// abstraction points, their sub-catchments and order proposed and ticked
 	// value by value; the empty map leads with Delineate and Draw (D4).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -1049,7 +1050,7 @@
 	/>
 {/snippet}
 
-{#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
+{#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span> <HelpTip key="catchment-map" label="About the catchment map" />{/snippet}
 {#snippet headerStatus()}
 	{#if setupSteps}
 		<MapSetupPill
@@ -1187,7 +1188,7 @@
 				<dd>{@render standsFor(picked)}</dd>
 			{/if}
 			{#if takesDamPosition(picked)}
-				<dt>Siting</dt>
+				<dt>Siting <HelpTip key="dam-siting" /></dt>
 				<dd>{@render damPosition(picked)}</dd>
 			{/if}
 			{@render resultFacts(picked)}
@@ -1196,7 +1197,7 @@
 				<dd data-testid="map-card-area-source">{@render unitArea(picked)}</dd>
 			{/if}
 			{#if canEdit && takesArea(picked) && farms.length}
-				<dt>Area into the model</dt>
+				<dt>Area into the model <HelpTip key="map-area" /></dt>
 				<dd>{@render areaInto(picked)}</dd>
 			{/if}
 			{#if picked.sourceId && sourceName.get(picked.sourceId)}
@@ -1631,7 +1632,7 @@
 											<th scope="col">Stands for</th>
 											<th scope="col">Unit’s area</th>
 											{#if results.ready}<th scope="col">Result</th><th scope="col">Band</th>{/if}
-											{#if canEdit}<th scope="col">Area into the model</th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
+											{#if canEdit}<th scope="col">Area into the model <HelpTip key="map-area" /></th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
 										</tr>
 									</thead>
 									<tbody>

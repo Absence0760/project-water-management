@@ -11,6 +11,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol } from './curtailment';
 	import ShareThePainBoard from './ShareThePainBoard.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { basicNeedsNote } from './shareThePain';
 	import { SUPPLY_TARGET } from '$lib/components/runs/results';
 
@@ -42,7 +43,7 @@
 </script>
 
 <section class="curtailment" aria-labelledby="curtailment-heading">
-	<h3 id="curtailment-heading">Curtailment targets</h3>
+	<h3 id="curtailment-heading">Curtailment targets <HelpTip key="curtailment-targets" /></h3>
 	{#if !c}
 		<p class="muted">
 			This run was made before curtailment targets were added. Run the model again to see them.
@@ -87,7 +88,7 @@
 					<tr class="group">
 						<th scope="col" rowspan="2">Hydrological unit</th>
 						<th scope="colgroup" colspan="3">Irrigation used</th>
-						<th scope="colgroup" colspan="3">Equitable share (fairness benchmark, ex EWR)</th>
+						<th scope="colgroup" colspan="3">Equitable share (fairness benchmark, ex EWR) <HelpTip key="equitable-share" /></th>
 						<th scope="colgroup" colspan={attributed ? 10 : 5}>To balance and meet the EWR</th>
 					</tr>
 					<tr>
@@ -97,9 +98,9 @@
 						<th scope="col" class="num">Equitable share volume<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Above (−) / below (+) equitable share<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Above (−) / below (+) equitable share<br /><span class="u">l/s</span></th>
-						<th scope="col" class="num">{attributed ? 'EWR charge' : 'EWR shortfall'}<br /><span class="u">m³/day charged</span></th>
+						<th scope="col" class="num">{attributed ? 'EWR charge' : 'EWR shortfall'} <HelpTip key={attributed ? 'ewr-charge' : 'ewr-shortfall'} label="About the {attributed ? 'EWR charge' : 'EWR shortfall'}" /><br /><span class="u">m³/day charged</span></th>
 						{#if attributed}
-							<th scope="col" class="num" title="The part of the EWR charge met by irrigating less">Irrigate less<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num" title="The part of the EWR charge met by irrigating less">Irrigate less <HelpTip key="ewr-charge-split" label="About irrigating less and storing less" /><br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num" title="The part of the EWR charge met by storing less or passing inflow">Store less / pass inflow<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num" title="The cut in supply that meets the irrigation part: irrigate less ÷ (1 − the return flow share)">Supply cut<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num">Supply cut<br /><span class="u">l/s</span></th>
@@ -108,7 +109,7 @@
 						<th scope="col" class="num">Total change<br /><span class="u">m³/day</span></th>
 						<th scope="col" class="num">Total change<br /><span class="u">l/s</span></th>
 						<th scope="col" class="num">Volume left<br /><span class="u">m³/day</span></th>
-						<th scope="col" class="num">Demand left<br /><span class="u">%</span></th>
+						<th scope="col" class="num">Demand left <HelpTip key="demand-left" /><br /><span class="u">%</span></th>
 					</tr>
 				</thead>
 				<tbody>

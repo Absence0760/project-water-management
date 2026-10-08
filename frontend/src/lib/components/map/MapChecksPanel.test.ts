@@ -3,9 +3,12 @@
 // found" when there are none. Server-rendered; clicks are e2e's. (Not
 // MapChecks.test.ts: mapChecks.test.ts differs from it only in case.)
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MapFeature, MapNodeArea } from '$lib/api/types';
 import MapChecks from './MapChecks.svelte';
+
+// HelpTip links to the glossary under the app's base path.
+vi.mock('$app/paths', () => ({ base: '' }));
 
 // Comments stripped until none are left, so one split by another can't survive
 // as a fresh '<!--' (CodeQL js/incomplete-multi-character-sanitization).

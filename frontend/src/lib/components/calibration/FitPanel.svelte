@@ -212,7 +212,7 @@
 		</p>
 		<div class="controls">
 			<div class="field">
-				<label for="{uid}-obj">Objective</label>
+				<label for="{uid}-obj">Objective <HelpTip key="calibration-objective" label="About what to optimise" /></label>
 				<select id="{uid}-obj" bind:value={objective} disabled={status === 'running'}>
 					{#each OBJECTIVES as o (o)}<option value={o}>{objectiveName(o)}</option>{/each}
 				</select>
@@ -225,7 +225,7 @@
 				<span class="hint" id="{uid}-bounds-h">{boundsHint(bounds)}</span>
 			</div>
 			<div class="field">
-				<label for="{uid}-budget">Model runs per fit</label>
+				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
 				<NumberInput id="{uid}-budget" min={50} max={10_000} step={50} bind:value={budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
 				<span class="hint" id="{uid}-budget-h">{fmtNum(runs)} runs in all. Default 1 500.</span>
 			</div>
@@ -244,7 +244,7 @@
 				</span>
 			</div>
 			<fieldset class="plain params">
-				<legend>Parameters to fit</legend>
+				<legend>Parameters to fit <HelpTip key="gr4j" label="About the GR4J parameters" /></legend>
 				{#each params as p (p.key)}
 					<label class="check">
 						<input type="checkbox" bind:checked={picked[p.key]} disabled={status === 'running'} />
@@ -255,6 +255,7 @@
 			<label class="check validate">
 				<input type="checkbox" bind:checked={validate} disabled={status === 'running'} />
 				Validate: split-sample and dry → wet tests (two more fits)
+				<HelpTip key="validation-tests" label="About the validation tests" />
 			</label>
 			{#if recordOptions.length}
 				<div class="field">
@@ -348,7 +349,7 @@
 				{/if}
 				<div class="table-wrap">
 					<table class="data compact scores">
-						<caption>Fit, and validation on days the parameters were not fitted to</caption>
+						<caption>Fit, and validation on days the parameters were not fitted to <HelpTip key="validation-tests" label="About the validation columns" /></caption>
 						<thead>
 							<tr>
 								<th scope="col">Score</th>
@@ -360,7 +361,7 @@
 						<tbody>
 							{#each SCORE_ROWS as r (r.key)}
 								<tr>
-									<th scope="row">{r.label} <span class="muted">(ideal {r.ideal})</span></th>
+									<th scope="row">{r.label} <span class="muted">(ideal {r.ideal})</span> <HelpTip key={r.help} label="About {r.label}" /></th>
 									{#each columns as c (c.id)}
 										<td class="num" class:val={c.validation}>{scoreCellText(c, r.key, r.unit)}</td>
 									{/each}
@@ -372,13 +373,13 @@
 				{#if anyInterval}
 					<p class="muted small">
 						In brackets: the 90 % range of the score when whole water years are resampled (1 000 times). A short record gives a wide range; with
-						fewer than 3 water years there is none.
+						fewer than 3 water years there is none. <HelpTip key="score-interval" label="About the score range" />
 					</p>
 				{/if}
 				{#if benchRows.length}
 					<div class="table-wrap">
 						<table class="data compact scores" data-testid="fit-benchmarks">
-							<caption>{objectiveName(report.objective)}: the model against two simple benchmarks on the same days</caption>
+							<caption>{objectiveName(report.objective)}: the model against two simple benchmarks on the same days <HelpTip key="fit-benchmarks" label="About the benchmarks" /></caption>
 							<thead>
 								<tr>
 									<th scope="col">Simulation</th>
@@ -428,7 +429,7 @@
 					{@const rep = report.representativeness}
 					<!-- Calibration research CR-34: the record's length and where its years sit in the long-term rain. -->
 					<section class="rep" aria-labelledby="{uid}-rep-h" data-testid="fit-representativeness">
-						<h5 id="{uid}-rep-h">How representative is the record <span class="muted gist">{representativenessGist(rep)}</span></h5>
+						<h5 id="{uid}-rep-h">How representative is the record <HelpTip key="record-representativeness" label="About how representative the record is" /> <span class="muted gist">{representativenessGist(rep)}</span></h5>
 						<p class="small">{rep.summary}</p>
 						{#if rep.years.length}
 							<div class="table-wrap">

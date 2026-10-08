@@ -7,6 +7,7 @@
 	(`onuse`); the owner still attaches the feed. Reads GET …/map/stations.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
 	import type { GaugeStationLookup } from '$lib/api/types';
@@ -31,7 +32,7 @@
 
 <section class="nearest" aria-labelledby="{uid}-h" data-testid="nearest-gauges" data-ready={lookup || loadError ? 'true' : undefined}>
 	<div class="head">
-		<h4 id="{uid}-h">Nearest gauging stations</h4>
+		<h4 id="{uid}-h">Nearest gauging stations <HelpTip key="dws-flow" label="About DWS gauges and the nearest stations" /></h4>
 		{#if synthetic}<span class="badge badge-warn" title="The server's station list is the repository's invented sample, not DWS's catalogue">Sample stations</span>{/if}
 	</div>
 	{#if loadError}

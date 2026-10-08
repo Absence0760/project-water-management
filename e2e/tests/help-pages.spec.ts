@@ -81,6 +81,15 @@ test('search results sit in columns, with the glossary terms on the first screen
 	);
 	expect(xs.size).toBeGreaterThanOrEqual(2);
 	await expect(terms.getByRole('heading', { name: 'Glossary' })).toBeInViewport();
+
+	// A common word matches most guides: the best six show, the rest on request.
+	const guides = page.getByRole('region', { name: 'Guides' });
+	const n = Number((await page.getByRole('link', { name: /^Guides \(\d+\)$/ }).innerText()).match(/\d+/)![0]);
+	expect(n).toBeGreaterThan(6);
+	await expect(guides.getByRole('listitem')).toHaveCount(6);
+	await guides.getByRole('button', { name: `Show all ${n} guides` }).click();
+	await expect(guides.getByRole('listitem')).toHaveCount(n);
+	await expect(guides.getByRole('button', { name: /^Show all/ })).toHaveCount(0);
 });
 
 test('on a phone the search results stack, and a jump link reaches the glossary terms', async ({ page, owner }) => {

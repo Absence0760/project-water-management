@@ -140,7 +140,7 @@
 		{/if}
 		<div class="fields">
 			<div class="field">
-				<label for="{uid}-q">Quaternary catchment</label>
+				<label for="{uid}-q">Quaternary catchment <HelpTip key="quaternary" /></label>
 				<input id="{uid}-q" readonly={readonly} maxlength="16" placeholder="e.g. A21B" bind:value={ref.quaternary} aria-invalid={err('quaternary') ? 'true' : undefined} aria-describedby="{uid}-q-e" />
 				{#if err('quaternary')}<span class="err" id="{uid}-q-e">{err('quaternary')}</span>{/if}
 			</div>
@@ -226,7 +226,7 @@
 
 		<div class="fields">
 			<div class="field">
-				<label for="{uid}-scale">Scale the reference by</label>
+				<label for="{uid}-scale">Scale the reference by <HelpTip key="wr2012-check" label="About scaling the reference" /></label>
 				<select id="{uid}-scale" disabled={readonly} bind:value={value.scaling} aria-describedby="{uid}-scale-h">
 					<option value="area">Area ratio</option>
 					<option value="areaRain">Area and rainfall ratio</option>
@@ -257,7 +257,7 @@
 		</fieldset>
 
 		<fieldset class="plain flags">
-			<legend>When the simulated MAR differs from WR2012 by…</legend>
+			<legend>When the simulated MAR differs from WR2012 by… <HelpTip key="wr2012-check" label="About the MAR thresholds" /></legend>
 			<div class="fields">
 				{#each FLAG_FIELDS as f (f.key)}
 					<div class="field">

@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { InputChange } from '@water-management/engine';
@@ -427,10 +428,10 @@
 	{/if}
 
 	<!-- Not "History": the page's h1 already says it, and the tab body is the region of that name. -->
-	<section class="panel card" aria-labelledby="{uid}-h">
+	<section class="panel card" aria-labelledby="{uid}-h-t">
 		<div class="panel-head">
 			<div class="head-text">
-				<h2 id="{uid}-h">Changes, newest first</h2>
+				<h2 id="{uid}-h"><span id="{uid}-h-t">Changes, newest first</span> <HelpTip key="change-history" label="About the change history" /></h2>
 				<span class="muted small">
 					Every change to the model, settings, data, members and publication, with who made it and why.
 					{#if canEdit}Restoring a version saves it as a new change: nothing is ever erased.{/if}

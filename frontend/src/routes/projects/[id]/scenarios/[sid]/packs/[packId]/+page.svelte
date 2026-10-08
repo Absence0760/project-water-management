@@ -24,6 +24,7 @@
 	import { api, ApiError, type ApplicantPack } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { errataFoundSinceNote, latestOnly } from '$lib/components/packs/pack';
 	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '$lib/components/packs/applicantPack';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
@@ -175,6 +176,7 @@
 				{:else}
 					<button type="button" class="btn" disabled={asking} onclick={askCopy} data-testid="applicant-copy-ask">Make a printable copy</button>
 				{/if}
+				<HelpTip key="applicant-copy" label="About your printable copy" />
 			</div>
 			{#if copy?.status === 'ready' && copy.sha256}
 				<p class="small muted no-print" data-testid="applicant-copy-ready">
@@ -306,7 +308,7 @@
 		</section>
 
 		<section class="panel" aria-labelledby="ap-check-h" data-testid="applicant-pack-check">
-			<h2 id="ap-check-h">Check this pack</h2>
+			<h2 id="ap-check-h">Check this pack <HelpTip key="pack-short-code" label="About checking a pack" /></h2>
 			<p>Code <span class="mono" data-testid="applicant-pack-code">{pack.shortCode}</span>, issued {fmtDate(view.verify.issuedAt)}. Anyone holding a copy checks it on the verify page.</p>
 			<dl class="hashes">
 				<dt>Manifest SHA-256</dt>
@@ -402,7 +404,8 @@
 	}
 	@media print {
 		.no-print,
-		.applicant-pack :global(.no-print) {
+		.applicant-pack :global(.no-print),
+		.applicant-pack :global(.helptip) {
 			display: none !important;
 		}
 		.print-only {

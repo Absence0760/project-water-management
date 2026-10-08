@@ -16,6 +16,7 @@
 	import { REPORT_FOOTER, type EvidenceReport } from '@water-management/engine';
 	import { api, ApiError, hasRole, type Pack, type Project, type SignoffList } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { issuedOf, packHref, packsOfRun } from '$lib/components/packs/pack';
 	import { fmtDate } from '$lib/format/number';
@@ -156,6 +157,7 @@
 			<a href={back}>← Back</a>
 			<button type="button" class="btn btn-primary" disabled={!ready || !!report?.refused} onclick={() => window.print()}>Download draft PDF</button>
 			<a class="btn" href="{base}/projects/{projectId}/report?run={runId}">Catchment report</a>
+			<HelpTip key="evidence-report" label="About the evidence report" />
 			<p class="muted small" role="status">
 				{#if !ready}Preparing the evidence report…{:else}A draft: every page says “{DRAFT_STAMP}”. To issue it, with a hash, a short code and a public verify link, make it an evidence pack (below the checks).{/if}
 			</p>
@@ -189,13 +191,13 @@
 					{/each}
 				</ul>
 				{#if report.questions.length}
-					<p class="small"><strong>Expect questions about:</strong></p>
+					<p class="small"><strong>Expect questions about:</strong> <HelpTip key="pack-issue-checks" label="About the checks that stop issue" /></p>
 					<ul class="small questions">{#each report.questions as q, i (i)}<li>{q}</li>{/each}</ul>
 				{/if}
 			</details>
 			<section class="board no-print" aria-labelledby="ev-packs-h" data-testid="evidence-packs">
 				<!-- Not a heading: the report below starts at its h1. -->
-				<p id="ev-packs-h" class="board-h">Evidence packs of this report</p>
+				<p class="board-h"><span id="ev-packs-h">Evidence packs of this report</span> <HelpTip key="pack-lifecycle" label="About an evidence pack’s lifecycle" /></p>
 				<p class="small muted">
 					A pack freezes this report as it is now, with its SHA-256 and a short code; a registered professional signs it and an editor issues it. Its
 					public verify page then says whether it still stands.
@@ -223,13 +225,13 @@
 						{#if current}<span class="small muted">It replaces version {current.version} once it is signed and issued.</span>{/if}
 					</p>
 				{:else if hasRole(project?.role, 'editor') && !report.issuable}
-					<p class="small muted">A pack can be made once every check that stops issue passes.</p>
+					<p class="small muted">A pack can be made once every check that stops issue passes. <HelpTip key="pack-issue-checks" label="About the checks that stop issue" /></p>
 				{/if}
 				{#if createError}<p class="alert alert-error" role="alert">{createError}</p>{/if}
 			</section>
 			{#if canRunAuthorised || authorisedError}
 				<section class="board no-print" aria-labelledby="ev-authorised-h" data-testid="evidence-authorised-run">
-					<p id="ev-authorised-h" class="board-h">Against full authorised use</p>
+					<p class="board-h"><span id="ev-authorised-h">Against full authorised use</span> <HelpTip key="full-authorised-use" label="About the impact against full authorised use" /></p>
 					<p class="small muted">
 						Page 1’s headline board runs the baseline and the application again with every holder at their full registered volume.
 						{authorised?.status === 'stale' ? 'The one there is out of date.' : 'It hasn’t been run for this application run yet.'} A pack drafted now freezes what page 1 shows.

@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
 	import { tick, type Snippet } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 
 	let {
 		testid,
@@ -20,6 +21,7 @@
 		id,
 		variant,
 		title,
+		helpKey,
 		what,
 		intro,
 		controls,
@@ -40,6 +42,8 @@
 		/** 'page' a panel on a page (Dams), 'drawer' a section at a drawer's foot (land cover), 'inline' a group inside a form's section (Settings). */
 		variant: 'page' | 'drawer' | 'inline';
 		title: string;
+		/** A glossary id for a HelpTip beside the heading, if any. */
+		helpKey?: string;
 		/** What failed to load, in "The <what> couldn’t be loaded". */
 		what: string;
 		intro: Snippet;
@@ -69,9 +73,9 @@
 
 <section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
 	{#if variant === 'page'}
-		<div class="panel-head"><h2 id="{uid}-h">{title}</h2></div>
+		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h2></div>
 	{:else}
-		<h3 id="{uid}-h">{title}</h3>
+		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
 	{/if}
 	{@render intro()}
 

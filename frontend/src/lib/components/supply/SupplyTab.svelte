@@ -356,7 +356,7 @@
 							<dd class="sub">{week ? `${week.reportStart} to ${week.reportEnd}` : ''}</dd>
 						</div>
 						<div class="stat" class:flagged={totals.shortfallM3Day > 0.5} data-kpi="shortfall">
-							<dt>Total shortfall</dt>
+							<dt>Total shortfall <HelpTip key="irrigation-deficit" /></dt>
 							<dd class="value">{fmtQty(totals.shortfallMm3a, 3)}<small>Mm³/a</small></dd>
 							<dd class="sub">{fmtNum(totals.shortfallM3Day)} m³/day of demand not supplied, on average</dd>
 						</div>

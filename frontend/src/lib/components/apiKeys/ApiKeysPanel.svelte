@@ -5,6 +5,7 @@
 	// revokes one. Owners only: SettingsTab renders this for an owner, and the
 	// API answers anyone else 403.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '$lib/api';
@@ -102,9 +103,9 @@
 	}
 </script>
 
-<section class="panel" id="set-api-keys" aria-labelledby="api-keys-h">
+<section class="panel" id="set-api-keys" aria-labelledby="api-keys-h-t">
 	<div class="panel-head">
-		<h2 id="api-keys-h">API keys</h2>
+		<h2 id="api-keys-h"><span id="api-keys-h-t">API keys</span> <HelpTip key="api-key" label="About API keys" /></h2>
 	</div>
 	<p class="muted small intro">
 		A key lets a logger gateway or a script add daily readings to this project’s series without signing in. It can write series, and nothing

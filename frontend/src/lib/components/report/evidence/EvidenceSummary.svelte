@@ -10,6 +10,7 @@
 	import { monthName } from '$lib/format/months';
 	import type { VerifyRef } from '$lib/components/packs/pack';
 	import LicenceImpactBoard from '../LicenceImpactBoard.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { BoardView } from '../licenceImpact';
 	import { changeText, signed, valueText, worseText } from './format';
 	import { FORMER_MEMBER } from '$lib/format/maker';
@@ -79,7 +80,7 @@
 	</div>
 	{#if id.authority !== undefined}
 		<div data-testid="evidence-for">
-			<dt>For</dt>
+			<dt>For <HelpTip key="responsible-authority" /></dt>
 			<dd>
 				{#if id.authority}
 					{id.authority.name}
@@ -108,13 +109,13 @@
 		</dd>
 	</div>
 	<div>
-		<dt>Signed</dt>
+		<dt>Signed <HelpTip key="signoff-statement" label="About the professional sign-off" /></dt>
 		<dd>
 			{#if signoffs.length}{signoffs.map((s) => `${s.fullName} (${s.registrationBody.toUpperCase()} ${s.registrationNo})`).join('; ')}{:else}<span class="na">Not signed</span>{/if}
 		</dd>
 	</div>
 	<div>
-		<dt>Verify</dt>
+		<dt>Verify <HelpTip key="pack-short-code" label="About the verify code" /></dt>
 		<dd>{#if verify}<span class="mono">{verify.code}</span><span class="sub">{verify.url}</span>{:else}<span class="na">Given when a pack is issued</span>{/if}</dd>
 	</div>
 </dl>
@@ -185,7 +186,7 @@
 {#if app && authorised}
 	<!-- evidence-14 (licensing build item 8): the board against full authorised use is the headline; the modelled-use board follows. -->
 	<div class="board-block" data-testid="evidence-impact-authorised">
-		<p class="k">{AUTHORISED_HEADING}</p>
+		<p class="k">{AUTHORISED_HEADING} <HelpTip key="full-authorised-use" /></p>
 		<p class="small muted">
 			The baseline and the application both run with every holder at their full registered volume: what the application does to the river and to
 			other users if each takes what they are registered or licensed for.
@@ -198,7 +199,7 @@
 		{#if mix}
 			<table class="data mix" data-testid="evidence-authorised-mix">
 				<caption class="small">The volumes it held holders to, by how they are held. Only a licence or a verified existing lawful use is an entitlement.</caption>
-				<thead><tr><th scope="col">Held as</th><th scope="col" class="num">Volume</th><th scope="col">Entitlement</th></tr></thead>
+				<thead><tr><th scope="col">Held as <HelpTip key="authorisation-type" label="About how a volume is held" /></th><th scope="col" class="num">Volume</th><th scope="col">Entitlement</th></tr></thead>
 				<tbody>
 					{#each mix.lines as l (l.label)}<tr><th scope="row">{l.label}</th><td class="num">{l.volume}</td><td>{l.entitlement ? 'Yes' : 'No'}</td></tr>{/each}
 					<tr class="total"><th scope="row">All of it (entitlements: {mix.entitlement})</th><td class="num">{mix.total}</td><td></td></tr>

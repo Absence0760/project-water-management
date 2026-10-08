@@ -3,9 +3,12 @@
 // (engine 1.44.0, issue #123) only when an object has a floor, "–" for one
 // without. The browser flow is pinned by e2e/tests/demand-objects.spec.ts.
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { DemandObjectSummary, RunSummary } from '@water-management/engine';
 import HumanImpactTables from './HumanImpactTables.svelte';
+
+// HelpTip (the column headers' ⓘ) links to the glossary under the app's base path.
+vi.mock('$app/paths', () => ({ base: '' }));
 
 const object = (over: Partial<DemandObjectSummary> = {}): DemandObjectSummary => ({
 	id: 'v',

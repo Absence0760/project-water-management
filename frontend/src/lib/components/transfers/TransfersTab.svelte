@@ -172,9 +172,9 @@
 			</div>
 		</section>
 	{:else}
-		<section class="rules-card" aria-labelledby={inModal ? undefined : 'tr-h'}>
+		<section class="rules-card" aria-labelledby={inModal ? undefined : 'tr-h-t'}>
 			<div class="rules-head">
-				{#if !inModal}<h2 id="tr-h">Transfer rules</h2>{/if}
+				{#if !inModal}<h2 id="tr-h"><span id="tr-h-t">Transfer rules</span> <HelpTip key="transfer" label="About transfers" /></h2>{/if}
 				<span class="muted small">Water moved from one hydrological unit’s dam, or from the river there, to another hydrological unit, up to each month’s rate. Lower priorities move first.</span>
 				<!-- One unit for every rule's rates (display only, so a viewer has it too); each rule's title names it. -->
 				<span class="rate-unit"><span aria-hidden="true">Rates in</span> <FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" /></span>

@@ -8,13 +8,14 @@
 -->
 <script lang="ts">
 	import type { BoardView } from './licenceImpact';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 
 	let { view }: { view: BoardView } = $props();
 	const METHOD = { terciles: 'terciles', quintiles: 'quintiles' } as const;
 </script>
 
 <section class="board" aria-labelledby="impact-board-h" data-testid="licence-impact-board">
-	<h3 id="impact-board-h">Impact by year class</h3>
+	<h3 id="impact-board-h">Impact by year class <HelpTip key="licence-impact-year-class" /></h3>
 	{#if view.status === 'unavailable'}
 		<p class="alert alert-info" role="status">{view.reason}</p>
 	{:else}

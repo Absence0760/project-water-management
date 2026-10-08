@@ -7,6 +7,7 @@
 	water too large or cut off by the data's edge) shows here with its reason.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type DamTraceProposal, type DamTraceState, type MapPosition, type MinOccurrence } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { parseDegrees } from '../mapData';
@@ -73,7 +74,7 @@
 			</div>
 		</div>
 		<div class="field">
-			<label for="{uid}-share">Count a cell as water if it was water in at least</label>
+			<label for="{uid}-share">Count a cell as water if it was water in at least <HelpTip key="trace-dam" label="About tracing a dam" /></label>
 			<select id="{uid}-share" bind:value={minOccurrence}>
 				{#each [10, 25, 50, 75] as const as v (v)}<option value={v}>{v} % of the observations</option>{/each}
 			</select>

@@ -5,6 +5,7 @@
 	// changed next), shows the value a field has now, and builds the op with
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
 	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -257,8 +258,8 @@
 	{/if}
 {/snippet}
 
-<form class="op-form" onsubmit={submit} aria-labelledby="op-form-h" novalidate>
-	<h3 id="op-form-h">Add a change</h3>
+<form class="op-form" onsubmit={submit} aria-labelledby="op-form-h-t" novalidate>
+	<h3 id="op-form-h"><span id="op-form-h-t">Add a change</span> <HelpTip key="scenario-change" label="About scenario changes" /></h3>
 	<div class="form-row">
 		<div class="field">
 			<label for="op-kind">Kind of change</label>
@@ -739,7 +740,7 @@
 				</select>
 			</div>
 			<div class="field">
-				<label for="op-change">Change (%)</label>
+				<label for="op-change">Change (%) <HelpTip key="scale-series" /></label>
 				<input id="op-change" type="text" inputmode="decimal" placeholder="e.g. −10" bind:value={d.changePct} />
 			</div>
 			<div class="field">
@@ -751,7 +752,7 @@
 				<input id="op-to-day" type="text" placeholder="empty for the end" bind:value={d.to} />
 			</div>
 		</div>
-		<p class="hint">Scales recorded rain only; missing days stay missing. Evaporation is the A-pan setting (“Change a setting”).</p>
+		<p class="hint">Scales the recorded days of the series chosen; missing days stay missing. The monthly A-pan means are a setting (“Change a setting”): on a project with a daily A-pan series they reach only the days it doesn’t cover, so scale that series too.</p>
 	{:else if d.kind === 'ewrRule.set'}
 		<div class="form-row">
 			<div class="field">
@@ -803,7 +804,7 @@
 				</div>
 			{/if}
 			<div class="field">
-				<label for="op-demand-pct">Demand (% of what they'd take)</label>
+				<label for="op-demand-pct">Demand (% of what they'd take) <HelpTip key="scale-demand" /></label>
 				<input id="op-demand-pct" type="text" inputmode="decimal" placeholder="e.g. 85" bind:value={d.demandPct} />
 			</div>
 		</div>

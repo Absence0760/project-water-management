@@ -13,6 +13,7 @@
 	clicks would be lost).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { MapPosition } from '$lib/api/types';
 	import { parseDegrees } from './mapData';
 	import { pieceLine, savable, type ClickDivider } from './clickPieces.svelte';
@@ -89,7 +90,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Escape leaves from any control inside; each control is itself interactive) -->
 <section class="click-bar {placement}" aria-labelledby="{uid}-h" data-testid="map-click-bar" data-busy={divider.busy ?? undefined} {onkeydown}>
-	<h2 class="bar-h" id="{uid}-h">Sub-catchments</h2>
+	<h2 class="bar-h" id="{uid}-h">Sub-catchments <HelpTip key="sub-catchments" /></h2>
 	<DelineateChoice value="clicks" onchange={(v) => v === 'one' && onone()} />
 	<p class="how small" data-testid="map-click-how">
 		{mapReady

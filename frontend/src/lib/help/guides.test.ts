@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { EWR_TRAFFIC_LIGHT } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { helpFor } from './content';
+import { HELP, helpFor } from './content';
 import { SHOTS } from './pictures';
 import { TOUR } from './tour';
 import { ALL_TABS, TAB_GUIDE } from '$lib/workspace/tabs';
@@ -89,6 +89,13 @@ describe('guides', () => {
 			// Must not collide with the page's own section ids.
 			for (const a of anchors) expect(['terms-h', 'related-h'], g.id).not.toContain(a);
 		}
+	});
+
+	it('leave the glossary’s long text no broken link (the glossary renders it as guide markup)', () => {
+		const broken = HELP.flatMap((e) => inline(e.long).filter((p) => p.kind === 'broken').map((p) => `${e.id}: ${p.text}`));
+		expect(broken).toEqual([]);
+		// The markup is rendered, not shown: **bold** in an article reads as bold.
+		expect(inline('a **b** c').map((p) => p.kind)).toEqual(['text', 'strong', 'text']);
 	});
 
 	it('only link to glossary entries and guides that exist', () => {

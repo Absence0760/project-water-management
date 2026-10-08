@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The Project page (`?tab=project`, issue #17 option A): what the project
 	// is and who can open it. The project's details, its import record, notes
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	// and the model's headline facts on the left; the team, members, farmers
 	// and share links on the right. Everything here sat below the
 	// Summary's first screen until 2026-09-27 and moved unchanged; the Summary
@@ -119,7 +120,7 @@
 </script>
 
 {#snippet headerContext()}<span data-testid="project-context">{context}</span>{/snippet}
-{#snippet headerActions()}<DownloadMenu items={projectDownloads} />{/snippet}
+{#snippet headerActions()}<DownloadMenu items={projectDownloads} /><HelpTip key="project-file" label="About the project file" />{/snippet}
 
 <div class="project-page" bind:this={body}>
 	<div class="grid">
@@ -139,7 +140,7 @@
 						<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={details.description}></textarea>
 					</div>
 					<div class="field">
-						<label for="pd-tz">Time zone</label>
+						<span class="label"><label for="pd-tz">Time zone</label> <HelpTip key="project-time-zone" /></span>
 						<input id="pd-tz" required maxlength="64" autocomplete="off" list="pd-tz-list" readonly={!canEdit} bind:value={details.timeZone} aria-describedby="pd-tz-h" />
 						<datalist id="pd-tz-list">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
 						<span class="hint" id="pd-tz-h">An IANA name, like Africa/Johannesburg. Downloads are dated by the day here.</span>

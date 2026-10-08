@@ -9,6 +9,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { api } from '$lib/api';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { describeReport, isPending, type ReportStatus, reportsApi } from './serverPdf';
 
 	let { projectId, runId, against = null }: { projectId: string; runId: string; against?: string | null } = $props();
@@ -73,6 +74,7 @@
 <div class="server-pdf" data-state={current?.report.status ?? (busy ? 'starting' : 'idle')}>
 	<button type="button" class="btn" disabled={pending} onclick={() => start(false)}>Generate PDF</button>
 	<button type="button" class="btn" disabled={pending} onclick={() => start(true)}>Email me the PDF</button>
+	<HelpTip key="report-pdf" label="About the report’s PDFs" />
 	<p class="muted small" role="status">
 		{#if current}{describeReport(current.report, emailed)}{:else if busy}Queueing the PDF…{/if}
 	</p>

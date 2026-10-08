@@ -7,6 +7,7 @@
 	withdrawing a nomination keeps the earlier one on the list.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, NOMINATION_REASON_MAX, type Nomination, type RunMeta } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
 	import { currentNomination, evidenceLine, historyEntries, nominateBlocker } from './evidence';
@@ -97,7 +98,7 @@
 			<p class="muted small">{blocker}</p>
 		{:else}
 			<form onsubmit={nominate}>
-				<label for="{uid}-r">Why this run is the evidence <span class="muted">(required)</span></label>
+				<label for="{uid}-r">Why this run is the evidence <span class="muted">(required)</span> <HelpTip key="evidence-run" label="About nominating a run" /></label>
 				<textarea
 					id="{uid}-r"
 					rows="3"

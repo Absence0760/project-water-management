@@ -8,6 +8,7 @@
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
 	import { onMount } from 'svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type AlertRule } from '$lib/api';
 	import AlertFeedbackSummary from './AlertFeedbackSummary.svelte';
 	import { feedRuleLabel, groupRules, SERIES_STALE_NAME, seriesRuleLabel, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
@@ -84,8 +85,8 @@
 	</div>
 {/snippet}
 
-<form class="rules" onsubmit={save} aria-labelledby="alert-rules-h">
-	<h3 id="alert-rules-h">Alert emails for this catchment</h3>
+<form class="rules" onsubmit={save} aria-labelledby="alert-rules-h-t">
+	<h3 id="alert-rules-h"><span id="alert-rules-h-t">Alert emails for this catchment</span> <HelpTip key="alert-rules" label="About alert rules" /></h3>
 	<p class="muted">
 		Nothing is sent until you switch a kind on. Each alert is sent once when a figure crosses its level, and again only after it recovers. Farmers get dam
 		alerts for their own hydrological unit and the restriction notices; each person chooses how often on their account page.

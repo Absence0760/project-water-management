@@ -599,7 +599,7 @@
 				<thead role="rowgroup">
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
-						<th scope="col" role="columnheader">Data up to</th>
+						<th scope="col" role="columnheader">Data up to <HelpTip key="data-freshness" /></th>
 						<th scope="col" role="columnheader" class="from-col">From</th>
 						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
 						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
@@ -803,7 +803,7 @@
 {#if hasChecks}
 	<section class="panel" id="data-checks" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
-			<h2 id="chk-h">Data checks</h2>
+			<h2 id="chk-h">Data checks <HelpTip key="data-quality-limits" label="About the data checks" /></h2>
 			<span class="muted small">Negative values, outliers, flat stretches, catchment rain that looks missing but reads 0, and changes in its ratio to CHIRPS. Runs list the same checks as warnings.</span>
 		</div>
 		{#if checks.length}

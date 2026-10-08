@@ -8,6 +8,7 @@
 	model only; bands of two models are never pooled.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onDestroy } from 'svelte';
 	import { diffEnsembleOptions, type EnsembleSummary, type PairedResult, type PairedSummary } from '@water-management/engine';
 	import { api, type Ensemble, type EnsembleDetail } from '$lib/api';
@@ -98,8 +99,8 @@
 	];
 </script>
 
-<section aria-labelledby="{uid}-h" data-testid="paired-uncertainty">
-	<h2 id="{uid}-h">Uncertainty</h2>
+<section aria-labelledby="{uid}-h-t" data-testid="paired-uncertainty">
+	<h2 id="{uid}-h"><span id="{uid}-h-t">Uncertainty</span> <HelpTip key="uncertainty-bands" /></h2>
 	{#if !sameProject}
 		<p class="muted">Paired bands need two different runs of one project: the parameter sets describe one catchment.</p>
 	{:else if loading}
@@ -137,7 +138,7 @@
 			{/if}
 		{/if}
 
-		<h3>Paired band on B − A</h3>
+		<h3>Paired band on B − A <HelpTip key="paired-band" /></h3>
 		{#if !sameModel}
 			<p class="muted">The runs use different runoff models ({modelA}, {modelB}): bands of two models are never pooled, so there is no paired band.</p>
 		{:else if !bandA}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	// The workspace's Scenarios tab (?tab=scenarios, docs/ui.md § Scenarios,
 	// docs/scenarios.md): the project's scenarios, a form to start one on a
@@ -333,7 +334,7 @@
 			</div>
 			{#if !applicant}
 				<div class="field">
-					<label for="new-scenario-base">Base run</label>
+					<label for="new-scenario-base">Base run <HelpTip key="base-run" label="About the run a scenario starts from" /></label>
 					<select id="new-scenario-base" value={newBase || defaultBase} onchange={(e) => (newBase = e.currentTarget.value)}>
 						{#each bases as r (r.id)}<option value={r.id}>{runLabel(r)}</option>{/each}
 					</select>

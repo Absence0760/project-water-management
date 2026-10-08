@@ -5,6 +5,7 @@
 	// waits as a pending invite, listed here for owners, until it signs up. A
 	// farmer is removed like any member (their links go with the membership).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Farmer, type FarmerEntry, type InvitedFarmer } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
@@ -147,9 +148,9 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="farmers-h">
+<section class="panel" aria-labelledby="farmers-h-t">
 	<div class="panel-head">
-		<h2 id="farmers-h">Farmers{#if !loading && !loadError}&nbsp;({farmers.length}){/if}</h2>
+		<h2 id="farmers-h"><span id="farmers-h-t">Farmers{#if !loading && !loadError}&nbsp;({farmers.length}){/if}</span> <HelpTip key="farmer-link" label="About farmers and their units" /></h2>
 		{#if isOwner && farms.length > 0}
 			<button type="button" class="btn btn-sm btn-primary" onclick={() => (inviteMounted = inviting = true)}>Invite farmers</button>
 		{/if}
@@ -225,7 +226,7 @@
 
 		{#if invites.length}
 			<section class="invites" aria-labelledby="farmer-inv-h">
-				<h3 id="farmer-inv-h">Pending farmer invitations <span class="count">({invites.length})</span></h3>
+				<h3 id="farmer-inv-h">Pending farmer invitations <span class="count">({invites.length})</span> <HelpTip key="invitation" label="About invitations" /></h3>
 				<ul>
 					{#each invites as inv (inv.inviteId)}
 						<li class:expired={inv.status === 'expired'}>

@@ -12,6 +12,7 @@
 	lands here) and follows a new pick.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { STRESS_LABEL, type StressGrid, type SupplyAssurance } from '@water-management/engine';
 	import { page } from '$app/state';
 	import { UNIT_PARAM } from '$lib/components/supply/links';
@@ -85,7 +86,7 @@
 		<p class="muted">
 			Reporting window {assurance.reportStart} to {assurance.reportEnd} ({fmtNum(assurance.days)} days). A demand day counts as met when the whole
 			demand was supplied; days without demand don't count. A water year is met when {pctText(assurance.annualThreshold)} or more of its demand
-			was supplied (a project setting, not a standard).
+			was supplied (a project setting, not a standard). <HelpTip key="assurance-of-supply" />
 		</p>
 		{#if assurance.reliability.length === 0}
 			<p class="muted">This network has no hydrological units or other water users.</p>
@@ -146,7 +147,7 @@
 				</p>
 			{:else}
 				<div class="head">
-					<h4 id="{uid}-sh">Stress classes by month</h4>
+					<h4 id="{uid}-sh"><span id="{uid}-sh-t">Stress classes by month</span> <HelpTip key="stress-class" /></h4>
 					<div class="field inline">
 						<label for="{uid}-grid">Show</label>
 						<select id="{uid}-grid" bind:value={gridId}>
@@ -156,7 +157,7 @@
 						</select>
 					</div>
 				</div>
-				{@render stressGrid(grid, `${uid}-sh`, true)}
+				{@render stressGrid(grid, `${uid}-sh-t`, true)}
 				<p class="note muted">
 					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (a provisional default, not yet confirmed by the catchment's hydrologist). The whole run
 					is shown, not only the reporting window. Use the arrow keys to move between months.

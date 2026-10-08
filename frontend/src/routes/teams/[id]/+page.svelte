@@ -7,6 +7,7 @@
 	// settings sheet (`?settings=1`, lib/components/teams/TeamSettings.svelte),
 	// out of the reading path.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -313,9 +314,9 @@
 
 			<div class="team-body">
 				<div class="cols">
-					<section class="panel projects" aria-labelledby="tp-h">
+					<section class="panel projects" aria-labelledby="tp-h-t">
 						<div class="panel-head">
-							<h2 id="tp-h">Projects</h2>
+							<h2 id="tp-h"><span id="tp-h-t">Projects</span> <HelpTip key="ewr-traffic-light" label="About the EWR status" /></h2>
 							<span class="muted small">EWR over the last 30 days of each project's figures, worst first</span>
 						</div>
 						{#if portfolioError}
@@ -352,9 +353,9 @@
 						{/if}
 					</section>
 
-					<section class="panel members" aria-labelledby="members-h">
+					<section class="panel members" aria-labelledby="members-h-t">
 						<div class="panel-head">
-							<h2 id="members-h">Members</h2>
+							<h2 id="members-h"><span id="members-h-t">Members</span> <HelpTip key="team" label="About team roles" /></h2>
 							{#if !isAdmin}<span class="muted small">Only owners can manage members.</span>{/if}
 						</div>
 						<div class="table-wrap">
@@ -412,7 +413,7 @@
 							<form class="add" onsubmit={add}>
 								{#if addError}<div class="alert alert-error" role="alert">{addError}</div>{/if}
 								<div class="field">
-									<label for="tm-email">Add member by email</label>
+									<span class="label"><label for="tm-email">Add member by email</label> <HelpTip key="invitation" label="About invitations" /></span>
 									<input id="tm-email" type="email" required placeholder="colleague@example.com" bind:value={email} bind:this={emailInput} />
 								</div>
 								<div class="add-row">

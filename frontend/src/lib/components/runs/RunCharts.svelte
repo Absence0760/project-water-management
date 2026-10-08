@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	// The standard result views of one run: hydrograph, flow-duration curve,
 	// and an explorer for any stored series (EWR vs outflow moved to River &
 	// reserve with the rest of its group, river/RiverTab.svelte, and a unit's
@@ -307,7 +308,7 @@
 				<table class="data compact q">
 					<thead>
 						<tr>
-							<th scope="col"><span class="visually-hidden">Flow record</span></th>
+							<th scope="col"><span class="visually-hidden">Flow record</span><HelpTip key="flow-duration-curve" /></th>
 							<th scope="col" class="num">Q10</th>
 							<th scope="col" class="num">Q50</th>
 							<th scope="col" class="num">Q90</th>

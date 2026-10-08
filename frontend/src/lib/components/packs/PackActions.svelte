@@ -12,6 +12,7 @@
 	import { api, ApiError, type Pack, type PackIssueChecks } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { issueChecklist, packHref } from './pack';
 
@@ -123,7 +124,7 @@
 		<p class="alert alert-error" role="alert">The stored manifest no longer matches its SHA-256, so this pack can’t be trusted or issued. Tell the project’s owner.</p>
 	{/if}
 	{#if pack.status === 'draft'}
-		<p><strong>Draft pack, not issued.</strong> No verify page answers for it yet. Drafted {fmtDate(pack.createdAt, true)}{pack.createdBy ? ` by ${pack.createdBy}` : ''}.</p>
+		<p><strong>Draft pack, not issued.</strong> <HelpTip key="pack-lifecycle" label="About an evidence pack’s lifecycle" /> No verify page answers for it yet. Drafted {fmtDate(pack.createdAt, true)}{pack.createdBy ? ` by ${pack.createdBy}` : ''}.</p>
 		{#if issue}
 			<ul class="checks" data-testid="pack-checklist" aria-label="Before it can be issued">
 				{#each checklist as c (c.id)}
@@ -132,15 +133,17 @@
 			</ul>
 		{/if}
 	{:else if pack.status === 'issued'}
-		<p><strong>Issued</strong> {fmtDate(pack.issuedAt, true)}{pack.issuedBy ? ` by ${pack.issuedBy}` : ''}. Its verify page answers for code <span class="mono">{pack.shortCode}</span>.</p>
+		<p><strong>Issued</strong> {fmtDate(pack.issuedAt, true)}{pack.issuedBy ? ` by ${pack.issuedBy}` : ''}. Its verify page answers for code <span class="mono">{pack.shortCode}</span>. <HelpTip key="pack-short-code" label="About the short code and the verify page" /></p>
 	{:else if pack.status === 'superseded'}
 		<p class="banner banner-amber" role="note" data-testid="pack-banner">
 			<strong>Superseded.</strong> A newer version replaces this one.
 			{#if pack.supersededById}<a href={packHref(base, projectId, pack.supersededById)}>Open the newer version</a>.{/if}
+			<HelpTip key="pack-lifecycle" label="About an evidence pack’s lifecycle" />
 		</p>
 	{:else}
 		<p class="banner banner-red" role="note" data-testid="pack-banner">
 			<strong>Withdrawn.</strong> Reason (shown publicly on the verify page): <span class="reason">{pack.statusReason}</span>
+			<HelpTip key="pack-lifecycle" label="About an evidence pack’s lifecycle" />
 		</p>
 	{/if}
 
@@ -154,7 +157,7 @@
 			{/if}
 			<button type="button" class="btn btn-ghost" disabled={busy} onclick={() => ((reason = ''), (withdrawing = true))}>Withdraw…</button>
 		</div>
-		{#if pack.status === 'draft' && !canIssue}<p class="muted small">Issue is open once every line above is ticked. Sign the pack in Appendix B.2 below.</p>{/if}
+		{#if pack.status === 'draft' && !canIssue}<p class="muted small">Issue is open once every line above is ticked. Sign the pack in Appendix B.2 below. <HelpTip key="pack-issue-checks" label="About the checks before issue" /></p>{/if}
 		{#if pack.status === 'draft' && pack.signoffs > 0}<p class="muted small">A signed draft is kept with its sign-off: withdraw it rather than delete it.</p>{/if}
 	{/if}
 	{#if error}<p class="alert alert-error" role="alert">{error}</p>{/if}

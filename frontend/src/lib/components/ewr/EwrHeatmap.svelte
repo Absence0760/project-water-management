@@ -9,6 +9,7 @@
 	Input: RunSummary.ewrCompliance (engine 0.3.0+).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
 	import type { EwrCompliance } from '@water-management/engine';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -124,7 +125,7 @@
 
 <section class="ewr-heatmap" aria-labelledby="{uid}-h">
 	<div class="head">
-		<h3 id="{uid}-h">EWR compliance by month{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''}</h3>
+		<h3 id="{uid}-h">EWR compliance by month{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''} <HelpTip key="ewr-days-not-met" /></h3>
 		{#if compliance && grids.length && !print}
 			<div class="controls">
 				<div class="field inline">

@@ -146,20 +146,22 @@ export interface ScoreRow {
 	unit: '' | '%';
 	/** What "good" is, for the reader. */
 	ideal: string;
+	/** The HelpTip key that explains the score (a glossary id in $lib/help/tips). */
+	help: string;
 }
 
 export const SCORE_ROWS: ScoreRow[] = [
-	{ key: 'kgePrime', label: 'KGE′', unit: '', ideal: '1' },
-	{ key: 'kgeYearly', label: 'Year-balanced KGE′', unit: '', ideal: '1' },
-	{ key: 'kgeNp', label: 'Non-parametric KGE', unit: '', ideal: '1' },
-	{ key: 'nse', label: 'NSE', unit: '', ideal: '1' },
-	{ key: 'nseSqrt', label: 'NSE on √Q', unit: '', ideal: '1' },
-	{ key: 'nseLog', label: 'NSE on log Q', unit: '', ideal: '1' },
-	{ key: 'kgeLowHigh', label: 'Low/high-flow KGE′ (Q and 1/Q)', unit: '', ideal: '1' },
-	{ key: 'volumeErrorPct', label: 'Volume error', unit: '%', ideal: '0' },
-	{ key: 'fdcHighPct', label: 'High flows (top 2 %)', unit: '%', ideal: '0' },
-	{ key: 'fdcMidSlopePct', label: 'FDC mid-slope', unit: '%', ideal: '0' },
-	{ key: 'fdcLowPct', label: 'Low flows (bottom 30 %)', unit: '%', ideal: '0' }
+	{ key: 'kgePrime', label: 'KGE′', unit: '', ideal: '1', help: 'kge' },
+	{ key: 'kgeYearly', label: 'Year-balanced KGE′', unit: '', ideal: '1', help: 'calibration-objective' },
+	{ key: 'kgeNp', label: 'Non-parametric KGE', unit: '', ideal: '1', help: 'calibration-objective' },
+	{ key: 'nse', label: 'NSE', unit: '', ideal: '1', help: 'nse' },
+	{ key: 'nseSqrt', label: 'NSE on √Q', unit: '', ideal: '1', help: 'calibration-objective' },
+	{ key: 'nseLog', label: 'NSE on log Q', unit: '', ideal: '1', help: 'log-nse' },
+	{ key: 'kgeLowHigh', label: 'Low/high-flow KGE′ (Q and 1/Q)', unit: '', ideal: '1', help: 'calibration-objective' },
+	{ key: 'volumeErrorPct', label: 'Volume error', unit: '%', ideal: '0', help: 'volume-error' },
+	{ key: 'fdcHighPct', label: 'High flows (top 2 %)', unit: '%', ideal: '0', help: 'fdc-signatures' },
+	{ key: 'fdcMidSlopePct', label: 'FDC mid-slope', unit: '%', ideal: '0', help: 'fdc-signatures' },
+	{ key: 'fdcLowPct', label: 'Low flows (bottom 30 %)', unit: '%', ideal: '0', help: 'fdc-signatures' }
 ];
 
 export interface ScoreColumn {

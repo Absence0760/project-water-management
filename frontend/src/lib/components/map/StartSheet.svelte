@@ -13,6 +13,7 @@
 	opens here at its card (`focusKey`).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { tick } from 'svelte';
 	import { api, type MapFeature, type StartProposal, type StartState, type StartTicks } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -242,7 +243,7 @@
 				The model has hydrological units already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (under the map, at the end of the key row, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
 			</p>
 		{:else if step === 'boundary'}
-			<h3 class="sub">Put the catchment’s boundary on the map</h3>
+			<h3 class="sub">Put the catchment’s boundary on the map <HelpTip key="start-from-map" /></h3>
 			<p class="lead">The units, their areas and their order are proposed inside it. Use whichever you have:</p>
 			<div class="ways">
 				{#if ondelineate}
@@ -259,7 +260,7 @@
 			{/if}
 		{:else if step === 'points'}
 			<form id="{uid}-points" onsubmit={propose} novalidate data-testid="start-points">
-				<h3 class="sub">Say what each point on the map is</h3>
+				<h3 class="sub">Say what each point on the map is <HelpTip key="dam-siting" label="About dams on the river and off-channel" /></h3>
 				<p class="lead">
 					Each unit’s area becomes what drains to its point and to no unit above it{info.elevation ? '' : ' (with an elevation model on the server; without one, the areas and the order are yours to type)'}. Put a dam on the map at its wall, an abstraction point where water is taken from the river.
 				</p>
@@ -283,7 +284,7 @@
 				{/if}
 				<p><button type="button" class="btn btn-sm" onclick={onplace} data-testid="start-place">Place a point</button></p>
 				<div class="field">
-					<label for="{uid}-outlet">The outlet (the outflow gauge)</label>
+					<label for="{uid}-outlet">The outlet (the outflow gauge) <HelpTip key="outlet-placement" /></label>
 					<select id="{uid}-outlet" value={outlet} onchange={(e) => setOutlet(e.currentTarget.value)} data-testid="start-outlet">
 						{#if boundary}<option value="">The boundary’s own outlet</option>{:else if !outlet}<option value="" disabled>Choose a gauge…</option>{/if}
 						{#each gauges as g (g.id)}<option value={g.id}>{featureName(g)} (gauge)</option>{/each}
@@ -427,7 +428,7 @@
 						{#if p.cellSizeM}<dt>Cell size</dt><dd>{fmtNum(p.cellSizeM, 0)} m</dd>{/if}
 						{#if p.pans}<dt>Pans</dt><dd>{p.pans.method}</dd>{/if}
 					</dl>
-					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it (design/delineation.md § Accuracy).</p>
+					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it. <HelpTip key="elevation-model" label="About the elevation model’s accuracy" /></p>
 				</details>
 			</div>
 		{:else if step === 'data'}

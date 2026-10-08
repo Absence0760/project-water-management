@@ -5,6 +5,7 @@
 	// the review triggers' day). Part of the Settings
 	// form (the save bar saves it), in the Settings tab's chunk. No model input. The defaults are the engine's, confirmed by
 	// the client (plan.md O3, O6, issue #90).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE, defaultReviewDate } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { monthName } from '$lib/format/months';
@@ -41,14 +42,14 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="outlook-set-h" data-testid="outlook-settings">
+<section class="panel" aria-labelledby="outlook-set-h-t" data-testid="outlook-settings">
 	<div class="panel-head">
-		<h2 id="outlook-set-h">Seasonal outlook</h2>
+		<h2 id="outlook-set-h"><span id="outlook-set-h-t">Seasonal outlook</span> <HelpTip key="seasonal-outlook" /></h2>
 		<span class="muted small">The season the Runs tab’s outlook runs, its planning share and its review date</span>
 	</div>
 	<fieldset class="group">
 		<legend>
-			Season
+			Season <HelpTip key="outlook-season" />
 		</legend>
 		<label class="check">
 			<input type="checkbox" disabled={readonly} checked={!value.season} onchange={(e) => useDefaultSeason(e.currentTarget.checked)} />
@@ -85,7 +86,7 @@
 	</fieldset>
 	<fieldset class="group">
 		<legend>
-			Planning share
+			Planning share <HelpTip key="planning-figure" />
 		</legend>
 		<label class="check">
 			<input type="checkbox" disabled={readonly} checked={value.planningShare === null} onchange={(e) => useDefaultShare(e.currentTarget.checked)} />
@@ -103,7 +104,7 @@
 		</p>
 	</fieldset>
 	<fieldset class="group">
-		<legend>Review date</legend>
+		<legend>Review date <HelpTip key="review-triggers" /></legend>
 		<label class="check">
 			<input type="checkbox" disabled={readonly} checked={!value.review} onchange={(e) => useDefaultReview(e.currentTarget.checked)} />
 			Use the default review date{defaultReview ? ` (${day(defaultReview.month, defaultReview.day)})` : ''}

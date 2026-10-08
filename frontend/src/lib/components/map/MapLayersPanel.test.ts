@@ -15,6 +15,9 @@ import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
 import type { RiverLayer } from './riverLayer.svelte';
 
+// HelpTip links to the glossary under the app's base path.
+vi.mock('$app/paths', () => ({ base: '' }));
+
 const quaternaries = { on: false } as unknown as QuaternaryLayer;
 const riversOff = { on: false } as unknown as RiverLayer;
 const html = (relief: { on: boolean; failed: boolean } | null) => render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, relief } }).body;

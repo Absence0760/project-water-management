@@ -19,6 +19,7 @@
 	and the panel's data-state attribute says which, for the e2e spec.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
 	import { onDestroy, untrack } from 'svelte';
 	import { canonicalJson, describeDroughtRestriction, DISCLAIMER, DISCLAIMER_DRAFT_NOTE, type DroughtRestrictionRule } from '@water-management/engine';
@@ -226,8 +227,8 @@
 	const busy = $derived(submitting || shown?.kind === 'pending');
 </script>
 
-<section aria-labelledby="outlook-h" data-testid="seasonal-outlook" data-state={dataState}>
-	<h3 id="outlook-h">Seasonal outlook</h3>
+<section aria-labelledby="outlook-h-t" data-testid="seasonal-outlook" data-state={dataState}>
+	<h3 id="outlook-h"><span id="outlook-h-t">Seasonal outlook</span> <HelpTip key="seasonal-outlook" /></h3>
 	<p class="muted small lead">
 		From this run’s state on the season’s decision date, the season run with the weather of each past water year, at a few demand levels: how
 		the dams, the hydrological units and the river fared in those years. Historical analogues, not a forecast; the choice of level is the WUA’s.
@@ -250,7 +251,7 @@
 						Add a monthly plan
 					</label>
 				</div>
-				<p class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it).</p>
+				<p class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it). <HelpTip key="demand-level" /></p>
 				{#if withPlan}
 					<fieldset class="plan">
 						<legend>Monthly plan <span class="u">(% of today’s hydrological unit demand, by month of the season)</span></legend>
@@ -303,6 +304,7 @@
 				<span class="badge" data-testid="outlook-share">Planning share: {view.share}</span>
 				<span class="badge" data-testid="outlook-metric">Measure: {view.metricLabel}</span>
 				<span class="badge" data-testid="outlook-years">{view.nYears} analogue {view.nYears === 1 ? 'year' : 'years'}</span>
+				<HelpTip key="analogue-years" />
 			</div>
 			{#if view.start}<p class="small">{view.start}</p>{/if}
 			{#if view.tooFewYears}<div class="alert alert-warning" data-testid="outlook-too-few">{view.tooFewYears}</div>{/if}
@@ -344,14 +346,14 @@
 				water irrigated from a dam drains back to the river, so taking less from the dam can leave the river lower on dry days.
 			</p>
 
-			<h4>Planning figure</h4>
+			<h4>Planning figure <HelpTip key="planning-figure" /></h4>
 			<p data-testid="outlook-planning">{view.planning}</p>
 			<p class="hint">
 				This counts past years; it is not a decision. The WUA decides the season’s level and publishes it as the restriction notice.
 			</p>
 
 			{#if triggers && triggers.kind !== 'none'}
-				<h4 id="triggers-h">Review triggers</h4>
+				<h4 id="triggers-h">Review triggers <HelpTip key="review-triggers" /></h4>
 				<div data-testid="outlook-triggers">
 					{#if triggers.kind === 'notDrawn'}
 						<p class="muted" data-testid="triggers-not-drawn">Review on {triggers.reviewDate}: no trigger table. {triggers.problem}</p>
@@ -435,7 +437,7 @@
 				</div>
 			{/if}
 
-			<h4 id="publish-h">Farmers</h4>
+			<h4 id="publish-h">Farmers <HelpTip key="outlook-publish" /></h4>
 			<div data-testid="outlook-publish">
 				{#if publication}
 					<p class="small" data-testid="outlook-published" data-here={publishedHere}>

@@ -14,6 +14,7 @@
 	// The preview runs this web build's engine (ENGINE_VERSION, the worker is
 	// part of the same build) and names it, with a note when the stored
 	// result came from another engine (the backend is released separately).
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onDestroy, untrack } from 'svelte';
 	import { api, type JobMeta, type RunMeta, type YieldResult } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -218,9 +219,9 @@
 	const engineNote = $derived(engineDiffersNote(ENGINE_VERSION, latest.firm));
 </script>
 
-<section class="panel yield" aria-labelledby="yield-h-{nodeId}" data-testid="yield-panel">
+<section class="panel yield" aria-labelledby="yield-h-{nodeId}-t" data-testid="yield-panel">
 	<div class="panel-head">
-		<h2 id="yield-h-{nodeId}">Yield of {nodeName || 'this dam'}</h2>
+		<h2 id="yield-h-{nodeId}"><span id="yield-h-{nodeId}-t">Yield of {nodeName || 'this dam'}</span> <HelpTip key="firm-yield" /></h2>
 		<span class="muted small">How much this dam can supply, drawing steadily through the whole record.</span>
 	</div>
 	<p class="note small">{HISTORICAL_NOTE}</p>
@@ -243,14 +244,14 @@
 	{#if target && (canEdit || source)}
 		<div class="controls">
 			<div class="field">
-				<label for="yield-pattern-{nodeId}">Draft pattern</label>
+				<label for="yield-pattern-{nodeId}">Draft pattern <HelpTip key="draft-pattern" label="About how the draft is spread over the year" /></label>
 				<select id="yield-pattern-{nodeId}" bind:value={pattern} disabled={busy}>
 					<option value="constant">Constant: the same every day</option>
 					<option value="demand">This hydrological unit's irrigation demand, by month</option>
 				</select>
 			</div>
 			<div class="field">
-				<label for="yield-assurance-{nodeId}">Assurance</label>
+				<label for="yield-assurance-{nodeId}">Assurance <HelpTip key="yield-assurance" /></label>
 				<select id="yield-assurance-{nodeId}" bind:value={assurance} disabled={busy}>
 					{#each ASSURANCE_OPTIONS as o (o.value)}
 						<option value={o.value}>{o.label}</option>
@@ -332,7 +333,7 @@
 		{/if}
 		{#if latest.curve && chart}
 			{@const c = latest.curve}
-			<h3>Storage–yield curve</h3>
+			<h3>Storage–yield curve <HelpTip key="storage-yield-curve" label="About the curve of yield against capacity" /></h3>
 			<p class="muted small">
 				{assuranceLabel(c.params.assurance)} yield, {patternLabel(c.params.pattern)}, at {c.points.points.length} capacities from 0 to twice the dam's {fmtNum(c.points.baseCapacityM3)} m³.
 				Worked out {fmtDate(c.createdAt, true)}.

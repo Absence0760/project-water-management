@@ -14,6 +14,7 @@
 	as a river (one reach at a time: the layer proposes, the modeller decides).
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { MapFeature } from '$lib/api';
@@ -93,7 +94,7 @@
 	<label class="toggle">
 		<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
 		<span class="swatch" style:--qt={quaternaryColour(dark)} aria-hidden="true"></span>
-		Quaternary catchments
+		Quaternary catchments <HelpTip key="quaternary-lookup" label="About the quaternary catchments" />
 	</label>
 	{#if quaternaries.on}
 		<div class="qt small" data-testid="map-quaternaries">
@@ -122,7 +123,7 @@
 	<label class="toggle">
 		<input type="checkbox" checked={rivers.on} onchange={(e) => toggle('rivers', e.currentTarget.checked)} data-testid="map-layer-rivers" />
 		<span class="swatch rn-swatch" style:--rn={riverNetworkColour(dark)} aria-hidden="true"></span>
-		River network
+		River network <HelpTip key="river-network" />
 	</label>
 	{#if rivers.on}
 		<div class="qt small" data-testid="map-rivers">
@@ -179,7 +180,7 @@
 		<label class="toggle">
 			<input type="checkbox" checked={relief.on} onchange={(e) => toggle('relief', e.currentTarget.checked)} data-testid="map-layer-relief" />
 			<span class="swatch relief-swatch" aria-hidden="true"></span>
-			Relief
+			Relief <HelpTip key="elevation-model" label="About the relief and the elevation model" />
 		</label>
 		{#if relief.on && relief.failed}
 			<p class="err small" role="alert" data-testid="map-relief-error">The relief couldn’t be loaded, so the map is drawn without it.</p>

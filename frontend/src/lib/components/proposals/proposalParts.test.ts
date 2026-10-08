@@ -3,10 +3,13 @@
 // synthetic-data warning and the collapsed citation. The panels' e2e specs
 // load the synthetic datasets, so the no-dataset wording is pinned here.
 import { render } from 'svelte/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ProposalNoDataset from './ProposalNoDataset.svelte';
 import ProposalSource from './ProposalSource.svelte';
 import ProposalSynthetic from './ProposalSynthetic.svelte';
+
+// HelpTip links to the glossary under the app's base path.
+vi.mock('$app/paths', () => ({ base: '' }));
 
 // Comments stripped until none are left (CodeQL js/incomplete-multi-character-sanitization).
 const text = (html: string) => {

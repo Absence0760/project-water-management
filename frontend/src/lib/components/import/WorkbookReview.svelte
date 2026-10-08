@@ -5,6 +5,7 @@
 	// (ImportReportLists, shared with the Overview's import record).
 	// Everything here comes from the file (farm names, formula text), so it is
 	// rendered as text only: plain interpolation, never {@html}.
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_CHOICES } from '$lib/series/provenance';
 	import ImportReportLists from './ImportReportLists.svelte';
 	import { DEFAULT_CHIRPS_KEY, type WorkbookReport } from './workbookFile';
@@ -41,7 +42,7 @@
 
 {#if report.hasGauge}
 	<fieldset class="option-group" {disabled}>
-		<legend>Gauge column</legend>
+		<legend>Gauge column <HelpTip key="reference-gauge" /></legend>
 		<label class="check">
 			<input type="checkbox" bind:checked={gaugeAsReference} onchange={onoptions} aria-describedby="wb-gauge-hint" />
 			It's a gauge on another river: import it as a reference gauge
@@ -78,7 +79,7 @@
 {#if report.runOfRiverUnits.length}
 	{@const n = report.runOfRiverUnits.length}
 	<fieldset class="option-group" {disabled}>
-		<legend>River pumping units</legend>
+		<legend>River pumping units <HelpTip key="supply-rule" label="About supply rules and run of river" /></legend>
 		<label class="check">
 			<input type="checkbox" bind:checked={runOfRiver} onchange={onoptions} aria-describedby="wb-ror-hint" />
 			Import {n === 1 ? 'it' : `these ${n}`} as run of river, pumping from the river
@@ -99,7 +100,7 @@
 
 {#if report.hasChirps}
 	<div class="field chirps">
-		<label for="wb-chirps">CHIRPS column</label>
+		<label for="wb-chirps">CHIRPS column <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
 		<select id="wb-chirps" bind:value={chirpsKey} {disabled} aria-describedby="wb-chirps-hint">
 			{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}{c.value === DEFAULT_CHIRPS_KEY ? ' (usual for b023)' : ''}</option>{/each}
 			<option value="">Not known</option>

@@ -7,6 +7,7 @@
 	(?rain=boundary). Helpers in ./feeds.ts.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { page } from '$app/state';
 	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
@@ -75,7 +76,7 @@
 	<button type="button" class="btn btn-sm" bind:this={opener} onclick={show} data-testid="boundary-rain-open">Use the catchment boundary</button>
 {:else}
 	<section class="boundary-rain" aria-labelledby="{uid}-h" data-testid="boundary-rain">
-		<h3 id="{uid}-h" tabindex="-1" bind:this={heading}>Rain from the catchment boundary</h3>
+		<h3 id="{uid}-h" tabindex="-1" bind:this={heading}>Rain from the catchment boundary <HelpTip key="boundary-rain" /></h3>
 		{#if loading}
 			<p class="muted" role="status">Working out the cells…</p>
 		{:else if proposal}

@@ -8,6 +8,7 @@
 	RunSummary.supplyAssurance.waterAccount; nothing shows on older runs.
 -->
 <script lang="ts">
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
@@ -24,7 +25,7 @@
 
 {#if account?.total.ewr.length}
 	<section class="required-met" aria-labelledby="{uid}-h">
-		<h4 id="{uid}-h">EWR required vs met, each water year</h4>
+		<h4 id="{uid}-h">EWR required vs met, each water year <HelpTip key="ewr-shortfall" label="About the EWR volume met" /></h4>
 		<div class="table-wrap scroll">
 			<table class="data" data-testid="ewr-required-met">
 				<caption class="visually-hidden">EWR required and met at each site per water year, m³</caption>
