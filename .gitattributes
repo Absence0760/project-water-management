@@ -6,6 +6,11 @@
 *.sh text eol=lf
 *.bash text eol=lf
 
+# The synthetic Desktop Reserve Model files keep the DRM's CRLF line ends, byte for byte
+# (frontend settings/drmFiles.test.ts compares them with the app's example files).
+e2e/fixtures/drm-synthetic.rul -text
+e2e/fixtures/drm-synthetic.tab -text
+
 # Binary files — never auto-convert line endings or diff as text.
 *.png binary
 *.jpg binary

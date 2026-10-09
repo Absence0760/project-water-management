@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 	// Summary → the reserve at a glance (issue #162, item 10): the days below
 	// the pragmatic EWR at the outlet in each of the run's last twelve months
 	// (reserveStrip.ts), a small bar and its count per month, and a link to
@@ -16,6 +17,7 @@
 		compliance,
 		forecastFrom = null,
 		ruleTable = false,
+		daily = null,
 		more
 	}: {
 		/** The run summary's monthly grid; absent on a run older than it. */
@@ -24,13 +26,15 @@
 		forecastFrom?: string | null;
 		/** The headline card judges the Reserve by a rule table (ewrAssurance.ts headlineSite). */
 		ruleTable?: boolean;
+		/** The run's daily outlet EWR source (summary.catchment.outletEwr, engine ≥ 1.77.0); absent = the pragmatic EWR. */
+		daily?: DailyEwrSource;
 		/** River & reserve, for the same run. */
 		more: { href: string; label: string };
 	} = $props();
 
 	const months = $derived(compliance ? recentMonths(compliance, forecastFrom) : []);
 	const span = $derived(stripSpan(months));
-	const words = $derived(stripWords(ruleTable));
+	const words = $derived(stripWords(ruleTable, daily));
 	// The key names what the strip counts: days below the EWR, or the pragmatic EWR beside a rule table.
 	const bands = $derived(bandLabels(undefined, `days below ${words.test}`));
 </script>

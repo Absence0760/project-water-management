@@ -91,7 +91,8 @@ function seriesStep(series: SeriesMeta[] | null, settings: ProjectSettings): Che
 function settingsStep(s: ProjectSettings): ChecklistStep {
 	const base = { id: 'settings', tab: 'settings', title: 'Evaporation, calibration & EWR' } as const;
 	const apan = s.apanMm.some((v) => v > 0);
-	const ewr = s.ewrPragmaticM3PerDay.some((v) => v > 0);
+	// The pragmatic EWR, or a daily EWR from the DRM tables (engine ≥ 1.77.0, settings.ewrDailySource).
+	const ewr = s.ewrPragmaticM3PerDay.some((v) => v > 0) || (!!s.ewrDailySource && s.ewrDailySource.method !== 'pragmatic');
 	if (!apan && !ewr)
 		return { ...base, status: 'todo', detail: 'Enter monthly A-pan evaporation (mm) and the pragmatic EWR (m³/day), Oct–Sep.' };
 	if (!apan)

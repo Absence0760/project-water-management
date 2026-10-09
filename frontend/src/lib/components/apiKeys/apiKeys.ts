@@ -80,6 +80,17 @@ export function apiBase(publicApiUrl: string, origin: string): string {
 }
 
 /** A copyable curl that pushes one day, with a placeholder where the key goes (never a real key). */
+/**
+ * The ingest body the panel's "Expected format" shows (issue #456; docs/api.md
+ * § Ingest): three invented days of rain from 1 April 2025, the third with no
+ * reading.
+ */
+export const INGEST_EXAMPLE_BODY = JSON.stringify(
+	{ kind: 'rain_catchment_mm', name: 'Logger', unit: 'mm', startDate: '2025-04-01', values: [0, 12.4, null], source: 'weir gateway' },
+	null,
+	2
+);
+
 export function curlExample(base: string, series: ApiKeySeries | null, today: string): string {
 	const s = series ?? { kind: 'flow_logger_m3s', name: 'Logger' };
 	const unit = s.kind.endsWith('_mm') ? 'mm' : 'm3/s';

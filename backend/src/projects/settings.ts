@@ -70,6 +70,7 @@ import {
 	SIGNED_OFF_BY_MAX,
 	declaredRuleError,
 	droughtRestrictionIssues,
+	ewrDailySourceIssues,
 	type ProjectSettings,
 	isIsoDate
 } from '@water-management/engine';
@@ -180,9 +181,11 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * that changed one threshold must not keep another from an older one. So is
  * the drought restriction rule (engine ≥ 1.54.0): a level left out is gone.
  * And the EWR headline choice (issue #444): a site kept from a rule-table
- * choice under `{ source: 'pragmatic' }` would be a field no choice has.
+ * choice under `{ source: 'pragmatic' }` would be a field no choice has. So
+ * is the daily outlet EWR's source (engine ≥ 1.77.0, issue #455): its tables
+ * are one set, entered together.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -976,6 +979,15 @@ export const SettingsPatch = z
 		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.
 		ewrChargeSource: z.enum(EWR_CHARGE_SOURCES),
 		lowFlowMeasure: z.enum(LOW_FLOW_MEASURES),
+		// Where the daily outlet EWR comes from (engine ≥ 1.77.0, issue #455, reserve/dailySource.ts): the pragmatic EWR,
+		// the DRM TAB file or the DRM percentile tables; replaced whole, null = the pragmatic EWR. The engine's own checks
+		// (ewrDailySourceIssues), so the form, the save and the run agree.
+		ewrDailySource: z
+			.unknown()
+			.superRefine((v, ctx) => {
+				if (v === null) return;
+				for (const i of ewrDailySourceIssues(v)) ctx.addIssue({ code: 'custom', message: `daily EWR source: ${i.field ? `${i.field}: ` : ''}${i.message}` });
+			}),
 		// The drought restriction rule (engine ≥ 1.54.0, WP-3.8, network/restriction.ts): replaced whole, null = off.
 		// The engine's own checks (droughtRestrictionIssues), so the form, the save and the run agree.
 		droughtRestriction: z

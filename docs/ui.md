@@ -252,6 +252,39 @@ A chart's value axis writes its ticks short (`charts/series.ts`
 decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float
 noise rather than a flow, does it fall back to an exponent.
 
+## Expected format
+
+Every box that reads a file or a request body says what it expects, beside
+it, in one shared piece (`common/FormatHelp.svelte`, issue #456): a closed
+**Expected format** disclosure whose first line names the file types and
+limits, then the structure and units (the caller's own list, since the
+words must match what that box's parser accepts), an **Example** of a few
+lines and, where a file helps, **Download an example file** (a data URL
+built in the browser from the example's text, `common/formatHelp.ts`; a
+CSV starts with a byte-order mark for Excel, which every CSV reader in the
+app skips). Each example is proved against its parser: by unit tests where
+the parser is the browser's, by `backend/src/geo/geojson.test.ts` for the
+map's file, and end to end in `e2e/tests/upload-formats.spec.ts`, which
+feeds each downloaded or shown example back into its box.
+
+| Box | Takes | Example | Errors name |
+|---|---|---|---|
+| Add data / Data, series upload (`series/UploadForm.svelte`) | .csv/.tsv/.txt `date,value`, or a DWS daily export (text or saved page) | `example-daily-rainfall.csv` (`lib/series/example.ts`): a week with a blank, an `NA` and a `-999` | the line (“Line 12: …”) |
+| Allocations, Import registered volumes | CSV, 2 MB, 5 000 rows, 200 columns | the template's fewest columns, a take and a storage (`ALLOCATIONS_EXAMPLE`); **Download the CSV template** stays beside it | each row's line, in the preview |
+| Project, Invite farmers (CSV) | pasted rows, or .csv/.txt | `invite-farmers-example.csv`, built from the project's first two units (`inviteExampleCsv`) | each row's line, in the preview |
+| Map, Upload a GeoJSON file | .geojson/.json, 5 MB, 500 features | `example-features.geojson` (`map/example-features.geojson`): a boundary, a parcel, a river and a gauge, each with its `kind` | each feature's place (“Feature 3 …”) |
+| Load crop factors, a b023 workbook | .xlsx/.xlsm, the whole tool | – | the missing named ranges; the crops to check |
+| Load crop factors, a hydrological-unit-based workbook | .xlsx/.xlsm with [Crop_Factors] | the table's shape (`NODE_FACTORS_EXAMPLE`) | each warning's cell |
+| Import a b023 workbook | .xlsm/.xlsx, 150 MB, a b02x build | – | the missing named ranges; sheet and cell |
+| Import a project file | .json, 5 MB | – (*Download project (JSON)* writes one) | the line and column where the JSON stops (`jsonErrorAt`) |
+| Settings, API keys (**Expected format of a request**) | JSON to `/ingest/v1/series/merge` | the merge body (`INGEST_EXAMPLE_BODY`) | `details`, each problem's place in the body |
+
+The grids' paste dialog (`model/GridPasteDialog.svelte`) and **Paste a
+shape** already said their layout and example in place, and the verify
+page's file check only hashes the file, so they keep their own words. The
+Reserve's rule-table and EWR uploads (Settings) are being reworked
+separately and don't use the piece yet.
+
 ## Landing page
 
 `/` for a signed-out visitor, and `/welcome` for anyone (issue #57;
@@ -1170,7 +1203,9 @@ same way on every screen:
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
   decided per file; CRLF, LF or bare-CR line endings) or a DWS hydrology export (fixed-width YYYYMMDD with a
   quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
-  rules. The form's **File formats** note lists them.
+  rules. The form's **Expected format** note lists them (dates, times for
+  sub-daily files, separators, numbers, what is read as a gap), with an
+  example and an example file to download ([Expected format](#expected-format)).
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
   updates from its name and header (`guessSeries`). An existing series
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
@@ -1762,7 +1797,8 @@ it scrolls, and isn't fitted to the window.
   WP-3.3, invited with the ordinary English invite email and badged
   "applicant" in the pending list) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
-  `project/farmers.ts`). A CSV is previewed first: a table of every row's
+  `project/farmers.ts`; its **Expected format** says so, with an example file
+  built from the project's first two units, [Expected format](#expected-format)). A CSV is previewed first: a table of every row's
   line, email, farm and what will happen (added, invited, or the row's
   error), from a server dry run that sends nothing; **Send** then does it and
   the table shows the results. Opened again after a send, the CSV box is
@@ -2019,7 +2055,11 @@ turns a project document into a new project through `POST /projects/import`:
 1. **Pick** a `.json` file: a project's *Download project (JSON)* or the
    workbook importer's `project.json`. It's read in the browser
    (`import/projectFile.ts`); a file that isn't JSON, isn't a project document
-   or is over the 5 MB cap is refused here, before anything is sent.
+   or is over the 5 MB cap is refused here, before anything is sent. JSON
+   that doesn't parse names the line and column where it stops, when the
+   browser says (`jsonErrorAt`; Chromium doesn't for a file whose first
+   character is wrong). The dialog's **Expected format** lists the
+   document's parts ([Expected format](#expected-format)).
 2. **Preview** (`ImportPreview.svelte`): the importer's notes first (for
    example, a file with no time series, or an export's notes, which aren't
    imported and aren't sent), then the name (editable, prefilled
@@ -3621,7 +3661,9 @@ map" card) stays the schematic; this is the geography.
 - **Upload a GeoJSON file** (`upload=1`, a side sheet, editors;
   `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file (WGS84,
   at most 5 MB; a `.zip`/`.shp` is turned away with how to export GeoJSON
-  from QGIS) and **Review**, which reads it on the server
+  from QGIS; its **Expected format** gives the shapes, the `kind` words and
+  an example file, `map/example-features.geojson`, [Expected format](#expected-format))
+  and **Review**, which reads it on the server
   (`POST …/map/import/preview`). Then the sheet widens to the review: a line
   with the file's name and its features counted by kind ("Check each kind
   before you import; nothing is saved until then"), **Set every row’s
@@ -3952,7 +3994,9 @@ answer is beside **Apply** at every size.
    (`spreadsheet/import/`, the same reader and failure messages as Import a
    b023 workbook; it reads the whole workbook, so a large one takes a few
    seconds). Workbooks never leave the browser, and the dialog says so under
-   the file field.
+   the file field, above an **Expected format** for the source picked (for a
+   hydrological-unit-based workbook, the [Crop_Factors] table's shape;
+   [Expected format](#expected-format)).
    **A hydrological-unit-based workbook** is the third source: its [Crop_Factors] and
    [Crop_Areas] sheets, read by the same worker
    (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
@@ -5563,6 +5607,53 @@ two.
   10 %, the Allocations tab's "within band"), each with its help tip and
   field history. Either is a model setting: saving it makes the latest run
   out of date.
+- **The daily EWR at the outlet** (inside `#set-ewr`, first, above the
+  pragmatic EWR row, which then says it isn't used while the daily EWR comes
+  from the DRM tables (kept for switching back), and the panel's head names
+  the source in use; `settings/EwrDailySourceFields.svelte`, its own chunk; helpers in
+  `settings/ewrDailySource.ts` and `settings/drmFiles.ts`; engine ≥ 1.77.0,
+  issue #455, [model.md §2.9f](./model.md)). **Daily EWR from** picks
+  `settings.ewrDailySource.method`: *The pragmatic EWR (above)*, the default;
+  *The DRM TAB file (monthly total flows)*; or *The DRM percentile tables
+  (read at each day's natural flow)*. With either DRM source: **Scale the
+  tables by** (*MAR ratio* or *Area ratio*), **Table MAR** (Mm³/a) and
+  **Table catchment area** (km², its hint naming the modelled area, the units'
+  areas summed), and a line with the **scale factor**: for the area ratio its
+  value and inputs; for the MAR ratio the last run's natural MAR ÷ the table
+  MAR (the last run's own s when it used the tables, else an estimate from its
+  mean natural flow, so labelled; "Run the model to see it" without a run).
+  Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
+  **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
+  ten points, m³/s), each before scaling. **Load a DRM file (.tab or .rul)**
+  reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
+  Maint.*, in Mm³ and converted to m³/s (÷ the month's days × 86 400 s,
+  February 28 days) in a preview with **Use these values** (which fills the TAB
+  flows and the table MAR from its `MAR =` line; under the percentile tables
+  the button is **Use its MAR only**, since a .tab and a .rul from one
+  determination go together) and Cancel; a `.rul` fills both percentile
+  tables (the total Reserve and the natural duration curve, converted from Mm³
+  a month when its unit line says so), asking first over tables already
+  there, and loaded under the TAB method switches to the percentile tables
+  and says so. The paste box's buttons are **Fill the natural flow table** /
+  **Fill the total Reserve table** (or **Fill the TAB flows**). A paste box takes the 12 TAB flows (a row or a
+  column) or a percentile table (as the rule tables' paste: 12 month rows,
+  optional % heading). **Which files can I load into the daily EWR, and what
+  do they fill?** (`settings/DrmFormatHelp.svelte`, named per place: "… into
+  the rule table at …" under each rule table) describes the `.rul` and `.tab` layouts,
+  the unit handling and the paste, with synthetic example files to download
+  (`.rul` in m³/s and in Mm³, `.tab`, a CSV). A file that doesn't parse names
+  the line (“line 13: the Jan row of the total Reserve block needs 10
+  numbers…”). A DRM source missing its tables or its divisor blocks Save
+  (the save bar links to `#set-ewr`); the pragmatic choice keeps tables half
+  entered. Run results say which EWR a run used: the *EWR not met* stat on
+  Runs & results and in the printed report (the same `RunSummaryView`)
+  carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)" or "EWR:
+  the pragmatic EWR", and the run's warnings repeat it. Wherever a screen
+  names the outlet's daily test (Judge results by's choice and Automatic, the
+  Summary's reserve strip, River & reserve's judged-by line, water-year bars
+  and EWR by month note) it uses `ewr/notMet.ts dailyEwrName`: "the pragmatic
+  EWR", or "the daily EWR from the DRM TAB file / percentile tables"; a DRM
+  source counts as a daily test set for Judge results by.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -5607,8 +5698,17 @@ two.
   **Also enter the low flows (maintenance and drought)**, which adds a blank
   **Low flows (maintenance to drought)** grid (blank cells block Save; switching
   the table to *Low flows only* drops it) and a **Fill the low flows** button;
-  **Load a CSV file** reads a file into the paste box, and two links download
-  synthetic example layouts (a total-flow and a low-flow table, DRM style).
+  **Load a file (.rul, .tab or CSV)** (issue #455) reads a CSV into the paste
+  box; a Desktop Reserve Model **.rul** fills the table at once (its unit, the
+  % points, the total Reserve as the EWR, *Reserve Flows without High Flows*
+  as the low flows, the *Natural Duration curves* as the natural flows, the
+  REC, the kind *desktop estimate* and, when none is typed, a source naming
+  the file; asking first over values; the natural-flow choice is kept and the
+  status line says how to use the file's curve), and a **.tab** fills the
+  determination's natural MAR and the REC. Two links download synthetic
+  example layouts (a total-flow and a low-flow table, DRM style), and **Which
+  files can I load, and what do they fill?** describes the formats, with
+  synthetic `.rul` and `.tab` files.
   Under each table, **High flows: freshets and floods**
   (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
   months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", the
@@ -5863,6 +5963,10 @@ or a script uses to push daily readings into the project's series.
 - **The new key** is shown once, in a highlighted box with **Copy** and the
   warning that it won't be shown again, above a copyable `curl` example that
   pushes one day with a `$WM_INGEST_KEY` placeholder (never the key itself).
+- **Expected format of a request**, under the panel's intro, before any key
+  exists: the body's fields, the units, that a `null` clears its day there
+  (unlike an upload's Append / update), when a new series is refused (`409`)
+  and the `400` `details`, with an example body ([Expected format](#expected-format)).
 - **The list**: each key's name, its `wm_<prefix>_…` (never the secret), its
   state (**Live**, **Expired**, **Revoked**), what it writes, who made it
   and when, when it ends (or "Revoked … by …"), and when it was last used.
@@ -7912,7 +8016,9 @@ grows with the page.
 
 **Import registered volumes** (the Import sheet, `AllocationImport.svelte`):
 what the file is (WARMS extract or CSV template), a reference, the file, and
-**Download the CSV template**. The preview says how many rows matched,
+**Download the CSV template**, with an **Expected format** under it (the
+headings, the columns a row needs, units, numbers, dates and an example;
+[Expected format](#expected-format)). The preview says how many rows matched,
 didn't, or have problems; the table lists rows with problems first (the
 problem in red), then unmatched rows, each with a unit picker ("by farm
 name", "chosen by you"); type and source share a column. **Import N rows**

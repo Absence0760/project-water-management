@@ -16,7 +16,8 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { describeFailure, WORKBOOK_ACCEPT } from '$lib/components/import/workbookFile';
+	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import { describeFailure, WORKBOOK_ACCEPT, WORKBOOK_MAX_MB } from '$lib/components/import/workbookFile';
 	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -37,6 +38,7 @@
 		FACTOR_SHEET,
 		kpForShape,
 		matchByName,
+		NODE_FACTORS_EXAMPLE,
 		nodeWarningText,
 		pctChange,
 		shapeOf,
@@ -334,6 +336,29 @@
 							</label>
 						{/key}
 						<p class="muted small">Read in this browser; the file isn’t uploaded.</p>
+						{#if kind === 'b023'}
+							<FormatHelp accepts={`A b023 Water Balance Tool workbook (.xlsx or .xlsm), up to ${WORKBOOK_MAX_MB} MB.`}>
+								<ul>
+									<li>The whole tool, with its named ranges: a workbook that lacks them is refused, and the message lists the ones missing.</li>
+									<li>The factors come from its [Crop demand] sheet: a row per crop under the month header, twelve A-pan crop factors from Oct to Sep.</li>
+									<li>Rows to check (a negative factor, a lone 0 or spike, a factor above 1.0, a row copied from another crop) are listed with the crop’s name; they load as they are.</li>
+								</ul>
+							</FormatHelp>
+						{:else}
+							<FormatHelp
+								accepts={`A hydrological-unit-based workbook (.xlsx or .xlsm), up to ${WORKBOOK_MAX_MB} MB, with a sheet named Crop_Factors (or “Crop Factors”).`}
+								example={NODE_FACTORS_EXAMPLE}
+							>
+								<ul>
+									<li>
+										A header row with the twelve months in any order (Oct … Sep, Jan … Dec or the full names), the names’ column headed “Crop” or
+										“Crops”, and optionally an “… efficiency” column just after the months (above 0, up to 1).
+									</li>
+									<li>Then a row per crop: its name and twelve FAO-56 crop coefficients (Kc). The table ends at the first row without a name, or at a “Total” row.</li>
+									<li>A missing sheet or header is listed as a warning, and so is a cell it can’t read, by its address; a cell that isn’t a number counts as 0.</li>
+								</ul>
+							</FormatHelp>
+						{/if}
 						{#if reading}<p class="small" role="status">Reading the workbook…</p>{/if}
 						{#if wbError}<p class="alert alert-error small" role="alert">{wbError}</p>{/if}
 						{#if wb}

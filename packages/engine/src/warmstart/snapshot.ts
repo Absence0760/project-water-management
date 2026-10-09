@@ -29,6 +29,7 @@
 import { fromEpochDay, toEpochDay, isIsoDate as isRealDate } from '../calendar';
 import type { ModelInput } from '../project';
 import type { GapFillKind } from '../flowGapFill';
+import type { OutletEwrInfo } from '../reserve/dailySource';
 import type { PreparedFits } from '../prepare';
 import { ENGINE_VERSION } from '../version';
 import { damCapacityOn } from '../network/development';
@@ -84,6 +85,13 @@ export interface PinnedStatistics {
 	reserveNatural: { site: string; curves: (number[] | null)[] }[];
 	/** The rain handling's fits from the stored record. */
 	fits: PreparedFits;
+	/**
+	 * The daily outlet EWR's scale factor and its inputs (engine ≥ 1.77.0,
+	 * settings.ewrDailySource, ../reserve/dailySource.ts): the capture run's,
+	 * so a resumed run's EWR is the uninterrupted run's. Absent with the
+	 * pragmatic EWR.
+	 */
+	outletEwr?: OutletEwrInfo;
 }
 
 /** The decoded state (plain numbers). */

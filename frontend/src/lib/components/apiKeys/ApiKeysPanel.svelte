@@ -10,7 +10,9 @@
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { apiBase, curlExample, DEFAULT_KEY_EXPIRY_DAYS, KEY_EXPIRY_CHOICES, KEY_STATE_WORD, keyRow, revokeKeyQuestion, seriesText, sortKeys } from './apiKeys';
+	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import { SERIES_KINDS } from '@water-management/engine';
+	import { apiBase, curlExample, INGEST_EXAMPLE_BODY, DEFAULT_KEY_EXPIRY_DAYS, KEY_EXPIRY_CHOICES, KEY_STATE_WORD, keyRow, revokeKeyQuestion, seriesText, sortKeys } from './apiKeys';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -111,6 +113,23 @@
 		A key lets a logger gateway or a script add daily readings to this project’s series without signing in. It can write series, and nothing
 		else: it can’t read the model, runs or members. Each request with it shows in History under the key’s name.
 	</p>
+	<FormatHelp
+		summary="Expected format of a request"
+		accepts="JSON (Content-Type: application/json), sent with POST to /ingest/v1/series/merge with the key as Authorization: Bearer <key>."
+		example={INGEST_EXAMPLE_BODY}
+	>
+		<ul>
+			<li><span class="mono">kind</span>: one of {#each SERIES_KINDS as k, i (k)}{i ? ', ' : ''}<span class="mono">{k}</span>{/each}.</li>
+			<li><span class="mono">name</span>: the series’ name, as the Data page shows it. A key limited to some series writes only those. A name the project doesn’t have yet makes a new series only while the project has no outlet series of that kind; otherwise add the series on the Data page first (the request is answered 409).</li>
+			<li><span class="mono">unit</span>: flow in m3/s, l/s, m3/day, m3/h or ML/day; rain and evaporation in mm, cm or in. The values are converted to m³/s or mm when stored.</li>
+			<li>
+				<span class="mono">startDate</span> (YYYY-MM-DD) and <span class="mono">values</span>, one a day from that date. Only the days sent are touched: new ones are
+				added, changed ones corrected, and a <span class="mono">null</span> clears its day (unlike an upload’s Append / update, which keeps the stored value).
+			</li>
+			<li>Optional: <span class="mono">source</span>, a label of up to 100 characters kept in History.</li>
+			<li>A body the server can’t take is answered 400, and its <span class="mono">details</span> name each problem’s place in the body (<span class="mono">["values", 3]</span>); nothing is written.</li>
+		</ul>
+	</FormatHelp>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
 	<form class="add" aria-label="Make an API key" onsubmit={create}>

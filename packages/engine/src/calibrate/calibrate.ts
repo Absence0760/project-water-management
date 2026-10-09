@@ -26,7 +26,7 @@ import { fromEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf }
 import { simulateNetwork } from '../network/simulate';
 import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
-import { buildNetworkPlan, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
+import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
@@ -398,7 +398,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);
-	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
+	const { plan, topo, outletEwr } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
 
 	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
 	const siteNodeId = settings.calibrationSiteNodeId ?? null;
@@ -466,12 +466,16 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Land cover (WP-1.35) reads the whole run's natural flow (its low-flow
 	// threshold is the flow exceeded 75 % of the historical days), so a run
 	// with land cover can't stop at the last scored day.
-	const wholeRun = plan.nodes.some((nd) => nd.landCover);
+	// A daily outlet EWR scaled by natural MAR (engine ≥ 1.77.0, §2.9f) reads every historical day's natural flow too.
+	const wholeRun = plan.nodes.some((nd) => nd.landCover) || outletEwr?.source.scaling === 'mar';
+	const areaKm2 = outletEwr?.info.modelAreaKm2 ?? 0;
 	const simulator = (scoredTo: number) => {
 		const n = wholeRun ? days : scoredTo;
 		const shortPlan = { ...plan, days: n };
 		return (p: ParamSet): Float64Array => {
 			runoff(p, n);
+			// The daily outlet EWR from the DRM tables follows each candidate's natural flow, as a run on it would.
+			if (outletEwr) fillPlanOutletEwr(plan, topo.outflow, natural, outletEwr.source, areaKm2, historyDays, n);
 			if (siteIndex < 0) return new Float64Array(days);
 			return simulateNetwork(shortPlan).nodes[siteIndex]!.outflow;
 		};

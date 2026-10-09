@@ -1,6 +1,6 @@
 // Pure helpers for the run results dashboard: the farm table's sorting and
 // flags, grouping of output series for the pickers, and unit conversion.
-import type { FarmSummary } from '@water-management/engine';
+import type { FarmSummary, OutletEwrInfo } from '@water-management/engine';
 import type { RunSeriesRef } from '$lib/api/types';
 
 export const SUPPLY_TARGET = 0.95;
@@ -8,6 +8,22 @@ export const SEC_PER_DAY = 86_400;
 /** m³/day → Mm³ per year (365.25-day year). */
 export const m3DayToMm3a = (v: number) => (v * 365.25) / 1e6;
 export const m3DayToM3s = (v: number) => v / SEC_PER_DAY;
+
+/**
+ * Which daily EWR the run judged the outlet by (engine ≥ 1.77.0,
+ * summary.catchment.outletEwr): the pragmatic EWR when absent, else the DRM
+ * table it came from, the scale factor and what it was worked out from.
+ */
+export function outletEwrLine(info: OutletEwrInfo | undefined): string {
+	if (!info) return 'EWR: the pragmatic EWR';
+	const what = info.method === 'tab' ? 'the DRM TAB file' : 'the DRM percentile tables';
+	const sig = (v: number) => String(Number(v.toPrecision(4)));
+	const how =
+		info.scaling === 'mar'
+			? `natural MAR ${sig(info.modelMarMm3 ?? NaN)} ÷ ${sig(info.tableMarMm3 ?? NaN)} Mm³/a`
+			: `area ${sig(info.modelAreaKm2 ?? NaN)} ÷ ${sig(info.tableAreaKm2 ?? NaN)} km²`;
+	return `EWR: ${what} × ${sig(info.scale)} (${how}${info.pinned ? ', the factor of the run it continues from' : ''})`;
+}
 
 /** Width of a supply bar, 0–1: the fraction supplied, clamped (non-finite → 0). */
 export const supplyBarFraction = (f: number) => (Number.isFinite(f) ? Math.min(1, Math.max(0, f)) : 0);

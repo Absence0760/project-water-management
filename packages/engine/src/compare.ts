@@ -12,6 +12,7 @@ import { regroup } from './format';
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { fromEpochDay, toEpochDay } from './calendar';
 import { ewrSourceConfidence, type EwrRuleTable, type EwrRuleSourceKind } from './reserve/rules';
+import { EWR_DAILY_SOURCE_LABEL, ewrDailySourceChanges } from './reserve/dailySource';
 import { isEwrSite } from './network/topology';
 import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
@@ -961,6 +962,8 @@ function diffSettings(
 	}
 	out.push(...diffWr2012(a.wr2012 as Partial<Wr2012Settings>, b.wr2012 as Partial<Wr2012Settings>));
 	out.push(...diffEwrRules(a.ewrRules, b.ewrRules, siteName));
+	// The daily outlet EWR's source (engine ≥ 1.77.0): a snapshot without it ran the pragmatic EWR.
+	for (const t of ewrDailySourceChanges(a.ewrDailySource, b.ewrDailySource)) push(EWR_DAILY_SOURCE_LABEL, `${EWR_DAILY_SOURCE_LABEL}: ${t}`);
 	out.push(...diffExclusions(a.calibrationExclusions, b.calibrationExclusions));
 	const za = a.zeroRainRuns as Record<string, unknown>;
 	const zb = b.zeroRainRuns as Record<string, unknown>;
@@ -1000,7 +1003,8 @@ function diffSettings(
 		'pe',
 		'lakeEvapFactorMonthly',
 		'effectiveRainFractionMonthly',
-		'droughtRestriction'
+		'droughtRestriction',
+		'ewrDailySource'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);
@@ -1835,7 +1839,8 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 		['Monthly dam evaporation factors', 'lakeEvapFactorMonthly'],
 		['Monthly effective rain fractions', 'effectiveRainFractionMonthly'],
 		[PE_LABEL, 'pe'],
-		['Hi/lo MAP split', 'hiLoSplit']
+		['Hi/lo MAP split', 'hiLoSplit'],
+		[EWR_DAILY_SOURCE_LABEL, 'ewrDailySource']
 	);
 	for (const [k, f] of Object.entries(DATA_QUALITY_FIELDS)) out.push([`Data quality ${f.label}`, `dataQuality.${k}`]);
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);

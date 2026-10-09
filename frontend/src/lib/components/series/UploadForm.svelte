@@ -23,6 +23,8 @@
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 	import { newSeriesEffect } from './roles';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
+	import { SERIES_EXAMPLE, SERIES_EXAMPLE_FILE } from '$lib/series/example';
 
 	let {
 		projectId,
@@ -344,18 +346,24 @@
 </script>
 
 <form id={id('form')} onsubmit={upload}>
-	<details class="fmt">
-		<summary>File formats</summary>
-		<p>Two columns, <span class="mono">date,value</span>, one row per day; a header row is optional.</p>
-		<pre class="mono">date,value
-2025-04-01,0.0
-2025-04-02,12.4
-2025-04-03,</pre>
+	<FormatHelp
+		accepts="A .csv, .tsv or .txt file, or a DWS daily export saved as text or as the web page (.htm, .html). At most 60 000 days from the first date to the last."
+		example={SERIES_EXAMPLE}
+		exampleFile={SERIES_EXAMPLE_FILE}
+	>
+		<p>Two columns, <span class="mono">date,value</span>, one row per day; a header row is optional and lines starting with # are skipped.</p>
 		<ul>
-			<li>Dates: YYYY-MM-DD (safest), YYYY/MM/DD, DD/MM/YYYY or MM/DD/YYYY. The order is worked out from the whole file; if no day is above 12, day/month is assumed and the summary says so.</li>
+			<li>
+				Dates: YYYY-MM-DD (safest), YYYY/MM/DD, YYYYMMDD, DD/MM/YYYY or MM/DD/YYYY (the last two with slashes, dots or dashes). The order is worked out from the whole file;
+				if no day is above 12, day/month is assumed and the summary says so.
+			</li>
+			<li>
+				Several readings a day (an hourly or 10-minute logger): a time after each date, <span class="mono">2025-04-01 09:00</span> (seconds and am/pm are
+				read too). The form then asks how to add them up into days.
+			</li>
 			<li>Separators: comma, semicolon or tab, worked out from the file. Quote a value that holds the separator.</li>
 			<li>Numbers: 12.5 or 12,5 (a decimal comma in a semicolon or tab file, or quoted), with or without thousands separators (1 234,5 · 1,234.5). The decimal separator is worked out from the whole file; a file that mixes them, or where 1,234 could be either, is refused.</li>
-			<li>Blank, NA or - = no reading (stored as a gap).</li>
+			<li>Blank, NA, NaN, null or - = no reading (stored as a gap). A negative value (-999, -1) is a “no reading” placeholder and is stored as a gap too; the summary counts them.</li>
 			<li>
 				DWS hydrology exports load as they are: the daily table from the DWS site (<span class="mono">DATE D AVG F/R QUAL</span>, dates as
 				YYYYMMDD), as text or the saved page. Days whose quality code says the data is missing (151, 165, 170, 172, 246, 247, 255), and blank
@@ -363,8 +371,9 @@
 			</li>
 			<li>Units: pick the file's unit below and the values are converted; flow is stored as the daily mean in m³/s, rain and evaporation in mm per day.</li>
 			<li>Name the file after the series (e.g. <span class="mono">Weir flow.csv</span>) and it is picked for you.</li>
+			<li>A row that can't be read stops the upload, and the message names its line (“Line 12: …”).</li>
 		</ul>
-	</details>
+	</FormatHelp>
 	<div class="field">
 		<label for={id('file')}>CSV file or DWS export</label>
 		<input id={id('file')} type="file" accept=".csv,.tsv,.txt,.htm,.html,text/csv,text/plain" bind:this={fileInput} onchange={(e) => read(e.currentTarget.files?.[0])} />
@@ -625,31 +634,6 @@
 </form>
 
 <style>
-	.fmt {
-		margin-bottom: 0.75rem;
-		font-size: 0.85rem;
-	}
-	.fmt summary {
-		cursor: pointer;
-		font-weight: 600;
-		color: var(--accent);
-		min-height: 32px;
-		/* As wide as its words, so its focus ring (it takes focus first in the Add data dialog) hugs them. */
-		width: fit-content;
-		display: flex;
-		align-items: center;
-	}
-	.fmt pre {
-		background: var(--surface-2);
-		padding: 0.5rem 0.75rem;
-		border-radius: var(--radius-sm);
-		margin: 0.4rem 0;
-	}
-	.fmt ul {
-		margin: 0.25rem 0 0;
-		padding-left: 1.1rem;
-		color: var(--text-2);
-	}
 	.label-row {
 		display: flex;
 		align-items: center;

@@ -19,7 +19,8 @@ Anyone holding a pack can hash the file at the engine's tag and compare.
 | Version | Written | For engines | Notes |
 | --- | --- | --- | --- |
 | [v1](./v1.md) | 2026-09-29 | 1.30.0 – 1.71.0 | First statement (issue #71) |
-| [v2](./v2.md) | 2026-10-03 | ≥ 1.72.0 | §4: irrigation systems per crop and unit; the return flow a share of the water supplied (audit N1) |
+| [v2](./v2.md) | 2026-10-03 | 1.72.0 – 1.76.0 | §4: irrigation systems per crop and unit; the return flow a share of the water supplied (audit N1) |
+| [v3](./v3.md) | 2026-10-08 | ≥ 1.77.0 | §5: the daily EWR at the outlet may come from the DRM TAB file or percentile tables, scaled by MAR or area (issue #455) |
 
 The highest version is the current one: new sign-offs and packs cite it.
 

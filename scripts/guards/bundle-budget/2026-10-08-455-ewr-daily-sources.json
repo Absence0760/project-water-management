@@ -1,0 +1,4 @@
+{
+	"addKb": 18,
+	"why": "Issue #455: the daily EWR at the outlet from the DRM TAB file or percentile tables, and DRM file uploads. Measured gzipped locally: the Settings fields chunk (EwrDailySourceFields, 5.5 KB), the DRM file parsers and format help (drmFiles + DrmFormatHelp, 4.3 KB), the engine's dailySource module (2.2 KB), the run summary's EWR line (0.9 KB), plus the help article, the rule-table editor's file loading and run.ts. With the shared name of the daily test (ewr/notMet.ts dailyEwrName) on the Summary, River & reserve and Judge results by: 1827 KB locally against 1813 before this entry; CI runs ~2 KB above. Headroom ~2 KB on CI."
+}

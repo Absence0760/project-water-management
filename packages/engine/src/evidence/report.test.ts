@@ -661,6 +661,23 @@ describe('absence is printed, never omitted (rule 3, G6, G16)', () => {
 		expect(evidenceReport(i).flags.map((f) => f.id)).not.toContain('ewrZero');
 	});
 
+	it('with the daily EWR from the DRM TAB file (engine ≥ 1.77.0), the TAB flows decide it, not the pragmatic EWR', () => {
+		const i = input();
+		const flag = (tab: number[], pragmatic: number) => {
+			const ewrDailySource = { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 10, tabM3s: tab, naturalPctM3s: null, reservePctM3s: null };
+			const settings = { ...i.baseline.inputs.settings, ewrPragmaticM3PerDay: new Array(12).fill(pragmatic) as never, ewrDailySource: ewrDailySource as never };
+			return evidenceReport(input({ baseline: { ...i.baseline, inputs: { ...i.baseline.inputs, settings } } })).flags.map((f) => f.id);
+		};
+		expect(flag(new Array(12).fill(0), 1000)).toContain('ewrZero');
+		expect(flag(new Array(12).fill(0.1), 0)).not.toContain('ewrZero');
+	});
+
+	it('a run whose daily EWR scale factor came out 0 is flagged too: it asked for 0 every day', () => {
+		const i = input();
+		const summary = { ...i.baseline.summary, catchment: { ...i.baseline.summary.catchment, outletEwr: { method: 'tab' as const, scaling: 'mar' as const, scale: 0, modelMarMm3: 0, tableMarMm3: 10 } } };
+		expect(evidenceReport(input({ baseline: { ...i.baseline, summary } })).flags.map((f) => f.id)).toContain('ewrZero');
+	});
+
 	it('orders the flags red, then caution, then counts', () => {
 		const order = { red: 0, caution: 1, count: 2 };
 		const levels = evidenceReport(input()).flags.map((f) => order[f.level]);

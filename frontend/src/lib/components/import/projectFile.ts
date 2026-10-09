@@ -45,8 +45,9 @@ export function parseProjectFileText(text: string): ParsedImport {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(text.replace(/^﻿/, ''));
-	} catch {
-		throw new ImportFileError("This file isn't valid JSON, so it can't be a project file.");
+	} catch (e) {
+		const at = jsonErrorAt(e instanceof Error ? e.message : '', text);
+		throw new ImportFileError(`This file isn't valid JSON${at ? ` (${at})` : ''}, so it can't be a project file.`);
 	}
 	const doc = raw as Record<string, unknown> | null;
 	if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new ImportFileError(notAProject);
@@ -67,6 +68,23 @@ export function parseProjectFileText(text: string): ParsedImport {
 }
 
 const notAProject = "This JSON file isn't a project file.";
+
+/**
+ * Where JSON.parse stopped, as "line 3, column 5", from the browser's
+ * message (issue #456): V8 and Firefox name the line and column, older V8
+ * only the character position (counted here, from 0, in the text it parsed,
+ * which had any byte-order mark removed). '' when the message names neither
+ * (Safari; V8 when the first character is already wrong).
+ */
+export function jsonErrorAt(message: string, text: string): string {
+	const lc = /line (\d+) column (\d+)/i.exec(message);
+	if (lc) return `line ${lc[1]}, column ${lc[2]}`;
+	const pos = /position (\d+)/i.exec(message);
+	if (!pos) return '';
+	const before = text.replace(/^﻿/, '').slice(0, Number(pos[1]));
+	const lines = before.split(/\r\n|\r|\n/);
+	return `line ${lines.length}, column ${lines.at(-1)!.length + 1}`;
+}
 
 function tooLarge(bytes: number): string {
 	const mb = (n: number, digits: number) => (n / 1024 / 1024).toFixed(digits);

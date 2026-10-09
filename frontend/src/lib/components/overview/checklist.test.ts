@@ -138,6 +138,12 @@ describe('checklist', () => {
 		noEwr.ewrPragmaticM3PerDay = defaultProjectSettings().ewrPragmaticM3PerDay;
 		const step = checklist({ model: full, settings: noEwr, series: [], runs: [] })[3]!;
 		expect(step).toMatchObject({ status: 'partial', optional: true });
+
+		// A daily EWR from the DRM TAB file (engine ≥ 1.77.0) is an EWR set, with the pragmatic EWR at 0.
+		const tab = settled();
+		tab.ewrPragmaticM3PerDay = defaultProjectSettings().ewrPragmaticM3PerDay;
+		tab.ewrDailySource = { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 10, tabM3s: new Array(12).fill(0.1), naturalPctM3s: null, reservePctM3s: null };
+		expect(checklist({ model: full, settings: tab, series: [], runs: [] })[3]!.status).toBe('done');
 	});
 
 	it('flags results as stale when the project changed after the last run', () => {

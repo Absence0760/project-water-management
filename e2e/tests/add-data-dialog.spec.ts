@@ -32,7 +32,7 @@ test('the dialog shows the upload form, closes on Escape and gives focus back to
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByRole('heading', { level: 2, name: 'Add data' })).toBeVisible();
 	await expect(dialog).toContainText('Upload a CSV (or a DWS export) of daily rainfall, flow or evaporation. New days are appended to the matching series');
-	await expect(dialog.getByText('File formats')).toBeVisible();
+	await expect(dialog.getByText('Expected format', { exact: true })).toBeVisible();
 	for (const label of ['CSV file or DWS export', 'Kind', 'Unit']) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
 	// The kind's own tip, beside the field where the kind is chosen.
 	await expect(dialog.getByRole('button', { name: 'About Catchment rainfall' })).toBeVisible();

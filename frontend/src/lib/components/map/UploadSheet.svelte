@@ -17,7 +17,10 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, ApiError, type MapFeatureKind, type MapImportPreview, type MapImportProblem, type MapSource } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
 	import { areaText, GEO_MAX_BYTES, importProblems, KIND_LABEL, KIND_NODES, problemText } from './mapData';
+	// The example file the "Expected format" offers; the backend's geojson.test.ts checks it passes the upload's checks.
+	import EXAMPLE_GEOJSON from './example-features.geojson?raw';
 	import {
 		importBody,
 		kindCounts,
@@ -175,6 +178,22 @@
 					A file may mix boundaries, parcels, dams, gauges and rivers: you check each feature’s kind before anything is saved.
 				</span>
 			</div>
+			<FormatHelp
+				accepts="A GeoJSON file (.geojson or .json): at most 5 MB, 500 features and 50 000 positions a feature. Shapefiles and KML aren’t read: export the layer as GeoJSON in EPSG:4326 (QGIS: Export → Save Features As)."
+				example={'{ "type": "Feature",\n  "properties": { "name": "Example weir", "kind": "gauge" },\n  "geometry": { "type": "Point", "coordinates": [21.40, -33.62] } }'}
+				exampleFile={{ name: 'example-features.geojson', text: EXAMPLE_GEOJSON, type: 'application/geo+json' }}
+			>
+				<ul>
+					<li>A FeatureCollection, one Feature or one geometry: Point, LineString, MultiLineString, Polygon or MultiPolygon, in 2D.</li>
+					<li>Each position is <span class="mono">[longitude, latitude]</span> in degrees, south negative. A polygon’s rings are closed and don’t cross themselves or each other.</li>
+					<li>
+						A <span class="mono">kind</span>, <span class="mono">type</span> or <span class="mono">layer</span> property proposes the feature’s kind: catchment boundary,
+						farm parcel, dam, gauge, river or other (plurals and words such as reservoir, weir or stream too); without one, its shape does.
+					</li>
+					<li>Only a name (<span class="mono">name</span>, <span class="mono">label</span> or <span class="mono">title</span>), a description and a ref are kept; every other property is dropped.</li>
+					<li>Any problem refuses the whole file, and each is listed by its feature’s place in the file (“Feature 3 …”).</li>
+				</ul>
+			</FormatHelp>
 			{#if error}
 				<div class="alert alert-error" role="alert" data-testid="map-import-error"><p>{error}</p></div>
 			{/if}

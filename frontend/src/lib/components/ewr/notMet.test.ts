@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import { headlines } from '$lib/components/overview/latestRun';
 import { riverKpis } from '$lib/components/river/river';
-import { EWR_NOT_MET, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
+import { EWR_NOT_MET, dailyEwrName, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
 
 describe('ewrNotMet', () => {
 	it('words the pragmatic EWR test one way: the share not met and the days not met of the record', () => {
@@ -59,5 +59,15 @@ describe('daysBelowTestOf', () => {
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'pragmatic' } }])).toBe('the reserve');
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'auto' } }])).toBe('the pragmatic EWR');
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'pragmatic' } }, { summary: { ewrAssurance: [site] } }])).toBe('the pragmatic EWR');
+	});
+});
+
+describe('dailyEwrName (engine ≥ 1.77.0, issue #455)', () => {
+	it('the pragmatic EWR unless the run or the settings take it from a DRM table', () => {
+		expect(dailyEwrName(undefined)).toBe('the pragmatic EWR');
+		expect(dailyEwrName({ method: 'pragmatic' })).toBe('the pragmatic EWR');
+		expect(dailyEwrName({ method: 'tab' })).toBe('the daily EWR from the DRM TAB file');
+		expect(daysBelowTest(true, { method: 'percentile' })).toBe('the daily EWR from the DRM percentile tables');
+		expect(daysBelowTest(false, { method: 'percentile' })).toBe('the reserve');
 	});
 });

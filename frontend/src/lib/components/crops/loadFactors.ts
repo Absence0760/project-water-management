@@ -63,6 +63,17 @@ export const SOURCE_KINDS = [
 ] as const satisfies readonly { id: string; label: string; hint: string; shape: FactorShape }[];
 export type SourceKind = (typeof SOURCE_KINDS)[number]['id'];
 
+/**
+ * The [Crop_Factors] table the dialog's "Expected format" shows for a
+ * node-based workbook (issue #456; spreadsheet/import/nodeCrops.ts reads it).
+ * Invented values; "…" stands for the months between.
+ */
+export const NODE_FACTORS_EXAMPLE = [
+	'Crop      Oct   Nov   Dec   …   Sep   Irrigation efficiency',
+	'Citrus    0.65  0.65  0.70  …   0.65  0.85',
+	'Pasture   0.80  0.85  0.90  …   0.80  0.75'
+].join('\n');
+
 export const shapeOf = (kind: SourceKind): FactorShape => SOURCE_KINDS.find((k) => k.id === kind)!.shape;
 
 /**

@@ -597,6 +597,20 @@ alongside teams, e.g. to give an outside client `viewer` access.
   with a warning (the Settings form refuses them). A project copy moves its
   ids to the copy's nodes. A model input: runs record it, and changing it
   moves `updatedAt`.
+  `settings.ewrDailySource` (engine ≥ 1.77.0, issue #455,
+  [model.md §2.9f](./model.md), [ui.md § The daily EWR at the outlet](./ui.md))
+  is where the outlet's daily EWR comes from: `{ method: 'pragmatic' | 'tab' |
+  'percentile', scaling: 'mar' | 'area', tableMarMm3: number > 0 | null,
+  tableAreaKm2: number > 0 | null, tabM3s: number[12] | null,
+  naturalPctM3s: number[12][10] | null, reservePctM3s: number[12][10] | null }`
+  (m³/s, water-year months Oct … Sep, the ten DRM points 0.1 … 0.99; every
+  value 0 … 10⁶), or `null` (the default) for the pragmatic EWR. Every key is
+  required (`null` when not entered) and no other is accepted. `tab` needs
+  `tabM3s`, `percentile` both grids, and the scaling its divisor (`mar`:
+  `tableMarMm3`; `area`: `tableAreaKm2`); `pragmatic` needs nothing, so tables
+  half entered can be saved under it. Replaced whole, never merged; the
+  engine's `ewrDailySourceIssues` checks it (`400 daily EWR source: <field>:
+  …`). A model input: runs record it, and changing it moves `updatedAt`.
   `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
   ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
   evidence report's cited ensemble must follow: `{ members, bounds:
@@ -2016,6 +2030,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
+- `summary.catchment.outletEwr` (engine ≥ 1.77.0, issue #455; only when the
+  daily outlet EWR came from a DRM table, `settings.ewrDailySource`):
+  `{ method: 'tab' | 'percentile', scaling: 'mar' | 'area', scale,
+  modelMarMm3?, tableMarMm3? (with 'mar'), modelAreaKm2?, tableAreaKm2?
+  (with 'area'), pinned?: true (a resumed run's, from its snapshot) }`; the
+  outlet's `ewr` series is then labelled `EWR from the DRM TAB file (scaled)` /
+  `EWR from the DRM percentile tables (scaled)`. Absent = the pragmatic EWR.
 - `summary.droughtRestriction` (engine ≥ 1.54.0, WP-3.8; only with
   `settings.droughtRestriction`): `{ rule (as applied), years: [{
   waterYear, days, daysByLevel: [none, level 1, …] }], daysByLevel (the
