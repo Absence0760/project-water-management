@@ -603,9 +603,15 @@ did, and refuses the whole file on any problem, listing them per feature:
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
-  feature's name (made one line, as every feature name is, since the map
-  draws it as a label: line breaks and control characters become spaces;
-  api.md § Catchment map), and `description` and `ref`, trimmed and capped. Everything
+  feature's name; a feature with none of those takes its `layer` (any key
+  case) as the name when that value names no kind, since QGIS's "Merge
+  vector layers" writes each source layer's name there, so a file of
+  sub-catchments carries their names only in `layer`. That name then also
+  links it to the unit of the same name (below), and the `layer` proposes no
+  kind. The name is made one line, as every feature name is, since the map
+  draws it as a label (line breaks and control characters become spaces;
+  api.md § Catchment map). `description` and `ref` are kept too, trimmed and
+  capped. Everything
   else is dropped: an attribute table can carry owners' names or ID numbers,
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file
