@@ -4,6 +4,7 @@ import {
 	ImportFileError,
 	importBody,
 	importTooLarge,
+	jsonErrorAt,
 	parseProjectFileText,
 	readImportFile,
 	summarizeImport
@@ -79,6 +80,15 @@ describe('parseProjectFileText', () => {
 		expect(bad(JSON.stringify({ ...exported, format: 'something-else' }))).toBe("This JSON file isn't a project file.");
 		expect(bad(JSON.stringify({ name: 'x', model: { nodes: [] } }))).toMatch(/It has no model/);
 		expect(bad(JSON.stringify({ ...exported, series: {} }))).toMatch(/series aren't a list/);
+	});
+
+	it('names the line and column where broken JSON stops, when the browser says where (issue #456)', () => {
+		expect(() => parseProjectFileText('{\n  "name": "x",\n}')).toThrow(/^This file isn't valid JSON \(line 3, column 1\), so it can't be a project file\.$/);
+		// Each engine's wording: V8's line and column, Firefox's, and an older V8's character position (counted past a BOM).
+		expect(jsonErrorAt('Expected double-quoted property name in JSON at position 11 (line 3 column 1)', '')).toBe('line 3, column 1');
+		expect(jsonErrorAt("JSON.parse: expected ',' or '}' after property value in object at line 2 column 9 of the JSON data", '')).toBe('line 2, column 9');
+		expect(jsonErrorAt('Unexpected token } in JSON at position 14', '﻿{\r\n  "a": 1,\r\n}')).toBe('line 3, column 1');
+		expect(jsonErrorAt('JSON Parse error: Unexpected identifier "date"', 'date')).toBe('');
 	});
 
 	it('keeps a missing name as empty, for the preview to ask for one', () => {

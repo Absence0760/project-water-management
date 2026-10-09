@@ -2,6 +2,7 @@
 // which farms a farmer is linked to, by name, the checkbox list's selection,
 // the bulk invite CSV and its outcomes. Kept free of Svelte so they can be
 // unit-tested.
+import { LANGUAGES } from '@water-management/engine/languages';
 import type { BulkFarmerResult, BulkFarmerRow, FarmerEntry } from '$lib/api/types';
 
 export interface FarmOption {
@@ -114,6 +115,25 @@ export function parseFarmerCsv(text: string): ParsedFarmerCsv {
 	if (!rows.length) problems.push('The file has a header row but no farmers under it.');
 	if (rows.length > BULK_MAX_ROWS) problems.push(`At most ${BULK_MAX_ROWS} rows at a time; this has ${rows.length}. Split it into several files.`);
 	return { rows, problems };
+}
+
+/** A CSV cell, quoted when it holds a comma, a quote or a line break (parseFarmerCsv reads it back). */
+const csvCell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/**
+ * The invite CSV's example file (the dialog's "Expected format", issue #456):
+ * a header and a row for each of the project's first two hydrological units,
+ * an invented address and a language code each (else one row with a
+ * placeholder name), so it reads back as it is (parseFarmerCsv) and every
+ * farm in it is one the project has.
+ */
+export function inviteExampleCsv(farms: readonly Pick<FarmOption, 'name'>[]): string {
+	const names = farms
+		.map((f) => f.name.trim())
+		.filter(Boolean)
+		.slice(0, 2);
+	const rows = (names.length ? names : ['Hydrological unit name']).map((n, i) => `farmer${i + 1}@example.com,${csvCell(n)},${LANGUAGES[i % LANGUAGES.length]!.code}`);
+	return ['email,farm,language', ...rows, ''].join('\r\n');
 }
 
 /** "3 added, 12 invited, 2 with errors" (only the parts that aren't zero). */

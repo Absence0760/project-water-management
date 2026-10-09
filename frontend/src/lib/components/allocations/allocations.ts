@@ -321,6 +321,16 @@ export const TEMPLATE_CSV =
 	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions,water_use\r\n' +
 	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace,Oct-Mar,0.05,No abstraction below 0.2 m3/s at the weir | Meter and report monthly,21a\r\n';
 
+/**
+ * The import sheet's "Expected format" example (issue #456): the template's
+ * fewest columns a row needs, a take and a dam's storage. Invented values;
+ * the e2e spec imports it (upload-formats.spec.ts).
+ */
+export const ALLOCATIONS_EXAMPLE =
+	'registration_no,farm,authorisation,water_source,volume_m3_year,water_use\n' +
+	'EXAMPLE-001,Farm A,licence,surface,120000,21a\n' +
+	'EXAMPLE-002,Farm A,licence,surface,150000,21b';
+
 /** The first 12 hex digits of a SHA-256, for display beside the full hash in a title. */
 export const shortHash = (sha: string) => sha.slice(0, 12);
 

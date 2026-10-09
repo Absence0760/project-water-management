@@ -173,6 +173,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		why: 'GridPasteDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed); DrmFormatHelp: the same prefix + the synthetic percentile CSV (ewrDailySource.ts exampleDailyCsv), passed in by EwrDailySourceFields',
 		in: ['lib/components/model/GridPasteDialog.svelte', 'lib/components/settings/DrmFormatHelp.svelte']
 	},
+	exampleUrl: { why: 'FormatHelp: exampleHref() = `data:<type>;charset=utf-8,` + encodeURIComponent(the example text); the type is a literal at every caller (text/csv by default, application/geo+json)', in: ['lib/components/common/FormatHelp.svelte'] },
 	templateHref: { why: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)', in: ['lib/components/allocations/AllocationImport.svelte'] }
 };
 

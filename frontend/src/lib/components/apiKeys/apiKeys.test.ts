@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ApiKey } from '$lib/api/types';
-import { apiBase, curlExample, keyRow, keyState, revokeKeyQuestion, sortKeys } from './apiKeys';
+import { SERIES_KINDS, unitOptions } from '@water-management/engine';
+import { apiBase, curlExample, INGEST_EXAMPLE_BODY, keyRow, keyState, revokeKeyQuestion, sortKeys } from './apiKeys';
 
 const NOW = Date.parse('2026-09-26T12:00:00Z');
 const key = (over: Partial<ApiKey> = {}): ApiKey => ({
@@ -102,5 +103,17 @@ describe('the curl example', () => {
 		expect(text).not.toMatch(/wm_[0-9a-f]{8}_/);
 		expect(text).toContain('"kind":"rain_catchment_mm","name":"Weir","unit":"mm","startDate":"2026-09-25"');
 		expect(curlExample('x', null, '2026-09-25')).toContain('"kind":"flow_logger_m3s"');
+	});
+});
+
+describe('INGEST_EXAMPLE_BODY (issue #456)', () => {
+	it('is a merge body: a known kind, a unit that kind takes, a date and daily values', () => {
+		const body = JSON.parse(INGEST_EXAMPLE_BODY);
+		expect(Object.keys(body).sort()).toEqual(['kind', 'name', 'source', 'startDate', 'unit', 'values']);
+		expect(SERIES_KINDS).toContain(body.kind);
+		expect(unitOptions(body.kind)).toContain(body.unit);
+		expect(body.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		expect(body.values).toEqual([0, 12.4, null]);
+		expect(body.source.length).toBeLessThanOrEqual(100);
 	});
 });

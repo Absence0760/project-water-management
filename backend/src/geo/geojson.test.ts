@@ -1,5 +1,6 @@
 // GeoJSON checks (geo/geojson.ts): what the map refuses, and why, before
 // anything is stored.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { circle, sawtooth } from '../__tests__/shapes.js';
 import {
@@ -361,5 +362,23 @@ describe('nested holes, checked without comparing every pair (round-4 hardening)
 		const [e, n] = last[2]!;
 		const inner = box(w + (e - w) / 4, s + (n - s) / 4, e - (e - w) / 4, n - (n - s) / 4);
 		expect(problemOf(poly(outer, ...holes, inner))).toMatch(/hole inside another hole/);
+	});
+});
+
+describe('the Map upload’s example file (issue #456)', () => {
+	// The file the upload sheet's "Expected format" offers (frontend/src/lib/components/map/example-features.geojson):
+	// it must pass these same checks, with the kind each feature names.
+	const text = readFileSync(new URL('../../../frontend/src/lib/components/map/example-features.geojson', import.meta.url), 'utf8');
+
+	it('passes every check and proposes the kind its `kind` property names', () => {
+		const r = parseGeoJson(text);
+		expect(r.problems).toEqual([]);
+		expect(r.features.map((f) => f.name)).toEqual(['Example catchment', 'Example farm', 'Example river', 'Example weir']);
+		expect(proposeKinds(r.features, { hasBoundary: false })).toEqual([
+			{ kind: 'catchment_boundary', from: 'property' },
+			{ kind: 'farm_parcel', from: 'property' },
+			{ kind: 'river', from: 'property' },
+			{ kind: 'gauge', from: 'property' }
+		]);
 	});
 });

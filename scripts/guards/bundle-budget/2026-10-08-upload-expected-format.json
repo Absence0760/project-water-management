@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Issue #456, the Expected format note at every upload and paste box (common/FormatHelp.svelte and the words for the series upload, allocations import, invite CSV, GeoJSON upload, Load crop factors, project import and API keys). Measured 1810 KB locally on main @ f7a769b87, 1816 KB with the change (+6 KB)."
+}
