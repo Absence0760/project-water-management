@@ -206,12 +206,10 @@ jobs:
         env:
           CACHED: ${{ steps.minio-image.outputs.cache-hit }}
         run: |
-          if [ "$CACHED" = "true" ]; then
-            bash scripts/ci/service-image.sh load minio ~/service-images/minio.tar
-            docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio
-          else
-            docker compose up -d --wait minio
-          fi
+          # On a miss, the same mirror-first pull e2e-build makes, never compose's own (from Docker Hub).
+          [ "$CACHED" = "true" ] || bash scripts/ci/service-image.sh save minio ~/service-images/minio.tar
+          bash scripts/ci/service-image.sh load minio ~/service-images/minio.tar
+          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio
 
       - name: DB tests
         run: pnpm test:backend:db
