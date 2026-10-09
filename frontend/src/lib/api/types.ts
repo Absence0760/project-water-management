@@ -3082,34 +3082,25 @@ export interface PanReport {
 export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
 
 /**
- * How a point of a start or division was put on the elevation model's channel (start-7, backend delineation/pointPlacement.ts):
- * matched to its nearby river reach's area, at the DEM's junction for the river picked at a confluence, snapped to the
- * most-drained cell near it, on the much larger channel the editor chose, on its own cell (a delineated outlet), a dam
- * polygon's most-drained cell, or the boundary's. Absent on proposals before start-7.
+ * How a point of a start or division was put on the elevation model's channel (backend delineation/pointPlacement.ts): on the
+ * terrain channel nearest it (`snapped`), on the much larger channel the editor chose, on its own cell (a delineated outlet), a
+ * dam polygon's most-drained cell, or the boundary's. Absent on proposals before start-7. Proposals from start-7 to start-14
+ * can also say `matched` or `junction` and carry the mapped river `reach` (and `unmatched`): the mapped river's rules, gone
+ * since start-15 (issue #472).
  */
 export interface PointPlacement {
 	placedBy: 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary';
-	reach: { dataset: string; reachId: number; upstreamKm2: number; chosen: boolean } | null;
-	/** Snapped beside a much larger channel: that channel (Use that channel puts the point on it). */
+	reach?: { dataset: string; reachId: number; upstreamKm2: number; chosen: boolean } | null;
+	/** Beside a much larger channel: that channel (Use that channel puts the point on it). */
 	larger: LargerChannel | null;
-	/** A reach was near but no channel near the point matched its area. */
-	unmatched: boolean;
+	unmatched?: boolean;
 	/** A dam polygon placed by the position marked on the map (194), not by its outline; absent when unmarked. */
 	damPosition?: DamPosition;
 }
 
-/** A point's placement choices in a start or division request: the river picked at a confluence, the larger channel taken. */
+/** A point's placement choice in a start or division request: the larger channel taken. */
 export interface PlacementChoice {
-	reach?: { dataset: string; reachId: number };
 	useLarger?: boolean;
-}
-
-/** Points at confluences (a start's or division's 422 `confluence`, `details.points`): each one's rivers, picked as `reach`. */
-export interface ConfluencePoint {
-	/** The map feature's id; '' for the outlet gauge. */
-	featureId: string;
-	name: string;
-	choices: ConfluenceChoice[];
 }
 
 /** One unit a start-from-the-map proposal offers, keyed by the map feature it came from. */
@@ -3285,14 +3276,8 @@ export interface ClickPiece {
 	nonContributingM2?: number | null;
 	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
 	open: boolean;
-	/** matched: put on the channel whose upstream area matches its nearby river reach's; junction: at the DEM's own junction for the river picked at a confluence; snapped: on the most-drained cell near it. */
-	placedBy: 'matched' | 'snapped' | 'junction';
-	/** The river reach it was matched to. */
-	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
-	/** Snapped beside a much larger channel: that channel, to offer instead. */
+	/** Beside a much larger terrain channel: that channel, to offer instead. */
 	larger: LargerChannel | null;
-	/** A river reach was near but no channel near the click matched its area: that reach (the click may be on another stream). */
-	unmatched: { dataset: string; reachId: number; upstreamKm2: number } | null;
 }
 
 /** GET …/map/channels?tile=i,j: one tile of the elevation model's channels (cells with ≥ minKm2 draining through them). */
@@ -3306,18 +3291,6 @@ export interface ChannelTileAnswer {
 	cached: boolean;
 }
 
-/** One river at a confluence (a 422 `confluence`'s `details.choices`): pick it by sending its dataset and reach id back as `reach`. */
-export interface ConfluenceChoice {
-	dataset: string;
-	reachId: number;
-	upstreamKm2: number;
-	/** The point's distance from its line (m). */
-	distanceM: number;
-	role: 'above' | 'below' | 'along';
-	/** In words: "the river below the junction", "the tributary above the junction", … */
-	label: string;
-}
-
 /** A much larger channel near a point (a 422 `larger_channel`'s `details.larger`, or a click's piece). */
 export interface LargerChannel {
 	at: MapPosition;
@@ -3329,8 +3302,6 @@ export interface LargerChannel {
 	pointKm2: number;
 	/** A dam outline's: the channel its outline only clips, the dam's own outflow placed instead (backend damOutflow). */
 	outline?: boolean;
-	/** Offered because it matches a nearby river reach (not for being 100× larger): the reach's area at the point (km²). It can be smaller than the point's channel. */
-	reachKm2?: number;
 }
 
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */
@@ -3368,8 +3339,6 @@ export interface DelineationRequest {
 	error: string | null;
 	/** With `proposed`: the proposal it made (null once pruned). */
 	proposal: DelineationProposal | null;
-	/** With `proposed`: the river-network check that came with it. */
-	check: string | null;
 	/** With `refused`: the reason and sentence the request would have answered with (and the larger channel to offer). */
 	refusal: { reason: string; message: string; larger?: LargerChannel } | null;
 	createdAt: string;

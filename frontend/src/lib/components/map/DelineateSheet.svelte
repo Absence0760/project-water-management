@@ -3,7 +3,7 @@
 	#326 B-delineate, docs/design/delineation.md, docs/ui.md § Map). Two
 	steps. Ask: the point (clicked on the map in the draw bar, or typed: the
 	non-pointer way, and the one e2e drives) and whether it is the outlet or
-	just below a dam wall; the server snaps it to the channel and proposes the
+	just below a dam wall; the server puts it on the nearest terrain channel and proposes the
 	catchment upstream. Decide: the proposal's facts, its caveats and the
 	dataset's notice, then Accept as the catchment boundary (replacing one
 	only with the tick: never silently), Accept as an area (an "other"
@@ -23,8 +23,8 @@
 	import { ApiError } from '$lib/api/client';
 	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
-	import { choiceText, confluenceOf, largerChannelOf } from './largerChannel';
-	import type { ConfluenceChoice, LargerChannel } from '$lib/api';
+	import { largerChannelOf } from './largerChannel';
+	import type { LargerChannel } from '$lib/api';
 
 	let {
 		open = $bindable(false),
@@ -92,12 +92,8 @@
 	let replace = $state(false);
 	const notice = $derived(datasetNotice(info.dataset));
 
-	/** A refusal beside a much larger channel (issue #374): the sentence, the channel, and the point that was asked for. */
+	/** A refusal beside a much larger terrain channel: the sentence, the channel, and the point that was asked for. */
 	let larger = $state<{ message: string; channel: LargerChannel; asked: [number, number] } | null>(null);
-	/** A point at a confluence (the server didn't choose between rivers): the sentence, the rivers, and the point asked for. */
-	let confluence = $state<{ message: string; choices: ConfluenceChoice[]; asked: [number, number] } | null>(null);
-	/** The river-network check on the proposal just made (a reach nearby whose area no channel matched); not stored, so a reopened sheet has none. */
-	let check = $state<string | null>(null);
 	async function propose(e: SubmitEvent) {
 		e.preventDefault();
 		tried = true;
@@ -109,18 +105,16 @@
 		await send([lon.value, lat.value]);
 	}
 	/** Ask the server for the catchment above `at`; `keepPoint` keeps it beside a much larger channel. */
-	async function send(at: [number, number], keepPoint = false, reach: { dataset: string; reachId: number } | null = null) {
+	async function send(at: [number, number], keepPoint = false) {
 		busy = 'propose';
 		error = null;
 		larger = null;
-		confluence = null;
 		try {
 			const r = await api.delineation.propose(projectId, {
 				lon: at[0],
 				lat: at[1],
 				from,
 				...(keepPoint ? { keepPoint } : {}),
-				...(reach ? { reach } : {}),
 				...(background ? { background } : {})
 			});
 			if ('request' in r) {
@@ -130,14 +124,11 @@
 			}
 			waiting = null;
 			replace = false;
-			check = r.check;
 			await onproposed(r.proposal);
 			setAsking(false);
 		} catch (err) {
 			const channel = largerChannelOf(err);
-			const junction = confluenceOf(err);
 			if (channel) larger = { message: err instanceof Error ? err.message : '', channel, asked: at };
-			else if (junction) confluence = { message: err instanceof Error ? err.message : '', choices: junction.choices, asked: at };
 			else error = err instanceof Error ? err.message : String(err);
 		} finally {
 			busy = null;
@@ -182,7 +173,6 @@
 		waiting = null;
 		if (r.status === 'proposed' && r.proposal) {
 			replace = false;
-			check = r.check;
 			await onproposed(r.proposal);
 			setAsking(false);
 		} else if (r.status === 'refused' && r.refusal) {
@@ -243,7 +233,7 @@
 				{/each}
 			</fieldset>
 			{#if at}
-				<p class="at" data-testid="delineate-at">Clicked at {positionText(at)}. The point moves onto the channel nearby: the cell most water drains through.</p>
+				<p class="at" data-testid="delineate-at">Clicked at {positionText(at)}. The point goes on the nearest terrain channel (the red lines), within 150 m; mapped rivers never move it.</p>
 			{/if}
 			<details class="coords" bind:open={showCoords}>
 				<summary>Enter coordinates</summary>
@@ -272,17 +262,6 @@
 				</div>
 			{/if}
 			{#if error}<p class="err" role="alert" data-testid="delineate-error">{error}</p>{/if}
-			{#if confluence}
-				{@const j = confluence}
-				<div class="offer" role="alert" data-testid="delineate-confluence">
-					<p>This point is at a confluence. Which river do you mean? The outlet goes on the channel whose area matches it.</p>
-					<div class="offer-actions">
-						{#each j.choices as c (`${c.dataset}:${c.reachId}`)}
-							<button type="button" class="btn" disabled={!!busy} onclick={() => send(j.asked, false, { dataset: c.dataset, reachId: c.reachId })} data-testid="delineate-choice" data-reach={c.reachId}>{choiceText(c)}</button>
-						{/each}
-					</div>
-				</div>
-			{/if}
 			{#if larger}
 				{@const l = larger}
 				<div class="offer" role="alert" data-testid="delineate-larger">
@@ -318,7 +297,6 @@
 					{#each CAVEATS as c (c)}<li>{c}</li>{/each}
 				</ul>
 			</section>
-			{#if check}<p class="offer" role="note" data-testid="delineate-check">{check}</p>{/if}
 			{#if notice}<p class="hint notice">{notice}</p>{/if}
 			{#if boundary}
 				<label class="tick">

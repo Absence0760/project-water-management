@@ -96,7 +96,6 @@ describe('a delineation the background worker has', () => {
 		progress: null,
 		error: null,
 		proposal: null,
-		check: null,
 		refusal: null,
 		createdAt: '2026-10-03T00:00:00.000Z',
 		finishedAt: null,

@@ -17,7 +17,6 @@
 	import type { MapPosition } from '$lib/api/types';
 	import { parseDegrees } from './mapData';
 	import { pieceLine, savable, type ClickDivider } from './clickPieces.svelte';
-	import { choiceText } from './largerChannel';
 	import PieceBadge from './PieceBadge.svelte';
 	import DelineateChoice from './DelineateChoice.svelte';
 	import DelineationLines from './DelineationLines.svelte';
@@ -100,18 +99,6 @@
 	{#if lines?.length && mapReady}<DelineationLines {lines} />{/if}
 	<p class="said small muted" role="status" data-testid="map-click-said">{divider.said}</p>
 	{#if divider.error}<p class="problem small" role="alert" data-testid="map-click-error">{divider.error}</p>{/if}
-	{#if divider.pendingChoice}
-		{@const pc = divider.pendingChoice}
-		<div class="choice-box" role="alert" data-testid="map-click-confluence">
-			<p class="small">Click {pc.click + 1} is at a confluence. Which river do you mean? It goes on the channel whose area matches.</p>
-			<div class="bar-actions">
-				{#each pc.choices as c (`${c.dataset}:${c.reachId}`)}
-					<button type="button" class="btn" disabled={!!divider.busy} onclick={() => divider.chooseReach(c)} data-testid="map-click-choice" data-reach={c.reachId}>{choiceText(c)}</button>
-				{/each}
-				<button type="button" class="btn btn-ghost" onclick={() => divider.cancelChoice()} data-testid="map-click-choice-cancel">Drop the click</button>
-			</div>
-		</div>
-	{/if}
 
 	{#if divider.clicks.length}
 		<ol class="pieces small" data-testid="map-click-pieces">
@@ -135,7 +122,7 @@
 							class="btn btn-sm use"
 							disabled={!!divider.busy}
 							onclick={() => divider.replace(i, larger.at)}
-							data-testid="map-click-use-larger">{larger.reachKm2 !== undefined ? 'Use that channel' : 'Use the larger channel'}</button
+							data-testid="map-click-use-larger">Use the larger channel</button
 						>{/if}
 				</li>
 			{/each}
@@ -207,17 +194,6 @@
 	}
 	.problem {
 		color: var(--danger);
-	}
-	.choice-box {
-		display: grid;
-		gap: 0.4rem;
-		padding: 0.5rem 0.6rem;
-		border: 1px solid var(--warning);
-		border-radius: var(--radius-sm);
-		background: var(--warning-soft);
-	}
-	.choice-box p {
-		margin: 0;
 	}
 	.pieces {
 		display: grid;
