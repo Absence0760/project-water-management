@@ -127,3 +127,50 @@ describe('the Layers box’s River network', () => {
 		expect(riverHtml(none, true)).toContain('No river network is loaded');
 	});
 });
+
+describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggles', () => {
+	const props = (extra: Record<string, unknown>) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, onshowfeature: () => {}, ...extra } }).body);
+	const at: [number, number] = [21.3, -33.6];
+
+	it('offers none of them unless the tab passes them, and each unchecked while off', () => {
+		expect(props({})).not.toMatch(/map-layer-(units|mapgrid|chirps)/);
+		const off = props({ units: { on: false, labels: [] }, chirps: { on: false, cells: null } });
+		expect(off).toMatch(/<input[^>]*type="checkbox"[^>]*data-testid="map-layer-units"/);
+		expect(off).not.toMatch(/<input[^>]*checked[^>]*data-testid="map-layer-units"/);
+		expect(off).not.toContain('map-units-summary');
+	});
+
+	it('lists the units it labels, each by its unit with its polygon’s own name and area, and says when there are none', () => {
+		const b = props({ units: { on: true, labels: [{ featureId: 'f1', label: 'Lower unit', polygonName: 'Lower polygon', areaKm2: 12.5, at }] } });
+		expect(b).toContain('1 unit, each outlined and named on the map.');
+		expect(b).toContain('Lower unit');
+		expect(b).toContain('“Lower polygon”');
+		expect(b).toContain('12.5 km²');
+		expect(props({ units: { on: true, labels: [] } })).toContain('No hydrological unit polygons on the map yet');
+		// Without the map's fonts, the list is where the names are read.
+		expect(props({ units: { on: true, labels: [{ featureId: 'f1', label: 'A', polygonName: null, areaKm2: null, at }] }, labels: false })).toContain('read the names below');
+	});
+
+	it('says how many CHIRPS points are in view, or to zoom in', () => {
+		const cells = [{ lon: 19.225, lat: -32.675, square: [19.2, -32.7, 19.25, -32.65] }];
+		expect(props({ chirps: { on: true, cells } })).toContain('1 CHIRPS v3 grid point in view, each the centre of a 0.05° cell');
+		expect(props({ chirps: { on: true, cells: null } })).toContain('Zoom in to see the CHIRPS grid');
+	});
+
+	it('shows the MAP grid’s points from one dataset with their range and source, a picker when there are two, and each other state', () => {
+		const ds = (dataset: string, cellDeg: number, synthetic = false) => ({ dataset, source: `Source of ${dataset}`, version: '1', attribution: 'a', cellDeg, cells: 9, synthetic });
+		const grid = (answer: unknown, extra: Record<string, unknown> = {}) =>
+			({ on: true, zoomIn: false, error: null, answer, range: [612, 790], pick: () => {}, retry: () => {}, ...extra }) as never;
+		const two = { bbox: [0, 0, 1, 1], dataset: ds('synthetic', 0.01, true), datasets: [ds('coarse-test', 0.25), ds('synthetic', 0.01, true)], cells: [[21.305, -33.645, 790], [21.315, -33.645, 612]], tooDense: false, max: 5000 };
+		const b = props({ mapGrid: grid(two) });
+		expect(b).toContain('2 points in view from synthetic (0.01° cells): 612 mm to 790 mm.');
+		expect(b).toContain('Synthetic test data, never real rainfall.');
+		expect(b).toContain('Source: Source of synthetic');
+		expect(b).toContain('data-testid="map-mapgrid-dataset"');
+		expect(props({ mapGrid: grid({ ...two, datasets: [two.dataset] }) })).not.toContain('map-mapgrid-dataset');
+		expect(props({ mapGrid: grid({ ...two, cells: [], tooDense: true }) })).toMatch(/This view holds more than 5.000 of the grid’s points/);
+		expect(props({ mapGrid: grid({ ...two, dataset: null, datasets: [] }) })).toContain('No MAP grid is loaded');
+		expect(props({ mapGrid: grid(null, { zoomIn: true }) })).toContain('Zoom in to see the MAP grid');
+		expect(props({ mapGrid: grid(null, { error: 'offline' }) })).toContain('The MAP grid couldn’t be loaded: offline');
+	});
+});

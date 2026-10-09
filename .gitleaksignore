@@ -11,23 +11,8 @@
 #   - generic-api-key on comparisons with the River to dam field name (divertCapacityM3Day)
 #     in its first commit; the later lines carry gitleaks:allow.
 # Add a line only after checking the match is not a real secret.
-05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:202
-05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:217
-05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:51
-05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:52
-2051abe83c4508d41a7dea18de0f85ba00f9c191:frontend/src/lib/api/emailAuth.test.ts:generic-api-key:20
-9bef367aa77a25bc65440bbb3f420f71fc2e3a48:frontend/src/lib/components/settings/SettingsTab.svelte:generic-api-key:208
-af721b204f6a2ee253f7d938e3d805b3075cb306:backend/src/mail/templates.test.ts:generic-api-key:4
-b343f48d9df01bee8e59b6f9df1e2a0cec4eab68:frontend/src/lib/components/settings/calibration.ts:generic-api-key:85
-b343f48d9df01bee8e59b6f9df1e2a0cec4eab68:frontend/src/lib/components/settings/calibration.ts:generic-api-key:91
-c99b08db8b468df15d8f37424bd689a9dfbf1d9c:frontend/src/lib/components/compare/delta.ts:generic-api-key:92
-c99b08db8b468df15d8f37424bd689a9dfbf1d9c:frontend/src/lib/components/compare/delta.ts:generic-api-key:95
-d62f5524bfb4ce98e5102a3e076e8065de859117:frontend/src/lib/components/runs/RunSummaryView.svelte:generic-api-key:49
-d62f5524bfb4ce98e5102a3e076e8065de859117:frontend/src/lib/components/runs/RunSummaryView.svelte:generic-api-key:50
-d62f5524bfb4ce98e5102a3e076e8065de859117:frontend/src/lib/components/runs/RunSummaryView.svelte:generic-api-key:52
-d7682bdd823f592ee15ba7e2afdd74eee72a9fb9:frontend/src/lib/components/network/fields.ts:generic-api-key:110
-b0d3e6323a95ef6ecc8c395f64d4eaeca7f5714d:frontend/src/lib/components/reliability/reliability.ts:generic-api-key:67
-b0d3e6323a95ef6ecc8c395f64d4eaeca7f5714d:frontend/src/lib/components/reliability/reliability.ts:generic-api-key:69
+# Prefer a value in .gitleaks.toml: a fingerprint names a commit, and the 2026-09-28 history recreation
+# orphaned every one pinned before it (removed 2026-10-09, issue #435; their values moved to .gitleaks.toml).
 frontend/src/lib/components/reliability/reliability.ts:generic-api-key:67
 frontend/src/lib/components/reliability/reliability.ts:generic-api-key:69
 frontend/src/lib/components/network/fields.ts:generic-api-key:149

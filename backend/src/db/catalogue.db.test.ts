@@ -202,6 +202,8 @@ const READ_ONLY = new Set([
 	'cropland_cell_reference',
 	'evaporation_dataset',
 	'evaporation_cell_reference',
+	'rain_map_dataset',
+	'rain_map_cell_reference',
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
 	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',

@@ -79,6 +79,11 @@ export const REFERENCE_KINDS = {
 		status: 'blocked',
 		sourcesRows: ['Hydrological station catalogue'],
 		why: "the DWS station catalogue's licence is unconfirmed (followups.md, Decision: the DWS station catalogue's licence)"
+	},
+	'map-grid': {
+		status: 'blocked',
+		sourcesRows: ['Lynch (2004) mean annual precipitation', 'Provincial MAP surfaces'],
+		why: "the MAP grids' licences are unconfirmed (followups.md, Decision: the MAP grids' licences)"
 	}
 } as const satisfies Record<string, ReferenceKind>;
 

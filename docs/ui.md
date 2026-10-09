@@ -3635,6 +3635,21 @@ map" card) stays the schematic; this is the geography.
   map as a river, from the river network.") or "On the map as a river." and
   **Show it**. The key's Lines gain "river network" while it is on
   ([maps.md § River network](./maps.md#river-network)).
+  **Hydrological units** (`layers=units`, a solid green swatch): on, each
+  unit's polygon (a farm parcel linked to it) is outlined heavier and named
+  by its unit on the map, and the box lists them ("3 units, each outlined
+  and named on the map.") with each polygon's own name when it differs and
+  its area; a name shows its polygon. **MAP grid** (`layers=mapgrid`, the
+  ramp as its swatch): on, one loaded MAP grid's points in view, each
+  coloured and labelled with its MAP ("812 mm"), the box saying how many,
+  from which grid and their range, the source line, a **Grid** picker when
+  more than one is loaded, and "Zoom in to see the MAP grid" or "This view
+  holds more than 5 000 of the grid’s points" when the view is too wide.
+  **CHIRPS grid** (`layers=chirps`, a dashed orange swatch): on, CHIRPS v3's
+  0.05° cells in view, dashed, with their centres as dots, and how many
+  ([maps.md § Hydrological units layer, § MAP grid, § CHIRPS
+  grid](./maps.md#map-grid)). Without glyphs the outlines and dots are drawn
+  and the box says the names or values aren't written on the map.
 - **Features** (the side column's Features tab): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
