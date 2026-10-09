@@ -16,7 +16,9 @@
 //                so a tag cut from a side branch is refused.
 //   ci           the `CI gate` check on the tagged commit passed. Waits up to
 //                CI_WAIT_SECONDS while it is still running (a release cut
-//                right after a push), then fails. Only a `CI gate` posted by
+//                right after a push: `CI gate` is ci.yml's last job, so until
+//                the jobs it needs finish there is no check run, only an
+//                unfinished ci.yml run of the commit), then fails. Only a `CI gate` posted by
 //                the GitHub Actions app, from a run of .github/workflows/ci.yml
 //                on a push or manual run of that exact commit, counts: any
 //                app with checks:write can post a check run by that name, and
@@ -109,7 +111,7 @@ const CI_EVENTS = ['push', 'workflow_dispatch'];
 
 /**
  * @typedef {{ id: number, status: string, conclusion: string | null, app?: { id?: number, slug?: string } | null, check_suite_id?: number | null }} CheckRun
- * @typedef {{ path?: string, event?: string, head_sha?: string, head_repository?: string | null }} WorkflowRun
+ * @typedef {{ path?: string, event?: string, head_sha?: string, head_repository?: string | null, status?: string }} WorkflowRun
  */
 
 /**
@@ -157,15 +159,34 @@ export function trustedCiGateRuns(checkRuns, runsBySuite, sha, repo) {
 }
 
 /**
+ * Count the runs of ci.yml, on a push or a manual run of this very commit in
+ * this repository, that have not finished. Until one finishes its `CI gate`
+ * check run does not exist, so the preflight waits on these instead.
+ * @param {WorkflowRun[]} workflowRuns ci.yml's runs for the commit (`status` included)
+ * @param {string} sha
+ * @param {string} repo owner/name
+ */
+export function runningCiRuns(workflowRuns, sha, repo) {
+	return workflowRuns.filter(
+		(w) => (w.path ?? '').split('@')[0] === CI_WORKFLOW_PATH && CI_EVENTS.includes(w.event ?? '') && w.head_sha === sha && (w.head_repository ?? repo) === repo && w.status !== 'completed',
+	).length;
+}
+
+/**
  * The newest `CI gate` check run decides.
  * @param {{ id: number, status: string, conclusion: string | null }[]} runs the trusted runs (trustedCiGateRuns)
  * @param {string[]} [ignored] why other runs by that name did not count
  * @param {number} [unresolved] Actions runs whose workflow run is not indexed yet (trustedCiGateRuns)
+ * @param {number} [running] unfinished ci.yml runs of this commit (runningCiRuns): `CI gate` is the
+ *   last job, so GitHub creates its check run only once every job it needs has finished
  * @returns {{ state: 'pass' | 'pending' | 'fail', detail: string }}
  */
-export function ciGateState(runs, ignored = [], unresolved = 0) {
+export function ciGateState(runs, ignored = [], unresolved = 0, running = 0) {
 	if (!runs.length && unresolved > 0) {
 		return { state: 'pending', detail: `"CI gate" exists but its workflow run is not visible yet (${unresolved} check suite${unresolved === 1 ? '' : 's'})` };
+	}
+	if (!runs.length && running > 0) {
+		return { state: 'pending', detail: `${CI_WORKFLOW_PATH} is still running on this commit (${running} run${running === 1 ? '' : 's'}); "CI gate" is its last job` };
 	}
 	if (!runs.length) {
 		const why = ignored.length ? ` (ignored: ${ignored.join('; ')})` : '';
@@ -457,7 +478,16 @@ async function main() {
 			}
 			if (lookupFailed) break;
 			const { trusted, ignored, unresolved } = trustedCiGateRuns(checkRuns, runsBySuite, outputs.sha, repo);
-			const state = ciGateState(trusted, ignored, unresolved);
+			let running = 0;
+			if (!trusted.length) {
+				const wf = tryRun('gh', ['api', `repos/${repo}/actions/workflows/${CI_WORKFLOW_PATH.split('/').pop()}/runs?head_sha=${outputs.sha}&per_page=100`, '--jq', '.workflow_runs | map({path, event, head_sha, status, head_repository: .head_repository.full_name})']);
+				if (!wf.ok) {
+					errors.push(`could not list ${CI_WORKFLOW_PATH}'s runs for ${outputs.sha.slice(0, 12)}: ${wf.out.trim().split('\n')[0]}`);
+					break;
+				}
+				running = runningCiRuns(JSON.parse(wf.out), outputs.sha, repo);
+			}
+			const state = ciGateState(trusted, ignored, unresolved, running);
 			if (state.state === 'pass') break;
 			if (state.state === 'fail' || Date.now() > deadline) {
 				errors.push(`CI did not pass on ${outputs.sha.slice(0, 12)}: ${state.detail}${state.state === 'pending' ? ` after ${waitSeconds}s` : ''}. Only a commit whose CI gate is green may be released.`);
