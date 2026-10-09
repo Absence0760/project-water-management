@@ -14,6 +14,7 @@ import type { RiverReach } from '$lib/api';
 import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
 import type { RiverLayer } from './riverLayer.svelte';
+import type { AreaFill } from './areaFill.svelte';
 
 // HelpTip links to the glossary under the app's base path.
 vi.mock('$app/paths', () => ({ base: '' }));
@@ -180,5 +181,19 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 		expect(props({ mapGrid: grid({ ...two, dataset: null, datasets: [] }) })).toContain('No MAP grid is loaded');
 		expect(props({ mapGrid: grid(null, { zoomIn: true }) })).toContain('Zoom in to see the MAP grid');
 		expect(props({ mapGrid: grid(null, { error: 'offline' }) })).toContain('The MAP grid couldn’t be loaded: offline');
+	});
+});
+
+describe('the Layers box’s Area fill slider', () => {
+	it('is offered only when the tab passes it, at its percentage, with a note on what it fills', () => {
+		const render_ = (areaFill: unknown) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, areaFill: areaFill as AreaFill | null } }).body);
+		expect(render_(null)).not.toContain('map-area-fill');
+		const b = render_({ percent: 40, scale: 0.4, set: () => {} });
+		expect(b).toMatch(/<input[^>]*type="range"[^>]*data-testid="map-area-fill-slider"/);
+		expect(b).toMatch(/aria-valuetext="40 %"/);
+		expect(b).toMatch(/<span[^>]*aria-hidden="true"[^>]*data-testid="map-area-fill-value"[^>]*>40 %<\/span>/);
+		// One live region in the box (WCAG 4.1.3): the slider's value is no second one.
+		expect(b).not.toContain('<output');
+		expect(b).toContain('outlines stay');
 	});
 });

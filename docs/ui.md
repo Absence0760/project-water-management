@@ -3625,6 +3625,16 @@ map" card) stays the schematic; this is the geography.
   map as a river, from the river network.") or "On the map as a river." and
   **Show it**. The key's Lines gain "river network" while it is on
   ([maps.md § River network](./maps.md#river-network)).
+  **Area fill**, a slider at the top of the box (0–100 %, steps of 5,
+  default 100 %): how strongly the polygons are filled (parcels, dams,
+  other areas and the results colours, `mapStyle.ts` `fillOpacity`); the
+  outlines and the selection stay at full strength, so at 0 % only the
+  outlines are left and the basemap, relief, rivers and grids read through.
+  It is set on the map in place (`setPaintProperty`, no restyle), and kept
+  in this browser (`localStorage` `wm.map.areaFill`, `areaFill.svelte.ts`),
+  not in the URL or the project. The value beside it is plain text hidden from
+  screen readers: the slider says it itself (`aria-valuetext`), and the box
+  keeps its one live region.
   **Hydrological units** (`layers=units`, a solid green swatch): on, each
   unit's polygon (a farm parcel linked to it) is outlined heavier and named
   by its unit on the map, and the box lists them ("3 units, each outlined

@@ -227,8 +227,23 @@ export function fillColour(c: ReturnType<typeof overlayColours>): unknown[] {
 	return ['to-color', ['get', 'fill'], ['match', ['get', 'kind'], 'dam', c.damFill, 'other', c.otherFill, c.parcelFill]];
 }
 
+/**
+ * The area fills' opacity at `scale` (0–1, the Layers box's Area fill
+ * slider): a results colour at RESULT_FILL_OPACITY, a kind's tint (already
+ * translucent) at full, both × scale, so 0 leaves only the outlines and the
+ * basemap, relief and rivers read through. Outlines and the selection keep
+ * their strength whatever the scale.
+ */
+export function fillOpacity(scale = 1): unknown[] {
+	const k = Math.min(1, Math.max(0, Number.isFinite(scale) ? scale : 1));
+	return ['case', ['has', 'fill'], RESULT_FILL_OPACITY * k, k];
+}
+
+/** The layer the Area fill slider drives (CatchmentMap sets its fill-opacity in place, no restyle). */
+export const AREA_FILL_LAYER = 'ov-parcel-fill';
+
 /** The overlay layers over the `features` GeoJSON source (polygons and lines; points are DOM markers). */
-export function overlayLayers(dark: boolean): Layer[] {
+export function overlayLayers(dark: boolean, fillScale = 1): Layer[] {
 	const c = overlayColours(dark);
 	const kind = (k: string) => ['==', ['get', 'kind'], k];
 	const polygon = ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]];
@@ -236,7 +251,7 @@ export function overlayLayers(dark: boolean): Layer[] {
 	const selected = ['==', ['get', 'selected'], true];
 	const src = { source: 'features' };
 	return [
-		{ id: 'ov-parcel-fill', type: 'fill', ...src, filter: ['all', polygon, ['!', kind('catchment_boundary')]], paint: { 'fill-color': fillColour(c), 'fill-opacity': ['case', ['has', 'fill'], RESULT_FILL_OPACITY, 1] } },
+		{ id: AREA_FILL_LAYER, type: 'fill', ...src, filter: ['all', polygon, ['!', kind('catchment_boundary')]], paint: { 'fill-color': fillColour(c), 'fill-opacity': fillOpacity(fillScale) } },
 		{ id: 'ov-casing', type: 'line', ...src, filter: ['any', polygon, line], paint: { 'line-color': c.casing, 'line-width': ['case', selected, 7, ['==', ['get', 'kind'], 'catchment_boundary'], 6, ['==', ['get', 'kind'], 'river'], 6, 4], 'line-opacity': 0.85 } },
 		// The boundary: a long dash, thickest; parcels solid green; dams solid blue; other features dotted; rivers thicker solid blue.
 		{ id: 'ov-boundary', type: 'line', ...src, filter: ['all', polygon, kind('catchment_boundary')], paint: { 'line-color': c.boundary, 'line-width': 3, 'line-dasharray': [4, 2] } },
@@ -663,6 +678,8 @@ export interface StyleOptions {
 	mapGrid?: ReturnType<typeof mapGridData>;
 	/** The CHIRPS grid's cells and points (chirpsData()); none when omitted. */
 	chirps?: ReturnType<typeof chirpsData>;
+	/** The area fills' opacity scale, 0–1 (the Area fill slider, fillOpacity()); 1 when omitted. */
+	fillScale?: number;
 }
 
 /**
@@ -697,7 +714,7 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...qt.under,
 			...riverNetworkLayers(dark),
 			...channelLayers(dark),
-			...overlayLayers(dark),
+			...overlayLayers(dark, opts.fillScale ?? 1),
 			...un.over,
 			...chirpsLayers(dark),
 			...mg.over,
