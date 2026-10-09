@@ -35,6 +35,7 @@ import type { RunoffModelId } from '../runoff/types';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
+import { simulateUnits, unitRainFingerprint, unitRainForcing, type UnitRainFingerprint } from '../runoff/unitRain';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
 import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
@@ -258,6 +259,8 @@ export interface CalibrationReport {
 	representativeness?: RecordRepresentativeness | null;
 	/** The CHIRPS factors the fit's rain used, per fit range (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
 	chirpsFactors?: ChirpsFactorSet[] | null;
+	/** The per-unit forcing the fit ran under (engine ≥ 1.78.0, docs/model.md §2.4h); absent under catchment rain. */
+	unitRain?: UnitRainFingerprint | null;
 	/**
 	 * The per-day quality flags of the fitted record and its rain (engine ≥
 	 * 1.22.0, calibration research CR-18/22, ./dayFlags.ts): days by class,
@@ -356,6 +359,8 @@ export interface CalibrationProblem {
 	exclusions: DateRange[];
 	/** The CHIRPS factors the rain used (engine ≥ 0.29.0), for fit provenance. */
 	chirpsFactors?: ChirpsFactorSet[] | null;
+	/** The per-unit forcing (engine ≥ 1.78.0, settings.unitRain `perUnit`), for fit provenance; absent under catchment rain. */
+	unitRain?: UnitRainFingerprint | null;
 	/**
 	 * The run's daily rain over the whole run as calibration reads it (catchment,
 	 * else bias-corrected CHIRPS, else forecast, × the areal factor; null =
@@ -398,7 +403,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const natural = new Float64Array(days);
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);
-	const { plan, topo, outletEwr } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): each evaluation runs GR4J once per land
+	// unit, into buffers the plan reads as the units' local inflow, and natural flow is their sum, as runModel's.
+	const perUnit = unitRainForcing(
+		{ settings, series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays },
+		warnings
+	);
+	const unitBuffers = perUnit ? perUnit.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
+	const { plan, topo, outletEwr } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, unitBuffers ? { unitRunoff: unitBuffers } : {}, historyDays);
 
 	// The site (engine ≥ 1.41.0, ./site.ts): the outlet's records and outflow, or an inner gauge's.
 	const siteNodeId = settings.calibrationSiteNodeId ?? null;
@@ -459,6 +471,21 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// The warm-up cycles the full forcing's historical days, as runModel's does,
 	// so a scored day sees exactly the state a normal run would give it.
 	const runoff = (p: ParamSet, n: number) => {
+		if (perUnit) {
+			// The same products and the same node-id order as the run's (runoff/simulate.ts unitNaturalFlow), so a scored
+			// day's flow is runModel's to the bit.
+			const traces = simulateUnits(perUnit.units, p as unknown as Gr4jParams, forcing.petMm, { warmupDays, trace: false, days: n, cycleDays: historyDays });
+			natural.fill(0, 0, n);
+			perUnit.units.forEach((u, k) => {
+				const q = traces[k]!.qMm;
+				const buf = unitBuffers![k]!.runoffM3Day;
+				for (let t = 0; t < n; t++) {
+					buf[t] = q[t]! * u.areaKm2 * 1000;
+					natural[t] = natural[t]! + buf[t]!;
+				}
+			});
+			return;
+		}
 		const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n, cycleDays: historyDays });
 		for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
 	};
@@ -528,6 +555,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
+		...(perUnit ? { unitRain: unitRainFingerprint(settings.unitRain, perUnit.recipes) } : {}),
 		rain: arealRainOn(usedRain, areal, month),
 		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
 		simulate: simulator(Math.max(idx[idx.length - 1]!, lastAll) + 1),
@@ -1034,6 +1062,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		exclusions: pb.exclusions,
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
+		...(pb.unitRain ? { unitRain: pb.unitRain } : {}),
 		dayQuality: pb.dayQuality ?? null,
 		fitAllDays,
 		evaluations,

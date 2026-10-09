@@ -7,7 +7,10 @@ import { requireCatchmentAreaKm2 } from './area';
 import { gr4j } from './gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from './params';
 import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
-import type { DayFluxes, NaturalFlowGenerator, ParamSpec, RunContext, RunoffModel } from './types';
+import type { DayFluxes, NaturalFlowGenerator, NaturalFlowInput, ParamSpec, RunContext, RunoffModel } from './types';
+import { simulateUnits, unitRainForcing, unitRainOn, unitRainSummary } from './unitRain';
+import { cmpStr } from '../order';
+import { UNIT_RAIN_SERIES, type ModelInput } from '../project';
 
 /** Daily model drivers (mm/day). */
 export interface RunoffForcing {
@@ -176,6 +179,11 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const areaKm2 = requireCatchmentAreaKm2(ctx.settings.calibration, input);
 	const p = resolveParams<Gr4jParams>(GR4J_PARAMS, ctx.settings.gr4j, 'GR4J', warnings);
 	const warmupDays = resolveWarmupDays(ctx.settings.gr4j?.warmupDays, warnings);
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h).
+	if (unitRainOn(ctx.settings)) {
+		const perUnit = unitNaturalFlow(input, ctx, p, warmupDays, warnings);
+		if (perUnit) return perUnit;
+	}
 	const forcing = runoffForcing(ctx.settings, ctx);
 	const w = ctx.warm;
 	const tr = simulateRunoff(gr4j, p, forcing, {
@@ -218,3 +226,126 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 		...(tr.captured ? { state: tr.captured } : {})
 	};
 };
+
+/**
+ * GR4J on each land unit's own rain (settings.unitRain `perUnit`, docs/model.md
+ * §2.4h): one run per unit with the one parameter set and the catchment PE,
+ * over the unit's area. Natural flow is the units' runoff summed in node-id
+ * order. The catchment series (rain_used, aet, the stores, exchange) are the
+ * units' area-weighted means, so the catchment balance in summary.runoff
+ * closes as before (area = Σ unit areas); each unit's own balance is in
+ * summary.unitRain. Null when the model has no land unit (the run warns and
+ * forces the catchment as before).
+ */
+function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warmupDays: number, warnings: string[]): NaturalFlowInput | null {
+	if (ctx.chirpsCorrection === undefined) throw new Error('per-unit rain needs the run\u2019s CHIRPS correction in the run context');
+	const w = ctx.warm;
+	const built = unitRainForcing(
+		{
+			settings: ctx.settings,
+			series: input.series ?? {},
+			nodes: input.model.nodes,
+			startDate: ctx.startDate,
+			days: ctx.days,
+			aligned: ctx.aligned,
+			chirpsCorrection: ctx.chirpsCorrection,
+			...(ctx.historyDays !== undefined ? { historyDays: ctx.historyDays } : {})
+		},
+		warnings,
+		w?.unitRecipes
+	);
+	if (!built) return null;
+	const { units, recipes } = built;
+	const days = ctx.days;
+	// The catchment PE (runoffForcing's), the same for every unit.
+	const petMm = runoffForcing({ ...ctx.settings, arealRain: null }, ctx).petMm;
+	const traces = simulateUnits(units, p, petMm, {
+		warmupDays,
+		...(ctx.historyDays !== undefined ? { cycleDays: ctx.historyDays } : {}),
+		...(w?.resumeUnits ? { initial: w.resumeUnits } : {}),
+		...(w?.captureAt !== undefined ? { captureAt: w.captureAt } : {})
+	});
+	if (w?.resume !== undefined && !w.resumeUnits) throw new Error('the snapshot holds one catchment runoff state; this run forces each unit with its own rain');
+	// Node-id order (unitRainForcing's), so the sums are the same to the bit however the nodes are listed.
+	const area = units.reduce((s, u) => s + u.areaKm2, 0);
+	const naturalFlowM3Day = new Float64Array(days);
+	const rain = new Float64Array(days);
+	const before = units.some((u) => u.rainBeforeArealMm) ? new Float64Array(days) : null;
+	const aet = new Float64Array(days);
+	const ex = new Float64Array(days);
+	const stores = gr4j.stores.map(() => new Float64Array(days));
+	const unitRunoff: NonNullable<NaturalFlowInput['unitRunoff']> = [];
+	const nodeSeries: NonNullable<NaturalFlowInput['nodeSeries']> = [];
+	let storageStart = 0;
+	let storageEnd = 0;
+	const storesStart = gr4j.stores.map(() => 0);
+	units.forEach((u, k) => {
+		const tr = traces[k]!;
+		const a = u.areaKm2;
+		const wgt = a / area;
+		const runoff = new Float64Array(days);
+		for (let t = 0; t < days; t++) {
+			runoff[t] = tr.qMm[t]! * a * MM_KM2_TO_M3;
+			naturalFlowM3Day[t] = naturalFlowM3Day[t]! + runoff[t]!;
+			rain[t] = rain[t]! + u.rainMm[t]! * wgt;
+			if (before) before[t] = before[t]! + (u.rainBeforeArealMm ? u.rainBeforeArealMm[t]! : u.rainMm[t]!) * wgt;
+			aet[t] = aet[t]! + tr.aetMm[t]! * wgt;
+			ex[t] = ex[t]! + tr.exchangeMm[t]! * wgt;
+			for (let j = 0; j < stores.length; j++) stores[j]![t] = stores[j]![t]! + tr.stores[j]![t]! * wgt;
+		}
+		storageStart += tr.storageStartMm * wgt;
+		storageEnd += tr.storageEndMm * wgt;
+		tr.storesStartMm.forEach((v, j) => (storesStart[j] = storesStart[j]! + v * wgt));
+		unitRunoff.push({ nodeId: u.nodeId, runoffM3Day: runoff });
+		nodeSeries.push(
+			{ nodeId: u.nodeId, key: UNIT_RAIN_SERIES.rain.key, label: UNIT_RAIN_SERIES.rain.label, unit: 'mm', values: Array.from(u.rainMm) },
+			{ nodeId: u.nodeId, key: UNIT_RAIN_SERIES.runoff.key, label: UNIT_RAIN_SERIES.runoff.label, unit: 'm³/day', values: Array.from(runoff) }
+		);
+	});
+	const series = [
+		{ key: 'rain_used', label: 'Rain used (the units\u2019 own rain, area-weighted)', unit: 'mm', values: Array.from(rain) },
+		{ key: 'pet', label: 'Potential evaporation', unit: 'mm', values: Array.from(petMm) },
+		{ key: 'aet', label: 'Actual evaporation', unit: 'mm', values: Array.from(aet) },
+		...gr4j.stores.map((s, j) => ({ key: s.key, label: s.label, unit: 'mm', values: Array.from(stores[j]!) }))
+	];
+	if (p.x2 !== 0) series.push({ key: 'exchange', label: 'Groundwater exchange (+ gained / − lost)', unit: 'mm', values: Array.from(ex) });
+	const total = (a: ArrayLike<number>) => {
+		let s = 0;
+		for (let t = 0; t < a.length; t++) s += a[t]!;
+		return s;
+	};
+	const flowMm = total(naturalFlowM3Day) / (area * MM_KM2_TO_M3);
+	const captured = w?.captureAt !== undefined ? units.map((u, k) => ({ id: u.nodeId, state: traces[k]!.captured! })) : undefined;
+	// A calibration override is the catchment's area under catchment rain; here the units' areas are (resolveCatchmentAreaKm2).
+	const override = ctx.settings.calibration.catchmentAreaKm2;
+	if (override != null && override > 0 && Math.abs(override - area) > 0.01 * area)
+		warnings.push(`runoff from each unit's own rain runs on the units' areas (${Math.round(area * 100) / 100} km²), not the catchment area set in Settings (${override} km²)`);
+	const idle = input.model.nodes.filter((n) => n.kind === 'farm' && !(n.areaKm2 > 0)).sort((a, b) => cmpStr(a.id, b.id));
+	if (idle.length && ctx.settings.flowShareMethod !== 'area')
+		warnings.push(`runoff from each unit's own rain: ${idle.map((n) => `"${n.name}"`).join(', ')} ${idle.length === 1 ? 'has' : 'have'} no area, so no runoff of ${idle.length === 1 ? 'its' : 'their'} own, whatever flow share`);
+	return {
+		naturalFlowM3Day,
+		series,
+		nodeSeries,
+		warnings,
+		unitRunoff,
+		unitRain: unitRainSummary(ctx.settings.unitRain!, units, traces, petMm),
+		unitRecipes: recipes,
+		balance: {
+			model: 'gr4j',
+			params: { ...p },
+			warmupDays,
+			areaKm2: area,
+			rainMm: total(rain),
+			...(ctx.settings.arealRain && before ? { arealRain: { ...structuredClone(ctx.settings.arealRain), rainBeforeMm: total(before) } } : {}),
+			petMm: total(petMm),
+			aetMm: total(aet),
+			flowMm,
+			exchangeMm: total(ex),
+			storageStartMm: storageStart,
+			storesStartMm: Object.fromEntries(gr4j.stores.map((s, j) => [s.key, storesStart[j]!])),
+			storageEndMm: storageEnd
+		},
+		...(captured ? { unitStates: captured } : {})
+	};
+}

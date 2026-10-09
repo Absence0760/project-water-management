@@ -257,6 +257,13 @@ bottom:
    × 1.85 (map: …)" when one side has none (a run saved before 1.13.0 had
    none), else the months whose factor changed ("factors Oct 1.85 → 1.9"),
    a changed method and a reworded source.
+   A change of runoff from each unit's own rain (`settings.unitRain`,
+   engine ≥ 1.78.0, [model.md §2.4h](./model.md)) is a settings line
+   labelled **Runoff from each unit's own rain**: "off → on (gauge MAP 600
+   mm (source); MAP period 1991-01-01 to 2020-12-31)" (a run saved before
+   1.78.0 is off). A unit's MAP and its source are node lines ("MAP none →
+   700 mm"), and a unit's own rain record is named by its unit
+   ("Rainfall (CHIRPS) of the unit …").
    A change of the drought restriction rule (`settings.droughtRestriction`,
    engine ≥ 1.54.0, [model.md §2.7i](./model.md)) is one settings line per
    change, labelled **Drought restriction rule**: "off → reviewed 5 Oct;

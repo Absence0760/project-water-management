@@ -670,6 +670,9 @@ def unsupported(doc: dict) -> list[str]:
         out.append("daily A-pan series")
     if s.get("damStorageReset"):
         out.append("dam storage reset (outlook only)")
+    if (s.get("unitRain") or {}).get("mode") == "perUnit":
+        # model.md §2.4h, issue #482: ported from the docs in a later part.
+        out.append("runoff from each unit's own rain (perUnit)")
     return sorted(set(out))
 
 

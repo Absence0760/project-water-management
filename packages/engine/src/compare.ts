@@ -30,6 +30,9 @@ import {
 	defaultProjectSettings,
 	RETIRED_CALIBRATION_KEYS,
 	resolveArealRain,
+	resolveUnitRain,
+	DEFAULT_UNIT_MAP_PERIOD,
+	parseUnitRainSeriesKey,
 	resolvePe,
 	SUPPLY_RULE_LABEL,
 	OBSERVED_SERIES_LABEL,
@@ -685,6 +688,23 @@ function arealRainChange(ra: unknown, rb: unknown): string | null {
 	return parts.length ? parts.join('; ') : null;
 }
 const AREAL_RAIN_LABEL = 'Areal rainfall correction (GR4J)';
+const UNIT_RAIN_LABEL = 'Runoff from each unit’s own rain';
+
+/** settings.unitRain in words (engine ≥ 1.78.0): "off", or "on (gauge MAP 600 mm (source); MAP period …)". */
+export function unitRainText(raw: unknown): string {
+	const u = resolveUnitRain(raw, []);
+	if (u?.mode !== 'perUnit') return 'off';
+	const gauge = u.gaugeMapMm != null ? `gauge MAP ${fmtValue(u.gaugeMapMm, 0)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : 'no gauge MAP';
+	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
+	return `on (${gauge}; MAP period ${p.start} to ${p.end})`;
+}
+
+/** The change of settings.unitRain between two runs, or null. A run saved without it (engine < 1.78.0) ran on the catchment rain. */
+function unitRainChange(ra: unknown, rb: unknown): string | null {
+	const a = unitRainText(ra);
+	const b = unitRainText(rb);
+	return a === b ? null : `${a} → ${b}`;
+}
 const DROUGHT_RESTRICTION_LABEL = 'Drought restriction rule';
 
 type Fmt = (v: unknown) => string;
@@ -924,6 +944,8 @@ function diffSettings(
 	if (pe) push(PE_LABEL, `${PE_LABEL}: ${pe}`);
 	const areal = arealRainChange(a.arealRain, b.arealRain);
 	if (areal) push(AREAL_RAIN_LABEL, `${AREAL_RAIN_LABEL}: ${areal}`);
+	const unitRain = unitRainChange(a.unitRain, b.unitRain);
+	if (unitRain) push(UNIT_RAIN_LABEL, `${UNIT_RAIN_LABEL}: ${unitRain}`);
 	const ha = a.hiLoSplit as Record<string, unknown>;
 	const hb = b.hiLoSplit as Record<string, unknown>;
 	if (!same(ha, hb)) push('Hi/lo MAP split', `Hi/lo MAP split: ${fmtValue(ha.hi)}/${fmtValue(ha.lo)} → ${fmtValue(hb.hi)}/${fmtValue(hb.lo)}`);
@@ -1335,6 +1357,9 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		for (const [k, label, fmt] of NODE_FIELDS) {
 			if (!same(x[k], y[k])) parts.push(`${label} ${fmt(x[k])} → ${fmt(y[k])}`);
 		}
+		// The unit's MAP and its source (engine ≥ 1.78.0, docs/model.md §2.4h); absent = none.
+		if ((x.mapMm ?? null) !== (y.mapMm ?? null)) parts.push(`MAP ${withUnit('mm', 0)(x.mapMm ?? null)} → ${withUnit('mm', 0)(y.mapMm ?? null)}`);
+		if ((x.mapSource ?? null) !== (y.mapSource ?? null)) parts.push(`MAP source ${x.mapSource ? `"${x.mapSource}"` : 'none'} → ${y.mapSource ? `"${y.mapSource}"` : 'none'}`);
 		// The unit whose dam supplies the crops' remote share (engine ≥ 1.73.0), by name: matched by name when the ids differ.
 		const ra = na.node(x.cropRemoteNodeId ?? null);
 		const rb = nb.node(y.cropRemoteNodeId ?? null);
@@ -1703,7 +1728,10 @@ function sharedDaysText(label: string, c: NonNullable<ReturnType<typeof sharedDa
 /** A series key's label: its kind's, or a gauge node's own record (`<kind>@<node id>`, engine ≥ 1.4.0) named by its gauge. */
 function seriesLabel(key: string, nodeName: (id: string) => string): string {
 	const g = parseGaugeSeriesKey(key);
-	return g ? `${OBSERVED_SERIES_LABEL[g.kind]} at gauge ${nodeName(g.nodeId)}` : (SERIES_LABELS[key] ?? key);
+	if (g) return `${OBSERVED_SERIES_LABEL[g.kind]} at gauge ${nodeName(g.nodeId)}`;
+	// A land unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h).
+	const u = parseUnitRainSeriesKey(key);
+	return u ? `${SERIES_LABELS[u.kind]} of the unit ${nodeName(u.nodeId)}` : (SERIES_LABELS[key] ?? key);
 }
 
 function diffSeries(

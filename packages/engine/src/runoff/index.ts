@@ -7,6 +7,23 @@ export * from './gr4j';
 export { defaultGr4jParams, GR4J_PARAMS, type Gr4jParams } from './params';
 export { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
 export { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
+export {
+	chirpsMeanAnnual,
+	isLandUnit,
+	perUnitAreaKm2,
+	recipeLevel,
+	unitRainFingerprint,
+	unitRainFingerprintOfSummary,
+	unitRainFingerprintChanged,
+	unitRainFingerprintError,
+	unitRainOn,
+	UNIT_MAP_MIN_YEARS,
+	UNIT_RAIN_SOURCE,
+	unitRainForcing,
+	simulateUnits,
+	type UnitRainFingerprint,
+	type UnitRainRecipe
+} from './unitRain';
 
 /** The natural-flow generator for settings.runoffModel. */
 export const NATURAL_FLOW: Record<RunoffModelId, NaturalFlowGenerator> = {

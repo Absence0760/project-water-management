@@ -19,7 +19,7 @@
 //
 // Pure and deterministic (no sampling): the same input and options give the
 // same result. Nothing here is stored; it is a live diagnostic.
-import type { ModelInput, ModelOutput } from '../project';
+import { parseUnitRainSeriesKey, type DailySeries, type ModelInput, type ModelOutput, type UnitRainSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario/overrides';
@@ -109,7 +109,11 @@ export function sensitivityPlan(
 	});
 
 	// Rain: every rain series the project has, the same factor, so CHIRPS's bias-correction factors are unchanged.
-	const rainKinds = RAIN_KINDS.filter((k) => input.series?.[k]?.values.some((v) => typeof v === 'number' && v > 0));
+	// A land unit's own rain records too (engine ≥ 1.78.0, docs/model.md §2.4h), so a per-unit run's rain moves with the rest.
+	const unitKeys = Object.keys(input.series ?? {})
+		.filter((k) => parseUnitRainSeriesKey(k) !== null)
+		.sort() as UnitRainSeriesKey[];
+	const rainKinds = [...RAIN_KINDS, ...unitKeys].filter((k) => (input.series as Record<string, DailySeries | undefined>)?.[k]?.values.some((v) => typeof v === 'number' && v > 0));
 	if (rainKinds.length) {
 		plans.push(scaled('rain', (k) => rainKinds.map((kind) => ({ op: 'series.scale', kind, factor: k }) as ScenarioOp), [`${rainKinds.length} rain series scaled`]));
 	} else skipped.push({ factor: 'rain', reason: 'the project has no rain' });

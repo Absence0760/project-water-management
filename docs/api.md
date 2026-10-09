@@ -2197,6 +2197,16 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `storageStartMm`. GR4J runs also
   carry the catchment series `pet`, `aet`, `production_store`, `routing_store`,
   `uh_store` (mm), and `exchange` when X2 ≠ 0.
+- `summary.unitRain` (engine ≥ 1.78.0, only under `settings.unitRain`
+  `{ mode: 'perUnit' }`, [model.md §2.4h](./model.md)) is each land unit's
+  forcing and GR4J balance: `{ mode, gaugeMapMm, gaugeMapSource, mapPeriod,
+  units }`, one entry per land unit in node-id order with its `rule`
+  (`unitGauge` | `gaugeMap` | `unitChirps` | `catchment`), `rainKey`,
+  `factor` and `factorSource`, the MAP ratio and CHIRPS level, the run days
+  by where their rain came from (`days`), and `rainMm`, `aetMm`, `flowMm`,
+  `runoffM3`, `runoffCoefficient`. Such a run also carries, per land unit,
+  the series `rain_unit` (mm) and `runoff_natural` (m³/day, before land
+  cover), and `summary.runoff` is over the land units' areas.
 - `summary.wr2012` (engine ≥ 0.6.0; only when the project has a WR2012
   reference) compares simulated **natural** flow with the reference scaled to
   the modelled catchment (`Wr2012Report` in
