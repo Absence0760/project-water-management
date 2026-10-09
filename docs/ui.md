@@ -5582,9 +5582,12 @@ two.
   the pragmatic EWR", and the run's warnings repeat it. Wherever a screen
   names the outlet's daily test (Judge results by's choice and Automatic, the
   Summary's reserve strip, River & reserve's judged-by line, water-year bars
-  and EWR by month note) it uses `ewr/notMet.ts dailyEwrName`: "the pragmatic
-  EWR", or "the daily EWR from the DRM TAB file / percentile tables"; a DRM
-  source counts as a daily test set for Judge results by.
+  and EWR by month note, Compare runs' water-year bars) it uses
+  `ewr/notMet.ts dailyEwrName`: "the pragmatic EWR", or "the daily EWR from
+  the DRM TAB file / percentile tables"; runs compared with different sources
+  are "each run's daily EWR" (`dailyEwrNameOf`), each run's own named in the
+  chart's legend and caption. A DRM source counts as a daily test set for
+  Judge results by.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a

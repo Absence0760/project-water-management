@@ -74,12 +74,31 @@ export function daysBelowTest(ruleTable: boolean, daily?: DailyEwrSource): strin
 	return ruleTable ? dailyEwrName(daily) : 'the reserve';
 }
 
+/** What a chart of several runs calls the daily test when the runs' tests differ (Compare runs' water-year bars). */
+export const EACH_RUNS_DAILY_EWR = 'each run’s daily EWR';
+
 /**
- * The same for a chart of several runs (Compare runs' water-year bars): the
- * bars always count the pragmatic EWR, so "the pragmatic EWR" is true for any
- * mix and is used as soon as one run is judged by a rule table, each by its
- * own project's choice (settings.ewrHeadline, issue #444; none = automatic).
+ * The daily test of several runs by one name: the runs' shared dailyEwrName,
+ * or, when they differ (a pragmatic baseline beside a what-if on the DRM
+ * percentile tables), "each run's daily EWR", the chart then naming each
+ * run's own beside it.
  */
-export function daysBelowTestOf(runs: readonly { summary: Pick<RunSummary, 'ewrAssurance'>; choice?: EwrHeadline | null }[]): string {
-	return daysBelowTest(runs.some((r) => headlineSite(r.summary, r.choice) !== null));
+export function dailyEwrNameOf(dailies: readonly DailyEwrSource[]): string {
+	const names = [...new Set(dailies.map(dailyEwrName))];
+	return names.length > 1 ? EACH_RUNS_DAILY_EWR : (names[0] ?? dailyEwrName(null));
+}
+
+/**
+ * The same for a chart of several runs (Compare runs' water-year bars): each
+ * bar counts its own run's daily EWR (the pragmatic EWR or, from engine
+ * 1.77.0, a DRM table: summary.catchment.outletEwr), so beside a rule table
+ * (any run judged by one, each by its own project's choice,
+ * settings.ewrHeadline, issue #444; none = automatic) the count is named by
+ * dailyEwrNameOf; without one it is "the reserve".
+ */
+export function daysBelowTestOf(
+	runs: readonly { summary: Pick<RunSummary, 'ewrAssurance'> & { catchment?: { outletEwr?: DailyEwrSource } }; choice?: EwrHeadline | null }[]
+): string {
+	if (!runs.some((r) => headlineSite(r.summary, r.choice) !== null)) return 'the reserve';
+	return dailyEwrNameOf(runs.map((r) => r.summary.catchment?.outletEwr));
 }

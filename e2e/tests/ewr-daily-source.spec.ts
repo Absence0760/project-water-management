@@ -159,3 +159,21 @@ test('a Reserve rule table is filled from a .rul (grids, unit, REC, source) and 
 	await answerConfirm(page, false, 'Replace the rule table at Outlet (Outflow gauge) with drm-synthetic.rul?');
 	await expect(table.getByLabel('EWR (total flow), Oct, 10 %, m³/s')).toHaveValue('0.7');
 });
+
+test('Compare runs names each run’s daily EWR on the water-year bars when a pragmatic baseline meets a DRM what-if', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Compare daily EWR sources');
+	const baseline = await createRun(page.request, id, 'Pragmatic');
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'mar', tableMarMm3: 49.8, tableAreaKm2: null, tabM3s: [0.47, 0.27, 0.1, 0.05, 0.06, 0.08, 0.22, 0.97, 1.85, 2.09, 1.57, 1.16], naturalPctM3s: null, reservePctM3s: null }
+	});
+	const whatIf = await createRun(page.request, id, 'TAB file');
+	await page.goto(`/projects/${id}?tab=compare&a=${id}:${baseline}&b=${id}:${whatIf}`);
+	const years = page.getByRole('region', { name: /^Days below .*, each year$/ });
+	// The bars count each run's own daily EWR: the caption and the legend name both, never "the pragmatic EWR" for the two.
+	await expect(years.getByText(/^Days in each water year/)).toHaveText(
+		/^Days in each water year \(Oct–Sep\) when the simulated outflow was below each run’s daily EWR at the outlet \(Baseline: the pragmatic EWR; What-if 1: the daily EWR from the DRM TAB file\)\./
+	);
+	await expect(years.getByTestId('reserve-years-daily')).toHaveText([' (the pragmatic EWR)', ' (the daily EWR from the DRM TAB file)']);
+	await expectNoViolations(page);
+});

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunSummary } from '@water-management/engine';
 import { headlines } from '$lib/components/overview/latestRun';
 import { riverKpis } from '$lib/components/river/river';
-import { EWR_NOT_MET, dailyEwrName, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
+import { EACH_RUNS_DAILY_EWR, EWR_NOT_MET, dailyEwrName, dailyEwrNameOf, daysBelowTest, daysBelowTestOf, ewrNotMet } from './notMet';
 
 describe('ewrNotMet', () => {
 	it('words the pragmatic EWR test one way: the share not met and the days not met of the record', () => {
@@ -59,6 +59,22 @@ describe('daysBelowTestOf', () => {
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'pragmatic' } }])).toBe('the reserve');
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'auto' } }])).toBe('the pragmatic EWR');
 		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] }, choice: { source: 'pragmatic' } }, { summary: { ewrAssurance: [site] } }])).toBe('the pragmatic EWR');
+	});
+	it('names the runs’ own daily EWR beside a rule table: one shared DRM source by name, two different ones as each run’s (issue #455)', () => {
+		const tab = { catchment: { outletEwr: { method: 'tab' as const } } };
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site], ...tab } }, { summary: { ewrAssurance: [site], ...tab } }])).toBe('the daily EWR from the DRM TAB file');
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [site] } }, { summary: { ewrAssurance: [site], catchment: { outletEwr: { method: 'percentile' } } } }])).toBe('each run’s daily EWR');
+		// Without a rule table the count stays "the reserve", whatever the sources.
+		expect(daysBelowTestOf([{ summary: { ewrAssurance: [] } }, { summary: { ewrAssurance: [], ...tab } }])).toBe('the reserve');
+	});
+});
+
+describe('dailyEwrNameOf', () => {
+	it('one name for runs that agree, “each run’s daily EWR” for runs that don’t', () => {
+		expect(dailyEwrNameOf([])).toBe('the pragmatic EWR');
+		expect(dailyEwrNameOf([null, { method: 'pragmatic' }])).toBe('the pragmatic EWR');
+		expect(dailyEwrNameOf([{ method: 'percentile' }, { method: 'percentile' }])).toBe('the daily EWR from the DRM percentile tables');
+		expect(dailyEwrNameOf([null, { method: 'percentile' }])).toBe(EACH_RUNS_DAILY_EWR);
 	});
 });
 
