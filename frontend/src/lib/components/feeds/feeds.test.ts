@@ -196,6 +196,8 @@ describe('descriptions', () => {
 	it('say where a feed reads and what it writes', () => {
 		expect(describePlace({ source: 'dws', config: { station: 'X0H000' } })).toBe('station X0H000');
 		expect(describePlace({ source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }] } })).toBe('cell -20.12, 25.17');
+		// A unit's feed (issue #482): its cells came from the unit's parcel.
+		expect(describePlace({ source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17 }, { lat: -20.17, lon: 25.17 }], unit: { nodeId: 'n', featureId: 'f', updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 12.345 } } })).toBe('2 cells of a unit’s parcel (12.35 km²), area weighted');
 		expect(describePlace({ source: 'chirps', config: { cells: [{ lat: 1, lon: 2 }, { lat: 3, lon: 4 }] } })).toBe('2 cells');
 		expect(describePlace({ source: 'chirps', config: { bbox: { south: -20.3, west: 25, north: -20.1, east: 25.2 } } })).toBe('box -20.30, 25.00 to -20.10, 25.20');
 		expect(describePlace({ source: 'chirps_gefs', config: { bbox: { south: -20.125, west: 25.1, north: -20.1, east: 25.175 } } })).toBe('box -20.125, 25.10 to -20.10, 25.175');

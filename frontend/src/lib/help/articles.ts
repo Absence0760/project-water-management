@@ -611,6 +611,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['gr4j', 'chirps-bias', 'rain-final', 'gr4j-pe'],
 		source: 'Engine 1.13.0; docs/model.md §2.4g; docs/calibration-research.md § Rain forcing'
 	},
+	'unit-rain': {
+		long: 'Off (the default), GR4J runs once on the catchment rain and each hydrological unit gets its flow share of the natural flow. On, GR4J runs once for each unit with land, with the one calibrated parameter set, the catchment’s evaporation and the unit’s own area, and each unit’s runoff is its own inflow; the natural flow at the outlet is their routed sum. Each unit’s rain is, in this order:\n\n• **Its own rain gauge**, as recorded, its gaps filled by its CHIRPS scaled to its MAP.\n• **The catchment gauge × unit MAP ÷ gauge MAP**, when the gauge’s MAP is set here and the unit has a MAP. Days the gauge has none take the unit’s CHIRPS scaled to its MAP.\n• **Its own CHIRPS**, scaled by its MAP ÷ the CHIRPS mean annual rain over the MAP period (1991–2020 by default, at least 5 complete years), or with the catchment’s CHIRPS correction when it has no MAP.\n• **Otherwise the catchment rain**, as with the switch off, with the areal rainfall correction; the run warns, naming the unit.\n\nEvery factor is flat and held between 0.25 and 4, and a held one warns. Demand, rain on the dams and the WR2012 check keep the catchment rain. Set up each unit’s CHIRPS under Data feeds, Rain for each unit, and its MAP on the unit’s form. GR4J is nonlinear, so switching it on changes the flow even where the rain is the same: refit afterwards. The run lists each unit’s rule, factor and source.',
+		aliases: ['per-unit rain', 'rain per unit', 'unit rain', 'semi-distributed GR4J', 'unitRain'],
+		related: ['unit-map', 'areal-rain', 'gr4j', 'flow-share'],
+		source: 'docs/model.md §2.4h; issue #482'
+	},
 	'actual-evaporation': {
 		long: 'The part of potential evaporation that rain meets directly, plus what the soil-moisture store can give up. On dry days with a dry store it falls well below PET.',
 		related: ['gr4j', 'pan-coefficient'],

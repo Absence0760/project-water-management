@@ -3344,3 +3344,54 @@ export interface DelineationRequest {
 	createdAt: string;
 	finishedAt: string | null;
 }
+
+/** CHIRPS v3's two daily products a unit rain feed reads (backend feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
+export type UnitRainProduct = 'sat' | 'rnl';
+
+/**
+ * One land unit in GET …/feeds/chirps/from-units (issue #482, docs/api.md § Data feeds): its
+ * delineated parcel (`map_feature.node_id`), the CHIRPS cells it covers (exact clipped overlap
+ * × cos latitude, `share` = the part of the cell inside the parcel), and its own feed, if any.
+ */
+export interface UnitRainProposalUnit {
+	nodeId: string;
+	name: string;
+	featureId: string;
+	areaKm2: number;
+	cells: { lat: number; lon: number; share: number; weight: number }[];
+	/** The CHIRPS feed into this unit's rain_chirps_mm series, or null before Create. */
+	feedId: string | null;
+	/** Days that series holds (0 before the first fetch). */
+	seriesDays: number;
+	/** What POST does for it: make its feed, give its (still empty) feed these cells or this product, or nothing (it reads them already). */
+	action: 'create' | 'update' | 'none';
+}
+
+/** GET …/feeds/chirps/from-units: every land unit's proposal, and the units it can't propose for. */
+export interface UnitRainProposal {
+	/** The product the unit feeds read (or would read). */
+	product: UnitRainProduct;
+	units: UnitRainProposalUnit[];
+	/** Land units with no parcel linked on the map. */
+	withoutPolygon: { nodeId: string; name: string }[];
+	/** Land units the server can't set up, and why (in words): several parcels, a parcel changed after its feed fetched, a series in the way. */
+	refused: { nodeId: string; name: string; reason: string }[];
+	/** Whether this caller may POST: feeds are set up by owners (data_feed's RLS); editors see the proposal. */
+	canApply: boolean;
+}
+
+/** POST …/feeds/chirps/from-units body: the product (absent: the units' feeds' own, else rnl from 1981), the first day (absent: the product's first), and the units (absent: every proposed one). */
+export interface UnitRainApplyBody {
+	product?: UnitRainProduct;
+	startDate?: string;
+	nodeIds?: string[];
+}
+
+/** POST …/feeds/chirps/from-units answer: the feeds made and changed, one per unit. */
+export interface UnitRainApplyResult {
+	created: number;
+	updated: number;
+	feeds: { nodeId: string; feedId: string }[];
+	/** The units left out (refused, or with no parcel), and why. */
+	skipped?: { nodeId: string; name: string; reason: string }[];
+}

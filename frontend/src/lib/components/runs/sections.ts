@@ -7,6 +7,7 @@
 import type { RunSummary } from '@water-management/engine';
 import { riverAnchor, riverHref } from '$lib/components/river/links';
 import { supplyAnchor, supplyHref } from '$lib/components/supply/links';
+import { unitRainOf } from './unitRain';
 
 export interface ResultSection {
 	id: string;
@@ -19,7 +20,8 @@ export interface ResultGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast'>;
+// unitRain: summary.unitRain (engine ≥ 1.78.0, issue #482), read through unitRainOf until the engine's RunSummary carries it.
+type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast'> & { unitRain?: unknown };
 
 export function resultGroups(summary: SectionInput): ResultGroup[] {
 	return [
@@ -41,6 +43,8 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 				{ id: 'res-water-balance', label: 'Water balance' },
 				// Runoff model balance: conceptual models (GR4J) only.
 				...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
+				// Rain for each unit: runs with settings.unitRain perUnit only (issue #482).
+				...(unitRainOf(summary) ? [{ id: 'res-unit-rain', label: 'Unit rain' }] : []),
 				// WR2012 check: only when the project has a reference.
 				...(summary.wr2012 ? [{ id: 'res-wr2012', label: 'WR2012 check' }] : []),
 				{ id: 'res-ewr-agreement', label: 'EWR vs observed' },

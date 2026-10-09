@@ -2642,6 +2642,16 @@ itself.
   method, a line under the areas says when High-MAP + Low-MAP is more than
   1 % off the area (`hiLoHint`, the run's own `areaMismatches` rule), so it
   is caught while typing.
+- **MAP** (a unit's own mean annual precipitation, mm, issue #482): in a
+  unit's Catchment area section, after the areas, an optional **MAP**
+  (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
+  a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
+  read only with Settings' Rain for each unit on. Clearing the MAP clears
+  its source. A MAP out of range or without its source is marked
+  `aria-invalid` with the message under its field, and blocks Save
+  (`unitMapIssue` in `model/validate.ts`, the engine's `mapMmError`, as the
+  API checks it); a gauge or water user that kept a MAP from being a unit is
+  left alone.
 - **Set elsewhere** (a unit's Irrigation section): its crops ("20.00 ha
   planted, 1 crop", a link to the farm drawer over the map, in place of the
   sheet) and its transfers ("1 transfer, to Lower farm", a link to
@@ -5195,7 +5205,26 @@ two.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it.
+    shows it. With rain for each unit on, its hint adds that it applies only
+    to the units that fall back to the catchment rain.
+    Then **Rain for each unit** (`settings.unitRain`, issue #482,
+    `settings/UnitRainFields.svelte`, its own chunk, helpers in
+    `settings/unitRain.ts`; [model.md §2.4h](./model.md)): a checkbox
+    "Runoff from each unit's own rain" (off: null, the catchment rain as
+    before; on: `{ mode: 'perUnit' }`, and the setting switched off comes
+    back if ticked again before saving). On, a line says how many units with
+    land have a MAP ("1 of 2 units with land has a MAP."), with a link to
+    Data feeds' Rain for each unit; then an optional **Rain gauge's MAP**
+    (mm, 1–12 000; with it a unit with a MAP runs on the gauge's rain × unit
+    MAP ÷ gauge MAP) and, once it is set, its required **Source**; then the
+    **MAP period** as a first and a last year (1 Jan to 31 Dec; 1991–2020,
+    the default, is stored as none). A period under five years, or starting
+    before 1981, gets a note but saves; a gauge MAP out of range, one without
+    its source, or a first year after the last blocks Save, the message under
+    its field (named by `aria-describedby`) and in the save bar. The Settings
+    tab checks it itself (`unitRainFormError`), so Save is blocked before the
+    chunk has loaded. The group's summary line adds "rain for each unit"
+    while it is on.
     After it comes
     the **GR4J potential evaporation** group (`settings.pe`, engine ≥
     0.31.0, issue #39, `settings/peInput.ts`;
@@ -5965,6 +5994,30 @@ part of the Settings tab's chunk; WP-2.10,
   catchment boundary “…”, area weighted". The Map tab's link opens it at once
   (`?rain=boundary`). Without a boundary the error says so, with a link to
   the map.
+- **Rain for each unit** (editors see it, owners act; issue #482,
+  `feeds/UnitRain.svelte`, helpers in `feeds/unitRain.ts`, [maps.md § Rain
+  for each unit](./maps.md)): opens **Rain for each unit** under the list
+  with the server's proposal (`GET …/feeds/chirps/from-units`): a table of
+  each unit with land and a parcel on the map (unit, area, "3 cells, 75 %
+  of their area inside", and its feed's state chip and health sentence from
+  the feeds list, or "No feed yet"), **The cells** (a disclosure: unit,
+  latitude, longitude, share inside, weight), the units without a parcel
+  (named, with **Open the map**) and the units the server can't set up,
+  each with its reason (several parcels and none accepted, a parcel changed
+  after its feed fetched, a series in the way). Owners get **Daily product**
+  (*rnl*, from 1981, by default; changing it asks the server again with
+  `?product=`, keeping the panel shown, `aria-busy`, since the server says
+  which units that would refuse), an optional **Start date** (checked
+  against the product's first day; without one the feeds read from it), a
+  sentence of what the button does, and the button itself, named by what it
+  does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
+  (from each unit's `action`). With every feed up to date it says so and
+  offers no button; editors read "An owner of the project creates the
+  feeds". After the POST the panel says what it did ("Created 3 feeds. They
+  run on the next schedule …", and how many units were left out), reloads
+  the feeds list and the proposal. A unit's feed card reads "3 cells of a
+  unit's parcel (12.35 km²), area weighted" (`describePlace`). Opens at
+  once on `?rain=units`. Tested by `e2e/tests/unit-rain.spec.ts`.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
@@ -6476,7 +6529,8 @@ read it before.
   phone bar on a phone) down the long results page, marks the section being read, takes at most two
   rows on a laptop (three at 1280 px until its groups could break across rows; [§ On this page
   menu](#on-this-page-menu)), and on phones is one sideways strip.
-  Runoff model only for a GR4J run, WR2012 check only with a reference, and
+  Runoff model only for a GR4J run, Unit rain only for a run with rain for
+  each unit (`summary.unitRain`), WR2012 check only with a reference, and
   Plausibility only on a run made by engine 0.25.0 or later. Plausibility
   and Outputs are one word in the menu (the panels' headings say
   *Plausibility checks* and *Explore outputs*) so it still fits two rows at
@@ -7038,6 +7092,18 @@ read it before.
   the chart beside the table only where the panel is 44rem wide or more (a
   container query on the panel, so at 1024 px, with the sidebar and the runs
   rail, it stacks under the table)),
+  **Rain for each unit** for a run with `settings.unitRain` per unit
+  (`UnitRainPanel`, its own chunk, `#res-unit-rain`, helpers in
+  `runs/unitRain.ts`; shown only when the summary carries
+  `summary.unitRain`, engine ≥ 1.78.0, issue #482): the MAP period and the
+  rain gauge's MAP with its source, a warning list of what to check (the
+  units that fell back to the catchment rain, by name; a factor held at the
+  0.25–4 bound; a CHIRPS mean taken outside the MAP period; CHIRPS used
+  raw), a table per unit (rain from: its own gauge, catchment gauge × MAP
+  ratio, its own CHIRPS, or catchment rain (fallback); the level factor and
+  its source, "held at the bound" in words; MAP; rain and runoff in mm; the
+  runoff coefficient), the MAP sources, and **Days by where the rain came
+  from** (a disclosure),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping

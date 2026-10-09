@@ -316,6 +316,12 @@ export const DATA_ARTICLES: Record<string, HelpArticle> = {
 		related: ['data-feeds', 'chirps', 'chirps-bias'],
 		source: 'docs/maps.md (Rain from the boundary)'
 	},
+	'unit-rain-feeds': {
+		long: 'Under Settings, Data feeds, **Rain for each unit** proposes one CHIRPS feed for each hydrological unit with land and a parcel on the map (its delineated or drawn area, linked to the unit). Each feed averages the 0.05° CHIRPS cells the parcel covers, each weighted by the share of it inside and by its area, and writes into that unit’s own rain series.\n\nOne daily product serves every unit, end to end: **rnl** (from 1981, final days only) by default, or **sat** (from 1998, with preliminary days); a feed never splices one onto the other. Without a start date the feeds read from the product’s first day, so the MAP period has its years. Units without a parcel are listed, with a link to the map.\n\nNeighbouring small units often share cells, so their raw CHIRPS is nearly the same: what tells them apart is each unit’s MAP, which levels its CHIRPS. The series are read only while Rain for each unit is on in Settings, Flow generation.',
+		aliases: ['per-unit CHIRPS', 'unit CHIRPS', 'CHIRPS per unit', 'from-units'],
+		related: ['unit-rain', 'unit-map', 'boundary-rain', 'chirps-version'],
+		source: 'docs/maps.md § Rain for each unit; issue #482'
+	},
 	'chirps-gefs': {
 		long: 'CHIRPS-GEFS v3 is a rainfall forecast from the Climate Hazards Center: the GEFS weather forecast bias-corrected to CHIRPS, on the same 0.05° grid, one issue a day of 16 daily values. A feed reads the newest complete issue for its cells or box and writes all 16 days into the forecast rainfall series, each issue replacing the last from its issue date on.\n\nAn ordinary run stops where the observed record ends, so forecast days reach only a forecast run, where results on those days are indicative. Forecast rain also fills a day neither catchment rain nor CHIRPS has.',
 		aliases: ['GEFS', 'rain forecast feed', '16-day forecast'],
