@@ -96,6 +96,8 @@
 		mapGridData,
 		type MapGridPointData,
 		chirpsData,
+		demGridData,
+		type DemGridPointData,
 		type ChirpsCellData
 	} from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
@@ -141,7 +143,8 @@
 		onpiecepick,
 		units = null,
 		mapGrid = null,
-		chirps = null
+		chirps = null,
+		demGrid = null
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -203,6 +206,8 @@
 		mapGrid?: readonly MapGridPointData[] | null;
 		/** The CHIRPS grid layer's cells and points (mapLayers.ts chirpsCells); null or empty: none. */
 		chirps?: readonly ChirpsCellData[] | null;
+		/** The DEM grid layer's sampled cells, each labelled with its elevation; null or empty: none. */
+		demGrid?: readonly DemGridPointData[] | null;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -384,6 +389,7 @@
 	const syncUnits = () => setSource('units', () => unitsData(units, features));
 	const syncMapGrid = () => setSource('mapgrid', () => mapGridData(mapGrid));
 	const syncChirps = () => setSource('chirps', () => chirpsData(chirps));
+	const syncDemGrid = () => setSource('demgrid', () => demGridData(demGrid));
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
@@ -447,7 +453,8 @@
 						proposal: proposalData(proposal),
 						units: unitsData(units, features),
 						mapGrid: mapGridData(mapGrid),
-						chirps: chirpsData(chirps)
+						chirps: chirpsData(chirps),
+						demGrid: demGridData(demGrid)
 					});
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
@@ -621,6 +628,11 @@
 		void chirps;
 		void status;
 		syncChirps();
+	});
+	$effect(() => {
+		void demGrid;
+		void status;
+		syncDemGrid();
 	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.

@@ -2844,6 +2844,22 @@ export interface MapGridLayer {
 	max: number;
 }
 
+/** The DEM grid layer's points in a box (GET …/map/dem-grid; docs/maps.md § DEM grid). */
+export interface DemGridLayer {
+	bbox: [number, number, number, number];
+	/** The elevation model read (its label and attribution) and the zoom its cells are at. */
+	dataset: { label: string; attribution: string; zoom: number };
+	/** One point every `stride` DEM cells along each row and column. */
+	stride: number;
+	/** A DEM cell's side here, m (rounded); null with no points read. */
+	cellM: number | null;
+	/** Each point's centre and its elevation, whole metres. */
+	points: [lon: number, lat: number, elevationM: number][];
+	/** The box holds more points than one answer carries (`max`): none, zoom in. */
+	tooDense: boolean;
+	max: number;
+}
+
 /** A reach of the loaded river network (GET …/map/rivers, issue #345). */
 export interface RiverReach {
 	dataset: string;

@@ -11,7 +11,7 @@ import { boundsOfAll } from './mapData';
 import { interiorPoint } from './pieces';
 
 /** The layers the tab can add, in the order the URL lists them. */
-export const MAP_LAYERS = ['quaternaries', 'rivers', 'relief', 'units', 'mapgrid', 'chirps'] as const;
+export const MAP_LAYERS = ['quaternaries', 'rivers', 'relief', 'units', 'mapgrid', 'chirps', 'demgrid'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** The layers `layers=` turns on (unknown names ignored). */
@@ -65,6 +65,24 @@ export const riverBbox = (features: readonly MapFeature[]) => layerBbox(features
 export const RIVER_VIEW_SNAP_DEG = 0.05;
 
 /**
+ * A map view (west, south, east, north) snapped outward to whole multiples of
+ * `snap` degrees, so a small pan asks the same box again: null when no view
+ * is known or the snapped view is wider than `maxDeg` a side (the server
+ * refuses it: zoom in). The river network, the MAP grid and the DEM grid ask
+ * for their view this way.
+ */
+export function snappedViewBbox(view: readonly [number, number, number, number] | null, snap: number, maxDeg: number): [number, number, number, number] | null {
+	if (!view || !view.every(Number.isFinite)) return null;
+	const r = (v: number) => Math.round(v * 1e4) / 1e4;
+	const w = r(Math.max(-180, Math.floor(view[0] / snap) * snap));
+	const s = r(Math.max(-90, Math.floor(view[1] / snap) * snap));
+	const e = r(Math.min(180, Math.ceil(view[2] / snap) * snap));
+	const n = r(Math.min(90, Math.ceil(view[3] / snap) * snap));
+	if (e <= w || n <= s || e - w > maxDeg || n - s > maxDeg) return null;
+	return [w, s, e, n];
+}
+
+/**
  * The bbox the river network is asked for when the project has no features
  * yet (docs/maps.md § River network): the map's view (west, south, east,
  * north), snapped outward to RIVER_VIEW_SNAP_DEG so a small pan asks the same
@@ -72,15 +90,7 @@ export const RIVER_VIEW_SNAP_DEG = 0.05;
  * RIVER_BBOX_MAX_DEG a side, which the server refuses: zoom in.
  */
 export function riverViewBbox(view: readonly [number, number, number, number] | null): [number, number, number, number] | null {
-	if (!view || !view.every(Number.isFinite)) return null;
-	const g = RIVER_VIEW_SNAP_DEG;
-	const r = (v: number) => Math.round(v * 1e4) / 1e4;
-	const w = r(Math.max(-180, Math.floor(view[0] / g) * g));
-	const s = r(Math.max(-90, Math.floor(view[1] / g) * g));
-	const e = r(Math.min(180, Math.ceil(view[2] / g) * g));
-	const n = r(Math.min(90, Math.ceil(view[3] / g) * g));
-	if (e <= w || n <= s || e - w > RIVER_BBOX_MAX_DEG || n - s > RIVER_BBOX_MAX_DEG) return null;
-	return [w, s, e, n];
+	return snappedViewBbox(view, RIVER_VIEW_SNAP_DEG, RIVER_BBOX_MAX_DEG);
 }
 
 /**
@@ -204,15 +214,7 @@ export const MAP_GRID_VIEW_SNAP_DEG = 0.02;
  * more of the grid's points than one answer carries.
  */
 export function mapGridViewBbox(view: readonly [number, number, number, number] | null): [number, number, number, number] | null {
-	if (!view || !view.every(Number.isFinite)) return null;
-	const g = MAP_GRID_VIEW_SNAP_DEG;
-	const r = (v: number) => Math.round(v * 1e4) / 1e4;
-	const w = r(Math.max(-180, Math.floor(view[0] / g) * g));
-	const s = r(Math.max(-90, Math.floor(view[1] / g) * g));
-	const e = r(Math.min(180, Math.ceil(view[2] / g) * g));
-	const n = r(Math.min(90, Math.ceil(view[3] / g) * g));
-	if (e <= w || n <= s || e - w > MAP_GRID_BBOX_MAX_DEG || n - s > MAP_GRID_BBOX_MAX_DEG) return null;
-	return [w, s, e, n];
+	return snappedViewBbox(view, MAP_GRID_VIEW_SNAP_DEG, MAP_GRID_BBOX_MAX_DEG);
 }
 
 /** A MAP value as the map and the list write it: whole mm. */
@@ -260,4 +262,18 @@ export function chirpsCells(view: readonly [number, number, number, number] | nu
 		}
 	}
 	return out;
+}
+
+// ---------------------------------------------------------------------------
+// The DEM grid (docs/maps.md § DEM grid)
+// ---------------------------------------------------------------------------
+
+/** The widest view the DEM grid is asked for (the server's DEM_GRID_BBOX_MAX_DEG). */
+export const DEM_GRID_BBOX_MAX_DEG = 0.5;
+/** The grid a view is snapped out to before the DEM grid is asked for it. */
+export const DEM_GRID_VIEW_SNAP_DEG = 0.01;
+
+/** The bbox the DEM grid is asked for: the view snapped out to 0.01°, null past 0.5° a side (zoom in) or with no view. */
+export function demGridViewBbox(view: readonly [number, number, number, number] | null): [number, number, number, number] | null {
+	return snappedViewBbox(view, DEM_GRID_VIEW_SNAP_DEG, DEM_GRID_BBOX_MAX_DEG);
 }

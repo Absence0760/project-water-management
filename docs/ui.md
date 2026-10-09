@@ -3635,6 +3635,12 @@ map" card) stays the schematic; this is the geography.
   from which grid and their range, the source line, a **Grid** picker when
   more than one is loaded, and "Zoom in to see the MAP grid" or "This view
   holds more than 5 000 of the grid’s points" when the view is too wide.
+  **DEM grid** (`layers=demgrid`, the elevation ramp as its swatch; not
+  offered when an editor's delineation check finds no DEM): on, every 10th
+  elevation-model cell each way in view, coloured and labelled with its
+  elevation ("812 m"), the box saying how many, how far apart, their range
+  and the DEM's name, or "Zoom in to see the DEM grid" past 0.5°
+  ([maps.md § DEM grid](./maps.md#dem-grid)).
   **CHIRPS grid** (`layers=chirps`, a dashed orange swatch): on, CHIRPS v3's
   0.05° cells in view, dashed, with their centres as dots, and how many
   ([maps.md § Hydrological units layer, § MAP grid, § CHIRPS

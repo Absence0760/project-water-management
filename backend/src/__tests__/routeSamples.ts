@@ -145,6 +145,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	// The river network (issue #345, geo/rivers.ts): a bbox round the synthetic network, and one of its reaches.
 	'GET /projects/:id/map/rivers': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
 	'GET /projects/:id/map/map-grid': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	'GET /projects/:id/map/dem-grid': () => ({ query: { bbox: '20.7,-33.5,20.78,-33.42' } }),
 	// The DEM's channels: the tile holding the synthetic DEM's valley (the ladder turns DEM_URL on with it).
 	'GET /projects/:id/map/channels': () => ({ query: { tile: '103,-168' } }),
 	'POST /projects/:id/map/rivers/add': () => ({ body: { dataset: 'synthetic', reachId: 90000005 } }),

@@ -52,7 +52,10 @@ import {
 	MAP_RAMP,
 	chirpsData,
 	chirpsColour,
-	chirpsLayers
+	chirpsLayers,
+	demGridData,
+	demGridLayers,
+	DEM_RAMP
 } from './mapStyle';
 
 /** Relative luminance and contrast ratio (WCAG 2.2). */
@@ -164,7 +167,7 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'demgrid-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
@@ -175,7 +178,8 @@ describe('overlay', () => {
 			proposal: { type: 'geojson', data: proposalData(null) },
 			units: { type: 'geojson', data: unitsData(null) },
 			mapgrid: { type: 'geojson', data: mapGridData(null) },
-			chirps: { type: 'geojson', data: chirpsData(null) }
+			chirps: { type: 'geojson', data: chirpsData(null) },
+			demgrid: { type: 'geojson', data: demGridData(null) }
 		});
 	});
 
@@ -246,7 +250,7 @@ describe('labels (#326 A6): self-hosted glyphs, none without a glyphs URL', () =
 
 	it('with glyphs but no tiles, labels only the quaternaries, the units and the MAP grid (there are no place names to draw)', () => {
 		const s = mapStyle(null, false, data, { glyphs });
-		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'mapgrid-label']);
+		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'demgrid-label', 'mapgrid-label']);
 		// Without glyphs: no text anywhere, the points and outlines still drawn.
 		const bare = mapStyle(null, false, data);
 		expect(bare.layers.filter((l) => l.type === 'symbol')).toEqual([]);
@@ -604,5 +608,23 @@ describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', 
 			}
 		}
 		expect(chirpsLayers(false).map((l) => l.id)).toEqual(['chirps-cell', 'chirps-point']);
+	});
+});
+
+describe('the DEM grid (docs/maps.md § DEM grid)', () => {
+	it('feeds each sampled cell with its elevation and a whole-metre label, nothing while off', () => {
+		expect(demGridData(null).features).toEqual([]);
+		expect(demGridData([{ lon: 20.71, lat: -33.43, elevationM: 812.4 }]).features).toEqual([
+			{ type: 'Feature', properties: { m: 812.4, label: '812 m' }, geometry: { type: 'Point', coordinates: [20.71, -33.43] } }
+		]);
+	});
+
+	it('colours the points on a rising ramp apart from the MAP grid’s, ringed in the halo colour, labels only with glyphs', () => {
+		expect(DEM_RAMP.map(([m]) => m)).toEqual([...DEM_RAMP.map(([m]) => m)].sort((a, b) => a - b));
+		expect(DEM_RAMP.map(([, c]) => c)).not.toEqual(expect.arrayContaining(MAP_RAMP.map(([, c]) => c)));
+		const { over, labels } = demGridLayers(false, true);
+		expect(over[0]!.paint).toMatchObject({ 'circle-stroke-color': labelColours(false).halo });
+		expect(labels.map((l) => l.id)).toEqual(['demgrid-label']);
+		expect(demGridLayers(false, false).labels).toEqual([]);
 	});
 });

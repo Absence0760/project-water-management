@@ -74,6 +74,7 @@
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
+	import { DemGridLayer } from './demGridLayer.svelte';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import { RiverLayer } from './riverLayer.svelte';
@@ -806,6 +807,14 @@
 	});
 	const chirpsOn = $derived(layersOn(params).has('chirps'));
 	const chirpsInView = $derived(chirpsOn ? chirpsCells(mapView) : null);
+	const demGrid = new DemGridLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('demgrid'),
+		view: () => mapView,
+		load: api.map.demGrid
+	});
+	/** The DEM grid is offered unless the server is known to have no elevation model (an editor's delineation check says so). */
+	const demGridOffered = $derived(!(canEdit && delineationLoaded && !delineation?.available));
 
 	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
 	/**
@@ -1288,6 +1297,7 @@
 		{mapGrid}
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
+		demGrid={demGridOffered ? demGrid : null}
 	/>
 {/snippet}
 {#snippet keyBody()}
@@ -1451,6 +1461,7 @@
 									units={unitsLabelled}
 									mapGrid={mapGrid.points}
 									chirps={chirpsInView}
+									demGrid={demGrid.points}
 								/>
 							{/snippet}
 						</Lazy>
