@@ -35,7 +35,7 @@ describe.skipIf(!fixture)('runModel performance: client catchment (needs data/cl
 		return;
 	}
 	const { modelInput, natural } = fixture;
-	// Measured medians (2026-09-30, issue #284), the client catchment (13 nodes, 16 161 days), Node 24 on the
+	// Measured medians (2026-09-30, issue #284), the client catchment (its full network and daily record), Node 24 on the
 	// 20-thread dev laptop with nothing else running, three runs of this file: 136–159 ms for the replay and
 	// 143–150 ms with the rain model. So a run is about 0.15 s, which is what the in-browser previews
 	// (frontend/src/lib/preview) lean on: the unsaved-edits preview runs the model twice. The 1 s budgets

@@ -258,7 +258,7 @@ describe('boreholes (WP-1.34)', () => {
 		// on day 23, so the dam wasn't drawn; doubled, it was, the 1e9 m³/day unit refilled the dam that day
 		// and a flood took the stream depletion at once, while the base run refilled it on the dry day 24 and
 		// owed 40 000 m³ of depletion for days (n8 0.288 → 0.492). 10028: n16's dam seeps all it holds, and
-		// doubled demand kept it filled from groundwater every day, 720 000 m³/day seeping on down to n13
+		// doubled demand kept it filled from groundwater every day, all it holds seeping on down to n13
 		// (0.781 → 0.852). 20 000-case soak on engine 1.20.0, #164.
 		for (const [seed, id] of [[4536, 'n12'], [10028, 'n16']] as const) {
 			// Engine 1.73.0's crop supply tables are taken off, so each case is the one found.
