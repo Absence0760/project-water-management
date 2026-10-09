@@ -90,7 +90,13 @@
 		TERRAIN_SOURCE,
 		terrainSource,
 		type NetworkReach,
-		type QuaternaryOutline
+		type QuaternaryOutline,
+		unitsData,
+		type UnitLabelData,
+		mapGridData,
+		type MapGridPointData,
+		chirpsData,
+		type ChirpsCellData
 	} from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { attachDrawing } from './draw/attachDrawing';
@@ -132,7 +138,10 @@
 		onreliefError,
 		proposal = null,
 		onpiecehover,
-		onpiecepick
+		onpiecepick,
+		units = null,
+		mapGrid = null,
+		chirps = null
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -188,6 +197,12 @@
 		onpiecehover?: (key: string | null) => void;
 		/** A piece or its number was clicked (where no feature is): its key. */
 		onpiecepick?: (key: string) => void;
+		/** The hydrological units layer: each unit's polygon outlined and named (mapLayers.ts unitLabels); null or empty: none. */
+		units?: readonly UnitLabelData[] | null;
+		/** The MAP grid layer's points, each labelled with its MAP; null or empty: none. */
+		mapGrid?: readonly MapGridPointData[] | null;
+		/** The CHIRPS grid layer's cells and points (mapLayers.ts chirpsCells); null or empty: none. */
+		chirps?: readonly ChirpsCellData[] | null;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -366,6 +381,9 @@
 	const syncProposal = () => setSource('proposal', () => proposalData(proposal));
 	const syncRivers = () => setSource('rivers', () => riverNetworkData(rivers, pickedReach));
 	const syncChannels = () => setSource('channels', () => channelData(channels, channelsDim));
+	const syncUnits = () => setSource('units', () => unitsData(units, features));
+	const syncMapGrid = () => setSource('mapgrid', () => mapGridData(mapGrid));
+	const syncChirps = () => setSource('chirps', () => chirpsData(chirps));
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
@@ -426,7 +444,10 @@
 						terrain: reliefUrl(),
 						riversCredit: riversCreditHtml(),
 						dataSourcesHref: `${base}/data-sources`,
-						proposal: proposalData(proposal)
+						proposal: proposalData(proposal),
+						units: unitsData(units, features),
+						mapGrid: mapGridData(mapGrid),
+						chirps: chirpsData(chirps)
 					});
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
@@ -584,6 +605,22 @@
 		void channelsDim;
 		void status;
 		syncChannels();
+	});
+	$effect(() => {
+		void units;
+		void features;
+		void status;
+		syncUnits();
+	});
+	$effect(() => {
+		void mapGrid;
+		void status;
+		syncMapGrid();
+	});
+	$effect(() => {
+		void chirps;
+		void status;
+		syncChirps();
 	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.
