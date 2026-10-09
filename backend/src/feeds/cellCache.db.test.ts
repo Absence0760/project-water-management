@@ -88,9 +88,10 @@ describe('chirps_cell_year: shared reference data', () => {
 		const stranger = await signUp('CacheStranger');
 		await asOwner(`INSERT INTO chirps_cell_year (origin, product, row_idx, col_idx, year, vals, final, final_through)
 			VALUES ('chc', 'sat', 1600, 4100, 2024, array_fill(1::real, ARRAY[366]), array_fill(true, ARRAY[366]), '2024-12-31')`);
-		// Positive control: any signed-in session, member of nothing, reads it.
-		expect((await withUser(stranger.id, (db) => db.query('SELECT 1 FROM chirps_cell_year'))).rows).toHaveLength(1);
-		expect((await withoutUser((db) => db.query('SELECT 1 FROM chirps_cell_year'))).rows).toHaveLength(0);
+		// Positive control: any signed-in session, member of nothing, reads it. Only this row: the table is shared, so an earlier file's fetches may have filled others.
+		const mine = `SELECT 1 FROM chirps_cell_year WHERE origin = 'chc' AND product = 'sat' AND row_idx = 1600 AND col_idx = 4100 AND year = 2024`;
+		expect((await withUser(stranger.id, (db) => db.query(mine))).rows).toHaveLength(1);
+		expect((await withoutUser((db) => db.query(mine))).rows).toHaveLength(0);
 		for (const sql of [
 			`INSERT INTO chirps_cell_year (origin, product, row_idx, col_idx, year, vals, final, final_through) VALUES ('chc', 'sat', 1, 1, 2024, array_fill(1::real, ARRAY[366]), array_fill(true, ARRAY[366]), '2024-12-31')`,
 			`UPDATE chirps_cell_year SET vals[1] = 999`,
