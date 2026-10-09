@@ -242,7 +242,10 @@ words must match what that box's parser accepts), an **Example** of a few
 lines and, where a file helps, **Download an example file** (a data URL
 built in the browser from the example's text, `common/formatHelp.ts`; a
 CSV starts with a byte-order mark for Excel, which every CSV reader in the
-app skips). Each example is proved against its parser: by unit tests where
+app skips), or several (`exampleFiles`, each link worded by its `label`).
+Where one page has several of the note, `context` adds words a screen
+reader reads after the summary ("Expected format of a file for the rule
+table at Outlet"). Each example is proved against its parser: by unit tests where
 the parser is the browser's, by `backend/src/geo/geojson.test.ts` for the
 map's file, and end to end in `e2e/tests/upload-formats.spec.ts`, which
 feeds each downloaded or shown example back into its box.
@@ -257,13 +260,12 @@ feeds each downloaded or shown example back into its box.
 | Load crop factors, a hydrological-unit-based workbook | .xlsx/.xlsm with [Crop_Factors] | the table's shape (`NODE_FACTORS_EXAMPLE`) | each warning's cell |
 | Import a b023 workbook | .xlsm/.xlsx, 150 MB, a b02x build | – | the missing named ranges; sheet and cell |
 | Import a project file | .json, 5 MB | – (*Download project (JSON)* writes one) | the line and column where the JSON stops (`jsonErrorAt`) |
+| Settings, the daily EWR at the outlet and each Reserve rule table (`settings/DrmFormatHelp.svelte`) | a DRM .rul or .tab (plain text, either line ending); a rule table also a CSV, read into its paste box | `drm-example.rul` (m³/s), `drm-example-mcm.rul`, `drm-example.tab` (`drmFiles.ts drmExampleFiles`) and the CSV layouts (`ewr-example.csv`; `ewr-total-example.csv`, `ewr-low-flow-example.csv`) | the file's line (“line 13: the Jan row of the total Reserve block needs 10 numbers…”) |
 | Settings, API keys (**Expected format of a request**) | JSON to `/ingest/v1/series/merge` | the merge body (`INGEST_EXAMPLE_BODY`) | `details`, each problem's place in the body |
 
 The grids' paste dialog (`model/GridPasteDialog.svelte`) and **Paste a
 shape** already said their layout and example in place, and the verify
-page's file check only hashes the file, so they keep their own words. The
-Reserve's rule-table and EWR uploads (Settings) are being reworked
-separately and don't use the piece yet.
+page's file check only hashes the file, so they keep their own words.
 
 ## Landing page
 
@@ -5547,8 +5549,10 @@ two.
   mean natural flow, so labelled; "Run the model to see it" without a run).
   Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
   **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
-  ten points, m³/s), each before scaling. **Load a DRM file (.tab or .rul)**
-  reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
+  ten points, m³/s), each before scaling. **Load a DRM file (.rul / .tab)**
+  sits above those tables, under the fields, so it is seen without scrolling
+  past them, with a hint, its own **File result** status line and the
+  **Expected format** beside it; it reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
   Maint.*, in Mm³ and converted to m³/s (÷ the month's days × 86 400 s,
   February 28 days) in a preview with **Use these values** (which fills the TAB
   flows and the table MAR from its `MAR =` line; under the percentile tables
@@ -5556,13 +5560,17 @@ two.
   determination go together) and Cancel; a `.rul` fills both percentile
   tables (the total Reserve and the natural duration curve, converted from Mm³
   a month when its unit line says so), asking first over tables already
-  there, and loaded under the TAB method switches to the percentile tables
-  and says so. The paste box's buttons are **Fill the natural flow table** /
+  there. A file never changes **Daily EWR from**: a `.rul` loaded under the
+  TAB file fills the percentile tables and says the daily EWR still comes
+  from the DRM TAB file, with a **Use the percentile tables** button to switch
+  on the person's say (`ewrDailySource.ts rulLoad`); a `.tab` under the
+  percentile tables offers its MAR only. The paste box, under the tables,
+  has its own **Paste result** line; its buttons are **Fill the natural flow table** /
   **Fill the total Reserve table** (or **Fill the TAB flows**). A paste box takes the 12 TAB flows (a row or a
   column) or a percentile table (as the rule tables' paste: 12 month rows,
-  optional % heading). **Which files can I load into the daily EWR, and what
-  do they fill?** (`settings/DrmFormatHelp.svelte`, named per place: "… into
-  the rule table at …" under each rule table) describes the `.rul` and `.tab` layouts,
+  optional % heading). The **Expected format** (`settings/DrmFormatHelp.svelte`,
+  the shared note, [Expected format](#expected-format); the same beside each
+  rule table's file load) describes the `.rul` and `.tab` layouts,
   the unit handling and the paste, with synthetic example files to download
   (`.rul` in m³/s and in Mm³, `.tab`, a CSV). A file that doesn't parse names
   the line (“line 13: the Jan row of the total Reserve block needs 10
@@ -5620,18 +5628,21 @@ two.
   From engine 0.33.0 ([model.md §2.9d](./model.md)): a *total* table has
   **Also enter the low flows (maintenance and drought)**, which adds a blank
   **Low flows (maintenance to drought)** grid (blank cells block Save; switching
-  the table to *Low flows only* drops it) and a **Fill the low flows** button;
-  **Load a file (.rul, .tab or CSV)** (issue #455) reads a CSV into the paste
-  box; a Desktop Reserve Model **.rul** fills the table at once (its unit, the
+  the table to *Low flows only* drops it) and a **Fill the low flows** button.
+  Each table opens, right under its heading and before the fields, with
+  **Load a DRM file (.rul / .tab) or a CSV** (issue #455), a hint saying what
+  each fills, its own **File result** status line and the **Expected
+  format**, since a .rul fills nearly every field below it; the paste box
+  stays under the grids. A CSV goes into the paste box (the status line says
+  so); a Desktop Reserve Model **.rul** fills the table at once (its unit, the
   % points, the total Reserve as the EWR, *Reserve Flows without High Flows*
   as the low flows, the *Natural Duration curves* as the natural flows, the
   REC, the kind *desktop estimate* and, when none is typed, a source naming
   the file; asking first over values; the natural-flow choice is kept and the
   status line says how to use the file's curve), and a **.tab** fills the
-  determination's natural MAR and the REC. Two links download synthetic
-  example layouts (a total-flow and a low-flow table, DRM style), and **Which
-  files can I load, and what do they fill?** describes the formats, with
-  synthetic `.rul` and `.tab` files.
+  determination's natural MAR and the REC. The **Expected format** describes
+  the formats and offers synthetic `.rul` and `.tab` files and two CSV
+  layouts (a total-flow and a low-flow table, DRM style).
   Under each table, **High flows: freshets and floods**
   (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
   months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", the

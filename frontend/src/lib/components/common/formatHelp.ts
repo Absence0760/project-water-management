@@ -9,6 +9,8 @@ export interface ExampleFile {
 	text: string;
 	/** Default `text/csv`. */
 	type?: string;
+	/** The link's words when a note offers several files ("Download an example .rul, m³/s"); default "Download an example file". */
+	label?: string;
 }
 
 /**

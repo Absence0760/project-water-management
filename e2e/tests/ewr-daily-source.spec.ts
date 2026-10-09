@@ -1,8 +1,10 @@
 // The daily EWR at the outlet from Desktop Reserve Model files (engine 1.77.0,
 // issue #455, docs/ui.md § The daily EWR at the outlet): upload a .tab and a
 // .rul on Settings, see the converted values, save, run, and read which EWR
-// the run used; and fill a Reserve rule table from the same files. The files
-// are synthetic (e2e/fixtures/drm-synthetic.*, the app's own example files).
+// the run used; and fill a Reserve rule table from the same files. The file
+// load sits above the tables (and at the top of each rule table), and a file
+// never changes the daily EWR's method on its own. The files are synthetic
+// (e2e/fixtures/drm-synthetic.*, the app's own example files).
 import type { APIRequestContext } from '@playwright/test';
 import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -38,11 +40,18 @@ test('a .tab file sets the TAB flows (shown converted before use), a .rul the pe
 	// The TAB flows and the table MAR are missing: Save is blocked and says why.
 	await expect(daily.getByRole('alert')).toContainText('Daily EWR at the outlet: Enter the TAB file’s 12 monthly total flows');
 	await expect(saveChanges(page)).toBeDisabled();
-	await daily.getByText('Which files can I load into the daily EWR, and what do they fill?').click();
-	await expect(daily.getByRole('link', { name: '.tab', exact: true })).toHaveAttribute('download', 'drm-example.tab');
+	// The file load sits above the TAB flows, with the shared Expected format.
+	const loadFile = daily.getByLabel('Load a DRM file (.rul / .tab)');
+	await expect(loadFile).toBeAttached();
+	const loadBox = (await daily.getByText('Load a DRM file (.rul / .tab)').boundingBox())!;
+	const tableBox = (await daily.getByRole('table', { name: /^TAB flows/ }).boundingBox())!;
+	expect(loadBox.y + loadBox.height).toBeLessThan(tableBox.y);
+	await daily.getByTestId('format-help').getByText('Expected format').click();
+	await expect(daily.getByRole('link', { name: 'Example .tab', exact: true })).toHaveAttribute('download', 'drm-example.tab');
+	await expect(daily.getByRole('link', { name: 'Example CSV (percentile table, m³/s)' })).toHaveAttribute('download', 'ewr-example.csv');
 
 	// The .tab's last column, Mm³ a month, converted to m³/s (October: 1.26 Mm³ over 31 days; February over 28).
-	await daily.getByLabel('Load a DRM file (.tab or .rul)').setInputFiles(TAB);
+	await loadFile.setInputFiles(TAB);
 	const preview = daily.getByTestId('ewr-tab-preview');
 	await expect(preview.getByRole('row', { name: /^Mm³/ })).toContainText('1.26');
 	await expect(preview.getByRole('row', { name: /^m³\/s/ })).toContainText('0.4704');
@@ -52,7 +61,7 @@ test('a .tab file sets the TAB flows (shown converted before use), a .rul the pe
 	await preview.getByRole('button', { name: 'Cancel' }).click();
 	await expect(preview).toBeHidden();
 	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue('');
-	await daily.getByLabel('Load a DRM file (.tab or .rul)').setInputFiles(TAB);
+	await loadFile.setInputFiles(TAB);
 	await preview.getByRole('button', { name: 'Use these values' }).click();
 	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue(/^0\.470/);
 	await expect(daily.getByLabel('Table MAR (Mm³/a)')).toHaveValue('49.8');
@@ -64,15 +73,33 @@ test('a .tab file sets the TAB flows (shown converted before use), a .rul the pe
 	await page.goto(`/projects/${id}?tab=runs`);
 	await expect(page.getByTestId('outlet-ewr-source').first()).toContainText(/^EWR: the DRM TAB file × [\d.]+ \(natural MAR [\d.]+ ÷ 49\.8 Mm³\/a\)$/);
 
-	// The percentile tables from the .rul: the natural duration curve and the total Reserve, m³/s.
+	// A .rul loaded under the TAB file fills the percentile tables but keeps the TAB file, and says so.
 	await page.goto(`/projects/${id}?tab=settings`);
-	await daily.getByLabel('Daily EWR from').selectOption('percentile');
-	await daily.getByLabel('Load a DRM file (.tab or .rul)').setInputFiles(RUL);
-	await expect(daily.getByRole('status', { name: 'File result' })).toContainText('Read drm-synthetic.rul (DRM rule curves, m³/s)');
+	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('tab');
+	await loadFile.setInputFiles(RUL);
+	const fileResult = daily.getByRole('status', { name: 'File result' });
+	await expect(fileResult).toHaveText(
+		'Read drm-synthetic.rul (DRM rule curves, m³/s): filled the two percentile tables (the total Reserve and the natural duration curve). The daily EWR still comes from the DRM TAB file; the tables are used only once you pick them.'
+	);
+	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('tab');
+	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue(/^0\.470/);
+	// One click switches, on the person's say.
+	await daily.getByRole('button', { name: 'Use the percentile tables' }).click();
+	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('percentile');
+	await expect(daily.getByRole('button', { name: 'Use the percentile tables' })).toBeHidden();
+	await expect(fileResult).toHaveText('The daily EWR now comes from the DRM percentile tables.');
 	await expect(daily.getByLabel('Natural flow percentile table, Oct, 10 %, m³/s')).toHaveValue('1.305');
 	await expect(daily.getByLabel('Total Reserve flow percentile table, Oct, 99 %, m³/s')).toHaveValue('0.011');
 	await expect(page.getByTestId('pragmatic-unused')).toBeVisible();
 	await expectNoViolations(page);
+	// A .tab under the percentile tables offers its MAR only, and changes nothing else.
+	await daily.getByLabel('Table MAR (Mm³/a)').fill('10');
+	await loadFile.setInputFiles(TAB);
+	await preview.getByRole('button', { name: 'Use its MAR only' }).click();
+	await expect(fileResult).toHaveText("Used drm-synthetic.tab's MAR, 49.8 Mm³/a, as the table MAR.");
+	await expect(daily.getByLabel('Table MAR (Mm³/a)')).toHaveValue('49.8');
+	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('percentile');
+	await expect(daily.getByLabel('Natural flow percentile table, Oct, 10 %, m³/s')).toHaveValue('1.305');
 	await saveSettings(page);
 	await page.reload();
 	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('percentile');
@@ -99,8 +126,15 @@ test('a Reserve rule table is filled from a .rul (grids, unit, REC, source) and 
 	const section = page.getByRole('region', { name: /^Reserve rule tables/ });
 	await section.getByRole('button', { name: 'Add a rule table' }).click();
 	const table = section.getByRole('group', { name: 'Rule table at Outlet (Outflow gauge)' });
-	const load = table.getByLabel('Load a file (.rul, .tab or CSV)');
-	const status = table.getByRole('status', { name: 'Paste result', exact: true });
+	// The file load opens the table, above its fields, with the shared Expected format.
+	const load = table.getByLabel('Load a DRM file (.rul / .tab) or a CSV');
+	const status = table.getByRole('status', { name: 'File result', exact: true });
+	const loadBox = (await table.getByText('Load a DRM file (.rul / .tab) or a CSV').boundingBox())!;
+	const siteBox = (await table.getByLabel('EWR site').boundingBox())!;
+	expect(loadBox.y + loadBox.height).toBeLessThan(siteBox.y);
+	await table.getByTestId('format-help').getByText('Expected format').click();
+	await expect(table.getByRole('link', { name: 'Example .rul (m³/s)' })).toHaveAttribute('download', 'drm-example.rul');
+	await expect(table.getByRole('link', { name: 'Example CSV (low-flow table)' })).toHaveAttribute('download', 'ewr-low-flow-example.csv');
 
 	await load.setInputFiles({ name: 'broken.rul', mimeType: 'text/plain', buffer: Buffer.from('Data are given in m^3/s mean monthly flow\r\nMonth  % Points\r\n  10%  20%\r\nOct  1  x\r\n') });
 	await expect(status).toHaveText('broken.rul: line 4: the Oct row of the total Reserve block needs 2 numbers; it has one that isn’t a number.');
