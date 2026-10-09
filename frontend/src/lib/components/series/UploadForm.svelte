@@ -354,7 +354,7 @@
 		<p>Two columns, <span class="mono">date,value</span>, one row per day; a header row is optional and lines starting with # are skipped.</p>
 		<ul>
 			<li>
-				Dates: YYYY-MM-DD (safest), YYYY/MM/DD, YYYYMMDD, DD/MM/YYYY or MM/DD/YYYY (with slashes, dots or dashes). The order is worked out from the whole file;
+				Dates: YYYY-MM-DD (safest), YYYY/MM/DD, YYYYMMDD, DD/MM/YYYY or MM/DD/YYYY (the last two with slashes, dots or dashes). The order is worked out from the whole file;
 				if no day is above 12, day/month is assumed and the summary says so.
 			</li>
 			<li>

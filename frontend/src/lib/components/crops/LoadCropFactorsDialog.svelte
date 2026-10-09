@@ -352,10 +352,10 @@
 								<ul>
 									<li>
 										A header row with the twelve months in any order (Oct … Sep, Jan … Dec or the full names), the names’ column headed “Crop” or
-										“Crops”, and optionally an “… efficiency” column just after the months (0 to 1).
+										“Crops”, and optionally an “… efficiency” column just after the months (above 0, up to 1).
 									</li>
 									<li>Then a row per crop: its name and twelve FAO-56 crop coefficients (Kc). The table ends at the first row without a name, or at a “Total” row.</li>
-									<li>A sheet, header or cell it can’t read is listed as a warning naming its cell; a cell that isn’t a number counts as 0.</li>
+									<li>A missing sheet or header is listed as a warning, and so is a cell it can’t read, by its address; a cell that isn’t a number counts as 0.</li>
 								</ul>
 							</FormatHelp>
 						{/if}

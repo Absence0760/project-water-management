@@ -13,7 +13,7 @@
 	import { latestFileText } from '$lib/files/latest';
 	import { LANGUAGES } from '$lib/i18n/state.svelte';
 	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { bulkSummary, farmNames, inviteExampleCsv, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
+	import { BULK_MAX_ROWS, bulkSummary, farmNames, inviteExampleCsv, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
 
 	let {
 		open = $bindable(false),
@@ -217,7 +217,11 @@
 						<code>farm name</code>, <code>language</code>); without one they are read as email, farm, language.
 					</li>
 					<li>Columns separated by commas, semicolons or tabs, as the first row has them. Quote a farm name that holds one (<code>"Smit, Oos"</code>).</li>
-					<li>Blank lines are skipped. The preview lists every row by its line, with what will happen to it or what is wrong with it.</li>
+					<li>Language: a code ({#each LANGUAGES as l, i (l.code)}{i ? ', ' : ''}<code>{l.code}</code>{/each}) or the language’s name; English if left blank.</li>
+					<li>
+						At most {BULK_MAX_ROWS} rows at a time. Blank lines are skipped. The preview lists every row by its line, with what will happen to it or what is
+						wrong with it.
+					</li>
 				</ul>
 			</FormatHelp>
 			<div class="field">
