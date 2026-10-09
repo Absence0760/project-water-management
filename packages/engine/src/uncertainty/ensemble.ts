@@ -201,11 +201,11 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	if (covered < CHIRPS_ONLY_MIN_COVERAGE) {
 		return { input: null, reason: `CHIRPS covers only ${Math.round(covered * 100)} % of the run's days (at least ${CHIRPS_ONLY_MIN_COVERAGE * 100} % needed)` };
 	}
-	const series = { ...input.series, rain_chirps_mm: { startDate: run.startDate, values } };
-	delete series.rain_catchment_mm;
-	// A land unit's own gauge goes too (engine ≥ 1.78.0, docs/model.md §2.4h): the member runs on CHIRPS alone, each unit on its
-	// own CHIRPS where it has one, levelled by its MAP (a unit without a MAP runs it raw, as the member's catchment CHIRPS is).
-	for (const k of Object.keys(series)) if (parseUnitRainSeriesKey(k)?.kind === 'rain_catchment_mm') delete (series as Record<string, unknown>)[k];
+	// Without the station rain, and (engine ≥ 1.78.0, docs/model.md §2.4h) without a land unit's own gauge: the member runs on
+	// CHIRPS alone, each unit on its own CHIRPS where it has one, levelled by its MAP (a unit without a MAP runs it raw, as the
+	// member's catchment CHIRPS is). A filtered copy, never a delete by an input's key.
+	const kept = Object.entries(input.series).filter(([k]) => k !== 'rain_catchment_mm' && parseUnitRainSeriesKey(k)?.kind !== 'rain_catchment_mm');
+	const series = { ...Object.fromEntries(kept), rain_chirps_mm: { startDate: run.startDate, values } } as ModelInput['series'];
 	return { input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series }, reason: null };
 }
 
