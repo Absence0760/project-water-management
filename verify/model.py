@@ -670,6 +670,9 @@ def unsupported(doc: dict) -> list[str]:
         out.append("daily A-pan series")
     if s.get("damStorageReset"):
         out.append("dam storage reset (outlook only)")
+    # The seasonal outlook's engine-only per-unit inputs (§2.4h, §2.15): with forecast mode, outside verify/.
+    if any(k.startswith("rain_forecast_mm@") for k in (doc.get("series") or {})) or (s.get("unitRain") or {}).get("pinned"):
+        out.append("per-unit outlook forcing (rain_forecast_mm@<unit>, unitRain.pinned)")
     return sorted(set(out))
 
 

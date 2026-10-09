@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 108 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 108 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -219,6 +219,8 @@ compared; the engine's `checkRunoffBalance` closes it. The areal correction
 them; diff.py refuses an input that uses one. Tracked as one item in
 docs/followups.md § Verification ("`verify/` phase 2b").
 
+- the seasonal outlook's engine-only per-unit inputs (a unit's
+  `rain_forecast_mm@<unit>`, `settings.unitRain.pinned`), §2.4h and §2.15;
 - Reserve rule tables (and audit A1–A7), §2.9c–d;
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
@@ -354,10 +356,10 @@ fix, `model.py` also treats a forecast tail that starts on 1 October as
 starting a part year of its own (no historical days to fit on), as the engine
 does and §2.12a now says.
 
-Per-unit rain, 2026-10-09 (engine 1.78.0): the examples, the 24 probes and
+Per-unit rain, 2026-10-09 (engine 1.78.0): the examples, the 25 probes and
 400 random and 400 dense networks (seeds 1000–1199 and 1–200 of each) agree
-on every compared column, `rain_unit` and `runoff_natural` included
-(largest difference 4e-9 m³/day). No engine behaviour departs from §2.4h.
+on every compared column (largest difference on the new columns 4e-9
+m³/day on `runoff_natural` and 6e-14 mm on `rain_unit`). No engine behaviour departs from §2.4h.
 Two points §2.4h didn't settle, both now written into it from the engine's
 output (rows `unit-rain-map-period` and `unit-rain-no-land-unit` below):
 
@@ -408,7 +410,8 @@ source into three receivers whose rooms fill one after another, its water
 offered again twice: §2.6, engine 1.70.0, issue #90 Q25/Q26),
 `outage-reading-set-aside` (a 30 mm reading after 150 blank days is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
 and `short-blank-run-window` (7 blank days still count like zeros, so the
-reading is spread; its mutant moves the limit by one), and `unit-rain-rules`
+reading is spread; its mutant moves the limit by one), `unit-rain-forecast-warmup`
+(each unit's warm-up cycles its historical days only, §2.4h, §2.4f) and `unit-rain-rules`
 (§2.4h: one farm per point of the forcing rule, with gaps that walk each
 chain to its end, a clamped MAP ratio, a negative catchment reading on a
 gauge-MAP unit's wet CHIRPS day, a MAP period holding five of six complete

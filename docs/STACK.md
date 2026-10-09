@@ -192,7 +192,7 @@ pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNA
                              # check:pins also holds every CI service image (ci.yml's Postgres) to the digest docker-compose.yml gives that image:tag (serviceImageProblems), so a Dependabot compose bump fails until ci.yml moves with it
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
-pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~2 min)
+pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~6 min)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
 pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)

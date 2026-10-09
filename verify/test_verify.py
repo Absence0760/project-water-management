@@ -397,6 +397,10 @@ class Generator(unittest.TestCase):
         modes = [(generate.random_input(seed).get("settings", {}).get("unitRain") or {}).get("mode") for seed in range(1, 60)]
         self.assertIn("perUnit", modes)
         self.assertIn("catchment", modes)
+        # The outlook's engine-only per-unit inputs stay out, with forecast mode.
+        self.assertTrue(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": []}}, "model": {}}) == [])
+        self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": [{"nodeId": "u"}]}}, "model": {}})), 1)
+        self.assertEqual(len(model.unsupported({"settings": {}, "model": {}, "series": {"rain_forecast_mm@u": {"startDate": "2020-01-01", "values": [1]}}})), 1)
 
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():
