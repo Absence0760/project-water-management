@@ -494,6 +494,152 @@ def dam_rules_rationing_and_release() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": _dry(4)}
 
 
+# Runoff from each unit's own rain (§2.4h, engine >= 1.78.0).
+
+
+def _wave(start: dt.date, n: int, k: int, scale: float = 1.0) -> list:
+    """Invented daily rain: a wet day every few days, a different depth each
+    year, so annual totals differ from year to year."""
+    out = []
+    for i in range(n):
+        d = start + dt.timedelta(days=i)
+        out.append(round(scale * ((i * 7 + k) % 11) * (1 + 0.3 * (d.year % 4)), 1) if (i + k) % 3 == 0 else 0.0)
+    return out
+
+
+def unit_rain_rules() -> dict:
+    """Six years of rain and eight farms under per-unit rain (gauge MAP
+    600 mm), one per point of the forcing rule: u1 its own gauge (gaps filled
+    by its CHIRPS at its MAP, then the gauge × its MAP ratio, then the
+    catchment's rain × the ratio); u2 the gauge × a MAP ratio clamped to 4,
+    its CHIRPS filling the gauge's gap and its negative reading not (the
+    reading runs as 0); u3 its CHIRPS at its MAP, u8 at a MAP factor clamped
+    to 4; u4 its CHIRPS without a MAP
+    (the catchment's monthly factors); u5 a MAP but no complete CHIRPS year
+    (the factors too); u6 an own gauge with only negative values (no reading:
+    rule 2, the gauge × the ratio before its CHIRPS); u7 nothing of its own (the catchment forcing);
+    z a farm without area with a gauge of its own (not a land unit). A
+    six-day forecast tail ends the run: × the ratio on u1, u2 and u6, × 1 on
+    the rest. catchmentAreaKm2 is ignored (the units' areas sum). The MAP
+    period, 2015–2019, holds five of the six complete years: u3's CHIRPS MAP
+    factor averages those five only, while u1's and u2's CHIRPS, with a gap in
+    2015, have four there and average every complete year of the record."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    catch: list = _wave(start, n, 0)
+    for j in range(400, 420):
+        catch[j] = None
+    catch[602] = -3.0  # u2's CHIRPS rains that day
+    catch[603] = 12.0
+    chirps = [round(v * 0.8, 2) for v in _wave(start, n, 1)]
+    series: dict = {
+        "rain_catchment_mm": {"startDate": start.isoformat(), "values": catch},
+        "rain_chirps_mm": {"startDate": start.isoformat(), "values": chirps},
+        "rain_forecast_mm": {"startDate": "2020-01-01", "values": [4.0, 0.0, 9.0, 1.0, 0.0, 6.0]},
+    }
+    own1: list = _wave(start, n, 2, 1.3)
+    for j in list(range(100, 130)) + list(range(395, 425)):
+        own1[j] = None
+    own1[705] = -2.0  # a no-data code on a day u1's CHIRPS rains
+    ch1: list = _wave(start, n, 3, 0.9)
+    for j in range(390, 410):
+        ch1[j] = None
+    ch2: list = _wave(start, n, 4, 1.1)
+    for j in range(405, 415):
+        ch2[j] = None
+    ch5: list = _wave(start, n, 5)
+    for y in range(6):
+        ch5[y * 365 + 100] = None
+    series["rain_catchment_mm@u1"] = {"startDate": start.isoformat(), "values": own1}
+    series["rain_chirps_mm@u1"] = {"startDate": start.isoformat(), "values": ch1}
+    series["rain_chirps_mm@u2"] = {"startDate": start.isoformat(), "values": ch2}
+    series["rain_chirps_mm@u3"] = {"startDate": start.isoformat(), "values": _wave(start, n, 6, 0.7)}
+    series["rain_chirps_mm@u4"] = {"startDate": start.isoformat(), "values": _wave(start, n, 7, 1.2)}
+    series["rain_chirps_mm@u5"] = {"startDate": start.isoformat(), "values": ch5}
+    series["rain_catchment_mm@u6"] = {"startDate": start.isoformat(), "values": [-9999.0] * 50}
+    series["rain_chirps_mm@u6"] = {"startDate": start.isoformat(), "values": _wave(start, n, 9, 0.6)}
+    series["rain_chirps_mm@u8"] = {"startDate": start.isoformat(), "values": _wave(start, n, 10)}
+    series["rain_catchment_mm@z"] = {"startDate": start.isoformat(), "values": _wave(start, n, 8, 3)}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("u1", "farm", "o", areaKm2=3, mapMm=800, **src),
+        _node("u2", "farm", "u1", areaKm2=2, mapMm=3000, **src),
+        _node("u3", "farm", "o", areaKm2=4, mapMm=900, **src),
+        _node("u4", "farm", "o", areaKm2=1.5),
+        _node("u5", "farm", "o", areaKm2=2.5, mapMm=700, **src),
+        _node("u6", "farm", "o", areaKm2=1, mapMm=450, **src),
+        _node("u7", "farm", "o", areaKm2=5),
+        _node("u8", "farm", "o", areaKm2=0.5, mapMm=11000, **src),
+        _node("z", "farm", "o", areaKm2=0, mapMm=500, **src),
+    ]
+    s = _settings(
+        gr4j={"x1": 300, "x2": -0.5, "x3": 80, "x4": 1.8, "warmupDays": 400},
+        calibration={"rainThresholdMm": 2, "catchmentAreaKm2": 50},
+        unitRain={"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented", "mapPeriod": {"start": "2015-01-01", "end": "2019-12-31"}},
+    )
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def unit_rain_forecast_warmup() -> dict:
+    """The forecast-tail warm-up probe under per-unit rain: 40 days of
+    records, 6 forecast days and a 365-day warm-up. Each unit's warm-up
+    cycles its 40 historical days only, never the tail (§2.4h, §2.4f); one
+    unit on its own gauge, one on the gauge × its MAP ratio."""
+    doc = forecast_tail_warmup()
+    rain = doc["series"]["rain_catchment_mm"]["values"]
+    doc["series"]["rain_catchment_mm@f"] = {"startDate": "2020-01-01", "values": [v * 1.5 for v in rain]}
+    doc["model"]["nodes"].append(_node("h", "farm", "o", areaKm2=3, mapMm=900, mapSource="invented"))
+    doc["settings"]["unitRain"] = {"mode": "perUnit", "gaugeMapMm": 600, "gaugeMapSource": "invented"}
+    return doc
+
+
+def unit_rain_map_period() -> dict:
+    """CHIRPS MAP factors (§2.4h rule 3) over six complete calendar years
+    and a MAP period holding two of them: fewer than 5, so units a and b
+    average every complete year of the record; a third unit's CHIRPS reads 0 on every day of its complete years (a mean
+    annual rain of 0) and rains in its incomplete last one: no complete year
+    with rain, so its MAP can't level it and it runs raw (the catchment has
+    no CHIRPS for §2.4b factors). Not in the docs until this probe; the
+    engine's reading, now in §2.4h. A complete year of 0 mm among rainy ones
+    still counts in the mean."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    series: dict = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": _wave(start, n, 0)}}
+    series["rain_chirps_mm@a"] = {"startDate": start.isoformat(), "values": _wave(start, n, 1)}
+    series["rain_chirps_mm@b"] = {"startDate": start.isoformat(), "values": _wave(start, n, 2)}
+    zero = [0.0] * n
+    zero[n - 10] = None
+    for j in range(n - 300, n - 11):
+        zero[j] = 5.0 if j % 4 == 0 else 0.0
+    series["rain_chirps_mm@c"] = {"startDate": start.isoformat(), "values": zero}
+    dry_first: list = _wave(start, n, 3)
+    for j in range(365):
+        dry_first[j] = 0.0
+    series["rain_chirps_mm@d"] = {"startDate": start.isoformat(), "values": dry_first}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("a", "farm", "o", areaKm2=3, mapMm=700, **src),
+        _node("b", "farm", "o", areaKm2=2, mapMm=500, **src),
+        _node("c", "farm", "o", areaKm2=1, mapMm=500, **src),
+        _node("d", "farm", "o", areaKm2=1, mapMm=600, **src),
+    ]
+    s = _settings(unitRain={"mode": "perUnit", "mapPeriod": {"start": "2015-01-01", "end": "2016-12-31"}})
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def unit_rain_no_land_unit() -> dict:
+    """Per-unit rain with no land unit (the one farm has no area) and a
+    catchmentAreaKm2 set. Read literally, §2.4h makes the catchment area the
+    land units' areas summed, 0, which §2.4a refuses; the engine instead runs
+    GR4J on the catchment rain over catchmentAreaKm2, with a warning, as if
+    the setting were off. Not in the docs until this probe; now in §2.4h."""
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=0)]
+    s = _settings(calibration={"rainThresholdMm": 2, "catchmentAreaKm2": 25}, unitRain={"mode": "perUnit"})
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(30, 4.0)}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -516,4 +662,8 @@ PROBES = {
     "full-allocation-gap-year": full_allocation_gap_year(),
     "offtake-release-keep-and-floor": offtake_release_keep_and_floor(),
     "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
+    "unit-rain-rules": unit_rain_rules(),
+    "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
+    "unit-rain-map-period": unit_rain_map_period(),
+    "unit-rain-no-land-unit": unit_rain_no_land_unit(),
 }

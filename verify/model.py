@@ -670,10 +670,144 @@ def unsupported(doc: dict) -> list[str]:
         out.append("daily A-pan series")
     if s.get("damStorageReset"):
         out.append("dam storage reset (outlook only)")
-    if (s.get("unitRain") or {}).get("mode") == "perUnit":
-        # model.md §2.4h, issue #482: ported from the docs in a later part.
-        out.append("runoff from each unit's own rain (perUnit)")
+    # The seasonal outlook's engine-only per-unit inputs (§2.4h, §2.15): with forecast mode, outside verify/.
+    if any(k.startswith("rain_forecast_mm@") for k in (doc.get("series") or {})) or (s.get("unitRain") or {}).get("pinned"):
+        out.append("per-unit outlook forcing (rain_forecast_mm@<unit>, unitRain.pinned)")
     return sorted(set(out))
+
+
+# --------------------------------------------------------------------------
+# Runoff from each unit's own rain (docs/model.md §2.4h)
+# --------------------------------------------------------------------------
+
+UNIT_MAP_MIN_YEARS = 5
+
+
+def _clamp(f: float, diag: dict) -> float:
+    c = min(FACTOR_MAX, max(FACTOR_MIN, f))
+    if c != f:
+        diag["unit_clamped"] += 1
+    return c
+
+
+def chirps_map_factor(hu: Series, map_mm: float, period: tuple[int, int], diag: dict):
+    """§2.4h rule 3: unit MAP ÷ the CHIRPS mean annual rain over the complete
+    calendar years (every day a reading) inside the MAP period; fewer than 5
+    there, every complete year of the record; none at all, None."""
+    if not hu:
+        return None
+    first = _dt.date.fromordinal(hu.start).year
+    last = _dt.date.fromordinal(hu.end).year
+    years: list[tuple[int, float]] = []
+    for y in range(first, last + 1):
+        a, b = _dt.date(y, 1, 1).toordinal(), _dt.date(y, 12, 31).toordinal()
+        tot = 0.0
+        ok = True
+        for o in range(a, b + 1):
+            v = hu.get(o)
+            if not valid(v):
+                ok = False
+                break
+            tot += v
+        if ok:
+            years.append((y, tot))
+    if not years:
+        return None
+    inside = [(y, t) for y, t in years if _dt.date(y, 1, 1).toordinal() >= period[0] and _dt.date(y, 12, 31).toordinal() <= period[1]]
+    use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years
+    if use is years and len(inside) < UNIT_MAP_MIN_YEARS:
+        diag["unit_map_all_years"] += 1
+    mean = 0.0
+    for _, t in use:
+        mean += t
+    mean /= len(use)
+    if not mean > 0:
+        # No complete year with rain: nothing to level with, so the next sub-rule (probe unit-rain-map-period).
+        return None
+    return _clamp(map_mm / mean, diag)
+
+
+def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], finals: list[float], p_used: list[float], units: list[dict], diag: dict) -> dict[str, list[float]]:
+    """Each land unit's daily rain (§2.4h): its rule, chosen from the records
+    the input holds, then the rule's chain day by day; 0 mm where no link has
+    a value, and never below 0 (GR4J's rain)."""
+    period_doc = ur.get("mapPeriod") or {"start": "1991-01-01", "end": "2020-12-31"}
+    period = (iso_to_ord(period_doc["start"]), iso_to_ord(period_doc["end"]))
+    gauge_map = ur.get("gaugeMapMm")
+    c_raw = series.get("rain_catchment_mm")
+    # "Catchment gauge rain": any reading at all in the stored catchment series (a negative one is a reading, §2.4b).
+    has_catchment = bool(c_raw) and any(v is not None and math.isfinite(v) for v in c_raw["values"])
+    fac = rain["factors"]
+    has_bias = any(f is not None for f in fac[1:])
+    out: dict[str, list[float]] = {}
+    for u in units:
+        uid = u["id"]
+        own_g = Series(series.get(f"rain_catchment_mm@{uid}"))
+        own_c = Series(series.get(f"rain_chirps_mm@{uid}"))
+        has_g = any(valid(v) for v in own_g.values)
+        has_c = any(valid(v) for v in own_c.values)
+        map_mm = u.get("mapMm")
+        cond2 = gauge_map is not None and map_mm is not None and has_catchment
+        ratio = _clamp(map_mm / gauge_map, diag) if cond2 else 1.0
+        # The unit's CHIRPS, levelled as in rule 3: its MAP factor, else the catchment's §2.4b factors, else raw.
+        lev_f = chirps_map_factor(own_c, map_mm, period, diag) if (has_c and map_mm is not None) else None
+        if has_c and lev_f is None and has_bias:
+            diag["unit_chirps_bias"] += 1
+
+        def lev(o, own_c=own_c, lev_f=lev_f):
+            v = own_c.get(o)
+            if not valid(v):
+                return None
+            if lev_f is not None:
+                return v * lev_f
+            f = fac[cal_month(o)] if has_bias else None
+            return v * f if f is not None else v
+
+        def own(o, own_g=own_g):
+            v = own_g.get(o)
+            return v if valid(v) else None
+
+        def gauge(o):
+            v, src = rain["pick"](o)
+            return v if src == 0 else None
+
+        if has_g:
+            rule = 1
+            chain = [own, lev] + ([lambda o, r=ratio: None if (v := gauge(o)) is None else v * r] if cond2 else [])
+            diag["unit_rule_gauge"] += 1
+        elif cond2:
+            rule = 2
+            chain = [lambda o, r=ratio: None if (v := gauge(o)) is None else v * r, lev]
+            diag["unit_rule_gauge_map"] += 1
+        elif has_c:
+            rule = 3
+            chain = [lev]
+            diag["unit_rule_chirps"] += 1
+        else:
+            rule = 4
+            diag["unit_rule_catchment"] += 1
+        if rule == 4:
+            # The catchment forcing (× the areal correction, out of scope here).
+            out[uid] = list(p_used)
+            continue
+        vals = []
+        for i, o in enumerate(days):
+            v = None
+            for link in chain:
+                v = link(o)
+                if v is not None:
+                    break
+            if v is not None:
+                diag["unit_link_days"] += 1
+            else:
+                # The catchment's rain (catchment ?? corrected CHIRPS ?? forecast) × the MAP ratio, else × 1.
+                cr = finals[i]
+                v = None if math.isnan(cr) else cr * ratio
+                if v is not None:
+                    diag["unit_catchment_days"] += 1
+            vals.append(0.0 if v is None or v < 0 else v)
+        out[uid] = vals
+    return out
 
 
 def run(doc: dict) -> dict:
@@ -698,7 +832,10 @@ def run(doc: dict) -> dict:
                 cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
                 river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
-                divert_by_month_days=0, reach_loss_days=0)
+                divert_by_month_days=0, reach_loss_days=0,
+                # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
+                unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
+                unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})
@@ -744,13 +881,17 @@ def run(doc: dict) -> dict:
         no_pet = all(settings["panCoefficient"][m] * apan[m] == 0 for m in range(12))
     if no_pet:
         raise Refused("GR4J_NO_PET")
-    model_g = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
-    for k in range(int(g.get("warmupDays", 365))):
-        i = k % hist if hist > 0 else 0
-        model_g.step(p_used[i], pet[i])
     farms = [x for x in model["nodes"] if x["kind"] == "farm"]
+    ur = settings.get("unitRain")
+    per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"
+    # §2.4h: under per-unit rain each land unit (a farm with an area above 0) runs GR4J on its own rain.
+    units = sorted((f for f in farms if (f.get("areaKm2") or 0) > 0), key=lambda x: x["id"]) if per_unit else []
+    if not units:
+        # No land unit: GR4J runs on the catchment rain, as without the setting (probe unit-rain-no-land-unit).
+        per_unit = False
     area_km2 = settings["calibration"].get("catchmentAreaKm2")
-    if area_km2 is None:
+    if per_unit or area_km2 is None:
+        # Per-unit rain: the land units' areas summed, catchmentAreaKm2 ignored (§2.4h).
         area_km2 = 0.0
         for f in sorted(farms, key=lambda x: x["id"]):
             area_km2 += f.get("areaKm2") or 0
@@ -762,16 +903,51 @@ def run(doc: dict) -> dict:
         tot_share += shares_all[f["id"]]
     if tot_share > 1 + 0.0002:
         raise Refused("flow shares over 1")
-    natural, aet, prod, rout, uhs, exch = [], [], [], [], [], []
-    for i in range(n):
-        r = model_g.step(p_used[i], pet[i])
-        natural.append(r["q"] * area_km2 * 1000)
-        aet.append(r["aet"])
-        prod.append(model_g.s)
-        rout.append(model_g.r)
-        uhs.append(model_g.uh_store())
-        exch.append(r["exchange"])
-    put(None, "rain_used", p_used)
+    local: dict[str, list[float]] | None = None
+    if not per_unit:
+        model_g = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
+        for k in range(int(g.get("warmupDays", 365))):
+            i = k % hist if hist > 0 else 0
+            model_g.step(p_used[i], pet[i])
+        natural, aet, prod, rout, uhs, exch = [], [], [], [], [], []
+        for i in range(n):
+            r = model_g.step(p_used[i], pet[i])
+            natural.append(r["q"] * area_km2 * 1000)
+            aet.append(r["aet"])
+            prod.append(model_g.s)
+            rout.append(model_g.r)
+            uhs.append(model_g.uh_store())
+            exch.append(r["exchange"])
+        rain_gr4j = p_used
+    else:
+        forcing = unit_rain_forcing(ur, series, rain, days, finals, p_used, units, diag)
+        local = {}
+        acc = {k: [0.0] * n for k in ("rain", "aet", "prod", "rout", "uh", "exch")}
+        natural = [0.0] * n
+        for u in units:
+            a = float(u["areaKm2"])
+            pu = forcing[u["id"]]
+            gu = Gr4j(g["x1"], g["x2"], g["x3"], g["x4"])
+            for k in range(int(g.get("warmupDays", 365))):
+                i = k % hist if hist > 0 else 0
+                gu.step(pu[i], pet[i])
+            q = []
+            for i in range(n):
+                r = gu.step(pu[i], pet[i])
+                q.append(r["q"] * a * 1000)
+                acc["rain"][i] += a * pu[i]
+                acc["aet"][i] += a * r["aet"]
+                acc["prod"][i] += a * gu.s
+                acc["rout"][i] += a * gu.r
+                acc["uh"][i] += a * gu.uh_store()
+                acc["exch"][i] += a * r["exchange"]
+                natural[i] += q[i]
+            local[u["id"]] = q
+            put(u["id"], "rain_unit", pu)
+            put(u["id"], "runoff_natural", q)
+        # The catchment's GR4J series are the units' area-weighted means (§2.4h).
+        rain_gr4j, aet, prod, rout, uhs, exch = ([v / area_km2 for v in acc[k]] for k in ("rain", "aet", "prod", "rout", "uh", "exch"))
+    put(None, "rain_used", rain_gr4j)
     put(None, "pet", pet)
     put(None, "aet", aet)
     put(None, "production_store", prod)
@@ -1658,7 +1834,8 @@ def run(doc: dict) -> dict:
             area, pd, e_raw, sp_raw = pre[xid]
             j = J[xid]
             rule_ = supply_rule(x)
-            I = natural[i] * shares.get(xid, 0.0)
+            # Per-unit rain (§2.4h): the unit's own runoff in place of natural × share.
+            I = natural[i] * shares.get(xid, 0.0) if local is None else (local[xid][i] if xid in local else 0.0)
             y_ewr = ewr[i] * ewr_share[xid]
             z = y_ewr + zu
             zs = sen_y[xid][i] + zs_in

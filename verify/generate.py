@@ -1,7 +1,7 @@
 """Random networks for the cross-check (verify/README.md), this harness's own
 generator: seeded, stdlib `random` only, and independent of the engine's fuzz
 generator (packages/engine/src/testing/fuzz.ts is never read). Every input is
-synthetic and uses only phase-1 features (model.unsupported() is empty).
+synthetic and uses only the features verify/ covers (model.unsupported() is empty).
 
 `random_input(seed)` returns a ModelInput document.
 """
@@ -255,7 +255,68 @@ def random_input(seed: int, dense: bool = False) -> dict:
     doc = {"settings": settings, "model": {"nodes": nodes, "crops": crops, "cropAreas": crop_areas, "transfers": transfers}, "series": series}
     add_phase_two(rng, doc, start, days, dense)
     add_irrigation_systems(random.Random(seed * 104729 + 3), doc, dense)
+    add_unit_rain(random.Random(seed * 15485863 + 11), doc, start, days, dense)
     return doc
+
+
+def _unit_series(rng: random.Random, start: dt.date, days: int, scale: float, chirps: bool) -> dict:
+    """A unit's own record: its own synthetic rain, from a little before or
+    after the catchment's start to a little before or after its end, with
+    gaps, now and then a negative (no-data) value, and now and then nothing
+    but blanks (a series with no reading)."""
+    off = rng.randint(-120, 400) if rng.random() < 0.5 else 0
+    s0 = start + dt.timedelta(days=off)
+    n = max(1, days - off + rng.randint(-300, 60))
+    vals: list = [round(v * scale, 2 if chirps else 1) for v in _rain(rng, s0, n, rng.random() < 0.5)]
+    for _ in range(rng.randint(0, 4)):
+        a = rng.randrange(n)
+        for j in range(a, min(n, a + rng.randint(1, 60))):
+            vals[j] = None
+    if rng.random() < 0.15:
+        for _ in range(rng.randint(1, 3)):
+            vals[rng.randrange(n)] = -9999.0 if chirps else -round(rng.uniform(0.1, 5), 1)
+    if rng.random() < 0.05:
+        vals = [None] * n
+    return {"startDate": s0.isoformat(), "values": vals}
+
+
+def add_unit_rain(rng: random.Random, doc: dict, start: dt.date, days: int, dense: bool = False) -> None:
+    """Runoff from each unit's own rain (§2.4h, engine >= 1.78.0), from its
+    own stream so the rest of a network is unchanged: in 35 % of networks
+    (75 % dense), settings.unitRain perUnit, with or without a gauge MAP and
+    a MAP period (sometimes too short or outside the record for 5 complete
+    years); per farm (a farm without area too, which isn't a land unit) its
+    own gauge, its own CHIRPS, both or neither, and a MAP or none, a few far
+    enough from the gauge MAP or the CHIRPS mean to be clamped; now and then
+    a forecast tail the units reach through the catchment's rain. In 15 % of
+    those networks the setting is `catchment` instead, the units' records
+    and MAPs in the input but unused."""
+    if rng.random() >= (0.75 if dense else 0.35):
+        return
+    s = doc["settings"]
+    series = doc["series"]
+    # Now and then the records and MAPs with the setting off: they change nothing (§2.4h).
+    ur: dict = {"mode": "perUnit" if rng.random() < 0.85 else "catchment"}
+    if rng.random() < 0.65:
+        ur["gaugeMapMm"] = round(rng.uniform(300, 1200))
+        ur["gaugeMapSource"] = "synthetic"
+    if rng.random() < 0.4:
+        y0 = start.year + rng.randint(-2, 4)
+        ur["mapPeriod"] = {"start": f"{y0}-01-01", "end": f"{y0 + rng.randint(0, 6)}-12-31"}
+    s["unitRain"] = ur
+    farms = [x for x in doc["model"]["nodes"] if x["kind"] == "farm"]
+    for f in farms:
+        kind = rng.choice(["gauge", "chirps", "chirps", "both", "none"])
+        if kind in ("gauge", "both"):
+            series[f"rain_catchment_mm@{f['id']}"] = _unit_series(rng, start, days, rng.uniform(0.5, 1.8), False)
+        if kind in ("chirps", "both"):
+            series[f"rain_chirps_mm@{f['id']}"] = _unit_series(rng, start, days, rng.uniform(0.4, 1.5), True)
+        if rng.random() < 0.7:
+            f["mapMm"] = rng.choice([round(rng.uniform(250, 1500)), round(rng.uniform(250, 1500)), round(rng.uniform(1, 60)), round(rng.uniform(5000, 12000))])
+            f["mapSource"] = "synthetic"
+    if "rain_forecast_mm" not in series and rng.random() < 0.4:
+        fstart = start + dt.timedelta(days=days - rng.randint(0, 5))
+        series["rain_forecast_mm"] = {"startDate": fstart.isoformat(), "values": [round(rng.gammavariate(0.6, 5), 1) for _ in range(rng.randint(3, 16))]}
 
 
 SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]

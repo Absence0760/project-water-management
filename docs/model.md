@@ -2164,7 +2164,10 @@ not the run window, so the rule doesn't depend on the window):
      stored series inside the MAP period. With fewer than
      `UNIT_MAP_MIN_YEARS` = 5 there, every complete year of the record is
      used instead, with a warning; with fewer than 5 in all, it warns too.
-     With no complete year, the next sub-rule applies, with a warning;
+     With no complete year, or none with rain (a mean annual rain of 0 mm,
+     which nothing can level), the next sub-rule applies, with a warning; a
+     complete year of 0 mm among rainy ones still counts in the mean (verify/
+     probe `unit-rain-map-period`);
    - without a MAP (or no complete year), × the catchment's §2.4b monthly
      factors for the day's month and fit range (`chirpsFactorOn`) when the
      catchment has any; else raw, with a warning. The quantile map (§2.4b)
@@ -2218,7 +2221,10 @@ of the natural losses, §2.6b). The EWR split (`ewr × share`) and the land
 cover's low-flow threshold (`Q75 × share`, §2.5a) still use the flow
 shares. The catchment area is the land units' areas summed:
 `calibration.catchmentAreaKm2` is ignored, with a warning when it differs
-by more than 1 % (`resolveCatchmentAreaKm2`).
+by more than 1 % (`resolveCatchmentAreaKm2`). With no land unit at all (no
+farm has an area), the setting can't apply: GR4J runs on the catchment rain
+over `catchmentAreaKm2`, as without it, with a warning, rather than refusing
+the run for a zero area (§2.4a; verify/ probe `unit-rain-no-land-unit`).
 
 The catchment's GR4J series are the units' area-weighted means
 (`rain_used`, `aet`, the three stores, `exchange`; `pet` is the one PE), so
@@ -2305,8 +2311,12 @@ The older re-run path (`warmStart: false`) pins the base input's rules and
 factors too (`settings.unitRain.pinned`, engine-only), rather than refit
 them on the member's record cut at the decision date, so its history runs
 at the levels its season was made at and its season is the snapshot
-member's to the bit. `verify/` (the independent cross-check) lists
-`perUnit` as unsupported until it is ported from this section.
+member's to the bit. `verify/` (the independent cross-check) models
+this section from the text above, in random and dense networks and the
+probes `unit-rain-rules`, `unit-rain-forecast-warmup`, `unit-rain-map-period`
+and `unit-rain-no-land-unit`; the outlook's engine-only inputs (a unit's
+`rain_forecast_mm@<unit>`, `settings.unitRain.pinned`) are outside it, with
+forecast mode.
 
 **Performance.** A synthetic 12-unit catchment with daily rain from 1981
 to 2025 (`run.perf.test.ts`): a run 140 ms
@@ -10403,7 +10413,9 @@ and hands-off flows. On engine 1.36.0 it found no departure from this
 document; on 1.53.0 one, on a few random networks: a float-noise demand
 switched on a primary or emergency dam-target borehole (§2.7d), fixed in
 1.57.0 (§2.3, §2.7d; erratum ER-12), and a noise-level day in `limitBound`
-that §2.12a now settles. What it doesn't
+that §2.12a now settles. Runoff from each unit's own rain (§2.4h, engine
+1.78.0) followed, with two points this section left open settled from
+`runModel` (a CHIRPS mean annual rain of 0 mm, and no land unit). What it doesn't
 cover yet (rule tables, forecast mode, calibration, land cover, time-varying
 development, drought restrictions, `demand.scale` by part and the other
 optional inputs) is its phase 2b ([followups.md](./followups.md) §

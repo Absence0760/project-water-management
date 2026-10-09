@@ -314,9 +314,10 @@ runs and accumulations are real) can't be decided without the client.
       ratio; (6) a unit's own gauge used as recorded, with no zero-run or
       accumulation check of its own. Trigger: the hydrologist's answer, or
       the client's first per-unit run once part B's feeds and part D's
-      settings land. Also left: `verify/` ports §2.4h (part E of #482); the
-      run window still follows the catchment rain series. (The seasonal
-      outlook runs each unit's season on its own rain, engine 1.78.0.)
+      settings land. `verify/` cross-checks §2.4h (part E of #482). Also
+      left: the run window still follows the catchment rain series. (The
+      seasonal outlook runs each unit's season on its own rain, engine
+      1.78.0.)
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
@@ -1721,6 +1722,16 @@ the suggested order (the IDs carry the detail):
       (its run days; the tail-start year's historical days), what it would
       have asked for (`fullAllocationFactors`, model.md §2.12a, probe
       `scaled-no-demand-tail-year`, `mode.test.ts`).
+- [x] **`verify/` runoff from each unit's own rain** (part E of
+      [#482](https://github.com/Absence0760/project-water-management/issues/482);
+      engine 1.78.0, model.md §2.4h): the forcing rule's four rules and
+      their day-by-day chains, the clamp, the CHIRPS MAP factor's complete
+      years and MAP period, a GR4J per land unit and the summed natural flow,
+      written from §2.4h, in about a third of the random networks and most
+      dense ones, with three probes and 21 more mutants. No engine departure
+      from the docs; two points §2.4h left open (a CHIRPS mean annual rain of
+      0 mm; per-unit rain with no land unit) were settled from `runModel` and
+      written into §2.4h.
 - [ ] **`verify/` phase 2b: the rest of the model.** Phases 1 and 2a cover
       the daily chain and the optional inputs above; `verify/model.py`'s
       `unsupported()` names what they leave out and the harness refuses an
