@@ -7,7 +7,8 @@
 //    job proposes it, and the request says so (with its proposal);
 //  - `background` queues at once, from the worker's first window;
 //  - at the worker's own cap the request records the refusal, and the job is
-//    done (an outcome, not a failure); with the DEM off it says so;
+//    done (an outcome, not a failure), worded from the mapped river near the
+//    click and never a confluence question (issue #472); with the DEM off it says so;
 //  - one delineation per account: a new click in the project supersedes the
 //    waiting one (its job cancelled, nothing stored when it would run); one
 //    waiting in another project, or running, is 429; the dedupe key names the
@@ -131,9 +132,9 @@ describe('a catchment too large for the request', () => {
 	});
 
 	it('records the refusal at the worker’s own cap, in the request’s words; the job is done, not failed', async () => {
-		// The valley runs about 240 cells north of the outlet: a 256-cell window placed over it (delineate-6) holds 203 of them.
+		// The valley runs about 240 cells north of the outlet: a 224-cell window placed over it (delineate-6) holds about 214 of them.
 		delineationLimits.requestWindows = [128];
-		delineationLimits.jobWindows = [192, 256];
+		delineationLimits.jobWindows = [192, 224];
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status, JSON.stringify(res.body)).toBe(202);
 		const proposalsBefore = (await asOwner('SELECT count(*)::int AS n FROM delineation_proposal WHERE project_id = $1', [projectId]))[0].n;
@@ -142,6 +143,32 @@ describe('a catchment too large for the request', () => {
 		const done = (await viewer.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request;
 		expect(done).toMatchObject({ status: 'refused', proposal: null, refusal: { reason: 'too_large', message: expect.stringMatching(/^The catchment above that point reaches beyond the \d+ km/) } });
 		expect((await asOwner('SELECT count(*)::int AS n FROM delineation_proposal WHERE project_id = $1', [projectId]))[0].n).toBe(proposalsBefore);
+	});
+
+	it('words its refusal from the mapped river near the click, and never asks about a confluence, even for an older request carrying a pick (issue #472)', async () => {
+		// A main stem mapped through the outlet: far larger than the worker's cap, so the refusal points at Sub-catchments.
+		const line = [fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 40), fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5)];
+		await asOwner(
+			`INSERT INTO river_reference (dataset, reach_id, strahler, upstream_km2, geometry, min_lon, min_lat, max_lon, max_lat, source)
+			 VALUES ('requests-test', 1, 6, 340724, $1, $2, $3, $4, $5, 'test main stem')`,
+			[JSON.stringify({ type: 'LineString', coordinates: line }), Math.min(line[0]![0], line[1]![0]), Math.min(line[0]![1], line[1]![1]), Math.max(line[0]![0], line[1]![0]), Math.max(line[0]![1], line[1]![1])]
+		);
+		try {
+			delineationLimits.requestWindows = [128];
+			delineationLimits.jobWindows = [192, 224];
+			const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			// A request queued before issue #472 kept the river picked at a confluence: the worker no longer reads it.
+			await asOwner(`UPDATE delineation_request SET reach = $2 WHERE id = $1`, [res.body.request.id, JSON.stringify({ dataset: 'requests-test', reachId: 99 })]);
+			await tick();
+			const done = (await viewer.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request;
+			expect(done).toMatchObject({ status: 'refused', refusal: { reason: 'too_large', message: expect.stringMatching(/^The river here drains about 340\s724 km² \(its mapped reach\)/) } });
+			expect(done).not.toHaveProperty('check');
+			// Without the mapped river, the plain sentence (the positive control above words it so too).
+			expect(done.refusal.message).not.toMatch(/confluence/);
+		} finally {
+			await asOwner(`DELETE FROM river_reference WHERE dataset = 'requests-test'`);
+		}
 	});
 
 	it('hands the worker where the request’s window cut the catchment, so its first window is placed over it', async () => {

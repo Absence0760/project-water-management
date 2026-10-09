@@ -115,7 +115,7 @@ describe('a click with the cross-check (delineate-12)', () => {
 		await plantReach(98000002, true);
 		const pan = await click();
 		expect(pan.status, JSON.stringify(pan.body)).toBe(201);
-		expect(pan.body.proposal.methodVersion).toBe('delineate-12');
+		expect(pan.body.proposal.methodVersion).toBe('delineate-13');
 		expect(pan.body.proposal.pans).toMatchObject({ count: 1, onRiver: { count: 0, largest: [] } });
 		expect(pan.body.proposal.pans.nonContributingM2).toBeLessThan(10e6);
 

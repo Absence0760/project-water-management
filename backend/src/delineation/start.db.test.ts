@@ -6,11 +6,10 @@
 //  - with one, a gauge at the outlet, a dam and an abstraction point up the
 //    river give two units in order, their areas adding up to the catchment;
 //    a boundary that came from Delineate lends its outlet;
-//  - each point placed as Delineate places it (start-7): the outlet gauge
-//    and a dam on a river line beside a gully matched to the line's reach,
-//    the larger channel named per point without one and taken with Use
-//    that channel, the river asked for at a confluence, a delineated outlet
-//    kept on its own cell;
+//  - each point on the terrain channel nearest it (start-15, issue #472):
+//    a planted river reach or confluence changes nothing, the larger
+//    channel named per point and taken with Use that channel, a body naming
+//    a reach refused, a delineated outlet kept on its own cell;
 //  - apply writes only the ticked values: the ticked areas as parcels
 //    linked to their units (area "from the map"), the ticked order, runoff
 //    to the dam; unticked, the area stays 0 and the unit drains into the
@@ -73,7 +72,7 @@ describe('without an elevation model', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-14' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-15' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -228,7 +227,7 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-14/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-15/);
 		// Gross, the default (195): the units took the parcels' whole areas, and say so.
 		const bases = await asOwner(`SELECT name, area_basis FROM node WHERE project_id = $1 ORDER BY sort_order`, [p.id]);
 		expect(bases.map((b) => [b.name, b.area_basis])).toEqual([
@@ -446,9 +445,9 @@ describe('bounds', () => {
 	});
 });
 
-describe('each point placed as Delineate places it (start-7, the hydrologist’s review finding 3)', () => {
+describe('each point on the terrain channel nearest it (start-15, issue #472)', () => {
 	// A planted river line three cells (about 380 m) east of the valley's river, as a HydroRIVERS line sits off the DEM's
-	// channel; the outlet gauge and a dam on it. A 150 m snap there finds only the hillside's gully beside the river.
+	// channel; the outlet gauge and a dam on it, each on one of the valley side's small terrain channels beside the river.
 	const DATASET = 'start-snap-test';
 	const LINE = [pos(DAM_CELL.x + 3, DAM_CELL.y + 10), pos(DAM_CELL.x + 3, DAM_CELL.y + 100)];
 	let q: Awaited<ReturnType<typeof newProject>>;
@@ -465,7 +464,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		);
 	};
 	const clear = () => asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
-	type Placement = { placedBy: string; reach: { reachId: number; chosen: boolean } | null; larger: { distanceM: number } | null; unmatched: boolean };
+	type Placement = { placedBy: string; larger: { distanceM: number } | null };
 
 	beforeAll(async () => {
 		process.env.DEM_URL = FIXTURE;
@@ -481,40 +480,48 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 	}, 60_000);
 	afterAll(clear);
 
-	it('matches the outlet gauge and the dam to the reach: the river’s catchment, the dam kept, the method saying so', async () => {
+	it('proposes the same plan with a river reach, or a confluence, planted on the points as without: the network never places them', async () => {
+		const body = { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] };
+		const where = (r: { body: { proposal: { plan: { outlet: { point: number[] }; catchment: { areaM2: number }; units: { key: string; point: number[] }[]; dropped: { featureId: string }[] } } } }) => {
+			const p = r.body.proposal.plan;
+			return { outlet: p.outlet.point, areaM2: p.catchment.areaM2, units: p.units.map((u) => [u.key, u.point]), dropped: p.dropped.map((d) => d.featureId) };
+		};
 		await clear();
+		const plain = await owner.call('POST', q.at('/map/start'), body);
+		expect(plain.status, JSON.stringify(plain.body)).toBe(201);
+		expect(plain.body.proposal.methodVersion).toBe('start-15');
+		expect(plain.body.proposal.method).toMatch(/the nearest terrain channel: the nearest cell within 150 m with at least 1 km² draining through it, the mapped river network not used/);
 		await plant(99100001, riverKm2, LINE);
-		// The river flowing into the line's upper end, as HydroRIVERS joins reaches: the line's area at each point is then the river's
-		// (reach.ts areaAlong; with nothing flowing in, its upper end would count as a 10 km² head reach's).
 		await plant(99100002, 0.85 * riverKm2, [pos(DAM_CELL.x + 3, DAM_CELL.y - 30), LINE[0]!]);
-		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
-		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		const { plan, method, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-14');
-		expect(Math.abs(plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
-		expect(plan.outlet.placement).toMatchObject({ placedBy: 'matched', reach: { dataset: DATASET, reachId: 99100001, chosen: false }, larger: null, unmatched: false });
-		expect(plan.dropped).toEqual([]);
-		expect(plan.units).toHaveLength(1);
-		expect(plan.units[0].placement).toMatchObject({ placedBy: 'matched', reach: { reachId: 99100001 } });
-		expect(plan.warnings).toEqual([expect.stringMatching(PAN_WARNING)]);
-		expect(method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the reach’s area/);
-		expect(method).not.toMatch(/snapped/);
+		const reach = await owner.call('POST', q.at('/map/start'), body);
+		expect(reach.status, JSON.stringify(reach.body)).toBe(201);
+		expect(where(reach)).toEqual(where(plain));
+		// Two rivers of clearly different areas ending at the gauge: no question asked.
+		await clear();
+		const g = pos(DAM_CELL.x + 3, DAM_CELL.y + 60);
+		await plant(99100002, riverKm2, [pos(DAM_CELL.x + 3, DAM_CELL.y + 10), g]);
+		await plant(99100003, riverKm2 / 4, [pos(DAM_CELL.x + 20, DAM_CELL.y + 50), g]);
+		const junction = await owner.call('POST', q.at('/map/start'), body);
+		expect(junction.status, JSON.stringify(junction.body)).toBe(201);
+		expect(where(junction)).toEqual(where(plain));
+		// A body naming a reach for the outlet is refused (the confluence pick is gone).
+		expect((await owner.call('POST', q.at('/map/start'), { ...body, outletReach: { dataset: DATASET, reachId: 99100002 } })).status).toBe(400);
 	});
 
-	it('without a reach: the gully, the larger channel named per point as a warning; Use that channel puts each on the river', async () => {
+	it('a gauge and a dam on the valley side’s small channels: the larger channel named per point as a warning; Use that channel puts each on the river', async () => {
 		await clear();
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		const outlet = plan.outlet.placement as Placement;
-		expect(outlet).toMatchObject({ placedBy: 'snapped', reach: null, unmatched: false });
+		expect(outlet).toMatchObject({ placedBy: 'snapped' });
 		expect(outlet.larger!.distanceM).toBeGreaterThan(200);
 		expect(plan.catchment.areaM2 / 1e6).toBeLessThan(0.05 * riverKm2);
-		expect(plan.warnings[0]).toMatch(/^A much larger channel runs \d+ m west of the outlet \(Weir on the line\): at least [\d ,.]+ km² drains through it, against [\d.]+ km² where the point was put\..*use that channel/i);
-		expect(r.body.proposal.method).toMatch(/the outlet snapped, .*snapped: the most-accumulating cell within 150 m/);
-		// The dam, snapped into its own gully, doesn't drain to the outlet's: dropped, but with the river beside it named, to move it there.
+		expect(plan.warnings[0]).toMatch(/^A much larger terrain channel runs \d+ m west of the outlet \(Weir on the line\): at least [\d ,.]+ km² drains through it, against [\d.]+ km² where the point was put\..*use that channel/i);
+		expect(r.body.proposal.method).toMatch(/the outlet on the nearest terrain channel, .*the nearest terrain channel: the nearest cell within 150 m/);
+		// The dam, on its own small channel, doesn't drain to the outlet's: dropped, but with the river beside it named, to move it there.
 		expect(plan.dropped).toMatchObject([{ featureId: dam, reason: expect.stringMatching(/isn’t upstream of the outlet/), placement: { placedBy: 'snapped', larger: { distanceM: expect.any(Number) } } }]);
-		expect(plan.warnings.some((w: string) => /^A much larger channel runs \d+ m west of Dam on the line:/.test(w))).toBe(true);
+		expect(plan.warnings.some((w: string) => /^A much larger terrain channel runs \d+ m west of Dam on the line:/.test(w))).toBe(true);
 
 		const used = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, outletUseLarger: true, points: [{ featureId: dam, role: 'dam', useLarger: true }] });
 		expect(used.status, JSON.stringify(used.body)).toBe(201);
@@ -576,7 +583,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect(unitOf(unset).totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
 		expect(unitOf(unset).placement).not.toHaveProperty('damPosition');
 		expect(unitOf(unset)).not.toHaveProperty('damShares');
-		expect(unset.body.proposal.methodVersion).toBe('start-14');
+		expect(unset.body.proposal.methodVersion).toBe('start-15');
 		const refused = await apply(unset, { upstreamToDam: true });
 		expect(refused.status).toBe(400);
 		expect(refused.body.error).toMatch(/has no proposed upstream inflow to its dam: mark the dam on or off the river/);
@@ -609,29 +616,6 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		const node = ok.body.model.nodes.find((n: { name: string }) => n.name === 'Long dam');
 		expect(node).toMatchObject({ pctUpstreamToDam: 0, pctRunoffToDam: u.damShares.pctRunoffToDam });
 		expect(ok.body.proposal.decision.units).toEqual([expect.objectContaining({ key: longDam, runoffToDam: true, upstreamToDam: true })]);
-	});
-
-	it('asks for the river at a confluence, every such point at once, and places it on the one picked', async () => {
-		await clear();
-		// Two rivers of clearly different areas ending where the gauge is: a tributary and the main river above a junction.
-		const g = pos(DAM_CELL.x + 3, DAM_CELL.y + 60);
-		await plant(99100002, riverKm2, [pos(DAM_CELL.x + 3, DAM_CELL.y + 10), g]);
-		await plant(99100003, riverKm2 / 4, [pos(DAM_CELL.x + 20, DAM_CELL.y + 50), g]);
-		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
-		expect(r.status).toBe(422);
-		expect(r.body.error).toMatch(/^“Weir on the line” is at a confluence of rivers of different sizes/);
-		expect(r.body.details.reason).toBe('confluence');
-		expect(r.body.details.points).toEqual([{ featureId: '', name: 'Weir on the line', choices: expect.any(Array) }]);
-		expect(r.body.details.points[0].choices.map((c: { reachId: number }) => c.reachId).sort()).toEqual([99100002, 99100003]);
-		// A reach that isn't near the point is refused, naming it.
-		const far = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, outletReach: { dataset: DATASET, reachId: 1 }, points: [] });
-		expect(far.status).toBe(400);
-		expect(far.body.error).toMatch(/The river picked for “Weir on the line” isn’t within 1 km of it/);
-		const picked = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, outletReach: { dataset: DATASET, reachId: 99100002 }, points: [{ featureId: dam, role: 'dam' }] });
-		expect(picked.status, JSON.stringify(picked.body)).toBe(201);
-		expect(picked.body.proposal.plan.outlet.placement).toMatchObject({ reach: { reachId: 99100002, chosen: true } });
-		expect(['matched', 'junction']).toContain(picked.body.proposal.plan.outlet.placement.placedBy);
-		expect(Math.abs(picked.body.proposal.plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.1);
 	});
 
 	it('takes a delineated outlet’s own cell, not the most-drained one 150 m further down', async () => {

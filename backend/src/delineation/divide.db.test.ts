@@ -111,7 +111,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-14' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-15' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the pump drains into the dam, the dam into the new gauge, the gauge into the outflow.
@@ -191,7 +191,7 @@ describe('dividing the valley', () => {
 			['Valley dam', 'typed', null, null],
 			['Valley weir', 'typed', null, null]
 		]);
-		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-14/);
+		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-15/);
 		// The parcel stores its piece's area from the cells, the unit's area: the simplified outline's own area is a little off it.
 		const [parcel] = await asOwner(
 			`SELECT f.area_m2, f.geometry FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.project_id = $1 AND n.name = 'Top pump'`,
@@ -361,11 +361,9 @@ describe('dividing the valley', () => {
 	});
 });
 
-describe('each point placed as Delineate places it (start-7)', () => {
+describe('each point on the terrain channel nearest it (start-15, issue #472)', () => {
 	const DATASET = 'divide-snap-test';
 	let v: Awaited<ReturnType<typeof valley>>;
-	/** What drains through the river at the mid weir (Delineate's answer there). */
-	let riverKm2: number;
 	const plant = async (reachId: number, km2: number, line: [number, number][]) => {
 		const lons = line.map((c) => c[0]);
 		const lats = line.map((c) => c[1]);
@@ -377,35 +375,32 @@ describe('each point placed as Delineate places it (start-7)', () => {
 	};
 	beforeAll(async () => {
 		await asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
-		v = await valley('Divide, placed as Delineate');
-		const g = pos(DAM_CELL.x, DAM_CELL.y + 60);
-		const d = await owner.call('POST', v.at('/map/delineation'), { lon: g[0], lat: g[1], from: 'outlet' });
-		expect(d.status, JSON.stringify(d.body)).toBe(201);
-		riverKm2 = d.body.proposal.areaM2 / 1e6;
+		v = await valley('Divide, placed on the terrain channels');
 	}, 60_000);
 	afterAll(() => asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]));
 
-	it('records each point’s placement: with no reach near, every point snapped', async () => {
+	it('records each point’s placement: on the nearest terrain channel, no reach', async () => {
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal.plan.outlet.placement).toMatchObject({ placedBy: 'snapped', reach: null, unmatched: false });
-		for (const u of r.body.proposal.plan.units) expect(u.placement).toMatchObject({ placedBy: 'snapped', reach: null });
+		expect(r.body.proposal.plan.outlet.placement).toEqual({ placedBy: 'snapped', larger: null });
+		for (const u of r.body.proposal.plan.units) expect(u.placement).toMatchObject({ placedBy: 'snapped' });
+		for (const u of r.body.proposal.plan.units) expect(u.placement).not.toHaveProperty('reach');
 	});
 
-	it('asks for the river at a confluence, and places the point on the one picked', async () => {
+	it('never asks for the river at a mapped confluence, and divides as with no river network', async () => {
+		const plain = await owner.call('POST', v.at('/map/divide'), v.body);
+		expect(plain.status, JSON.stringify(plain.body)).toBe(201);
 		// Two rivers of clearly different areas ending at the mid weir: the main river above a junction and a tributary.
 		const g = pos(DAM_CELL.x, DAM_CELL.y + 60);
-		await plant(99200001, riverKm2, [pos(DAM_CELL.x, DAM_CELL.y + 10), g]);
-		await plant(99200002, riverKm2 / 4, [pos(DAM_CELL.x + 20, DAM_CELL.y + 50), g]);
-		const asked = await owner.call('POST', v.at('/map/divide'), v.body);
-		expect(asked.status).toBe(422);
-		expect(asked.body.details).toMatchObject({ reason: 'confluence', points: [{ featureId: v.f.mid, name: 'Mid weir' }] });
-		const body = { ...v.body, points: v.body.points.map((p) => (p.featureId === v.f.mid ? { ...p, reach: { dataset: DATASET, reachId: 99200001 } } : p)) };
-		const picked = await owner.call('POST', v.at('/map/divide'), body);
-		expect(picked.status, JSON.stringify(picked.body)).toBe(201);
-		const mid = picked.body.proposal.plan.units.find((u: { key: string }) => u.key === v.f.mid);
-		expect(mid.placement).toMatchObject({ reach: { dataset: DATASET, reachId: 99200001, chosen: true } });
-		expect(['matched', 'junction']).toContain(mid.placement.placedBy);
+		await plant(99200001, 400, [pos(DAM_CELL.x, DAM_CELL.y + 10), g]);
+		await plant(99200002, 100, [pos(DAM_CELL.x + 20, DAM_CELL.y + 50), g]);
+		const r = await owner.call('POST', v.at('/map/divide'), v.body);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const where = (p: { plan: { units: { key: string; point: number[]; areaM2: number | null }[] } }) => p.plan.units.map((u) => [u.key, u.point, u.areaM2]);
+		expect(where(r.body.proposal)).toEqual(where(plain.body.proposal));
+		// A body naming a reach for a point is refused (the confluence pick is gone).
+		const named = await owner.call('POST', v.at('/map/divide'), { ...v.body, points: v.body.points.map((p) => ({ ...p, reach: { dataset: DATASET, reachId: 99200001 } })) });
+		expect(named.status).toBe(400);
 	});
 });
 
