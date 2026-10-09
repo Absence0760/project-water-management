@@ -94,4 +94,19 @@ describe('outlook members under per-unit rain', () => {
 		const i0 = toEpochDay(a.from) - toEpochDay(base.startDate);
 		for (const id of ['a', 'b']) expect(col(warm, id, 'rain_unit'), id).toEqual(col(base, id, 'rain_unit')!.slice(i0, i0 + s.days));
 	});
+
+	it('the re-run member pins the base run’s rules and factors too, so its season is the snapshot member’s to the bit', () => {
+		const input = ownRecords();
+		const base = runModelWithoutChecks(input);
+		const a = outlookAnalogue(s, 2005);
+		const warm = runModelFrom(captureModelState(input, SEASON.decisionDate), outlookSeasonInput(input, base, SEASON, a).input);
+		const cold = runModelWithoutChecks(outlookMemberInput(input, base, SEASON, a).input);
+		const i0 = toEpochDay(SEASON.decisionDate) - toEpochDay(cold.startDate);
+		for (const x of warm.series) {
+			const c = col(cold, x.nodeId, x.key);
+			if (c) expect(x.values, `${x.nodeId}/${x.key}`).toEqual(c.slice(i0));
+		}
+		// Its history is the base run's: the cut record isn't refitted.
+		expect(col(cold, 'a', 'rain_unit')!.slice(0, i0)).toEqual(col(base, 'a', 'rain_unit')!.slice(0, i0));
+	});
 });

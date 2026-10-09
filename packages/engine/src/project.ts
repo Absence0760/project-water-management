@@ -932,6 +932,8 @@ export interface ArealRain {
 	source: string;
 }
 
+import type { UnitRainRecipe } from './runoff/unitRain';
+
 export const UNIT_RAIN_MODES = ['catchment', 'perUnit'] as const;
 export type UnitRainMode = (typeof UNIT_RAIN_MODES)[number];
 
@@ -952,6 +954,13 @@ export interface UnitRainSettings {
 	 * 1991–2020 climatology years.
 	 */
 	mapPeriod?: { start: string; end: string } | null;
+	/**
+	 * Engine-only (never stored by the API): each unit's rule and factors to
+	 * use instead of fitting them on the input's records. A seasonal outlook's
+	 * re-run member sets it to the base input's, so a history cut at the
+	 * decision date runs at the base run's levels (docs/model.md §2.4h).
+	 */
+	pinned?: UnitRainRecipe[] | null;
 }
 
 export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
@@ -1027,7 +1036,8 @@ export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSetti
 		mode: r.mode,
 		gaugeMapMm: r.gaugeMapMm ?? null,
 		gaugeMapSource: r.gaugeMapSource ?? null,
-		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null
+		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null,
+		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
 	};
 }
 
@@ -3754,7 +3764,7 @@ export interface WaterBalanceRow {
 	/** Start year of the water year (Oct–Sep); null for the whole-run row. */
 	waterYear: number | null;
 	days: number;
-	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0); null when the run has no rain series. */
+	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0; under per-unit rain, engine ≥ 1.78.0, the units' area-weighted rain_used); null when the run has no rain series. */
 	rainMm: number | null;
 	/** Natural flow as depth over the catchment (mm); null without an area. */
 	naturalFlowMm: number | null;

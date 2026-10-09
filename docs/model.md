@@ -2276,8 +2276,9 @@ also fills a gauge unit's gaps; absent = catchment rain, as every fit before
 it). Turning per-unit rain on or off, another gauge MAP or MAP period, and
 (from a run's summary, `FitForcingNow.unitRain`) a unit's rule, record,
 CHIRPS level or factor moving by more than 2 % are "Forcing changed since
-fit". The API's fit-record schema validates the field with
-`unitRainFingerprintError`.
+fit". The API's fit-record schema is to accept the field, validated with
+`unitRainFingerprintError` (the integration of issue #482; until then a
+per-unit fit can't be saved).
 
 **Elsewhere.** Firm yield (§2.13) runs on the same per-unit runoff. A
 model-state snapshot (§2.16) holds each unit's GR4J state and pins each
@@ -2299,10 +2300,12 @@ never stores one), which the unit's chain reads before the catchment's rain.
 So the season has the unit's rule and factors as the base run had them, a
 member from the snapshot keeps them pinned, and a unit on the catchment rule
 (rule 4) ignores it and keeps the catchment rain. A unit on the MAP ratio
-(rule 2) gets the same season as without it when the catchment gauge has
-every analogue day (`outlook.unitRain.test.ts`). The older re-run path
-(`warmStart: false`) refits the units' factors on each member's cut
-record, as it refits the other record-wide statistics. `verify/` (the independent cross-check) lists
+(rule 2) gets the same season as without it (`outlook.unitRain.test.ts`).
+The older re-run path (`warmStart: false`) pins the base input's rules and
+factors too (`settings.unitRain.pinned`, engine-only), rather than refit
+them on the member's record cut at the decision date, so its history runs
+at the levels its season was made at and its season is the snapshot
+member's to the bit. `verify/` (the independent cross-check) lists
 `perUnit` as unsupported until it is ported from this section.
 
 **Performance.** A synthetic 12-unit catchment with daily rain from 1981
@@ -7977,7 +7980,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 
 | Factor | Low / high (default) | What changes | Skipped when |
 | --- | --- | --- | --- |
-| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; under per-unit rain, engine ≥ 1.78.0, the units' own records too, with the unit MAPs and the gauge MAP × the same factor, §2.4h; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
 | Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it. On a full-allocation run, 0.7 and 1.3 × the registered volume (engine ≥ 1.70.0, §2.12a; before, both ends were the central run) | no unit or user has demand over the reporting window |

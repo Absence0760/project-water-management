@@ -38,6 +38,8 @@ import { RESTRICTION_SERIES } from '../network/restriction';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { damCapacityOn } from '../network/development';
 import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
+import { prepareRun } from '../prepare';
+import { unitRainRecipes, type UnitRainRecipe } from '../runoff/unitRain';
 import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
 import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
@@ -226,7 +228,19 @@ export function outlookMemberInput(
 	Object.assign(series, unitSeasonRain(baseRun, s, a));
 	if (input.series.evap_apan_mm) series.evap_apan_mm = historyThen(input.series.evap_apan_mm, s.from, valuesOn(input.series.evap_apan_mm, a, s.days));
 
-	return withLevel({ settings: memberSettings(input, s, baseRun.startDate, start), model: input.model, series }, ops);
+	const settings = memberSettings(input, s, baseRun.startDate, start);
+	// Under per-unit rain (engine ≥ 1.78.0, §2.4h): the base input's unit rules and factors, so the history cut at the decision
+	// date runs at the levels its season (the base run's rain_unit) was made at, as a member from the snapshot does.
+	const pinned = baseUnitRecipes(input);
+	if (pinned) settings.unitRain = { ...settings.unitRain!, pinned };
+	return withLevel({ settings, model: input.model, series }, ops);
+}
+
+/** The base input's unit rain recipes (prepareRun's CHIRPS correction for the bias sub-rule); null without per-unit rain. */
+function baseUnitRecipes(input: ModelInput): UnitRainRecipe[] | null {
+	if (input.settings.unitRain?.mode !== 'perUnit') return null;
+	const prep = prepareRun(input);
+	return unitRainRecipes({ settings: prep.settings, series: input.series, nodes: input.model.nodes, chirpsCorrection: prep.chirpsCorrection }, []);
 }
 
 /**

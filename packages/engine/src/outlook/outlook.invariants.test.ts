@@ -15,10 +15,11 @@ import { describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput } from '../project';
 import { Rng } from '../random';
-import { runModelWithoutChecks } from '../run';
+import { captureModelState, runModelFrom, runModelWithoutChecks } from '../run';
 import type { ScenarioOp } from '../scenario/ops';
 import { randomInput, withUnitRain } from '../testing/fuzz';
-import { outlookAnalogues, outlookMember, outlookMemberInput } from './outlook';
+import { outlookAnalogues, outlookMember, outlookMemberInput, outlookSeasonInput } from './outlook';
+import { checkInvariants } from '../testing/invariants';
 import type { OutlookSeason } from './season';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
@@ -106,7 +107,11 @@ describe('seasonal outlook on random networks', () => {
 			const base = runModelWithoutChecks(c.input);
 			const a = outlookAnalogues(base, c.season).analogues[0];
 			if (!a || !base.summary.unitRain) continue;
-			const out = runModelWithoutChecks(outlookMemberInput(c.input, base, c.season, a).input);
+			const member = outlookMemberInput(c.input, base, c.season, a).input;
+			const out = runModelWithoutChecks(member);
+			expect(checkInvariants(member, out), `seed ${seed}`).toBeNull();
+			// The default path, from the snapshot: the same season, to the bit.
+			const warm = runModelFrom(captureModelState(c.input, c.season.decisionDate), outlookSeasonInput(c.input, base, c.season, a).input);
 			const days = toEpochDay(c.season.seasonEnd) - toEpochDay(c.season.decisionDate) + 1;
 			const i0 = toEpochDay(a.from) - toEpochDay(base.startDate);
 			const j0 = toEpochDay(c.season.decisionDate) - toEpochDay(out.startDate);
@@ -115,6 +120,7 @@ describe('seasonal outlook on random networks', () => {
 				const want = base.series.find((x) => x.nodeId === u.nodeId && x.key === 'rain_unit')!.values.slice(i0, i0 + days);
 				const got = out.series.find((x) => x.nodeId === u.nodeId && x.key === 'rain_unit')!.values.slice(j0, j0 + days);
 				expect(got, `seed ${seed} ${u.nodeId}`).toEqual(want);
+				expect(warm.series.find((x) => x.nodeId === u.nodeId && x.key === 'rain_unit')!.values, `seed ${seed} ${u.nodeId} from the snapshot`).toEqual(want);
 				units++;
 			}
 		}
