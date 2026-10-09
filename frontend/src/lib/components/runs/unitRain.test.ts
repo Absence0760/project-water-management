@@ -4,6 +4,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import UnitRainPanel from './UnitRainPanel.svelte';
 import { factorClamped, factorText, periodText, sortResultUnits, unitRainNotes, unitRainOf, type UnitRainResult, type UnitRainResultUnit } from './unitRain';
+import { withoutComments } from '../__fixtures__/withoutComments';
 
 vi.mock('$app/paths', () => ({ base: '' }));
 
@@ -105,7 +106,7 @@ describe('UnitRainPanel', () => {
 	it('lists each unit’s rule, factor, MAP, rain and runoff, with the notes and the days by source', () => {
 		const { body: html } = render(UnitRainPanel, { props: { result: result([unit(), unit({ nodeId: 'u2', name: 'Lower unit', rule: 'catchment', factor: null, factorSource: 'catchment', mapMm: null, mapSource: null, runoffCoefficient: null })]) } });
 		// Without Svelte's hydration markers, so a sentence reads as one string.
-		const body = html.replace(/<!--[^]*?-->/g, '');
+		const body = withoutComments(html);
 		expect(body).toContain('Rain for each unit');
 		expect(body).toContain('MAP period 1991–2020; rain gauge’s MAP 656 mm (gauge record)');
 		expect(body).toContain('Catchment gauge × MAP ratio');
