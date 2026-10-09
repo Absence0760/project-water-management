@@ -54,6 +54,21 @@ moved here from `verify/`, whose workbook transcription it served):
 Its output quotes the client's cells, so it stays on your machine, never in
 an issue or a commit.
 
+## Extract format
+
+`project.json` starts with `extractFormat`, a number that says what its stored
+fields mean (`EXTRACT_FORMAT` in `extract_project.py` and in
+`frontend/src/lib/spreadsheet/import/extract.ts`; currently 1). **Bump it, in
+both importers and in `EXPECTED_EXTRACT_FORMAT` in
+`packages/engine/src/testing/client-catchment-fixture.ts`, whenever an importer
+change alters what a stored field means** (a conversion such as the "Upstream
+inflow above dam %" `1 -` flip moves from the loader into the importers, a unit
+changes, a field is renamed), then regenerate the synthetic fixtures. The
+client catchment regression loader refuses an extract with no stamp or another
+one, telling you to re-extract, instead of failing as per-column engine diffs
+(issue #473). The backend's `ProjectFile` ignores the key, so it never reaches
+the database.
+
 ## What it reads
 
 The workbook must have been **calculated and saved in Excel**. The script opens

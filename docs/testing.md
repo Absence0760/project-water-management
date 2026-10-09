@@ -165,7 +165,12 @@ job doesn't pay a second Chromium install (the cache restore plus the apt
 A new test of this kind follows the same rule and goes in the table; the
 MinIO check is `backend/src/__tests__/minio.ts` (`minioUp`).
 The only skips CI allows are for the gitignored client data (`data/`, the
-source workbooks), which CI never has (CLAUDE.md rule 10).
+source workbooks), which CI never has (CLAUDE.md rule 10). Because CI can't see
+that fixture, the local loader (`packages/engine/src/testing/client-catchment-fixture.ts`)
+refuses an extract made by an older importer (`extractFormat` missing or not
+the loader's `EXPECTED_EXTRACT_FORMAT`) with a "re-extract" message rather than
+letting it fail as engine drift; the bump rule is in
+`scripts/wbt-import/README.md` § Extract format.
 
 ## Coverage
 

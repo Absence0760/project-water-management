@@ -42,9 +42,34 @@ export type ShortfallCol =
 	| 'volumeLeft'
 	| 'fractionOfDemandLeft';
 export interface ImportedProject {
+	/** The importers' EXTRACT_FORMAT; absent in an extract made before it existed. */
+	extractFormat?: number;
 	settings: ModelInput['settings'];
 	model: ModelInput['model'];
 	series: { kind: string; startDate: string; values: (number | null)[] }[];
+}
+
+/**
+ * The meaning of project.json's stored fields this loader replays. Same number as
+ * extract_project.py's EXTRACT_FORMAT and the browser importer's EXTRACT_FORMAT; bump all
+ * three when an importer change alters what a stored field means (scripts/wbt-import/README.md,
+ * "Extract format"). A stale extract otherwise fails as per-column engine diffs, not as itself.
+ */
+export const EXPECTED_EXTRACT_FORMAT = 1;
+
+/**
+ * Throws, naming the fix, when `project` was extracted by an older importer than this loader
+ * expects, or by one that stamped nothing.
+ */
+export function assertExtractFormat(project: { extractFormat?: unknown }, dataDir: string): void {
+	const found = project.extractFormat;
+	if (found === EXPECTED_EXTRACT_FORMAT) return;
+	const what =
+		found === undefined ? 'has no extract-format stamp (made by an older importer)' : `is extract format ${String(found)}, the loader expects ${EXPECTED_EXTRACT_FORMAT}`;
+	throw new Error(
+		`The client-catchment extract in ${dataDir} ${what}. Re-extract it with scripts/wbt-import/extract_project.py ` +
+			'(scripts/wbt-import/README.md, "Run"); the engine tests below would otherwise fail as engine drift.'
+	);
 }
 
 export interface ClientCatchmentFixture {
@@ -90,6 +115,7 @@ export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixtu
 
 	const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;
 	const expected = JSON.parse(fs.readFileSync(`${dataDir}/expected.json`, 'utf8')) as Expected;
+	assertExtractFormat(project, dataDir);
 
 	// Q1 (engine ≥ 0.9.0): the engine puts pctUpstreamToDam of the upstream
 	// inflow INTO the dam, as the column's label says; the workbook's formula
