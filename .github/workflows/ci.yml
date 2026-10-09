@@ -113,7 +113,7 @@ jobs:
     services:
       postgres:
         # The image and digest docker-compose.yml runs (pnpm check:pins, serviceImageProblems).
-        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
         env:
           # Throwaway CI-only credentials, same as docker-compose.yml.
           POSTGRES_USER: water
@@ -289,7 +289,7 @@ jobs:
     services:
       postgres:
         # The image and digest docker-compose.yml runs (pnpm check:pins, serviceImageProblems).
-        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
         env:
           # Throwaway CI-only credentials, same as docker-compose.yml.
           POSTGRES_USER: water

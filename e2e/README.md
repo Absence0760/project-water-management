@@ -120,7 +120,9 @@ balanced by time rather than by count:
    file) and uploads it as `minio-image`: the shards load it instead of each
    pulling it, since Docker Hub's anonymous pull limit refused 14 shards' pulls
    (issue #492; `scripts/ci/service-image.sh`, which checks the loaded image is
-   the one pulled). Mailpit comes from GHCR, never Docker Hub.
+   the one pulled; it pulls by digest from Google's Docker Hub mirror first).
+   Mailpit comes from GHCR and Postgres from ECR Public's `docker/library`,
+   never Docker Hub.
 2. **Each shard** gets its own Postgres service, downloads the site and runs
    with `E2E_PREBUILT=1` (serve that build, don't rebuild). The config refuses a
    prebuilt site whose stamp (`e2e-api-url.txt`) names another API URL.
