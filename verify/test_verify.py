@@ -398,7 +398,7 @@ class Generator(unittest.TestCase):
         self.assertIn("perUnit", modes)
         self.assertIn("catchment", modes)
         # The outlook's engine-only per-unit inputs stay out, with forecast mode.
-        self.assertTrue(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": []}}, "model": {}}) == [])
+        self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": []}}, "model": {}}), [])
         self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": [{"nodeId": "u"}]}}, "model": {}})), 1)
         self.assertEqual(len(model.unsupported({"settings": {}, "model": {}, "series": {"rain_forecast_mm@u": {"startDate": "2020-01-01", "values": [1]}}})), 1)
 
