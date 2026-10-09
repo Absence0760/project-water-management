@@ -15,10 +15,11 @@
 	import { tick } from 'svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { api } from '$lib/api';
+	import { ApiError } from '$lib/api/client';
 	import type { UnitRainProduct, UnitRainProposal } from '$lib/api/types';
 	import { fmtNum } from '$lib/format/number';
 	import { CHIRPS_PRODUCT_FIRST_DAY, errorText, feedsApi, type FeedMeta } from './feeds';
-	import { appliedWords, sortUnitRows, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
+	import { appliedWords, feedLimitNote, sortUnitRows, STALE_PROPOSAL_CODES, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
 
 	let { projectId, feeds, onapplied }: { projectId: string; feeds: FeedMeta[]; onapplied: () => Promise<void> | void } = $props();
 
@@ -48,6 +49,7 @@
 	const upToDate = $derived(proposal ? unitRainUpToDate(proposal) : false);
 	/** Owners set the feeds up (the server says, canApply); editors read the proposal. */
 	const canApply = $derived(proposal?.canApply ?? false);
+	const limitNote = $derived(proposal ? feedLimitNote(proposal, feeds.length) : null);
 
 	// Only the newest proposal may land: a product switched twice quickly must not show the first answer.
 	let seq = 0;
@@ -109,6 +111,9 @@
 			r = await calls.applyUnits(parsed.body);
 		} catch (e) {
 			error = errorText(e);
+			// The proposal moved under it (a unit refused, a feed changed or fetching): show it as it is now.
+			const code = e instanceof ApiError ? ((e.details as { code?: unknown } | null)?.code ?? e.code) : null;
+			if (typeof code === 'string' && STALE_PROPOSAL_CODES.includes(code)) await load(product).catch(() => undefined);
 			applying = false;
 			return;
 		}
@@ -248,6 +253,7 @@
 				</p>
 				{#if startError}<p class="err" id="{uid}-start-err" role="alert">{startError}</p>{/if}
 			{/if}
+			{#if limitNote}<p class="alert alert-warning" role="note" data-testid="unit-rain-limit">{limitNote}</p>{/if}
 			{#if action}
 				<p data-testid="unit-rain-words">{action.words}</p>
 			{:else if upToDate}

@@ -59,7 +59,7 @@ test('the owner sets up a CHIRPS feed for each unit with a parcel, and the feed 
 	await expect(panel.getByTestId('unit-rain-without')).toContainText('Without a parcel on the map (1 unit): Lower farm.');
 	await expect(panel.getByRole('link', { name: 'Open the map' })).toHaveAttribute('href', '?tab=map');
 	await panel.getByText('The cells', { exact: true }).click();
-	await expect(panel.getByRole('table', { name: 'Each unit’s CHIRPS cells' }).locator('tbody tr').first()).toHaveText(/Upper farm\s*-33\.\d{3}\s*21\.\d{3}\s*[\d.]+ %\s*[\d.]+/);
+	await expect(panel.getByRole('table', { name: 'Each unit’s CHIRPS cells', exact: true }).locator('tbody tr').first()).toHaveText(/Upper farm\s*-33\.\d{3}\s*21\.\d{3}\s*[\d.]+ %\s*[\d.]+/);
 
 	// rnl, from 1981, unless the owner picks the other; a start date before it is caught before anything is sent.
 	await expect(panel.getByLabel('Daily product')).toHaveValue('rnl');
@@ -116,7 +116,7 @@ test('a unit’s MAP takes its source before Save, and is kept', async ({ page, 
 	await map.blur();
 	const source = page.getByLabel('Source of the MAP');
 	await expect(source).toHaveAttribute('aria-invalid', 'true');
-	await expect(page.getByText('Say where its MAP comes from: the source is required (the dataset or study, and its years).')).toBeVisible();
+	await expect(source).toHaveAccessibleDescription(/Say where its MAP comes from: the source is required \(the dataset or study, and its years\)\./);
 	await source.fill('a synthetic MAP grid, 1991–2020');
 	await expect(source).not.toHaveAttribute('aria-invalid', 'true');
 	await expectNoViolations(page, { include: '[data-testid="unit-map"]' });

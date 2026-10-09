@@ -5205,16 +5205,20 @@ two.
     of range or a blank source blocks Save, with the message beside the
     source and in the save bar. The fit record lists the correction it ran
     under ("Areal rainfall correction"), and the report's inputs table
-    shows it. With rain for each unit on, its hint adds that it applies only
-    to the units that fall back to the catchment rain.
+    shows it. With rain for each unit on, a note under it (shown even with
+    the explanations off) says it applies only to the units that fall back
+    to the catchment rain, and the report's inputs table adds a "Rain for
+    each unit (GR4J rain)" row (`report/inputs.ts`).
     Then **Rain for each unit** (`settings.unitRain`, issue #482,
     `settings/UnitRainFields.svelte`, its own chunk, helpers in
     `settings/unitRain.ts`; [model.md §2.4h](./model.md)): a checkbox
     "Runoff from each unit's own rain" (off: null, the catchment rain as
     before; on: `{ mode: 'perUnit' }`, and the setting switched off comes
     back if ticked again before saving). On, a line says how many units with
-    land have a MAP ("1 of 2 units with land has a MAP."), with a link to
-    Data feeds' Rain for each unit; then an optional **Rain gauge's MAP**
+    land have a MAP ("1 of 2 units with land has a MAP."), with a link that
+    opens Data feeds' Rain for each unit (`?rain=units#set-feeds`), and names
+    the units without one (the first six, each a link to its form, "and N
+    more"); then an optional **Rain gauge's MAP**
     (mm, 1–12 000; with it a unit with a MAP runs on the gauge's rain × unit
     MAP ÷ gauge MAP) and, once it is set, its required **Source**; then the
     **MAP period** as a first and a last year (1 Jan to 31 Dec; 1991–2020,
@@ -6000,7 +6004,9 @@ part of the Settings tab's chunk; WP-2.10,
   with the server's proposal (`GET …/feeds/chirps/from-units`): a table of
   each unit with land and a parcel on the map (unit, area, "3 cells, 75 %
   of their area inside", and its feed's state chip and health sentence from
-  the feeds list, or "No feed yet"), **The cells** (a disclosure: unit,
+  the feeds list, or "No feed yet"; the units that need something first, no
+  feed, failing, stale, and the first eight shown, the rest behind **Show
+  all N units**), **The cells** (a disclosure: unit,
   latitude, longitude, share inside, weight), the units without a parcel
   (named, with **Open the map**) and the units the server can't set up,
   each with its reason (several parcels and none accepted, a parcel changed
@@ -6011,11 +6017,21 @@ part of the Settings tab's chunk; WP-2.10,
   against the product's first day; without one the feeds read from it), a
   sentence of what the button does, and the button itself, named by what it
   does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
-  (from each unit's `action`). With every feed up to date it says so and
-  offers no button; editors read "An owner of the project creates the
-  feeds". After the POST the panel says what it did ("Created 3 feeds. They
-  run on the next schedule …", and how many units were left out), reloads
-  the feeds list and the proposal. A unit's feed card reads "3 cells of a
+  (from each unit's `action`), in the panel's action row with Close. When
+  the new feeds would pass the project's 20-feed cap (the catchment's
+  included) a warning says so plainly, with the room left, before the button
+  is pressed (`feedLimitNote`; the server refuses it, `feed_limit`). With
+  every feed up to date it says so and offers no button; editors read "An
+  owner of the project creates the feeds". After the POST the panel says
+  what it did ("Created 3 feeds. They run on the next schedule …", and how
+  many units were left out), reloads the feeds list and the proposal, and
+  moves focus to its heading when the button has gone. A refusal because
+  the proposal moved (`unit_refused`, `feed_changed`, `feed_fetching`)
+  shows the server's words and reloads the proposal. A unit's feed is found
+  by its site, never by its series name (`CHIRPS v3 (<product>) <unit>`).
+  History reads "Set up rain for each unit: CHIRPS rnl feeds for 4 units
+  (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01"
+  (`history/timeline.ts`). A unit's feed card reads "3 cells of a
   unit's parcel (12.35 km²), area weighted" (`describePlace`). Opens at
   once on `?rain=units`. Tested by `e2e/tests/unit-rain.spec.ts`.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
@@ -7099,11 +7115,15 @@ read it before.
   rain gauge's MAP with its source, a warning list of what to check (the
   units that fell back to the catchment rain, by name; a factor held at the
   0.25–4 bound; a CHIRPS mean taken outside the MAP period; CHIRPS used
-  raw), a table per unit (rain from: its own gauge, catchment gauge × MAP
-  ratio, its own CHIRPS, or catchment rain (fallback); the level factor and
-  its source, "held at the bound" in words; MAP; rain and runoff in mm; the
-  runoff coefficient), the MAP sources, and **Days by where the rain came
-  from** (a disclosure),
+  raw; the first four, the rest behind **Show all N things to check**), a
+  table per unit, the units that fell back and then held factors first,
+  eight shown and the rest behind **Show all N units** (rain from: its own
+  gauge, catchment gauge × MAP ratio, its own CHIRPS, or catchment rain
+  (fallback), over its level factor and source in one column, "held at the
+  bound" in words; MAP; rain and runoff in mm; the runoff coefficient; the
+  wrap focusable so a keyboard can scroll it), **Where each unit's MAP
+  comes from** and **Days by where the rain came from** (disclosures, with
+  full-height targets),
   the **WR2012 check** when the project has a reference (`Wr2012Panel`,
   `#res-wr2012`, helpers in `runs/wr2012.ts`): the scaling rule and factor,
   the deviation flag in words (not colour alone), the MAR table (overlapping

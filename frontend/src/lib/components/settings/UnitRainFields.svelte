@@ -17,7 +17,8 @@
 
 	let {
 		value = $bindable(),
-		last = $bindable(null),
+		// No fallback: bound to an unset draft.kept key, a fallback would throw (props_invalid_value).
+		last = $bindable(),
 		readonly = false,
 		nodes = []
 	}: {
