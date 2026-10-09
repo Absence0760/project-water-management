@@ -315,7 +315,14 @@ runs and accumulations are real) can't be decided without the client.
       accumulation check of its own. Trigger: the hydrologist's answer, or
       the client's first per-unit run once part B's feeds and part D's
       settings land. Also left: `verify/` ports §2.4h (part E of #482); the
-      run window still follows the catchment rain series.
+      run window still follows the catchment rain series; and a seasonal
+      outlook's members (§2.15) run their season on the analogue's
+      catchment rain, so a unit off the MAP ratio runs its season at the
+      catchment level. The durable fix: each unit's season rain from the
+      base run's `rain_unit` on the analogue days (a per-unit forecast
+      record the chain reads first), with an outlook invariant that an
+      analogue equal to the history reproduces the base run's unit rain.
+      Trigger: the first per-unit project that runs an outlook.
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic

@@ -80,10 +80,18 @@ function checkRange(f: ScaledFactor, r: FactorRange): FactorRange {
 	return { low: r.low, high: r.high };
 }
 
+interface PlanCase {
+	setting: number;
+	label: string;
+	ops: ScenarioOp[];
+	/** A change no scenario op makes, applied after the ops (the units' MAPs under per-unit rain, engine ≥ 1.78.0). */
+	adjust?: (input: ModelInput) => ModelInput;
+}
+
 interface Plan {
 	factor: SensitivityFactor;
-	low: { setting: number; label: string; ops: ScenarioOp[] };
-	high: { setting: number; label: string; ops: ScenarioOp[] };
+	low: PlanCase;
+	high: PlanCase;
 	notes: string[];
 }
 
@@ -101,21 +109,40 @@ export function sensitivityPlan(
 	const nodes = input.model.nodes;
 	const plans: Plan[] = [];
 	const skipped: { factor: SensitivityFactor; reason: string }[] = [];
-	const scaled = (f: ScaledFactor, make: (k: number) => ScenarioOp[], notes: string[]): Plan => ({
+	const scaled = (f: ScaledFactor, make: (k: number) => ScenarioOp[], notes: string[], adjust?: (k: number) => PlanCase['adjust']): Plan => ({
 		factor: f,
-		low: { setting: ranges[f].low, label: fmtFactor(ranges[f].low), ops: make(ranges[f].low) },
-		high: { setting: ranges[f].high, label: fmtFactor(ranges[f].high), ops: make(ranges[f].high) },
+		low: { setting: ranges[f].low, label: fmtFactor(ranges[f].low), ops: make(ranges[f].low), ...(adjust ? { adjust: adjust(ranges[f].low) } : {}) },
+		high: { setting: ranges[f].high, label: fmtFactor(ranges[f].high), ops: make(ranges[f].high), ...(adjust ? { adjust: adjust(ranges[f].high) } : {}) },
 		notes
 	});
 
 	// Rain: every rain series the project has, the same factor, so CHIRPS's bias-correction factors are unchanged.
 	// A land unit's own rain records too (engine ≥ 1.78.0, docs/model.md §2.4h), so a per-unit run's rain moves with the rest.
-	const unitKeys = Object.keys(input.series ?? {})
-		.filter((k) => parseUnitRainSeriesKey(k) !== null)
-		.sort() as UnitRainSeriesKey[];
+	// A unit's CHIRPS levelled by its MAP would cancel the scaling (its mean annual rain scales with it), so under per-unit
+	// rain the units' MAPs and the gauge's MAP scale by the same factor: every rule's rain then moves by it, and the ratio
+	// unit MAP ÷ gauge MAP stays put.
+	const perUnit = s.unitRain?.mode === 'perUnit';
+	const unitKeys = perUnit
+		? (Object.keys(input.series ?? {})
+				.filter((k) => parseUnitRainSeriesKey(k) !== null)
+				.sort() as UnitRainSeriesKey[])
+		: [];
 	const rainKinds = [...RAIN_KINDS, ...unitKeys].filter((k) => (input.series as Record<string, DailySeries | undefined>)?.[k]?.values.some((v) => typeof v === 'number' && v > 0));
 	if (rainKinds.length) {
-		plans.push(scaled('rain', (k) => rainKinds.map((kind) => ({ op: 'series.scale', kind, factor: k }) as ScenarioOp), [`${rainKinds.length} rain series scaled`]));
+		const maps = perUnit ? nodes.filter((n) => typeof n.mapMm === 'number').length : 0;
+		const scaleMaps = (k: number) => (x: ModelInput): ModelInput => ({
+			...x,
+			settings: { ...x.settings, unitRain: { ...x.settings.unitRain!, ...(typeof x.settings.unitRain?.gaugeMapMm === 'number' ? { gaugeMapMm: x.settings.unitRain.gaugeMapMm * k } : {}) } },
+			model: { ...x.model, nodes: x.model.nodes.map((n) => (typeof n.mapMm === 'number' ? { ...n, mapMm: n.mapMm * k } : n)) }
+		});
+		plans.push(
+			scaled(
+				'rain',
+				(k) => rainKinds.map((kind) => ({ op: 'series.scale', kind, factor: k }) as ScenarioOp),
+				[`${rainKinds.length} rain series scaled`, ...(maps ? [`${maps} unit MAP${maps === 1 ? '' : 's'} scaled with them`] : [])],
+				perUnit ? scaleMaps : undefined
+			)
+		);
 	} else skipped.push({ factor: 'rain', reason: 'the project has no rain' });
 
 	// Pan coefficient: GR4J's PE under pe.kind 'pan' only.
@@ -204,10 +231,10 @@ export function sensitivityRuns(input: ModelInput, opts: SensitivityOptions = {}
 	let done = 1;
 	opts.onProgress?.({ done, total });
 
-	const runCase = (factor: SensitivityFactor, c: Plan['low']): SensitivityCase => {
+	const runCase = (factor: SensitivityFactor, c: PlanCase): SensitivityCase => {
 		const applied = applyScenario(input, c.ops);
 		if (applied.problems.length) throw new Error(`${SENSITIVITY_FACTOR_LABELS[factor]} ${c.label}: ${applied.problems.join('; ')}`);
-		const v = siteValues(runModelWithoutChecks(applied.input));
+		const v = siteValues(runModelWithoutChecks(c.adjust ? c.adjust(applied.input) : applied.input));
 		done++;
 		opts.onProgress?.({ done, total });
 		return { setting: c.setting, label: c.label, values: v.values };

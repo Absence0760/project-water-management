@@ -28,7 +28,7 @@ import { alignFlow } from '../prepare';
 import { arealRainFactors, calibrationSeriesKey, CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, fillPlanOutletEwr, naturalAtOutlet, naturalReaches, pickObservedKind } from '../run';
 import { calibrationSiteIndex } from './site';
-import { requireCatchmentAreaKm2 } from '../runoff/area';
+import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
@@ -480,7 +480,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 				const q = traces[k]!.qMm;
 				const buf = unitBuffers![k]!.runoffM3Day;
 				for (let t = 0; t < n; t++) {
-					buf[t] = q[t]! * u.areaKm2 * 1000;
+					buf[t] = q[t]! * u.areaKm2 * MM_KM2_TO_M3;
 					natural[t] = natural[t]! + buf[t]!;
 				}
 			});

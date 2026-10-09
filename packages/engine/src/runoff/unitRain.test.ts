@@ -15,7 +15,13 @@ import { checkForecastPrefix, withForecastTail } from '../testing/forecastInvari
 import { checkInvariants, checkOrderInvariance, sameOutput } from '../testing/invariants';
 import { checkResume } from '../testing/warmstartInvariants';
 import { applyScenario } from '../scenario/overrides';
-import { sensitivityRuns } from '../uncertainty/sensitivity';
+import { sensitivityPlan, sensitivityRuns } from '../uncertainty/sensitivity';
+import { SENSITIVITY_RANGES } from '../uncertainty/sensitivityVerdict';
+import { ensembleContext, resolveEnsembleOptions } from '../uncertainty/ensemble';
+import { validateScenarioOps } from '../scenario/ops';
+import { runModelCapturing, runModelFrom } from '../run';
+import { ModelStateMismatchError } from '../warmstart/snapshot';
+import { randomInput, withUnitRain as withUnitRainRecords } from '../testing/fuzz';
 import { gr4j } from './gr4j';
 import { simulateRunoff, runoffForcing } from './simulate';
 import { chirpsMeanAnnual, unitRainFingerprintChanged, unitRainFingerprintError, unitRainFingerprintOfSummary } from './unitRain';
@@ -350,8 +356,101 @@ describe('scenarios and sensitivity reach a unit’s own rain', () => {
 		expect(r.input.series['rain_catchment_mm@A']!.values[0]).toBe((input.series['rain_catchment_mm@A']!.values[0] as number) * 2);
 		expect(applyScenario(input, [{ op: 'series.scale', kind: 'rain_chirps_mm@nowhere' as never, factor: 2 }]).problems).toHaveLength(1);
 		const rain = sensitivityRuns(input).factors.find((f) => f.factor === 'rain')!;
-		expect(rain.notes).toEqual(['4 rain series scaled']);
+		expect(rain.notes).toEqual(['4 rain series scaled', '3 unit MAPs scaled with them']);
 	});
+
+	it('the rain sensitivity moves every unit’s rain by its factor, a MAP-levelled CHIRPS included', () => {
+		const input = everyRule();
+		delete input.settings.unitRain!.gaugeMapMm; // C on rule 3, levelled by its MAP
+		const central = runModel(input);
+		expect(unitOf(central, 'C').factorSource).toBe('chirpsMap');
+		const plan = sensitivityPlan(input, central, SENSITIVITY_RANGES).plans.find((p) => p.factor === 'rain')!;
+		const k = plan.high.setting;
+		const high = runModel(plan.high.adjust!(applyScenario(input, plan.high.ops).input));
+		for (const u of central.summary.unitRain!.units) expect(unitOf(high, u.nodeId).rainMm, u.nodeId).toBeCloseTo(u.rainMm * k, 6);
+	});
+
+	it('series.scale takes a unit’s own record and refuses other keyed series', () => {
+		const { errors } = validateScenarioOps([
+			{ op: 'series.scale', kind: 'rain_catchment_mm@A', factor: 1.1 },
+			{ op: 'series.scale', kind: 'rain_chirps_mm@B', factor: 1.1 },
+			{ op: 'series.scale', kind: 'rain_catchment_mm@', factor: 1.1 },
+			{ op: 'series.scale', kind: 'flow_observed_m3s@G', factor: 1.1 }
+		]);
+		expect(errors.map((e) => e.slice(0, 13))).toEqual(['ops[2].kind: ', 'ops[3].kind: ']);
+	});
+
+	it('the ensemble’s CHIRPS-only member drops the units’ own gauges', () => {
+		const input = everyRule();
+		set(input, 'rain_chirps_mm', rainOf(0.6));
+		const { options } = resolveEnsembleOptions(input, { members: 30, rainSources: ['recorded', 'chirps'] });
+		const ctx = ensembleContext(input, options);
+		expect(Object.keys(ctx.chirps!.series).filter((k) => k.includes('@'))).toEqual(['rain_chirps_mm@A', 'rain_chirps_mm@C']);
+		expect(unitOf(runModel(ctx.chirps!), 'A').rule).toBe('unitChirps');
+	});
+});
+
+describe('more of the per-unit run', () => {
+	it('the catchment runoff coefficient is the units’ runoff over their rain', () => {
+		const out = runModel(everyRule());
+		const units = out.summary.unitRain!.units;
+		const runoff = units.reduce((a, u) => a + u.runoffM3, 0);
+		const rain = units.reduce((a, u) => a + u.rainMm * u.areaKm2 * 1000, 0);
+		expect(out.summary.catchment.runoffCoefficient).toBeCloseTo(runoff / rain, 9);
+	});
+
+	it('land cover reduces a unit’s own runoff; the share still sets its low-flow threshold', () => {
+		const x = everyRule();
+		x.model.landCover = [{ id: 'lc', nodeId: 'B', coverClass: 'pine', areaKm2: 3, densityPct: 1, factors: null }];
+		const out = runModelChecked(x);
+		expect(out.summary.verification!.checks.every((c) => c.passed)).toBe(true);
+		const own = col(out, 'runoff_natural', 'B')!;
+		const red = col(out, 'landcover_reduction', 'B')!;
+		const I = col(out, 'runoff', 'B')!;
+		expect(red.some((v) => v > 0)).toBe(true);
+		for (const t of [0, 50, 900]) expect(I[t]! + red[t]!).toBeCloseTo(own[t]!, 6);
+	});
+
+	it('a resume refuses a snapshot from the other forcing, as a model-state mismatch', () => {
+		const per = everyRule();
+		const { snapshot } = runModelCapturing(per, '2017-01-01');
+		const catchmentRain = everyRule();
+		catchmentRain.settings.unitRain = { mode: 'catchment' };
+		expect(() => runModelFrom(snapshot, catchmentRain)).toThrow(ModelStateMismatchError);
+		const { snapshot: plain } = runModelCapturing(catchmentRain, '2017-01-01');
+		expect(() => runModelFrom(plain, per)).toThrow(ModelStateMismatchError);
+	});
+
+	it('a fit records how a gauge unit’s backup CHIRPS is levelled, so a moved MAP factor flags the forcing', () => {
+		const a = everyRule();
+		a.model.nodes[1]!.mapMm = 650; // A: its own gauge, its CHIRPS levelled by its MAP on the gauge's gaps
+		a.model.nodes[1]!.mapSource = 'invented';
+		delete a.settings.unitRain!.gaugeMapMm;
+		const b = structuredClone(a);
+		b.model.nodes[1]!.mapMm = 900;
+		const fa = unitRainFingerprintOfSummary(runModel(a).summary.unitRain)!;
+		const fb = unitRainFingerprintOfSummary(runModel(b).summary.unitRain)!;
+		expect(fa.units[0]).toMatchObject({ rule: 'unitGauge', factor: 1, chirpsSource: 'map' });
+		expect(unitRainFingerprintChanged(fa, fb)).toBe(true);
+		expect(unitRainFingerprintChanged(fa, structuredClone(fa))).toBe(false);
+	});
+
+	it('off is identical to the bit on random networks, unit records and MAPs in the input or not', () => {
+		for (let seed = 1; seed <= 25; seed++) {
+			const plain = randomInput(seed);
+			let before: string;
+			try {
+				before = JSON.stringify(runModel(plain));
+			} catch {
+				continue;
+			}
+			for (const unitRain of [null, { mode: 'catchment' as const }]) {
+				const off = withUnitRainRecords(randomInput(seed), seed);
+				off.settings.unitRain = unitRain;
+				expect(JSON.stringify(runModel(off)), `seed ${seed}`).toBe(before);
+			}
+		}
+	}, 120_000);
 });
 
 describe('chirpsMeanAnnual', () => {

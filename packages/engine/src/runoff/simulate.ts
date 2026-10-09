@@ -3,7 +3,7 @@
 import { monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import { apanDailyMm, hasDailyApanValue } from '../evaporation/apanDaily';
 import { arealRainFactors, gr4jPeMonthlyMm, type ArealRain, type PeInput, type ProjectSettings } from '../project';
-import { requireCatchmentAreaKm2 } from './area';
+import { MM_KM2_TO_M3, requireCatchmentAreaKm2 } from './area';
 import { gr4j } from './gr4j';
 import { GR4J_PARAMS, type Gr4jParams } from './params';
 import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
@@ -169,7 +169,6 @@ export function resolveWarmupDays(v: unknown, warnings: string[]): number {
 	return 365;
 }
 
-const MM_KM2_TO_M3 = 1000; // 1 mm over 1 km² = 1 000 m³
 
 export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const warnings: string[] = [];
@@ -240,6 +239,8 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warmupDays: number, warnings: string[]): NaturalFlowInput | null {
 	if (ctx.chirpsCorrection === undefined) throw new Error('per-unit rain needs the run\u2019s CHIRPS correction in the run context');
 	const w = ctx.warm;
+	// A snapshot of catchment rain can't resume here (run.ts refuses it first, as a ModelStateMismatchError).
+	if (w?.resume !== undefined && !w.resumeUnits) throw new Error('the snapshot holds one catchment runoff state; this run forces each unit with its own rain');
 	const built = unitRainForcing(
 		{
 			settings: ctx.settings,
@@ -265,7 +266,6 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		...(w?.resumeUnits ? { initial: w.resumeUnits } : {}),
 		...(w?.captureAt !== undefined ? { captureAt: w.captureAt } : {})
 	});
-	if (w?.resume !== undefined && !w.resumeUnits) throw new Error('the snapshot holds one catchment runoff state; this run forces each unit with its own rain');
 	// Node-id order (unitRainForcing's), so the sums are the same to the bit however the nodes are listed.
 	const area = units.reduce((s, u) => s + u.areaKm2, 0);
 	const naturalFlowM3Day = new Float64Array(days);

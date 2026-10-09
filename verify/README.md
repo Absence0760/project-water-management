@@ -182,6 +182,8 @@ rows (`capReached`, `limitBound`, `scaled`) within the same tolerance.
 them; diff.py refuses an input that uses one. Tracked as one item in
 docs/followups.md § Verification ("`verify/` phase 2b").
 
+- runoff from each unit's own rain (`settings.unitRain` `perUnit`), §2.4h
+  (issue #482; its port is part E of that issue);
 - Reserve rule tables (and audit A1–A7), §2.9c–d;
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;

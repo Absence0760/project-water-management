@@ -2225,12 +2225,15 @@ The catchment's GR4J series are the units' area-weighted means
 units' area, every day, as before; each unit closes its own balance too
 (the runoff self-check, `checkRunoffBalance`, checks both, and that natural
 flow is the units' runoff summed each day). The catchment runoff
-coefficient (W1) reads the units' rain.
+coefficient (W1), the water account's rain memo (§2.11b) and the
+verification water balance read the units' rain (`rain_used`), the rain
+the natural flow was made from. `rain_areal` (§2.4g) isn't written: GR4J
+doesn't run on it.
 
 **What stays on the catchment rain.** Irrigation demand's effective rain
 and the rain threshold (§2.3), rain on the dams (§2.7a), the WR2012 check
-and its calibration penalty (§2.10c), the data checks (§2.10a, §2.10d) and
-`rain_final`: field-scale rain and the record's own checks, as with the
+and its calibration penalty (§2.10c), the data checks (§2.10a, §2.10d,
+the plausibility checks' runoff ratios included) and `rain_final`: field-scale rain and the record's own checks, as with the
 areal correction (§2.4g). This keeps the client regression suite's demand
 columns unchanged.
 
@@ -2267,19 +2270,30 @@ at the fit site. Each evaluation runs GR4J once per land unit into the
 plan's local-inflow buffers, with the same products in the same order as a
 run, so a scored day is `runModel`'s to the bit. A fit records the per-unit
 forcing (`fitRecord.forcing.unitRain`, `UnitRainFingerprint`: the setting
-and each unit's rule, record and factors; absent = catchment rain, as every
-fit before it). Turning per-unit rain on or off, another gauge MAP or MAP
-period, and (from a run's summary, `FitForcingNow.unitRain`) a unit's rule,
-record or factor moving by more than 2 % are "Forcing changed since fit".
+and each unit's rule, record and factors, its CHIRPS level included, which
+also fills a gauge unit's gaps; absent = catchment rain, as every fit before
+it). Turning per-unit rain on or off, another gauge MAP or MAP period, and
+(from a run's summary, `FitForcingNow.unitRain`) a unit's rule, record,
+CHIRPS level or factor moving by more than 2 % are "Forcing changed since
+fit". The API's fit-record schema validates the field with
+`unitRainFingerprintError`.
 
 **Elsewhere.** Firm yield (§2.13) runs on the same per-unit runoff. A
 model-state snapshot (§2.16) holds each unit's GR4J state and pins each
 unit's rule and factors (`runoff.units`, `runoff.unitRecipes`), as it pins
-the CHIRPS factors, so a resumed run is the uninterrupted one to the bit.
-`series.scale` (scenarios) may scale a unit's own rain record, and the
-sensitivity runs' rain ±10 % (§2.10g) scale every unit record too. The
-uncertainty ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as
-it drops the catchment gauge. `verify/` (the independent cross-check) lists
+the CHIRPS factors, so a resumed run is the uninterrupted one to the bit; a
+snapshot of the other forcing is refused (`ModelStateMismatchError`).
+`series.scale` (scenarios) may scale a unit's own rain record; on a unit
+whose CHIRPS its MAP levels, scaling the CHIRPS changes nothing (its mean
+annual rain scales with it, and the MAP sets the level). The sensitivity
+runs' rain factor (§2.10g) therefore scales every rain record and, under
+per-unit rain, every unit's MAP and the gauge MAP by the same factor, so
+every unit's rain moves by it and the MAP ratios stay put. The uncertainty
+ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as it drops the
+catchment gauge. A seasonal outlook's member (§2.15) runs its season on the
+analogue's catchment rain as the forecast, so a unit off the MAP ratio runs
+its season at the catchment level, not at its own (a follow-up:
+followups.md § Hydrologist). `verify/` (the independent cross-check) lists
 `perUnit` as unsupported until it is ported from this section.
 
 **Performance.** A synthetic 12-unit catchment with daily rain from 1981
@@ -2304,6 +2318,8 @@ and 200 ms.
   checks (§2.4c, §2.4d) run on the catchment gauge only;
 - the run window still follows the catchment's rain series (§2.1), so a
   project needs a catchment series or a set simulation period.
+- the EWR split and the land cover's low-flow threshold stay on the flow
+  shares, while each unit's runoff is its own (engine-audit.md U1).
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 

@@ -42,7 +42,7 @@ import { cmpStr } from '../order';
 import { gr4j } from './gr4j';
 import type { Gr4jParams } from './params';
 import { simulateRunoff, type RunoffForcing, type RunoffTrace } from './simulate';
-import { isLandUnit } from './area';
+import { isLandUnit, MM_KM2_TO_M3 } from './area';
 import { recipeLevel } from './unitRainFingerprint';
 
 export { isLandUnit, perUnitAreaKm2 } from './area';
@@ -191,9 +191,8 @@ export function unitRainRecipes(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 
 				const span = `${mean.years[0]}–${mean.years[mean.years.length - 1]}`;
 				if (!mean.inPeriod)
 					warnings.push(
-						`${unit}: its CHIRPS has fewer than ${UNIT_MAP_MIN_YEARS} complete calendar years in the MAP period ${period.start} to ${period.end}, so its MAP factor averages every complete year of the record (${mean.years.length}, ${span})`
+						`${unit}: its CHIRPS has fewer than ${UNIT_MAP_MIN_YEARS} complete calendar years in the MAP period ${period.start} to ${period.end}, so its MAP factor averages every complete year of the record (${mean.years.length}, ${span}${mean.years.length < UNIT_MAP_MIN_YEARS ? `, still fewer than ${UNIT_MAP_MIN_YEARS}` : ''})`
 					);
-				else if (mean.years.length < UNIT_MAP_MIN_YEARS) warnings.push(`${unit}: its CHIRPS MAP factor rests on ${mean.years.length} complete calendar year${mean.years.length === 1 ? '' : 's'} (${span}), fewer than ${UNIT_MAP_MIN_YEARS}`);
 				if (chirps.clamped)
 					warnings.push(`${unit}: its MAP ÷ its CHIRPS mean annual rain is ${fmt(own)} (${map} ÷ ${Math.round(mean.meanAnnualMm)} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(factor)} (clamped)`);
 			} else {
@@ -388,7 +387,7 @@ export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing
 				exchangeMm: sum(tr.exchangeMm),
 				storageStartMm: tr.storageStartMm,
 				storageEndMm: tr.storageEndMm,
-				runoffM3: flowMm * x.areaKm2 * 1000,
+				runoffM3: flowMm * x.areaKm2 * MM_KM2_TO_M3,
 				runoffCoefficient: rainMm > 0 ? flowMm / rainMm : null
 			};
 		})

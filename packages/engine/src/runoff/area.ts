@@ -1,6 +1,9 @@
 import { unitRainError, type ModelInput, type NetworkNode, type UnitRainSettings } from '../project';
 import { cmpStr } from '../order';
 
+/** 1 mm over 1 km² = 1 000 m³. */
+export const MM_KM2_TO_M3 = 1000;
+
 /**
  * Explicit catchment area, else the sum of the farm areas (the workbook's
  * rFarmSpec_AreaTotal). Under settings.unitRain `perUnit` the sum of the land

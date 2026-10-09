@@ -60,7 +60,7 @@ import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
 import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
-import { naturalFlowFor, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
+import { naturalFlowFor, perUnitAreaKm2, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	AREAL_RAIN_COLUMN,
 	arealRainFactors,
@@ -311,6 +311,9 @@ function runNetwork(
 				}
 			: undefined;
 	if (resume && resume.runoff.model !== settings.runoffModel) throw new ModelStateMismatchError('input', `the snapshot holds a ${resume.runoff.model} runoff model's state; the run uses ${settings.runoffModel}`);
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h) holds one state per land unit, catchment rain one.
+	if (resume && !!resume.runoff.units !== (perUnitAreaKm2(input) !== null))
+		throw new ModelStateMismatchError('input', resume.runoff.units ? 'the snapshot holds each unit’s runoff state (runoff from each unit’s own rain); this run forces the catchment rain' : 'the snapshot holds the catchment’s one runoff state; this run forces each unit with its own rain');
 	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, chirpsCorrection, ...(runoffWarm ? { warm: runoffWarm } : {}) });
 	if (nf.naturalFlowM3Day.length !== days) {
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
@@ -620,7 +623,8 @@ function runNetwork(
 	for (const s of nf.nodeSeries ?? []) push(s.nodeId, s.key, s.label, s.unit, s.values);
 	// No value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
-	if (areal && catchmentRain) push(null, AREAL_RAIN_COLUMN.key, AREAL_RAIN_COLUMN.label, AREAL_RAIN_COLUMN.unit, catchmentRain.map((v) => v ?? NaN));
+	// Not under per-unit rain (engine ≥ 1.78.0): GR4J runs on each unit's own rain there (`rain_used`, `rain_unit`).
+	if (areal && catchmentRain && !nf.unitRain) push(null, AREAL_RAIN_COLUMN.key, AREAL_RAIN_COLUMN.label, AREAL_RAIN_COLUMN.unit, catchmentRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
 	// Where each day's rain came from: with rain-source periods their column, else (engine ≥ 1.27.0) the same pick as rain_final.
@@ -1089,7 +1093,8 @@ function runNetwork(
 		}),
 		natural,
 		outflow: simOutflow,
-		rainMm: catchmentRain,
+		// Under per-unit rain (engine ≥ 1.78.0, §2.4h) the rain the natural flow was made from: the units' own, area-weighted.
+		rainMm: nf.unitRain ? (nf.series?.find((x) => x.key === 'rain_used')?.values ?? catchmentRain) : catchmentRain,
 		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
 		sites: attribution.sites.map((site, si) => {
 			const outlet = si === 0 && topo.outflow >= 0;
