@@ -230,14 +230,14 @@ describe('no-flow days and users served in full while a site fails (§2.9e)', ()
 	});
 
 	it('with the charge on the rule table, the site is judged on the table’s day (basis ruleTable)', () => {
-		// A table asking for 0.9 Mm³ a month (constant): flow 1000 m³/day ≈ 0.03 Mm³ fails every complete month.
+		// A table asking for 0.7 Mm³ a month (constant): flow 1000 m³/day ≈ 0.03 Mm³ fails every complete month.
 		const rule: EwrRuleTable = {
 			siteNodeId: null,
 			source: 'Invented',
 			component: 'total',
 			unit: 'mcm',
 			points: [10, 90],
-			ewr: Array.from({ length: 12 }, () => [0.9, 0.9]),
+			ewr: Array.from({ length: 12 }, () => [0.7, 0.7]),
 			naturalSource: 'table',
 			natural: Array.from({ length: 12 }, () => [0.01, 0.005]),
 			scale: 1

@@ -3290,9 +3290,11 @@ readable by anyone. The rules:
   live in `data/client-catchment/`. `scripts/guards/check_client_terms.mjs`
   checks against the list: pre-commit (staged changes) and commit-msg hooks
   via `pre-commit install`, `pnpm check:terms` for every tracked file and
-  path, and `--history` for every ref. It is a no-op without the list (CI,
-  outside contributors) and never prints a term, only the file, line and
-  term number. Add a term to the list the moment a new client name turns up.
+  path, and `--history` for every ref. It looks for the list beside the
+  checkout and, in a linked git worktree (including one under
+  `.claude/worktrees/`), beside the main checkout too. It is a no-op without
+  the list (CI, outside contributors, cloud sessions) and never prints a
+  term, only the file, line and term number. Add a term to the list the moment a new client name turns up.
   The history was rewritten once (2026-09, `git filter-repo --replace-text`)
   to take the names out of every past commit, and the GitHub repo recreated
   from it, because GitHub keeps a PR's commits under `refs/pull/*` forever.

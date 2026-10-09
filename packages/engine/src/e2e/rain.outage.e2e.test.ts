@@ -232,7 +232,7 @@ describe('a long outage, then days of 0 or blank, then the reading', () => {
 	});
 
 	it('an outage in the middle of a flagged zero run: §2.4c fills the zeros before it, CHIRPS the outage, the window takes the zeros after it', () => {
-		// 70 zeros (Nov–Jan, flagged: 60+ wet-season days), 10 blanks, 20 zeros, then 80 mm.
+		// 70 zeros (Nov–Jan, flagged: 60+ wet-season days), 10 blanks, 20 zeros, then one wet day (80).
 		const f = fixture('2017-11-01', [...zeros(70), ...blanks(10), ...zeros(20)], 80);
 		const out = runModel(catchment(f.series));
 		const w0 = f.r - 20;
