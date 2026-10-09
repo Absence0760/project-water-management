@@ -81,7 +81,7 @@
 
 <fieldset class="plain excl" aria-describedby="{uid}-hint">
 	<legend>{legend} <HelpTip key={helpKey} label={helpLabel} /></legend>
-	<p class="hint" id="{uid}-hint">{hint}</p>
+	<p class="hint explain" id="{uid}-hint">{hint}</p>
 	{#if list.length}
 		<ol class="rows">
 			{#each list as x, i (i)}

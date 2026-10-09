@@ -15,9 +15,18 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { anySaveBar, fitSummary, header, isProjectPatch, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
+/** The side index at 1440 px (issue #468): every panel's heading, under its task. */
+const SETTINGS_INDEX: [string, string[]][] = [
+	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
+	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions']],
+	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
+	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
+	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]
+];
 const AFTER_FORM = 'Data feeds, API keys and scheduled reports save as you change them, not with the save bar’s Save changes.';
 
-test('the header says there is no fit record and jumps to Fit automatically; the menu is grouped and reaches the panels after the form', async ({ page, owner }) => {
+test('the header says there is no fit record and jumps to Fit the parameters; the side index is grouped by task and reaches the panels after the form', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Settings page');
@@ -32,43 +41,40 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 	// The old intro paragraph is gone: the header and the menu's groups say it.
 	await expect(page.getByText(/^Grouped by what each setting drives/)).toHaveCount(0);
 
-	// The menu's three groups, each a list named for screen readers, in page order.
+	// The index's groups, each a named list, in page order; each link is its panel's heading, word for word.
 	const menu = settingsMenu(page);
-	for (const [name, first, last] of [
-		['Model inputs', 'Demand', 'Data quality'],
-		['How results are read', 'Outcome matrix', 'Evidence'],
-		['Automation & access', 'Automation & access', 'Automation & access']
-	] as const) {
-		const links = menu.getByRole('list', { name, exact: true }).getByRole('link');
-		await expect(links.first()).toHaveText(first);
-		await expect(links.last()).toHaveText(last);
+	for (const [name, links] of SETTINGS_INDEX) {
+		await expect(menu.getByRole('list', { name, exact: true }).getByRole('link')).toHaveText(links);
 	}
-	// Automatic runs, Data feeds, API keys and Scheduled reports behind one link, so the bar fits two rows at 1280 px.
-	await expect(menu.getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automation & access']);
+	for (const [, links] of SETTINGS_INDEX) {
+		for (const name of links) {
+			const id = (await menu.getByRole('link', { name, exact: true }).getAttribute('href'))!.slice(1);
+			await expect(page.locator(`#${id}`).getByRole('heading', { level: 2 }).first()).toHaveText(new RegExp(`^${name}`));
+		}
+	}
 
-	// The jump lands on the fit panel, below the sticky menu, and the menu marks it.
+	// The jump lands on the fit panel, at the top of the window beside the index, and the index marks it.
 	await jump.click();
 	await expect(page).toHaveURL(/\?tab=settings#set-fit$/);
 	const fit = page.locator('#set-fit');
 	await expect(fit.getByRole('heading', { name: 'Fit automatically' })).toBeInViewport();
-	expect((await fit.boundingBox())!.y).toBeGreaterThanOrEqual((await menu.boundingBox())!.y + (await menu.boundingBox())!.height - 1);
-	await expect(menu.getByRole('link', { name: 'Fit automatically' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Fit the parameters' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu).toBeInViewport();
 
-	// The panels after the form: the line says they save on their own; the menu's group link lands on the first of them.
+	// The panels after the form: the line says they save on their own; each has its own link.
 	await expect(page.getByText(AFTER_FORM, { exact: true })).toBeVisible();
-	const automation = menu.getByRole('link', { name: 'Automation & access' });
-	await automation.click();
+	await menu.getByRole('link', { name: 'Automatic runs' }).click();
 	await expect(page).toHaveURL(/#set-auto$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Automatic runs' })).toBeInViewport();
-	await expect(automation).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Automatic runs' })).toHaveAttribute('aria-current', 'location');
 
 	// Back returns to the fragment before, on the same page.
 	await page.goBack();
 	await expect(page).toHaveURL(/#set-fit$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
 
-	// Each panel keeps its own anchor, so a link to it still lands, with the group's link marked. Data feeds is a
-	// lazy chunk: its anchor is on a wrapper that is always there.
+	// Each panel keeps its own anchor, so a link to it still lands, with its link marked. Data feeds is a lazy
+	// chunk: its anchor is on a wrapper that is always there.
 	for (const [id, name] of [
 		['set-report-schedules', 'Scheduled reports'],
 		['set-api-keys', 'API keys'],
@@ -77,8 +83,10 @@ test('the header says there is no fit record and jumps to Fit automatically; the
 		await page.goto(`/projects/${project.id}?tab=settings#${id}`);
 		// Not exact: a panel's heading may carry its ⓘ tip ("API keys About API keys"); the id scopes it.
 		await expect(page.locator(`#${id}`).getByRole('heading', { level: 2, name })).toBeInViewport();
-		await expect(automation).toHaveAttribute('aria-current', 'location');
+		await expect(menu.getByRole('link', { name, exact: true })).toHaveAttribute('aria-current', 'location');
 	}
+	// The index sticks beside the last panel too.
+	await expect(menu).toBeInViewport();
 });
 
 test('a link into a group (?tab=calibration, a note’s #set- link) opens the page on that group, below the menu', async ({ page, owner }) => {
@@ -87,7 +95,7 @@ test('a link into a group (?tab=calibration, a note’s #set- link) opens the pa
 	const project = await createProject(page.request, 'Settings links');
 	await page.goto(`/projects/${project.id}?tab=calibration#set-ewr`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Settings & calibration' })).toBeVisible();
-	const ewr = page.getByRole('heading', { name: 'Environmental water requirement (EWR)' });
+	const ewr = page.getByRole('heading', { name: 'EWR', exact: true });
 	await expect(ewr).toBeInViewport();
 	await expect(ewr).toBeFocused();
 	const menu = (await settingsMenu(page).boundingBox())!;
@@ -186,7 +194,7 @@ test('a viewer reads where the parameters came from, with nothing to fit and no 
 	await expect(header(v).getByRole('link', { name: /^Fit (the parameters|record)$/ })).toHaveCount(0);
 	await expect(v.getByText(/save as you change them/)).toHaveCount(0);
 	// The same one group link (API keys, an owner's panel, isn't on the page for a viewer).
-	await expect(settingsMenu(v).getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automation & access']);
+	await expect(settingsMenu(v).getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automatic runs', 'Data feeds', 'Scheduled reports']);
 	await expect(v.locator('#set-api-keys')).toHaveCount(0);
 	await expect(anySaveBar(v)).toHaveCount(0);
 });
@@ -217,7 +225,7 @@ test.describe('with a fitted example catchment', () => {
 		const fitted = /^GR4J · fitted \d{1,2} [A-Z][a-z]{2} \d{4} · KGE′ \d\.\d\d in calibration$/;
 		await expect(fitSummary(page)).toHaveText(fitted);
 		// The header, the menu and the first panel are on the first screen.
-		await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeInViewport();
+		await expect(page.getByRole('heading', { level: 2, name: 'Simulation period' })).toBeInViewport();
 
 		// A fit writes nine decimals; the field shows three and keeps the value (nothing to save).
 		const x1 = page.getByLabel(/^Production store capacity X1/);
@@ -370,13 +378,13 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
 	expect((await names('set-flow')).slice(0, 4)).toEqual([
-		'Flow calibration (rain → natural flow)',
+		'Flow calibration',
 		'Areal rainfall correction',
 		'GR4J potential evaporation',
 		'Evaporation from the map'
 	]);
 	expect(await names('set-rain')).toEqual([
-		'Rain gaps and CHIRPS',
+		'Rain gaps',
 		'CHIRPS bias correction and quantile map',
 		'CHIRPS fit period',
 		'Zero-rain runs in the catchment rain',

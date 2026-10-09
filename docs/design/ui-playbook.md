@@ -483,6 +483,26 @@ section it belongs to, with the example that taught it.
   Getting started pill kept its steps' buttons in a `hidden` box, and a check
   that the header's controls share one row (`locator('button, a.btn')`) read
   them at top 0. Render the content only while open (`MapSetupPill.svelte`).
+- **A long form gets an index beside it, its values in its heads and its
+  explanations behind a switch.** Settings & calibration was 12,300 px at
+  1440 (22,000 on a phone) of panels in model order under a two-row pill bar,
+  every field carrying a two-to-five-line explanation, and the operator lost
+  a file box under a 12-row grid ("my god is it difficult to navigate",
+  2026-10-08, issue #468). It became: the panels regrouped by task with the
+  menu as a sticky side column from 80rem of content (`SectionNav`'s rail,
+  a layout option of the shared menu rather than a fork, the bar kept below
+  it), a find box that jumps to a setting by name and opens what folds it,
+  one line under each heading saying what the panel is set to now, and the
+  static explanations hidden until a remembered switch is ticked (each
+  field's ⓘ stays, and the hidden text is still its `aria-describedby`):
+  10,000 px, and every panel reachable in one click. Two rules from it: an
+  explanation and a state line look alike, so mark only what explains
+  (`.explain`) and leave warnings, "now" figures and required notes alone
+  ("With no rule declared…" was inside an explanation and had to move out);
+  and measure the widest content beside a rail before choosing where it
+  starts (the A-pan row with its year total overflowed by 23 px beside a
+  13.5rem rail until the month cells' padding went to 0.1rem and the rail
+  to 13rem; at 1280 it would scroll, so the bar stays there).
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve
@@ -721,7 +741,7 @@ section it belongs to, with the example that taught it.
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
 | A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
-| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `SUPPLY_NAV`, `series/sections.ts`); at most two rows, the rest in More (ui.md § On this page menu) |
+| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `SUPPLY_NAV`, `series/sections.ts`); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width, and `find` for a find-a-setting box (Settings, issue #468; ui.md § On this page menu) |
 
 Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
 fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run

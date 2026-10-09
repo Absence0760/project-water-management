@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, navFitCount } from './sectionNav';
+import { activeSectionId, findEntries, foldText, matchesQuery, navFitCount } from './sectionNav';
 
 describe('navFitCount', () => {
 	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
@@ -71,5 +71,40 @@ describe('activeSectionId', () => {
 
 	it('has nothing to mark before any section is on the page', () => {
 		expect(activeSectionId([], 68)).toBeNull();
+	});
+});
+
+describe('the find box', () => {
+	it('matches every word of the query anywhere in the name, ignoring case and accents', () => {
+		expect(matchesQuery('Pan coefficient', 'pan coef')).toBe(true);
+		expect(matchesQuery('Pan coefficient', 'COEF pan')).toBe(true);
+		expect(matchesQuery('Droëvlei dam', 'droevlei')).toBe(true);
+		expect(matchesQuery('Pan coefficient', 'pan rain')).toBe(false);
+		expect(matchesQuery('Pan coefficient', '   ')).toBe(false);
+		expect(foldText('  Days in\n  February ')).toBe('days in february');
+	});
+
+	it('lists matching sections and the settings in them, in page order, once per name, up to the limit', () => {
+		const sections = [
+			{ id: 'a', label: 'Demand' },
+			{ id: 'b', label: 'Flow calibration' }
+		];
+		const settings = [
+			{ sectionId: 'b', text: 'Warm-up (days)' },
+			{ sectionId: 'a', text: 'A-pan evaporation mm' },
+			{ sectionId: 'a', text: 'Dam evaporation factor (× A-pan)' },
+			{ sectionId: 'a', text: 'Dam evaporation factor (× A-pan)' },
+			{ sectionId: 'b', text: 'GR4J potential evaporation' },
+			{ sectionId: 'b', text: 'Flow calibration' }
+		];
+		expect(findEntries(sections, settings, 'evaporation')).toEqual([
+			{ sectionId: 'a', text: 'A-pan evaporation mm', index: 1 },
+			{ sectionId: 'a', text: 'Dam evaporation factor (× A-pan)', index: 2 },
+			{ sectionId: 'b', text: 'GR4J potential evaporation', index: 4 }
+		]);
+		// A section's own name, not again as a setting (its heading is in the scan too).
+		expect(findEntries(sections, settings, 'flow')).toEqual([{ sectionId: 'b', text: 'Flow calibration', index: -1 }]);
+		expect(findEntries(sections, settings, 'evaporation', 2)).toHaveLength(2);
+		expect(findEntries(sections, settings, ' ')).toEqual([]);
 	});
 });

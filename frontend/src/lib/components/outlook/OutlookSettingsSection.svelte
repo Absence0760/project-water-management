@@ -11,7 +11,7 @@
 	import { monthName } from '$lib/format/months';
 	import type { OutlookSettings } from '$lib/api/types';
 
-	let { value = $bindable(), readonly, error }: { value: OutlookSettings; readonly: boolean; error: string | null } = $props();
+	let { value = $bindable(), readonly, error, summary = null }: { value: OutlookSettings; readonly: boolean; error: string | null; summary?: string | null } = $props();
 
 	const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 	const d = DEFAULT_OUTLOOK_SEASON;
@@ -45,8 +45,9 @@
 <section class="panel" aria-labelledby="outlook-set-h-t" data-testid="outlook-settings">
 	<div class="panel-head">
 		<h2 id="outlook-set-h"><span id="outlook-set-h-t">Seasonal outlook</span> <HelpTip key="seasonal-outlook" /></h2>
-		<span class="muted small">The season the Runs tab’s outlook runs, its planning share and its review date</span>
 	</div>
+	{#if summary}<p class="summary" data-testid="summary-outlook">{summary}</p>{/if}
+	<p class="hint muted explain">The season the Runs tab’s outlook runs, its planning share and its review date.</p>
 	<fieldset class="group">
 		<legend>
 			Season <HelpTip key="outlook-season" />
@@ -79,7 +80,7 @@
 				</div>
 			</div>
 		{/if}
-		<p class="hint">
+		<p class="hint explain">
 			The decision date is the season’s first day: the outlook starts from the run’s state at the end of the day before, the latest such date the
 			run reaches. The season ends on the end date (the next one after the decision date).
 		</p>
@@ -98,7 +99,7 @@
 				<NumberInput id="outlook-share" decimals={1} min={0} max={100} scale={100} disabled={readonly} bind:value={value.planningShare} />
 			</div>
 		{/if}
-		<p class="hint">
+		<p class="hint explain">
 			The outlook names the highest demand level that met the river’s requirement in at least this share of past years. It reports that trade-off; the
 			WUA decides the level.
 		</p>
@@ -123,7 +124,7 @@
 				</div>
 			</div>
 		{/if}
-		<p class="hint">
+		<p class="hint explain">
 			The day in the season the WUA reads its dams and reviews the level. Each outlook also draws review triggers for it: for each band of dam storage
 			on that day, the highest demand level that met the river’s requirement in at least the planning share of past years.
 		</p>

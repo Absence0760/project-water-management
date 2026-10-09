@@ -84,7 +84,7 @@
 <div class="rain-source" data-testid="rain-source">
 	<div class="head">
 		<h3 class="title">Rain source periods <HelpTip key="settings.rainSource" /></h3>
-		<span class="hint">
+		<span class="hint explain">
 			Over each period, catchment rain comes from the alternative catchment gauge × its month’s factor instead of the catchment series, which then stays out
 			of every factor fit. A day the gauge has no reading falls through to the fallback, then forecast rain.
 		</span>
@@ -182,7 +182,7 @@
 									<span class="hint" id="{uid}-ft{i}-h">WY {waterYearLabel(ref.toWaterYear)}</span>
 								</div>
 							</div>
-							<span class="hint">
+							<span class="hint explain">
 								Factor = (catchment ÷ reference over the reference era) ÷ (gauge ÷ reference over the period): the gauge lands at the catchment series’ level
 								in the years it was trusted. Pick a reference that doesn’t contain the gauge.
 							</span>
@@ -233,7 +233,7 @@
 									<NumberInput id="{uid}-qw{i}" min={QM_WET_DAY_MM_MIN} max={QM_WET_DAY_MM_MAX} step={0.1} disabled={readonly} value={q.wetDayMm} onchange={(v) => v !== null && patch(i, { quantileMap: { ...q, wetDayMm: v } })} />
 								</div>
 							</div>
-							<span class="hint">
+							<span class="hint explain">
 								The gauge’s wet days are mapped, month by month, onto the catchment series’ wet days in those years (a month with fewer than {QM_MIN_WET_DAYS} wet days
 								uses its three-month season, else keeps the factor alone), then scaled back to the month’s total: the spread of the falls changes, the volume
 								doesn’t. Each run reports the share of rain on heavy days (≥ {HEAVY_DAY_MM} mm) either way.

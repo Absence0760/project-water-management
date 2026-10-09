@@ -68,7 +68,7 @@
 
 <fieldset class="plain rules" aria-describedby="{uid}-hint" data-testid="calibration-rules">
 	<legend><h3 class="title">Calibration rules <HelpTip key="settings.calibrationRules" label="About the calibration rules" /></h3></legend>
-	<p class="hint" id="{uid}-hint">
+	<p class="hint explain" id="{uid}-hint">
 		Automated calibration makes its choices by these rules, saved before any fit is seen: which water years to leave out, which fits to try and which
 		one to keep. It only runs on the saved rules, and saving a change raises the revision.
 	</p>

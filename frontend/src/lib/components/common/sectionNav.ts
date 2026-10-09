@@ -6,6 +6,17 @@ export interface NavSection {
 	label: string;
 	/** Marks the link with a dot and "(has a problem)" for screen readers. */
 	problem?: boolean;
+	/**
+	 * A link to another page instead of a panel on this one (`?tab=series`): it is
+	 * listed like the rest but never marked as the section being read.
+	 */
+	href?: string;
+	/**
+	 * The ids of the panels after it that this one link stands for (Settings'
+	 * "Automation & access" on the bar): the link is marked while any of them is
+	 * read, and the find box searches them as part of it.
+	 */
+	covers?: string[];
 }
 
 export interface NavGroup {
@@ -107,4 +118,59 @@ export function navFitCount(items: NavBox[], fit: NavFit): number {
 		if (rowCount([...boxes.slice(0, k), more], fit.avail, fit.lead) <= fit.rows) return k;
 	}
 	return 0;
+}
+
+/** A setting's name for the menu's find box: its words, lower case, without accents. */
+export function foldText(text: string): string {
+	return text
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+/** Whether every word of `query` starts a word of (or is inside) `text`: "pan coef" finds "Pan coefficient". */
+export function matchesQuery(text: string, query: string): boolean {
+	const words = foldText(query).split(' ').filter(Boolean);
+	if (!words.length) return false;
+	const hay = foldText(text);
+	return words.every((w) => hay.includes(w));
+}
+
+/** One thing the find box can list: a section, or a setting inside one. */
+export interface FindEntry {
+	/** The section it is in. */
+	sectionId: string;
+	/** What it is called on the page. */
+	text: string;
+	/** Its index in the page's list of settings, or -1 for the section itself. */
+	index: number;
+}
+
+/**
+ * What the find box lists for `query`, in page order: each section whose name
+ * matches, and each setting whose name does (once per section and name), at
+ * most `limit` in all.
+ */
+export function findEntries(
+	sections: { id: string; label: string }[],
+	settings: { sectionId: string; text: string }[],
+	query: string,
+	limit = 40
+): FindEntry[] {
+	if (!foldText(query)) return [];
+	const out: FindEntry[] = [];
+	for (const sec of sections) {
+		if (matchesQuery(sec.label, query)) out.push({ sectionId: sec.id, text: sec.label, index: -1 });
+		const seen = new Set<string>();
+		settings.forEach((st, i) => {
+			if (st.sectionId !== sec.id) return;
+			const key = foldText(st.text);
+			if (seen.has(key) || key === foldText(sec.label) || !matchesQuery(st.text, query)) return;
+			seen.add(key);
+			out.push({ sectionId: sec.id, text: st.text, index: i });
+		});
+	}
+	return out.slice(0, limit);
 }

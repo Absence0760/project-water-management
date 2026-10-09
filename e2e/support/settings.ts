@@ -40,3 +40,13 @@ export async function saveSettings(page: Page) {
 	await expect(page.getByTestId('savebar-announcement')).toHaveText('Changes saved.');
 	await expect(anySaveBar(page)).toHaveCount(0);
 }
+
+/**
+ * Turns on Settings' "Explain each setting under its field" (issue #468): the explanations under the
+ * fields are hidden until it is on (it is remembered in the browser's storage, so a fresh context starts off).
+ */
+export async function showExplanations(page: Page) {
+	const sw = page.getByRole('checkbox', { name: 'Explain each setting under its field' });
+	await sw.check();
+	await expect(sw).toBeChecked();
+}

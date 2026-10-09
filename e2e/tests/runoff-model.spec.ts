@@ -18,7 +18,7 @@ test('GR4J is the only runoff model: no picker, its parameters save, and a run r
 	const project = await seedRunnableProject(page.request, 'GR4J settings');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 
-	const flow = page.getByRole('region', { name: 'Flow calibration (rain → natural flow)' });
+	const flow = page.getByRole('region', { name: 'Flow calibration', exact: true });
 	await expect(flow.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
 	await expect(flow).toContainText('The legacy b023 workbook model was removed in engine 1.0.0');
 	// Nothing to choose, and none of the legacy model's parameters.

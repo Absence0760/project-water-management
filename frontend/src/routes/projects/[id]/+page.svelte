@@ -967,6 +967,7 @@
 								chirpsSource={chirpsSourceOf(series)}
 								observedOrigins={observedOriginsOf(series)}
 								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
+								flowRecordId={series?.find((x) => x.kind === 'flow_observed_m3s' || x.kind === 'flow_logger_m3s')?.id ?? null}
 								readonly={!canEdit}
 								{onProjectChange}
 							/>
