@@ -6,7 +6,10 @@
 // with every feature. Measure, driven from the keyboard, writes its distance
 // and area in words; the distance is checked against the listed points. The
 // River network (#345): its reaches listed biggest first, one picked and
-// added as the project's river, which the list then marks on the map. Axe
+// added as the project's river, which the list then marks on the map. The
+// hydrological units (each parcel named by its unit), the MAP grid (the
+// synthetic grid's points in view, with their range and source) and the
+// CHIRPS grid (its points in view), each its own toggle in the URL. Axe
 // with the layers on and while measuring, light and dark.
 import { readFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
@@ -14,6 +17,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openLayers, openMap, parcelsGeoJson, showTab, uploadThroughSheet } from '../support/map.ts';
+import { loadSyntheticMapGrid } from '../support/mapGrid.ts';
 import { layoutSettled } from '../support/reflow.ts';
 
 const layers = (page: Page) => page.getByTestId('map-layers');
@@ -120,6 +124,50 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await page.goBack();
 	await expect(page).not.toHaveURL(/layers=/);
 	await expect(page.getByTestId('map-rivers')).toHaveCount(0);
+});
+
+test('the hydrological units, the MAP grid and the CHIRPS grid: each a toggle in the URL, what they draw said beside the map', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticMapGrid();
+	const project = await seedRunnableProject(page.request, 'Map layers grids');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+	await uploadThroughSheet(page, null, 'parcels.geojson', parcelsGeoJson());
+	await mapReady(page);
+
+	await openLayers(page);
+	const status = layers(page).getByRole('status');
+	// The units: each parcel named by the unit it is linked to, listed by name.
+	await layers(page).getByRole('checkbox', { name: 'Hydrological units' }).check();
+	await expect(page).toHaveURL(/[?&]layers=units(&|$)/);
+	await expect(page.getByTestId('map-unit-list').getByRole('button')).toHaveText([/^Lower farm/, /^Upper farm/]);
+	await expect(status).toHaveText('2 hydrological units labelled.');
+	// A unit in the list shows its polygon.
+	await page.getByTestId('map-unit-list').getByRole('button', { name: /^Upper farm/ }).click();
+	await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
+
+	// The MAP grid: the synthetic grid's points in the view (the catchment, 21.3–21.4 E, is inside it), their range and source.
+	await openLayers(page);
+	await layers(page).getByRole('checkbox', { name: 'MAP grid' }).check();
+	await expect(page).toHaveURL(/[?&]layers=units%2Cmapgrid(&|$)|[?&]layers=units,mapgrid(&|$)/);
+	await expect(page.getByTestId('map-mapgrid-summary')).toHaveText(
+		// The e2e site has no glyphs, so the values aren't written on the map and the box says so.
+		/^[\d\s,]+ points in view from synthetic \(0\.01° cells\): \d+ mm to \d+ mm\. Synthetic test data, never real rainfall\. The map has no fonts for labels here, so it shows the points without their values\.$/
+	);
+	await expect(page.getByTestId('map-mapgrid-source')).toContainText('Source: Invented MAP grid for tests and demos');
+	await expect(status).toContainText(/MAP grid points shown\./);
+
+	// The CHIRPS grid: its 0.05° cells' centres in view, from the grid alone.
+	await layers(page).getByRole('checkbox', { name: 'CHIRPS grid' }).check();
+	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(%2C|,)chirps(&|$)/);
+	await expect(page.getByTestId('map-chirps-summary')).toHaveText(/^[\d\s,]+ CHIRPS v3 grid points? in view, each the centre of a 0\.05° cell/);
+	await expect(page.getByTestId('map-layers-toggle')).toHaveAccessibleName('Layers (3 on)');
+
+	// Back turns the last one off; the others stay.
+	await page.goBack();
+	await expect(page).toHaveURL(/layers=units(%2C|,)mapgrid(&|$)/);
+	await expect(page.getByTestId('map-chirps')).toHaveCount(0);
+	await expect(page.getByTestId('map-mapgrid-summary')).toBeVisible();
 });
 
 /** The fit with the Layers tab picked: the page doesn't scroll, the tab's panel ends inside the side column and scrolls in its box. */
