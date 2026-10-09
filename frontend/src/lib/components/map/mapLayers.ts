@@ -1,14 +1,17 @@
 // The Map tab's optional layers (issue #326 A6, the relief, the river network
-// #345; docs/ui.md § Map): which are on (`layers=` in the URL, a comma list,
-// so a view can be shared and Back undoes a toggle), and the bbox the
-// quaternary outlines and the river network are asked for around the
-// project's features. Pure (mapLayers.test.ts).
-import type { MapFeature } from '$lib/api/types';
+// #345, the hydrological units' labels, the MAP grid and the CHIRPS grid;
+// docs/ui.md § Map): which are on (`layers=` in the URL, a comma list, so a
+// view can be shared and Back undoes a toggle), the bbox the quaternary
+// outlines and the river network are asked for around the project's
+// features, and what the units, MAP grid and CHIRPS layers draw. Pure
+// (mapLayers.test.ts).
+import type { MapFeature, MapPosition } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 import { boundsOfAll } from './mapData';
+import { interiorPoint } from './pieces';
 
 /** The layers the tab can add, in the order the URL lists them. */
-export const MAP_LAYERS = ['quaternaries', 'rivers', 'relief'] as const;
+export const MAP_LAYERS = ['quaternaries', 'rivers', 'relief', 'units', 'mapgrid', 'chirps'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** The layers `layers=` turns on (unknown names ignored). */
@@ -137,7 +140,7 @@ export interface LayerState {
  * many it shows, then the reach picked. A failure is said by its own alert,
  * so it adds nothing here.
  */
-export function layersStatus(qt: LayerState, rv: LayerState, picked: string | null): string {
+export function layersStatus(qt: LayerState, rv: LayerState, picked: string | null, more: readonly (string | null)[] = []): string {
 	const one = (s: LayerState, loading: string, one: string, many: string) => {
 		if (!s.on || s.idle || s.failed) return null;
 		if (s.count === null) return loading;
@@ -146,8 +149,115 @@ export function layersStatus(qt: LayerState, rv: LayerState, picked: string | nu
 	return [
 		one(qt, 'Loading the quaternaries…', 'quaternary', 'quaternaries'),
 		one(rv, 'Loading the river network…', 'reach', 'reaches'),
-		rv.on && picked ? `Picked ${picked}.` : null
+		rv.on && picked ? `Picked ${picked}.` : null,
+		...more
 	]
 		.filter(Boolean)
 		.join(' ');
+}
+
+// ---------------------------------------------------------------------------
+// Hydrological units (docs/maps.md § Hydrological units layer)
+// ---------------------------------------------------------------------------
+
+/** A unit's label: the polygon it stands on, where to write it, and what. */
+export interface UnitLabel {
+	featureId: string;
+	/** The linked unit's name, else the polygon's own, else "Unnamed area". */
+	label: string;
+	/** The polygon's own name when it differs from the unit's (said beside it in the list). */
+	polygonName: string | null;
+	areaKm2: number | null;
+	at: MapPosition;
+}
+
+/**
+ * The hydrological units' polygons (the farm parcels: a unit's sub-catchment,
+ * docs/maps.md § Uploads) as the layer labels them, by label: each named by
+ * its unit when linked to one, written at a point inside the polygon (its
+ * interior point, else its centre), so a concave unit's label lands on it.
+ */
+export function unitLabels(features: readonly MapFeature[]): UnitLabel[] {
+	return features
+		.filter((f) => f.kind === 'farm_parcel' && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'))
+		.map((f) => {
+			const label = f.nodeName || f.name || 'Unnamed area';
+			const at = interiorPoint(f.geometry as Extract<MapFeature['geometry'], { type: 'Polygon' | 'MultiPolygon' }>) ?? f.center;
+			return { featureId: f.id, label, polygonName: f.name && f.name !== label ? f.name : null, areaKm2: f.areaM2 === null ? null : f.areaM2 / 1e6, at };
+		})
+		.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// ---------------------------------------------------------------------------
+// The MAP grid (docs/maps.md § MAP grid)
+// ---------------------------------------------------------------------------
+
+/** The widest view the MAP grid is asked for (the server's MAP_GRID_BBOX_MAX_DEG). */
+export const MAP_GRID_BBOX_MAX_DEG = 2;
+/** The grid a view is snapped out to before the MAP grid is asked for it, so small pans share one answer. */
+export const MAP_GRID_VIEW_SNAP_DEG = 0.02;
+
+/**
+ * The bbox the MAP grid is asked for: the map's view, snapped outward to
+ * MAP_GRID_VIEW_SNAP_DEG. Null when no view is known or it is wider than
+ * MAP_GRID_BBOX_MAX_DEG a side (zoom in). The server says when a view holds
+ * more of the grid's points than one answer carries.
+ */
+export function mapGridViewBbox(view: readonly [number, number, number, number] | null): [number, number, number, number] | null {
+	if (!view || !view.every(Number.isFinite)) return null;
+	const g = MAP_GRID_VIEW_SNAP_DEG;
+	const r = (v: number) => Math.round(v * 1e4) / 1e4;
+	const w = r(Math.max(-180, Math.floor(view[0] / g) * g));
+	const s = r(Math.max(-90, Math.floor(view[1] / g) * g));
+	const e = r(Math.min(180, Math.ceil(view[2] / g) * g));
+	const n = r(Math.min(90, Math.ceil(view[3] / g) * g));
+	if (e <= w || n <= s || e - w > MAP_GRID_BBOX_MAX_DEG || n - s > MAP_GRID_BBOX_MAX_DEG) return null;
+	return [w, s, e, n];
+}
+
+/** A MAP value as the map and the list write it: whole mm. */
+export const mapLabel = (mm: number) => `${fmtNum(mm, 0, true)} mm`;
+
+// ---------------------------------------------------------------------------
+// The CHIRPS grid (docs/maps.md § CHIRPS grid)
+// ---------------------------------------------------------------------------
+
+/** CHIRPS v3's cell: 0.05°, corners on whole multiples of 0.05° from 180° W and 60° N (the feed's grid, backend feeds/config.ts). */
+export const CHIRPS_CELL_DEG = 0.05;
+/** The most CHIRPS points the layer draws (about a 50 × 50 block): wider views say zoom in. */
+export const CHIRPS_MAX_POINTS = 2_500;
+
+/** One CHIRPS cell in view: its centre and its square (west, south, east, north). */
+export interface ChirpsCell {
+	lon: number;
+	lat: number;
+	square: [number, number, number, number];
+}
+
+/**
+ * The CHIRPS v3 cells whose centres lie in the map's view (west, south, east,
+ * north), from the grid's definition alone (no data is read: the points say
+ * where CHIRPS's values are, not what they are). Null when the view holds
+ * more than `max` (zoom in) or no view is known.
+ */
+export function chirpsCells(view: readonly [number, number, number, number] | null, max = CHIRPS_MAX_POINTS): ChirpsCell[] | null {
+	if (!view || !view.every(Number.isFinite)) return null;
+	const d = CHIRPS_CELL_DEG;
+	// Centres sit at k × d + d/2 (the grid's corners are whole multiples of d).
+	const k0 = Math.ceil((view[0] - d / 2) / d - 1e-9);
+	const k1 = Math.floor((view[2] - d / 2) / d + 1e-9);
+	const j0 = Math.ceil((view[1] - d / 2) / d - 1e-9);
+	const j1 = Math.floor((view[3] - d / 2) / d + 1e-9);
+	const count = Math.max(0, k1 - k0 + 1) * Math.max(0, j1 - j0 + 1);
+	if (count > max) return null;
+	const r = (v: number) => Math.round(v * 1e6) / 1e6;
+	const out: ChirpsCell[] = [];
+	for (let j = j0; j <= j1; j++) {
+		for (let k = k0; k <= k1; k++) {
+			const lon = r(k * d + d / 2);
+			const lat = r(j * d + d / 2);
+			out.push({ lon, lat, square: [r(lon - d / 2), r(lat - d / 2), r(lon + d / 2), r(lat + d / 2)] });
+		}
+	}
+	return out;
 }

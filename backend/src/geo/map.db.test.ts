@@ -190,6 +190,24 @@ describe('a file mixing kinds, reviewed before it is saved (issue #326 D2)', () 
 		expect(await count()).toBe(0);
 	});
 
+	it('names and links sub-catchments whose names are only in `layer` (a QGIS merge), and saves nothing', async () => {
+		const qgis = JSON.stringify({
+			type: 'FeatureCollection',
+			features: [
+				{ type: 'Feature', properties: { layer: 'Upper farm', Area: 4.6 }, geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.02)] } },
+				{ type: 'Feature', properties: { layer: 'LOWER FARM', Area: 4.6 }, geometry: { type: 'Polygon', coordinates: [box(21.35, -33.69, 0.02)] } }
+			]
+		});
+		const res = await editor.call('POST', mixAt('/import/preview'), { fileName: 'subcatchments.geojson', text: qgis });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.problems).toEqual([]);
+		expect(res.body.features.map((f: Record<string, unknown>) => [f.name, f.kind, f.kindFrom, f.note, f.nodeId])).toEqual([
+			['Upper farm', 'farm_parcel', 'geometry', undefined, upper.id],
+			['LOWER FARM', 'farm_parcel', 'geometry', undefined, lower.id]
+		]);
+		expect(await count()).toBe(0);
+	});
+
 	it('refuses a kind that doesn’t fit a feature’s geometry, a node of the wrong kind and a second boundary, per feature, and saves nothing', async () => {
 		const res = await editor.call('POST', mixAt('/import'), {
 			fileName: 'mixed.geojson',

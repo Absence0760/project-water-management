@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Map tab: the Hydrological units, MAP grid and CHIRPS grid layers (MapLayers toggles, mapGridLayer state, mapStyle sources and layers, mapLayers helpers). Measured 1851 KB on main @ 7eaa8a8a and 1854 KB with this change locally (+3 KB); CI measured 1858 against 1857. Headroom after: ~2 KB on CI."
+}

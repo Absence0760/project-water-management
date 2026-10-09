@@ -45,7 +45,14 @@ import {
 	RESULT_FILL_OPACITY,
 	TERRAIN_ATTRIBUTION,
 	TERRAIN_SOURCE,
-	withAlpha
+	withAlpha,
+	unitsData,
+	mapGridData,
+	mapGridLayers,
+	MAP_RAMP,
+	chirpsData,
+	chirpsColour,
+	chirpsLayers
 } from './mapStyle';
 
 /** Relative luminance and contrast ratio (WCAG 2.2). */
@@ -157,7 +164,7 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), ...proposalLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', 'dem-channels', ...overlayLayers(dark).map((l) => l.id), 'units-casing', 'units-line', 'chirps-cell', 'chirps-point', 'mapgrid-point', ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
@@ -165,7 +172,10 @@ describe('overlay', () => {
 			rivers: { type: 'geojson', data: riverNetworkData(null) },
 			channels: { type: 'geojson', data: channelData(null) },
 			features: { type: 'geojson', data },
-			proposal: { type: 'geojson', data: proposalData(null) }
+			proposal: { type: 'geojson', data: proposalData(null) },
+			units: { type: 'geojson', data: unitsData(null) },
+			mapgrid: { type: 'geojson', data: mapGridData(null) },
+			chirps: { type: 'geojson', data: chirpsData(null) }
 		});
 	});
 
@@ -234,9 +244,13 @@ describe('labels (#326 A6): self-hosted glyphs, none without a glyphs URL', () =
 		}
 	});
 
-	it('with glyphs but no tiles, labels only the quaternaries (there are no place names to draw)', () => {
+	it('with glyphs but no tiles, labels only the quaternaries, the units and the MAP grid (there are no place names to draw)', () => {
 		const s = mapStyle(null, false, data, { glyphs });
-		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label']);
+		expect(s.layers.filter((l) => l.type === 'symbol').map((l) => l.id)).toEqual(['qt-label', 'units-label', 'mapgrid-label']);
+		// Without glyphs: no text anywhere, the points and outlines still drawn.
+		const bare = mapStyle(null, false, data);
+		expect(bare.layers.filter((l) => l.type === 'symbol')).toEqual([]);
+		expect(bare.layers.map((l) => l.id)).toEqual(expect.arrayContaining(['units-line', 'mapgrid-point', 'chirps-point']));
 	});
 
 	it('keeps every label at least 4.5:1 against its halo and against every basemap colour, light and dark', () => {
@@ -536,5 +550,59 @@ describe('attribution HTML (MapLibre sets it as innerHTML)', () => {
 		const html = riversCredit('" onmouseover="x', '<b>credit</b>');
 		expect(html).not.toMatch(/<b>|" onmouseover/);
 		expect(terrainSource('/t.pmtiles', '"><script>').attribution).not.toContain('<script>');
+	});
+});
+
+describe('hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md)', () => {
+	const square: MapFeature['geometry'] = { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] };
+	const base = { name: '', nodeId: null, nodeName: null, damPosition: null, properties: {}, center: [0.5, 0.5] as [number, number], sourceId: null, nonContributingM2: null, createdBy: null, createdAt: '', updatedAt: '', areaM2: 1 };
+
+	it('feeds the units source each labelled unit’s outline and its label point, nothing while off', () => {
+		const fs: MapFeature[] = [
+			{ ...base, id: 'u1', kind: 'farm_parcel', geometry: square },
+			{ ...base, id: 'b', kind: 'catchment_boundary', geometry: square }
+		];
+		expect(unitsData(null, fs).features).toEqual([]);
+		const d = unitsData([{ featureId: 'u1', label: 'Upper unit', at: [0.5, 0.5] }], fs);
+		expect(d.features).toEqual([
+			{ type: 'Feature', properties: { role: 'outline' }, geometry: square },
+			{ type: 'Feature', properties: { role: 'label', label: 'Upper unit' }, geometry: { type: 'Point', coordinates: [0.5, 0.5] } }
+		]);
+	});
+
+	it('feeds the MAP grid source each point with its MAP and its label in whole mm', () => {
+		expect(mapGridData([{ lon: 21.305, lat: -33.645, mapMm: 812.4 }]).features).toEqual([
+			{ type: 'Feature', properties: { mm: 812.4, label: '812 mm' }, geometry: { type: 'Point', coordinates: [21.305, -33.645] } }
+		]);
+		expect(mapGridData(null).features).toEqual([]);
+	});
+
+	it('colours the MAP points on a rising ramp, each ringed in the halo colour so both ends read on either basemap', () => {
+		const [point] = mapGridLayers(false, false).over;
+		expect(point!.paint).toMatchObject({ 'circle-stroke-color': labelColours(false).halo, 'circle-stroke-width': 1 });
+		expect(MAP_RAMP.map(([mm]) => mm)).toEqual([...MAP_RAMP.map(([mm]) => mm)].sort((a, b) => a - b));
+		for (const dark of [false, true]) {
+			const halo = labelColours(dark).halo;
+			// Each end of the ramp stands apart from the ring round it, or the ring from the basemap (WCAG 1.4.11, 3:1).
+			const ends = [MAP_RAMP[0]![1], MAP_RAMP[MAP_RAMP.length - 1]![1]];
+			for (const g of [basemapColours(dark).earth, basemapColours(dark).bg]) {
+				expect(Math.max(...ends.map((c) => contrast(c, halo)), contrast(halo, g)), `ramp on ${g}`).toBeGreaterThanOrEqual(3);
+			}
+		}
+	});
+
+	it('feeds the CHIRPS source each cell’s square and its centre, in an orange that stands out from the land (3:1)', () => {
+		const d = chirpsData([{ lon: 19.225, lat: -32.675, square: [19.2, -32.7, 19.25, -32.65] }]);
+		expect(d.features.map((f) => [f.properties.role, f.geometry.type])).toEqual([
+			['cell', 'Polygon'],
+			['point', 'Point']
+		]);
+		expect(d.features[0]!.geometry.coordinates).toEqual([[[19.2, -32.7], [19.25, -32.7], [19.25, -32.65], [19.2, -32.65], [19.2, -32.7]]]);
+		for (const dark of [false, true]) {
+			for (const g of [basemapColours(dark).bg, basemapColours(dark).earth, basemapColours(dark).green]) {
+				expect(contrast(chirpsColour(dark), g), `CHIRPS on ${g}`).toBeGreaterThanOrEqual(3);
+			}
+		}
+		expect(chirpsLayers(false).map((l) => l.id)).toEqual(['chirps-cell', 'chirps-point']);
 	});
 });
