@@ -3378,6 +3378,8 @@ export interface UnitRainProposal {
 	refused: { nodeId: string; name: string; reason: string }[];
 	/** Whether this caller may POST: feeds are set up by owners (data_feed's RLS); editors see the proposal. */
 	canApply: boolean;
+	/** The most feeds the project can have, the catchment's included (backend feeds/routes.ts MAX_FEEDS): the server's, so the UI never keeps its own copy. */
+	maxFeeds: number;
 }
 
 /** POST …/feeds/chirps/from-units body: the product (absent: the units' feeds' own, else rnl from 1981), the first day (absent: the product's first), and the units (absent: every proposed one). */

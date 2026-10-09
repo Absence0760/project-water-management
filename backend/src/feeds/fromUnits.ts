@@ -255,7 +255,7 @@ export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			const role = await requireRole(db, id, 'editor');
-			return c.json({ ...publicProposal(await plan(db, id, product)), canApply: role === 'owner' });
+			return c.json({ ...publicProposal(await plan(db, id, product)), canApply: role === 'owner', maxFeeds: MAX_FEEDS });
 		});
 	})
 	.post('/:id/feeds/chirps/from-units', async (c) => {

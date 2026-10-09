@@ -20,8 +20,7 @@ export interface ResultGroup {
 	sections: ResultSection[];
 }
 
-// unitRain: summary.unitRain (engine ≥ 1.78.0, issue #482), read through unitRainOf until the engine's RunSummary carries it.
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast'> & { unitRain?: unknown };
+type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain'>;
 
 export function resultGroups(summary: SectionInput): ResultGroup[] {
 	return [

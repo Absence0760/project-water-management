@@ -108,19 +108,16 @@ export function appliedWords(r: Pick<UnitRainApplyResult, 'created' | 'updated' 
 	return `${s.charAt(0).toUpperCase()}${s.slice(1)}. They run on the next schedule, or now with “Run now” on each feed.${skipped}`;
 }
 
-/** The most feeds a project can have, the catchment's included (backend feeds/routes.ts MAX_FEEDS). */
-export const MAX_FEEDS = 20;
-
 /**
  * When creating every proposed unit's feed would pass the project's feed cap:
  * what to say, plainly, or null. The server refuses the whole request then
  * (409 feed_limit), so this says so before the button is pressed.
  */
-export function feedLimitNote(p: Pick<UnitRainProposal, 'units'>, feedCount: number): string | null {
+export function feedLimitNote(p: Pick<UnitRainProposal, 'units' | 'maxFeeds'>, feedCount: number): string | null {
 	const creating = p.units.filter((u) => u.action === 'create').length;
-	if (!creating || feedCount + creating <= MAX_FEEDS) return null;
-	const room = Math.max(0, MAX_FEEDS - feedCount);
-	return `A project can have at most ${MAX_FEEDS} feeds, the catchment’s included. It has ${plural(feedCount, 'feed')}, and this would add ${fmtNum(creating)}, so it is refused as it stands: there is room for ${fmtNum(room)} more. Remove feeds the project no longer needs first.`;
+	if (!creating || feedCount + creating <= p.maxFeeds) return null;
+	const room = Math.max(0, p.maxFeeds - feedCount);
+	return `A project can have at most ${p.maxFeeds} feeds, the catchment’s included. It has ${plural(feedCount, 'feed')}, and this would add ${fmtNum(creating)}, so it is refused as it stands: there is room for ${fmtNum(room)} more. Remove feeds the project no longer needs first.`;
 }
 
 /** Errors after which the proposal is out of date: the server's answer changed, so it is read again. */

@@ -16,6 +16,7 @@ import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { loadModelInput } from '../runs/execute.js';
+import { MAX_FEEDS } from './routes.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -87,6 +88,7 @@ describe('rain for each unit (from-units)', () => {
 		const p = (await s.owner.call('GET', at(s.pid))).body;
 		expect(p.product).toBe('rnl');
 		expect(p.canApply).toBe(true);
+		expect(p.maxFeeds).toBe(MAX_FEEDS);
 		expect(p.units).toHaveLength(1);
 		const u = p.units[0];
 		expect(u).toMatchObject({ nodeId: s.a.id, name: 'Unit A', featureId: f.id, feedId: null, seriesDays: 0, action: 'create' });

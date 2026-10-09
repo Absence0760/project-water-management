@@ -4,43 +4,17 @@
 // reports them in summary.unitRain (engine ≥ 1.78.0). Read defensively: a run
 // from before it has none, and the panel shows only when the summary carries
 // the field.
+import type { UnitRainSummary, UnitRainUnit } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
-/**
- * The parts of summary.unitRain the panel reads: a temporary copy of the
- * engine's UnitRainSummary (issue #482 part C, built in parallel). Once
- * RunSummary carries `unitRain`, import UnitRainSummary from
- * @water-management/engine here, and drop sections.ts's `unitRain?: unknown`.
- */
-export interface UnitRainResultUnit {
-	nodeId: string;
-	name: string;
-	areaKm2: number;
-	mapMm: number | null;
-	mapSource: string | null;
-	rule: 'unitGauge' | 'gaugeMap' | 'unitChirps' | 'catchment';
-	factor: number | null;
-	factorSource: 'gauge' | 'gaugeMap' | 'chirpsMap' | 'chirpsBias' | 'chirpsRaw' | 'catchment';
-	gaugeMapClamped?: boolean;
-	chirps?: { source: 'map'; clamped: boolean; ownFactor: number; meanAnnualMm: number; years: number[]; inPeriod: boolean } | { source: 'bias' } | { source: 'raw' } | null;
-	days?: { unitGauge: number; gaugeMap: number; unitChirps: number; catchment: number; forecast: number; none: number };
-	rainMm: number;
-	flowMm: number;
-	runoffM3?: number;
-	runoffCoefficient: number | null;
-}
-
-export interface UnitRainResult {
-	mode: 'perUnit';
-	gaugeMapMm: number | null;
-	gaugeMapSource: string | null;
-	mapPeriod: { start: string; end: string };
-	units: UnitRainResultUnit[];
-}
+/** summary.unitRain as the engine reports it (RunSummary.unitRain, engine ≥ 1.78.0). */
+export type UnitRainResultUnit = UnitRainUnit;
+export type UnitRainResult = UnitRainSummary;
 
 /** summary.unitRain when the run has it, in the shape the panel reads; null otherwise (an older run, or catchment rain). */
 export function unitRainOf(summary: unknown): UnitRainResult | null {
-	const u = (summary as { unitRain?: unknown } | null | undefined)?.unitRain as Partial<UnitRainResult> | undefined;
+	// A stored summary is JSON from whichever engine made the run: checked, not trusted to the type.
+	const u = (summary as { unitRain?: unknown } | null | undefined)?.unitRain as Partial<UnitRainResult> | null | undefined;
 	if (!u || typeof u !== 'object' || u.mode !== 'perUnit' || !Array.isArray(u.units)) return null;
 	return u as UnitRainResult;
 }

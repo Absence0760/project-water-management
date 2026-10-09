@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UnitRainProposal, UnitRainProposalUnit } from '$lib/api/types';
 import { feedsApi, type FeedHealth } from './feeds';
-import { appliedWords, feedLimitNote, MAX_FEEDS, sortUnitRows, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
+import { appliedWords, feedLimitNote, sortUnitRows, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
 
 const unit = (over: Partial<UnitRainProposalUnit> = {}): UnitRainProposalUnit => ({
 	nodeId: 'u1',
@@ -20,7 +20,7 @@ const unit = (over: Partial<UnitRainProposalUnit> = {}): UnitRainProposalUnit =>
 	action: over.feedId ? 'update' : 'create',
 	...over
 });
-const proposal = (units: UnitRainProposalUnit[], product: UnitRainProposal['product'] = 'rnl'): UnitRainProposal => ({ product, units, withoutPolygon: [], refused: [], canApply: true });
+const proposal = (units: UnitRainProposalUnit[], product: UnitRainProposal['product'] = 'rnl'): UnitRainProposal => ({ product, units, withoutPolygon: [], refused: [], canApply: true, maxFeeds: 20 });
 const ok: FeedHealth = { state: 'ok', stale: false, staleAfterDays: 7, reason: { code: 'ok', newest: '2026-09-30', checked: '2026-10-01' } };
 
 describe('unitRainRows', () => {
@@ -120,14 +120,15 @@ describe('unitRainBody under a skewed time zone (CLAUDE.md rule 7)', () => {
 });
 
 describe('feedLimitNote', () => {
-	it('says plainly when the new unit feeds would pass the 20-feed cap, and is silent within it', () => {
+	it('says plainly when the new unit feeds would pass the server’s feed cap, and is silent within it', () => {
 		const three = proposal([unit(), unit({ nodeId: 'u2' }), unit({ nodeId: 'u3', feedId: 'x', action: 'none' })]);
-		expect(MAX_FEEDS).toBe(20);
 		expect(feedLimitNote(three, 18)).toBeNull();
 		expect(feedLimitNote(three, 19)).toBe(
 			'A project can have at most 20 feeds, the catchment’s included. It has 19 feeds, and this would add 2, so it is refused as it stands: there is room for 1 more. Remove feeds the project no longer needs first.'
 		);
 		expect(feedLimitNote(proposal([unit({ feedId: 'x', action: 'update' })]), 20)).toBeNull();
+		// The cap is the server's: the same project under a higher one has room.
+		expect(feedLimitNote({ ...three, maxFeeds: 60 }, 19)).toBeNull();
 	});
 });
 

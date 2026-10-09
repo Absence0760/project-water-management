@@ -905,6 +905,17 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
 	});
 
+	it('accepts an optional unitRain fingerprint inside forcing (engine ≥ 1.78.0, issue #482), and refuses a malformed one', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const unit = { nodeId: 'u1', rule: 'gaugeMap', rainKey: 'rain_catchment_mm', factor: 1.2, factorSource: 'gaugeMap', gaugeMapFactor: 1.2, chirpsSource: 'map', chirpsFactor: 1.9 };
+		const unitRain = { mode: 'perUnit', gaugeMapMm: 650, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [unit] };
+		expect(ok({ ...record, forcing: { ...forcing, unitRain } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, unitRain: null } })).toBe(true);
+		expect(ok({ ...record, forcing })).toBe(true); // a fit on the catchment's rain records none
+		expect(ok({ ...record, forcing: { ...forcing, unitRain: { ...unitRain, mode: 'catchment' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, unitRain: { ...unitRain, mapPeriod: undefined } } })).toBe(false);
+	});
+
 	it('accepts an optional chirpsBiasCorrection inside forcing, and a forcing from before it without', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
 		expect(ok({ ...record, forcing })).toBe(true); // no chirpsBiasCorrection: a forcing from before it existed

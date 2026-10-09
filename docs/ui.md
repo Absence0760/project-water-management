@@ -6018,7 +6018,7 @@ part of the Settings tab's chunk; WP-2.10,
   sentence of what the button does, and the button itself, named by what it
   does: **Create 3 feeds**, **Update the feed**, **Create 2, update 1**
   (from each unit's `action`), in the panel's action row with Close. When
-  the new feeds would pass the project's 20-feed cap (the catchment's
+  the new feeds would pass the project's feed cap (the proposal's `maxFeeds`, 60; the catchment's
   included) a warning says so plainly, with the room left, before the button
   is pressed (`feedLimitNote`; the server refuses it, `feed_limit`). With
   every feed up to date it says so and offers no button; editors read "An

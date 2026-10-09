@@ -39,6 +39,7 @@ import {
 	MAP_MM_MIN,
 	UNIT_RAIN_MODES,
 	unitRainError,
+	unitRainFingerprintError,
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_METHODS,
 	resolveFitRecord,
@@ -894,7 +895,15 @@ export const FitRecord = z
 					.nullable()
 					.optional(),
 				// Engine ≥ 1.20.0 (issue #66): the data-quality rain-check limits the fit ran under. Optional, as above; absent = the defaults.
-				rainChecks: RainChecks.strict().optional()
+				rainChecks: RainChecks.strict().optional(),
+				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain, recorded only when on. Optional, as above; absent = catchment rain.
+				unitRain: z
+					.unknown()
+					.superRefine((v, ctx) => {
+						const err = unitRainFingerprintError(v);
+						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
+					})
+					.optional()
 			})
 			.strict()
 			.optional(),

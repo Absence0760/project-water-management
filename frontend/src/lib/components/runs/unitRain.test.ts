@@ -14,13 +14,22 @@ const unit = (over: Partial<UnitRainResultUnit> = {}): UnitRainResultUnit => ({
 	mapMm: 820,
 	mapSource: 'a synthetic MAP grid',
 	rule: 'gaugeMap',
+	rainKey: 'rain_catchment_mm',
 	factor: 1.25,
 	factorSource: 'gaugeMap',
+	gaugeMapFactor: 1.25,
+	gaugeMapOwnFactor: 1.25,
 	gaugeMapClamped: false,
 	chirps: null,
 	days: { unitGauge: 0, gaugeMap: 3000, unitChirps: 40, catchment: 0, forecast: 0, none: 2 },
 	rainMm: 9100,
+	petMm: 12_000,
+	aetMm: 7800,
 	flowMm: 1200,
+	exchangeMm: 0,
+	storageStartMm: 200,
+	storageEndMm: 300,
+	runoffM3: 12_000_000,
 	runoffCoefficient: 0.132,
 	...over
 });
@@ -47,7 +56,7 @@ describe('the factor in words', () => {
 	it('marks a factor held at the bound by the rule that used it', () => {
 		expect(factorClamped(unit({ gaugeMapClamped: true }))).toBe(true);
 		expect(factorClamped(unit({ rule: 'unitChirps', gaugeMapClamped: true, chirps: { source: 'raw' } }))).toBe(false);
-		expect(factorClamped(unit({ rule: 'unitChirps', chirps: { source: 'map', clamped: true, ownFactor: 4.6, meanAnnualMm: 200, years: [2001], inPeriod: true } }))).toBe(true);
+		expect(factorClamped(unit({ rule: 'unitChirps', chirps: { source: 'map', factor: 4, clamped: true, ownFactor: 4.6, meanAnnualMm: 200, years: [2001], inPeriod: true } }))).toBe(true);
 	});
 
 	it('writes the MAP period as years', () => {
@@ -63,7 +72,7 @@ describe('unitRainNotes', () => {
 				unit({ nodeId: 'a', name: 'A', rule: 'catchment', factor: null, factorSource: 'catchment' }),
 				unit({ nodeId: 'b', name: 'B', rule: 'catchment', factor: null, factorSource: 'catchment' }),
 				unit({ nodeId: 'c', name: 'C', gaugeMapClamped: true }),
-				unit({ nodeId: 'd', name: 'D', rule: 'unitChirps', factorSource: 'chirpsMap', chirps: { source: 'map', clamped: false, ownFactor: 1.1, meanAnnualMm: 700, years: [2001, 2002, 2003], inPeriod: false } }),
+				unit({ nodeId: 'd', name: 'D', rule: 'unitChirps', factorSource: 'chirpsMap', chirps: { source: 'map', factor: 1.1, clamped: false, ownFactor: 1.1, meanAnnualMm: 700, years: [2001, 2002, 2003], inPeriod: false } }),
 				unit({ nodeId: 'e', name: 'E', rule: 'unitChirps', factor: null, factorSource: 'chirpsRaw', chirps: { source: 'raw' } })
 			])
 		);
