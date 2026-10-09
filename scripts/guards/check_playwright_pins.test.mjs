@@ -156,7 +156,7 @@ test('a docker-compose file with no image line is a problem, not a pass', () => 
 test("the repo's docker-compose.yml pins Postgres, Mailpit and MinIO by digest", () => {
 	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 	const compose = readFileSync(join(root, 'docker-compose.yml'), 'utf8');
-	for (const name of ['postgres', 'axllent/mailpit', 'pgsty/minio']) assert.match(compose, new RegExp(`^\\s*image: ${name}:[^@\\s]+@sha256:[0-9a-f]{64}$`, 'm'), name);
+	for (const name of ['postgres', 'ghcr.io/axllent/mailpit', 'pgsty/minio']) assert.match(compose, new RegExp(`^\\s*image: ${name}:[^@\\s]+@sha256:[0-9a-f]{64}$`, 'm'), name);
 	assert.deepEqual(composeImageProblems(compose, 'docker-compose.yml'), []);
 });
 

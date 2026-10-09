@@ -190,10 +190,28 @@ jobs:
           fi
           find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t ~/apt-debs/ {} +
 
+      # MinIO comes from Docker Hub only (pgsty/minio), whose anonymous pull
+      # limit refused CI's runners (issue #492): the image e2e-build saves,
+      # by its pinned digest, when the cache has it; else one pull here.
+      - name: Restore the MinIO image
+        id: minio-image
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/service-images
+          key: minio-image-${{ hashFiles('docker-compose.yml') }}
+
       # The report PDF store for render.db.test.ts, from docker-compose.yml
       # on the local-dev port (:9002). Mail is in-memory under vitest.
       - name: Start MinIO
-        run: docker compose up -d --wait minio
+        env:
+          CACHED: ${{ steps.minio-image.outputs.cache-hit }}
+        run: |
+          if [ "$CACHED" = "true" ]; then
+            bash scripts/ci/service-image.sh load minio ~/service-images/minio.tar
+            docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio
+          else
+            docker compose up -d --wait minio
+          fi
 
       - name: DB tests
         run: pnpm test:backend:db
@@ -224,6 +242,30 @@ jobs:
 
       - name: Build the e2e site
         run: pnpm -C e2e build:site
+
+      # MinIO for every shard, pulled once per run here instead of once per
+      # shard: Docker Hub's anonymous pull limit refused 14 shards' pulls
+      # (issue #492). Pulled by docker-compose.yml's pinned digest, saved,
+      # cached by that file (so an unchanged pin pulls nothing), and handed
+      # to the shards and the DB job, which load it and never pull.
+      - name: Cache the MinIO image
+        id: minio-image
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/service-images
+          key: minio-image-${{ hashFiles('docker-compose.yml') }}
+
+      - name: Pull the MinIO image
+        if: steps.minio-image.outputs.cache-hit != 'true'
+        run: bash scripts/ci/service-image.sh save minio ~/service-images/minio.tar
+
+      - name: Upload the MinIO image
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: minio-image
+          path: ~/service-images/
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload the site
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -332,11 +374,21 @@ jobs:
           PGPASSWORD: water
         run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
 
+      - name: Download the MinIO image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: minio-image
+          path: ${{ runner.temp }}/service-images/
+
       # Server-side PDF reports (server-report.spec.ts): the worker stores the
       # PDF in MinIO and mails through Mailpit, both from docker-compose.yml
-      # on the same ports as local dev. That spec never skips in CI.
+      # on the same ports as local dev. That spec never skips in CI. MinIO is
+      # the image e2e-build pulled (loaded, never pulled here, issue #492);
+      # Mailpit comes from GHCR.
       - name: Start MinIO and Mailpit
-        run: docker compose up -d --wait minio mailpit
+        run: |
+          bash scripts/ci/service-image.sh load minio "$RUNNER_TEMP/service-images/minio.tar"
+          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio mailpit
 
       # Shards are packed by time, not count (e2e/README.md § CI): each one
       # plans the whole suite from `--list` and e2e/shard-timings.json and runs
