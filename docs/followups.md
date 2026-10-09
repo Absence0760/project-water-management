@@ -4034,8 +4034,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       14 % to 88 % within ½–2×, main stems from 0 to 19 of 66. The run also
       found the HTTP DEM reader failing on a kept-alive socket closed during
       a long routing (fixed: the read is sent once more). New classes, below.
-- [ ] **The larger-channel question suggests the wrong river at gauges**
-      (new in the gauge rerun). When a click sits on a DEM channel of its
+- [x] **The larger-channel question suggests the wrong river at gauges**
+      (new in the gauge rerun). **Obsolete (issue #472, 2026-10-09):** rules
+      3 and 4 are gone; the offer now comes only from the DEM's own 100×
+      channel, never a mapped reach's. When a click sits on a DEM channel of its
       own and the nearby reach's matching channel is offered (place.ts
       rules 3 and 4), "Use that channel" was wrong at all 13 such gauges
       and "Keep my point" right at 11: the reach was mostly another stream
@@ -4055,8 +4057,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       or Divide plan cut at its last window to a worker job, as Delineate
       does (delineation_request with a plan kind, the same aim). Trigger:
       a client catchment over about 1 000 km², or a Start refusal reported.
-- [ ] **No caveat on a gully snap with no reach within 1 km** (finding 7's
-      other half, still open after the gauge rerun). A click more than
+- [x] **No caveat on a gully snap with no reach within 1 km** (finding 7's
+      other half, still open after the gauge rerun). **Obsolete (issue #472,
+      2026-10-09):** a point now goes only on a cell with 1 km² or more
+      draining through it, else it is refused. A click more than
       1 km from any HydroRIVERS line has no reach, so nothing raises the
       *unmatched* caveat: 4 gauges so placed snapped into gullies under
       1 km², accepted silently. Durable fix: with no reach, warn when the
@@ -4096,8 +4100,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       it. Trigger: the next change to the Network editor's dam fields or to
       `linked-nodes`, or a client model where a marked dam's typed share
       disagrees with its siting.
-- [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
-      gauge run). On 2 flat lower rivers GLO-30 has no channel within
+- [x] **A DEM that routes a lower river elsewhere** (new in issue #390's
+      gauge run). **Obsolete (issue #472, 2026-10-09):** the fix compared the
+      placed area with the mapped reach's, and the mapped network no longer
+      judges the outlet; the outline follows the DEM's rivers by decision. On 2 flat lower rivers GLO-30 has no channel within
       2.5 km carrying the river, and Delineate accepts a catchment under
       half the published area with only the *unmatched* caveat. Durable
       fix: refuse, or ask, when the placed area is under ~10 % of the

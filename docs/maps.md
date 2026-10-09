@@ -1159,74 +1159,56 @@ to a point on a river. The design, the method and its accuracy are in
 [ui.md § Map](./ui.md#map-tabmap), the API in
 [api.md § Delineation](./api.md#delineation).
 
-- **Where you click.** The river at the catchment's outlet, or just below a
-  dam wall (the draw bar's point; or **Enter coordinates**). River lines
-  (HydroRIVERS, the basemap's waterways) can sit hundreds of metres off the
-  channel the DEM routes along, so the server places the point on the
-  DEM's channel (`place.ts`, issue #374, measured in
-  [design/delineation-snapping.md](./design/delineation-snapping.md)):
-  near a loaded river reach (within 1 km), on the cell whose upstream area
-  matches the reach's area at the click (its upper end's plus the rest in
-  proportion to how far down the line the click is; for a head reach, its
-  upper end's area as the elevation model drains it there, not
-  HydroRIVERS' 10 km² threshold); otherwise on the
-  most-drained cell within about 150 m, and if a channel with 100× its
-  upstream area runs within 1 km the sheet says so instead of proposing ("A
-  much larger channel runs 504 m north of your point: …") with **Use that
-  channel** and **Keep my point**. A click **on a red line** (the elevation
-  model's channel) more than 150 m from the river reach's line stays on that
-  channel: when the reach's matching channel lies further than the snap,
-  the sheet offers it the same way ("Your point is on a channel the
-  elevation model sees, draining 2.06 km², but the mapped river nearby
-  drains about 617 km² there, and the channel matching it runs 480 m north
-  …"), never moving the point by itself. The same holds the other way
-  round, wherever the line is: a click on a river whose nearest mapped line
-  is a small tributary's stays on the river, the tributary's channel
-  offered. And when the point lands in a
-  gully (under a tenth of the reach's area) with no match within 1 km, a
-  matching channel out to 2.5 km is offered ("… that far off it can be
-  another river, so check it on the map"). The channel's area is what drains through it inside the routed
-  window: when its catchment runs past the window the sheet says "at
-  least … and more from beyond", and quotes the nearby river reach's own
-  area when it is at least that (the hydrologist's review, finding 10:
-  "about 619 km²" was said of the Orange, which carries 340 724). **Use
-  that channel** on such a river usually runs past the request's window
-  too, so it goes to the background worker like any large catchment
-  (below); on a main stem the worker refuses it as too large, pointing at
-  Sub-catchments. **At a confluence** (reaches within 200 m whose areas differ by
-  1.5×) the server doesn't choose: the sheet asks which river ("The river
-  below the junction, 497 km²", "The main river above the junction, 422
-  km²", "The tributary above the junction, 67 km²"), and the outlet goes on
-  the picked river's side of the DEM's own junction (`junction.ts`: the
-  tributary followed downhill to where the main river joins it), on that
-  river's channel nearest the point, else on the channel within 2.5 km
-  matching its area. Measured on 60 real junctions:
-  [design/delineation-snapping.md § Confluences](./design/delineation-snapping.md#confluences-third-experiment).
-  **Beside a confluence** (a mapped junction of the nearest reach within
-  1 km, but no other river within 200 m) nothing is asked, and the outlet
-  is kept on the nearest reach's side of the DEM's junction the same way
-  (`delineate-7` / `start-8`): matched by area alone, a third of gauges a
-  few hundred metres up the main river or down the river below landed on
-  the other side ([§ Beside a
-  confluence](./design/delineation-snapping.md#beside-a-confluence-fifth-experiment)).
-  A click on a red line of its own there (off the mapped line, or on a
-  channel larger than the reach) isn't taken to the junction: it is placed
-  as any other red-line click (`delineate-8` / `start-9`).
-  It says how far the point moved; a junction placement that moved it
-  more than 500 m adds a note that the elevation model's rivers meet away
-  from the mapped junction, to check the outlet against the map.
+- **Where you click.** A **terrain channel** (the red lines, [§ The
+  elevation model's channels](#the-elevation-models-channels)) at the
+  catchment's outlet, or just below a dam wall (the draw bar's point; or
+  **Enter coordinates**). The server puts the point on the nearest cell
+  within 150 m that has at least 1 km² draining through it (`place.ts`,
+  issue #472), measured from the exact click to each cell's centre, the
+  larger area winning a tie. Nearest, not most-drained: a click on a
+  tributary beside the main river stays on the tributary. With no terrain
+  channel within 150 m the click is refused (`off_channel`): "No terrain
+  channel runs within 150 m of that point. Zoom in until the terrain
+  channels (the red lines) show, and click on one: they are the elevation
+  model's rivers, which the outline follows." The mapped river network
+  (HydroRIVERS, the basemap's waterways) never moves or chooses the
+  outlet: the elevation model's rivers often run hundreds of metres from
+  the mapped lines, and the outline follows the elevation model's
+  (the operator's decision, issue #472). Issue #374's rules that matched the
+  click to a nearby reach's area, asked which river at a confluence and
+  put the outlet at the elevation model's junction (`delineate-2` to
+  `delineate-11`, measured in
+  [design/delineation-snapping.md](./design/delineation-snapping.md)) were
+  retired in `delineate-13`.
+  One check stays, from the elevation model alone: when a channel with 100×
+  the placed cell's upstream area runs within 1 km, the sheet says so
+  instead of proposing ("A much larger terrain channel runs 504 m north of
+  your point: … against 2.06 km² on the terrain channel nearest your
+  point. Use that channel, or keep your point if you meant the small
+  one.") with **Use that channel** and **Keep my point**; it never moves
+  the point by itself. The channel's area is what drains through it inside
+  the routed window: when its catchment runs past the window the sheet
+  says "at least … and more from beyond", and quotes the nearby mapped
+  river reach's own area when it is at least that, for the wording only
+  ("(the mapped river here, reach 7 of HydroRIVERS, drains 340 724 km²)";
+  the hydrologist's review, finding 10: "about 619 km²" was said of the
+  Orange, which carries 340 724). **Use that channel** on such a river
+  usually runs past the request's window too, so it goes to the background
+  worker like any large catchment (below); on a main stem the worker
+  refuses it as too large, pointing at Sub-catchments. The sheet says how
+  far the point moved.
 - **What it does.** On the API, never in the engine: reads the DEM around
   the point (a 1 024-cell window, about 34 km, centred on it, grown to
-  2 048 and 3 072 cells while the catchment reaches its edge, or while the
-  river reach near the point is cut by it with no channel matching its
-  area yet; each larger window is placed over the catchment the last one
-  cut, so it reaches up to about 95 km from the outlet in the direction the
-  catchment runs), fills depressions (Priority-Flood+ε), routes flow with
+  2 048 and 3 072 cells while the catchment reaches its edge; each larger
+  window is placed over the catchment the last one cut, keeping 1 km and
+  two cells around the point for the placement and its larger-channel
+  check, so it reaches up to about 95 km from the outlet in the direction
+  the catchment runs), fills depressions (Priority-Flood+ε), routes flow with
   D8, collects every cell upstream of the outlet and outlines them as one
   polygon, simplified to about a cell. A catchment reaching the edge of the
-  DEM's data (a missing tile) is refused rather than cut off, and so is a
-  river reach cut there; so is a point outside the DEM or one almost
-  nothing drains to. Since `delineate-6` the land beside missing data is
+  DEM's data (a missing tile) is refused rather than cut off; so is a
+  point outside the DEM, one with no terrain channel within 150 m, or
+  one almost nothing drains to. Since `delineate-6` the land beside missing data is
   the data's edge, not a sink every cell beside it drained into, which
   had hidden such catchments (issue #390).
   A catchment past the largest window is refused as too large: "Click
@@ -1262,10 +1244,12 @@ to a point on a river. The design, the method and its accuracy are in
   accepted ones all), and audited. The elevation model's channels stay
   drawn behind it, dimmed, until it is decided (below).
 - **What follows the terrain.** The outline follows the elevation model
-  alone: the land that drains to the point along its own channels. Mapped
-  rivers (HydroRIVERS, the basemap's waterways) only help place the point (a
-  click near a loaded reach is moved onto the channel that matches it); they
-  never shape the outline. The bar and the Key say so in words.
+  alone: the land that drains to the point along its own channels, and the
+  point itself goes on one of those channels. Mapped rivers (HydroRIVERS,
+  the basemap's waterways) neither place the point nor shape the outline
+  (since `delineate-13`, issue #472; before it a click near a loaded reach
+  was moved onto the channel matching the reach's area). The bar and the
+  Key say so in words.
 - **After accepting a boundary.** It is a map feature only: the model's
   units, areas and order don't change. The toast and the boundary's card
   say so and offer the step that does: **Divide the model** (a model with
@@ -1323,7 +1307,9 @@ channels in solid red, wider for a larger area (issue #374;
 `delineation/channels.ts`, `channelRoutes.ts`, the Map's
 `channelLayer.svelte.ts`). River lines sit hundreds of metres off the
 channel the DEM routes along ([design/delineation-snapping.md](./design/delineation-snapping.md)),
-so these are the lines to click: a click on one snaps onto it.
+so these are the lines to click: a click goes on the nearest one within
+150 m, and a click with none that near is refused (`place.ts`; every cell
+these lines draw is one a click can go on, both at 1 km²).
 
 - **How.** The map's view is cut into fixed 0.2° tiles; each is routed in a
   1 024-cell window centred on it (Delineate's first window, about 6 km of
@@ -1408,23 +1394,26 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   unit's point (a dam's basin) is that unit's own, never a pan. A saved
   sub-catchment from clicks ([§ Sub-catchments from clicks](#sub-catchments-from-clicks))
   says the same in its description.
-- **Placing the points: as Delineate does** (`start-7`, the hydrologist's
-  review finding 3; `delineation/pointPlacement.ts`). The outlet gauge and
-  each point are placed by Delineation's rules ([§ Delineation](#delineation)):
-  near a loaded river reach (within 1 km), on the cell whose upstream area
-  matches the reach's; otherwise on the most-drained cell within 150 m. A
-  point at a confluence is asked about in the sheet ("These points are at a
-  confluence …", each with its rivers to pick; every such point at once),
-  then goes at the DEM's junction for the river picked. Since `start-9` the
-  rest of Delineate's rules apply too: a point on a red line of its own
-  stays on it and a gully snap offers the reach's channel out to 2.5 km,
-  each as the same warning below, and the reach's area is taken at the
-  point. A point snapped
+- **Placing the points: as Delineate does** (`start-15`, issue #472;
+  `delineation/pointPlacement.ts`, `place.ts`). The outlet gauge and each
+  point (a gauge, an abstraction point, a dam drawn as a point) go on the
+  nearest terrain channel, the nearest cell within 150 m with at least
+  1 km² draining through it ([§ Delineation](#delineation)); the mapped
+  river network never moves or chooses them. An outlet gauge with no
+  terrain channel within 150 m is refused ("No terrain channel runs within
+  150 m of the outlet gauge. Move the gauge onto a terrain channel …");
+  any other such point is dropped with the reason
+  "has no terrain channel within 150 m: move it onto one of the elevation
+  model’s channels". From `start-7` to `start-14` the points were placed by
+  the mapped river's rules (a reach's area matched, the river asked
+  for at a confluence, a junction side kept, a red-line or gully rule);
+  those were retired in `start-15`. A point placed
   beside a channel with 100× its upstream area keeps that channel as a
-  warning ("A much larger channel runs 202 m west of the outlet …"), the
+  warning ("A much larger terrain channel runs 202 m west of the outlet
+  (Weir): …"), the
   outlet's first, and its card offers **use that channel**, which proposes
   again with the point on it (a point dropped as "not upstream" from a
-  gully beside its river offers it too). A dam polygon takes its most-drained cell,
+  small stream beside its river offers it too). A dam polygon takes its most-drained cell,
   the wall's outflow when the river runs through the reservoir; but when
   the river's stem inside the outline is short (twice its cells at most
   the outline's longer side) and carries 100× the most-drained outline
@@ -1466,17 +1455,15 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   the method counts them ("1 point at a dam polygon’s outflow (1 marked
   off-channel)", with the rule) only when one is marked; an unmarked dam is
   placed exactly as before, so marking dams didn't bump the method
-  version (`start-14` today, for the pans against rivers). A
+  version (it was `start-14` then; `start-15` today). A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
-  Delineate put it. Each card says where its point went ("On the channel
-  matching river reach 11509680 (292 km²), 602 m from the point"), and the
-  method names only the rules that ran. Before `start-7` every point was
-  snapped 150 m with no reach and the guard's warning dropped: on 12
-  HydroRIVERS reaches of 100–600 km², 5 gauge outlets landed in gullies
-  (5.6, 1.4 and 0.1 km² for reaches of 292, 237 and 166 km²) and the dams
-  above them were dropped as "not upstream"; placed as Delineate does, the
-  same gauges give 428, 334 and 156 km², Delineate's own answers
-  (`backend/scripts/research/snap-start.ts`).
+  Delineate put it. Each card says where its point went ("On the nearest
+  terrain channel, 42 m from the point."), and the method names only the
+  rules that ran. Before `start-7` every point was snapped 150 m to the
+  most-drained cell and the guard's warning dropped, which put some gauge
+  outlets in gullies of a fraction of a km² beside their rivers; now a
+  point lands only on a cell with 1 km² or more draining through it, and
+  the warning names a much larger channel beside it.
 - **Without a DEM** (`DEM_URL` empty): the units come from the points with
   no area and all drain into the outflow gauge; the rest of the catchment is
   the boundary.
@@ -1524,8 +1511,8 @@ from clicks](./api.md#sub-catchments-from-clicks)) divides the land by
 clicking the rivers, with no boundary, no points to place and no roles to
 pick first.
 
-- **What a click is.** An outlet on a river: the server moves it to the
-  most-drained cell within about 150 m, as Delineation does. Its piece is
+- **What a click is.** An outlet on a terrain channel: the server puts it
+  on the nearest terrain channel within 150 m, as Delineation does. Its piece is
   its **incremental catchment**: the cells whose water reaches it before
   any other click. A click upstream of an earlier one carves its piece out
   of that one; a click below them all becomes the lowest and takes what
@@ -1553,30 +1540,24 @@ pick first.
   it landed on ("Click 2 landed on a channel draining 1.02 km², with a
   much larger channel 480 m south-west of it: it doesn’t drain to click 1,
   so it is on another river or missed this one …"), since a lower click
-  that missed the river is the usual cause (finding 11). A click whose
-  catchment runs past the window (the lowest when it is cut, an inflow
-  point and those below it) is not called unmatched: no window could
-  match its reach's area (`start-10`).
-- **Clicking on the channel** (the same rules as Delineation's, [§
-  Delineation](#delineation)). A river line can sit hundreds of metres off
-  the channel the DEM routes along. A click within 1 km of a loaded river
-  reach is put on the channel whose upstream area matches the reach's; its
-  line says so ("on the channel matching river reach 11492928 (412.50
-  km²)"). Any other click snaps to the most-drained cell within 150 m
-  (measured from the click itself to each cell's centre, so the move is
-  never more than 150 m; since `start-5`, issue #387), and
-  when a channel 100× larger runs within 1 km its line names it ("a much
-  larger channel (620 km²) runs 504 m north: …") with **Use the larger
+  that missed the river is the usual cause (finding 11).
+- **Clicking on the channel** (the same rule as Delineation's, [§
+  Delineation](#delineation); `start-15`, issue #472). Each click goes on
+  the nearest cell within 150 m with at least 1 km² draining through it
+  (measured from the click itself to each cell's centre); its line says how
+  far it moved from 50 m ("· moved 72 m to the nearest terrain channel").
+  A click with no terrain channel within 150 m is refused, naming it ("No
+  terrain channel runs within 150 m of click 2. …"). The mapped river
+  network never moves or chooses a click: before `start-15` a click near a
+  loaded reach was matched to the reach's area, a red-line or gully click
+  was offered the reach's channel, and a click at a confluence waited for
+  the river to be picked; all of that was retired with issue #472 (the
+  experiments behind it: [design/delineation-snapping.md](./design/delineation-snapping.md)).
+  When a channel with 100× the click's upstream area runs within 1 km its
+  line names it ("· a much larger terrain channel (620 km²) runs 504 m
+  north: use it if that is the river you meant") with **Use the larger
   channel**, which moves the click there and routes again (Undo moves it
-  back). A click on a red line beside a river reach, or one in a gully with
-  the reach's channel up to 2.5 km off, stays where it is and its line
-  offers the reach's channel ("the channel matching the mapped river (about
-  617 km² there) runs 480 m north, …") with **Use that channel** (the same
-  rules as Delineation's). A click with under 1 km² upstream and no larger channel nearby is
-  flagged ("very little drains here: it probably missed the channel").
-  A click at a confluence waits in the panel until the river is picked
-  (as Delineate's sheet asks), then goes at the DEM's junction for it.
-  Measured: [design/delineation-snapping.md](./design/delineation-snapping.md).
+  back).
 - **Pans** (`start-11`, [§ Delineation](#delineation)): a piece part of
   whose own area drains into pans says so on its line ("1.25 km² of it
   drains into pans (non-contributing)") and in its saved description; its
@@ -1624,8 +1605,9 @@ the app can analyse; this layer is.
   box says to zoom in. The view comes from the map after each move
   (`CatchmentMap` `onview`, also its wrapper's `data-view`), and the last
   twelve answers are kept, so panning back asks nothing. Before a boundary
-  exists is when the rivers help most: finding the outlet to Delineate, or
-  tracing the boundary.
+  exists is when the rivers help most: finding roughly where the outlet is,
+  or tracing the boundary. They never place Delineate's outlet: that goes
+  on a terrain channel ([§ Delineation](#delineation), issue #472).
 - **Style.** A dashed cyan-blue line (`riverNetworkColour`: `#006b9e`
   light, `#3ec1f0` dark), wider for a higher order (1.25 px at order 1 to
   3 px at 6), over the quaternary outlines and under the features. Its
@@ -1726,8 +1708,9 @@ reads it.
   to us, 2026-10-03; the workflow's gate checks both; § Sources).
 - **Does the client need it?** #90 Q23 asks whether OSM's rivers on the
   basemap already suffice for "show the rivers". If they do, the layer is
-  still the only river data the app can analyse (the checks, and later
-  snapping and B-delineate).
+  still the only river data the app can analyse (the checks, and the pans'
+  storage-on-a-river cross-check; it no longer places a delineated outlet,
+  issue #472).
 
 ## Cultivated area from land cover
 
