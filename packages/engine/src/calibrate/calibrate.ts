@@ -407,7 +407,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// unit, into buffers the plan reads as the units' local inflow, and natural flow is their sum, as runModel's.
 	const perUnit = unitRainForcing(
 		{ settings, series: input.series ?? {}, nodes: input.model.nodes, startDate, days, aligned, chirpsCorrection: run.chirpsCorrection, historyDays },
-		warnings
+		warnings,
+		settings.unitRain?.pinned ?? undefined
 	);
 	const unitBuffers = perUnit ? perUnit.units.map((u) => ({ nodeId: u.nodeId, runoffM3Day: new Float64Array(days) })) : null;
 	const { plan, topo, outletEwr } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, unitBuffers ? { unitRunoff: unitBuffers } : {}, historyDays);

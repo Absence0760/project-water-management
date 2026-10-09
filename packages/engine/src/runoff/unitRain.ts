@@ -25,6 +25,7 @@ import {
 	DEFAULT_UNIT_MAP_PERIOD,
 	MAP_MM_MAX,
 	MAP_MM_MIN,
+	unitForecastSeriesKey,
 	unitRainSeriesKey,
 	type DailySeries,
 	type ModelInput,
@@ -254,6 +255,8 @@ export function unitRainForcing(ctx: UnitRainContext, warnings: string[], pinned
 			return { ...base, rainMm, source, ...(before ? { rainBeforeArealMm: before } : {}) };
 		}
 		const gauge = r.hasGauge ? align(ctx.series[unitRainSeriesKey('rain_catchment_mm', n.id)]) : null;
+		// The unit's own forecast (a seasonal outlook member's season, unitForecastSeriesKey): read before the catchment's rain.
+		const ownForecast = ctx.series[unitForecastSeriesKey(n.id)] ? align(ctx.series[unitForecastSeriesKey(n.id)]) : null;
 		const chirps = r.chirps ? align(ctx.series[unitRainSeriesKey('rain_chirps_mm', n.id)]) : null;
 		const k2 = r.gaugeMapFactor;
 		const level = r.chirps;
@@ -288,6 +291,10 @@ export function unitRainForcing(ctx: UnitRainContext, warnings: string[], pinned
 			if (v === null && r.rule === 'unitGauge' && k2 !== null && c[t] != null) {
 				v = c[t]! * k2;
 				code = UNIT_RAIN_SOURCE.gaugeMap;
+			}
+			if (v === null && ownForecast && ownForecast[t] != null) {
+				v = ownForecast[t]!;
+				code = UNIT_RAIN_SOURCE.forecast;
 			}
 			if (v === null) {
 				const x = c[t] ?? ch[t] ?? f[t] ?? null;
