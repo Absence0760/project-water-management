@@ -34,5 +34,9 @@ describe('flowHeading and hasRuleLine (issue #177: name the reserve only when th
 
 	it('is "Flow vs pragmatic EWR" when the rule tables are at other sites, so the chart draws only the pragmatic EWR', () => {
 		expect(flowHeading(true, false)).toBe('Flow vs pragmatic EWR');
+		// Engine ≥ 1.77.0: the line drawn is the daily EWR from a DRM table when the run used one.
+		expect(flowHeading(true, false, { method: 'tab' })).toBe('Flow vs daily EWR');
+		expect(flowHeading(true, false, { method: 'pragmatic' })).toBe('Flow vs pragmatic EWR');
+		expect(flowHeading(false, false, { method: 'tab' })).toBe('Flow vs reserve');
 	});
 });

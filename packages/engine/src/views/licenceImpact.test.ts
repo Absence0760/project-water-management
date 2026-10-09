@@ -249,6 +249,10 @@ describe('describeLicenceImpact', () => {
 			application: run({ irrigation: () => 50, daysBelow: () => 0 })
 		});
 		expect(describeLicenceImpact(days.metric, days.classes[0]!)).toBe('The pragmatic EWR was not met on 1 fewer day over 3 dry years (1 in the background run, 0 in the application).');
+		// The daily test by its name when the runs' daily EWR came from a DRM table (engine ≥ 1.77.0).
+		expect(describeLicenceImpact(days.metric, days.classes[0]!, { background: 'the background run', application: 'the application', ewr: 'the daily EWR from the DRM TAB file' })).toBe(
+			'The daily EWR from the DRM TAB file was not met on 1 fewer day over 3 dry years (1 in the background run, 0 in the application).'
+		);
 		const few = licenceImpactByYearClass({ background: run({ irrigation: () => 0, years: 4 }), application: run({ irrigation: () => 0, years: 4 }) });
 		expect(few.classes.map((c) => describeLicenceImpact(few.metric, c))).toEqual([
 			'Only 1 dry year both runs cover: not enough years to judge.',

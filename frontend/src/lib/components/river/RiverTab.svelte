@@ -241,7 +241,7 @@
 	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
 	     under its first screen. Its group names show on the bar (issue #162), so the gaps between
 	     the groups read as groups. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(hasAssurance, ruleLine, ruleTable)} label="River sections" />{/if}
+	{#if shown && summary}<SectionNav groups={riverNavGroups(hasAssurance, ruleLine, ruleTable, summary.catchment.outletEwr)} label="River sections" />{/if}
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
@@ -281,7 +281,7 @@
 				<div class="flow-cell" id="res-ewr">
 					<Lazy load={loadFlowVsReserve}>
 						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} height={flowH} units pannable {ruleTable} />
+							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} height={flowH} units pannable {ruleTable} daily={shown!.run.summary.catchment.outletEwr} />
 						{/snippet}
 					</Lazy>
 				</div>
@@ -317,7 +317,7 @@
 			{/if}
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
-					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline)} daily={dailyEwrName(summary.catchment.outletEwr)} />
+					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} />
 				{:else}
 					<h3>EWR compliance by month</h3>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
@@ -342,6 +342,7 @@
 						outcomes={project.settings.outcomes}
 						nodes={editor.model.nodes}
 						ewrRules={project.settings.ewrRules}
+						daily={summary?.catchment.outletEwr}
 						{onProjectChange}
 						canEdit={canEdit}
 					/>
@@ -349,7 +350,7 @@
 			</div>
 			<div class="panel" id="res-outlook">
 				{#key shownRun.id}
-					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} droughtRestriction={project.settings.droughtRestriction ?? null} {onProjectChange} />
+					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} droughtRestriction={project.settings.droughtRestriction ?? null} daily={summary?.catchment.outletEwr} {onProjectChange} />
 				{/key}
 			</div>
 			<div class="panel" id="res-water-account">

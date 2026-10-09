@@ -35,6 +35,7 @@ import {
 import type { OutcomeSettings, StoredRunSeries, Sweep, SweepMember, SweepRequest } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 import { effectiveCutoffs } from './outcomeSettings';
+import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
 
 /** The demand levels a new sweep starts with, % of today's demand (planning-outputs.md S2). */
 export const DEFAULT_DEMAND_LEVELS: readonly number[] = Object.freeze([100, 85, 70]);
@@ -158,9 +159,12 @@ export function chooseSite(stored: string | null | undefined, sites: readonly Ma
 	return { site: outlet, notice: 'The Reserve site chosen for this matrix no longer has a rule table (or is no longer in the network), so the matrix reads the outlet.' };
 }
 
-/** The measure in words, at the site it is read at (days below the pragmatic EWR are always at the outlet). */
-export function metricLabel(metric: OutcomeMetric, site: Pick<MatrixSite, 'where'> = OUTLET_SITE): string {
-	return metric === 'reserveMonthsMet' ? `Reserve months met (the rule table at ${site.where})` : 'Days below the pragmatic EWR at the outlet';
+/**
+ * The measure in words, at the site it is read at (days below the daily EWR are always at the outlet), the
+ * daily EWR named as the base run has it (dailyEwrName: the pragmatic EWR, or a DRM table, engine ≥ 1.77.0).
+ */
+export function metricLabel(metric: OutcomeMetric, site: Pick<MatrixSite, 'where'> = OUTLET_SITE, daily?: DailyEwrSource): string {
+	return metric === 'reserveMonthsMet' ? `Reserve months met (the rule table at ${site.where})` : `Days below ${dailyEwrName(daily)} at the outlet`;
 }
 
 const pct = (v: number) => `${fmtNum(v * 100, 1, true)} %`;
@@ -232,6 +236,8 @@ export interface MatrixInput {
 	settings: OutcomeSettings;
 	/** The Reserve site (chooseSite); the outlet by default. */
 	site?: MatrixSite;
+	/** The base run's daily outlet EWR source (its members share its settings): names the days-below measure. */
+	daily?: DailyEwrSource;
 }
 
 /**
@@ -290,7 +296,7 @@ export function buildMatrixView(input: MatrixInput): MatrixView {
 	}
 	return {
 		metric,
-		metricLabel: metric ? metricLabel(metric, site) : null,
+		metricLabel: metric ? metricLabel(metric, site, input.daily) : null,
 		site,
 		siteMissing,
 		method: classes.method,

@@ -1,6 +1,7 @@
 // The catchment flow charts' series, shared by the Runs tab (RunCharts) and
 // the printable report: which lines, in which colour, width and style.
-import { OBSERVED_SERIES_LABEL, type DailySeries } from '@water-management/engine';
+import { OBSERVED_SERIES_LABEL, OUTLET_EWR_LABELS, type DailySeries } from '@water-management/engine';
+import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 import type { ChartSeries } from '$lib/components/charts/series';
 import { fmtNum } from '$lib/format/number';
 
@@ -111,13 +112,35 @@ export function hydrographSeries(c: CatchmentFlows, conv: Convert, hideNatural =
  * Summary's "Reserve rules met" is judged against the rule, so the chart
  * beside it must show that line too, not only the pragmatic one (issue #51).
  */
-export function ewrChartSeries(c: CatchmentFlows, conv: Convert): ChartSeries[] {
+export function ewrChartSeries(c: CatchmentFlows, conv: Convert, daily?: DailyEwrSource): ChartSeries[] {
 	const out: ChartSeries[] = [];
 	if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
-	if (c.ewr) out.push({ label: 'Pragmatic EWR', startDate: c.ewr.startDate, values: conv(c.ewr), style: 'step', color: '--chart-ref', width: 1.75 });
+	if (c.ewr) out.push({ label: ewrLineLabel(daily), startDate: c.ewr.startDate, values: conv(c.ewr), style: 'step', color: '--chart-ref', width: 1.75 });
 	if (c.ewrRule) out.push({ label: 'Reserve rule requirement', startDate: c.ewrRule.startDate, values: conv(c.ewrRule), style: 'step', color: '--series-3', width: 1.75 });
 	return out;
 }
+
+/**
+ * The outlet `ewr` line's legend label: the run's daily EWR (engine ≥ 1.77.0,
+ * summary.catchment.outletEwr), the engine's own label for the series
+ * (OUTLET_EWR_LABELS), or "Pragmatic EWR" without a DRM source.
+ */
+export function ewrLineLabel(daily?: DailyEwrSource): string {
+	return daily && daily.method !== 'pragmatic' ? OUTLET_EWR_LABELS[daily.method] : 'Pragmatic EWR';
+}
+
+/**
+ * The EWR line in a caption's words: "the pragmatic EWR line", or "the daily
+ * EWR line (from the DRM TAB file)" when the run's daily EWR came from a DRM
+ * table, which is then the line drawn and the one the shading counts.
+ */
+export function ewrLineWords(daily?: DailyEwrSource): string {
+	if (!daily || daily.method === 'pragmatic') return 'the pragmatic EWR line';
+	return `the daily EWR line (from the DRM ${daily.method === 'tab' ? 'TAB file' : 'percentile tables'})`;
+}
+
+/** The EWR chart's caption without a rule line: which days count as EWR not met. */
+export const ewrChartCaption = (daily?: DailyEwrSource) => `Days the outflow dips below ${ewrLineWords(daily)} count as EWR not met.`;
 
 /** The EWR chart's note on the rule line, when it draws one: what it is and how it is judged. */
 export const EWR_RULE_CAPTION =

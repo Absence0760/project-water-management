@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { parseCsv } from './csv';
 import { createRequire } from 'node:module';
 import { dailyCells, dailyStub, sheetjsWorkbook, streamDailySheet } from './sheetjsReference';
-import { annualVolumeRows, buildWorkbook, inputRows, type DailyColumn, type DailyTable, type WorkbookInput } from './workbook';
+import { annualVolumeRows, buildWorkbook, ewrGridRows, inputRows, type DailyColumn, type DailyTable, type WorkbookInput } from './workbook';
 
 const require = createRequire(import.meta.url);
 
@@ -430,4 +430,12 @@ describe('the zip container', () => {
 			t.columns.forEach((c, i) => expect(rows.slice(1).map((r) => r[i + 1])).toEqual(c.values));
 		}
 	}, 60_000);
+});
+
+describe('ewrGridRows names what the outlet is compared with', () => {
+	const siteRow = (sum: RunSummary) => ewrGridRows(sum).find((r) => r[0] === 'Site' && String(r[1]).startsWith('Outlet'))![1];
+	it('the full pragmatic EWR, or the daily EWR from the DRM tables the run used (engine ≥ 1.77.0)', () => {
+		expect(siteRow(summary)).toBe('Outlet: simulated outflow vs the full pragmatic EWR');
+		expect(siteRow({ ...summary, catchment: { outletEwr: { method: 'tab' } } } as unknown as RunSummary)).toBe('Outlet: simulated outflow vs the daily EWR from the DRM TAB file');
+	});
 });

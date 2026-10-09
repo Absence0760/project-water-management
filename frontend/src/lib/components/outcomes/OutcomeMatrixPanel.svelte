@@ -38,6 +38,7 @@
 		type MatrixView
 	} from './matrix';
 	import { resolveOutcomes } from './outcomeSettings';
+	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 
 	let {
 		projectId,
@@ -46,6 +47,7 @@
 		outcomes,
 		nodes = [],
 		ewrRules = [],
+		daily,
 		onProjectChange,
 		canEdit
 	}: {
@@ -60,6 +62,8 @@
 		nodes?: readonly Pick<NetworkNode, 'id' | 'name' | 'kind' | 'downstreamNodeId' | 'sortOrder'>[];
 		/** settings.ewrRules: which gauges have a rule table. */
 		ewrRules?: readonly Pick<EwrRuleTable, 'siteNodeId'>[];
+		/** The base run's daily outlet EWR source (summary.catchment.outletEwr): what its days below are counted against, by name. */
+		daily?: DailyEwrSource;
 		/** The project after the site was saved. */
 		onProjectChange?: (p: Project) => void;
 		canEdit: boolean;
@@ -88,7 +92,7 @@
 	const shown = $derived(sweep ? sweepState(sweep) : null);
 	const view = $derived.by((): MatrixView | null => {
 		if (!sweep || shown?.kind !== 'complete' || !natural) return null;
-		return buildMatrixView({ baseStartDate: run.startDate, baseNatural: natural, members: sweep.members, settings, site: chosen.site });
+		return buildMatrixView({ baseStartDate: run.startDate, baseNatural: natural, members: sweep.members, settings, site: chosen.site, daily });
 	});
 	const dataState = $derived(loading ? 'loading' : !sweep ? 'empty' : (shown?.kind ?? 'loading'));
 
@@ -230,7 +234,7 @@
 				</select>
 				<span class="hint" id="outcome-site-h">
 					Whose Reserve rule table the matrix reads, for everyone on the project{canEdit ? '' : ' (an editor can change it)'}. Days below the
-					pragmatic EWR are only at the outlet.
+					daily EWR are only at the outlet.
 				</span>
 			</div>
 		{/if}

@@ -110,8 +110,8 @@ Above the detail, for the baseline and every what-if at once
   demand supplied, a farm crossing 95 %, 5 points of one farm's supply, 5 %
   of the mean outflow): "What-if 1 puts the river below the EWR on 13 more
   days a year", "What-if 2 puts the river below the EWR on 2 fewer days a
-  year" (the pragmatic EWR's days, not the Reserve's rule months, so never
-  "reserve"), "What-if 1 leaves 1 more
+  year" (the days below each run's daily EWR, the pragmatic EWR or a DRM
+  table, not the Reserve's rule months, so never "reserve"), "What-if 1 leaves 1 more
   farm below 95% supplied", "Under What-if 1, Farm 4 gets −12 pp of its
   demand", "What-if 1 lowers the mean outflow by 10%". A what-if with none
   "makes no material change to these outcomes". When both what-ifs add days
@@ -126,7 +126,16 @@ Above the detail, for the baseline and every what-if at once
   shortfall is below zero), so the years add up to it; counting outflow <
   EWR from the two flow series would miss the engine's noise tolerance. Part
   years at either end are drawn faded and marked in the table; a run that
-  stored no shortfall series is named under the chart.
+  stored no shortfall series is named under the chart. Each run's shortfall
+  is against its own daily EWR (engine ≥ 1.77.0: the pragmatic EWR, or the
+  DRM TAB file or percentile tables, `summary.catchment.outletEwr`), so the
+  chart names it by `ewr/notMet.ts dailyEwrName`: the caption says "below
+  the daily EWR from the DRM TAB file at the outlet" when every run shares
+  one, and "below each run's daily EWR at the outlet (Baseline: the pragmatic
+  EWR; What-if 1: …)", with each run's source beside its name in the legend,
+  when they differ. The heading says "the reserve" unless a run is judged by
+  a Reserve rule table; then it names the daily test the same way
+  (`daysBelowTestOf`: "Days below each run's daily EWR, each year").
 
 ### The full comparison
 

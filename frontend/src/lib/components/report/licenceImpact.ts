@@ -30,6 +30,7 @@ import {
 import type { RunCompareResponse } from '$lib/api/types';
 import { boundsText, OUTLET_SITE, type MatrixSite } from '$lib/components/outcomes/matrix';
 import { fmtNum } from '$lib/format/number';
+import { dailyEwrNameOf } from '$lib/components/ewr/notMet';
 import type { ImpactSeries } from './impactSeries';
 
 /**
@@ -198,7 +199,9 @@ function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun 
 	else if (!authorised && mode(b) === 'fullAllocation')
 		notes.push(`${capitalised} holds every holder at their full registered volume, but the baseline doesn’t, so the proposed step also counts the other holders going up to their registered volumes. Compare it with a full-allocation baseline.`);
 	const unit = impact.metric === 'reserveMonthsMet' ? 'months' : 'days';
-	const names = { background: `the baseline ${background}`, application };
+	// Days below each run's own daily EWR (the pragmatic EWR, or a DRM table, engine ≥ 1.77.0), named as both runs have it.
+	const dailyName = dailyEwrNameOf([a, b].map((r) => r.run.summary.catchment?.outletEwr));
+	const names = { background: `the baseline ${background}`, application, ewr: dailyName };
 	const columns: BoardColumn[] = impact.classes.map((c) => ({
 		id: c.classId,
 		label: c.label,
@@ -212,12 +215,12 @@ function boardOf(impact: LicenceImpact, ctx: { data: { a: BoardRun; b: BoardRun 
 		text: describeLicenceImpact(impact.metric, c, names)
 	}));
 	notes.push(...impact.warnings);
-	if (unit === 'days' && !impact.warnings.length) notes.push('Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.');
+	if (unit === 'days' && !impact.warnings.length) notes.push(`Neither run has a Reserve rule table at the outlet, so the board counts days below ${dailyName}.`);
 	const classed = impact.classes.reduce((s, c) => s + c.nYears, 0);
 	return {
 		status: 'ok',
 		metric: impact.metric,
-		belowLabel: impact.metric === 'reserveMonthsMet' ? `Months below the Reserve (the rule table at ${site.where})` : 'Days below the pragmatic EWR at the outlet',
+		belowLabel: impact.metric === 'reserveMonthsMet' ? `Months below the Reserve (the rule table at ${site.where})` : `Days below ${dailyName} at the outlet`,
 		background,
 		application,
 		nYears: classed,
