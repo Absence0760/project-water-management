@@ -314,8 +314,14 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   the pointer. Once drawn: drag a corner (or the point) to move it, click an
   edge's middle to add a corner, click a corner to pick it and press Delete
   (or **Remove the picked corner**) to remove it, never below three corners
-  (two points for a line). **Undo** steps back through every change (a drag
-  is one step; up to 200); **Cancel** drops the drawing at once. **Escape**
+  (two points for a line). A click hits a corner or an edge's middle when
+  the 12 px box around it touches the drawn dot (a corner's reach is 23 px,
+  well over a 24 px target), the nearest one, a corner before any middle.
+  The hit is read from the draft's own corners projected to the screen, not
+  from the drawn layers, which MapLibre redraws a frame or more after each
+  change, so a quick click on the first corner closes the shape rather than
+  adding another (`attachDrawing.ts` `hitAt`). **Undo** steps back through
+  every change (a drag is one step; up to 200); **Cancel** drops the drawing at once. **Escape**
   does too while there is nothing to lose (one corner, a placed point, an
   edit not yet changed), but with two corners or more, a finished or pasted
   shape, or a changed edit it asks first (the app's confirmation dialog,
