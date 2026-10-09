@@ -383,7 +383,9 @@ area-weighted CHIRPS (`rain_chirps_mm`, the from-units feeds,
   `node.map_source` (1–600 characters, not blank), with
   `node_map_mm_needs_source` (a MAP needs its source; the engine's
   `mapMmError`). The model store writes the source only with a MAP. NULL on
-  every existing row, so every stored model runs as before.
+  every existing row, so every stored model runs as before. Besides `PUT
+  /model`, `POST /map/unit-map` writes both from a MAP grid (a `model_put`
+  revision; [maps.md § MAP for each unit](./maps.md#map-for-each-unit)).
 - Both functions are `SECURITY INVOKER` with a pinned `search_path`: they read
   `node` and `data_feed` under the writer's RLS, and whoever may write a
   project's series may read both. No new table, grant, policy or foreign key.

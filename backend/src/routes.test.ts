@@ -192,6 +192,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Each unit's MAP from the MAP grid (issue #482): auth-gated like every project route.
+	it('inventories the unit MAP routes as auth-gated', () => {
+		for (const r of ['GET /projects/:id/map/unit-map', 'POST /projects/:id/map/unit-map']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Sign-offs (WP-3.13, 036_signoff): auth-gated like every project route.
 	it('inventories the sign-off routes as auth-gated', () => {
 		for (const r of ['GET /projects/:id/runs/:runId/signoffs', 'POST /projects/:id/runs/:runId/signoffs']) {

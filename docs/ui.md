@@ -2646,7 +2646,9 @@ itself.
   unit's Catchment area section, after the areas, an optional **MAP**
   (1–12 000 mm, blank is none) with its ⓘ (`unit-map`) and, once it is set,
   a required **Source of the MAP** (`node.mapMm`, `node.mapSource`). It is
-  read only with Settings' Rain for each unit on. Clearing the MAP clears
+  read only with Settings' Rain for each unit on, where **MAP from the
+  grid** can fill it and its source from a loaded MAP grid for every unit
+  at once. Clearing the MAP clears
   its source. A MAP out of range or without its source is marked
   `aria-invalid` with the message under its field, and blocks Save
   (`unitMapIssue` in `model/validate.ts`, the engine's `mapMmError`, as the
@@ -5244,6 +5246,20 @@ two.
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
     chunk has loaded. The group's summary line adds "rain for each unit"
     while it is on.
+    With it on, editors also get **MAP from the grid**
+    (`settings/UnitMapProposal.svelte`, its own chunk, helpers in
+    `settings/unitMapProposal.ts`; `GET`/`POST …/map/unit-map`, [maps.md § MAP
+    for each unit](./maps.md#map-for-each-unit)), a proposal panel
+    (`ProposalPanel`, inline): a line saying which grid covers how many of
+    the units with a parcel ("synthetic (0.01° cells) covers all 2 units with
+    a parcel on the map."), a table of each unit (a link to its form), its
+    proposed MAP in mm, the cells and what its form holds now; the units the
+    grid doesn't cover with the reason, never filled from another grid; a
+    warning naming the units holding another grid's MAP (Use is then
+    disabled); a **Grid** picker when more than one is loaded; the synthetic
+    warning and the source and method. **Use for N units** asks first, then
+    writes the units' MAP and source as one model change and reloads the
+    model; it waits while the model has unsaved edits. Viewers don't see it.
     After it comes
     the **GR4J potential evaporation** group (`settings.pe`, engine ≥
     0.31.0, issue #39, `settings/peInput.ts`;

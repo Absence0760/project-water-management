@@ -2844,6 +2844,60 @@ export interface MapGridLayer {
 	max: number;
 }
 
+/** A land unit, by its node. */
+export interface UnitRef {
+	nodeId: string;
+	name: string;
+}
+
+/** A unit's MAP from the chosen grid (GET …/map/unit-map). */
+export interface UnitMapUnit extends UnitRef {
+	featureId: string;
+	/** The area-weighted MAP over the unit's parcel, whole mm/yr. */
+	mapMm: number;
+	/** How many grid cells with a value the parcel touches. */
+	cells: number;
+	/** The share of the parcel with values, 0–1. */
+	coveredShare: number;
+	/** What the unit's form holds now. */
+	current: { mapMm: number | null; mapSource: string | null };
+	/** The unit already holds this MAP from this grid. */
+	same: boolean;
+}
+
+/** A loaded MAP grid and how many of the units it covers. */
+export interface UnitMapCandidate {
+	label: string;
+	version: string;
+	cellDeg: number;
+	synthetic: boolean;
+	covered: number;
+	missing: UnitRef[];
+}
+
+/** Each unit's MAP from one MAP grid (GET /projects/:id/map/unit-map; docs/maps.md § MAP for each unit). */
+export interface UnitMapProposal {
+	/** The grid proposed: the one asked for, else the first (real before synthetic, finest first) covering every unit, else the one covering the most; null with none covering any. */
+	dataset: { label: string; version: string; source: string; attribution: string; cellDeg: number; synthetic: boolean } | null;
+	coversAll: boolean;
+	units: UnitMapUnit[];
+	/** Units with a polygon the grid doesn't cover: never filled from another grid. */
+	uncovered: (UnitRef & { coveredShare: number; reason: string })[];
+	withoutPolygon: UnitRef[];
+	refused: (UnitRef & { reason: string })[];
+	/** Units outside this proposal whose MAP came from another grid: an apply is refused (grid_mixed) until they are cleared. */
+	otherGrid: (UnitRef & { mapSource: string })[];
+	candidates: UnitMapCandidate[];
+}
+
+/** What POST …/map/unit-map wrote. */
+export interface UnitMapApplied {
+	dataset: string;
+	units: { nodeId: string; mapMm: number; mapSource: string }[];
+	changed: number;
+	revisionId: string | null;
+}
+
 /** A reach of the loaded river network (GET …/map/rivers, issue #345). */
 export interface RiverReach {
 	dataset: string;

@@ -111,3 +111,15 @@ export function gridShares(
 	}
 	return { cells, rows, cols };
 }
+
+/**
+ * The geometry moved by (−originLon, −originLat), so a grid whose cells have
+ * their south-west corners at origin + index × cellDeg (the evaporation and
+ * MAP grids) has them on whole multiples of cellDeg, as gridShares reads.
+ */
+export function toGrid(g: Geometry, grid: { originLon: number; originLat: number }): Geometry {
+	const shift = ([x, y]: Position): Position => [x - grid.originLon, y - grid.originLat];
+	if (g.type === 'Polygon') return { type: 'Polygon', coordinates: g.coordinates.map((ring) => ring.map(shift)) };
+	if (g.type === 'MultiPolygon') return { type: 'MultiPolygon', coordinates: g.coordinates.map((rings) => rings.map((ring) => ring.map(shift))) };
+	return g;
+}

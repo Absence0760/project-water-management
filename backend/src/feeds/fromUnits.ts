@@ -55,14 +55,14 @@ export const unitSeriesName = (product: ChirpsDailyProduct, unitName: string) =>
 /** A unit's cell as the GET shows it (the feed config keeps the weight only). */
 export type UnitCell = Pick<BoundaryCell, 'lat' | 'lon' | 'share' | 'weight'>;
 
-interface Parcel {
+export interface Parcel {
 	id: string;
 	geometry: Geometry;
 	updatedAt: string;
 	areaM2: number;
 }
 
-interface UnitRow {
+export interface UnitRow {
 	nodeId: string;
 	name: string;
 	areaFeatureId: string | null;
@@ -103,7 +103,8 @@ interface Plan extends UnitsProposal {
 	detail: Map<string, { feed: FeedMeta | null; series: UnitSeries | null; mark: UnitMark; targetName: string }>;
 }
 
-async function loadUnits(db: Db, projectId: string): Promise<UnitRow[]> {
+/** The land units (farm nodes with an area above 0) with their farm parcels on the map, in the model's order. */
+export async function loadUnits(db: Db, projectId: string): Promise<UnitRow[]> {
 	const { rows } = await db.query<UnitRow>(
 		`SELECT n.id AS "nodeId", n.name, n.area_feature_id AS "areaFeatureId",
 			(SELECT json_agg(json_build_object('id', f.id, 'geometry', f.geometry, 'areaM2', f.area_m2,
@@ -117,7 +118,7 @@ async function loadUnits(db: Db, projectId: string): Promise<UnitRow[]> {
 }
 
 /** The unit's polygon: the parcel its area came from, else its only parcel; 'several' when it has more and none was accepted. */
-function unitParcel(u: UnitRow): Parcel | 'several' | null {
+export function unitParcel(u: UnitRow): Parcel | 'several' | null {
 	const parcels = u.parcels ?? [];
 	const accepted = parcels.find((p) => p.id === u.areaFeatureId);
 	if (accepted) return accepted;
