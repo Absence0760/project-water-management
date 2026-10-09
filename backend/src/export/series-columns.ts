@@ -21,6 +21,7 @@ import {
 	aboveRainThreshold,
 	CALIBRATION_FLOW_KINDS,
 	exclusionRanges,
+	parseUnitRainSeriesKey,
 	RAIN_SOURCE_CODE,
 	RAIN_SOURCE_COLUMN,
 	resolveDataQuality,
@@ -58,7 +59,7 @@ export interface ReadingRun {
 	/** The run's label, else its creation date: what the headers name it by. */
 	name: string;
 	startDate: string;
-	/** The run_input_series key it read the series as: its kind, or `<kind>@<node id>` for a gauge's record. */
+	/** The run_input_series key it read the series as: its kind, or `<kind>@<node id>` for a gauge's record or a land unit's own rain. */
 	inputKey: string;
 	/** settings.calibration.rainThresholdMm as the run stored it; null when it didn't. */
 	rainThresholdMm: number | null;
@@ -66,6 +67,8 @@ export interface ReadingRun {
 	catchment: Readonly<Record<string, RunColumn>>;
 	/** A gauge record's simulated flow: the gauge node's `outflow`; null otherwise. */
 	gaugeFlow: (RunColumn & { gaugeName: string }) | null;
+	/** A land unit's own rain (issue #482): the rain the run used on the unit (its `rain_unit`); null otherwise, or a run that made none. Optional: older callers set none. */
+	unitRain?: (RunColumn & { unitName: string }) | null;
 }
 
 /** The `rain_source` codes in words (engine RAIN_SOURCE_CODE); a missing day is blank. */
@@ -150,6 +153,9 @@ function runColumns(s: ExportSeries, run: ReadingRun): DailyColumn[] {
 		if (c.rain_chirps_corrected) out.push(numeric(c.rain_chirps_corrected));
 		// Engine ≥ 1.53.0 (CR-23): CHIRPS after the gap map, when it was on.
 		if (c.rain_chirps_mapped) out.push(numeric(c.rain_chirps_mapped));
+	} else if (parseUnitRainSeriesKey(run.inputKey)) {
+		// A land unit's own rain: what the run made of it on that unit (none from a run on catchment rain).
+		if (run.unitRain) out.push(numeric(run.unitRain, `Rain used at ${run.unitRain.unitName}`));
 	} else if ((CALIBRATION_FLOW_KINDS as readonly string[]).includes(run.inputKey)) {
 		if (c.simulated_outflow) out.push(numeric(c.simulated_outflow));
 	} else if (run.gaugeFlow) {

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -403,6 +403,39 @@ describe('SettingsPatch.pe (engine ≥ 0.31.0, issue #39)', () => {
 		expect(forcing.safeParse({ ...base, pe: { kind: 'pan' } }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, pe: monthlyPe }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, pe: { ...monthlyPe, source: '' } }).success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.unitRain (issue #482)', () => {
+	const ok = (unitRain: unknown) => SettingsPatch.safeParse({ unitRain }).success;
+	const full = { mode: 'perUnit', gaugeMapMm: 700, gaugeMapSource: 'Synthetic gauge', mapPeriod: { start: '1991-01-01', end: '2020-12-31' } };
+
+	it('takes either mode, the gauge MAP with its source, a MAP period, or null; and agrees with the engine’s unitRainError', () => {
+		for (const good of [null, { mode: 'catchment' }, { mode: 'perUnit' }, full, { ...full, gaugeMapMm: null, gaugeMapSource: null }, { ...full, mapPeriod: null }]) {
+			expect(ok(good), JSON.stringify(good)).toBe(true);
+			expect(unitRainError(good)).toBeNull();
+		}
+		for (const [name, bad] of [
+			['an unknown mode', { mode: 'grid' }],
+			['no mode', { gaugeMapMm: 700, gaugeMapSource: 's' }],
+			['a gauge MAP without its source', { mode: 'perUnit', gaugeMapMm: 700 }],
+			['a gauge MAP of 0', { mode: 'perUnit', gaugeMapMm: 0, gaugeMapSource: 's' }],
+			['a gauge MAP above the bound', { mode: 'perUnit', gaugeMapMm: 12_001, gaugeMapSource: 's' }],
+			['a period under a year', { mode: 'perUnit', mapPeriod: { start: '2000-01-01', end: '2000-12-01' } }],
+			['a period without an end', { mode: 'perUnit', mapPeriod: { start: '2000-01-01' } }]
+		] as [string, unknown][]) {
+			expect(ok(bad), name).toBe(false);
+			expect(unitRainError(bad), name).not.toBeNull();
+		}
+		expect(ok({ ...full, extra: 1 })).toBe(false);
+	});
+
+	it('is replaced whole by a patch, and kept by a patch of anything else', () => {
+		const stored = patchSettings({}, { unitRain: full });
+		expect(stored.unitRain).toEqual(full);
+		expect(patchSettings(stored, { unitRain: { mode: 'catchment' } }).unitRain).toEqual({ mode: 'catchment' });
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).unitRain).toEqual(full);
+		expect(patchSettings(stored, { unitRain: null }).unitRain).toBeNull();
 	});
 });
 

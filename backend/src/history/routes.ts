@@ -4,6 +4,7 @@
 // revision or a run's inputs, and a series' kept values and restoring them.
 // Viewers read; editors restore. Farmers get 403 (requireRole 'viewer'), and
 // RLS shows them nothing either way (D4).
+import { isUnitRainKind, siteProblem, type SiteNode } from '../series/site.js';
 import { cleanModelNames, diffInputs, upgradeLegacyModel, type InputChange, type RunInputsSnapshot } from '@water-management/engine';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
@@ -434,14 +435,24 @@ export const historyRoutes = new Hono<AuthEnv>()
 				{ ...body, provenance: rowProvenance(body), origin: rowOrigin({ source, sourceUnit, sourceUnitFactor }) },
 				{ restoredFrom: rev }
 			);
-			// And its site (085): a gauge record comes back at its gauge, never quietly at the outlet.
+			// And its site (085): a gauge record comes back at its gauge, never quietly at the outlet, and a land
+			// unit's own rain (209) at its unit, never quietly as the catchment's.
 			if (meta.siteNodeId !== siteNodeId) {
 				if (siteNodeId !== null) {
-					const { rows: node } = await db.query('SELECT 1 FROM node WHERE project_id = $1 AND id = $2', [id, siteNodeId]);
-					if (!node[0]) {
+					const { rows: node } = await db.query<SiteNode>(
+						'SELECT kind::text AS kind, downstream_node_id AS "downstreamNodeId", area_km2 AS "areaKm2" FROM node WHERE project_id = $1 AND id = $2',
+						[id, siteNodeId]
+					);
+					// A gauge record: only whether its node is still there (as before 209). A unit's rain: whether its node is
+					// still a land unit (the database holds that too); an area typed to 0 since doesn't stop a restore.
+					const problem = isUnitRainKind(body.kind) ? siteProblem(body.kind, node[0], { anyArea: true }) : node[0] ? null : 'gone';
+					if (problem) {
 						throw new ApiError(
 							409,
-							"this record was measured at a gauge that is no longer in the model: restoring it would make it the outlet's record. Add the gauge back from the model's history first"
+							isUnitRainKind(body.kind)
+								? "this rain was a land unit's own, and that unit is no longer a land unit of the model: restoring it would make it the catchment's rain. Add the unit back from the model's history first"
+								: "this record was measured at a gauge that is no longer in the model: restoring it would make it the outlet's record. Add the gauge back from the model's history first",
+							{ code: 'site_gone' }
 						);
 					}
 				}

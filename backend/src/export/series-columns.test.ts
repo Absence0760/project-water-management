@@ -114,6 +114,17 @@ describe('seriesExportColumns', () => {
 		expect(lines[3]).toBe('2024-01-03,2,,172800,9');
 	});
 
+	it('a land unit’s own rain (issue #482): the rain the run used on the unit, never a gauge’s flow or the catchment’s columns', () => {
+		const unitRain: ExportSeries = { ...rain, label: 'rain_catchment_mm – Unit A gauge', siteNodeId: 'u1' };
+		const catchment = { rain_final: { label: 'Rain used', unit: 'mm', values: [0, 99, 99, 99, 99] } };
+		const used = run('rain_catchment_mm@u1', catchment, { unitRain: { label: 'Rain on the unit', unit: 'mm', values: [0, 11, 0, 4, 1], unitName: 'Unit A' } });
+		const lines = csv(unitRain, settings(), used);
+		expect(lines[0]).toBe('date,rain_catchment_mm – Unit A gauge (mm),Flags,Rain used at Unit A [run Baseline] (mm)');
+		expect(lines[1]).toBe('2024-01-01,12,,11');
+		// A run on the catchment's rain made none for the unit: no run columns, and none of the catchment's.
+		expect(csv(unitRain, settings(), run('rain_catchment_mm@u1', catchment))[0]).toBe('date,rain_catchment_mm – Unit A gauge (mm),Flags');
+	});
+
 	it('a series kind the model doesn’t use from the run gets no run columns', () => {
 		const apan: ExportSeries = { ...rain, kind: 'evap_apan_mm', label: 'evap_apan_mm' };
 		const r = run('evap_apan_mm', { rain_final: { label: 'x', unit: 'mm', values: [1, 1, 1, 1, 1] } });
