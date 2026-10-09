@@ -19,10 +19,10 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, seedRunnableProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_MID_GAUGE, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_MID_GAUGE, FIXTURE_OFF_CHANNEL, FIXTURE_OFF_TERRAIN, FIXTURE_OUTLET } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { boundaryGeoJson, loadRiverNetwork, openKey, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, openKey, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
 
 const sheet = (page: Page, name = 'Delineate a catchment') => page.getByRole('dialog', { name });
 const review = (page: Page) => sheet(page, 'The delineated catchment');
@@ -58,7 +58,7 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(r.getByRole('heading', { name: 'The delineated catchment' })).toBeFocused();
 	await r.getByText('How it was made').click();
 	await expect(r.getByTestId('delineate-fact-dataset')).toContainText('Synthetic DEM');
-	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-12]');
+	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-13]');
 	await expect(r.getByTestId('delineate-fact-pans')).toContainText('Non-contributing (pans)');
 	await expect(r.getByRole('heading', { name: 'Before you accept it' })).toBeVisible();
 	for (const scheme of ['light', 'dark'] as const) {
@@ -290,14 +290,14 @@ test('a point beside a much larger channel is not delineated quietly: the sheet 
 	await delineateAt(page, FIXTURE_OFF_CHANNEL);
 	const offer = sheet(page).getByTestId('delineate-larger');
 	await expect(offer).toBeVisible();
-	await expect(offer).toContainText(/^A much larger channel runs \d+ m west of your point: [\d\s,]+ km² drains through it/);
+	await expect(offer).toContainText(/^A much larger terrain channel runs \d+ m west of your point: [\d\s,]+ km² drains through it/);
 	await expect(sheet(page).getByTestId('delineate-error')).toHaveCount(0);
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		await expectNoViolations(page);
 	}
 	await page.emulateMedia({ colorScheme: 'light' });
-	// Keep my point: the small catchment it snapped to.
+	// Keep my point: the small catchment of the terrain channel it is on.
 	await offer.getByTestId('delineate-keep-point').click();
 	await expect(review(page)).toBeVisible();
 	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^\d\.\d\d km²$/);
@@ -309,28 +309,22 @@ test('a point beside a much larger channel is not delineated quietly: the sheet 
 	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^[34]\d\d\.\d\d km²$/);
 });
 
-test('a point at a confluence asks which river, and delineates the one picked', async ({ page, owner }) => {
+test('a point with no terrain channel within 150 m is refused with what to do, the form kept, and no channel offered (issue #472)', async ({ page, owner }) => {
 	void owner;
-	// A river reach along the valley and a small tributary ending at the point: two rivers within 200 m.
-	await loadRiverNetwork('e2e-confluence', [
-		{ id: 99100001, upstreamKm2: 400, order: 4, line: FIXTURE_JUNCTION_RIVER },
-		{ id: 99100002, upstreamKm2: 3, order: 1, line: FIXTURE_JUNCTION_TRIBUTARY }
-	]);
-	const project = await seedRunnableProject(page.request, 'Delineate confluence');
+	const project = await seedRunnableProject(page.request, 'Delineate off the channels');
 	await openMap(page, project.id);
-	await delineateAt(page, FIXTURE_JUNCTION);
-	const box = sheet(page).getByTestId('delineate-confluence');
-	await expect(box).toBeVisible();
-	await expect(box.getByTestId('delineate-choice')).toHaveText(['The river along the point, 400 km²', 'The river above the junction, 3.00 km²']);
+	await delineateAt(page, FIXTURE_OFF_TERRAIN);
+	await expect(sheet(page).getByTestId('delineate-error')).toHaveText(
+		"No terrain channel runs within 150 m of that point. Zoom in until the terrain channels (the red lines) show, and click on one: they are the elevation model's rivers, which the outline follows."
+	);
+	await expect(sheet(page).getByTestId('delineate-larger')).toHaveCount(0);
+	await expect(review(page)).toHaveCount(0);
+	await expect(sheet(page).getByTestId('delineate-submit')).toBeVisible();
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		await expectNoViolations(page);
 	}
 	await page.emulateMedia({ colorScheme: 'light' });
-	// The river: the valley above the junction, hundreds of km², matched to the reach.
-	await box.getByTestId('delineate-choice').first().click();
-	await expect(review(page)).toBeVisible();
-	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^[34]\d\d\.\d\d km²$/);
 });
 
 test('a viewer gets no Delineate', async ({ page, owner, signIn }) => {
