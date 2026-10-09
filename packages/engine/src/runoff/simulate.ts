@@ -253,7 +253,8 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 			...(ctx.historyDays !== undefined ? { historyDays: ctx.historyDays } : {})
 		},
 		warnings,
-		w?.unitRecipes
+		// A snapshot's pinned recipes, else the settings' (a seasonal outlook's re-run member).
+		w?.unitRecipes ?? ctx.settings.unitRain?.pinned ?? undefined
 	);
 	if (!built) return null;
 	const { units, recipes } = built;

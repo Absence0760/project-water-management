@@ -754,6 +754,17 @@ export function parseUnitRainSeriesKey(key: string): { kind: UnitRainKind; nodeI
 }
 
 /**
+ * A land unit's own forecast rain (engine ≥ 1.78.0, docs/model.md §2.4h):
+ * the rain the unit's chain reads before it falls back to the catchment's
+ * rain. Engine-only: the seasonal outlook writes it for each member's season
+ * from the base run's `rain_unit` on the analogue days, so a unit runs its
+ * season on its own forcing (its rule and factors as the base run had them).
+ * The API never stores one.
+ */
+export type UnitForecastSeriesKey = `rain_forecast_mm@${string}`;
+export const unitForecastSeriesKey = (nodeId: string): UnitForecastSeriesKey => `rain_forecast_mm@${nodeId}`;
+
+/**
  * The calibration records a site has, in CALIBRATION_FLOW_KINDS order (null =
  * the outlet's). `series` is keyed as ModelInput.series; only whether a key
  * holds something is read, so a client can pass a map of the keys it knows.
@@ -921,6 +932,8 @@ export interface ArealRain {
 	source: string;
 }
 
+import type { UnitRainRecipe } from './runoff/unitRain';
+
 export const UNIT_RAIN_MODES = ['catchment', 'perUnit'] as const;
 export type UnitRainMode = (typeof UNIT_RAIN_MODES)[number];
 
@@ -941,6 +954,13 @@ export interface UnitRainSettings {
 	 * 1991–2020 climatology years.
 	 */
 	mapPeriod?: { start: string; end: string } | null;
+	/**
+	 * Engine-only (never stored by the API): each unit's rule and factors to
+	 * use instead of fitting them on the input's records. A seasonal outlook's
+	 * re-run member sets it to the base input's, so a history cut at the
+	 * decision date runs at the base run's levels (docs/model.md §2.4h).
+	 */
+	pinned?: UnitRainRecipe[] | null;
 }
 
 export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
@@ -1016,7 +1036,8 @@ export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSetti
 		mode: r.mode,
 		gaugeMapMm: r.gaugeMapMm ?? null,
 		gaugeMapSource: r.gaugeMapSource ?? null,
-		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null
+		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null,
+		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
 	};
 }
 
@@ -2641,7 +2662,7 @@ export interface ModelInput {
 	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey,
 	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries };
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries };
 }
 
 /** One daily output series. nodeId null = catchment level. */
@@ -3743,7 +3764,7 @@ export interface WaterBalanceRow {
 	/** Start year of the water year (Oct–Sep); null for the whole-run row. */
 	waterYear: number | null;
 	days: number;
-	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0); null when the run has no rain series. */
+	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0; under per-unit rain, engine ≥ 1.78.0, the units' area-weighted rain_used); null when the run has no rain series. */
 	rainMm: number | null;
 	/** Natural flow as depth over the catchment (mm); null without an area. */
 	naturalFlowMm: number | null;

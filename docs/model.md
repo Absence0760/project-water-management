@@ -2185,8 +2185,9 @@ in this order:
 
 "The catchment's rain" is the catchment's rain used before the areal
 correction (catchment ?? corrected CHIRPS ?? forecast), × the unit's MAP
-ratio when rule 2's conditions hold, else × 1. A day with no value from any
-link is dry (0 mm) and counted. A unit on rules 1–3 that ran historical days
+ratio when rule 2's conditions hold, else × 1. On rules 1–3 a unit's own forecast record (`rain_forecast_mm@<unit>`, which
+only the seasonal outlook writes, below) comes just before the catchment's
+rain. A day with no value from any link is dry (0 mm) and counted. A unit on rules 1–3 that ran historical days
 on the catchment's rain warns how many.
 
 - **Clamp.** Every factor is held between `AREAL_RAIN_FACTOR_MIN` and
@@ -2275,8 +2276,9 @@ also fills a gauge unit's gaps; absent = catchment rain, as every fit before
 it). Turning per-unit rain on or off, another gauge MAP or MAP period, and
 (from a run's summary, `FitForcingNow.unitRain`) a unit's rule, record,
 CHIRPS level or factor moving by more than 2 % are "Forcing changed since
-fit". The API's fit-record schema validates the field with
-`unitRainFingerprintError`.
+fit". The API's fit-record schema is to accept the field, validated with
+`unitRainFingerprintError` (the integration of issue #482; until then a
+per-unit fit can't be saved).
 
 **Elsewhere.** Firm yield (§2.13) runs on the same per-unit runoff. A
 model-state snapshot (§2.16) holds each unit's GR4J state and pins each
@@ -2290,10 +2292,20 @@ runs' rain factor (§2.10g) therefore scales every rain record and, under
 per-unit rain, every unit's MAP and the gauge MAP by the same factor, so
 every unit's rain moves by it and the MAP ratios stay put. The uncertainty
 ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as it drops the
-catchment gauge. A seasonal outlook's member (§2.15) runs its season on the
-analogue's catchment rain as the forecast, so a unit off the MAP ratio runs
-its season at the catchment level, not at its own (a follow-up:
-followups.md § Hydrologist). `verify/` (the independent cross-check) lists
+catchment gauge. A seasonal outlook's member (§2.15) runs each land unit's
+season on that unit's own forcing: the base run's `rain_unit` on the
+analogue's days goes in as the unit's own forecast,
+`rain_forecast_mm@<unit>` (`unitForecastSeriesKey`, engine-only: the API
+never stores one), which the unit's chain reads before the catchment's rain.
+So the season has the unit's rule and factors as the base run had them, a
+member from the snapshot keeps them pinned, and a unit on the catchment rule
+(rule 4) ignores it and keeps the catchment rain. A unit on the MAP ratio
+(rule 2) gets the same season as without it (`outlook.unitRain.test.ts`).
+The older re-run path (`warmStart: false`) pins the base input's rules and
+factors too (`settings.unitRain.pinned`, engine-only), rather than refit
+them on the member's record cut at the decision date, so its history runs
+at the levels its season was made at and its season is the snapshot
+member's to the bit. `verify/` (the independent cross-check) lists
 `perUnit` as unsupported until it is ported from this section.
 
 **Performance.** A synthetic 12-unit catchment with daily rain from 1981
@@ -2310,7 +2322,8 @@ and 200 ms.
   complete year of the record (with a warning) below it;
 - the 0.25–4 clamp, reused from §2.4b for every unit factor;
 - forecast days: CHIRPS-GEFS stays catchment-wide, × the MAP ratio on rule 2
-  (and on rule 1 when its conditions hold), × 1 otherwise;
+  (and on rule 1 when its conditions hold), × 1 otherwise (a seasonal
+  outlook's analogue season is the unit's own, above);
 - a unit's CHIRPS without a MAP takes the catchment's §2.4b factors, which
   were fitted against the catchment gauge on the catchment CHIRPS, not on
   the unit's cells;
@@ -7967,7 +7980,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 
 | Factor | Low / high (default) | What changes | Skipped when |
 | --- | --- | --- | --- |
-| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; under per-unit rain, engine ≥ 1.78.0, the units' own records too, with the unit MAPs and the gauge MAP × the same factor, §2.4h; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
 | Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it. On a full-allocation run, 0.7 and 1.3 × the registered volume (engine ≥ 1.70.0, §2.12a; before, both ends were the central run) | no unit or user has demand over the reporting window |
@@ -9657,6 +9670,9 @@ checks the method reproduces the base run).
   bias-corrected (forecast rain is never corrected again, §2.4b);
 - the daily A-pan, when the project has one, the analogue's values on the
   same days (a day without one takes the season month's mean, §2.3a);
+- under runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0), each land
+  unit's season in `rain_forecast_mm@<unit>`: the base run's `rain_unit` on
+  the analogue's days, so the unit runs its season on its own forcing;
 - the run window pinned to the base run's start and the season end,
   rain-source periods clipped to the history (§2.4e), and
   `demandFactorFrom` set to the decision date;
