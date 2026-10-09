@@ -736,7 +736,7 @@
 						<div class="panel" id="res-unit-rain">
 							<Lazy load={loadUnitRainPanel}>
 								{#snippet children(UnitRainPanel)}
-									<UnitRainPanel result={unitRain} />
+									<UnitRainPanel result={unitRain} order={summary.farms.map((f) => f.nodeId)} />
 								{/snippet}
 							</Lazy>
 						</div>

@@ -428,6 +428,8 @@ describe('SettingsPatch.unitRain (issue #482)', () => {
 			expect(unitRainError(bad), name).not.toBeNull();
 		}
 		expect(ok({ ...full, extra: 1 })).toBe(false);
+		// The engine-only `pinned` rules (an outlook member's, docs/model.md §2.4h) never come from a client: a stored one would override every unit's fitted level.
+		expect(ok({ ...full, pinned: [{ nodeId: 'u1', rule: 'gaugeMap', gaugeMapFactor: 4 }] })).toBe(false);
 	});
 
 	it('is replaced whole by a patch, and kept by a patch of anything else', () => {

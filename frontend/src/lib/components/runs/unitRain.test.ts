@@ -94,6 +94,11 @@ describe('sortResultUnits', () => {
 		]).map((u) => u.name);
 		expect(order).toEqual(['C', 'B', 'A', 'D']);
 	});
+
+	it('follows the run’s farm order within a rank, not the engine’s node-id order; a unit it doesn’t name goes last', () => {
+		const units = [unit({ nodeId: 'a', name: 'A' }), unit({ nodeId: 'b', name: 'B' }), unit({ nodeId: 'c', name: 'C' }), unit({ nodeId: 'x', name: 'X', gaugeMapClamped: true })];
+		expect(sortResultUnits(units, ['c', 'x', 'a']).map((u) => u.name)).toEqual(['X', 'C', 'A', 'B']);
+	});
 });
 
 describe('UnitRainPanel', () => {

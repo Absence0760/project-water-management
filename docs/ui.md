@@ -7119,6 +7119,7 @@ read it before.
   0.25–4 bound; a CHIRPS mean taken outside the MAP period; CHIRPS used
   raw; the first four, the rest behind **Show all N things to check**), a
   table per unit, the units that fell back and then held factors first,
+  each group in the run's farm order (upstream first, as the farm tables),
   eight shown and the rest behind **Show all N units** (rain from: its own
   gauge, catchment gauge × MAP ratio, its own CHIRPS, or catchment rain
   (fallback), over its level factor and source in one column, "held at the

@@ -13,12 +13,13 @@
 	import { fmtNum } from '$lib/format/number';
 	import { factorClamped, factorText, periodText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
 
-	let { result }: { result: UnitRainResult } = $props();
+	/** order: node ids in the run's farm order (summary.farms), which the rows follow within each rank. */
+	let { result, order = [] }: { result: UnitRainResult; order?: string[] } = $props();
 
 	const uid = $props.id();
 	const FOLD = 8;
 	const NOTES_FOLD = 4;
-	const units = $derived(sortResultUnits(result.units));
+	const units = $derived(sortResultUnits(result.units, order));
 	const notes = $derived(unitRainNotes(result));
 	let allUnits = $state(false);
 	let allNotes = $state(false);

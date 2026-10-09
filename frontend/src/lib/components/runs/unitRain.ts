@@ -68,10 +68,13 @@ export function unitRainNotes(r: Pick<UnitRainResult, 'units'>): string[] {
 export const periodText = (p: { start: string; end: string }) => `${p.start.slice(0, 4)}–${p.end.slice(0, 4)}`;
 
 /** The units to look at first: fell back to the catchment rain, then a held factor, then the rest, each in the run's order. */
-export function sortResultUnits(units: readonly UnitRainResultUnit[]): UnitRainResultUnit[] {
+export function sortResultUnits(units: readonly UnitRainResultUnit[], order: readonly string[] = []): UnitRainResultUnit[] {
 	const rank = (u: UnitRainResultUnit) => (u.rule === 'catchment' ? 0 : factorClamped(u) ? 1 : 2);
+	// Within a rank, the run's farm order (summary.farms, upstream first, as every other per-unit table); the engine's node-id order is random to a reader.
+	const at = new Map(order.map((id, i) => [id, i]));
+	const pos = (u: UnitRainResultUnit, i: number) => at.get(u.nodeId) ?? order.length + i;
 	return units
-		.map((u, i) => ({ u, i }))
+		.map((u, i) => ({ u, i: pos(u, i) }))
 		.sort((a, b) => rank(a.u) - rank(b.u) || a.i - b.i)
 		.map((x) => x.u);
 }
