@@ -2,7 +2,27 @@
 // `layers=` in the URL and the bbox the quaternaries and rivers are asked for around the features.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
-import { creditedFeature, creditedReach, layersOn, layersStatus, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, reachFacts, reachLabel, RIVER_BBOX_MAX_DEG, riverBbox, riverViewBbox, withLayer } from './mapLayers';
+import {
+	CHIRPS_MAX_POINTS,
+	chirpsCells,
+	creditedFeature,
+	creditedReach,
+	layersOn,
+	layersStatus,
+	MAP_GRID_BBOX_MAX_DEG,
+	mapGridViewBbox,
+	mapLabel,
+	QUATERNARY_BBOX_MAX_DEG,
+	quaternaryBbox,
+	reachFacts,
+	reachLabel,
+	RIVER_BBOX_MAX_DEG,
+	riverBbox,
+	riverViewBbox,
+	unitLabels,
+	withLayer
+} from './mapLayers';
+import { square } from './layerTesting';
 
 const poly = (x: number, y: number, d: number) =>
 	({ id: 'p', kind: 'farm_parcel', geometry: { type: 'Polygon', coordinates: [[[x, y], [x + d, y], [x + d, y + d], [x, y]]] } }) as MapFeature;
@@ -28,6 +48,70 @@ describe('layers in the URL', () => {
 		expect(new URLSearchParams(withLayer(both, 'quaternaries', false)).get('layers')).toBe('relief');
 		const three = withLayer(both, 'rivers', true);
 		expect(new URLSearchParams(three).get('layers')).toBe('quaternaries,rivers,relief');
+	});
+
+	it('takes the units, the MAP grid and the CHIRPS grid as layers, each on and off on its own', () => {
+		const all = ['chirps', 'mapgrid', 'units'].reduce((q, l) => withLayer(q, l as 'units', true), '?tab=map');
+		expect(new URLSearchParams(all).get('layers')).toBe('units,mapgrid,chirps');
+		expect(new URLSearchParams(withLayer(all, 'mapgrid', false)).get('layers')).toBe('units,chirps');
+		expect([...layersOn(new URLSearchParams('layers=chirps,units'))]).toEqual(['units', 'chirps']);
+	});
+});
+
+describe('unitLabels', () => {
+	it('labels each farm parcel by its unit, else its own name, inside the polygon, sorted; other kinds are not units', () => {
+		const a = { ...square('a', 21.3, -33.7, 'farm_parcel'), name: 'Lower polygon', nodeName: 'Lower unit', areaM2: 12_500_000 } as never;
+		const b = { ...square('b', 21.4, -33.7, 'farm_parcel'), name: 'Middle', nodeName: null, areaM2: null } as never;
+		const c = { ...square('c', 21.5, -33.7, 'farm_parcel'), name: '', nodeName: 'Alpha', areaM2: 1_000_000 } as never;
+		const boundary = square('z', 21.2, -33.8, 'catchment_boundary');
+		const got = unitLabels([a, b, c, boundary]);
+		expect(got.map((u) => [u.featureId, u.label, u.polygonName, u.areaKm2])).toEqual([
+			['c', 'Alpha', null, 1],
+			['a', 'Lower unit', 'Lower polygon', 12.5],
+			['b', 'Middle', null, null]
+		]);
+		const [x, y] = got[1]!.at;
+		expect(x).toBeGreaterThan(21.3);
+		expect(x).toBeLessThan(21.4);
+		expect(y).toBeGreaterThan(-33.7);
+		expect(y).toBeLessThan(-33.6);
+	});
+});
+
+describe('mapGridViewBbox', () => {
+	it('snaps the view outward to 0.02°, and gives nothing for a view wider than the server takes', () => {
+		expect(mapGridViewBbox([21.301, -33.649, 21.329, -33.621])).toEqual([21.3, -33.66, 21.34, -33.62]);
+		expect(mapGridViewBbox([20, -34, 20 + MAP_GRID_BBOX_MAX_DEG + 0.1, -33])).toBeNull();
+		expect(mapGridViewBbox(null)).toBeNull();
+		expect(mapLabel(812)).toBe('812 mm');
+	});
+});
+
+describe('chirpsCells', () => {
+	it('gives the CHIRPS v3 cells whose centres lie in view, from the grid alone: centres at 0.025 + k × 0.05', () => {
+		const got = chirpsCells([19.2, -32.7, 19.3, -32.6])!;
+		expect(got.map((c) => [c.lon, c.lat])).toEqual([
+			[19.225, -32.675],
+			[19.275, -32.675],
+			[19.225, -32.625],
+			[19.275, -32.625]
+		]);
+		expect(got[0]!.square).toEqual([19.2, -32.7, 19.25, -32.65]);
+		// A centre on the view's edge is in it.
+		expect(chirpsCells([19.225, -32.675, 19.225, -32.675])).toHaveLength(1);
+	});
+
+	it('gives nothing for a view holding more than the most points drawn, or no view', () => {
+		expect(chirpsCells([18, -34, 21, -31])).toBeNull();
+		expect(chirpsCells([19, -33, 19.5, -32.5])!.length).toBeLessThanOrEqual(CHIRPS_MAX_POINTS);
+		expect(chirpsCells(null)).toBeNull();
+	});
+});
+
+describe('layersStatus with more layers', () => {
+	it('adds the other layers’ lines after the quaternaries’ and the reaches’', () => {
+		const off = { on: false, idle: false, failed: false, count: null };
+		expect(layersStatus(off, off, null, ['3 hydrological units labelled.', null, '20 CHIRPS grid points shown.'])).toBe('3 hydrological units labelled. 20 CHIRPS grid points shown.');
 	});
 });
 

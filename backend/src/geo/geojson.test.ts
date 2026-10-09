@@ -225,6 +225,28 @@ describe('proposing each feature’s kind (issue #326 D2)', () => {
 		expect(kinds(lone, true)).toEqual(['farm_parcel']);
 	});
 
+	it('names a feature from a `layer` that names no kind when it has no name (QGIS "Merge vector layers"), with no note', () => {
+		// QGIS writes each source layer's name in `layer`: a file of sub-catchments
+		// carries their names there and nothing in `name`.
+		const fs = parsed(
+			feature(poly(box(0, 0, 1, 1)), { layer: ' Upper unit ', Area: 12.5 }),
+			feature(poly(box(2, 2, 3, 3)), { LAYER: 'Lower unit' }),
+			feature(poly(box(4, 4, 5, 5)), { layer: 'Dams' }),
+			feature(poly(box(6, 6, 7, 7)), { name: 'Upper', layer: 'Subcatchments' }),
+			feature(poly(box(8, 8, 9, 9)), { layer: 'Middle unit', type: 'parcel' })
+		);
+		expect(fs.map((f) => f.name)).toEqual(['Upper unit', 'Lower unit', '', 'Upper', 'Middle unit']);
+		expect(fs.map((f) => f.kindHint)).toEqual([null, null, 'Dams', 'Subcatchments', 'parcel']);
+		expect(proposeKinds(fs, { hasBoundary: true })).toEqual([
+			{ kind: 'farm_parcel', from: 'geometry' },
+			{ kind: 'farm_parcel', from: 'geometry' },
+			{ kind: 'dam', from: 'property' },
+			{ kind: 'farm_parcel', from: 'geometry', note: 'the file says “Subcatchments”, which isn’t a kind the map knows' },
+			{ kind: 'farm_parcel', from: 'property' }
+		]);
+		expect(fs[0]!.properties).toEqual({});
+	});
+
 	it('falls back to the shape, with a note, when the property names no kind or one that can’t be that shape', () => {
 		const fs = parsed(feature(line, { kind: 'Gauge' }), feature(point(1, 1), { type: 'road' }));
 		expect(proposeKinds(fs, { hasBoundary: true })).toEqual([
