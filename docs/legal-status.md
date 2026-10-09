@@ -487,7 +487,7 @@ cl. 3). The licensing ones are rows in
   unchanged: a clarification, not a material change, so it brings no
   `LEGAL_VERSION` bump of its own (it shares the 2026-10-01 text with any
   bump made that day).
-- 2026-10-08: two-step sign-in, three operator decisions in one change
+- 2026-10-09: two-step sign-in, three operator decisions in one change
   (204_mfa_opt_in, 205_mfa_recovery, 206_mfa_email_code; security.md §
   Two-step sign-in). (1) Who must use it: Privacy §9 now says it is required
   for publishing to farmers, licence decisions and evidence packs, and in a
@@ -505,8 +505,8 @@ cl. 3). The licensing ones are rows in
   the Terms' sign-off clause: the fresh code may come from the app or by
   email. New personal data kept and a narrower default safeguard, so the
   operator judged the whole a **material change** (2026-10-08): one
-  `LEGAL_VERSION` 2026-10-08 (every account accepts again), with one entry
-  on the re-acceptance step naming all three. If it ships after 2026-10-08,
+  `LEGAL_VERSION` 2026-10-09 (every account accepts again), with one entry
+  on the re-acceptance step naming all three. If it ships after 2026-10-09,
   move `LEGAL_VERSION` (and this entry's date) to the deploy date.
 - 2026-10-01: two-step sign-in (issue #282, 150_mfa.sql). Privacy §3 lists
   the authenticator key (stored encrypted), the recovery codes (one-way

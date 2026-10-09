@@ -62,7 +62,7 @@ test('an account that accepted the previous version is shown only what changed s
 	await page.goto('/');
 	await expect(page.getByRole('heading', { level: 1, name: 'Our terms have changed' })).toBeVisible();
 	const changes = page.locator('ul.changes').getByRole('listitem');
-	// 2026-10-08's one entry: who must use two-step sign-in, recovering it, and codes by email.
+	// 2026-10-09's one entry: who must use two-step sign-in, recovering it, and codes by email.
 	await expect(changes).toHaveCount(3);
 	await expect(changes.nth(0)).toHaveText(/Two-step sign-in is now needed only to publish to farmers/);
 	await expect(changes.nth(1)).toHaveText(/remove two-step sign-in yourself after a 3-day wait, or ask a team admin/);

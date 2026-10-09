@@ -26,7 +26,7 @@ export const TERMS_CHANGES: readonly TermsChange<Msg>[] = [
 	// Two-step sign-in (the operator's decisions of 2026-10-08, docs/legal-status.md): who must use it (204, Privacy §9),
 	// recovering a lost factor (205, Privacy §3 and §7) and codes by email (206, Privacy §3, §7 and §9).
 	{
-		version: '2026-10-08',
+		version: '2026-10-09',
 		items: [
 			msg('Two-step sign-in is now needed only to publish to farmers, for licence decisions and evidence packs, and in a project or team that turns it on.'),
 			msg('If you can’t get a code, you can remove two-step sign-in yourself after a 3-day wait, or ask a team admin. We keep a record of the request for 90 days.'),
