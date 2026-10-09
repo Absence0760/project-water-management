@@ -2612,7 +2612,7 @@ In short:
     and with no database access**: its role may only receive fetch requests and
     send results, and it refuses a request for a longer window than one fetch
     reads (120 CHIRPS days, 20 DWS years). The worker validates each result
-    again (`FetchResult`, or `CellsResult` for a CHIRPS answer's cells: size, dates, values, a flat `meta` within `last_meta`'s
+    again (`FetchResult`, or `CellsResult` for a CHIRPS answer's cells, with its file `tags` and `recheck`, 210: size, dates in order, bounded counts, tags of printable ASCII, values, a flat `meta` within `last_meta`'s
     byte budget, no U+0000, so nothing it accepts can fail the database after
     the merge), checks it answers a real `feed_fetch` job of
     that feed, and drops one for a feed changed since, before anything merges
@@ -2647,6 +2647,21 @@ In short:
     only receives requests and sends answers. A fixture database's
     synthetic values carry `origin = 'fixtures'` and are never read by a
     live feed.
+  - **Re-checking finals** (`210_chirps_final_recheck`). The re-check adds
+    HEAD requests and reads of final files to the fetcher, by the same
+    client: HTTPS to `data.chc.ucsb.edu` only (`FEED_HOSTS`), every
+    redirect checked, the URL built from constants and a date the request
+    schema bounds (the product's first day to today). A file's tag is kept
+    only as 1–200 printable ASCII characters (`fileTag`, again in SQL
+    `chirps_tag_ok`). Only `chirps_recheck_apply` replaces a cached final,
+    and only for a day the worker's own claim asked that fetch for
+    (`claim_job`, which must be the feed's own `feed_fetch` job, queued as
+    the caller: a claim id read from the shared table is no key) or a
+    cell-day already marked stale; a HEAD result counts only for a file the
+    fetch claimed. So a forged answer can't rewrite
+    finals the feed never asked about, and at worst marks the claimed days
+    stale (they are read again). A revision is logged (`chirps_revision`)
+    and reaches each project's series with a History event.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -2928,9 +2943,11 @@ placed points. The server never trusts the browser with geometry:
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
   orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207) and `river_reference` (171) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
-  schema owner). The shared CHIRPS cell cache (`chirps_cell_year`, 208) is
-  read the same way but written by the data feeds, through one checked
-  function (Input handling, above).
+  schema owner). The shared CHIRPS cell cache (`chirps_cell_year`, 208,
+  and 210's `chirps_file`, `chirps_cell_stale`, `chirps_revision`) is read
+  the same way but written by the data feeds, through checked functions
+  (`chirps_cache_merge`, `chirps_recheck_claim`, `chirps_recheck_apply`;
+  Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
   with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and

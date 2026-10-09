@@ -11,6 +11,14 @@
 //   DWS     the sample page's values replayed for the requested window,
 //           ending DWS_FIXTURE_LAG_DAYS before today (dws-sample.html)
 //
+// Every file has a tag (FeedHttp.rangeTagged / head): a hash of its bytes, as
+// an ETag would change with them. With `rewrite` (FEED_FIXTURE_REWRITE=1, or
+// a test's option) the sat and rnl finals of the days chirps-rewrite.json
+// names, counted back from today, are served rewritten in place: other
+// values, so another tag, at the same URL, as CHC rewrote the 2024 dailies
+// in 2025-12. The re-check of cached finals is tested against it offline
+// (docs/architecture.md § Data feeds → Re-checking finals).
+//
 // The grids are encoded as real LZW GeoTIFFs in the CHC layout
 // (sources/tiff-write.ts), so fixtures exercise the same reader as
 // production. Each file covers the fixture's `cover` (21.0–25.4° E, 20.0–34.0° S),
@@ -18,6 +26,7 @@
 // example's synthetic catchment (backend/scripts/examples/map.ts) reads rain
 // offline. Any other URL is a 404. Invented grid and station: no real
 // place, catchment or measurement.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
@@ -96,8 +105,23 @@ export function renderDwsPage(station: string, rows: { date: string; value: numb
 	return `<p><pre>Data are continuously updated and reviewed.\nThe format of this file is as follows:\n${format}\n\n${station} (fixture)\nVariable 100.00 Surface Water Level\n\nDATE     D AVG F/R  QUAL\n${lines.join('\n')}\nZZZZZZZZZZZZ\n</pre></p>\n<!DOCTYPE html>\n<html><body></body></html>`;
 }
 
-export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
+/** chirps-rewrite.json: the final days served rewritten (days before today, inclusive) and how their rain changes. */
+export interface RewriteFixture {
+	fromDaysAgo: number;
+	toDaysAgo: number;
+	factor: number;
+}
+export const REWRITE_FIXTURE = (): RewriteFixture => load<RewriteFixture>('chirps-rewrite.json');
+
+/** A fixture file's tag: a hash of its bytes, like an ETag that changes when the file does. */
+export const fixtureTag = (bytes: Uint8Array) => `"fx-${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"`;
+
+export function fixtureHttp(today: () => string = () => utcToday(), opts: { rewrite?: RewriteFixture | boolean } = {}): FeedHttp {
 	const chirps = load<GridFixture>('chirps-sample.json');
+	const rewrite = opts.rewrite === true ? REWRITE_FIXTURE() : opts.rewrite || null;
+	/** Whether `day`'s final file is served rewritten. */
+	const rewritten = (day: number, t: number) => rewrite !== null && day >= t - rewrite.fromDaysAgo && day <= t - rewrite.toDaysAgo;
+	const scaled = (f: GridFixture) => ({ ...f, pattern: f.pattern.map((v) => v * rewrite!.factor) });
 	const gefs = load<GridFixture>('gefs-sample.json');
 	const dwsSample = parseDwsDaily(readFileSync(`${FIXTURE_DIR}dws-sample.html`, 'utf8'));
 	const cache = new Map<string, Uint8Array>();
@@ -111,6 +135,13 @@ export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
 		return v;
 	};
 
+	const tags = new WeakMap<Uint8Array, string>();
+	const tagOf = (bytes: Uint8Array) => {
+		let t = tags.get(bytes);
+		if (!t) tags.set(bytes, (t = fixtureTag(bytes)));
+		return t;
+	};
+
 	const file = (url: string): Uint8Array | null => {
 		const t = toEpochDay(today());
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
@@ -118,6 +149,7 @@ export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
 			const day = toEpochDay(`${m[1]}-${m[2]}-${m[3]}`);
 			if (day < RNL_FIRST || day > t - (chirps.rnlLagDays ?? 6)) return null;
 			// The same pentads, other daily timing: the pattern a day later.
+			if (rewritten(day, t)) return cached(`crnlx${day}`, () => gridFile(scaled(chirps), day - 1));
 			return cached(`crnl${day}`, () => gridFile(chirps, day - 1));
 		}
 		m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/(final|prelim)\/sat\/\d{4}\/chirps-v3\.0\.(?:sat|prelim)\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
@@ -129,6 +161,7 @@ export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
 			if (m[1] === 'final' ? !final : !prelim) return null;
 			// A preliminary day reads a little high, so the final overwrite is visible.
 			const k = day;
+			if (m[1] === 'final' && rewritten(day, t)) return cached(`cfinalx${k}`, () => gridFile(scaled(chirps), k));
 			return cached(`c${m[1]}${k}`, () =>
 				gridFile(m![1] === 'final' ? chirps : { ...chirps, pattern: chirps.pattern.map((v) => v * 1.1) }, k)
 			);
@@ -147,6 +180,14 @@ export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
 		async range(url, start, end) {
 			const bytes = file(url);
 			return bytes ? bytes.subarray(start, end + 1) : null;
+		},
+		async rangeTagged(url, start, end) {
+			const bytes = file(url);
+			return bytes ? { bytes: bytes.subarray(start, end + 1), tag: tagOf(bytes) } : null;
+		},
+		async head(url) {
+			const bytes = file(url);
+			return bytes ? { tag: tagOf(bytes) } : null;
 		},
 		async text(url) {
 			if (!url.startsWith(`${DWS_BASE}?`)) return null;

@@ -4130,7 +4130,13 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
   days staged so far, or the label of what it replaced once swapped in),
   `through` (the last day the fetch asked for) and, for CHIRPS,
   `finalThrough` (the last day through which the series is final, not read
-  again, #69). A CHIRPS `prelimDays` counts the preliminary days in the
+  again, #69), `daysRead` / `cellDaysRead` (what CHC was asked for this time,
+  208), `filesChecked` / `recheckDaysRead` (the cached final files HEADed and
+  the days read again by the re-check, when it ran, and `recheckFailed`, those
+  that failed and come due again, 210) and `revisionXmin`
+  (internal: where the feed's next refresh of revised days reads from; the
+  refresh itself shows in the History as `series.merged` with
+  `chirpsRevision`, architecture.md § Data feeds). A CHIRPS `prelimDays` counts the preliminary days in the
   window, the ones the feed already held and didn't read again included.
 - `health = { state, stale, staleAfterDays, reason }`, `state` ∈ `ok`,
   `stale`, `failing`, `pending`, `disabled`. `reason` says why, as a `code`

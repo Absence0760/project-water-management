@@ -1,0 +1,6 @@
+{
+	"note": "Synthetic. The CHIRPS sat and rnl finals of these days (counted back from today) are served rewritten in place when FEED_FIXTURE_REWRITE=1 or a test asks: the same URL, other values (the pattern times factor), so another tag. Stands in for CHC rewriting published finals with no version bump (the 2024 dailies, 2025-12). backend/src/feeds/fixtures.ts.",
+	"fromDaysAgo": 120,
+	"toDaysAgo": 100,
+	"factor": 1.25
+}

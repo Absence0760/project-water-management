@@ -215,7 +215,12 @@ const READ_ONLY = new Set([
 	'mfa_reset',
 	// The shared CHIRPS cell cache (208_chirps_cell_cache): every project's feeds read it, so only chirps_cache_merge
 	// writes it, from a running data-feed job, checking every value and never replacing a final one with a preliminary one.
-	'chirps_cell_year'
+	'chirps_cell_year',
+	// The re-check of cached finals CHC rewrites in place (210_chirps_final_recheck): the files' tags, the stale cells and
+	// the revision log, written only by chirps_cache_merge, chirps_recheck_claim and chirps_recheck_apply from a running data-feed job.
+	'chirps_file',
+	'chirps_cell_stale',
+	'chirps_revision'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).

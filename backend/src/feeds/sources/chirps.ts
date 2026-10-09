@@ -232,14 +232,37 @@ export async function fetchChirps(
  * outside 0–2000 mm fails the fetch, as gridMean's does.
  */
 export async function gridValues(http: FeedHttp, url: string, points: readonly { lat: number; lon: number }[]): Promise<(number | null)[] | null> {
-	const read = (start: number, end: number) => http.range(url, start, end);
+	return (await gridValuesTagged(http, url, points))?.values ?? null;
+}
+
+/**
+ * gridValues, with the file's tag (FeedHttp.rangeTagged; null when the
+ * client gives none): which version of the file the values came from. Every
+ * range read of the file must carry the same tag, or the file was rewritten
+ * while it was being read and its values may be half old, half new: that
+ * fails the fetch as unavailable, so it is read again later.
+ */
+export async function gridValuesTagged(
+	http: FeedHttp,
+	url: string,
+	points: readonly { lat: number; lon: number }[]
+): Promise<{ values: (number | null)[]; tag: string | null } | null> {
+	let tag: string | null | undefined;
+	const read = async (start: number, end: number) => {
+		if (!http.rangeTagged) return http.range(url, start, end);
+		const got = await http.rangeTagged(url, start, end);
+		if (!got) return null;
+		if (tag === undefined) tag = got.tag;
+		else if (got.tag !== tag) throw new FeedUnavailableError('a file changed while it was being read');
+		return got.bytes;
+	};
 	const grid = await openGrid(read);
 	if (!grid) return null;
 	const values = await readPoints(read, grid, points);
 	values.forEach((v, i) => {
 		if (v !== null && (v < 0 || v > 2000)) throw new FeedFormatError(`the grid has an implausible rainfall of ${v} mm at ${points[i]!.lat}, ${points[i]!.lon}`);
 	});
-	return values;
+	return { values, tag: tag ?? null };
 }
 
 /**
@@ -260,6 +283,8 @@ export interface CellDays {
 	read: string;
 	/** Per cell (the points' order), per day: mm, NaN for no data, null where the day wasn't read. */
 	values: (number | null)[][];
+	/** Per day: the final file's tag on a day read from it (gridValuesTagged), else null. */
+	tags: (string | null)[];
 }
 
 /**
@@ -285,19 +310,19 @@ export async function fetchChirpsCells(
 	const s = toEpochDay(start);
 	const days = Array.from({ length: plan.length }, (_, i) => fromEpochDay(s + i));
 	const today = toEpochDay(opts.today ?? fromEpochDay(s + plan.length));
-	const reads: ({ kind: 'f' | 'p'; v: (number | null)[] } | null)[] = new Array(plan.length).fill(null);
+	const reads: ({ kind: 'f' | 'p'; v: (number | null)[]; tag: string | null } | null)[] = new Array(plan.length).fill(null);
 	const want = days.map((_, i) => i).filter((i) => plan[i] !== DAY_SKIP);
 	if (product === 'rnl') {
 		await mapLimit(want, concurrency, async (i) => {
-			const v = await gridValues(http, chirpsRnlUrl(days[i]!), points);
-			if (v) reads[i] = { kind: 'f', v };
+			const r = await gridValuesTagged(http, chirpsRnlUrl(days[i]!), points);
+			if (r) reads[i] = { kind: 'f', v: r.values, tag: r.tag };
 		});
 	} else {
 		for (let probed = 0, size = 1; probed < want.length; size = concurrency) {
 			const idx = want.slice(probed, probed + size);
-			const batch = await mapLimit(idx, concurrency, (i) => gridValues(http, chirpsFinalUrl(days[i]!), points));
-			batch.forEach((v, k) => {
-				if (v) reads[idx[k]!] = { kind: 'f', v };
+			const batch = await mapLimit(idx, concurrency, (i) => gridValuesTagged(http, chirpsFinalUrl(days[i]!), points));
+			batch.forEach((r, k) => {
+				if (r) reads[idx[k]!] = { kind: 'f', v: r.values, tag: r.tag };
 			});
 			probed += idx.length;
 			if (batch.at(-1) === null && !finalExpected(days[idx.at(-1)!]!, today)) break;
@@ -305,14 +330,69 @@ export async function fetchChirpsCells(
 		const prelim = want.filter((i) => reads[i] === null && plan[i] === DAY_READ);
 		await mapLimit(prelim, concurrency, async (i) => {
 			const v = await gridValues(http, chirpsPrelimUrl(days[i]!), points);
-			if (v) reads[i] = { kind: 'p', v };
+			if (v) reads[i] = { kind: 'p', v, tag: null };
 		});
 	}
 	return {
 		startDate: start,
 		read: reads.map((r) => (r ? r.kind : '-')).join(''),
-		values: points.map((_, c) => reads.map((r) => (r ? (r.v[c] ?? Number.NaN) : null)))
+		values: points.map((_, c) => reads.map((r) => (r ? (r.v[c] ?? Number.NaN) : null))),
+		tags: reads.map((r) => (r?.kind === 'f' ? r.tag : null))
 	};
+}
+
+/** The final file of `day` for a CHIRPS v3 daily product. */
+export const chirpsFinalFileUrl = (product: 'sat' | 'rnl', day: string) => (product === 'rnl' ? chirpsRnlUrl(day) : chirpsFinalUrl(day));
+
+/** What a re-check of cached finals found (feeds/cellCache.ts, docs/architecture.md § Data feeds → Re-checking finals). */
+export interface RecheckDays {
+	/** Each file HEADed: its tag now, null when it is gone or has none. */
+	head: { day: string; tag: string | null }[];
+	/** Each day read again: its final file's tag and each point's value (NaN = no data), or values null when the file is gone. */
+	read: { day: string; tag: string | null; values: number[] | null }[];
+	/** HEADs and reads that failed (left out of the two lists above). */
+	failed: number;
+}
+
+/**
+ * Re-check cached CHIRPS finals: HEAD the final file of each `head` day (a
+ * request with no body: only its tag comes back), and read each `read` day's
+ * final file at `points` (the cells' centres), as a fetch reads a final.
+ * Only final files: a preliminary one is replaced by its final anyway.
+ *
+ * A day that fails (the source unreachable, a file rewritten while read, an
+ * implausible value) is left out of the answer rather than failing the
+ * feed's fetch: the re-check is a side job, and its claim simply comes due
+ * again (a stale day at the feed's next fetch, a file after its interval).
+ */
+export async function recheckChirpsFinals(
+	http: FeedHttp,
+	points: readonly { lat: number; lon: number }[],
+	product: 'sat' | 'rnl',
+	head: readonly string[],
+	read: readonly string[],
+	concurrency = 6
+): Promise<RecheckDays> {
+	const settle = async <T>(f: () => Promise<T>): Promise<T | null> => {
+		try {
+			return await f();
+		} catch {
+			return null;
+		}
+	};
+	const heads = await mapLimit(head, concurrency, (day) =>
+		settle(async () => ({ day, tag: http.head ? ((await http.head(chirpsFinalFileUrl(product, day)))?.tag ?? null) : null }))
+	);
+	const reads = await mapLimit(read, concurrency, (day) =>
+		settle(async () => {
+			const r = await gridValuesTagged(http, chirpsFinalFileUrl(product, day), points);
+			return r ? { day, tag: r.tag, values: r.values.map((v) => v ?? Number.NaN) } : { day, tag: null, values: null };
+		})
+	);
+	const kept = <T>(xs: (T | null)[]) => xs.filter((x): x is T => x !== null);
+	const h = kept(heads);
+	const r = kept(reads);
+	return { head: h, read: r, failed: head.length + read.length - h.length - r.length };
 }
 
 export interface Forecast {

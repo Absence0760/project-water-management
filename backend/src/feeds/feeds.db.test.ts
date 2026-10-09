@@ -40,6 +40,8 @@ afterEach(async () => {
 	await asOwner(`DELETE FROM job WHERE kind IN ('feed_fetch', 'feed_ingest')`);
 	// The shared cell cache (208) outlives a feed: each test starts from an empty one, as a new place would.
 	await asOwner('DELETE FROM chirps_cell_year');
+	await asOwner('DELETE FROM chirps_file');
+	await asOwner('DELETE FROM chirps_cell_stale');
 });
 
 const cell = () => ({ ...FIXTURE_CELL(), weight: 1 });
