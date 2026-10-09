@@ -2142,7 +2142,11 @@ mapPeriod? }`. `gaugeMapMm` is the catchment rain gauge's own MAP (mm, with
 its source), `mapPeriod` the years a unit's CHIRPS MAP factor compares over
 (ISO dates; absent = `DEFAULT_UNIT_MAP_PERIOD`, 1991-01-01 to 2020-12-31).
 Each unit's MAP is `node.mapMm` with `node.mapSource` (`mapMmError`: 1–12 000
-mm, a MAP needs its source).
+mm, a MAP needs its source), typed in the unit's form or proposed from a
+loaded MAP grid as the area-weighted mean over the unit's parcel (one grid per
+project, [maps.md § MAP for each unit](./maps.md#map-for-each-unit)). The
+engine only reads the number and its source; where it came from is the source's
+wording.
 
 **The forcing rule.** Each **land unit** (a farm with an area above 0;
 gauges and water users have no land) gets one rule, chosen once for the run
