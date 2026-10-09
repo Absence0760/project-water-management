@@ -3585,6 +3585,52 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
   ingest hand-off (the window check, late and redelivered answers, the fetch
   columns' guards).
 
+### The CHIRPS cell cache (208_chirps_cell_cache.sql)
+
+`chirps_cell_year`: CHIRPS v3 daily values per 0.05° grid cell and year,
+shared by every project's CHIRPS feeds so each cell is read from CHC once
+(issue #482 part A, [architecture.md § Data feeds](./architecture.md#data-feeds)).
+Reference data: no `project_id`, nothing about anyone.
+
+| Column | Holds |
+| --- | --- |
+| `origin` | `chc` (the real files) or `fixtures` (`FEED_SOURCE=fixtures`'s synthetic grids), kept apart so a database that ran on the fixtures never serves them to a live feed |
+| `product` | `sat` (from 1998) or `rnl` (from 1981), never mixed |
+| `row_idx`, `col_idx` | The CHC grid cell: row 0–2399 from 60° N, column 0–7199 from 180° W (`feeds/cellCache.ts` `chcCell`) |
+| `year` | From the product's first year (`CHECK`) |
+| `vals` | `real[366]` from 1 January: `NULL` not fetched (or not published), `NaN` no data (the sea). The 366th stays `NULL` in a common year |
+| `final` | `boolean[366]`, never `NULL`: whether each day's value came from the final file. Per day, so a preliminary value filling a gap in the archive never makes the finals after it look preliminary |
+| `final_through` | A summary of `final`: the day before the row's first preliminary value (31 December when it holds none; `CHECK` inside the year, or the previous year's 31 December) |
+| `source_etag` | Reserved for re-checking finals CHC rewrites in place; not written yet |
+| `fetched_at` | When a merge last changed the row |
+
+- **Primary key** `(origin, product, row_idx, col_idx, year)`: the reads
+  (`feeds/cellCacheStore.ts readCellCache`, a feed's cells over the years
+  its window spans) use it. No foreign keys.
+- **RLS**: SELECT for any signed-in session (`app_current_user_id() IS NOT
+  NULL`, the reference-data pattern of `evaporation_cell_reference`); no
+  write grant to `water_app` (`catalogue.db.test.ts` `READ_ONLY`).
+- **`chirps_cache_merge(feed, origin, product, first, read, rows, cols, vals)`**
+  (`SECURITY DEFINER`, `search_path` pinned, `water_app` only): the one
+  write path. The caller must be running a `feed_fetch` or `feed_ingest`
+  job of that feed (its lease live), still be an editor of its project, and
+  the feed must be a CHIRPS feed of that product. That the cells are the
+  feed's own and the days inside its window is checked by the ingest before
+  the call (`feeds/ingest.ts fromCells`). It checks every value (0–2000
+  mm or NaN; a value on every day read, none on a day not read), the days
+  (from the product's first day, never after today UTC; no preliminary
+  `rnl`), the cells (on the grid, at most 100, strictly in (row, column)
+  order: the lock order, so two merges never deadlock) and refuses the
+  whole fetch otherwise (`23514`). A final value always lands; a
+  preliminary one only on a day whose value isn't final. It locks each
+  row it touches (creating it empty first), recomputes `final_through`,
+  and returns the cell-days changed.
+- Size: about 1.5 KB a row, so a 100-cell feed over 1981–2026 is about 7 MB
+  ([deployment.md § Costs](./deployment.md#costs-rough-idle-to-light-use)).
+- `feeds/cellCache.db.test.ts` checks the access (positive controls), the
+  function's refusals and its final-over-preliminary rule, and the feeds end
+  to end through it.
+
 ### Feed days (031_feed_days.sql)
 
 Which days of a series its feed wrote, so a feed replaces only those and

@@ -1063,15 +1063,17 @@ merges into:
   window starts from there instead, less the re-read, so it moves past days
   with no data rather than asking for the same empty window forever (#29).
   A final CHIRPS value is never revised, so the re-read skips the days
-  already final (#69): the fetcher reports the last day of the leading run
-  it read from the final product (`finalThrough`; for `rnl`, every day), the
+  already final (#69): the answer reports the last day of the leading run
+  it read from the final product (`finalThrough`; for `rnl`, every day;
+  through the cell cache, the worker computes it from the cache itself), the
   ingest keeps it as `last_meta.finalThrough` once it has checked the claim
   (a day of that answer, from the window's first day, with a value on every
   day up to it; the previous marker carries on while it reaches the day
   before the window), and the next window starts the day after it (one day
   at least, the cap counted from there). Changing the feed's place,
   product or series clears `last_meta`, so the marker starts again.
-  A `sat` fetch also reads only what can have changed (`fetchChirps`): CHC
+  A `sat` fetch also reads only what can have changed (`fetchChirpsCells`,
+  the cell cache's fetch below; `fetchChirps` for a request without cells): CHC
   publishes a month's finals together, about three weeks after it ends, so
   it probes the finals from the window's first day (that day alone, then
   six at a time) and stops after a batch whose last day has none in a month
@@ -1081,22 +1083,77 @@ merges into:
   archive, so the probing goes on past it and the later finals are read as
   finals; the marker stops before the gap, so that day is probed again each
   fetch. A preliminary value is published once and only replaced by the
-  final, so a day with no final that the feed already holds isn't read
-  again: it comes back null, which the merge keeps, and still counts in
-  `prelimDays`. "Holds" is read from the series the answer merges into, the
-  same choice the ingest makes (the stage while a confirmed replacement
-  backfills and the live series still conflicts, else the live target;
-  store.ts `heldSeries`), as the leading run of the window's days with a
-  value, sent as the request's `heldThrough` (`sat` only: `rnl` has no
-  preliminary days): an empty day inside it (published late,
-  deleted, or a gap the merge kept) ends the run and is read again. On the
-  fixtures a caught-up feed's daily fetch goes from 194 range requests to 3
-  (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`).
+  final, so a day the cell cache (below) already holds as preliminary for
+  every cell reads only its final file, and still counts in `prelimDays`.
+  On the fixtures a caught-up feed's daily fetch goes from 194 range
+  requests to 3 (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`).
   **What this gives up:** a day before the final marker is never read
   again, so a feed day deleted or overwritten there (an upload over it, a
   restore) is not refilled by the feed; before #69 any day in the last 50
   was. Changing the feed's place, product or series clears the marker, and
-  re-attaching the feed reads its whole window again.
+  re-attaching the feed reads its whole window again (from the cell cache,
+  below, so without reading CHC again).
+- **The CHIRPS cell cache** (issue #482 part A, `208_chirps_cell_cache.sql`,
+  `feeds/cellCache.ts`, `feeds/cellCacheStore.ts`). A CHIRPS feed no longer
+  reads its own days: each of its cells is a cell of the one global 0.05° grid
+  (`chcCell`: row 0 at 60° N, column 0 at 180° W, by the reader's own rule
+  for a point on a cell edge), and each cell's days are kept once for every
+  project in `chirps_cell_year`, a row per origin, product, cell and year
+  holding 366 float32 values (null not fetched, NaN no data) and whether
+  each came from the final file (`final`, per day). So a
+  second project's feed, or a second unit's, over the same cells costs no
+  download. A fetch:
+  1. works out the feed's cells and its window (as above);
+  2. reads the cache for them and plans each day (`planFetch`): skip it when
+     every cell holds it final, read only its final file when every cell
+     holds it (some only as preliminary), else read it; only the cells not
+     final on every day are asked for (`FetchRequest.cells`: the cells as
+     `[row, column]` and one character per day). When nothing needs
+     reading, no request goes out at all: the job computes the feed's days
+     from the cache at once (in production it still records itself as the
+     feed's newest fetch, so a late answer to an older one is dropped);
+  3. the fetcher reads those cells at their centres (`fetchChirpsCells`,
+     the same final-probing as before) and answers **each cell's own
+     values**, never the mean (`CellsResult`: per day `f` final, `p`
+     preliminary or `-` not read; a value is the float32's bit pattern, so
+     the worker gets back the exact number the file held, and -1 is no
+     data). The largest answer, 100 cells × 120 days, is about 135 KB,
+     inside SQS's 256 KB;
+  4. the ingest checks the answer (its days inside the window, its cells the
+     feed's own, its product the feed's) and merges it through
+     `chirps_cache_merge`, which takes it only from a running job of that
+     CHIRPS feed, checks every value again and never replaces a final value
+     with a preliminary one; a refused merge is rolled back to a savepoint
+     and recorded as a failed fetch;
+  5. computes the feed's days from the cache (`seriesFromCache`) with
+     gridMean's own arithmetic (`meanOf`: the weights, the listed-sea-cell
+     refusal, the `skipNoData` mask and `cellsUsed`, the rounding to 0.01
+     mm) into the answer the ingest has always taken, and merges it as
+     before: prelim → final, `finalThrough` (here the worker's own: the
+     leading run of days final in every cell, so there is no fetcher claim
+     to check), `feed_stage` replacements, the
+     windows and health don't change. A day any cell lacks is a gap; a day
+     any cell holds only as preliminary is preliminary.
+
+  `sat` and `rnl` are separate rows, never spliced. The `origin` column
+  keeps the fixtures' synthetic values (`FEED_SOURCE=fixtures`) apart from
+  the real files' (`chc`), so a database that ran on the fixtures never
+  serves them to a live feed: an inline fetch merges as what `FEED_SOURCE`
+  reads, and the production fetcher's answers (always live) as `chc`. Lazy
+  and global: any cell in 60° S – 60° N fills on first use. Because unit
+  feeds over shared cells cost almost no download, a project may have 60
+  feeds (`MAX_FEEDS`, feeds/routes.ts; 20 before the cache), enough for a
+  CHIRPS feed per hydrological unit (issue #482). The meta records
+  what the source read this time (`daysRead`, `cellDaysRead`; 0 when the
+  cache had it all). A fetcher answer to a request without `cells` (sent by
+  a worker before 208 and still in flight while a release rolls out) is the
+  mean, as before, and is ingested as it was; the other way round, a
+  request with `cells` reaching a fetcher from before 208 is refused as
+  invalid and the feed retries 15 minutes later. A window the cache held whole
+  asked CHC for nothing, so a backfill's next window follows in 5 s
+  (`CACHED_NEXT_SECONDS`) rather than a minute. **Not yet:** the rows'
+  `source_etag` is reserved for re-checking finals CHC rewrites in place
+  ([followups.md](./followups.md)).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days
@@ -1188,7 +1245,8 @@ merges into:
 - **Backfill continues at once.** A fetch whose window stopped short of the
   newest day the source can have (CHIRPS and DWS windows are capped: 120
   days for CHIRPS) queues the feed's next fetch a minute later
-  (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts) instead of waiting for the
+  (`BACKFILL_NEXT_SECONDS`, feeds/ingest.ts; 5 s, `CACHED_NEXT_SECONDS`,
+  after a CHIRPS window the cell cache held whole) instead of waiting for the
   schedule, so a long backfill (a replacement, or an early start date) goes a
   window at a time rather than a window a day. Each CHIRPS window starts
   after the final days before it (the window, above), so a backfill of final
@@ -1248,8 +1306,8 @@ Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
   `ingest-results`. The worker checks that it answers a real `feed_fetch` job
   of that feed (`app_feed_fetch_job`), queues a `feed_ingest` job as that
   job's user, and the job validates the result (`FetchResult`) before
-  merging. A result for a feed saved with new settings since the fetch is
-  dropped. The queue can redeliver and reorder, so before sending, the
+  merging (a CHIRPS answer's cells into the cell cache first, above). A
+  result for a feed saved with new settings since the fetch is dropped. The queue can redeliver and reorder, so before sending, the
   `feed_fetch` job records itself and its window on the feed
   (`app_begin_feed_fetch`, `029_feed_fetch.sql`), and the `feed_ingest` job
   claims and clears that record (`app_take_feed_fetch`): only the newest

@@ -17,6 +17,8 @@ type User = Awaited<ReturnType<typeof signUp>>;
 afterEach(async () => {
 	await asOwner('DELETE FROM data_feed');
 	await asOwner(`DELETE FROM job WHERE kind IN ('feed_fetch', 'feed_ingest')`);
+	// The applied feed's fetch fills the shared cell cache (208): leave it empty for the next file.
+	await asOwner('DELETE FROM chirps_cell_year');
 });
 
 const ring = (w: number, s: number, e: number, n: number) => [
