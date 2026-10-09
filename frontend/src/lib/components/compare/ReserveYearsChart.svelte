@@ -8,6 +8,8 @@
 		colour: string;
 		/** A forecast run's first forecast day (RunMeta.forecastFrom): the bars count the days before it only. */
 		forecastFrom?: string | null;
+		/** The daily test its bars count (ewr/notMet.ts dailyEwrName): named beside the run when the runs' tests differ. */
+		daily?: string;
 	}
 </script>
 
@@ -19,16 +21,23 @@
 	// Its own chunk (CompareView loads it lazily); series come through the
 	// Runs tab's cache. `below` names the test in its labels: "the reserve", or
 	// "the pragmatic EWR" on River & reserve beside a rule table (river.ts
-	// reserveYearsWords, issue #177); Compare keeps the default.
+	// reserveYearsWords, issue #177); Compare passes daysBelowTestOf, and each
+	// run its own daily test (`daily` on ChartRun), named when they differ.
 	import { reserveDaysByWaterYear, waterYearLabel, type ReserveYear } from '@water-management/engine';
 	import { api, ApiError } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import { labelX, yearLabelIndices } from './yearAxis';
+	import { EACH_RUNS_DAILY_EWR } from '$lib/components/ewr/notMet';
 
 	// The chart fills the height its box gives it (a flex column), at least `minHeight` px.
 	// `daily`: the outlet's daily test the bars count, by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table).
 	let { runs, minHeight = 240, below = 'the reserve', daily = 'the pragmatic EWR' }: { runs: ChartRun[]; minHeight?: number; below?: string; daily?: string } = $props();
+
+	// The runs' own daily tests (Compare runs): one name when they agree, else "each run's daily EWR" with each run's named in the legend.
+	const dailies = $derived([...new Set(runs.map((r) => r.daily).filter((d): d is string => !!d))]);
+	const mixed = $derived(dailies.length > 1);
+	const dailyName = $derived(mixed ? EACH_RUNS_DAILY_EWR : (dailies[0] ?? daily));
 
 	// $state.raw: plain arrays, no deep proxies.
 	let years = $state.raw<(ReserveYear[] | null)[]>([]);
@@ -95,7 +104,7 @@
 	{:else}
 		<div class="chart">
 		<ul class="legend" aria-label="Runs">
-			{#each runs as r (r.name)}<li><span class="swatch" style:background={r.colour} aria-hidden="true"></span>{r.name}</li>{/each}
+			{#each runs as r (r.name)}<li><span class="swatch" style:background={r.colour} aria-hidden="true"></span>{r.name}{#if mixed && r.daily}<span class="muted" data-testid="reserve-years-daily">{` (${r.daily})`}</span>{/if}</li>{/each}
 		</ul>
 		<div class="plot" bind:clientWidth={width} bind:clientHeight={height} style:min-height="{minHeight}px">
 			{#if width > 0 && height > 0}
@@ -136,7 +145,7 @@
 			{/if}
 		</div>
 		<p class="muted small note">
-			Days in each water year (Oct–Sep) when the simulated outflow was below {daily} at the outlet.{#if anyPart}{' '}Faded bars are part years: the run covers only some of that year.{/if}{#if missingRuns.length}{' '}{missingRuns.join(' and ')} stored no shortfall series.{/if}
+			Days in each water year (Oct–Sep) when the simulated outflow was below {dailyName} at the outlet{#if mixed}{` (${runs.filter((r) => r.daily).map((r) => `${r.name}: ${r.daily}`).join('; ')})`}{/if}.{#if anyPart}{' '}Faded bars are part years: the run covers only some of that year.{/if}{#if missingRuns.length}{' '}{missingRuns.join(' and ')} stored no shortfall series.{/if}
 		</p>
 		<details class="as-table">
 			<summary>Show as a table</summary>

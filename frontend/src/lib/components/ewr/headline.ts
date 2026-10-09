@@ -145,10 +145,10 @@ export function reportJudgedBy(
 
 /**
  * The EWR compliance heat map's clause when the headline is a rule table
- * (site from resolveHeadline): its outlet cells count days below the
- * pragmatic EWR, which isn't what the results are judged by. '' when the
+ * (site from resolveHeadline): its outlet cells count days below the run's
+ * daily EWR (the pragmatic EWR, or a DRM table: dailyEwrName), which isn't what the results are judged by. '' when the
  * headline is the pragmatic EWR itself.
  */
-export function heatmapHeadlineNote(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> | null, choice: EwrHeadline | null | undefined): string {
-	return site ? `These bands count days below the pragmatic EWR; the results are judged by ${judgedByText(site, choice)} instead.` : '';
+export function heatmapHeadlineNote(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> | null, choice: EwrHeadline | null | undefined, daily?: DailyEwrSource): string {
+	return site ? `These bands count days below ${dailyEwrName(daily)}; the results are judged by ${judgedByText(site, choice)} instead.` : '';
 }

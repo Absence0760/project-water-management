@@ -4,9 +4,11 @@
 	// the structure and units as the caller's own list (the words must match
 	// what that box's parser accepts, so they stay with the caller), a short
 	// example and, when it helps, the example as a file to download (built
-	// here from its text, ./formatHelp.ts). One per box; the series upload,
-	// the allocations import, the farmer invite, the GeoJSON upload, Load crop
-	// factors and the project import use it.
+	// here from its text, ./formatHelp.ts), or several (`exampleFiles`, each
+	// with its own words). One per box; the series upload, the allocations
+	// import, the farmer invite, the GeoJSON upload, Load crop factors, the
+	// project import and the Reserve's DRM uploads (settings/DrmFormatHelp)
+	// use it.
 	import type { Snippet } from 'svelte';
 	import { exampleHref, type ExampleFile } from './formatHelp';
 
@@ -14,7 +16,9 @@
 		accepts,
 		example = '',
 		exampleFile = null,
+		exampleFiles = [],
 		summary = 'Expected format',
+		context = '',
 		children
 	}: {
 		/** The file types (and limits) the box takes, as a sentence: "CSV (.csv), at most 2 MB." */
@@ -23,16 +27,20 @@
 		example?: string;
 		/** The example as a file to download (a fuller one than `example`, or the same). */
 		exampleFile?: ExampleFile | null;
+		/** Several example files, each link worded by its `label`. */
+		exampleFiles?: readonly ExampleFile[];
 		summary?: string;
+		/** Read after the summary by a screen reader only, so two notes on one page differ ("for the rule table at Outlet"). */
+		context?: string;
 		/** The structure: columns, units, what is read as a gap, what is refused. */
 		children?: Snippet;
 	} = $props();
 
-	const exampleUrl = $derived(exampleFile ? exampleHref(exampleFile) : '');
+	const files = $derived(exampleFile ? [exampleFile, ...exampleFiles] : exampleFiles);
 </script>
 
 <details class="format-help" data-testid="format-help">
-	<summary>{summary}</summary>
+	<summary>{summary}{#if context}<span class="visually-hidden">{` ${context}`}</span>{/if}</summary>
 	<div class="body">
 		<p class="accepts" data-testid="format-accepts">{accepts}</p>
 		{#if children}{@render children()}{/if}
@@ -40,8 +48,13 @@
 			<p class="ex-h">Example</p>
 			<pre class="mono" data-testid="format-example">{example}</pre>
 		{/if}
-		{#if exampleFile}
-			<p><a class="btn btn-sm" href={exampleUrl} download={exampleFile.name} data-testid="format-example-file">Download an example file</a></p>
+		{#if files.length}
+			<p class="files">
+				{#each files as f (f.name)}
+					{@const exampleUrl = exampleHref(f)}
+					<a class="btn btn-sm" href={exampleUrl} download={f.name} data-testid="format-example-file">{f.label ?? 'Download an example file'}</a>
+				{/each}
+			</p>
 		{/if}
 	</div>
 </details>
@@ -68,6 +81,11 @@
 	}
 	.body p {
 		margin: 0;
+	}
+	.files {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 	.accepts {
 		color: var(--text);

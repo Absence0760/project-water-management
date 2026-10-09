@@ -1,6 +1,7 @@
 // River & reserve → the flow vs reserve chart (FlowVsReserve.svelte): the days the outflow was below the
 // reserve, as date ranges to shade, and the chart's time windows.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 
 /** The chart's time windows (LineChart `windows`); `days: null` is the whole run. It opens on a year. */
 export const FLOW_WINDOWS = [
@@ -51,6 +52,8 @@ export function hasRuleLine(refs: readonly { key: string; nodeId: string | null 
  * pragmatic EWR, so it says so (issue #177). The shading is always the
  * pragmatic EWR's, and its caption says that.
  */
-export function flowHeading(ruleTable: boolean, ruleLine: boolean): string {
-	return ruleTable && !ruleLine ? 'Flow vs pragmatic EWR' : 'Flow vs reserve';
+export function flowHeading(ruleTable: boolean, ruleLine: boolean, daily?: DailyEwrSource): string {
+	if (!(ruleTable && !ruleLine)) return 'Flow vs reserve';
+	// From engine 1.77.0 the line drawn can be the daily EWR from a DRM table (summary.catchment.outletEwr).
+	return daily && daily.method !== 'pragmatic' ? 'Flow vs daily EWR' : 'Flow vs pragmatic EWR';
 }

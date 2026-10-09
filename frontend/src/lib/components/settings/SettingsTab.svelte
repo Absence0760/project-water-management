@@ -1342,7 +1342,7 @@
 
 	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
 	<div id="set-outcomes">
-		<OutcomeSettingsSection summary={summaries['set-outcomes']} bind:value={s.outcomes} {readonly} error={outError} />
+		<OutcomeSettingsSection summary={summaries['set-outcomes']} bind:value={s.outcomes} {readonly} error={outError} daily={s.ewrDailySource} />
 	</div>
 	<div id="set-outlook">
 		<OutlookSettingsSection summary={summaries['set-outlook']} bind:value={s.outlook} {readonly} error={outlookErr} />

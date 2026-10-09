@@ -130,6 +130,7 @@ describe('buildOutlookView', () => {
 		const v = buildOutlookView({ ...SEASON, result: r });
 		expect(v.season).toBe('1 Oct 2012 – 30 Apr 2013 (212 days)');
 		expect(v.metricLabel).toBe('Days below the pragmatic EWR at the outlet');
+		expect(buildOutlookView({ ...SEASON, result: r }, { method: 'percentile' }).metricLabel).toBe('Days below the daily EWR from the DRM percentile tables at the outlet');
 		expect(v.ewrHeading).toBe('Days below the EWR');
 		expect(v.nYears).toBe(12);
 		expect(v.tooFewYears).toBeNull();

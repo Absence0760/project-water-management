@@ -16,6 +16,7 @@ import {
 import type { Outlook, OutlookExcludedYear, OutlookRequest, OutlookResult, OutlookSeasonSetting } from '$lib/api/types';
 import { monthName } from '$lib/format/months';
 import { fmtDay, fmtNum } from '$lib/format/number';
+import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
 
 /** The demand levels a new outlook starts with, % of today's demand (planning-outputs.md S3). */
 export const DEFAULT_OUTLOOK_LEVELS: readonly number[] = Object.freeze([100, 85, 70]);
@@ -163,15 +164,14 @@ export interface OutlookView {
 	warnings: string[];
 }
 
-const METRIC_LABEL: Record<OutlookResult['metric'], string> = {
-	reserveMonthsMet: 'Reserve months met (the rule table at the outlet)',
-	daysBelowEwr: 'Days below the pragmatic EWR at the outlet'
-};
+/** The measure in words; the days below name the base run's daily EWR (dailyEwrName: the pragmatic EWR, or a DRM table, engine ≥ 1.77.0). */
+const metricLabelOf = (metric: OutlookResult['metric'], daily?: DailyEwrSource) =>
+	metric === 'reserveMonthsMet' ? 'Reserve months met (the rule table at the outlet)' : `Days below ${dailyEwrName(daily)} at the outlet`;
 
 const dayBefore = (iso: string) => new Date(Date.parse(`${iso}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 
 /** A complete outlook's result in words. */
-export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> & { result: OutlookResult }): OutlookView {
+export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> & { result: OutlookResult }, daily?: DailyEwrSource): OutlookView {
 	const r = o.result;
 	const reserve = r.metric === 'reserveMonthsMet';
 	const m3 = (v: number) => `${fmtNum(v)} m³`;
@@ -205,7 +205,7 @@ export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> 
 		season: `${fmtDay(o.decisionDate)} – ${fmtDay(o.seasonEnd)} (${r.days} days)`,
 		share: `${pct(r.planning.share)} of analogue years`,
 		metric: r.metric,
-		metricLabel: METRIC_LABEL[r.metric],
+		metricLabel: metricLabelOf(r.metric, daily),
 		ewrHeading: reserve ? 'Reserve months met' : 'Days below the EWR',
 		start:
 			r.startStorageM3 === null
