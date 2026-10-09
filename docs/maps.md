@@ -2054,9 +2054,59 @@ line; **Synthetic test data, never real rainfall.** for the repo's grid.
   owner's. They are loaded locally only, never committed, and the
   production loader refuses the `map-grid` kind (`geo/referenceLoad.ts`) until
   the decision in followups.md is made.
-- Not yet read by the model: the per-unit hydrology option that scales a
-  unit's rain by its MAP is planned work. The layer shows the grid so its
-  values can be checked against the units and the gauges first.
+- **Read by the model through the units' MAP.** Under rain for each unit
+  ([model.md §2.4h](./model.md)) a unit's MAP sets the level of its rain;
+  Settings can take each unit's MAP from a loaded grid ([§ MAP for each
+  unit](#map-for-each-unit)). The layer shows the grid so its values can be
+  checked against the units and the gauges first.
+
+## MAP for each unit
+
+Settings → Rain for each unit → **MAP from the grid** (issue #482
+follow-up; `geo/unitMap.ts`, `geo/unitMapRoutes.ts`): each land unit's mean
+annual precipitation from one of the loaded MAP grids ([§ MAP
+grid](#map-grid)), proposed beside what its form holds, and written to the
+units' `mapMm` / `mapSource` only when an editor uses it.
+
+- **Which units and polygons.** Land units only (farm nodes with an area
+  above 0), each over its farm parcel as for its rain ([§ Rain for each
+  unit](#rain-for-each-unit)): the parcel its area came from, else its only
+  one. A unit with no parcel is listed as without one; one with several and
+  none its area is refused until one is chosen.
+- **The mean.** Over the grid cells the parcel touches, each weighted by the
+  share of the cell inside it (exact clipped overlap, `gridShares.ts`) × the
+  cell's area on the ellipsoid (which carries the cos latitude), as the
+  evaporation from the map averages over the boundary; cells without a value
+  are left out of both sums, and the result is rounded to whole mm. A unit
+  with values over less than 90 % of its parcel (`MIN_UNIT_COVERAGE`, a
+  provisional call) is not covered by that grid; nor is one whose bounding
+  box spans more than 100 000 of its cells (a 100 m grid over a unit about
+  30 km across), which is refused before any read; nor are the units past
+  1 000 000 cells of one grid in one request (their boxes summed); nor is
+  one whose MAP falls outside the 1–12 000 mm a unit's MAP takes (the
+  engine's `mapMmError`, which `PUT /model` applies).
+- **One grid for the whole project, never a mix** (the user's call). Two
+  grids can differ by tens of percent in mountain catchments, so units' MAPs
+  from two of them would not compare. The grid proposed is the finest real
+  grid that covers every unit with a parcel; when none does, the real grid
+  covering the most (the finest of those), with the units it misses listed
+  and **never filled from another grid**. The synthetic grid is proposed
+  only when no real grid covers any unit, so invented rainfall never wins
+  over a real grid by covering more. Every loaded grid is listed with how many units it
+  covers and which it misses, and the panel's **Grid** picker asks for
+  another (`?dataset=`).
+- **Use.** Writes each covered unit's MAP (all of them, or the `nodeIds`
+  asked for) and its source, `<grid label> <version>, area-weighted mean over
+  the unit’s parcel, <n> cells`, as one model change (a `model_put`
+  revision in History citing the grid, its cell size and source). A unit
+  already holding that MAP from that grid is unchanged, and an apply that
+  changes nothing records nothing. An apply that would leave a unit with a
+  MAP from another grid (one this panel wrote, recognised by its source
+  line) is refused (`grid_mixed`): use the grid that covers every unit, or
+  clear that unit's MAP on its form first. A MAP typed in by hand is no
+  grid's and is never touched by an apply that leaves its unit out.
+- **The synthetic grid** proposes invented values, marked as such; the
+  units' MAP from it is for development and tests only.
 
 ## CHIRPS grid
 

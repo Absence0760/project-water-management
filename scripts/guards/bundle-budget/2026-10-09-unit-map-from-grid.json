@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #482 follow-up, each unit's MAP from the MAP grid: the Settings panel MAP from the grid (settings/UnitMapProposal.svelte, its own lazy chunk, 4.2 KB gzipped measured) with its helpers and API types, the SettingsTab hook and the help article line. Measured 1876 KB on feat/unit-map-from-grid (stacked on feat/unit-rain-ui + main) against the 1874 KB ceiling there; the chunk alone accounts for the rise. Largest tab chunk 59 of 60 KB."
+}

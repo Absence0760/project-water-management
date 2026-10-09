@@ -24,6 +24,8 @@
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	// Rain for each unit (settings.unitRain, issue #482): its own chunk, for the same reason.
 	const loadUnitRain = () => import('./UnitRainFields.svelte');
+	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
+	const loadUnitMap = () => import('./UnitMapProposal.svelte');
 </script>
 
 <script lang="ts">
@@ -128,7 +130,8 @@
 		apanSeries,
 		flowRecordId = null,
 		readonly,
-		onProjectChange
+		onProjectChange,
+		onModelChanged = () => {}
 	}: {
 		project: Project;
 		editor?: ModelEditor;
@@ -153,6 +156,8 @@
 		flowRecordId?: string | null;
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
+		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
+		onModelChanged?: () => Promise<void> | void;
 	} = $props();
 
 	// The form edits the page's draft in place (settings/settingsDraft.svelte.ts), so a tab change keeps it.
@@ -965,6 +970,12 @@
 				<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} />
 			{/snippet}
 		</Lazy>
+		{#if !readonly && editor && s.unitRain?.mode === 'perUnit'}
+			<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
+			<Lazy load={loadUnitMap}>
+				{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
+			</Lazy>
+		{/if}
 		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
 		     demand and dam evaporation read the A-pan row whichever is chosen. -->
 		<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">
