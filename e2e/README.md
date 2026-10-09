@@ -116,6 +116,11 @@ balanced by time rather than by count:
 
 1. **`e2e-build`** builds the site once (`pnpm -C e2e build:site`) and uploads
    it. Every CI runner is slot 0, so the build's API URL is :3101 for all.
+   It also pulls MinIO once (by `docker-compose.yml`'s digest, cached by that
+   file) and uploads it as `minio-image`: the shards load it instead of each
+   pulling it, since Docker Hub's anonymous pull limit refused 14 shards' pulls
+   (issue #492; `scripts/ci/service-image.sh`, which checks the loaded image is
+   the one pulled). Mailpit comes from GHCR, never Docker Hub.
 2. **Each shard** gets its own Postgres service, downloads the site and runs
    with `E2E_PREBUILT=1` (serve that build, don't rebuild). The config refuses a
    prebuilt site whose stamp (`e2e-api-url.txt`) names another API URL.
