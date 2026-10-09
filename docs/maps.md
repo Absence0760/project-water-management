@@ -939,6 +939,50 @@ boundary itself rather than over a box around it.
 
 The rain feed's licence (CHIRPS) is in [§ Sources](#sources).
 
+## Rain for each unit
+
+Issue #482 part B: a CHIRPS rain series of its own for every hydrological
+unit, averaged over the unit's own polygon, so that under
+`settings.unitRain` `perUnit` each unit's runoff comes from its own rain
+([model.md §2.4h](./model.md)).
+
+- **Which units.** Land units only: farm nodes with an area above 0 (gauges
+  and water users have no land and are never listed). A unit's polygon is its
+  farm parcel on the map: the parcel its area was accepted from
+  (`node.area_feature_id`, which Start from the map and Sub-catchments set
+  for every unit they save), else its only parcel. A unit with no parcel is
+  listed as without a polygon; one with several and none accepted is
+  refused until one parcel's area is used for it.
+- **The proposal** (`GET /projects/:id/feeds/chirps/from-units`, editor): per
+  unit, its parcel, area and cells (latitude, longitude, share inside,
+  weight, by `boundaryCells.ts`: exact clipped overlap × cos latitude, as for
+  the boundary), its feed if it has one, the days its series holds, and what
+  applying would do (create, update, nothing). Then the units without a
+  polygon, and the units refused with the reason.
+- **Apply** (`POST …/from-units`, owner, as every feed change): one CHIRPS
+  daily feed per unit (all listed, or the `nodeIds` given) into
+  `rain_chirps_mm`, the series named `CHIRPS v3 (<product>) <unit>` and
+  sited at the unit ([data-model.md § Unit rain
+  series](./data-model.md#unit-rain-series-209_unit_rain_seriessql)). The
+  product is `rnl` (from 1981) unless asked otherwise or the units' feeds
+  already read `sat` (a provisional call; the hydrologist's question 3 in
+  #482); the start date is the product's first day. One History entry names
+  every unit set up.
+- **No splicing.** As for the boundary: a unit's feed takes new cells (its
+  parcel was redrawn) or another product only while its series holds no days;
+  after that the unit is refused, saying why, and its feed is left alone. A
+  parcel redrawn to the same cells changes nothing the feed averages, so it
+  needs nothing.
+- **Limits.** A unit reads at most 100 cells in 25 rows (one feed's limit), and
+  a project has at most 20 feeds, catchment feeds included: a model with more
+  units than that needs some units' rain set by hand.
+- **Small units.** A unit smaller than a cell still gets every cell it
+  touches, by exact overlap (a centroid rule could pick none), and neighbouring
+  units share cells, so their raw CHIRPS is nearly the same: the differences
+  between units come from each unit's MAP (`node.mapMm`, with its source).
+- **Local-first.** With `FEED_SOURCE=fixtures` a unit inside the fixtures'
+  cover fetches offline (`fromUnits.db.test.ts`).
+
 ## Quaternary lookup
 
 Settings → WR2012 check → **Propose from the map** looks up the quaternary

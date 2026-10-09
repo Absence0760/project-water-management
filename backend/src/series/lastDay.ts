@@ -13,7 +13,10 @@ export const RECORDED_RAIN_KINDS = ['rain_catchment_mm', 'rain_chirps_mm'] as co
 export const lastValueDaySql = (alias: string) =>
 	`(SELECT ${alias}.start_date + max(lv.o)::int - 1 FROM unnest(${alias}."values") WITH ORDINALITY lv(v, o) WHERE lv.v IS NOT NULL)`;
 
-/** SQL (a date, or NULL): the project's recorded rain end, the last day with a catchment or CHIRPS rain value. */
+/**
+ * SQL (a date, or NULL): the project's recorded rain end, the last day with a catchment or CHIRPS rain value.
+ * The catchment's rain only (no site): a land unit's own rain (209_unit_rain_series, issue #482) never moves it.
+ */
 export const recordedRainUntilSql = (projectExpr: string) =>
 	`(SELECT max(${lastValueDaySql('rts')}) FROM time_series rts
-		WHERE rts.project_id = ${projectExpr} AND rts.kind IN (${RECORDED_RAIN_KINDS.map((k) => `'${k}'`).join(', ')}))`;
+		WHERE rts.project_id = ${projectExpr} AND rts.site_node_id IS NULL AND rts.kind IN (${RECORDED_RAIN_KINDS.map((k) => `'${k}'`).join(', ')}))`;

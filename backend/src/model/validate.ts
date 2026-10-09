@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, REACH_LOSS_FRAC_MAX, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DEMAND_MONTHLY_UNITS, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, MAP_MM_MAX, MAP_MM_MIN, mapMmError, modelRuleProblems, PE_SOURCE_MAX, REACH_LOSS_FRAC_MAX, NAME_CONTROL_MESSAGE, SUPPLY_RULES, IRRIGATION_SYSTEMS, type IrrigationSystemId, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -111,6 +111,10 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// daily cap (null = none). Any kind of node; none on the outlet is a model rule (reachLossOutlet).
 				reachLossFrac: z.number().finite().min(0).max(REACH_LOSS_FRAC_MAX).default(0),
 				reachLossMaxM3Day: nonNeg.nullable().default(null),
+				// The land unit's MAP, mm, and where it came from (issue #482, docs/model.md §2.4h): null = none. A MAP needs
+				// its source (the engine's mapMmError, checked below); a source without a MAP is not stored.
+				mapMm: z.number().finite().min(MAP_MM_MIN).max(MAP_MM_MAX).nullable().default(null),
+				mapSource: z.string().trim().max(PE_SOURCE_MAX).nullable().default(null),
 				// Gauges: whether the EWR is assessed there (engine ≥ 1.5.0); the outlet always, a model rule.
 				ewrSite: z.boolean().default(true),
 				// GN 538 context (engine ≥ 1.12.0): the property's size and its quaternary's Table 2 rate; null = unknown.
@@ -120,6 +124,10 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 					.refine(isGa538Rate, { message: `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}` })
 					.nullable()
 					.default(null)
+			})
+			.superRefine((n, ctx) => {
+				const err = mapMmError(n.mapMm, n.mapSource);
+				if (err) ctx.addIssue({ code: 'custom', path: [err.startsWith('MAP must') ? 'mapMm' : 'mapSource'], message: err });
 			})
 		)
 		.max(500),

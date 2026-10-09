@@ -721,6 +721,16 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		// Rain for each unit (#482): one feed.configured for the whole action, naming each unit it set up.
+		route: `POST ${P}/feeds/chirps/from-units`,
+		records: ['feed.configured'],
+		call: async (c) => {
+			const square = [[[21.4, -33.75], [21.43, -33.75], [21.43, -33.72], [21.4, -33.72], [21.4, -33.75]]];
+			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard unit parcel', nodeId: c.otherFarmId, geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-units`, { product: 'rnl', nodeIds: [c.otherFarmId] });
+		}
+	},
+	{
 		// Evaporation from the map (issue #326 B-evap): a settings revision whose reason names the dataset, version and method.
 		route: `POST ${P}/evaporation-from-map`,
 		records: ['revision'],

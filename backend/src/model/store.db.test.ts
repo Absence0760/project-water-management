@@ -105,7 +105,10 @@ describe('model store', () => {
 			abstractionFrom: '2001-01-01',
 			// Bed losses in the reach below (engine 1.75.0, 203_reach_loss), awkward numbers.
 			reachLossFrac: 0.1 + 0.2,
-			reachLossMaxM3Day: 1 / 3
+			reachLossMaxM3Day: 1 / 3,
+			// The unit's MAP and its source (issue #482, 209_unit_rain_series), an awkward number.
+			mapMm: 612.3 + 0.1,
+			mapSource: 'Synthetic atlas, 1991–2020'
 		});
 		// A gauge taken off the EWR sites (engine 1.5.0, 086_ewr_site).
 		// Bed losses below a gauge too, the CHECK's upper bound, no cap (engine 1.75.0).
@@ -233,6 +236,8 @@ describe('model store', () => {
 			abstractionFrom: null,
 			reachLossFrac: 0,
 			reachLossMaxM3Day: null,
+			mapMm: null,
+			mapSource: null,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.

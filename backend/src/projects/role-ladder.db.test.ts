@@ -109,6 +109,7 @@ const OWNER_ONLY = new Map<string, string>([
 	['PATCH /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['DELETE /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['POST /projects/:id/feeds/chirps/from-boundary', 'it attaches or changes a feed, which writes into the project’s series on a schedule, unattended (#326 B-rain)'],
+	['POST /projects/:id/feeds/chirps/from-units', 'it attaches or changes a feed per unit, each writing into the project’s series on a schedule, unattended (#482)'],
 	['GET /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
@@ -206,6 +207,7 @@ const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
 	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)'],
 	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)'],
+	['GET /projects/:id/feeds/chirps/from-units', 'a proposal to attach a feed per unit, for the people who set the model up; viewers read the feeds themselves (#482)'],
 	['GET /projects/:id/registration-checks', 'the host’s checks of members’ professional registrations, for the people who issue packs (167)'],
 	['GET /projects/:id/map/channels', 'the elevation model’s channels, drawn only for the editors’ Delineate and Sub-catchments, and each tile computed counts against the caller’s elevation-model cap (#374)']
 ]);

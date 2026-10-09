@@ -1831,9 +1831,14 @@ In short:
   ACTION, block that project's deletion; `restored_from_run` is held the
   same way) and `alert_event.run_id`. A reference that is deliberately not
   a foreign key is held the same way on write: `time_series.site_node_id`
-  (084, a gauge record's site) by `time_series_site_same_project`, and the
-  PATCH route finds the node in the project first
-  (`series/site.db.test.ts`).
+  (084, a gauge record's site; 209, a land unit's own rain) by
+  `time_series_site_same_project`, and for rain also
+  `time_series_site_land_unit` (a farm of the same project); the PATCH
+  route, a series restore and an import apply one rule (`series/site.ts`)
+  and find the node in the project first (`series/site.db.test.ts`,
+  `series/unitRain.db.test.ts`). 209's `time_series_site_from_feed` sets a
+  new series' site only from a feed of the same project (SECURITY INVOKER,
+  under the writer's RLS).
 
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of

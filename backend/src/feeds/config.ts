@@ -100,6 +100,23 @@ const BoundaryMark = z
 	.strict();
 export type BoundaryMark = z.output<typeof BoundaryMark>;
 /**
+ * The land unit a feed's listed cells came from (issue #482,
+ * feeds/fromUnits.ts): the unit (its node id), its map polygon (the farm
+ * parcel's id and when it was last changed) and the polygon's area. Only the
+ * from-units route writes it; the plain feed routes refuse it, and a new list
+ * of cells drops it. A feed with it writes that unit's own rain: the series it
+ * creates is sited at the unit (209_unit_rain_series' time_series_site_from_feed).
+ */
+const UnitMark = z
+	.object({
+		nodeId: z.uuid(),
+		featureId: z.uuid(),
+		updatedAt: z.iso.datetime({ offset: true }),
+		areaKm2: z.number().finite().nonnegative()
+	})
+	.strict();
+export type UnitMark = z.output<typeof UnitMark>;
+/**
  * A box in degrees (south < north, west < east, no antimeridian crossing).
  * The feed reads every 0.05° cell the box overlaps, weighted by area (gridCells).
  */
@@ -173,6 +190,8 @@ export const GridConfig = z
 		bbox: Bbox.optional(),
 		/** Listed cells only: the catchment boundary they were computed from (BoundaryMark). */
 		boundary: BoundaryMark.optional(),
+		/** Listed cells only: the land unit's polygon they were computed from (UnitMark); never with `boundary`. */
+		unit: UnitMark.optional(),
 		/** First day to fetch when the feed has no data yet (default: 60 days back), and never fetched before. */
 		startDate: SeriesStartDate.refine((d) => d >= CHIRPS_FIRST_DAY, `CHIRPS begins on ${CHIRPS_FIRST_DAY}`).optional(),
 		staleAfterDays: z.number().int().min(-15).max(3650).optional(),
@@ -193,6 +212,10 @@ export const GridConfig = z
 		}
 		if (g.boundary !== undefined && g.cells === undefined) {
 			ctx.addIssue({ code: 'custom', path: ['boundary'], message: 'only listed cells come from the catchment boundary' });
+			return;
+		}
+		if (g.unit !== undefined && (g.cells === undefined || g.boundary !== undefined)) {
+			ctx.addIssue({ code: 'custom', path: ['unit'], message: 'only listed cells come from a unit’s polygon, and never also from the catchment boundary' });
 			return;
 		}
 		if ((g.cells === undefined) === (g.bbox === undefined)) {

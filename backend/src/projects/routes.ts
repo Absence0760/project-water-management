@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { UNIT_RAIN_KINDS } from '@water-management/engine';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
 import { ApiError, mustChange } from '../http/errors.js';
@@ -489,7 +490,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			);
 			await saveModel(db, newId, copied);
 			// A gauge record's site (084_gauge_records) follows its gauge to the copy's id; one whose
-			// node has left the model has nothing to follow, so it keeps no site in the copy.
+			// node has left the model has nothing to follow, so it keeps no site in the copy. A land unit's
+			// own rain (209) follows its unit the same way, and one whose unit has gone is left out: with no
+			// site it would become the copy's catchment rain.
 			const [from, to] = [[...ids.keys()], [...ids.values()]];
 			await db.query(
 				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
@@ -497,8 +500,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 				 SELECT $2, t.kind, t.name, t.unit, t.start_date, t."values", t.product, t.product_version, t.day_boundary, m.new_id,
 					t.source, t.source_unit, t.source_unit_factor
 				 FROM time_series t LEFT JOIN unnest($3::uuid[], $4::uuid[]) AS m(old_id, new_id) ON m.old_id = t.site_node_id
-				 WHERE t.project_id = $1`,
-				[srcId, newId, from, to]
+				 WHERE t.project_id = $1 AND NOT (t.site_node_id IS NOT NULL AND m.new_id IS NULL AND t.kind = ANY($5::text[]))`,
+				[srcId, newId, from, to, [...UNIT_RAIN_KINDS]]
 			);
 			// Notes don't copy (docs/data-model.md § Notes): a copy diverges, and a
 			// note is its author's words about the original; RLS inserts a note only

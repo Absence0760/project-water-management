@@ -35,6 +35,7 @@ const MODEL_JSON = `json_build_object(
 			crop_remote_node_id AS "cropRemoteNodeId", crop_remote_cap_m3_day AS "cropRemoteCapM3Day",
 			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
 			ewr_site AS "ewrSite", reach_loss_frac AS "reachLossFrac", reach_loss_max_m3_day AS "reachLossMaxM3Day",
+			map_mm AS "mapMm", map_source AS "mapSource",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
 		FROM node WHERE project_id = $1) r), '[]'),
 	'crops', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r)) ORDER BY r."sortOrder", r.name) FROM (
@@ -155,7 +156,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
-			reach_loss_frac, reach_loss_max_m3_day)
+			reach_loss_frac, reach_loss_max_m3_day, map_mm, map_source)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, return_flow_fraction,
@@ -167,7 +168,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			crop_share_dam, crop_share_river, crop_share_remote, crop_remote_cap_m3_day,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year,
-			reach_loss_frac, reach_loss_max_m3_day
+			reach_loss_frac, reach_loss_max_m3_day, map_mm, map_source
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 			-- An area accepted from the map (152, geo/routes.ts area-from-map) stays 'map' until the area is typed over (or the node changes kind).
@@ -202,7 +203,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			hands_off_ewr = EXCLUDED.hands_off_ewr, divert_monthly_m3_day = EXCLUDED.divert_monthly_m3_day,
 			ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year,
-			reach_loss_frac = EXCLUDED.reach_loss_frac, reach_loss_max_m3_day = EXCLUDED.reach_loss_max_m3_day
+			reach_loss_frac = EXCLUDED.reach_loss_frac, reach_loss_max_m3_day = EXCLUDED.reach_loss_max_m3_day,
+			map_mm = EXCLUDED.map_mm, map_source = EXCLUDED.map_source
 		 WHERE node.project_id = EXCLUDED.project_id`,
 		m.nodes.map((n) => ({
 			id: n.id,
@@ -263,7 +265,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			ga_rate_m3_ha_year: n.gaRateM3HaYear ?? null,
 			// Bed losses in the reach below (engine ≥ 1.75.0, migration 203); absent = none.
 			reach_loss_frac: n.reachLossFrac ?? REACH_LOSS_DEFAULTS.reachLossFrac,
-			reach_loss_max_m3_day: n.reachLossMaxM3Day ?? REACH_LOSS_DEFAULTS.reachLossMaxM3Day
+			reach_loss_max_m3_day: n.reachLossMaxM3Day ?? REACH_LOSS_DEFAULTS.reachLossMaxM3Day,
+			// The unit's MAP and its source (issue #482, migration 209); absent = none. A source without a MAP isn't kept.
+			map_mm: n.mapMm ?? null,
+			map_source: n.mapMm === null || n.mapMm === undefined ? null : (n.mapSource?.trim() || null)
 		})),
 		'node'
 	);
