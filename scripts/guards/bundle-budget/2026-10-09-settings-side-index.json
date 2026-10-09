@@ -1,4 +1,4 @@
 {
-	"addKb": 5,
-	"why": "Issue #468, Settings & calibration's side index, find box, panel summaries and explanations switch: SectionNav's rail and find (shared chunk 3.2 -> 5.8 KB gz), settings/summaries.ts and the tab's markup, plus the FAO-56 pan-coefficient helper split into its own chunk (~1 KB overhead) so the Settings tab chunk drops from 59.9 to 57 KB of its 60 KB ceiling. Measured 1833 KB on main @ 83e1762a1, 1841 KB on the branch (+8 KB); this raise covers the 4 KB over the old ceiling and leaves ~1 KB."
+	"addKb": 8,
+	"why": "Issue #468, Settings & calibration's side index, find box, panel summaries and explanations switch: SectionNav's rail and find (shared chunk 3.2 -> 5.8 KB gz), settings/summaries.ts and the tab's markup, plus the FAO-56 pan-coefficient helper split into its own chunk (~1 KB overhead) so the Settings tab chunk drops from 59.9 to 57 KB of its 60 KB ceiling. Measured 1833 KB on main @ 83e1762a1, 1841 KB on the branch (+8 KB); after merging main @ db111ea47 (#461), 1835 KB on main and 1843 KB on the branch, still +8 KB, so the raise is the full growth."
 }
