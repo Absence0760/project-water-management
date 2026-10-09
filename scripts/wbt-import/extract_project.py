@@ -121,6 +121,12 @@ class Workbook:
         return self.named(name)[0][0]
 
 
+# The meaning of project.json's stored fields. Bump it (here, in the browser importer's
+# EXTRACT_FORMAT and in the engine's EXPECTED_EXTRACT_FORMAT) whenever an importer change
+# alters what a stored field means, so a stale extract is refused (README, "Extract format").
+EXTRACT_FORMAT = 1
+
+
 def num(v: Any, default: float = 0.0) -> float:
     """Excel treats blanks as 0 in arithmetic."""
     if v is None or v == "":
@@ -1438,6 +1444,7 @@ def extract(
             wb.notes.append(f"[Flow data] rUseFlow picks {kind}, which has no values; calibrationFlowKind left unset")
             settings["calibrationFlowKind"] = None
         project = {
+            "extractFormat": EXTRACT_FORMAT,
             "name": name,
             "description": f"Imported from {path.name}",
             "settings": settings,

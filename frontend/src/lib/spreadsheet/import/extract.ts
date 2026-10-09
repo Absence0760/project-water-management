@@ -43,10 +43,19 @@ export type ImportedSettings = Pick<
 };
 
 /**
+ * The meaning of project.json's stored fields, same number as extract_project.py's EXTRACT_FORMAT
+ * and the engine fixture loader's EXPECTED_EXTRACT_FORMAT. Bump all three together whenever an
+ * importer change alters what a stored field means (scripts/wbt-import/README.md, "Extract format").
+ */
+export const EXTRACT_FORMAT = 1;
+
+/**
  * What extract_project.py writes to project.json: the body of
  * `POST /projects/import` (backend/src/projects/document.ts ProjectFile).
  */
 export interface ProjectFile {
+	/** The meaning of the stored fields (EXTRACT_FORMAT); the backend's ProjectFile ignores it. */
+	extractFormat: number;
 	name: string;
 	description: string;
 	settings: ImportedSettings;
@@ -353,6 +362,7 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	}
 
 	const project: ProjectFile = {
+		extractFormat: EXTRACT_FORMAT,
 		name,
 		description: `Imported from ${opts.fileName.split('/').pop()}`,
 		settings: settings as ImportedSettings,
