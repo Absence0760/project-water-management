@@ -50,7 +50,7 @@ const base: ModelInput = {
 			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000, reachLossFrac: 0.2, reachLossMaxM3Day: 300 }),
 			node(MINE, 'Rooikloof', 'farm', G, 1, { cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 }),
 			// A crop supply table (engine ≥ 1.73.0) drawing a share on the applicant's own dam.
-			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null, cropShareDam: 0.5, cropShareRiver: 0.3, cropShareRemote: 0.2, cropRemoteNodeId: MINE, cropRemoteCapM3Day: 900 }),
+			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null, cropShareDam: 0.5, cropShareRiver: 0.3, cropShareRemote: 0.2, cropRemoteNodeId: MINE, cropRemoteCapM3Day: 900, mapMm: 840, mapSource: 'Study of the neighbour’s gauge' }),
 			node(U1, 'Town', 'user', G, 4, { userDemandM3Day: monthly(500), userPriority: 'junior' })
 		],
 		crops: [
@@ -129,6 +129,14 @@ describe('projectBaseForApplicant', () => {
 		expect(hidden).not.toHaveProperty('cropRemoteNodeId');
 		// Positive control: the base has them.
 		expect(base.model.nodes.find((n) => n.id === N1)).toMatchObject({ cropShareRemote: 0.2, cropRemoteNodeId: MINE });
+	});
+
+	it('gives a hidden unit no MAP and no MAP source (none, not 0 mm; issue #482)', () => {
+		const hidden = byId.get(N1)!;
+		expect(hidden.mapMm).toBeNull();
+		expect(hidden).not.toHaveProperty('mapSource');
+		// Positive control: the base has them.
+		expect(base.model.nodes.find((n) => n.id === N1)).toMatchObject({ mapMm: 840, mapSource: 'Study of the neighbour’s gauge' });
 	});
 
 	it('keeps the river’s bed losses below a hidden node, a property of the river, not of the farm (engine ≥ 1.75.0)', () => {

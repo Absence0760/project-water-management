@@ -58,15 +58,18 @@ const TEXT_KEPT: Record<TextField, boolean> = {
 	supplyRule: true,
 	cropWaterSource: false,
 	// The crop supply table's other unit (engine ≥ 1.73.0): which neighbour's dam waters its crops.
-	cropRemoteNodeId: false
+	cropRemoteNodeId: false,
+	// A unit's MAP source (issue #482) is free text that can name a neighbour's gauge or study.
+	mapSource: false
 };
 
 /**
  * Number fields an anonymised node has none of (null), rather than 0: a crop
  * supply table (engine ≥ 1.73.0) with every share 0 is a table with nothing in
  * it, which the run warns about and a save refuses; none is the engine's default.
+ * A unit's MAP (issue #482) likewise: 0 mm would be a MAP, none is none.
  */
-const NUMBER_NONE = new Set(['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropRemoteCapM3Day']);
+const NUMBER_NONE = new Set(['cropShareDam', 'cropShareRiver', 'cropShareRemote', 'cropRemoteCapM3Day', 'mapMm']);
 
 /** A node with everything but its place, its kind and the kept rules blanked, under `name`. */
 function anonymise(n: NetworkNode, name: string): NetworkNode {
