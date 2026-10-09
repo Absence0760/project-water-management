@@ -13,6 +13,7 @@
 import type { Page } from '@playwright/test';
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';
 import { PASSWORD } from '../support/api.ts';
+import { API_URL, WEB_URL } from '../support/env.ts';
 import { ageEmailCodeSends, plantEmailCode } from '../support/db.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -159,4 +160,47 @@ test('codes by email: turn them on with the password and an emailed code, then s
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page).toHaveURL('/');
+});
+
+/** An authenticator for the page's account, through the API (205's sign-in panel needs a factor to reset). */
+async function appOnByApi(page: Page): Promise<void> {
+	const { secret } = (await (await page.request.post(`${API_URL}/auth/mfa/totp/enrol`, { data: { password: PASSWORD } })).json()) as { secret: string };
+	expect((await page.request.post(`${API_URL}/auth/mfa/totp/confirm`, { data: { code: hotp(base32Decode(secret)!, totpStep(Date.now())) } })).status()).toBe(200);
+}
+
+/** From the code step to the "lost everything" panel (205). */
+async function toLostPanel(page: Page) {
+	await page.getByRole('button', { name: 'Lost your phone? Use a recovery code' }).click();
+	await page.getByRole('button', { name: 'Lost your phone and your recovery codes?' }).click();
+	await expect(page.getByRole('heading', { name: 'Lost your phone and your recovery codes?' })).toBeFocused();
+}
+
+test('asking for a reset: the panel passes an a11y scan; past the daily cap it says so and stays; a lapsed sign-in goes back to the password', async ({ page, owner }) => {
+	await appOnByApi(page);
+	await page.goto('/');
+	await signOut(page, owner.displayName);
+
+	// Three requests today already (205's cap), through the API with a challenge of their own.
+	for (let i = 0; i < 3; i++) {
+		const ctx = await page.context().browser()!.newContext();
+		expect((await ctx.request.post(`${API_URL}/auth/login`, { data: { email: owner.email, password: PASSWORD } })).status()).toBe(200);
+		// The Origin a browser sends (the API's CSRF check wants it on a POST without a JSON body).
+		expect((await ctx.request.post(`${API_URL}/auth/mfa/reset`, { headers: { origin: WEB_URL } })).status()).toBe(202);
+		await ctx.close();
+	}
+
+	await page.goto('/login');
+	await password(page, owner.email);
+	await toLostPanel(page);
+	await expectNoViolations(page);
+	await page.getByRole('button', { name: 'Email me a link' }).click();
+	await expect(page.getByRole('alert')).toHaveText('You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.');
+	await expect(page.locator('[data-mfa-lost]')).toBeVisible();
+
+	// The sign-in's challenge gone (its 5 minutes over): asking takes the page back to the password.
+	await page.context().clearCookies({ name: 'wm_mfa' });
+	await page.getByRole('button', { name: 'Email me a link' }).click();
+	await expect(page.getByLabel('Email')).toBeVisible();
+	await expect(page.locator('[data-mfa-lost]')).toHaveCount(0);
+	await expect(page.getByRole('alert')).toContainText('sign-in');
 });

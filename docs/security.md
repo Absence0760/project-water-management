@@ -451,7 +451,7 @@ falls through to the first when it was the last. Neither is granted to
     end are emailed, each with a **cancel link that needs no sign-in**
     (another token kind, `mfa_reset_cancel`, one per email, all valid until
     the reset ends). Any right code from the owner cancels it (`…/verify`,
-    `…/step-up` and turning a factor off; from the app, by email, or a
+    `…/step-up`, new recovery codes and turning a factor off; from the app, by email, or a
     recovery code), since it proves they still have a factor. So a thief
     who has the password *and* the inbox of an account with only the app
     still has to get past three days of emails to the owner, any one of

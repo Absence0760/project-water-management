@@ -234,8 +234,8 @@ sign-in, `amr` in the session, and the requirement for project owners, team
 admins and assessors at the route (security.md § Two-step sign-in). Codes
 by email as a second factor, beside or instead of the app, built 2026-10-08
 (206_mfa_email_code.sql; security.md § Two-step sign-in → Code by email);
-its `LEGAL_VERSION` bump waits for the combined two-step PR (legal-status.md,
-2026-10-08). Open:
+`LEGAL_VERSION` 2026-10-08 covers it with the opt-in requirement and
+recovery, in the one combined change (legal-status.md, 2026-10-08). Open:
 
 - [x] **Opt-in per project and team** (operator decision, 2026-10-08,
       replacing the role-based requirement of 2026-10-01). Owners' and team
@@ -275,7 +275,8 @@ its `LEGAL_VERSION` bump waits for the combined two-step PR (legal-status.md,
       2026-10-08, operator decision; 205_mfa_recovery). The person can ask
       at the sign-in's code step (an emailed link, then a 3-day wait with a
       cancel link in every email), a team admin can remove a member's
-      factor at once, and the operator's runbook stays the last resort
+      factors at once (a member below admin only: a locked-out admin uses
+      the self-service reset or the runbook), and the operator's runbook stays the last resort
       (security.md § Two-step sign-in → Recovery; deployment.md § Runbooks 14).
 - [x] **Afrikaans for the recovery wording** (205, done 2026-10-08): the new
       sign-in, Account, `/mfa-reset` pages' and email lines were translated by

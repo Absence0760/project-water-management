@@ -69,7 +69,7 @@ send a code to `POST /auth/mfa/step-up`, then the action again.
 | DELETE | `/auth/mfa/email` | `{ code }` (emailed, app or recovery code) | `204`, as `DELETE /auth/mfa/totp` for codes by email; `409 mfa_not_enrolled` (signed in) |
 | POST | `/auth/mfa/email/send` | – | `202 { resendInSeconds, expiresInSeconds }`: a code by email, for confirming a pending factor or, once on, for step-up, turning a factor off and new recovery codes. `409 mfa_not_enrolled`; `429 mfa_email_wait`; `503 mfa_email_failed`; `403` on a render session (signed in) |
 | POST | `/auth/mfa/challenge/email` | – + the `wm_mfa` cookie | `202 { resendInSeconds, expiresInSeconds }`: a code by email for `…/verify`; the challenge isn't used up. `401 mfa_challenge_expired`; `409 mfa_not_enrolled` (no codes by email on the account); `429 mfa_email_wait`; `503 mfa_email_failed` (public: the challenge is the credential) |
-| POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's or an emailed one) | `200 { recoveryCodes }`, a new set; the old ones stop working; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's or an emailed one) | `200 { recoveryCodes }`, a new set; the old ones stop working; a waiting reset of the factors ends; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
 | POST | `/auth/mfa/verify` | `{ code }` (app, emailed or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. A waiting reset of the factors ends. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
 | POST | `/auth/mfa/step-up` | `{ code }` (app, emailed or recovery code) | `200 { ok, usedRecoveryCode? }` + this browser's session reissued with `amr: ["pwd", "otp"]` and `otp_at` now: what a sign-off, issuing or withdrawing an evidence pack need within 10 minutes (their `401 mfa_fresh_code`; [security.md § Two-step sign-in](./security.md#two-step-sign-in) → A fresh code). `400 mfa_code_wrong`; `403 mfa_required` no factor. A waiting reset of the factors ends (signed in) |
 | POST | `/auth/mfa/reset` | – + the `wm_mfa` cookie | Can't get a code **and** lost the recovery codes (205): `202 { sent: true }`, a confirmation link emailed to the account's address (1 h, single use); nothing changes until it is followed, and the challenge isn't used up. `200 { pending: true, effectiveAt }` when a confirmed reset already waits (nothing sent). `429 mfa_reset_limit` past 3 requests in 24 hours; `401 mfa_challenge_expired` without a live challenge (public: the challenge is the credential) |
@@ -80,13 +80,14 @@ send a code to `POST /auth/mfa/step-up`, then the action again.
 sign-in](./security.md#two-step-sign-in) → Recovery). During the wait the
 factor keeps working; the start, a reminder every 24 hours and the end are
 emailed, each with its own cancel link, valid until the reset ends. A
-sign-in (`…/verify`) or step-up with a code cancels it, and so does turning
-the factor off. When the wait is over, the job worker's tick removes every
-second factor of the account (the authenticator and the recovery codes),
+sign-in (`…/verify`), a step-up, new recovery codes or turning a factor off
+cancels it: any right code, from the app, by email, or a recovery code.
+When the wait is over, the job worker's tick removes every second factor of
+the account (the authenticator, codes by email and the recovery codes),
 moves the session watermark (every session signed out) and emails the
 person. One reset waits at a time per account. A team admin can remove a
-member's factor at once instead: `POST /teams/:id/members/:userId/mfa-reset`
-(§ Teams).
+member's factors at once instead, for a member below admin: `POST
+/teams/:id/members/:userId/mfa-reset` (§ Teams).
 
 **Actions that need it** (opt-in since 2026-10-08; [security.md § Two-step
 sign-in](./security.md#two-step-sign-in)). Where a project requires it
@@ -397,9 +398,10 @@ the frontend catalogue (same contract: add, never rename):
 | `mfa_already_enrolled` | 409 | `POST /auth/mfa/totp/enrol` with an authenticator already on |
 | `mfa_not_started` | 409 | `POST /auth/mfa/totp/confirm` with nothing started |
 | `mfa_not_enrolled` | 409 | turning off, or new recovery codes, with two-step sign-in off |
-| `mfa_required` | 403 | an action that needs two-step sign-in (an owner's or team admin's where the project or team requires it, or one that always does), or turning a project's or team's requirement on, without an authenticator set up |
+| `mfa_required` | 403 | an action that needs two-step sign-in (an owner's or team admin's where the project or team requires it, or one that always does), or turning a project's or team's requirement on, without a second factor set up (an authenticator or codes by email) |
 | `mfa_step_up` | 403 | the same with one set up, from a session signed in with the password only |
 | `mfa_reset_limit` | 429 | `POST /auth/mfa/reset` past 3 requests for the account in 24 hours (205) |
+| `mfa_reset_admin` | 403 | `POST /teams/:id/members/:userId/mfa-reset` naming another admin of the team: only a member below admin (205, operator decision 2026-10-08) |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
 | `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
 
@@ -1182,7 +1184,7 @@ email show them by the project role they give, viewer / editor / owner
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
-| POST | `/teams/:id/members/:userId/mfa-reset` | – | `204`: the member lost their phone and recovery codes; every second factor of theirs is removed at once, every session of theirs signed out, they are emailed, and `team_member.mfa_reset` is recorded on the team's projects (205). Needs a code from the last 10 minutes (`401 mfa_fresh_code`, § Two-step sign-in). `404` for someone not in the team (or no such team for the caller); `409` naming yourself (use the sign-in page's reset) or a member without two-step sign-in | admin |
+| POST | `/teams/:id/members/:userId/mfa-reset` | – | `204`: the member can't get a code and lost their recovery codes; every second factor of theirs (the authenticator and codes by email) is removed at once, every session of theirs signed out, they are emailed, and `team_member.mfa_reset` is recorded on the team's projects (205). Always needs a code from the last 10 minutes, whatever the team's setting (`403 mfa_required` / `mfa_step_up`, `401 mfa_fresh_code`, § Two-step sign-in). Only for a member below admin: `403 mfa_reset_admin` for another admin (operator decision, 2026-10-08; they use the self-service reset or the operator). `404` for someone not in the team (or no such team for the caller); `409` naming yourself (use the sign-in page's reset) or a member without two-step sign-in | admin |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
 | DELETE | `/teams/:id/invites/:inviteId` | – | `204` | admin |
 | GET | `/teams/:id/portfolio` | – | `Portfolio` (see [Portfolio](#portfolio) below) | viewer |

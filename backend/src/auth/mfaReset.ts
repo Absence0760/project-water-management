@@ -8,8 +8,9 @@
 //   2. Following the link starts a 3-day wait (MFA_RESET_WAIT, a constant on
 //      purpose: no environment can shorten it). The factor keeps working;
 //      the start, a daily reminder and the end are emailed, each with a
-//      cancel link that needs no sign-in. A sign-in or step-up with a code
-//      cancels it, and so does turning the factor off.
+//      cancel link that needs no sign-in. Any right code cancels it (a
+//      sign-in, a step-up, new recovery codes, turning a factor off; from
+//      the app, by email, or a recovery code).
 //   3. When the wait is over, the tick (runMfaResets, from jobs/runner.ts)
 //      removes every second factor of the account (mfa_remove_factors, the
 //      one place a factor is removed), moves the session watermark and sends

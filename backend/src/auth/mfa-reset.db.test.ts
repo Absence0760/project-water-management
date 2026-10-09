@@ -713,6 +713,40 @@ describe('the self-service reset with codes by email (206)', () => {
 	});
 });
 
+describe('every right code ends a waiting reset, and the export shows it', () => {
+	it('new recovery codes with an app code end it (code_used); the old cancel link then does nothing', async () => {
+		const u = await enrolled('ResetRegenerate');
+		const cancel = await started(u);
+		const r = await anon('POST', '/auth/mfa/recovery-codes', { code: code(u.secret) }, u.twoStep);
+		expect(r.status).toBe(200);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ end_reason: 'code_used' });
+		expect((await anon('POST', '/auth/mfa/reset/cancel', { token: cancel })).status).toBe(400);
+		expect(await hasFactor(u.id)).toBe(true);
+	});
+
+	it('a wrong code ends nothing (negative control)', async () => {
+		const u = await enrolled('ResetWrongCode');
+		await started(u);
+		expect((await anon('POST', '/auth/mfa/recovery-codes', { code: '000000' }, u.twoStep)).status).toBe(400);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ ended_at: null });
+	});
+
+	it('the data-subject export lists the reset’s dates and how it ended, never a hash', async () => {
+		const u = await enrolled('ResetExport');
+		await started(u);
+		const step = await anon('POST', '/auth/mfa/step-up', { code: code(u.secret) }, u.twoStep);
+		expect(step.status).toBe(200);
+		const r = await anon('GET', '/auth/me/export', undefined, cookieOf(step.headers, SESSION_COOKIE)!);
+		expect(r.status).toBe(200);
+		expect(r.body.twoStepSignInResets).toEqual([
+			{ requestedAt: expect.any(String), confirmedAt: expect.any(String), effectiveAt: expect.any(String), endedAt: expect.any(String), endReason: 'code_used' }
+		]);
+		expect(r.body.securityEvents.map((e: { kind: string }) => e.kind)).toEqual(expect.arrayContaining(['mfa.reset_requested', 'mfa.reset_confirmed', 'mfa.reset_cancelled']));
+		expect(JSON.stringify(r.body.twoStepSignInResets)).not.toMatch(/hash/i);
+		expect(JSON.stringify(r.body)).not.toMatch(/confirm_?hash|token_?hash|confirmHash|tokenHash/i);
+	});
+});
+
 describe('the owner turning off one factor of two (mfa_remove_factor)', () => {
 	it('the recovery codes stay while the other factor does; the right code ends a waiting reset; the last factor takes the codes', async () => {
 		const u = await enrolled('RemoveOneOfTwo');

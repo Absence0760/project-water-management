@@ -2190,12 +2190,14 @@ New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
 
-**Reset two-step** (admins, on every row but their own, beside Remove;
+**Reset two-step** (admins, on every row below admin, beside Remove;
 205_mfa_recovery, [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery):
-for a member who lost their phone and their recovery codes. A confirm
-dialog says to do it only when sure it's them asking (in person, on a
-call), and what it does: the member's authenticator and codes stop
-working, they're signed out everywhere, anyone with their password can
+for a member who can't get a code and lost their recovery codes. Never on
+an admin's row (operator decision, 2026-10-08: another admin uses the
+sign-in page's reset or the operator; the API refuses it too, `403
+mfa_reset_admin`). A confirm dialog says to do it only when sure it's them
+asking (in person, on a call), and what it does: the member's
+authenticator app, codes by email and recovery codes stop working, they're signed out everywhere, anyone with their password can
 sign in as them until they set it up again, and they get an email; it is
 recorded in the history of the team's projects. The API asks the admin for
 a code from the last 10 minutes first (the workspace's code dialog). Done,

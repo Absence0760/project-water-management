@@ -315,6 +315,8 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			const codes = await replaceRecoveryCodes(db, userId);
 			await recordSecurityEvent(db, userId, 'mfa.recovery_regenerated');
 			await db.query('SELECT app_mfa_succeeded()');
+			// A right code: the owner has their factor, so a waiting reset ends, as at every code check (205).
+			await cancelOwnReset(db);
 			return { kind: 'ok' as const, codes };
 		});
 		if (result.kind === 'none') throw ApiError.coded(409, 'mfa_not_enrolled', 'two-step sign-in is off');

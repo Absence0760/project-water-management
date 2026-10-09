@@ -2885,7 +2885,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `mfa_throttle` | The code throttle, per account: `user_id` (primary key, cascade), `failures`, `locked_until`, `last_attempt_at`. Deny-all policy; only `app_mfa_attempt(free, base, max)` and `app_mfa_succeeded()` (SECURITY DEFINER, the current user only) touch it, like `login_throttle` |
 | `account_security_event` | The account's own security log: `id`, `user_id` (cascade), `kind` (`mfa.enrolled`, `mfa.disabled` (the authenticator removed), `mfa.recovery_used`, `mfa.recovery_regenerated`, and since 206 `mfa.email_enrolled`, `mfa.email_disabled`), `created_at`. Append-only |
 | `user_email_otp` | Codes by email (206): one row per account that turned them on: `user_id` (primary key, cascade), `confirmed_at` (null while the first emailed code is awaited; an unconfirmed row signs nobody in and satisfies no requirement), `created_at` |
-| `mfa_email_code` | The live emailed code (206), one per account: `user_id` (primary key, cascade), `code_hash` (HMAC-SHA256 under a key derived from `APP_ENCRYPTION_KEY`, over the account, the purpose and the code; 32 bytes; null once used), `purpose` (`enrol` or `use`), `expires_at` (10 minutes after the send); all three null together. The row stays as the send limit's lock. Deny-all; only `app_mfa_email_send(hash, purpose, ttl, gap, per_hour)`, `app_mfa_email_use(hash, purpose)` and `app_mfa_email_void()` (SECURITY DEFINER, the current user only) touch it |
+| `mfa_email_code` | The live emailed code (206), one per account: `user_id` (primary key, cascade), `code_hash` (HMAC-SHA256 under a key derived from `APP_ENCRYPTION_KEY`, over the account, the purpose and the code; 32 bytes; null once used), `purpose` (`enrol` or `use`), `expires_at` (10 minutes after the send); all three null together. The row stays as the send limit's lock. Deny-all; only `app_mfa_email_send(hash, purpose, ttl, gap, per_hour)`, `app_mfa_email_use(hash, purpose)` (SECURITY DEFINER, the current user only) and the removals (`mfa_remove_factor(s)`, 205 replaced in 206, which void it with the factor) touch it |
 | `mfa_email_send` | When codes were emailed (206), for the send limits (a minute apart, five an hour): `id`, `user_id` (cascade; index `(user_id, sent_at)`), `sent_at` (index, for the day-old prune). Deny-all; only `app_mfa_email_send` writes it |
 
 - RLS: `user_totp` and `user_email_otp` are the account's own row for
@@ -2896,8 +2896,12 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   `mfa_throttle`, `mfa_email_code` and `mfa_email_send` deny-all. Proven
   with positive controls in `src/auth/mfa.db.test.ts` and
   `src/auth/mfa-email.db.test.ts`.
-- "Is two-step on" is one query, `hasConfirmedFactor` (`auth/stepUp.ts`): a
-  confirmed `user_totp` or `user_email_otp` row. Recovery codes are one set
+- "Is two-step on" is one test, SQL `mfa_has_factor(p_user)` (205, replaced
+  in 206 to count codes by email), which `hasConfirmedFactor`
+  (`auth/stepUp.ts`) calls: a confirmed `user_totp` or `user_email_otp`
+  row. Invoker's rights and granted to `water_app`, so from the API RLS
+  limits it to the caller's own rows, while the definer functions of 205
+  call it for any account. Recovery codes are one set
   per account, made when the first factor is confirmed and deleted with the
   last.
 - `audit_event` isn't used for these: it is a project's log (`project_id`
@@ -2954,17 +2958,28 @@ Opt-in per project and team since the operator's decision of 2026-10-08
   `app_mfa_reset_remind`, `app_mfa_reset_complete` and
   `app_mfa_reset_purge` (the tick; completing refuses a reset whose
   `effective_at` hasn't passed), `app_mfa_team_reset` (a team admin, for a
-  member of their team, never themselves) and `app_mfa_remove_own_factors`
-  (turning it off). Proven with positive controls in
+  member of their team below admin, never themselves and never another
+  admin: `co_admin`) and `app_mfa_remove_own_factor(method, watermark)`
+  (the owner turning one factor off). Proven with positive controls in
   `src/auth/mfa-reset.db.test.ts`.
-- **One place removes a second factor:** `mfa_remove_factors(p_user uuid)`
-  (not granted to `water_app`; the functions above call it), which deletes
-  every factor of the account (today `user_totp` and `user_recovery_code`)
-  and ends a waiting reset. `mfa_has_factor(p_user uuid)` is the one test of
-  whether an account has one. A new kind of factor is added to both.
+- **Two functions remove second factors, and nothing else does** (neither
+  granted to `water_app`; the functions above call them, the operator as the
+  schema owner): `mfa_remove_factors(p_user, p_watermark)` deletes every
+  factor of the account (`user_totp`, `user_email_otp` and its live
+  `mfa_email_code`, and `user_recovery_code`), ends a waiting reset
+  (`factor_removed`) and moves `sessions_revoked_at` to the watermark;
+  `mfa_remove_factor(p_user, method, p_watermark)` deletes one factor
+  (`totp` or `email`), keeps the recovery codes while another factor is
+  still on, moves the watermark, and with the last factor falls through to
+  `mfa_remove_factors`. A waiting reset survives the removal of one factor
+  of two at this layer; the routes that call it took a right code first,
+  which ends the reset (`code_used`) on its own. A new kind of factor is
+  added to these two and to `mfa_has_factor`. The send log
+  (`mfa_email_send`) is kept, so a removal can't reset the send limits.
 - `account_security_event.kind` gains `mfa.reset_requested`,
   `mfa.reset_confirmed`, `mfa.reset_cancelled`, `mfa.reset_completed` and
-  `mfa.reset_by_admin`; a team admin's reset is also `team_member.mfa_reset`
+  `mfa.reset_by_admin`, `mfa.reset_by_operator` (206 keeps them beside
+  its own two); a team admin's reset is also `team_member.mfa_reset`
   on each of the team's projects (§ Change history).
 - Retention: an ended reset is deleted 90 days after it ended (the tick,
   `app_mfa_reset_purge`); the security log keeps that it happened. The

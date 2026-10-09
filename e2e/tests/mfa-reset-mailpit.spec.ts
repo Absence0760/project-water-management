@@ -12,6 +12,7 @@
 import { request as apiRequest, type APIRequestContext, type Page } from '@playwright/test';
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';
 import { acceptInvites, PASSWORD } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { ageEmailCodeSends, endMfaResetWait, mfaResetState } from '../support/db.ts';
 import { API_URL, MFA_API_URL, WEB_URL } from '../support/env.ts';
@@ -158,6 +159,7 @@ test('lost phone and codes: the emailed link starts the wait, and when it is ove
 	await account.goto('/account');
 	await expect(account.locator('[data-pending-reset]')).toContainText('Someone asked to remove two-step sign-in from your account');
 	await expect(account.locator('[data-pending-reset]').getByRole('button', { name: 'Cancel the removal' })).toBeVisible();
+	await expectNoViolations(account);
 	await watcher.close();
 
 	await endMfaResetWait(owner.email);
@@ -325,4 +327,22 @@ test('signing in with an emailed code cancels a waiting reset', async ({ page, o
 	await page.goto('/account');
 	await expect(page.locator('[data-pending-reset]')).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Two-step sign-in' })).toHaveAttribute('data-two-step', 'on');
+});
+
+test('dead links: the confirmation and cancel pages say so, and pass an a11y scan', async ({ browser }) => {
+	const stranger = await browser.newContext();
+	const page = await stranger.newPage();
+	await page.goto('/mfa-reset?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+	await expect(page.getByRole('heading', { name: 'Remove two-step sign-in' })).toBeVisible();
+	await expectNoViolations(page);
+	await page.getByRole('button', { name: 'Start the 3-day wait' }).click();
+	await expect(page.getByRole('alert')).toHaveText('This link is invalid, already used, or older than 1 hour. Sign in again and ask for a new one.');
+	await expectNoViolations(page);
+
+	await page.goto('/mfa-reset/cancel?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+	await expect(page.getByRole('heading', { name: 'Keep two-step sign-in' })).toBeVisible();
+	await expectNoViolations(page);
+	await page.getByRole('button', { name: 'Cancel the removal' }).click();
+	await expect(page.getByRole('alert')).toContainText('This link no longer works');
+	await stranger.close();
 });
