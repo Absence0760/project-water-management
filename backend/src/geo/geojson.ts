@@ -14,7 +14,8 @@
 // A file's problems are listed per feature, so the person can fix them all
 // at once. Properties are dropped except FEATURE_PROPERTIES; a `kind`,
 // `type` or `layer` property is read only to propose each feature's kind
-// (proposeKinds, issue #326 D2), and is not kept.
+// (proposeKinds, issue #326 D2), and is not kept; a `layer` that names no
+// kind is the name of a feature that has none (layerAsName, QGIS exports).
 import { oneLineName } from '@water-management/engine';
 import { geometryAreaM2 } from './area.js';
 import { clipX, clipY, openRing } from './clip.js';
@@ -70,7 +71,7 @@ export interface ParsedFeature {
 	properties: Record<string, string>;
 	/** Geodesic area for polygons (m²), null otherwise. */
 	areaM2: number | null;
-	/** What the file says the feature is (its `kind`, `type` or `layer` property, the first present), for proposeKinds; never stored. */
+	/** What the file says the feature is (its `kind`, `type` or `layer` property, the first present; not `layer` when that became the name), for proposeKinds; never stored. */
 	kindHint: string | null;
 }
 
@@ -549,8 +550,24 @@ function featureName(props: Record<string, unknown>): string {
 	return '';
 }
 
-function kindHint(props: Record<string, unknown>): string | null {
+/**
+ * A `layer` value read as the feature's name: QGIS's "Merge vector layers"
+ * writes each source layer's name there, so a file of sub-catchments
+ * carries their names only in `layer`. Taken only when the
+ * feature has no NAME_KEYS name and the value names no kind (a `layer` of
+ * "dams" still proposes the kind).
+ */
+function layerAsName(props: Record<string, unknown>): string | null {
+	const key = Object.keys(props).find((x) => x.toLowerCase() === 'layer');
+	const v = key === undefined ? undefined : props[key];
+	if (typeof v !== 'string' || kindFromWord(v) !== null) return null;
+	return featureNameOf(v) || null;
+}
+
+/** The first `kind`/`type`/`layer` value; `layer` skipped when it became the name (layerAsName). */
+function kindHint(props: Record<string, unknown>, layerIsName: boolean): string | null {
 	for (const k of KIND_KEYS) {
+		if (layerIsName && k === 'layer') continue;
 		const key = Object.keys(props).find((x) => x.toLowerCase() === k);
 		const v = key === undefined ? undefined : props[key];
 		if (typeof v === 'string' && v.trim()) return v.trim().slice(0, FEATURE_NAME_MAX);
@@ -606,7 +623,11 @@ export function parseGeoJson(text: string): { features: ParsedFeature[]; problem
 		const p = props !== null && typeof props === 'object' && !Array.isArray(props) ? (props as Record<string, unknown>) : {};
 		const checked = checkGeometry((f as { geometry?: unknown }).geometry);
 		if ('problem' in checked) problems.push({ feature: index, message: checked.problem });
-		else features.push({ index, geometry: checked.geometry, name: featureName(p), properties: keptProperties(p), areaM2: checked.areaM2, kindHint: kindHint(p) });
+		else {
+			const named = featureName(p);
+			const fromLayer = named ? null : layerAsName(p);
+			features.push({ index, geometry: checked.geometry, name: named || fromLayer || '', properties: keptProperties(p), areaM2: checked.areaM2, kindHint: kindHint(p, fromLayer !== null) });
+		}
 	});
 	return { features, problems };
 }
