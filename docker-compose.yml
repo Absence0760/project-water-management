@@ -19,8 +19,11 @@
 name: project-water-management
 
 services:
+  # From ECR Public's copy of Docker's official images (docker/library), the
+  # same digest as Docker Hub's: CI runs it on every job, and Docker Hub's
+  # anonymous pull limit refused them (issue #492).
   postgres:
-    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     container_name: water-management-db
     ports:
       - "5434:5432"
@@ -46,8 +49,11 @@ services:
   # in backend/.env.development). Nothing leaves the laptop. Web UI:
   # http://localhost:8026 (`pnpm dev:mail:open`). Published on 1026/8026 so it
   # doesn't collide with other projects' Mailpit on the default 1025/8025.
+  # From GHCR, where Mailpit publishes the same image (the same digest) as on
+  # Docker Hub: CI's shards pull it on every run, and Docker Hub's anonymous
+  # pull limit refused them (issue #492).
   mailpit:
-    image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+    image: ghcr.io/axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
     container_name: water-management-mail
     ports:
       - "127.0.0.1:1026:1025"

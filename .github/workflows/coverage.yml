@@ -69,7 +69,7 @@ jobs:
     services:
       postgres:
         # The image and digest docker-compose.yml runs (pnpm check:pins, serviceImageProblems).
-        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
         env:
           # Throwaway CI-only credentials, same as docker-compose.yml.
           POSTGRES_USER: water
@@ -126,7 +126,11 @@ jobs:
           fi
 
       - name: Start MinIO
-        run: docker compose up -d --wait minio
+        # Through Google's Docker Hub mirror by digest, not compose's own pull from Docker Hub, whose anonymous pull limit refused CI's runners (issue #492).
+        run: |
+          bash scripts/ci/service-image.sh save minio "$RUNNER_TEMP/service-images/minio.tar"
+          bash scripts/ci/service-image.sh load minio "$RUNNER_TEMP/service-images/minio.tar"
+          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio
 
       - name: DB tests with coverage
         run: pnpm test:backend:db:coverage
