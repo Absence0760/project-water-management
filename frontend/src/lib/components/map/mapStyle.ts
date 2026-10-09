@@ -478,6 +478,168 @@ export function channelLayers(dark: boolean): Layer[] {
 	];
 }
 
+// ---------------------------------------------------------------------------
+// Hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md §
+// Hydrological units layer, § MAP grid, § CHIRPS grid): each its own source,
+// empty while its layer is off, so a toggle is a setData, never a restyle.
+// Their text needs glyphs, like every label; without them the points and
+// lines are drawn and the Layers box lists what the labels would say.
+// ---------------------------------------------------------------------------
+
+/** A unit's label as the units source takes it (mapLayers.ts unitLabels). */
+export interface UnitLabelData {
+	featureId: string;
+	label: string;
+	at: [number, number];
+}
+
+/** The `units` source's data: each labelled unit's point (its outline comes from the features it labels). */
+export function unitsData(labels: readonly UnitLabelData[] | null | undefined, features: readonly MapFeature[] = []) {
+	const ids = new Set((labels ?? []).map((l) => l.featureId));
+	return {
+		type: 'FeatureCollection' as const,
+		features: [
+			...features.filter((f) => ids.has(f.id)).map((f) => ({ type: 'Feature' as const, properties: { role: 'outline' }, geometry: f.geometry })),
+			...(labels ?? []).map((l) => ({ type: 'Feature' as const, properties: { role: 'label', label: l.label }, geometry: { type: 'Point' as const, coordinates: l.at } }))
+		]
+	};
+}
+
+/** The units layer: each unit's outline drawn heavier over the features, and its name at its middle. */
+export function unitsLayers(dark: boolean, labels: boolean): { over: Layer[]; labels: Layer[] } {
+	const c = overlayColours(dark);
+	const t = labelColours(dark);
+	const src = { source: 'units' };
+	return {
+		over: [
+			{ id: 'units-casing', type: 'line', ...src, filter: ['==', ['get', 'role'], 'outline'], paint: { 'line-color': c.casing, 'line-width': 6, 'line-opacity': 0.85 } },
+			{ id: 'units-line', type: 'line', ...src, filter: ['==', ['get', 'role'], 'outline'], paint: { 'line-color': c.parcel, 'line-width': 3 } }
+		],
+		labels: labels
+			? [
+					{
+						id: 'units-label',
+						type: 'symbol',
+						...src,
+						filter: ['==', ['get', 'role'], 'label'],
+						layout: { 'text-field': ['get', 'label'], 'text-font': [LABEL_FONTS.medium], 'text-size': 13, 'text-max-width': 8 },
+						paint: { 'text-color': t.text, 'text-halo-color': t.halo, 'text-halo-width': 2 }
+					}
+				]
+			: []
+	};
+}
+
+/** A MAP grid point as the map takes it. */
+export interface MapGridPointData {
+	lon: number;
+	lat: number;
+	mapMm: number;
+}
+
+/** The `mapgrid` source's data: each point with its MAP and its label ("812 mm"). */
+export function mapGridData(points: readonly MapGridPointData[] | null | undefined) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: (points ?? []).map((p) => ({
+			type: 'Feature' as const,
+			properties: { mm: p.mapMm, label: `${Math.round(p.mapMm)} mm` },
+			geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] }
+		}))
+	};
+}
+
+/**
+ * The MAP ramp: a light-to-dark blue by mm/yr, the same in both themes (each
+ * point has a casing of the opposite lightness, so the pale end reads on a
+ * light basemap and the dark end on a dark one). Its stops are the key's.
+ */
+export const MAP_RAMP: readonly (readonly [number, string])[] = [
+	[200, '#c6dbef'],
+	[500, '#6baed6'],
+	[800, '#2171b5'],
+	[1200, '#08519c'],
+	[2000, '#08306b']
+];
+
+/** The MAP grid layer: a dot per point, coloured by MAP, and its value beside it (labels thin themselves where they would overlap). */
+export function mapGridLayers(dark: boolean, labels: boolean): { over: Layer[]; labels: Layer[] } {
+	const t = labelColours(dark);
+	const src = { source: 'mapgrid' };
+	return {
+		over: [
+			{
+				id: 'mapgrid-point',
+				type: 'circle',
+				...src,
+				paint: {
+					'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.5, 14, 5],
+					'circle-color': ['interpolate', ['linear'], ['get', 'mm'], ...MAP_RAMP.flat()],
+					'circle-stroke-color': t.halo,
+					'circle-stroke-width': 1
+				}
+			}
+		],
+		labels: labels
+			? [
+					{
+						id: 'mapgrid-label',
+						type: 'symbol',
+						...src,
+						layout: { 'text-field': ['get', 'label'], 'text-font': [LABEL_FONTS.regular], 'text-size': 11, 'text-offset': [0, 0.9], 'text-anchor': 'top', 'text-padding': 2 },
+						paint: { 'text-color': t.text, 'text-halo-color': t.halo, 'text-halo-width': 1.5 }
+					}
+				]
+			: []
+	};
+}
+
+/** The CHIRPS grid's colour: an orange apart from the water blues, the parcels' green and the quaternaries' purple. */
+export const chirpsColour = (dark: boolean) => (dark ? '#ffb15c' : '#a34700');
+
+/** A CHIRPS cell as the map takes it (mapLayers.ts chirpsCells). */
+export interface ChirpsCellData {
+	lon: number;
+	lat: number;
+	square: [number, number, number, number];
+}
+
+/** The `chirps` source's data: each cell's square (dashed) and its centre, the grid point. */
+export function chirpsData(cells: readonly ChirpsCellData[] | null | undefined) {
+	const sq = ([w, s, e, n]: [number, number, number, number]) => [
+		[
+			[w, s],
+			[e, s],
+			[e, n],
+			[w, n],
+			[w, s]
+		]
+	];
+	return {
+		type: 'FeatureCollection' as const,
+		features: (cells ?? []).flatMap((c) => [
+			{ type: 'Feature' as const, properties: { role: 'cell' }, geometry: { type: 'Polygon' as const, coordinates: sq(c.square) } },
+			{ type: 'Feature' as const, properties: { role: 'point' }, geometry: { type: 'Point' as const, coordinates: [c.lon, c.lat] } }
+		])
+	};
+}
+
+/** The CHIRPS grid layer: each 0.05° cell's outline, dashed and thin, and its centre as a ringed dot. */
+export function chirpsLayers(dark: boolean): Layer[] {
+	const colour = chirpsColour(dark);
+	const src = { source: 'chirps' };
+	return [
+		{ id: 'chirps-cell', type: 'line', ...src, filter: ['==', ['get', 'role'], 'cell'], paint: { 'line-color': colour, 'line-width': 1, 'line-opacity': 0.7, 'line-dasharray': [3, 3] } },
+		{
+			id: 'chirps-point',
+			type: 'circle',
+			...src,
+			filter: ['==', ['get', 'role'], 'point'],
+			paint: { 'circle-radius': 3.5, 'circle-color': colour, 'circle-stroke-color': labelColours(dark).halo, 'circle-stroke-width': 1.5 }
+		}
+	];
+}
+
 export interface StyleOptions {
 	/** The glyphs URL (absolute; glyphsUrl()): place and water names, and the quaternaries' codes. Null: no labels. */
 	glyphs?: string | null;
@@ -495,19 +657,28 @@ export interface StyleOptions {
 	riversCredit?: string | null;
 	/** The data sources page's URL: the relief's credit links its Copernicus section (the Art. 6(c) liability sentence). */
 	dataSourcesHref?: string;
+	/** The hydrological units' outlines and labels (unitsData()); none when omitted. */
+	units?: ReturnType<typeof unitsData>;
+	/** The MAP grid's points (mapGridData()); none when omitted. */
+	mapGrid?: ReturnType<typeof mapGridData>;
+	/** The CHIRPS grid's cells and points (chirpsData()); none when omitted. */
+	chirps?: ReturnType<typeof chirpsData>;
 }
 
 /**
  * The basemap with the overlay over it: one style, so a theme switch
  * (`setStyle`) redraws both and keeps the features and the selection. Order,
  * bottom up: the basemap's land, the relief (when on), the rest of the
- * basemap, the quaternary outlines, the river network, the features, then every label (so a
+ * basemap, the quaternary outlines, the river network, the features, the
+ * units' outlines, the CHIRPS grid, the MAP grid's points, then every label (so a
  * results fill never hides a name).
  */
 export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnType<typeof overlayData>, opts: StyleOptions = {}): Style {
 	const base = basemapStyle(tilesUrl, dark);
 	const glyphs = opts.glyphs || null;
 	const qt = quaternaryLayers(dark, !!glyphs);
+	const un = unitsLayers(dark, !!glyphs);
+	const mg = mapGridLayers(dark, !!glyphs);
 	const style: Style = {
 		...base,
 		sources: {
@@ -516,9 +687,26 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			rivers: { type: 'geojson', data: opts.rivers ?? riverNetworkData(null) },
 			channels: { type: 'geojson', data: opts.channels ?? channelData(null) },
 			features: { type: 'geojson', data },
-			proposal: { type: 'geojson', data: opts.proposal ?? proposalData(null) }
+			proposal: { type: 'geojson', data: opts.proposal ?? proposalData(null) },
+			units: { type: 'geojson', data: opts.units ?? unitsData(null) },
+			mapgrid: { type: 'geojson', data: opts.mapGrid ?? mapGridData(null) },
+			chirps: { type: 'geojson', data: opts.chirps ?? chirpsData(null) }
 		},
-		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...channelLayers(dark), ...overlayLayers(dark), ...proposalLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
+		layers: [
+			...base.layers,
+			...qt.under,
+			...riverNetworkLayers(dark),
+			...channelLayers(dark),
+			...overlayLayers(dark),
+			...un.over,
+			...chirpsLayers(dark),
+			...mg.over,
+			...proposalLayers(dark),
+			...(glyphs && tilesUrl ? labelLayers(dark) : []),
+			...qt.labels,
+			...un.labels,
+			...mg.labels
+		]
 	};
 	if (opts.terrain) {
 		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain, opts.dataSourcesHref);

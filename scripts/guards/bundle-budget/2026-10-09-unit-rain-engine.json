@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Engine per-unit rain (issue #482): runoff/unitRain*.ts and the outlook's unit records, bundled with the frontend's engine import; measured 1854 KB on feat/unit-rain-types vs 1859 KB on this branch"
+}
