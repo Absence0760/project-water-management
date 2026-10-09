@@ -3098,7 +3098,8 @@ role and not before it.
         (`last_meta.finalThrough`) and the next window starts after it; a
         `sat` fetch stops probing finals after the first batch without one,
         and doesn't re-read the preliminary days the series already holds
-        (`heldThrough`). architecture.md § Data feeds, the window. On the
+        (`heldThrough`; since 208 the CHIRPS cell cache's plan does this from
+        the cache instead, issue #482). architecture.md § Data feeds, the window. On the
         fixtures a caught-up feed's daily fetch goes from 194 range requests
         to 3 (`sat`) and from 158 to 5 (`rnl`), and a backfill of final days
         moves on 120 days a window instead of 70.
@@ -3115,6 +3116,24 @@ role and not before it.
         often), and "Run now" is a token bucket per feed, 6 presses that
         queue or pull a fetch, then one every 10 minutes (`429` with
         `Retry-After`).
+  - [x] ~~A second project over the same CHIRPS cells downloads them
+        again.~~ **Done (issue #482 part A, `208_chirps_cell_cache`):** the
+        shared cell cache keeps each cell's days once, and a feed reads only
+        the cells and days it lacks; a window the cache holds whole asks CHC
+        for nothing, and the backfill's next window follows in 5 s
+        (`CACHED_NEXT_SECONDS`) instead of a minute. architecture.md § Data
+        feeds → The CHIRPS cell cache.
+  - [ ] **CHIRPS finals CHC rewrites in place aren't re-read** (issue #482's
+        gotchas: the 2024 dailies were rewritten in 2025-12). A cached final
+        is never read again, as a feed's final marker never was before the
+        cache. The durable fix: record each daily file's ETag / Last-Modified
+        (`chirps_cell_year.source_etag` is reserved for it; `FeedHttp.range`
+        would need to return the header) and re-check finals by a cheap HEAD
+        on a slow cycle, re-reading the cells of a file whose tag changed.
+        Trigger: CHC announces (or a feed's double-mass check shows) a
+        rewrite of years a project uses; until then an operator can delete
+        the affected `chirps_cell_year` rows and clear the feeds' markers
+        (save each feed) to re-read them.
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):

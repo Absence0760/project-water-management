@@ -24,7 +24,7 @@ import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
 import { FeedFormatError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
-import { type FetchRequest, type FetchResult, runFetch } from './feeds/fetch.js';
+import { type FetchAnswer, type FetchRequest, runFetch } from './feeds/fetch.js';
 import { type FeedHttp, feedHttp } from './feeds/http.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
 import { logEvent } from './logging/logEvent.js';
@@ -79,9 +79,9 @@ export function withDeadline(http: FeedHttp, deadline: number): FeedHttp {
 }
 
 /** runFetch, answered as a failure if it hasn't finished within `ms`. */
-async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number): Promise<FetchResult> {
+async function fetchWithin(req: FetchRequest, http: FeedHttp, ms: number): Promise<FetchAnswer> {
 	let timer: NodeJS.Timeout | undefined;
-	const late = new Promise<FetchResult>((resolve) => {
+	const late = new Promise<FetchAnswer>((resolve) => {
 		timer = setTimeout(() => resolve({ ok: false, error: TOO_SLOW }), Math.max(0, ms));
 	});
 	try {
@@ -97,7 +97,7 @@ export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemai
 	for (const record of event.Records) {
 		const req = parseFetchRequest(record.body);
 		let ids: z.output<typeof FetchEnvelope>;
-		let result: FetchResult;
+		let result: FetchAnswer;
 		const started = Date.now();
 		if (req) {
 			ids = req;
@@ -140,7 +140,9 @@ export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemai
 			feedId: req.feedId,
 			source: req.request.source,
 			ok: result.ok,
-			days: result.ok ? result.values.length : 0,
+			// A cell-cache answer: the days it covers, and how many cell-days it read from CHC.
+			days: !result.ok ? 0 : 'cells' in result ? result.cells.read.length : result.values.length,
+			...(result.ok && 'cells' in result ? { cellDaysRead: result.cells.values.reduce((n, row) => n + row.filter((v) => v !== null).length, 0) } : {}),
 			ms: Date.now() - started
 		});
 	}

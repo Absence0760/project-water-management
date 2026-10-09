@@ -48,6 +48,13 @@
 // forcing as changed (engine fitRecordStatus), and the run comparison notes
 // the new version.
 //
+// A CHIRPS answer to a request with `cells` (the cell cache, 208) carries
+// each cell's own values, not the feed's mean (fromCells below). They are
+// checked (the days inside the window, the cells the feed's own), merged into
+// the shared cache through chirps_cache_merge, and the feed's days are then
+// computed from the cache (cellCache.ts seriesFromCache) into the answer the
+// rest of the ingest has always taken: from there on nothing differs.
+//
 // Days that changed in the live series (a merge, or the swap) go through the
 // new-data hook (series/newData.ts onSeriesDaysChanged), which queues the project's
 // debounced automatic re-run when it has them on (WP-2.11). Staged days don't:
@@ -61,14 +68,24 @@ import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowP
 import { onSeriesDaysChanged } from '../series/newData.js';
 import { replaceSeries } from '../series/replace.js';
 import { unitFeedProblem } from './unitFeed.js';
-import { bboxCellCount, type FeedSource, feedProvenance, feedSourceText, type GridConfig, SOURCES } from './config.js';
-import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
+import { seriesFromCache, uniqueCells } from './cellCache.js';
+import { type CacheOrigin, cacheOrigin, mergeCellCache, readCellCache } from './cellCacheStore.js';
+import { bboxCellCount, chirpsProduct, type FeedSource, feedProvenance, feedSourceText, type GridConfig, gridCells, SOURCES } from './config.js';
+import { CellsResult, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { type FeedRow, feedFetchDedupeKey, feedReplaceDone, lockFeedIssued, recordFeedChecked, recordFeedResult, seriesAccepts } from './store.js';
 
 /** A backfill's next window waits this long, so one fetch after another never floods the source (or a test's tick). */
 export const BACKFILL_NEXT_SECONDS = 60;
+/**
+ * A CHIRPS window the cell cache held whole asked the source for nothing, so
+ * the next one needn't wait to spare it: a backfill over cells another feed
+ * already read goes at the worker's pace, not a window a minute (a 1981–2026
+ * record in minutes rather than hours). Still a delay, so a test's tick (or
+ * a worker's) never runs the whole chain in one go.
+ */
+export const CACHED_NEXT_SECONDS = 5;
 
 /**
  * A fetch whose window stopped short of the newest day the source can have
@@ -83,14 +100,14 @@ export const BACKFILL_NEXT_SECONDS = 60;
 const caughtUp = (feed: FeedRow, window: FetchWindow) =>
 	window.end >= (feed.source === 'chirps' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
 
-async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow): Promise<void> {
+async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number): Promise<void> {
 	if (feed.source === 'chirps_gefs' || caughtUp(feed, window)) return;
 	await enqueueJob(db, {
 		projectId: feed.projectId,
 		kind: 'feed_fetch',
 		payload: { feedId: feed.id },
 		dedupeKey: feedFetchDedupeKey(feed.id),
-		delaySeconds: BACKFILL_NEXT_SECONDS
+		delaySeconds
 	});
 }
 
@@ -200,7 +217,8 @@ async function stageReplacement(
 	result: OkResult,
 	window: FetchWindow,
 	writes: SeriesProvenance,
-	held: SeriesProvenance | null
+	held: SeriesProvenance | null,
+	nextSeconds: number
 ): Promise<IngestOutcome> {
 	const { rows } = await db.query<{ startDate: string; values: (number | null)[] }>(
 		`SELECT to_char(start_date, 'YYYY-MM-DD') AS "startDate", "values" FROM feed_stage WHERE feed_id = $1 FOR UPDATE`,
@@ -265,16 +283,84 @@ async function stageReplacement(
 	}
 	meta = withFinal(meta, finalThroughAfter(feed, result, window));
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
-	await continueBackfill(db, feed, window);
+	await continueBackfill(db, feed, window, nextSeconds);
 	return { merged, lastDate };
+}
+
+/**
+ * A cell-cache answer as the answer the ingest has always taken (the feed's
+ * mean per day, fetchChirps' meta), after merging its cells into the cache;
+ * or the reason to refuse it. As the job's acting user: the merge function
+ * takes it only from a running data-feed job. An answer the merge refuses
+ * (a value it won't store) is rolled back to before the merge and refused
+ * whole, as an invalid answer is, so the job never dies retrying it.
+ */
+async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow, origin: CacheOrigin): Promise<FetchResult> {
+	const parsed = CellsResult.safeParse(raw);
+	const config = feed.config as GridConfig;
+	const product = chirpsProduct(config);
+	if (!parsed.success || parsed.data.cells.product !== product) return { ok: false, error: INVALID };
+	const answer = parsed.data.cells;
+	if (answer.read.length) {
+		const last = fromEpochDay(toEpochDay(answer.startDate) + answer.read.length - 1);
+		const latest = latestDay(feed.source, utcToday());
+		if (last > latest) return { ok: false, error: `the fetcher’s answer had days after ${latest}, so nothing was written` };
+		if (answer.startDate < window.start || last > window.end) {
+			return { ok: false, error: `the fetcher’s answer had days outside ${window.start} to ${window.end}, the days it was asked for, so nothing was written` };
+		}
+	}
+	// Only the feed's own cells: an answer can't fill the cache for a place this feed doesn't read.
+	const own = uniqueCells(gridCells(config));
+	const mine = new Set(own.map((c) => `${c.row},${c.col}`));
+	if (answer.cells.some(([r, c]) => !mine.has(`${r},${c}`))) return { ok: false, error: INVALID };
+	// Lock order: the feed row (takeFeedFetch, in production), then the cache
+	// rows (cell, then year), then the series (lockSeries, below). Nothing
+	// takes them the other way round, so two ingests over shared cells wait
+	// for each other rather than deadlock; the cache rows stay locked to commit.
+	await db.query('SAVEPOINT chirps_cache_merge');
+	try {
+		await mergeCellCache(db, feed.id, origin, answer);
+		await db.query('RELEASE SAVEPOINT chirps_cache_merge');
+	} catch (err) {
+		await db.query('ROLLBACK TO SAVEPOINT chirps_cache_merge');
+		// The function's own refusals (a value or a day it won't store); anything else is a real fault.
+		if ((err as { code?: string }).code !== '23514') throw err;
+		return { ok: false, error: INVALID };
+	}
+	const { noData, used } = gridRead(config);
+	let days;
+	try {
+		days = seriesFromCache(gridCells(config), await readCellCache(db, origin, product, own, window), window, noData);
+	} catch (err) {
+		return fetchFailure(err, config);
+	}
+	const read = [...answer.read].filter((d) => d !== '-').length;
+	// What the source read this time (the rest came from the cache), for the status panel.
+	const reads = { daysRead: read, cellDaysRead: read * answer.cells.length };
+	if (!days.values.length) return { ok: true, startDate: null, values: [], meta: days.prelimDays ? { days: 0, prelimDays: days.prelimDays, product, ...reads } : { days: 0, product, ...reads } };
+	const meta: Record<string, string | number> = { days: days.values.length, prelimDays: days.prelimDays, product, ...used(), ...reads };
+	if (days.finalThrough) meta.finalThrough = days.finalThrough;
+	return { ok: true, startDate: days.startDate, values: days.values, meta };
 }
 
 /**
  * `window` is what the fetch asked for. A forecast is checked by its issue
  * instead (it reads the newest issue, whatever the window), and records no
- * `through`.
+ * `through`. `origin` is where a cell-cache answer's values came from: the
+ * production fetcher's answers (feed-ingest.ts) are always the real files;
+ * an inline fetch's are what FEED_SOURCE reads (cellCacheStore.ts
+ * cacheOrigin). `cacheOnly`: the fetch job found nothing to read and asked
+ * the source for nothing (feed-fetch.ts), so a backfill goes on sooner.
  */
-export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow): Promise<IngestOutcome> {
+export async function ingestResult(
+	db: Db,
+	feed: FeedRow,
+	raw: unknown,
+	window: FetchWindow,
+	opts: { origin?: CacheOrigin; cacheOnly?: boolean } = {}
+): Promise<IngestOutcome> {
+	const nextSeconds = opts.cacheOnly ? CACHED_NEXT_SECONDS : BACKFILL_NEXT_SECONDS;
+	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) raw = await fromCells(db, feed, raw, window, opts.origin ?? cacheOrigin());
 	const parsed = FetchResult.safeParse(raw);
 	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
 		return failed(db, feed, INVALID);
@@ -330,7 +416,7 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 					`the series holds ${provenanceLabel(held)} rainfall and this feed writes ${provenanceLabel(writes)}, so nothing was written: an owner must confirm replacing the series, or point the feed at another one`
 				);
 			}
-			return stageReplacement(db, feed, checked, window, writes, held);
+			return stageReplacement(db, feed, checked, window, writes, held, nextSeconds);
 		}
 	}
 
@@ -385,6 +471,6 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 			? { ...fetcherMeta(checked), merged, kept }
 			: withFinal({ ...fetcherMeta(checked), merged, kept, through: window.end }, finalThroughAfter(feed, checked, window));
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
-	await continueBackfill(db, feed, window);
+	await continueBackfill(db, feed, window, nextSeconds);
 	return { merged, lastDate };
 }
