@@ -3,7 +3,7 @@
 	// form (NetworkTab.svelte). Its sections run in the order water moves
 	// through a unit (nodeSections.ts), each a fieldset the sheet's jump row
 	// can scroll to.
-	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, MAP_MM_MAX, MAP_MM_MIN, onRiverDam, PE_SOURCE_MAX, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -21,7 +21,7 @@
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { ewrSiteIssue } from '$lib/model/validate';
+	import { ewrSiteIssue, unitMapProblem, withUnitMap } from '$lib/model/validate';
 
 	let {
 		node,
@@ -117,6 +117,11 @@
 	/** The EWR site flag (engine ≥ 1.5.0): shown on a gauge, and on any node that has it off so it can be put right. */
 	const showEwrSite = $derived(node.kind === 'gauge' || node.ewrSite === false);
 	const ewrSiteProblem = $derived(ewrSiteIssue(node));
+	/** The unit's MAP and its source (issue #482): checked as the API checks them, the problem under the field it is in. */
+	const mapIssue = $derived(unitMapProblem(node));
+	// Under its field it starts the sentence; the save bar puts the unit's name in front instead.
+	const mapProblem = $derived(mapIssue ? `${mapIssue.message.charAt(0).toUpperCase()}${mapIssue.message.slice(1)}` : null);
+	const mapOnSource = $derived(mapIssue?.field === 'source');
 	/** River to dam set by month (engine ≥ 1.32.0): the one value is then inert. */
 	const byMonth = $derived(node.divertMonthlyM3Day != null);
 	/** River to dam's one value, read-only while it is set by month. */
@@ -307,6 +312,48 @@
 					{/if}
 					{#if g === 'area' && hiLo}
 						<p class="hint dam-hint" role="note" data-testid="hilo-hint">{hiLo}</p>
+					{/if}
+					{#if g === 'area' && node.kind === 'farm'}
+						<!-- The unit's own MAP (issue #482): with rain for each unit on, it sets the level of the unit's rain (docs/model.md §2.4h). -->
+						<div class="field" data-testid="unit-map">
+							<span class="lbl"><label for={id('mapMm')}>MAP <span class="u">(mm)</span></label><HelpTip key="unit-map" /></span>
+							<NumberInput
+								id={id('mapMm')}
+								min={MAP_MM_MIN}
+								max={MAP_MM_MAX}
+								step={1}
+								nullable
+								grouped
+								placeholder="not set"
+								disabled={readonly}
+								aria-invalid={(!!mapProblem && !mapOnSource) || undefined}
+								aria-describedby="{id('mapMm')}-h{mapProblem && !mapOnSource ? ` ${id('map')}-err` : ''}"
+								value={node.mapMm ?? null}
+								onchange={(v) => withUnitMap(node, v)}
+							/>
+							<span class="hint" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only while Settings → Rain for each unit is on, where it sets the level of the unit’s rain. Empty: none.</span>
+							{#if mapProblem && !mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
+							<FieldHistoryLine field="node:{node.id}:mapMm" {unit} />
+						</div>
+						{#if node.mapMm !== null && node.mapMm !== undefined}
+							<div class="field">
+								<span class="lbl"><label for={id('mapSource')}>Source of the MAP</label></span>
+								<input
+									id={id('mapSource')}
+									readonly={readonly}
+									required
+									maxlength={PE_SOURCE_MAX}
+									value={node.mapSource ?? ''}
+									placeholder="e.g. a 1′ MAP grid averaged over the unit’s parcel"
+									aria-invalid={mapOnSource || undefined}
+									aria-describedby="{id('mapSource')}-h{mapOnSource ? ` ${id('map')}-err` : ''}"
+									oninput={(e) => (node.mapSource = e.currentTarget.value)}
+								/>
+								<span class="hint" id="{id('mapSource')}-h">Required: the dataset or study, and its years. The run shows it beside the unit’s rain factor.</span>
+								{#if mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
+								<FieldHistoryLine field="node:{node.id}:mapSource" {unit} />
+							</div>
+						{/if}
 					{/if}
 					{#if g === 'routing'}
 						<RiverToDamFields {node} readonly={readonly || onRiverDam(node)} />

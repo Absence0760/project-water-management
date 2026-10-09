@@ -2118,6 +2118,236 @@ then fit GR4J at the fixed factor (and at a small grid of factors around it,
 to report how much the fit and the results depend on it). Settings → Flow
 calibration → **Areal rainfall correction** edits it (ui.md).
 
+### 2.4h Runoff from each unit's own rain (engine ≥ 1.78.0, issue #482)
+
+`settings.unitRain` (`UnitRainSettings` in `packages/engine/src/project.ts`;
+the forcing in `packages/engine/src/runoff/unitRain.ts`). Absent, null or
+`{ mode: 'catchment' }` (the default) = GR4J runs once on the catchment rain
+and each unit gets natural × share (§2.5), exactly as before: a test runs
+every example catchment and random networks both ways, unit records in the
+input or not, and compares the output to the bit. An unusable setting
+(`unitRainError`) runs the catchment rain with a warning.
+
+**Why.** The glossary has always given a hydrological unit "its own area,
+MAP and rain gauge" (§7), but GR4J ran once for the catchment and split the
+flow by area or the Hi/Lo MAP shares. With a rain record per unit (its own
+gauge, or the area-weighted CHIRPS over its polygon, which part B of issue
+#482 builds), a wet unit on the ridge and a dry one in the valley make their
+own runoff. GR4J is nonlinear, so the sum of the units' runs is not the
+catchment's one run even with the same areal mean: expect the flow to shift
+and a refit.
+
+**The setting.** `{ mode: 'perUnit', gaugeMapMm?, gaugeMapSource?,
+mapPeriod? }`. `gaugeMapMm` is the catchment rain gauge's own MAP (mm, with
+its source), `mapPeriod` the years a unit's CHIRPS MAP factor compares over
+(ISO dates; absent = `DEFAULT_UNIT_MAP_PERIOD`, 1991-01-01 to 2020-12-31).
+Each unit's MAP is `node.mapMm` with `node.mapSource` (`mapMmError`: 1–12 000
+mm, a MAP needs its source), typed in the unit's form or proposed from a
+loaded MAP grid as the area-weighted mean over the unit's parcel (one grid per
+project, [maps.md § MAP for each unit](./maps.md#map-for-each-unit)). The
+engine only reads the number and its source; where it came from is the source's
+wording.
+
+**The forcing rule.** Each **land unit** (a farm with an area above 0;
+gauges and water users have no land) gets one rule, chosen once for the run
+from the records the input holds (any reading at all in the stored series,
+not the run window, so the rule doesn't depend on the window):
+
+1. **Its own gauge** (`rain_catchment_mm@<unit>`), as recorded. A negative
+   value is a no-data code, as for CHIRPS (§2.4b).
+2. **The catchment gauge × clamp(unit MAP ÷ gauge MAP)**, when
+   `gaugeMapMm` is set, the unit has a MAP and the project has catchment
+   gauge rain. The gauge rain is the prepared catchment rain on the days it
+   has a value: after the zero-run handling (§2.4c), the accumulation
+   spreading (§2.4d) and rain-source periods (§2.4e), before the CHIRPS
+   infill. This is the v4.6.0 workbook's method (unit MAP ÷ gauge MAP),
+   with the unit's CHIRPS as the backup.
+3. **Its own CHIRPS** (`rain_chirps_mm@<unit>`):
+   - with a MAP, × clamp(unit MAP ÷ the CHIRPS mean annual rain). The mean
+     is over the **complete calendar years** (every day a reading) of the
+     stored series inside the MAP period. With fewer than
+     `UNIT_MAP_MIN_YEARS` = 5 there, every complete year of the record is
+     used instead, with a warning; with fewer than 5 in all, it warns too.
+     With no complete year, or none with rain (a mean annual rain of 0 mm,
+     which nothing can level), the next sub-rule applies, with a warning; a
+     complete year of 0 mm among rainy ones still counts in the mean (verify/
+     probe `unit-rain-map-period`);
+   - without a MAP (or no complete year), × the catchment's §2.4b monthly
+     factors for the day's month and fit range (`chirpsFactorOn`) when the
+     catchment has any; else raw, with a warning. The quantile map (§2.4b)
+     is not applied to a unit's CHIRPS.
+4. **The catchment forcing as without per-unit rain**: catchment rain, else
+   corrected CHIRPS, else forecast (§2.4a), × the areal correction (§2.4g),
+   with a warning naming the unit.
+
+A day the rule's record has no value takes the next source of its chain,
+in this order:
+
+| Rule | Chain |
+| --- | --- |
+| 1 | own gauge → own CHIRPS (levelled as in rule 3) → catchment gauge × the MAP ratio (when rule 2's conditions hold) → the catchment's rain × the MAP ratio |
+| 2 | catchment gauge × the MAP ratio → own CHIRPS (levelled) → the catchment's rain × the MAP ratio |
+| 3 | own CHIRPS (levelled) → the catchment's rain |
+| 4 | the catchment forcing (catchment ?? corrected CHIRPS ?? forecast) × the areal factor |
+
+"The catchment's rain" is the catchment's rain used before the areal
+correction (catchment ?? corrected CHIRPS ?? forecast), × the unit's MAP
+ratio when rule 2's conditions hold, else × 1. On rules 1–3 a unit's own forecast record (`rain_forecast_mm@<unit>`, which
+only the seasonal outlook writes, below) comes just before the catchment's
+rain. A day with no value from any link is dry (0 mm) and counted. A unit on rules 1–3 that ran historical days
+on the catchment's rain warns how many.
+
+- **Clamp.** Every factor is held between `AREAL_RAIN_FACTOR_MIN` and
+  `AREAL_RAIN_FACTOR_MAX` (0.25–4, the §2.4b and §2.4g clamp, for the same
+  reason); a clamped factor warns.
+- **The areal correction** applies to rule-4 units only: on rules 1–3 the
+  unit's own record, or its MAP, already sets the level, and the factor
+  would correct it twice.
+- **Forecast days.** After the record, the chain reaches the forecast
+  through the catchment's rain: CHIRPS-GEFS stays catchment-wide, × the
+  unit's MAP ratio when rule 2's conditions hold, else × 1. The forecast
+  tail (§2.4f) is still where the catchment's rain turns to forecast, so a
+  run with a tail and one without agree on every historical day, to the bit
+  (`checkForecastPrefix` on per-unit inputs).
+- **Rain level is not a calibration knob** (§2.10): one outlet gauge can't
+  tell one unit's rain level from another's, so each unit's level comes from
+  its own record or its MAP, never from the fit.
+
+**Runoff.** GR4J runs once per land unit with the one parameter set
+(`settings.gr4j`), the catchment PE (§2.4a) and the unit's own warm-up, on
+its rain over its own area (`areaKm2`). The unit's runoff, q × area × 1000
+m³/day, is its local inflow in the network (`PlanNode.localRunoff`), in
+place of natural × share; a farm with no area has none. Natural flow at the
+outlet is the units' runoff summed in node-id order (the network routes
+within the day, so the sum is the routed flow; with bed losses on, the
+WR2012 check and a Reserve rule table read it routed down the reaches net
+of the natural losses, §2.6b). The EWR split (`ewr × share`) and the land
+cover's low-flow threshold (`Q75 × share`, §2.5a) still use the flow
+shares. The catchment area is the land units' areas summed:
+`calibration.catchmentAreaKm2` is ignored, with a warning when it differs
+by more than 1 % (`resolveCatchmentAreaKm2`). With no land unit at all (no
+farm has an area), the setting can't apply: GR4J runs on the catchment rain
+over `catchmentAreaKm2`, as without it, with a warning, rather than refusing
+the run for a zero area (§2.4a; verify/ probe `unit-rain-no-land-unit`).
+
+The catchment's GR4J series are the units' area-weighted means
+(`rain_used`, `aet`, the three stores, `exchange`; `pet` is the one PE), so
+`summary.runoff` closes rain − AET − flow + exchange = Δstorage over the
+units' area, every day, as before; each unit closes its own balance too
+(the runoff self-check, `checkRunoffBalance`, checks both, and that natural
+flow is the units' runoff summed each day). The catchment runoff
+coefficient (W1), the water account's rain memo (§2.11b) and the
+verification water balance read the units' rain (`rain_used`), the rain
+the natural flow was made from. `rain_areal` (§2.4g) isn't written: GR4J
+doesn't run on it.
+
+**What stays on the catchment rain.** Irrigation demand's effective rain
+and the rain threshold (§2.3), rain on the dams (§2.7a), the WR2012 check
+and its calibration penalty (§2.10c), the data checks (§2.10a, §2.10d,
+the plausibility checks' runoff ratios included) and `rain_final`: field-scale rain and the record's own checks, as with the
+areal correction (§2.4g). This keeps the client regression suite's demand
+columns unchanged.
+
+**Outputs.**
+
+- Per land unit, the series `rain_unit` (mm: the rain GR4J ran on) and
+  `runoff_natural` (m³/day: its GR4J runoff before land cover; `runoff` is
+  after it), in `UNIT_RAIN_SERIES`.
+- `summary.unitRain` (`UnitRainSummary`): `{ mode: 'perUnit', gaugeMapMm,
+  gaugeMapSource, mapPeriod: { start, end }, units }`, the units in node-id
+  order, each a `UnitRainUnit`:
+  `{ nodeId, name, areaKm2, mapMm, mapSource, rule ('unitGauge' |
+  'gaugeMap' | 'unitChirps' | 'catchment'), rainKey (the rule's record:
+  'rain_catchment_mm@<id>', 'rain_catchment_mm', 'rain_chirps_mm@<id>' or
+  null), factor (1, the MAP ratio, the CHIRPS MAP factor, 1 for raw CHIRPS,
+  null when it varies by day: the §2.4b factors or rule 4), factorSource
+  ('gauge' | 'gaugeMap' | 'chirpsMap' | 'chirpsBias' | 'chirpsRaw' |
+  'catchment'), gaugeMapFactor, gaugeMapOwnFactor, gaugeMapClamped, chirps
+  (null, { source: 'bias' | 'raw' }, or { source: 'map', factor, ownFactor,
+  clamped, meanAnnualMm, years, inPeriod }), days: { unitGauge, gaugeMap,
+  unitChirps, catchment, forecast, none }, rainMm, petMm, aetMm, flowMm,
+  exchangeMm, storageStartMm, storageEndMm, runoffM3, runoffCoefficient }`.
+  The mm figures are over the unit's area; runoffCoefficient = flowMm ÷
+  rainMm (null without rain).
+- The summary CSV writes the setting and one row per unit (rule, record,
+  factor and its source, clamped, the CHIRPS mean and its years, the day
+  counts, rain, AET, runoff in mm and m³, the runoff coefficient). Run
+  comparison lists a change of the setting (**Runoff from each unit's own
+  rain**: "off → on (gauge MAP …; MAP period …)"), a unit's MAP or MAP
+  source, and names a unit's rain record by its unit.
+
+**Calibration** (§2.10b) is unchanged in what it scores: one parameter set,
+at the fit site. Each evaluation runs GR4J once per land unit into the
+plan's local-inflow buffers, with the same products in the same order as a
+run, so a scored day is `runModel`'s to the bit. A fit records the per-unit
+forcing (`fitRecord.forcing.unitRain`, `UnitRainFingerprint`: the setting
+and each unit's rule, record and factors, its CHIRPS level included, which
+also fills a gauge unit's gaps; absent = catchment rain, as every fit before
+it). Turning per-unit rain on or off, another gauge MAP or MAP period, and
+(from a run's summary, `FitForcingNow.unitRain`) a unit's rule, record,
+CHIRPS level or factor moving by more than 2 % are "Forcing changed since
+fit". The API's fit-record schema is to accept the field, validated with
+`unitRainFingerprintError` (the integration of issue #482; until then a
+per-unit fit can't be saved).
+
+**Elsewhere.** Firm yield (§2.13) runs on the same per-unit runoff. A
+model-state snapshot (§2.16) holds each unit's GR4J state and pins each
+unit's rule and factors (`runoff.units`, `runoff.unitRecipes`), as it pins
+the CHIRPS factors, so a resumed run is the uninterrupted one to the bit; a
+snapshot of the other forcing is refused (`ModelStateMismatchError`).
+`series.scale` (scenarios) may scale a unit's own rain record; on a unit
+whose CHIRPS its MAP levels, scaling the CHIRPS changes nothing (its mean
+annual rain scales with it, and the MAP sets the level). The sensitivity
+runs' rain factor (§2.10g) therefore scales every rain record and, under
+per-unit rain, every unit's MAP and the gauge MAP by the same factor, so
+every unit's rain moves by it and the MAP ratios stay put. The uncertainty
+ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as it drops the
+catchment gauge. A seasonal outlook's member (§2.15) runs each land unit's
+season on that unit's own forcing: the base run's `rain_unit` on the
+analogue's days goes in as the unit's own forecast,
+`rain_forecast_mm@<unit>` (`unitForecastSeriesKey`, engine-only: the API
+never stores one), which the unit's chain reads before the catchment's rain.
+So the season has the unit's rule and factors as the base run had them, a
+member from the snapshot keeps them pinned, and a unit on the catchment rule
+(rule 4) ignores it and keeps the catchment rain. A unit on the MAP ratio
+(rule 2) gets the same season as without it (`outlook.unitRain.test.ts`).
+The older re-run path (`warmStart: false`) pins the base input's rules and
+factors too (`settings.unitRain.pinned`, engine-only), rather than refit
+them on the member's record cut at the decision date, so its history runs
+at the levels its season was made at and its season is the snapshot
+member's to the bit. `verify/` (the independent cross-check) models
+this section from the text above, in random and dense networks and the
+probes `unit-rain-rules`, `unit-rain-forecast-warmup`, `unit-rain-map-period`
+and `unit-rain-no-land-unit`; the outlook's engine-only inputs (a unit's
+`rain_forecast_mm@<unit>`, `settings.unitRain.pinned`) are outside it, with
+forecast mode.
+
+**Performance.** A synthetic 12-unit catchment with daily rain from 1981
+to 2025 (`run.perf.test.ts`): a run 140 ms
+on the catchment rain, 295 ms per unit; a calibration evaluation 29 ms and
+49 ms (medians, 2026-10-09, Node 24 on the dev laptop). The budgets are 1 s
+and 200 ms.
+
+**Provisional calls** (made to build it; open for the hydrologist,
+[followups.md § Hydrologist](./followups.md#hydrologist)):
+
+- the MAP period default, 1991–2020 (CHPclim2's climatology years);
+- the 5-year minimum for a CHIRPS MAP factor, and falling back to every
+  complete year of the record (with a warning) below it;
+- the 0.25–4 clamp, reused from §2.4b for every unit factor;
+- forecast days: CHIRPS-GEFS stays catchment-wide, × the MAP ratio on rule 2
+  (and on rule 1 when its conditions hold), × 1 otherwise (a seasonal
+  outlook's analogue season is the unit's own, above);
+- a unit's CHIRPS without a MAP takes the catchment's §2.4b factors, which
+  were fitted against the catchment gauge on the catchment CHIRPS, not on
+  the unit's cells;
+- a unit's own gauge is used as recorded: the zero-run and accumulation
+  checks (§2.4c, §2.4d) run on the catchment gauge only;
+- the run window still follows the catchment's rain series (§2.1), so a
+  project needs a catchment series or a set simulation period.
+- the EWR split and the land cover's low-flow threshold stay on the flow
+  shares, while each unit's runoff is its own (engine-audit.md U1).
+
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
 Each farm gets a fixed **share** (`frag[f]`, 0–1) of the catchment flow. The
@@ -2144,7 +2374,9 @@ more than 1 %: the hi/lo shares use hi + lo, the area share and the rain volume
 use the area ([audit W3](./engine-audit.md), engine review F7; `areaMismatches`,
 §2.10a). Then:
 
-- Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`)
+- Farm runoff: `runoff[f][t] = naturalFlow[t] × frag[f]` (workbook: `ROUND(…, 0)`); under
+  runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0) a land unit's runoff
+  is its own GR4J runoff instead, and the share still splits the EWR
 - Farm EWR: `ewr[f][t] = pragmaticEwr[month(t)] × frag[f]` (workbook: `ROUND(…, 0)`)
 
 Both sheets, every farm side by side, are the run's **Fragmented flow / EWR —
@@ -7762,7 +7994,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 
 | Factor | Low / high (default) | What changes | Skipped when |
 | --- | --- | --- | --- |
-| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; under per-unit rain, engine ≥ 1.78.0, the units' own records too, with the unit MAPs and the gauge MAP × the same factor, §2.4h; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
 | Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it. On a full-allocation run, 0.7 and 1.3 × the registered volume (engine ≥ 1.70.0, §2.12a; before, both ends were the central run) | no unit or user has demand over the reporting window |
@@ -9452,6 +9684,9 @@ checks the method reproduces the base run).
   bias-corrected (forecast rain is never corrected again, §2.4b);
 - the daily A-pan, when the project has one, the analogue's values on the
   same days (a day without one takes the season month's mean, §2.3a);
+- under runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0), each land
+  unit's season in `rain_forecast_mm@<unit>`: the base run's `rain_unit` on
+  the analogue's days, so the unit runs its season on its own forcing;
 - the run window pinned to the base run's start and the season end,
   rain-source periods clipped to the history (§2.4e), and
   `demandFactorFrom` set to the decision date;
@@ -9830,7 +10065,9 @@ can store one per base run. The state holds:
   unit-hydrograph queues (2 + ⌈X4⌉ + ⌈2·X4⌉ numbers; no warm-up on resume,
   the state is it), or the legacy recession model's eight day-before
   values (season flag, rain used, base flow and index, response flow and
-  index, resultant flow and index);
+  index, resultant flow and index); under runoff from each unit's own rain
+  (§2.4h, engine ≥ 1.78.0) one set per land unit (`runoff.units`), with each
+  unit's rule and factors pinned (`runoff.unitRecipes`);
 - per node, in model order: the dam storage the day before (before any
   storage reset on the day), the soil-water store in m³ over the cropped
   area (§2.3 step 4), the stream-depletion lag store and, from engine
@@ -10180,7 +10417,9 @@ and hands-off flows. On engine 1.36.0 it found no departure from this
 document; on 1.53.0 one, on a few random networks: a float-noise demand
 switched on a primary or emergency dam-target borehole (§2.7d), fixed in
 1.57.0 (§2.3, §2.7d; erratum ER-12), and a noise-level day in `limitBound`
-that §2.12a now settles. What it doesn't
+that §2.12a now settles. Runoff from each unit's own rain (§2.4h, engine
+1.78.0) followed, with two points this section left open settled from
+`runModel` (a CHIRPS mean annual rain of 0 mm, and no land unit). What it doesn't
 cover yet (rule tables, forecast mode, calibration, land cover, time-varying
 development, drought restrictions, `demand.scale` by part and the other
 optional inputs) is its phase 2b ([followups.md](./followups.md) §

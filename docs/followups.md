@@ -300,6 +300,24 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **Runoff from each unit's own rain (engine 1.78.0,
+      [#482](https://github.com/Absence0760/project-water-management/issues/482),
+      model.md §2.4h).** Built off by default (`settings.unitRain` absent
+      runs as before, to the bit). Provisional calls awaiting the
+      hydrologist: (1) is a unit's CHIRPS levelled by unit MAP ÷ its mean
+      annual over 1991–2020 the right correction, against the catchment
+      gauge's monthly §2.4b factors, when both exist; (2) should the clamp
+      stay 0.25–4 for the per-unit MAP factors; (3) `rnl` (from 1981) or
+      `sat` (from 1998) as the per-unit feeds' default product; (4) the
+      5-year minimum, and falling back to every complete year below it;
+      (5) the forecast (CHIRPS-GEFS) staying catchment-wide × the MAP
+      ratio; (6) a unit's own gauge used as recorded, with no zero-run or
+      accumulation check of its own. Trigger: the hydrologist's answer, or
+      the client's first per-unit run once part B's feeds and part D's
+      settings land. `verify/` cross-checks §2.4h (part E of #482). Also
+      left: the run window still follows the catchment rain series. (The
+      seasonal outlook runs each unit's season on its own rain, engine
+      1.78.0.)
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
@@ -1704,6 +1722,16 @@ the suggested order (the IDs carry the detail):
       (its run days; the tail-start year's historical days), what it would
       have asked for (`fullAllocationFactors`, model.md §2.12a, probe
       `scaled-no-demand-tail-year`, `mode.test.ts`).
+- [x] **`verify/` runoff from each unit's own rain** (part E of
+      [#482](https://github.com/Absence0760/project-water-management/issues/482);
+      engine 1.78.0, model.md §2.4h): the forcing rule's four rules and
+      their day-by-day chains, the clamp, the CHIRPS MAP factor's complete
+      years and MAP period, a GR4J per land unit and the summed natural flow,
+      written from §2.4h, in about a third of the random networks and most
+      dense ones, with three probes and 21 more mutants. No engine departure
+      from the docs; two points §2.4h left open (a CHIRPS mean annual rain of
+      0 mm; per-unit rain with no land unit) were settled from `runModel` and
+      written into §2.4h.
 - [ ] **`verify/` phase 2b: the rest of the model.** Phases 1 and 2a cover
       the daily chain and the optional inputs above; `verify/model.py`'s
       `unsupported()` names what they leave out and the harness refuses an
@@ -3098,7 +3126,8 @@ role and not before it.
         (`last_meta.finalThrough`) and the next window starts after it; a
         `sat` fetch stops probing finals after the first batch without one,
         and doesn't re-read the preliminary days the series already holds
-        (`heldThrough`). architecture.md § Data feeds, the window. On the
+        (`heldThrough`; since 208 the CHIRPS cell cache's plan does this from
+        the cache instead, issue #482). architecture.md § Data feeds, the window. On the
         fixtures a caught-up feed's daily fetch goes from 194 range requests
         to 3 (`sat`) and from 158 to 5 (`rnl`), and a backfill of final days
         moves on 120 days a window instead of 70.
@@ -3115,6 +3144,24 @@ role and not before it.
         often), and "Run now" is a token bucket per feed, 6 presses that
         queue or pull a fetch, then one every 10 minutes (`429` with
         `Retry-After`).
+  - [x] ~~A second project over the same CHIRPS cells downloads them
+        again.~~ **Done (issue #482 part A, `208_chirps_cell_cache`):** the
+        shared cell cache keeps each cell's days once, and a feed reads only
+        the cells and days it lacks; a window the cache holds whole asks CHC
+        for nothing, and the backfill's next window follows in 5 s
+        (`CACHED_NEXT_SECONDS`) instead of a minute. architecture.md § Data
+        feeds → The CHIRPS cell cache.
+  - [ ] **CHIRPS finals CHC rewrites in place aren't re-read** (issue #482's
+        gotchas: the 2024 dailies were rewritten in 2025-12). A cached final
+        is never read again, as a feed's final marker never was before the
+        cache. The durable fix: record each daily file's ETag / Last-Modified
+        (`chirps_cell_year.source_etag` is reserved for it; `FeedHttp.range`
+        would need to return the header) and re-check finals by a cheap HEAD
+        on a slow cycle, re-reading the cells of a file whose tag changed.
+        Trigger: CHC announces (or a feed's double-mass check shows) a
+        rewrite of years a project uses; until then an operator can delete
+        the affected `chirps_cell_year` rows and clear the feeds' markers
+        (save each feed) to re-read them.
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):

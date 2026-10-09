@@ -26,6 +26,7 @@ import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/he
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, plantStartProposal, SAMPLE, splitHalves, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
@@ -387,6 +388,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }));
 		return SAMPLE['POST /projects/:id/evaporation-from-map']!(ctx);
 	},
+	// Each unit's MAP from the synthetic MAP grid (issue #482, geo/unitMapRoutes.ts), the grid loaded first: the ladder's parcel lies in its region Z.
+	'POST /projects/:id/map/unit-map': async () => {
+		await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
+		return SAMPLE['POST /projects/:id/map/unit-map']!(ctx);
+	},
 	// A reach of the synthetic river network (issue #345, geo/rivers.ts), loaded first so the add has one to copy.
 	'POST /projects/:id/map/rivers/add': async () => {
 		await loadSyntheticRivers(process.env.TEST_MIGRATION_DATABASE_URL!);
@@ -482,6 +488,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
 		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
+	},
+	// Rain for each unit (#482): the ladder's farm A has its parcel; no feed in the way of a new one.
+	'POST /projects/:id/feeds/chirps/from-units': async () => {
+		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));
+		return { body: { product: 'rnl' } };
 	},
 	'POST /projects/:id/feeds/:feedId/run-now': async () => {
 		const feedId = await currentFeed();

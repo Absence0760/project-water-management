@@ -3,6 +3,7 @@ import { CHIRPS_V3_RNL, CHIRPS_V3_SAT } from '@water-management/engine';
 import { bboxCellCount, bboxCells, BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_FIRST_DAY, FeedInput, FeedPatch, feedProvenance, gridCells, SOURCES } from './config.js';
 
 const cells = [{ lat: -20.12, lon: 25.17 }];
+const UNIT = { nodeId: '00000000-0000-4000-8000-000000000001', featureId: '00000000-0000-4000-8000-000000000002', updatedAt: '2026-10-01T08:00:00.000Z', areaKm2: 12.5 };
 
 describe('FeedInput', () => {
 	it('defaults the target to the source’s first kind, the name to "", daily, enabled; cell weight 1', () => {
@@ -17,6 +18,11 @@ describe('FeedInput', () => {
 		});
 		expect(FeedInput.parse({ source: 'chirps_gefs', config: { cells } }).targetKind).toBe('rain_forecast_mm');
 		expect(FeedInput.parse({ source: 'dws', config: { station: ' x0h000 ' } })).toMatchObject({ targetKind: 'flow_observed_m3s', config: { station: 'X0H000' } });
+	});
+
+	it('takes listed cells with the land unit’s polygon they came from (issue #482)', () => {
+		const cells = [{ lat: -33.775, lon: 21.225, weight: 0.5 }];
+		expect(FeedInput.parse({ source: 'chirps', config: { cells, unit: UNIT, product: 'rnl' } }).config).toEqual({ cells, unit: UNIT, product: 'rnl' });
 	});
 
 	it('takes up to 100 listed cells in up to 25 grid rows, and the catchment boundary they came from (issue #326)', () => {
@@ -39,6 +45,10 @@ describe('FeedInput', () => {
 		['101 cells', { source: 'chirps', config: { cells: Array.from({ length: 101 }, () => cells[0]) } }],
 		['cells in 26 grid rows', { source: 'chirps', config: { cells: Array.from({ length: 26 }, (_, i) => ({ lat: -20.025 - 0.05 * i, lon: 25.025 })) } }],
 		['a boundary mark on a bounding box', { source: 'chirps', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 }, boundary: { featureId: '00000000-0000-4000-8000-000000000000', name: 'B', updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 1 } } }],
+		['a unit mark on a bounding box', { source: 'chirps', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 }, unit: UNIT } }],
+		['a unit mark beside a boundary mark', { source: 'chirps', config: { cells, unit: UNIT, boundary: { featureId: '00000000-0000-4000-8000-000000000000', name: 'B', updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 1 } } }],
+		['a unit mark with an unknown key', { source: 'chirps', config: { cells, unit: { ...UNIT, name: 'Unit A' } } }],
+		['a unit mark that is not a uuid', { source: 'chirps', config: { cells, unit: { ...UNIT, nodeId: 'unit-a' } } }],
 		['a boundary mark with an unknown key', { source: 'chirps', config: { cells, boundary: { featureId: '00000000-0000-4000-8000-000000000000', name: 'B', updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 1, geometry: {} } } }],
 		['a latitude beyond the grid', { source: 'chirps', config: { cells: [{ lat: 61, lon: 25 }] } }],
 		['a negative weight', { source: 'chirps', config: { cells: [{ ...cells[0], weight: -1 }] } }],

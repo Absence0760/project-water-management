@@ -754,6 +754,17 @@ export function parseUnitRainSeriesKey(key: string): { kind: UnitRainKind; nodeI
 }
 
 /**
+ * A land unit's own forecast rain (engine ≥ 1.78.0, docs/model.md §2.4h):
+ * the rain the unit's chain reads before it falls back to the catchment's
+ * rain. Engine-only: the seasonal outlook writes it for each member's season
+ * from the base run's `rain_unit` on the analogue days, so a unit runs its
+ * season on its own forcing (its rule and factors as the base run had them).
+ * The API never stores one.
+ */
+export type UnitForecastSeriesKey = `rain_forecast_mm@${string}`;
+export const unitForecastSeriesKey = (nodeId: string): UnitForecastSeriesKey => `rain_forecast_mm@${nodeId}`;
+
+/**
  * The calibration records a site has, in CALIBRATION_FLOW_KINDS order (null =
  * the outlet's). `series` is keyed as ModelInput.series; only whether a key
  * holds something is read, so a client can pass a map of the keys it knows.
@@ -921,6 +932,8 @@ export interface ArealRain {
 	source: string;
 }
 
+import type { UnitRainRecipe } from './runoff/unitRain';
+
 export const UNIT_RAIN_MODES = ['catchment', 'perUnit'] as const;
 export type UnitRainMode = (typeof UNIT_RAIN_MODES)[number];
 
@@ -941,6 +954,13 @@ export interface UnitRainSettings {
 	 * 1991–2020 climatology years.
 	 */
 	mapPeriod?: { start: string; end: string } | null;
+	/**
+	 * Engine-only (never stored by the API): each unit's rule and factors to
+	 * use instead of fitting them on the input's records. A seasonal outlook's
+	 * re-run member sets it to the base input's, so a history cut at the
+	 * decision date runs at the base run's levels (docs/model.md §2.4h).
+	 */
+	pinned?: UnitRainRecipe[] | null;
 }
 
 export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
@@ -998,6 +1018,27 @@ export function unitRainError(raw: unknown): string | null {
 		if (Date.parse(p.end) - Date.parse(p.start) < 364 * 86_400_000) return 'the MAP period must cover at least a year';
 	}
 	return null;
+}
+
+/**
+ * A stored `unitRain` as the engine runs it (docs/model.md §2.4h): absent or
+ * null = catchment rain; unusable = catchment rain, with a warning.
+ */
+export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSettings | null {
+	if (raw === null || raw === undefined) return null;
+	const e = unitRainError(raw);
+	if (e) {
+		warnings.push(`the per-unit rain setting is ignored (${e}): GR4J runs on the catchment rain`);
+		return null;
+	}
+	const r = raw as UnitRainSettings;
+	return {
+		mode: r.mode,
+		gaugeMapMm: r.gaugeMapMm ?? null,
+		gaugeMapSource: r.gaugeMapSource ?? null,
+		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null,
+		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
+	};
 }
 
 /**
@@ -2621,7 +2662,7 @@ export interface ModelInput {
 	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey,
 	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries };
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries };
 }
 
 /** One daily output series. nodeId null = catchment level. */
@@ -3204,6 +3245,112 @@ export interface RunoffBalance {
 	storageEndMm: number;
 }
 
+/**
+ * Which rule of the per-unit forcing (docs/model.md §2.4h) gave a land unit
+ * its rain: its own gauge (1), the catchment gauge × unit MAP ÷ gauge MAP
+ * (2), its own CHIRPS (3), or the catchment forcing as without per-unit rain
+ * (4).
+ */
+export const UNIT_RAIN_RULES = ['unitGauge', 'gaugeMap', 'unitChirps', 'catchment'] as const;
+export type UnitRainRule = (typeof UNIT_RAIN_RULES)[number];
+
+/**
+ * How a unit's CHIRPS is levelled (§2.4h rule 3): × unit MAP ÷ the CHIRPS
+ * mean annual rain over the MAP period (`map`), × the catchment's §2.4b
+ * monthly factors (`bias`), or raw.
+ */
+export type UnitChirpsLevel =
+	| {
+			source: 'map';
+			/** The factor applied (clamped to AREAL_RAIN_FACTOR_MIN–MAX). */
+			factor: number;
+			/** mapMm ÷ meanAnnualMm before the clamp. */
+			ownFactor: number;
+			clamped: boolean;
+			/** The CHIRPS mean annual rain, mm, over `years`. */
+			meanAnnualMm: number;
+			/** The complete calendar years it was averaged over. */
+			years: number[];
+			/** Whether `years` all lie inside the MAP period (false: too few did, so every complete year of the record was used). */
+			inPeriod: boolean;
+	  }
+	| { source: 'bias' }
+	| { source: 'raw' };
+
+/**
+ * One land unit's forcing as the run applied it (summary.unitRain.units).
+ * The rule and its factors are fixed for the run; a day's rain comes from
+ * the first source of the rule's chain that has a value (`days`).
+ */
+export interface UnitRainUnit {
+	nodeId: string;
+	name: string;
+	areaKm2: number;
+	/** The unit's MAP and its source, as the run read them (null = none). */
+	mapMm: number | null;
+	mapSource: string | null;
+	rule: UnitRainRule;
+	/** The record the rule names: `rain_catchment_mm@<id>`, `rain_catchment_mm` (rule 2), `rain_chirps_mm@<id>`, or null (rule 4, the catchment forcing). */
+	rainKey: string | null;
+	/**
+	 * The level factor on the rule's record: 1 for the unit's gauge, the MAP
+	 * ratio for rule 2, the CHIRPS MAP factor for rule 3 with a MAP, null when
+	 * it varies by day (the §2.4b factors, rule 3 without a MAP, or the areal
+	 * correction, rule 4) or there is none.
+	 */
+	factor: number | null;
+	/** Where `factor` comes from. */
+	factorSource: 'gauge' | 'gaugeMap' | 'chirpsMap' | 'chirpsBias' | 'chirpsRaw' | 'catchment';
+	/**
+	 * unit MAP ÷ gauge MAP (clamped) when rule 2's conditions hold (a gauge
+	 * MAP, a unit MAP and catchment gauge rain), whatever the rule: it also
+	 * scales the catchment rain and forecast that fill the unit's gaps. Null
+	 * otherwise.
+	 */
+	gaugeMapFactor: number | null;
+	/** unit MAP ÷ gauge MAP before the clamp; null with gaugeMapFactor. */
+	gaugeMapOwnFactor: number | null;
+	gaugeMapClamped: boolean;
+	/** How the unit's own CHIRPS is levelled; null without one. */
+	chirps: UnitChirpsLevel | null;
+	/**
+	 * Run days by where the day's rain came from: the unit's gauge, the
+	 * catchment gauge × the MAP ratio, the unit's CHIRPS, the catchment's rain
+	 * (gauge, else corrected CHIRPS; × the MAP ratio when there is one, × the
+	 * areal correction on rule 4), the forecast, or none (dry).
+	 */
+	days: { unitGauge: number; gaugeMap: number; unitChirps: number; catchment: number; forecast: number; none: number };
+	/** GR4J's water balance over the unit, mm over its area, as summary.runoff's. */
+	rainMm: number;
+	petMm: number;
+	aetMm: number;
+	flowMm: number;
+	exchangeMm: number;
+	storageStartMm: number;
+	storageEndMm: number;
+	/** The unit's runoff over the run, m³ (flowMm × area × 1000). */
+	runoffM3: number;
+	/** flowMm ÷ rainMm; null without rain. */
+	runoffCoefficient: number | null;
+}
+
+/** The per-unit output series under settings.unitRain `perUnit` (engine ≥ 1.78.0, docs/model.md §2.4h), one of each per land unit. */
+export const UNIT_RAIN_SERIES = {
+	rain: { key: 'rain_unit', label: 'Rain on the unit (its own rain, as GR4J ran on it)' },
+	runoff: { key: 'runoff_natural', label: 'Natural runoff from the unit’s own rain (GR4J, before land cover)' }
+} as const;
+
+/** settings.unitRain `perUnit` as a run applied it (engine ≥ 1.78.0, docs/model.md §2.4h). */
+export interface UnitRainSummary {
+	mode: 'perUnit';
+	gaugeMapMm: number | null;
+	gaugeMapSource: string | null;
+	/** The MAP period the CHIRPS MAP factors compare over (the default when unset). */
+	mapPeriod: { start: string; end: string };
+	/** Every land unit (a farm with an area), in node-id order. */
+	units: UnitRainUnit[];
+}
+
 export interface ForecastRainDays {
 	/** Days whose rain used is the forecast. */
 	days: number;
@@ -3415,6 +3562,12 @@ export interface RunSummary {
 	allocations?: RunAllocations;
 	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
 	runoff?: RunoffBalance;
+	/**
+	 * Each land unit's own rain and runoff (engine ≥ 1.78.0, settings.unitRain
+	 * `perUnit`, docs/model.md §2.4h, issue #482). Absent when the run forces
+	 * GR4J with the catchment rain (the default).
+	 */
+	unitRain?: UnitRainSummary;
 	catchment: {
 		meanNaturalFlowM3Day: number;
 		meanSimulatedOutflowM3Day: number;
@@ -3611,7 +3764,7 @@ export interface WaterBalanceRow {
 	/** Start year of the water year (Oct–Sep); null for the whole-run row. */
 	waterYear: number | null;
 	days: number;
-	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0); null when the run has no rain series. */
+	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0; under per-unit rain, engine ≥ 1.78.0, the units' area-weighted rain_used); null when the run has no rain series. */
 	rainMm: number | null;
 	/** Natural flow as depth over the catchment (mm); null without an area. */
 	naturalFlowMm: number | null;

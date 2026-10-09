@@ -83,7 +83,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			g ? `GR4J X1 ${fmtNum(g.x1, 0)} mm, X3 ${fmtNum(g.x3, 0)} mm, X4 ${fmtNum(g.x4, 2, true)} days${g.x2 ? `, X2 ${fmtNum(g.x2, 2, true)} mm` : ''}` : 'GR4J',
 			`${fmtNum(area != null && area > 0 ? area : i.unitAreaKm2, 1, true)} km²`,
 			`PE ${fmtNum(i.peAnnualMm)} mm a year${s.pe?.kind === 'monthly' ? ' (monthly PE)' : ''}`,
-			s.arealRain ? 'areal correction on' : null
+			s.arealRain ? 'areal correction on' : null,
+			s.unitRain?.mode === 'perUnit' ? 'rain for each unit' : null
 		]
 			.filter(Boolean)
 			.join(' · '),

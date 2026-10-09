@@ -104,7 +104,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 	const farm = (id: string, k: string) => series.get(`${id}|${k}`) ?? [];
 	const area = areaKm2 && areaKm2 > 0 ? areaKm2 : (out.summary.runoff?.areaKm2 ?? null);
 	// The catchment's rain after gap-filling, and after the areal rainfall correction when the run has one (engine ≥ 1.13.0).
-	const rain = cat('rain_areal') ?? cat('rain_final') ?? cat('rain_used');
+	// Under per-unit rain (engine ≥ 1.78.0, docs/model.md §2.4h) the units' own rain, area-weighted, which the natural flow came from.
+	const rain = out.summary.unitRain ? cat('rain_used') : (cat('rain_areal') ?? cat('rain_final') ?? cat('rain_used'));
 	const rainUsed = cat('rain_used');
 	const natural = cat('natural_flow') ?? [];
 	const outflow = cat('simulated_outflow') ?? [];

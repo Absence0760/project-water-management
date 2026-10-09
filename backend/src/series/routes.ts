@@ -5,7 +5,7 @@ import { withUser } from '../db/tx.js';
 import { recordAudit, recordSeriesRevision, seriesSubject, type SeriesRow } from '../history/record.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { CALIBRATION_FLOW_KINDS } from '@water-management/engine';
+import { isUnitRainKind, siteProblem, type SiteNode } from './site.js';
 import { z } from 'zod';
 import {
 	bodyOrigin,
@@ -42,9 +42,11 @@ export async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
 }
 
 /**
- * PATCH …/series/:seriesId: say what an existing series holds, or where a flow
- * record was measured (`siteNodeId`, 084_gauge_records: a gauge node inside
- * the network, null = the outlet), without touching its values.
+ * PATCH …/series/:seriesId: say what an existing series holds, or which node
+ * it belongs to (`siteNodeId`, without touching its values): where a flow
+ * record was measured (084_gauge_records: a gauge node inside the network,
+ * null = the outlet), or the land unit whose own rain it is (209: a farm with
+ * an area, null = the catchment's rain; series/site.ts).
  */
 const LabelBody = z
 	.object({ ...ProvenanceFields, siteNodeId: z.string().uuid().nullable().optional(), source: SourceField })
@@ -76,7 +78,9 @@ async function setSource(db: Db, projectId: string, seriesId: string, source: st
  * Move a flow record to a site: a gauge node of the project's model that is
  * not the outlet, or null (the outlet). Only the plausibility checks read a
  * gauge's record (engine ≥ 1.4.0), so the outlet's calibration, EWR test and
- * the rest move with it only when it leaves or joins the outlet.
+ * the rest move with it only when it leaves or joins the outlet. Or give a
+ * rain series to a land unit (issue #482): only settings.unitRain `perUnit`
+ * reads it, and null makes it the catchment's again (series/site.ts).
  */
 async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: string | null): Promise<SeriesMetaRow> {
 	const { rows: cur } = await db.query<{ kind: string; name: string; siteNodeId: string | null }>(
@@ -84,24 +88,20 @@ async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: 
 		[projectId, seriesId]
 	);
 	if (!cur[0]) throw new ApiError(404, 'not found');
-	if (siteNodeId !== null && !(CALIBRATION_FLOW_KINDS as readonly string[]).includes(cur[0].kind)) {
-		throw new ApiError(400, 'only an observed or logger flow record has a site: rain and evaporation are the catchment\'s');
-	}
 	if (siteNodeId !== null) {
-		const { rows: node } = await db.query<{ kind: string; downstream: string | null }>(
-			'SELECT kind, downstream_node_id AS downstream FROM node WHERE project_id = $1 AND id = $2',
+		const { rows: node } = await db.query<SiteNode>(
+			'SELECT kind::text AS kind, downstream_node_id AS "downstreamNodeId", area_km2 AS "areaKm2" FROM node WHERE project_id = $1 AND id = $2',
 			[projectId, siteNodeId]
 		);
-		if (!node[0]) throw new ApiError(400, 'siteNodeId: no such hydrological unit in this project (save the model first)');
-		if (node[0].kind !== 'gauge') throw new ApiError(400, 'siteNodeId: a record\'s site is a gauge');
-		if (node[0].downstream === null) throw new ApiError(400, 'siteNodeId: that gauge is the outlet, whose records have no site (null)');
+		const problem = siteProblem(cur[0].kind, node[0]);
+		if (problem) throw new ApiError(400, `siteNodeId: ${problem}`);
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`UPDATE time_series SET site_node_id = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`,
 		[projectId, seriesId, siteNodeId]
 	);
 	if (cur[0].siteNodeId !== siteNodeId) {
-		const names = await nodeNames(db, projectId, [cur[0].siteNodeId, siteNodeId]);
+		const names = await nodeNames(db, projectId, [cur[0].siteNodeId, siteNodeId], isUnitRainKind(cur[0].kind) ? 'the catchment' : 'the outlet');
 		await recordAudit(db, projectId, 'series.site_changed', {
 			seriesId,
 			kind: cur[0].kind,
@@ -112,14 +112,14 @@ async function setSite(db: Db, projectId: string, seriesId: string, siteNodeId: 
 	return rows[0]!;
 }
 
-/** A site as the audit line says it: the outlet, the gauge's name, or a node that has gone. */
-async function nodeNames(db: Db, projectId: string, ids: (string | null)[]): Promise<(id: string | null) => string> {
+/** A site as the audit line says it: no site (`none`: the outlet, or the catchment for rain), the node's name, or a node that has gone. */
+async function nodeNames(db: Db, projectId: string, ids: (string | null)[], none: string): Promise<(id: string | null) => string> {
 	const wanted = ids.filter((x): x is string => x !== null);
 	const { rows } = wanted.length
 		? await db.query<{ id: string; name: string }>('SELECT id, name FROM node WHERE project_id = $1 AND id = ANY($2::uuid[])', [projectId, wanted])
 		: { rows: [] };
 	const byId = new Map(rows.map((r) => [r.id, r.name]));
-	return (id) => (id === null ? 'the outlet' : (byId.get(id) ?? 'a removed node'));
+	return (id) => (id === null ? none : (byId.get(id) ?? 'a removed node'));
 }
 
 export const seriesRoutes = new Hono<AuthEnv>()

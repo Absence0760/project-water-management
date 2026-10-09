@@ -288,6 +288,28 @@ MUTANTS = [
         "                zs_in += ZS[u] - min(ZS[u], sen_led[u][i]) if u in sen_led else ZS[u]",
         "                zs_in += ZS[u]",
     ),
+    # Runoff from each unit's own rain (§2.4h, engine 1.78.0).
+    ("per-unit rain off: the units' records are used whatever the mode", 'per_unit = isinstance(ur, dict) and ur.get("mode") == "perUnit"', "per_unit = isinstance(ur, dict)"),
+    ("a unit's local inflow is natural × share, not its own runoff", "I = natural[i] * shares.get(xid, 0.0) if local is None else", "I = natural[i] * shares.get(xid, 0.0) if True else"),
+    ("the catchment area is catchmentAreaKm2 under per-unit rain", "if per_unit or area_km2 is None:", "if area_km2 is None:"),
+    ("per-unit rain with no land unit is refused", "        per_unit = False\n", '        raise Refused("catchment area is 0")\n'),
+    ("the catchment's GR4J series weight every unit alike", 'acc["rain"][i] += a * pu[i]', 'acc["rain"][i] += pu[i] * area_km2 / len(units)'),
+    ("a unit's warm-up cycles the forecast tail", "                i = k % hist if hist > 0 else 0\n                gu.step", "                i = k % n if n > 0 else 0\n                gu.step"),
+    ("a unit's gauge record of blanks and no-data codes picks rule 1", "has_g = any(valid(v) for v in own_g.values)", "has_g = bool(own_g)"),
+    ("a unit's own negative gauge value is a reading", "            v = own_g.get(o)\n            return v if valid(v) else None", "            v = own_g.get(o)\n            return v"),
+    ("a unit with CHIRPS takes it before the gauge × its MAP ratio", "        elif cond2:\n            rule = 2", "        elif cond2 and not has_c:\n            rule = 2"),
+    ("the gauge MAP ratio isn't clamped", "ratio = _clamp(map_mm / gauge_map, diag) if cond2", "ratio = map_mm / gauge_map if cond2"),
+    ("the CHIRPS MAP factor isn't clamped", "    return _clamp(map_mm / mean, diag)", "    return map_mm / mean"),
+    ("the CHIRPS MAP factor ignores the MAP period", "use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years", "use = years"),
+    ("the CHIRPS MAP factor takes the period's years however few", "use = inside if len(inside) >= UNIT_MAP_MIN_YEARS else years", "use = inside or years"),
+    ("the CHIRPS MAP factor counts incomplete years", "            if not valid(v):\n                ok = False\n                break\n            tot += v", "            if not valid(v):\n                continue\n            tot += v"),
+    ("a CHIRPS mean of 0 mm clamps the MAP factor to 4", "        return None\n    return _clamp(map_mm / mean, diag)", "        return FACTOR_MAX\n    return _clamp(map_mm / mean, diag)"),
+    ("a unit's CHIRPS without a MAP runs raw (no §2.4b factors)", "has_bias = any(f is not None for f in fac[1:])", "has_bias = False"),
+    ("rule 1 skips the unit's CHIRPS", "chain = [own, lev] +", "chain = [own] +"),
+    ("rule 2 never falls to the unit's CHIRPS", "else v * r, lev]", "else v * r]"),
+    ("the gauge rain G includes the CHIRPS infill", "            return v if src == 0 else None", "            return v"),
+    ("a negative catchment reading lets the unit's CHIRPS fill a gauge-MAP day", "            return v if src == 0 else None", "            return v if src == 0 and v >= 0 else None"),
+    ("the catchment's rain fills a unit's gap × 1, not × its MAP ratio", "v = None if math.isnan(cr) else cr * ratio", "v = None if math.isnan(cr) else cr"),
 ]
 
 
@@ -334,6 +356,9 @@ class CrossCheck(unittest.TestCase):
             "cap_bound_days", "full_allocation_units", "floor_days", "object_shortage_days", "offtake_days",
             "offtake_return_days", "user_days", "junior_short_days", "senior_pass_days", "river_pump_days",
             "trigger_hold_days", "curve_days", "release_days", "hands_off_days", "divert_by_month_days", "reach_loss_days",
+            # Per-unit rain (§2.4h).
+            "unit_rule_gauge", "unit_rule_gauge_map", "unit_rule_chirps", "unit_rule_catchment", "unit_clamped",
+            "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
@@ -365,6 +390,17 @@ class Generator(unittest.TestCase):
                 self.assertEqual(model.unsupported(doc), [], f"seed {seed}")
         self.assertEqual(json.dumps(generate.random_input(7)), json.dumps(generate.random_input(7)))
         self.assertEqual(json.dumps(generate.random_input(7, True)), json.dumps(generate.random_input(7, True)))
+
+    def test_per_unit_rain_is_in_scope(self):
+        # model.md §2.4h (issue #482): ported, so a per-unit input is cross-checked, and the generator makes some.
+        self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "perUnit"}}, "model": {"nodes": []}}), [])
+        modes = [(generate.random_input(seed).get("settings", {}).get("unitRain") or {}).get("mode") for seed in range(1, 60)]
+        self.assertIn("perUnit", modes)
+        self.assertIn("catchment", modes)
+        # The outlook's engine-only per-unit inputs stay out, with forecast mode.
+        self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": []}}, "model": {}}), [])
+        self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": [{"nodeId": "u"}]}}, "model": {}})), 1)
+        self.assertEqual(len(model.unsupported({"settings": {}, "model": {}, "series": {"rain_forecast_mm@u": {"startDate": "2020-01-01", "values": [1]}}})), 1)
 
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():

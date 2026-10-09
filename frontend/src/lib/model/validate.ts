@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { cropSupplyIssues, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { cropSupplyIssues, mapMmError, DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, REACH_LOSS_FRAC_MAX, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -130,6 +130,30 @@ export function developmentIssue(n: Pick<NetworkNode, 'kind' | 'damSurveyDate' |
 }
 
 /**
+ * Why a unit's MAP (issue #482, node.mapMm with node.mapSource) can't be
+ * saved, as the API refuses it (engine mapMmError), in the form's words and
+ * the field it is fixed in, or null. A gauge or water user keeps one it had
+ * as a unit (a run reads it on land units only), so turning a unit into a
+ * gauge never leaves a problem with no field to fix it in.
+ */
+export function unitMapProblem(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>): { field: 'map' | 'source'; message: string } | null {
+	if (n.mapMm === null || n.mapMm === undefined) return null;
+	const e = mapMmError(n.mapMm, n.mapSource ?? null);
+	if (!e) return null;
+	if (e.startsWith('MAP must')) return { field: 'map', message: `${e}.` };
+	if (/needs its source$/.test(e)) return { field: 'source', message: 'say where its MAP comes from: the source is required (the dataset or study, and its years).' };
+	return { field: 'source', message: `${e}.` };
+}
+
+export const unitMapIssue = (n: Pick<NetworkNode, 'mapMm' | 'mapSource'>): string | null => unitMapProblem(n)?.message ?? null;
+
+/** The unit's MAP set from its field: clearing it clears its source too (a source without a MAP says nothing). */
+export function withUnitMap(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>, mm: number | null): void {
+	n.mapMm = mm;
+	if (mm === null) n.mapSource = null;
+}
+
+/**
  * Every problem the API would refuse the model for. (A return flow above a
  * unit's losses isn't one: its crops' systems can move the losses from another
  * screen, so the unit form warns and a run caps it, engine ≥ 1.72.0;
@@ -215,6 +239,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (!inRange(n.reachLossMaxM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', itemId: n.id, message: `${label}: the most lost in the reach below in a day can't be negative.` });
 		if (n.downstreamNodeId === null && (n.reachLossFrac ?? 0) > 0)
 			issues.push({ area: 'network', itemId: n.id, message: `${label}: the outlet has no reach below it in the model; set its bed losses to 0%.` });
+		// A unit's MAP (issue #482), as the API checks it.
+		const map = unitMapIssue(n);
+		if (map) issues.push({ area: 'network', itemId: n.id, message: `${label}: ${map}` });
 		// Development over the run (engine ≥ 1.30.0), as the API checks it.
 		const development = developmentIssue(n);
 		if (development) issues.push({ area: 'network', itemId: n.id, message: `${label}: ${development}` });

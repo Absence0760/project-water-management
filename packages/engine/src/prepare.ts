@@ -59,6 +59,7 @@ import {
 	panCoefficientOutOfRange,
 	resolvePe,
 	resolveArealRain,
+	resolveUnitRain,
 	resolveChirpsQuantileMap,
 	AREAL_RAIN_FITTED_WARNING,
 	PE_SOURCE_MAX,
@@ -638,6 +639,8 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 	s.pe = resolvePe(raw?.pe, warnings);
 	// The areal rainfall correction (engine ≥ 1.13.0, docs/model.md §2.4g).
 	s.arealRain = resolveArealRain(raw?.arealRain, warnings);
+	// Per-unit rain (engine ≥ 1.78.0, §2.4h): only when stored, so settings without it normalise as before.
+	if (raw?.unitRain !== undefined) s.unitRain = resolveUnitRain(raw.unitRain, warnings);
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.
 	s.panCoefficientSource = typeof raw?.panCoefficientSource === 'string' ? raw.panCoefficientSource.slice(0, PE_SOURCE_MAX) : '';

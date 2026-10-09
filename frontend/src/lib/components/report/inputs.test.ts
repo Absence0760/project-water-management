@@ -44,6 +44,19 @@ describe('effectiveSettings', () => {
 });
 
 describe('settingsRows', () => {
+	it('lists rain for each unit only on a run that had it (issue #482)', () => {
+		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
+		const key = 'Rain for each unit (GR4J rain)';
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run))[key]).toBeUndefined();
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', unitRain: { mode: 'catchment' } }), run))[key]).toBeUndefined();
+		expect(Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', unitRain: { mode: 'perUnit' } }), run))[key]).toBe(
+			'on: GR4J ran once per unit with land on its own rain; MAP period 1991–2020; no rain gauge MAP'
+		);
+		expect(
+			Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j', unitRain: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record', mapPeriod: { start: '2001-01-01', end: '2020-12-31' } } }), run))[key]
+		).toBe('on: GR4J ran once per unit with land on its own rain; MAP period 2001–2020; rain gauge’s MAP 640 mm (gauge record)');
+	});
+
 	it('names the runoff model and lists GR4J parameters only for a GR4J run', () => {
 		const run = { startDate: '2000-10-01', endDate: '2010-09-30' };
 		const gr4j = Object.fromEntries(settingsRows(effectiveSettings({ runoffModel: 'gr4j' }), run));

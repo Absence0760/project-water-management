@@ -77,10 +77,11 @@ const cellKm2 = (west: number, south: number) => {
  * The weighted CHIRPS cells of a Polygon or MultiPolygon boundary, or the
  * reason there are none it can use: too big for one feed, outside the grid,
  * or not a polygon. The geometry is one the map stored, so its rings are
- * already checked (closed, simple, holes inside: geo/geojson.ts).
+ * already checked (closed, simple, holes inside: geo/geojson.ts). `what`
+ * names the polygon in a problem (a unit's parcel, feeds/fromUnits.ts).
  */
-export function boundaryCells(g: Geometry): BoundaryCellsResult {
-	if (g.type !== 'Polygon' && g.type !== 'MultiPolygon') return { problem: 'the catchment boundary is not a polygon' };
+export function boundaryCells(g: Geometry, what = 'the catchment boundary'): BoundaryCellsResult {
+	if (g.type !== 'Polygon' && g.type !== 'MultiPolygon') return { problem: `${what} is not a polygon` };
 	const polygons = (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).map((rings) => rings.map(open));
 	let south = Infinity;
 	let north = -Infinity;
@@ -94,12 +95,12 @@ export function boundaryCells(g: Geometry): BoundaryCellsResult {
 			east = Math.max(east, x);
 		}
 	}
-	if (!(south < north && west < east)) return { problem: 'the catchment boundary has no area' };
-	if (south < -LAT_LIMIT || north > LAT_LIMIT) return { problem: `the catchment boundary reaches beyond ${LAT_LIMIT}° of latitude, outside the CHIRPS grid` };
+	if (!(south < north && west < east)) return { problem: `${what} has no area` };
+	if (south < -LAT_LIMIT || north > LAT_LIMIT) return { problem: `${what} reaches beyond ${LAT_LIMIT}° of latitude, outside the CHIRPS grid` };
 	const [r0, r1] = span(south, north);
 	const [c0, c1] = span(west, east);
 	if (r1 - r0 > MAX_SPAN || c1 - c0 > MAX_SPAN) {
-		return { problem: `the catchment boundary spans ${r1 - r0} rows and ${c1 - c0} columns of 0.05° cells; ${LIMIT}` };
+		return { problem: `${what} spans ${r1 - r0} rows and ${c1 - c0} columns of 0.05° cells; ${LIMIT}` };
 	}
 	const cellArea = CHIRPS_CELL_DEG * CHIRPS_CELL_DEG;
 	const cells: BoundaryCell[] = [];
@@ -129,12 +130,12 @@ export function boundaryCells(g: Geometry): BoundaryCellsResult {
 			}, work);
 		}, work);
 	} catch (err) {
-		if (err instanceof GridWorkExceeded) return { problem: `the catchment boundary’s outline is too detailed to read the CHIRPS cells under it (more than ${err.limit.toLocaleString('en-ZA')} vertex cuts); simplify it` };
+		if (err instanceof GridWorkExceeded) return { problem: `${what}’s outline is too detailed to read the CHIRPS cells under it (more than ${err.limit.toLocaleString('en-ZA')} vertex cuts); simplify it` };
 		throw err;
 	}
-	if (!cells.length) return { problem: 'the catchment boundary covers no 0.05° cell enough to read' };
+	if (!cells.length) return { problem: `${what} covers no 0.05° cell enough to read` };
 	if (cells.length > BBOX_MAX_CELLS || rows.size > BBOX_MAX_ROWS) {
-		return { problem: `the catchment boundary covers ${cells.length} of the 0.05° CHIRPS cells in ${rows.size} rows; ${LIMIT}` };
+		return { problem: `${what} covers ${cells.length} of the 0.05° CHIRPS cells in ${rows.size} rows; ${LIMIT}` };
 	}
 	return { cells, rows: rows.size, cellsKm2: round(cellsKm2, 3), insideKm2: round(insideKm2, 3) };
 }

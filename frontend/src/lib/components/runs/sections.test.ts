@@ -40,6 +40,16 @@ describe('resultGroups', () => {
 		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-water-balance', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
 	});
 
+	it('lists Rain for each unit after the runoff model, only for a run that ran per unit (issue #482)', () => {
+		const model = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
+		const runoff = { model: 'gr4j' } as RunSummary['runoff'];
+		expect(model({ farms: [], runoff })).not.toContain('res-unit-rain');
+		// A stored summary from another engine: read defensively, whatever its type says.
+		expect(model({ farms: [], runoff, unitRain: { mode: 'catchment', units: [] } as unknown as RunSummary['unitRain'] })).not.toContain('res-unit-rain');
+		const ids = model({ farms: [], runoff, unitRain: { mode: 'perUnit', gaugeMapMm: null, gaugeMapSource: null, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [] } });
+		expect(ids.indexOf('res-unit-rain')).toBe(ids.indexOf('res-runoff') + 1);
+	});
+
 	it('puts the flow-duration curve with the hydrograph', () => {
 		const groups = resultGroups({ farms: [] });
 		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);

@@ -60,7 +60,7 @@ import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
 import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
-import { naturalFlowFor, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
+import { naturalFlowFor, perUnitAreaKm2, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	AREAL_RAIN_COLUMN,
 	arealRainFactors,
@@ -300,17 +300,29 @@ function runNetwork(
 		throw new RangeError(`capture date ${fromEpochDay(warm.captureDay!)} is outside the run (${startDate} … ${fromEpochDay(end)}, or the day after it)`);
 
 	// --- natural flow ---------------------------------------------------------
-	const runoffWarm = capturing || resume ? { ...(capturing ? { captureAt: captureAt! } : {}), ...(resume ? { resume: resume.runoff.state } : {}) } : undefined;
+	const runoffWarm =
+		capturing || resume
+			? {
+					...(capturing ? { captureAt: captureAt! } : {}),
+					...(resume ? { resume: resume.runoff.state } : {}),
+					// Per-unit rain (engine ≥ 1.78.0, §2.4h): each unit's state and the capture run's rules and factors.
+					...(resume?.runoff.units ? { resumeUnits: resume.runoff.units } : {}),
+					...(resume?.runoff.unitRecipes ? { unitRecipes: resume.runoff.unitRecipes } : {})
+				}
+			: undefined;
 	if (resume && resume.runoff.model !== settings.runoffModel) throw new ModelStateMismatchError('input', `the snapshot holds a ${resume.runoff.model} runoff model's state; the run uses ${settings.runoffModel}`);
-	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, ...(runoffWarm ? { warm: runoffWarm } : {}) });
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h) holds one state per land unit, catchment rain one.
+	if (resume && !!resume.runoff.units !== (perUnitAreaKm2(input) !== null))
+		throw new ModelStateMismatchError('input', resume.runoff.units ? 'the snapshot holds each unit’s runoff state (runoff from each unit’s own rain); this run forces the catchment rain' : 'the snapshot holds the catchment’s one runoff state; this run forces each unit with its own rain');
+	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, chirpsCorrection, ...(runoffWarm ? { warm: runoffWarm } : {}) });
 	if (nf.naturalFlowM3Day.length !== days) {
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	}
-	if (capturing && !nf.state) throw new Error('this natural flow has no state to capture (only the engine\u2019s own runoff models can be captured)');
+	if (capturing && !nf.state && !nf.unitStates) throw new Error('this natural flow has no state to capture (only the engine\u2019s own runoff models can be captured)');
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
 	warnings.push(...(nf.warnings ?? []));
 	const areal = arealRainFactors(settings.arealRain);
-	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month);
+	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month, !!nf.unitRain);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
 	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource), days);
 	// The rain on the catchment as GR4J ran on it (engine ≥ 1.13.0, §2.4g): rain_final × the areal
@@ -328,6 +340,8 @@ function runNetwork(
 	// --- network ----------------------------------------------------------------
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
 		...(capturing ? { captureAt: captureAt! } : {}),
+		// Each land unit's own runoff as its local inflow (engine ≥ 1.78.0, §2.4h).
+		...(nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {}),
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
 		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
 		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
@@ -605,9 +619,12 @@ function runNetwork(
 	});
 	for (const a of ewrAssurance) push(a.report.nodeId, 'ewr_rule', 'EWR from the Reserve rule table (the month’s requirement, per day)', 'm³/day', a.requiredM3Day);
 	for (const s of nf.series ?? []) push(null, s.key, s.label, s.unit, s.values);
+	// Each land unit's rain and runoff under per-unit rain (engine ≥ 1.78.0, §2.4h).
+	for (const s of nf.nodeSeries ?? []) push(s.nodeId, s.key, s.label, s.unit, s.values);
 	// No value from any source = NaN.
 	if (finalRain) push(null, 'rain_final', 'Final catchment rainfall (gaps filled by corrected CHIRPS then forecast)', 'mm', finalRain.map((v) => v ?? NaN));
-	if (areal && catchmentRain) push(null, AREAL_RAIN_COLUMN.key, AREAL_RAIN_COLUMN.label, AREAL_RAIN_COLUMN.unit, catchmentRain.map((v) => v ?? NaN));
+	// Not under per-unit rain (engine ≥ 1.78.0): GR4J runs on each unit's own rain there (`rain_used`, `rain_unit`).
+	if (areal && catchmentRain && !nf.unitRain) push(null, AREAL_RAIN_COLUMN.key, AREAL_RAIN_COLUMN.label, AREAL_RAIN_COLUMN.unit, catchmentRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
 	// Where each day's rain came from: with rain-source periods their column, else (engine ≥ 1.27.0) the same pick as rain_final.
@@ -1076,7 +1093,8 @@ function runNetwork(
 		}),
 		natural,
 		outflow: simOutflow,
-		rainMm: catchmentRain,
+		// Under per-unit rain (engine ≥ 1.78.0, §2.4h) the rain the natural flow was made from: the units' own, area-weighted.
+		rainMm: nf.unitRain ? (nf.series?.find((x) => x.key === 'rain_used')?.values ?? catchmentRain) : catchmentRain,
 		areaKm2: resolveCatchmentAreaKm2(settings.calibration, input),
 		sites: attribution.sites.map((site, si) => {
 			const outlet = si === 0 && topo.outflow >= 0;
@@ -1105,7 +1123,11 @@ function runNetwork(
 	if (capturing && warm.sink) {
 		const net = sim.captured!;
 		warm.sink.state = {
-			runoff: { model: settings.runoffModel, state: nf.state! },
+			runoff: {
+				model: settings.runoffModel,
+				state: nf.state ?? [],
+				...(nf.unitStates ? { units: nf.unitStates, unitRecipes: structuredClone(nf.unitRecipes!) } : {})
+			},
 			nodes: nodes.map((n, i) => ({
 				id: n.id,
 				storageM3: net.storageM3[i]!,
@@ -1163,6 +1185,7 @@ function runNetwork(
 				...(topo.outflow >= 0 ? { noFlow: noFlowDays(simOutflow, days) } : {})
 			},
 			...(nf.balance ? { runoff: nf.balance } : {}),
+			...(nf.unitRain ? { unitRain: nf.unitRain } : {}),
 			calibration,
 			curtailment,
 			ewrCompliance: compliance,
@@ -1386,13 +1409,28 @@ function gaugeSites(
 			name: nodes[g]!.name,
 			naturalShare,
 			observed,
-			naturalM3Day: Float64Array.from(r.natural, (v) => v * naturalShare),
+			naturalM3Day: unitNaturalAbove(plan, byId, above, r.natural, naturalShare),
 			simulatedM3Day: sim.nodes[g]!.outflow,
 			damsM3Day: damsOf(above),
 			landCoverM3Day: cover
 		});
 	}
 	return { sites, warnings };
+}
+
+/**
+ * The natural flow at a gauge: the catchment's × the shares above it, or
+ * under per-unit rain (engine ≥ 1.78.0, §2.4h) the runoff of the units above
+ * it, summed in node-id order.
+ */
+function unitNaturalAbove(plan: NetworkPlan, byId: readonly number[], above: Uint8Array, natural: Float64Array, naturalShare: number): Float64Array {
+	if (!plan.nodes.some((n) => n.localRunoff)) return Float64Array.from(natural, (v) => v * naturalShare);
+	const out = new Float64Array(natural.length);
+	for (const j of byId) {
+		const l = above[j] ? plan.nodes[j]!.localRunoff : undefined;
+		if (l) for (let t = 0; t < out.length; t++) out[t] = out[t]! + l[t]!;
+	}
+	return out;
 }
 
 /**
@@ -1418,7 +1456,20 @@ export function buildNetworkPlan(
 	 * `runStart`: a resumed run's capture run's first epoch day, which decides
 	 * whether a dam that came into service carries dam_capacity (§2.16).
 	 */
-	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[]; runStart?: number; outletEwr?: OutletEwrInfo } = {},
+	warm: {
+		captureAt?: number;
+		soilStoreM3?: readonly number[];
+		allocationFactor?: readonly (number | undefined)[];
+		runStart?: number;
+		outletEwr?: OutletEwrInfo;
+		/**
+		 * Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h,
+		 * NaturalFlowInput.unitRunoff): each land unit's runoff (m³/day) becomes
+		 * its local inflow in place of natural × share, and every other farm's
+		 * is 0. The arrays are the plan's own, so a calibration can refill them.
+		 */
+		unitRunoff?: readonly { nodeId: string; runoffM3Day: Float64Array }[];
+	} = {},
 	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
 	historyDays: number = days
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array; outletEwr?: OutletEwrPlan } {
@@ -1623,6 +1674,7 @@ export function buildNetworkPlan(
 		warnings
 	);
 	const remoteLinks = remotes.flatMap((x, i) => (x ? [{ from: x.from, to: i }] : []));
+	const unitRunoffOf = new Map((warm.unitRunoff ?? []).map((u) => [u.nodeId, u.runoffM3Day]));
 
 	const plan: NetworkPlan = {
 		days,
@@ -1645,9 +1697,11 @@ export function buildNetworkPlan(
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
 			const u = users.byNode.get(i);
 			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings, warm.runStart ?? start);
+			const local = unitRunoffOf.get(n.id) ?? (unitRunoffOf.size && n.kind === 'farm' ? new Float64Array(days) : undefined);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
+				...(local ? { localRunoff: local } : {}),
 				pctUpstreamToDam: n.pctUpstreamToDam,
 				pctRunoffToDam: n.pctRunoffToDam,
 				divertCapacityM3Day: n.divertCapacityM3Day,
@@ -2407,15 +2461,20 @@ function catchmentRunoffCoefficient(
 	balance: NaturalFlowInput['balance'],
 	/** The areal rainfall factors (engine ≥ 1.13.0, §2.4g), water-year months; null = none. */
 	areal: readonly number[] | null,
-	month: ArrayLike<number>
+	month: ArrayLike<number>,
+	/** Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h): the rain is the units' (the balance's), not the catchment series'. */
+	perUnit = false
 ): number | null {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!hasRainInput(input.series, settings.rainSource)) return null;
-	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	let rainMm = 0;
-	for (let t = 0; t < natural.length; t++) {
-		const v = c[t] ?? ch[t] ?? f[t] ?? null;
-		if (v !== null && v > 0) rainMm += areal ? v * areal[waterYearIndex(month[t]!)]! : v;
+	if (perUnit && balance) rainMm = balance.rainMm;
+	else {
+		if (!hasRainInput(input.series, settings.rainSource)) return null;
+		const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
+		for (let t = 0; t < natural.length; t++) {
+			const v = c[t] ?? ch[t] ?? f[t] ?? null;
+			if (v !== null && v > 0) rainMm += areal ? v * areal[waterYearIndex(month[t]!)]! : v;
+		}
 	}
 	const area = resolveCatchmentAreaKm2(settings.calibration, input);
 	if (!(rainMm > 0) || !(area > 0)) return null;
@@ -2458,6 +2517,8 @@ export function naturalReaches(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upst
 export function naturalAtOutlet(plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream'>, outflow: number, natural: ArrayLike<number>): Float64Array | null {
 	const r = naturalReaches(plan);
 	if (!r || outflow < 0) return null;
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, §2.4h): each unit's own runoff, and natural flow is their sum (no rest).
+	if (plan.nodes.some((n) => n.localRunoff)) return routeNatural(r, (i, t) => plan.nodes[i]!.localRunoff?.[t] ?? 0, natural.length, [outflow])[0]!;
 	const share = plan.nodes.map((n) => (n.kind === 'farm' ? n.share : 0));
 	// Summed in value order, so the float sum (and `rest`) doesn't depend on how the network is listed.
 	const rest = Math.max(0, 1 - [...share].sort((a, b) => a - b).reduce((a, b) => a + b, 0));

@@ -28,7 +28,7 @@ import { prepareCalibration } from '../calibrate/calibrate';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
-import { calibrationRecordsAt, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
+import { calibrationRecordsAt, parseUnitRainSeriesKey, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
@@ -201,8 +201,11 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	if (covered < CHIRPS_ONLY_MIN_COVERAGE) {
 		return { input: null, reason: `CHIRPS covers only ${Math.round(covered * 100)} % of the run's days (at least ${CHIRPS_ONLY_MIN_COVERAGE * 100} % needed)` };
 	}
-	const series = { ...input.series, rain_chirps_mm: { startDate: run.startDate, values } };
-	delete series.rain_catchment_mm;
+	// Without the station rain, and (engine ≥ 1.78.0, docs/model.md §2.4h) without a land unit's own gauge: the member runs on
+	// CHIRPS alone, each unit on its own CHIRPS where it has one, levelled by its MAP (a unit without a MAP runs it raw, as the
+	// member's catchment CHIRPS is). A filtered copy, never a delete by an input's key.
+	const kept = Object.entries(input.series).filter(([k]) => k !== 'rain_catchment_mm' && parseUnitRainSeriesKey(k)?.kind !== 'rain_catchment_mm');
+	const series = { ...Object.fromEntries(kept), rain_chirps_mm: { startDate: run.startDate, values } } as ModelInput['series'];
 	return { input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series }, reason: null };
 }
 

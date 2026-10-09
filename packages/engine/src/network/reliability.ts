@@ -323,7 +323,7 @@ export interface SupplyAssuranceInput {
 	accountNodes: AccountNodeInput[];
 	natural: ArrayLike<number>;
 	outflow: ArrayLike<number>;
-	/** Final catchment rain (mm), null entries for missing days; null without a rain series. */
+	/** Final catchment rain (mm; under per-unit rain, engine ≥ 1.78.0, the units' area-weighted rain), null entries for missing days; null without a rain series. */
 	rainMm: ArrayLike<number | null> | null;
 	areaKm2: number | null;
 	sites: AccountSiteInput[];

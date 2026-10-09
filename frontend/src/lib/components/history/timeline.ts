@@ -243,6 +243,14 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'feed.configured': {
 			const feed = `the ${feedName(s.source)} feed`;
+			// Rain for each unit (issue #482, feeds/fromUnits.ts): one entry for the whole action, naming its units.
+			if (s.action === 'units') {
+				const units = Array.isArray(s.units) ? (s.units as { name?: unknown }[]).map((u) => str(u.name)).filter(Boolean) : [];
+				const named = units.length > 3 ? `${units.slice(0, 3).join(', ')} and ${units.length - 3} more` : units.join(', ');
+				const made = [typeof s.created === 'number' && s.created ? `${s.created} created` : null, typeof s.updated === 'number' && s.updated ? `${s.updated} updated` : null].filter(Boolean).join(', ');
+				const product = str(s.product) ? ` ${str(s.product)}` : '';
+				return `Set up rain for each unit: CHIRPS${product} feeds for ${plural(units.length, 'unit')}${named ? ` (${named})` : ''}${made ? `, ${made}` : ''}${str(s.startDate) ? `, from ${str(s.startDate)}` : ''}`;
+			}
 			// Set from the map's catchment boundary (issue #326 B-rain): named, with its cell count.
 			const b = s.boundary as { name?: unknown } | undefined;
 			if (b && typeof b === 'object') {

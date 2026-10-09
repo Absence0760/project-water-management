@@ -4,8 +4,9 @@
 // tested without a page.
 import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, provenanceLabel, sameProvenance, type SeriesMeta, type SeriesProvenance } from '@water-management/engine';
 import type { Api } from '$lib/api';
+import type { UnitRainApplyBody, UnitRainApplyResult, UnitRainProposal } from '$lib/api/types';
 import { ApiError } from '$lib/api/client';
-import { fmtDate, fmtDay } from '$lib/format/number';
+import { fmtDate, fmtDay, fmtNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
 export type FeedSource = 'chirps' | 'chirps_gefs' | 'dws';
@@ -48,6 +49,8 @@ export interface FeedMeta {
 		staleAfterDays?: number;
 		product?: ChirpsProduct;
 		boundary?: BoundaryMark;
+		/** The land unit's parcel the cells came from (issue #482, …/feeds/chirps/from-units): the feed writes that unit's own rain. */
+		unit?: { nodeId: string; featureId: string; updatedAt: string; areaKm2: number };
 	};
 	targetKind: string;
 	targetName: string;
@@ -168,7 +171,11 @@ export function feedsApi(api: Pick<Api, 'request'>, projectId: string) {
 					updatedAt: p.boundary.updatedAt,
 					...(p.apply.action === 'update' ? { feedId: p.apply.feedId } : p.apply.action === 'create' ? { targetName: p.apply.targetName } : {})
 				})
-				.then((r) => r.feed)
+				.then((r) => r.feed),
+		/** Each land unit's CHIRPS cells from its parcel on the map, and its own feed (issue #482); `product`: as POST would set them up with it. */
+		unitsProposal: (product?: ChirpsProduct) => api.request<UnitRainProposal>('GET', `${base}/chirps/from-units${product ? `?product=${product}` : ''}`),
+		/** Create or update one CHIRPS feed per unit into its own rain series. */
+		applyUnits: (body: UnitRainApplyBody) => api.request<UnitRainApplyResult>('POST', `${base}/chirps/from-units`, body)
 	};
 }
 
@@ -381,6 +388,8 @@ export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 	const cells = f.config.cells ?? [];
 	const from = f.config.boundary;
 	if (from) return `${cells.length === 1 ? '1 cell' : `${cells.length} cells`} of the catchment boundary${from.name ? ` “${from.name}”` : ''}, area weighted`;
+	const unit = f.config.unit;
+	if (unit) return `${cells.length === 1 ? '1 cell' : `${cells.length} cells`} of a unit’s parcel (${fmtNum(unit.areaKm2, 2)} km²), area weighted`;
 	if (cells.length === 1) return `cell ${cells[0]!.lat}, ${cells[0]!.lon}`;
 	return `${cells.length} cells`;
 }
