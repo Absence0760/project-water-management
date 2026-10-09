@@ -2185,8 +2185,9 @@ in this order:
 
 "The catchment's rain" is the catchment's rain used before the areal
 correction (catchment ?? corrected CHIRPS ?? forecast), × the unit's MAP
-ratio when rule 2's conditions hold, else × 1. A day with no value from any
-link is dry (0 mm) and counted. A unit on rules 1–3 that ran historical days
+ratio when rule 2's conditions hold, else × 1. On rules 1–3 a unit's own forecast record (`rain_forecast_mm@<unit>`, which
+only the seasonal outlook writes, below) comes just before the catchment's
+rain. A day with no value from any link is dry (0 mm) and counted. A unit on rules 1–3 that ran historical days
 on the catchment's rain warns how many.
 
 - **Clamp.** Every factor is held between `AREAL_RAIN_FACTOR_MIN` and
@@ -2290,10 +2291,18 @@ runs' rain factor (§2.10g) therefore scales every rain record and, under
 per-unit rain, every unit's MAP and the gauge MAP by the same factor, so
 every unit's rain moves by it and the MAP ratios stay put. The uncertainty
 ensemble's CHIRPS-only member (§2.10e) drops the unit gauges as it drops the
-catchment gauge. A seasonal outlook's member (§2.15) runs its season on the
-analogue's catchment rain as the forecast, so a unit off the MAP ratio runs
-its season at the catchment level, not at its own (a follow-up:
-followups.md § Hydrologist). `verify/` (the independent cross-check) lists
+catchment gauge. A seasonal outlook's member (§2.15) runs each land unit's
+season on that unit's own forcing: the base run's `rain_unit` on the
+analogue's days goes in as the unit's own forecast,
+`rain_forecast_mm@<unit>` (`unitForecastSeriesKey`, engine-only: the API
+never stores one), which the unit's chain reads before the catchment's rain.
+So the season has the unit's rule and factors as the base run had them, a
+member from the snapshot keeps them pinned, and a unit on the catchment rule
+(rule 4) ignores it and keeps the catchment rain. A unit on the MAP ratio
+(rule 2) gets the same season as without it when the catchment gauge has
+every analogue day (`outlook.unitRain.test.ts`). The older re-run path
+(`warmStart: false`) refits the units' factors on each member's cut
+record, as it refits the other record-wide statistics. `verify/` (the independent cross-check) lists
 `perUnit` as unsupported until it is ported from this section.
 
 **Performance.** A synthetic 12-unit catchment with daily rain from 1981
@@ -2310,7 +2319,8 @@ and 200 ms.
   complete year of the record (with a warning) below it;
 - the 0.25–4 clamp, reused from §2.4b for every unit factor;
 - forecast days: CHIRPS-GEFS stays catchment-wide, × the MAP ratio on rule 2
-  (and on rule 1 when its conditions hold), × 1 otherwise;
+  (and on rule 1 when its conditions hold), × 1 otherwise (a seasonal
+  outlook's analogue season is the unit's own, above);
 - a unit's CHIRPS without a MAP takes the catchment's §2.4b factors, which
   were fitted against the catchment gauge on the catchment CHIRPS, not on
   the unit's cells;
@@ -9657,6 +9667,9 @@ checks the method reproduces the base run).
   bias-corrected (forecast rain is never corrected again, §2.4b);
 - the daily A-pan, when the project has one, the analogue's values on the
   same days (a day without one takes the season month's mean, §2.3a);
+- under runoff from each unit's own rain (§2.4h, engine ≥ 1.78.0), each land
+  unit's season in `rain_forecast_mm@<unit>`: the base run's `rain_unit` on
+  the analogue's days, so the unit runs its season on its own forcing;
 - the run window pinned to the base run's start and the season end,
   rain-source periods clipped to the history (§2.4e), and
   `demandFactorFrom` set to the decision date;

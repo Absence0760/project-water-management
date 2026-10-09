@@ -754,6 +754,17 @@ export function parseUnitRainSeriesKey(key: string): { kind: UnitRainKind; nodeI
 }
 
 /**
+ * A land unit's own forecast rain (engine ≥ 1.78.0, docs/model.md §2.4h):
+ * the rain the unit's chain reads before it falls back to the catchment's
+ * rain. Engine-only: the seasonal outlook writes it for each member's season
+ * from the base run's `rain_unit` on the analogue days, so a unit runs its
+ * season on its own forcing (its rule and factors as the base run had them).
+ * The API never stores one.
+ */
+export type UnitForecastSeriesKey = `rain_forecast_mm@${string}`;
+export const unitForecastSeriesKey = (nodeId: string): UnitForecastSeriesKey => `rain_forecast_mm@${nodeId}`;
+
+/**
  * The calibration records a site has, in CALIBRATION_FLOW_KINDS order (null =
  * the outlet's). `series` is keyed as ModelInput.series; only whether a key
  * holds something is read, so a client can pass a map of the keys it knows.
@@ -2641,7 +2652,7 @@ export interface ModelInput {
 	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey,
 	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries };
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries } & { [key: UnitForecastSeriesKey]: DailySeries };
 }
 
 /** One daily output series. nodeId null = catchment level. */

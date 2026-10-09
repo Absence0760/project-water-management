@@ -37,7 +37,7 @@
 import { RESTRICTION_SERIES } from '../network/restriction';
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { damCapacityOn } from '../network/development';
-import type { DailySeries, ModelInput, ModelOutput, SeriesKind } from '../project';
+import { unitForecastSeriesKey, UNIT_RAIN_SERIES, type DailySeries, type ModelInput, type ModelOutput, type SeriesKind, type UnitForecastSeriesKey } from '../project';
 import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
 import { withAllocationKnownBefore, type ModelStateSnapshot } from '../warmstart/snapshot';
 import type { ScenarioOp } from '../scenario/ops';
@@ -223,6 +223,7 @@ export function outlookMemberInput(
 		if (c) series[k] = c;
 	}
 	series.rain_forecast_mm = historyThen(input.series.rain_forecast_mm, s.from, seasonRain);
+	Object.assign(series, unitSeasonRain(baseRun, s, a));
 	if (input.series.evap_apan_mm) series.evap_apan_mm = historyThen(input.series.evap_apan_mm, s.from, valuesOn(input.series.evap_apan_mm, a, s.days));
 
 	return withLevel({ settings: memberSettings(input, s, baseRun.startDate, start), model: input.model, series }, ops);
@@ -249,9 +250,33 @@ export function outlookSeasonInput(
 	start: { storageM3?: Readonly<Record<string, number>> } = {}
 ): { input: ModelInput; problems: string[] } {
 	const { s, a, seasonRain } = memberSeason(input, baseRun, season, analogue);
-	const series: ModelInput['series'] = { rain_forecast_mm: { startDate: s.decisionDate, values: seasonRain } };
+	const series: ModelInput['series'] = { rain_forecast_mm: { startDate: s.decisionDate, values: seasonRain }, ...unitSeasonRain(baseRun, s, a) };
 	if (input.series.evap_apan_mm) series.evap_apan_mm = { startDate: s.decisionDate, values: valuesOn(input.series.evap_apan_mm, a, s.days) };
 	return withLevel({ settings: memberSettings(input, s, s.decisionDate, start), model: input.model, series }, ops);
+}
+
+/**
+ * Under runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md
+ * §2.4h): each land unit's season, the base run's `rain_unit` on the analogue
+ * days, as the unit's own forecast (unitForecastSeriesKey). The unit's chain
+ * reads it before the catchment's rain, so it runs its season on its own
+ * forcing, with its rule and factors as the base run had them; a unit on the
+ * catchment rule (rule 4) ignores it and keeps the catchment rain. Nothing
+ * without per-unit rain (the base run has no `rain_unit`).
+ */
+function unitSeasonRain(baseRun: OutlookBaseRun, s: ResolvedSeason, a: number): Record<UnitForecastSeriesKey, DailySeries> {
+	const out: Record<UnitForecastSeriesKey, DailySeries> = {};
+	const r0 = toEpochDay(baseRun.startDate);
+	for (const x of baseRun.series) {
+		if (x.nodeId === null || x.key !== UNIT_RAIN_SERIES.rain.key) continue;
+		const values = new Array<number | null>(s.days);
+		for (let i = 0; i < s.days; i++) {
+			const v = x.values[a + i - r0];
+			values[i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
+		}
+		out[unitForecastSeriesKey(x.nodeId)] = { startDate: s.decisionDate, values };
+	}
+	return out;
 }
 
 /** Check a member's base, season and analogue (outlookMemberInput's throws), and take the analogue's rain from the base run. */

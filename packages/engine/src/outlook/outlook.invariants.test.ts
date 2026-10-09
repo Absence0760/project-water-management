@@ -17,7 +17,7 @@ import type { ModelInput } from '../project';
 import { Rng } from '../random';
 import { runModelWithoutChecks } from '../run';
 import type { ScenarioOp } from '../scenario/ops';
-import { randomInput } from '../testing/fuzz';
+import { randomInput, withUnitRain } from '../testing/fuzz';
 import { outlookAnalogues, outlookMember, outlookMemberInput } from './outlook';
 import type { OutlookSeason } from './season';
 
@@ -47,9 +47,11 @@ interface Case {
 }
 
 /** A random network whose record holds a season of 30–200 days after at least 200 days of history, and an analogue. */
-function caseFor(seed: number, strip: boolean): Case | null {
+function caseFor(seed: number, strip: boolean, perUnit = false): Case | null {
 	let input = randomInput(seed, { maxNodes: 10, maxDays: 1200 });
 	if (strip) input = withoutReturns(input);
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h), from its own stream.
+	if (perUnit) input = withUnitRain(input, seed);
 	const base = runModelWithoutChecks(input);
 	const g = new Rng(seed ^ 0x0e5b);
 	const len = g.int(30, 200);
@@ -88,6 +90,38 @@ function check(c: Case, seed: number, plain: boolean): number {
 }
 
 describe('seasonal outlook on random networks', () => {
+	it(`under per-unit rain, every level shares the history and each unit runs its season on its own rain (${CASES} networks)`, () => {
+		let compared = 0;
+		let units = 0;
+		for (let seed = SEED0; seed < SEED0 + CASES; seed++) {
+			let c: Case | null;
+			try {
+				c = caseFor(seed, false, true);
+			} catch {
+				continue; // an input the model refuses (checkAll's to judge)
+			}
+			if (!c) continue;
+			compared += check(c, seed, false);
+			// Each unit not on the catchment rule runs the season on the base run's rain_unit on the analogue days.
+			const base = runModelWithoutChecks(c.input);
+			const a = outlookAnalogues(base, c.season).analogues[0];
+			if (!a || !base.summary.unitRain) continue;
+			const out = runModelWithoutChecks(outlookMemberInput(c.input, base, c.season, a).input);
+			const days = toEpochDay(c.season.seasonEnd) - toEpochDay(c.season.decisionDate) + 1;
+			const i0 = toEpochDay(a.from) - toEpochDay(base.startDate);
+			const j0 = toEpochDay(c.season.decisionDate) - toEpochDay(out.startDate);
+			for (const u of base.summary.unitRain.units) {
+				if (u.rule === 'catchment') continue;
+				const want = base.series.find((x) => x.nodeId === u.nodeId && x.key === 'rain_unit')!.values.slice(i0, i0 + days);
+				const got = out.series.find((x) => x.nodeId === u.nodeId && x.key === 'rain_unit')!.values.slice(j0, j0 + days);
+				expect(got, `seed ${seed} ${u.nodeId}`).toEqual(want);
+				units++;
+			}
+		}
+		expect(compared).toBeGreaterThan(0);
+		expect(units).toBeGreaterThan(0);
+	}, 300_000);
+
 	it(`every level shares the history, and a lower level never asks for more (${CASES} networks)`, () => {
 		let compared = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES; seed++) {
