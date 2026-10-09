@@ -126,7 +126,11 @@ jobs:
           fi
 
       - name: Start MinIO
-        run: docker compose up -d --wait minio
+        # Through Google's Docker Hub mirror by digest, not compose's own pull from Docker Hub, whose anonymous pull limit refused CI's runners (issue #492).
+        run: |
+          bash scripts/ci/service-image.sh save minio "$RUNNER_TEMP/service-images/minio.tar"
+          bash scripts/ci/service-image.sh load minio "$RUNNER_TEMP/service-images/minio.tar"
+          docker compose -f docker-compose.yml -f "$RUNNER_TEMP/compose.minio.yml" up -d --wait minio
 
       - name: DB tests with coverage
         run: pnpm test:backend:db:coverage
