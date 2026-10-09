@@ -152,31 +152,39 @@ test('a wrong current password and a too-short new password are shown as errors'
 });
 
 // Screen use (issue #17): the header says who you are; on a wide screen the
-// cards sit in two columns (Profile + Password + Delete my account, then
-// Language and units + Alert emails + Your data) and the page fits a 1440×960 window without
-// scrolling; on a phone they stack in one column; never a sideways scroll.
+// cards sit in two columns (Profile + Password + Two-step sign-in + Delete my
+// account, then Language and units + Alert emails + Your data); on a phone they
+// stack in one column; never a sideways scroll. A reading page, not a
+// dashboard (ui-playbook.md § Dashboards fit the window; reading pages
+// scroll): with both two-step methods (#282) the left column is taller than a
+// 960 px window, so the page scrolls down, as no-pointless-scroll.spec.ts notes.
 test.describe('layout', () => {
 	const box = async (page: import('@playwright/test').Page, name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!;
 
-	test('two columns at 1440 × 960 that fit the window', async ({ page, owner }) => {
+	test('two columns at 1440 × 960, with no sideways scroll', async ({ page, owner }) => {
 		await page.setViewportSize({ width: 1440, height: 960 });
 		await page.goto('/account');
 		await expect(page.getByLabel('Display name')).toHaveValue(owner.displayName);
 		const head = page.getByRole('region', { name: 'Account', exact: true });
 		await expect(head).toContainText(owner.displayName);
 		await expect(head).toContainText(owner.email);
+		// Measured once the two-step card has its status (it shows Loading… first).
+		await expect(page.locator('#two-step')).toHaveAttribute('data-two-step', 'off');
 
 		const profile = await box(page, 'Profile');
 		const password = await box(page, 'Password');
 		const prefs = await box(page, 'Language and units');
 		const alerts = await box(page, 'Alert emails');
 		const data = await box(page, 'Your data');
+		const twoStep = await box(page, 'Two-step sign-in');
 		const del = await box(page, 'Delete my account');
-		// Left column: Profile over Password over Delete my account; right column: the other three.
+		// Left column: Profile over Password over Two-step sign-in over Delete my account; right column: the other three.
 		expect(Math.abs(password.x - profile.x)).toBeLessThan(1);
 		expect(password.y).toBeGreaterThan(profile.y);
+		expect(Math.abs(twoStep.x - profile.x)).toBeLessThan(1);
+		expect(twoStep.y).toBeGreaterThan(password.y);
 		expect(Math.abs(del.x - profile.x)).toBeLessThan(1);
-		expect(del.y).toBeGreaterThan(password.y);
+		expect(del.y).toBeGreaterThan(twoStep.y);
 		expect(prefs.x).toBeGreaterThan(profile.x + profile.width);
 		expect(Math.abs(prefs.y - profile.y)).toBeLessThan(1);
 		expect(Math.abs(alerts.x - prefs.x)).toBeLessThan(1);
@@ -186,14 +194,14 @@ test.describe('layout', () => {
 		// The unit radios' rows are 32 px with a mouse (2rem was 28 px at the 14 px root).
 		const m3 = (await page.locator('label.radio').filter({ hasText: 'Cubic metres (m³)' }).boundingBox())!;
 		expect(m3.height).toBeGreaterThanOrEqual(32);
-		// Everything in view: no page scroll at all.
-		const { scrollH, innerH, scrollW, innerW } = await page.evaluate(() => ({
-			scrollH: document.documentElement.scrollHeight,
-			innerH: window.innerHeight,
+		// Both columns' first cards in view, and never a sideways scroll.
+		const { scrollW, innerW, innerH } = await page.evaluate(() => ({
 			scrollW: document.documentElement.scrollWidth,
-			innerW: window.innerWidth
+			innerW: window.innerWidth,
+			innerH: window.innerHeight
 		}));
-		expect(scrollH).toBeLessThanOrEqual(innerH);
+		expect(prefs.y + prefs.height).toBeLessThanOrEqual(innerH);
+		expect(password.y + password.height).toBeLessThanOrEqual(innerH);
 		expect(scrollW).toBeLessThanOrEqual(innerW);
 	});
 
