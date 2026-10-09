@@ -4,7 +4,7 @@
 // route loads what it needs inside its transaction, and the body is written
 // from memory as the client reads it. export.json is built in memory and
 // keeps the JSON cap (MAX_JSON_EXPORT_BYTES), so it always imports back.
-import { damCapacityOn, fromEpochDay, toEpochDay, type NetworkNode, type RunSummary, isIsoDate } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, parseGaugeSeriesKey, parseUnitRainSeriesKey, toEpochDay, type NetworkNode, type RunSummary, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -186,18 +186,24 @@ async function loadReadingRun(
 	const hit = rows[0];
 	if (!hit) return null;
 	const run = await loadRun(db, projectId, hit.runId);
-	const siteNodeId = hit.inputKey.includes('@') ? hit.inputKey.slice(hit.inputKey.indexOf('@') + 1) : null;
+	// A gauge's record (`<kind>@<gauge>`, 084): the gauge's simulated outflow beside it. A land unit's own rain
+	// (`<kind>@<unit>`, 209, issue #482): the rain the run used on that unit (`rain_unit`, under settings.unitRain perUnit).
+	const gauge = parseGaugeSeriesKey(hit.inputKey);
+	const unitRain = gauge ? null : parseUnitRainSeriesKey(hit.inputKey);
+	const siteNodeId = gauge?.nodeId ?? unitRain?.nodeId ?? null;
 	const { rows: stored } = await db.query<{ nodeId: string | null; nodeName: string | null; key: string; label: string | null; unit: string | null; values: (number | null)[] }>(
 		`SELECT s.node_id AS "nodeId", n.name AS "nodeName", s.key, s.meta->>'label' AS label, s.meta->>'unit' AS unit, s."values"
 		 FROM run_series s LEFT JOIN node n ON n.id = s.node_id
-		 WHERE s.run_id = $1 AND ((s.node_id IS NULL AND s.key = ANY($2)) OR (s.node_id = $3::uuid AND s.key = 'outflow'))`,
-		[hit.runId, RUN_CATCHMENT_KEYS, siteNodeId]
+		 WHERE s.run_id = $1 AND ((s.node_id IS NULL AND s.key = ANY($2)) OR (s.node_id = $3::uuid AND s.key = $4))`,
+		[hit.runId, RUN_CATCHMENT_KEYS, siteNodeId, unitRain ? 'rain_unit' : 'outflow']
 	);
 	const catchment: Record<string, RunColumn> = {};
 	let gaugeFlow: ReadingRun['gaugeFlow'] = null;
+	let unitRainUsed: ReadingRun['unitRain'] = null;
 	for (const r of stored) {
 		const col = { label: r.label ?? r.key, unit: r.unit || null, values: r.values };
 		if (r.nodeId === null) catchment[r.key] = col;
+		else if (unitRain) unitRainUsed = { ...col, unitName: r.nodeName ?? 'the unit' };
 		else gaugeFlow = { ...col, gaugeName: r.nodeName ?? 'the gauge' };
 	}
 	return {
@@ -209,7 +215,8 @@ async function loadReadingRun(
 			inputKey: hit.inputKey,
 			rainThresholdMm: hit.threshold,
 			catchment,
-			gaugeFlow
+			gaugeFlow,
+			unitRain: unitRainUsed
 		}
 	};
 }

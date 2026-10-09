@@ -41,6 +41,13 @@ export interface PlanNode {
 	kind: 'farm' | 'gauge' | 'user';
 	/** Fraction of natural flow / EWR generated on this farm's land. */
 	share: number;
+	/**
+	 * The unit's own natural runoff, m³/day (engine ≥ 1.78.0, runoff from each
+	 * unit's own rain, docs/model.md §2.4h): its local inflow in place of
+	 * naturalFlow × share. The EWR split and the land-cover threshold still
+	 * use `share`. Absent under catchment rain.
+	 */
+	localRunoff?: Float64Array;
 	/** Share of the upstream inflow (H) that enters the dam (K); the rest passes below it (L). Engine ≥ 0.9.0 (model.md §3 Q1). */
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
@@ -1390,7 +1397,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const Dr = split[i] ? damD![i]! : rD ? rD[i]! : D;
 			const H = sumU;
 			// Land cover removes part of the farm's natural runoff before it reaches the river or dam (WP-1.35).
-			const I0 = nat * node.share;
+			const I0 = node.localRunoff ? node.localRunoff[t]! : nat * node.share;
 			const lc = node.landCover ? landCoverReduction(I0, qLow * node.share, node.landCover) : 0;
 			const I = I0 - lc;
 			r.landCoverReduction[t] = lc;

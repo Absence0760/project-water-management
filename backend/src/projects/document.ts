@@ -10,6 +10,7 @@
 // a note is its author's words, RLS lets a note be inserted only as
 // yourself, and re-authoring them as the importer would misattribute them
 // (docs/data-model.md § Notes).
+import { isUnitRainKind } from '../series/site.js';
 import { cleanModelNames, DAY_BOUNDARIES, ENGINE_VERSION, SERIES_KINDS, type DayBoundary, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -52,7 +53,8 @@ export const ProjectFile = z.object({
 				...ProvenanceFields,
 				// How sub-daily readings were added up into days (033_series_day_boundary.sql); absent = daily values.
 				dayBoundary: z.enum(DAY_BOUNDARIES).optional(),
-				// A flow record's gauge node in the document's model (084_gauge_records); absent = the outlet.
+				// A flow record's gauge node, or a land unit's own rain's unit (209), in the document's model (084_gauge_records);
+				// absent = the outlet's record, the catchment's rain.
 				siteNodeId: z.string().uuid().optional(),
 				// Where the values came from, and the unit they were first given in (107_series_source.sql); absent = not recorded.
 				source: SourceField,
@@ -198,8 +200,10 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 		[projectId]
 	);
 	// A site whose node has left the model (084: the record keeps it, the run warns) has nothing to point at in the file.
+	// A gauge's record then goes as the outlet's, as before; a land unit's own rain (209) is left out, since without its
+	// unit it would come back as the catchment's rain, which no run of this project reads it as.
 	const nodeIds = new Set(model.nodes.map((n) => n.id));
-	const series = stored.map(({ product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, ...s }) => ({
+	const series = stored.filter((s) => !(s.siteNodeId !== null && !nodeIds.has(s.siteNodeId) && isUnitRainKind(s.kind))).map(({ product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, ...s }) => ({
 		...s,
 		...(product !== null && productVersion !== null ? { product, productVersion } : {}),
 		...(dayBoundary !== null ? { dayBoundary } : {}),

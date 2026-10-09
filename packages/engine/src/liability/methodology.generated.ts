@@ -18,8 +18,13 @@ export const METHODOLOGY_VERSIONS: readonly MethodologyVersion[] = [
 		"version": "methodology-3",
 		"file": "v3.md",
 		"sha256": "bab17f104f6c20bf4ba4bfa4936b681b13066b39e77e4fe82f483b13a989b4b9"
+	},
+	{
+		"version": "methodology-4",
+		"file": "v4.md",
+		"sha256": "7cd4583826ab33421e9889337dd09da333375cecddca1848d2be82bb9480083b"
 	}
 ];
 
 /** The current version: new sign-offs and evidence packs cite it. */
-export const METHODOLOGY: MethodologyVersion = METHODOLOGY_VERSIONS[2]!;
+export const METHODOLOGY: MethodologyVersion = METHODOLOGY_VERSIONS[3]!;

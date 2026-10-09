@@ -250,7 +250,7 @@ describe('fit record', () => {
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(6);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
-		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods or zero-rain run handling has changed since the fit/);
+		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, CHIRPS quantile map, rain-source periods, zero-rain run handling or the rain each unit runs on \(runoff from each unit’s own rain, its records, MAPs and factors\) has changed since the fit/);
 	});
 
 	it('keeps how automated calibration chose the fit, and says when its rules are drafts or have changed since (issue #153)', () => {

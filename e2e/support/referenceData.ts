@@ -24,7 +24,7 @@ export const REFERENCE_FAMILIES: readonly ReferenceFamily[] = [
 	{ what: 'quaternaries', testIds: /['"](map-quaternar[a-z-]*|quaternary-(code|rows|synthetic|none|proposal|no-dataset))['"]/, loader: 'loadSyntheticQuaternaries' },
 	{ what: 'the river network', testIds: /['"]map-rivers[a-z-]*['"]/, loader: 'loadSyntheticRivers' },
 	{ what: 'gauging stations', testIds: /['"]nearest-gauges-table['"]/, loader: 'loadSyntheticStations' },
-	{ what: 'the MAP grid', testIds: /['"]map-mapgrid-(summary|dataset|dense|empty|source)['"]/, loader: 'loadSyntheticMapGrid' }
+	{ what: 'the MAP grid', testIds: /['"](map-mapgrid-(summary|dataset|dense|empty|source)|unit-map-(rows|coverage|synthetic|source|same|uncovered|other-grid|none-covered))['"]/, loader: 'loadSyntheticMapGrid' }
 ];
 
 /** A top-level statement that declares tests (a `test(…)`, a `test.describe(…)`, or a loop or condition around them), with its first line (1-based). */

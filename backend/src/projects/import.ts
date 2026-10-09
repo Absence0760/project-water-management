@@ -7,6 +7,7 @@
 //
 // Reached from lambda.ts through the routes: never import dotenv (or a module
 // that does) here, so esbuild keeps it out of the deployment bundle.
+import { isFlowSiteKind, isUnitRainKind, siteProblem } from '../series/site.js';
 import { resolveFitRecord, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
@@ -61,13 +62,19 @@ export function projectFileProblems(data: ProjectFile): string[] {
 		const key = `${s.kind}/${s.name}`;
 		if (seen.has(key)) problems.push(`duplicate series ${s.kind}${s.name ? ` "${s.name}"` : ''}`);
 		seen.add(key);
-		// A flow record's site (084_gauge_records): a gauge of the file's own model, not the outlet.
+		// A series' site (series/site.ts): a flow record's gauge above the outlet (084_gauge_records), or a land
+		// unit's own rain (209), a node of the file's own model.
 		if (s.siteNodeId !== undefined) {
 			const site = data.model.nodes.find((n) => n.id === s.siteNodeId);
 			const what = `series ${s.kind}${s.name ? ` "${s.name}"` : ''}`;
-			if (s.kind !== 'flow_observed_m3s' && s.kind !== 'flow_logger_m3s') problems.push(`${what}: only a flow record has a site`);
+			if (!isFlowSiteKind(s.kind) && !isUnitRainKind(s.kind)) problems.push(`${what}: only a flow record or a land unit’s rain has a site`);
 			else if (!site) problems.push(`${what}: its site is not a hydrological unit of the model`);
-			else if (site.kind !== 'gauge' || site.downstreamNodeId === null) problems.push(`${what}: its site "${site.name}" is not a gauge above the outlet`);
+			else if (isFlowSiteKind(s.kind)) {
+				if (site.kind !== 'gauge' || site.downstreamNodeId === null) problems.push(`${what}: its site "${site.name}" is not a gauge above the outlet`);
+			} else {
+				const problem = siteProblem(s.kind, site);
+				if (problem) problems.push(`${what}: its site "${site.name}": ${problem}`);
+			}
 		}
 	}
 	return problems;
@@ -115,7 +122,7 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 				s.product ?? null,
 				s.productVersion ?? null,
 				s.dayBoundary ?? null,
-				// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
+				// The site follows its gauge or unit to the fresh id (projectFileProblems checked it is one of the file's).
 				s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null,
 				// Where the values came from and the unit they were first given in (107): only what the file records.
 				// A file without them stores none, so a project round-trips exactly (export writes back only what is

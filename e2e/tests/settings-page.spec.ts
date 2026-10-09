@@ -377,9 +377,10 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
-	expect((await names('set-flow')).slice(0, 4)).toEqual([
+	expect((await names('set-flow')).slice(0, 5)).toEqual([
 		'Flow calibration',
 		'Areal rainfall correction',
+		'Rain for each unit',
 		'GR4J potential evaporation',
 		'Evaporation from the map'
 	]);

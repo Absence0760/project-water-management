@@ -129,7 +129,7 @@ const PREVIEW_KEYS = [
 
 const settings = defaultProjectSettings();
 // Settings with no default (absent until someone sets them): typed, so each is a real field.
-const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule', 'droughtRestriction'];
+const OPTIONAL_SETTINGS: (keyof ProjectSettings)[] = ['evidenceUncertaintyRule', 'droughtRestriction', 'unitRain'];
 const VALID: Record<string, Set<string>> = {
 	node: new Set(Object.keys(NODE)),
 	crop: new Set(Object.keys(CROP)),

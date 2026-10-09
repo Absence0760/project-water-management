@@ -43,6 +43,29 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		expect(sent[1]).toMatchObject({ message: { type: 'ingest', result: { ok: false, error: expect.stringMatching(/no data at -20.27, 25.37/) } } });
 	});
 
+	it('answers a CHIRPS request with a cell plan (the cell cache, 208) with each cell’s own values, and logs how many cell-days it read', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const start = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
+		const end = new Date(Date.now() - 58 * 86_400_000).toISOString().slice(0, 10);
+		// The fixture cell's grid cell, and the one east of it; the middle day skipped (the cache holds it).
+		const cells = [
+			[1602, 4103],
+			[1602, 4104]
+		];
+		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start, end, today, cells: { cells, plan: '010' } } };
+		expect(await handler({ Records: [record('m1', req)] } as never)).toEqual({ batchItemFailures: [] });
+		const result = (sent[0]!.message as { result: { ok: boolean; cells: { read: string; cells: unknown; values: (number | null)[][] } } }).result;
+		expect(result).toMatchObject({ ok: true, cells: { product: 'sat', startDate: start, read: 'f-f', cells } });
+		expect(result.cells.values.map((row) => row.map((v) => v === null))).toEqual([
+			[false, true, false],
+			[false, true, false]
+		]);
+		// Ids, counts and the time only, never the values.
+		const logged = info.mock.calls.map(([line]) => JSON.parse(line as string)).find((l) => l.event === 'feed_fetched');
+		expect(logged).toEqual({ event: 'feed_fetched', feedId: ids.feedId, source: 'chirps', ok: true, days: 3, cellDaysRead: 4, ms: expect.any(Number) });
+	});
+
 	it('drops a message it cannot parse at all (a retry can’t fix it), and logs only ids', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const res = await handler({ Records: [record('m1', 'garbage'), record('m2', { v: 1, type: 'fetch', fetchJobId: 'nope', request: {} })] } as never);

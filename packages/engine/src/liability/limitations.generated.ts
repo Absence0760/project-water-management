@@ -130,6 +130,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Built (engine 1.77.0, issue #455), off by default (the pragmatic EWR); the hydrologist's confirmation of the scaling and the conventions pending"
 	},
 	{
+		"id": "U1",
+		"source": "finding",
+		"severity": "Medium (projects with runoff from each unit's own rain, settings.unitRain perUnit)",
+		"title": "Each unit's rain level rests on provisional calls the hydrologist hasn't confirmed",
+		"status": "Needs hydrologist (engine 1.78.0, issue #482)"
+	},
+	{
 		"id": "L1",
 		"source": "finding",
 		"severity": "Medium (licence applications that insert a senior other water user on a reach)",

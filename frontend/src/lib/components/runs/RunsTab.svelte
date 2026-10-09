@@ -29,6 +29,7 @@
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
+	import { unitRainOf } from './unitRain';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
 	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
@@ -60,6 +61,8 @@
 	import { FORMER_MEMBER } from '$lib/format/maker';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
+	// Rain for each unit (issue #482): its own chunk, only a run that ran per unit loads it.
+	const loadUnitRainPanel = () => import('./UnitRainPanel.svelte');
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
 	// seasonal outlook and the water account moved to River & reserve (issue #17, river/RiverTab.svelte);
 	// this page links there.
@@ -726,6 +729,16 @@
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
 							<RunoffPanel balance={summary.runoff} {projectId} runId={shownRunId} refs={runSeries} forecastFrom={summary.forecast?.from ?? null} />
+						</div>
+					{/if}
+					{#if unitRainOf(summary)}
+						{@const unitRain = unitRainOf(summary)!}
+						<div class="panel" id="res-unit-rain">
+							<Lazy load={loadUnitRainPanel}>
+								{#snippet children(UnitRainPanel)}
+									<UnitRainPanel result={unitRain} order={summary.farms.map((f) => f.nodeId)} />
+								{/snippet}
+							</Lazy>
 						</div>
 					{/if}
 					{#if summary.wr2012}

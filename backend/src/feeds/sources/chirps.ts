@@ -70,7 +70,17 @@ export async function gridMean(http: FeedHttp, url: string, cells: readonly Cell
 	const read = (start: number, end: number) => http.range(url, start, end);
 	const grid = await openGrid(read);
 	if (!grid) return null;
-	const values = await readPoints(read, grid, cells);
+	return meanOf(await readPoints(read, grid, cells), cells, noData);
+}
+
+/**
+ * gridMean's arithmetic on one day's values (null = no data), one per cell
+ * in `cells`' order: the same refusals, the same renormalising, the same
+ * rounding. The cell cache computes a feed's days with it from cached cells
+ * (feeds/cellCache.ts seriesFromCache), so a day is the same number whether
+ * it was read from the file or from the cache.
+ */
+export function meanOf(values: readonly (number | null)[], cells: readonly Cell[], noData?: NoDataPolicy): number {
 	let sum = 0;
 	let weights = 0;
 	if (noData) {
@@ -214,6 +224,95 @@ export async function fetchChirps(
 	const out: GridDays = { startDate: start, values: kept.map((g) => g.v), prelimDays: kept.filter((g) => g.prelim).length + held };
 	if (final > 0) out.finalThrough = days[final - 1]!;
 	return out;
+}
+
+/**
+ * One grid file's values at `points`, null where the grid says no data (the
+ * sea), or null for the whole file when it isn't published (404). A value
+ * outside 0–2000 mm fails the fetch, as gridMean's does.
+ */
+export async function gridValues(http: FeedHttp, url: string, points: readonly { lat: number; lon: number }[]): Promise<(number | null)[] | null> {
+	const read = (start: number, end: number) => http.range(url, start, end);
+	const grid = await openGrid(read);
+	if (!grid) return null;
+	const values = await readPoints(read, grid, points);
+	values.forEach((v, i) => {
+		if (v !== null && (v < 0 || v > 2000)) throw new FeedFormatError(`the grid has an implausible rainfall of ${v} mm at ${points[i]!.lat}, ${points[i]!.lon}`);
+	});
+	return values;
+}
+
+/**
+ * What a cell-cache fetch does with each day of its window (feeds/cellCache.ts
+ * planFetch): `0` read it (the final file, else the preliminary one), `1`
+ * skip it (the cache holds every cell final, or there is nothing to read),
+ * `2` read only its final file (the cache holds a preliminary value for every
+ * cell, and a preliminary value is published once).
+ */
+export const DAY_READ = '0';
+export const DAY_SKIP = '1';
+export const DAY_FINAL_ONLY = '2';
+
+/** Each cell's own days, as the cell cache stores them (feeds/cellCache.ts). */
+export interface CellDays {
+	startDate: string;
+	/** Per day: `f` read from the final file, `p` from the preliminary one, `-` not read (skipped, or not published). */
+	read: string;
+	/** Per cell (the points' order), per day: mm, NaN for no data, null where the day wasn't read. */
+	values: (number | null)[][];
+}
+
+/**
+ * fetchChirps for the cell cache: each point's own value per day, never their
+ * mean, and only the days `plan` asks for (one DAY_* character per day from
+ * `start`). The same reading as fetchChirps otherwise: `rnl` reads its final
+ * files; `sat` probes finals in date order (the first day alone, then
+ * `concurrency` at a time, stopping after a batch whose last day has none in
+ * a month whose finals may still be on their way), then reads the
+ * preliminary file of each DAY_READ day that had no final. A DAY_FINAL_ONLY
+ * day without a final is left unread: the cache's preliminary value stands.
+ * Every point is the centre of one grid cell (feeds/cellCache.ts cellCentre).
+ */
+export async function fetchChirpsCells(
+	http: FeedHttp,
+	points: readonly { lat: number; lon: number }[],
+	start: string,
+	plan: string,
+	product: 'sat' | 'rnl',
+	opts: { concurrency?: number; today?: string } = {}
+): Promise<CellDays> {
+	const concurrency = opts.concurrency ?? 6;
+	const s = toEpochDay(start);
+	const days = Array.from({ length: plan.length }, (_, i) => fromEpochDay(s + i));
+	const today = toEpochDay(opts.today ?? fromEpochDay(s + plan.length));
+	const reads: ({ kind: 'f' | 'p'; v: (number | null)[] } | null)[] = new Array(plan.length).fill(null);
+	const want = days.map((_, i) => i).filter((i) => plan[i] !== DAY_SKIP);
+	if (product === 'rnl') {
+		await mapLimit(want, concurrency, async (i) => {
+			const v = await gridValues(http, chirpsRnlUrl(days[i]!), points);
+			if (v) reads[i] = { kind: 'f', v };
+		});
+	} else {
+		for (let probed = 0, size = 1; probed < want.length; size = concurrency) {
+			const idx = want.slice(probed, probed + size);
+			const batch = await mapLimit(idx, concurrency, (i) => gridValues(http, chirpsFinalUrl(days[i]!), points));
+			batch.forEach((v, k) => {
+				if (v) reads[idx[k]!] = { kind: 'f', v };
+			});
+			probed += idx.length;
+			if (batch.at(-1) === null && !finalExpected(days[idx.at(-1)!]!, today)) break;
+		}
+		const prelim = want.filter((i) => reads[i] === null && plan[i] === DAY_READ);
+		await mapLimit(prelim, concurrency, async (i) => {
+			const v = await gridValues(http, chirpsPrelimUrl(days[i]!), points);
+			if (v) reads[i] = { kind: 'p', v };
+		});
+	}
+	return {
+		startDate: start,
+		read: reads.map((r) => (r ? r.kind : '-')).join(''),
+		values: points.map((_, c) => reads.map((r) => (r ? (r.v[c] ?? Number.NaN) : null)))
+	};
 }
 
 export interface Forecast {

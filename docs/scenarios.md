@@ -120,7 +120,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.45.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `rank` (its place within `first` or `last`, engine ≥ 1.64.0: a whole number 1–99, or null = 1), `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null), `population` (the people it serves for the basic-needs floor, engine ≥ 1.44.0; ≥ 0, or null for a per-person object's count), `source` (where its number comes from, engine ≥ 1.56.0: `meter`, `aadd`, `perCapita`, `other`, or null = not recorded; its sizing must fit, so switch both in one edit group), `waterSource` (engine ≥ 1.65.0, [model.md §2.7j](./model.md): `dam`, `river`, or null = the dam), `riverPumpM3Day` (≥ 0, or null = no limit), `riverPoolM3` (≥ 0, or null = none) or `note` (at most 1000 characters). A name, a note and a window's label are trimmed as a save trims them. Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got, or a population, source or rank it hasn't got, changes nothing. |
 | `demandObject.remove` | `demandObjectId` | Removes a demand object (engine ≥ 1.45.0). `node.remove` drops the node's objects too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
-| `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
+| `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series (a land unit's own rain record too, `rain_catchment_mm@<unit id>` or `rain_chirps_mm@<unit id>`, engine ≥ 1.78.0) or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
 | `ewrRule.set` | `table` | Sets or replaces the Reserve rule table of one EWR site (engine ≥ 1.6.0, WP-3.7): `table.siteNodeId` is the site. Always a baseline assumption. § Reserve rule tables. |
 | `ewrRule.remove` | `siteNodeId` | Removes the Reserve rule table of one EWR site (engine ≥ 1.35.0): null (or the outlet node's id) is the outlet. Always a baseline assumption. § Reserve rule tables. |
 | `allocation.set` | `allocation` | Sets or replaces one registered volume by id (engine ≥ 1.35.0, [allocations.md](./allocations.md)): a new id adds one. § Registered volumes. |
@@ -448,7 +448,10 @@ requested volume in a full-allocation background, is one op.
 `rain_chirps_mm`, `rain_forecast_mm`, a rain-source period's
 `rain_catchment_alt_mm` and the reanalysis `rain_reanalysis_mm` (engine ≥
 1.69.0, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), and the daily A-pan evaporation
-`evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
+`evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)). From engine 1.78.0
+a land unit's own rain records too, `rain_catchment_mm@<unit id>` and
+`rain_chirps_mm@<unit id>` ([model.md §2.4h](./model.md)), which the rain
+sensitivity (§2.10g) scales with the rest.
 - The monthly A-pan means are the setting `apanMm` (and, for GR4J,
   `panCoefficient` or a monthly `pe` row), changed with `settings.set`. On a
   project with a daily A-pan series they reach only the days the series

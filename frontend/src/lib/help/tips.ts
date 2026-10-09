@@ -1104,6 +1104,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.arealRain', 'run.rain_areal']
 	},
 	{
+		id: 'unit-rain',
+		term: 'Runoff from each unit’s own rain',
+		short: 'GR4J runs once per unit with land on that unit’s own rain (its gauge, the catchment gauge × MAP ratio, or its CHIRPS) and sums the flow.',
+		units: 'mm/day',
+		category: 'flow',
+		fields: ['settings.unitRain']
+	},
+	{
 		id: 'actual-evaporation',
 		term: 'Actual evaporation (AET)',
 		short: 'Water the catchment actually evaporates each day in GR4J, in mm: never more than the potential evaporation.',
@@ -1847,6 +1855,13 @@ export const TIPS: HelpTipText[] = [
 		id: 'boundary-rain',
 		term: 'Rain from the catchment boundary',
 		short: 'A CHIRPS feed averaging the 0.05° cells the boundary covers, each weighted by the share of it inside, rather than a box around it.',
+		units: 'mm/day',
+		category: 'data'
+	},
+	{
+		id: 'unit-rain-feeds',
+		term: 'Rain for each unit (CHIRPS feeds)',
+		short: 'One CHIRPS feed per unit with land, averaging the 0.05° cells its parcel covers, area weighted, into that unit’s own rain series.',
 		units: 'mm/day',
 		category: 'data'
 	},

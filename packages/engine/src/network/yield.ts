@@ -89,10 +89,11 @@ export function prepareYield(input: ModelInput, naturalFlow?: (ctx: RunContext) 
 	const { settings, days, startDate, aligned, month, warnings, start } = run;
 	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);
-	const nf = (naturalFlow ?? ((ctx: RunContext) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx)))({ settings, startDate, days, aligned, historyDays });
+	const nf = (naturalFlow ?? ((ctx: RunContext) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx)))({ settings, startDate, days, aligned, historyDays, chirpsCorrection: run.chirpsCorrection });
 	if (nf.naturalFlowM3Day.length !== days) throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	const natural = Float64Array.from(nf.naturalFlowM3Day, (v) => (Number.isFinite(v) ? v : 0));
-	const { plan } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
+	// Each land unit's own runoff under per-unit rain (engine ≥ 1.78.0, docs/model.md §2.4h), as runModel's plan has it.
+	const { plan } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, nf.unitRunoff ? { unitRunoff: nf.unitRunoff } : {}, historyDays);
 	const yearOfDay = new Int32Array(days);
 	const wyMonth = new Uint8Array(days);
 	const y0 = waterYearOf(run.start);

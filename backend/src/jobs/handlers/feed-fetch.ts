@@ -11,12 +11,19 @@
 //     (app_begin_feed_fetch, 029), in this transaction, so the answer is
 //     checked against what was asked for and a late answer to an older fetch
 //     is dropped (feed-ingest.ts, issue #31).
+//
+// A CHIRPS fetch goes through the shared cell cache (208_chirps_cell_cache,
+// feeds/cellCache.ts): the request names only the cells and days the cache
+// lacks or holds as preliminary. When it lacks none, nothing is fetched at
+// all: the feed's days are computed from the cache here, at once.
 import { z } from 'zod';
-import { chirpsProduct } from '../../feeds/config.js';
-import { fetchWindow, heldThrough, runFetch, utcToday } from '../../feeds/fetch.js';
+import { planFetch, uniqueCells } from '../../feeds/cellCache.js';
+import { cacheOrigin, readCellCache } from '../../feeds/cellCacheStore.js';
+import { chirpsProduct, type GridConfig, gridCells } from '../../feeds/config.js';
+import { type CellsResult, type FetchRequest, fetchWindow, runFetch, utcToday } from '../../feeds/fetch.js';
 import { feedHttp } from '../../feeds/http.js';
 import { ingestResult } from '../../feeds/ingest.js';
-import { beginFeedFetch, feedForJob, heldSeries } from '../../feeds/store.js';
+import { beginFeedFetch, feedForJob, takeFeedFetch } from '../../feeds/store.js';
 import { defineHandler } from '../registry.js';
 import { feedFetcher, type FetchRequestMessage, sendToQueue } from '../transport.js';
 
@@ -34,9 +41,25 @@ export const feedFetchHandler = defineHandler({
 		if (!feed || !feed.enabled) return;
 		const today = utcToday();
 		const window = fetchWindow(feed.source, feed.config, feed.lastDataDate, today, feed.readThrough, feed.finalThrough);
-		// A CHIRPS sat fetch needn't re-read the preliminary days the series it merges into already holds (fetchChirps); rnl has none.
-		const held = feed.source === 'chirps' && chirpsProduct(feed.config) === 'sat' ? heldThrough(feed.source, window, await heldSeries(db, feed, window)) : undefined;
-		const request = { source: feed.source, config: feed.config, ...window, today, ...(held ? { heldThrough: held } : {}) };
+		const request: FetchRequest = { source: feed.source, config: feed.config, ...window, today };
+		if (feed.source === 'chirps') {
+			const product = chirpsProduct(feed.config);
+			const cells = uniqueCells(gridCells(feed.config as GridConfig));
+			const plan = planFetch(cells, await readCellCache(db, cacheOrigin(), product, cells, window), window);
+			if (!plan) {
+				// The cache holds every day the window can use, final: no fetch. In
+				// production this still counts as the feed's newest fetch, so a late
+				// answer to an older one is dropped (feed-ingest.ts).
+				if (feedFetcher() === 'sqs') {
+					await beginFeedFetch(db, feed.id, job.id, window);
+					await takeFeedFetch(db, feed.id, job.id);
+				}
+				const fromCache: CellsResult = { ok: true, cells: { product, startDate: window.start, read: '', cells: [], values: [] }, meta: { product } };
+				await ingestResult(db, feed, fromCache, window, { cacheOnly: true });
+				return;
+			}
+			request.cells = { cells: plan.cells.map((c): [number, number] => [c.row, c.col]), plan: plan.plan };
+		}
 		if (feedFetcher() === 'sqs') {
 			await beginFeedFetch(db, feed.id, job.id, window);
 			const message: FetchRequestMessage = { v: 1, type: 'fetch', fetchJobId: job.id, feedId: feed.id, feedVersion: feed.version, request };

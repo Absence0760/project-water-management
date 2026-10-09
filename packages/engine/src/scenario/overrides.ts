@@ -12,7 +12,7 @@ import {
 	DEMAND_OBJECT_SET_FIELDS,
 	LAND_COVER_SET_FIELDS,
 	NODE_SET_FIELDS,
-	SCALABLE_SERIES_KINDS,
+	scalableSeriesKey,
 	SERIES_SCALE_MAX,
 	SETTINGS_PATHS,
 	TRANSFER_SET_FIELDS,
@@ -807,7 +807,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			break;
 		}
 		case 'series.scale': {
-			const kind = allowed(SCALABLE_SERIES_KINDS, op.kind) ?? fail(`${String(op.kind)} can't be scaled`);
+			const kind = scalableSeriesKey(op.kind) ?? fail(`${String(op.kind)} can't be scaled`);
 			if (!(Number.isFinite(op.factor) && op.factor >= 0 && op.factor <= SERIES_SCALE_MAX)) fail(`factor must be 0–${SERIES_SCALE_MAX}`);
 			for (const k of ['from', 'to'] as const) if (op[k] !== undefined && !isIsoDate(op[k])) fail(`${k} must be an ISO date`);
 			const s = d.series[kind] ?? fail(`the base has no ${kind} series`);

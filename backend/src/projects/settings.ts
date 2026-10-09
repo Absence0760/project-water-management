@@ -35,6 +35,11 @@ import {
 	OBJECTIVES,
 	PE_SOURCE_MAX,
 	AREAL_RAIN_FACTOR_MAX,
+	MAP_MM_MAX,
+	MAP_MM_MIN,
+	UNIT_RAIN_MODES,
+	unitRainError,
+	unitRainFingerprintError,
 	AREAL_RAIN_FACTOR_MIN,
 	AREAL_RAIN_METHODS,
 	resolveFitRecord,
@@ -185,7 +190,7 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * is the daily outlet EWR's source (engine ≥ 1.77.0, issue #455): its tables
  * are one set, entered together.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'chirpsQuantileMap', 'calibrationRules', 'evidenceUncertaintyRule', 'droughtRestriction', 'ewrHeadline', 'ewrDailySource', 'unitRain']);
 
 /**
  * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
@@ -539,6 +544,27 @@ const ArealRain = z
 	.strict();
 
 /**
+ * settings.unitRain (issue #482, docs/model.md §2.4h): whether each land unit
+ * runs GR4J on its own rain (`perUnit`) or the catchment's (`catchment`,
+ * like absent or null), the catchment gauge's own MAP with its source, and the
+ * period a unit's CHIRPS MAP factor is computed over (null/absent = 1991–2020).
+ * Replaced whole on a patch. The engine's unitRainError applies the same rules
+ * to a stored value, and here too, so the form, the save and the run agree.
+ */
+export const UnitRain = z
+	.object({
+		mode: z.enum(UNIT_RAIN_MODES),
+		gaugeMapMm: z.number().finite().min(MAP_MM_MIN).max(MAP_MM_MAX).nullable().optional(),
+		gaugeMapSource: z.string().trim().max(PE_SOURCE_MAX).nullable().optional(),
+		mapPeriod: z.object({ start: isoDate, end: isoDate }).strict().nullable().optional()
+	})
+	.strict()
+	.superRefine((v, ctx) => {
+		const err = unitRainError(v);
+		if (err) ctx.addIssue({ code: 'custom', message: `unit rain: ${err}` });
+	});
+
+/**
  * settings.chirpsQuantileMap (engine ≥ 1.53.0, CR-23, docs/model.md §2.4b
  * *Quantile map*): the CHIRPS gap fill's wet-day threshold; null = off.
  * Replaced whole on a patch. The engine's chirpsQuantileMapError applies the
@@ -869,7 +895,15 @@ export const FitRecord = z
 					.nullable()
 					.optional(),
 				// Engine ≥ 1.20.0 (issue #66): the data-quality rain-check limits the fit ran under. Optional, as above; absent = the defaults.
-				rainChecks: RainChecks.strict().optional()
+				rainChecks: RainChecks.strict().optional(),
+				// Engine ≥ 1.78.0 (issue #482): runoff from each unit's own rain, recorded only when on. Optional, as above; absent = catchment rain.
+				unitRain: z
+					.unknown()
+					.superRefine((v, ctx) => {
+						const err = unitRainFingerprintError(v);
+						if (err) ctx.addIssue({ code: 'custom', message: `unit rain fingerprint: ${err}` });
+					})
+					.optional()
 			})
 			.strict()
 			.optional(),
@@ -944,6 +978,8 @@ export const SettingsPatch = z
 		pe: PeInput,
 		// The areal rainfall correction on GR4J's rain (engine ≥ 1.13.0, project.ts ArealRain); replaced whole, null = none.
 		arealRain: ArealRain.nullable(),
+		// Rain for each land unit (issue #482, project.ts UnitRainSettings); replaced whole, null = the catchment's rain.
+		unitRain: UnitRain.nullable(),
 		// Where the pan-coefficient row came from (engine ≥ 0.31.1): free text, provenance only; '' = none.
 		panCoefficientSource: z.string().trim().max(PE_SOURCE_MAX),
 		chirpsBiasCorrection: z.enum(CHIRPS_BIAS_MODES),

@@ -20,8 +20,8 @@
 // (geo/evaporationRoutes.ts). The repo ships an invented grid
 // (`dataset: 'synthetic'`); a proposal from it says so.
 import type { Db } from '../db/tx.js';
-import type { Geometry, Position } from './geojson.js';
-import { cellAreaM2, cellSpan, gridShares } from './gridShares.js';
+import type { Geometry } from './geojson.js';
+import { cellAreaM2, cellSpan, gridShares, toGrid } from './gridShares.js';
 
 /** The label the committed fixture loads under; a proposal from it is marked synthetic. */
 export const SYNTHETIC_EVAPORATION_DATASET = 'synthetic';
@@ -111,14 +111,6 @@ export interface EvaporationSummary {
 export type EvaporationResult = EvaporationSummary | { problem: string };
 
 type Grid = Pick<EvaporationDataset, 'cellDeg' | 'originLon' | 'originLat'>;
-
-/** The geometry moved by (−originLon, −originLat), so the grid's cells have their corners on whole multiples of cellDeg. */
-function toGrid(g: Geometry, grid: Grid): Geometry {
-	const shift = ([x, y]: Position): Position => [x - grid.originLon, y - grid.originLat];
-	if (g.type === 'Polygon') return { type: 'Polygon', coordinates: g.coordinates.map((ring) => ring.map(shift)) };
-	if (g.type === 'MultiPolygon') return { type: 'MultiPolygon', coordinates: g.coordinates.map((rings) => rings.map((ring) => ring.map(shift))) };
-	return g;
-}
 
 /** The grid rows and columns a polygon spans, in the grid's own frame; null with no area. */
 export function evaporationExtent(g: Geometry, grid: Grid): { rows: [number, number]; cols: [number, number] } | null {
