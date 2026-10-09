@@ -251,7 +251,7 @@ test('only a team admin turns two-step sign-in on for the team; a member reads w
 	await colleague.page.goto(`/teams/${team.id}`);
 	const theirs = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Two-step sign-in' });
 	await expect(theirs).toContainText('Require two-step sign-in On');
-	await expect(theirs).toContainText('Only owners can change it.');
+	await expect(theirs).toContainText('Only admins can change it.');
 	await expect(theirs.getByRole('switch')).toHaveCount(0);
 });
 
@@ -354,7 +354,7 @@ test('an admin sets the privacy contact; a member reads it; a farmer finds it fr
 	await colleague.page.goto(`/teams/${team.id}`);
 	panel = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Privacy contact' });
 	await expect(panel).toContainText('Information Officer, io@contact-board.example');
-	await expect(panel).toContainText('Only owners can change it.');
+	await expect(panel).toContainText('Only admins can change it.');
 	await expect(panel.getByRole('button', { name: 'Save contact' })).toHaveCount(0);
 
 	// A farmer of a team catchment: Menu → Who decides about your farm's information.

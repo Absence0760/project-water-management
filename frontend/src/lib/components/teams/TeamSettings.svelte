@@ -267,9 +267,9 @@
 			<p class="small">
 				{team.privacyContact.name}, {team.privacyContact.email}{#if team.privacyContact.postal}<br />{team.privacyContact.postal}{/if}
 			</p>
-			<p class="muted small">Only owners can change it.</p>
+			<p class="muted small">Only admins can change it.</p>
 		{:else}
-			<p class="muted small">Not set yet. Only owners can set it.</p>
+			<p class="muted small">Not set yet. Only admins can set it.</p>
 		{/if}
 	</section>
 

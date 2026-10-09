@@ -73,7 +73,7 @@
 	{#if inherited}<p class="small" data-testid="two-step-inherited">{inherited}</p>{/if}
 	<p class="muted small">{ALWAYS_TEXT}</p>
 	{#if hint}<p class="muted small" data-testid="two-step-hint">{hint}</p>{/if}
-	{#if !canChange}<p class="muted small">Only owners can change it.</p>{/if}
+	{#if !canChange}<p class="muted small">Only {scope === 'team' ? 'admins' : 'owners'} can change it.</p>{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<p class="muted small saved" role="status">{saved ?? ''}</p>
 </div>
