@@ -968,6 +968,38 @@ export function arealRainError(raw: unknown): string | null {
 	return null;
 }
 
+/** The bounds on a MAP, mm/year (a unit's or the gauge's, issue #482): above any South African or CHIRPS-domain record, never 0. */
+export const MAP_MM_MIN = 1;
+export const MAP_MM_MAX = 12_000;
+
+/** Why a MAP (with its source) can't be used, or null; null/absent MAP is fine (none). */
+export function mapMmError(mapMm: unknown, source: unknown): string | null {
+	if (mapMm === null || mapMm === undefined) return null;
+	if (!(typeof mapMm === 'number' && Number.isFinite(mapMm) && mapMm >= MAP_MM_MIN && mapMm <= MAP_MM_MAX)) return `MAP must be a number from ${MAP_MM_MIN} to ${MAP_MM_MAX} mm`;
+	if (typeof source !== 'string' || !source.trim()) return 'a MAP needs its source';
+	if (source.length > PE_SOURCE_MAX) return `MAP source longer than ${PE_SOURCE_MAX} characters`;
+	return null;
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Why a stored settings.unitRain can't be used, or null (absent and null are fine: catchment rain). The API applies the same rules. */
+export function unitRainError(raw: unknown): string | null {
+	if (raw === null || raw === undefined) return null;
+	if (typeof raw !== 'object' || Array.isArray(raw)) return 'not a unit rain setting';
+	const r = raw as { mode?: unknown; gaugeMapMm?: unknown; gaugeMapSource?: unknown; mapPeriod?: unknown };
+	if (!(UNIT_RAIN_MODES as readonly unknown[]).includes(r.mode)) return `mode must be one of ${UNIT_RAIN_MODES.join(', ')}`;
+	const gauge = mapMmError(r.gaugeMapMm, r.gaugeMapSource);
+	if (gauge) return `gauge ${gauge}`;
+	if (r.mapPeriod !== null && r.mapPeriod !== undefined) {
+		const p = r.mapPeriod as { start?: unknown; end?: unknown };
+		if (typeof p !== 'object' || typeof p.start !== 'string' || typeof p.end !== 'string' || !ISO_DAY.test(p.start) || !ISO_DAY.test(p.end) || Number.isNaN(Date.parse(p.start)) || Number.isNaN(Date.parse(p.end)))
+			return 'the MAP period needs a start and an end date (YYYY-MM-DD)';
+		if (Date.parse(p.end) - Date.parse(p.start) < 364 * 86_400_000) return 'the MAP period must cover at least a year';
+	}
+	return null;
+}
+
 /**
  * A stored `arealRain` as the engine runs it: absent, null or unusable (with a
  * warning) = none. A correction whose factors are all 1 is kept (it records
