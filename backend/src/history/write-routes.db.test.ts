@@ -966,8 +966,10 @@ describe('every write route records its change', () => {
 
 	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render) and its re-run (pack_reproduce, 154_pack_reproduce); nothing here runs them, so no later file's tick may claim them.
 	// Issuing and withdrawing it also queue its emails (pack_notice, 133): settled here, or the next file's tick sends them into its outbox.
+	// The feed routes (from-boundary, from-units) leave enabled feeds behind, due at once: switched off here, with any fetch they queued, or the next file's tick schedules them.
 	afterAll(async () => {
-		await retirePendingJobs(ctx.packProjectId as string | undefined);
+		await asOwner('UPDATE data_feed SET enabled = false WHERE project_id = ANY($1::uuid[])', [[ctx.projectId, ctx.packProjectId].filter(Boolean)]);
+		await retirePendingJobs(ctx.projectId as string | undefined, ctx.packProjectId as string | undefined);
 		await settlePendingNotices(ctx.packProjectId as string | undefined);
 	});
 
