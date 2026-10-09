@@ -22,7 +22,7 @@ import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/l
 import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@water-management/engine';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
@@ -95,6 +95,35 @@ async function enrolledUser(n: string) {
 	const key = base32Decode((await ok(u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' }))).secret)!;
 	await ok(u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(key, totpStep(Date.now())) }));
 	return { u, key };
+}
+/** The sign-in challenge cookie (`wm_mfa`) a right password buys an account with a second factor. */
+async function challengeOf(u: { email: string }): Promise<string> {
+	const login = await app.request('/auth/login', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json', origin: ORIGIN },
+		body: JSON.stringify({ email: u.email, password: 'correct horse' })
+	});
+	return login.headers.getSetCookie().find((c) => c.startsWith('wm_mfa='))!.split(';')[0]!;
+}
+/** The six-digit code in the newest email to `to` (auth/mfa-email.db.test.ts codeIn). */
+function emailCodeIn(to: string): string {
+	const m = lastMailTo(to)?.text.match(/^(\d{6})$/m);
+	if (!m) throw new Error(`no code in the newest email to ${to}`);
+	return m[1]!;
+}
+/** A fresh account with codes by email on, past the minute between sends so the next send goes. */
+async function emailEnrolledUser(n: string) {
+	const u = await freshUser(n);
+	await ok(u.call('POST', '/auth/mfa/email/enrol', { password: 'correct horse' }));
+	await ok(u.call('POST', '/auth/mfa/email/confirm', { code: emailCodeIn(u.email) }));
+	await asOwner(`UPDATE mfa_email_send SET sent_at = sent_at - interval '2 minutes' WHERE user_id = $1`, [u.id]);
+	return u;
+}
+/** A fresh account with an authenticator, and the confirmation link's token of a self-service reset it asked for. */
+async function resetAsked(n: string) {
+	const { u } = await enrolledUser(n);
+	await ok(anon('POST', '/auth/mfa/reset', undefined, await challengeOf(u)));
+	return { u, token: tokenIn(lastMailTo(u.email)) };
 }
 const at = () => `/projects/${ctx.projectId}`;
 const ok = async (r: Promise<{ status: number; body: any }>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -254,6 +283,36 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		});
 		const challenge = login.headers.getSetCookie().find((c) => c.startsWith('wm_mfa='))!.split(';')[0]!;
 		return { as: null, headers: { cookie: challenge }, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
+	// Codes by email (206): a fresh account each time, its code read from the email it was sent.
+	'POST /auth/mfa/email/enrol': async () => ({ as: await freshUser('Memailenrol'), body: { password: 'correct horse' } }),
+	'POST /auth/mfa/email/confirm': async () => {
+		const u = await freshUser('Memailconfirm');
+		await ok(u.call('POST', '/auth/mfa/email/enrol', { password: 'correct horse' }));
+		return { as: u, body: { code: emailCodeIn(u.email) } };
+	},
+	'POST /auth/mfa/email/send': async () => ({ as: await emailEnrolledUser('Memailsend') }),
+	// The sign-in step's "Email me a code": the challenge cookie is the credential.
+	'POST /auth/mfa/challenge/email': async () => {
+		const u = await emailEnrolledUser('Memailchallenge');
+		return { as: null, headers: { cookie: await challengeOf(u) } };
+	},
+	// The self-service reset of a lost factor (205): asked with the challenge, confirmed and cancelled with the emailed links' tokens.
+	'POST /auth/mfa/reset': async () => {
+		const { u } = await enrolledUser('Mresetask');
+		return { as: null, headers: { cookie: await challengeOf(u) } };
+	},
+	'POST /auth/mfa/reset/confirm': async () => ({ as: null, body: { token: (await resetAsked('Mresetconfirm')).token } }),
+	'POST /auth/mfa/reset/cancel': async () => {
+		const { u, token } = await resetAsked('Mresetcancel');
+		await ok(anon('POST', '/auth/mfa/reset/confirm', { token }));
+		return { as: null, body: { token: tokenIn(lastMailTo(u.email)) } };
+	},
+	// A team admin (the owner) removes an enrolled member's factor: a fresh member each time, as it is removed once.
+	'POST /teams/:id/members/:userId/mfa-reset': async () => {
+		const { u } = await enrolledUser('Mteamreset');
+		await ok(ctx.owner.call('POST', `/teams/${ctx.teamId}/members`, { email: u.email, role: 'member' }));
+		return { params: { id: ctx.teamId, userId: u.id } };
 	},
 	'POST /auth/render-session': async () => ({ as: null, body: { token: await withUser(ctx.owner.id, (d) => issueRenderToken(d, ctx.projectId, ctx.runId)) } }),
 	'POST /alerts/unsubscribe': async () => {

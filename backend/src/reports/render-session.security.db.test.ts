@@ -42,6 +42,9 @@ const READS: Record<string, { why: string; query?: string }> = {
 	'GET /projects/:id/runs/:runId/publication': { why: 'the cover’s published-by line and notice, and the changes since the previous publication' }
 };
 
+/** The routes whose credential is the sign-in challenge cookie (auth/mfa-routes.ts, auth/mfa-reset-routes.ts). */
+const CHALLENGE_GATED = new Set(['POST /auth/mfa/verify', 'POST /auth/mfa/challenge/email', 'POST /auth/mfa/reset']);
+
 const routes = [
 	...new Set(app.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS').map((r) => `${r.method} ${r.path}`))
 ];
@@ -129,11 +132,23 @@ describe('a render session, over every route', () => {
 		// takes its own credential, so the session cookie adds nothing there.
 		const refused: string[] = [];
 		const publicRoutes: string[] = [];
+		const challengeGated: string[] = [];
 		for (const route of routes) {
 			if (READS[route]) continue;
 			const method = route.slice(0, route.indexOf(' '));
 			const path = fill(route, projectId, runId);
 			const signedOut = await as(null, method, path);
+			// The sign-in step's routes (public, routes.test.ts): their credential is the challenge cookie a right
+			// password buys (wm_mfa), and they never read a session, so the render session's cookie must change
+			// nothing: the same refusal as signed out, whatever it is (401 without the challenge; 400 for a body
+			// that fails validation first).
+			if (CHALLENGE_GATED.has(route)) {
+				const res = await as(cookie!, method, path);
+				expect(res, route).toEqual(signedOut);
+				expect([400, 401], route).toContain(res.status);
+				challengeGated.push(route);
+				continue;
+			}
 			if (signedOut.status !== 401) {
 				publicRoutes.push(route);
 				continue;
@@ -147,6 +162,7 @@ describe('a render session, over every route', () => {
 			}
 			refused.push(route);
 		}
+		expect(challengeGated.sort()).toEqual([...CHALLENGE_GATED].sort());
 		// The sweep reached the API, not a handful of routes.
 		expect(refused.length).toBeGreaterThan(100);
 		expect(refused).toEqual(expect.arrayContaining(['DELETE /projects/:id', 'GET /projects/:id/runs', 'GET /projects/:id/runs/:runId/export/daily.csv', 'GET /projects/:id/runs/:runId/allocations', 'POST /auth/logout-everywhere', 'GET /auth/me/export']));
