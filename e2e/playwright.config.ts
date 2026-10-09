@@ -108,7 +108,7 @@ export default defineConfig({
 			}
 		},
 		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the
-		// same database: mfa-required.spec.ts and mfa-reset-mailpit.spec.ts send the browser's API calls here, so a
+		// same database: mfa-required.spec.ts, mfa-email-mailpit.spec.ts and mfa-reset-mailpit.spec.ts send the browser's API calls here, so a
 		// real server refuses turning a project's requirement on and the page meets the real 403 (the requirement
 		// itself: backend/src/auth/stepUp.db.test.ts).
 		{
