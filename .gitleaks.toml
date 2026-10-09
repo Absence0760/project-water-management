@@ -14,7 +14,9 @@ regexes = [
   '''^0123456789abcdef0123456789abcdef0123456789abcdef$''',
   '''^abcdef0123456789abcdef0123456789abcdef01234567$''',
   '''^fedcba9876543210fedcba9876543210fedcba9876543210$''',
-  '''^-----BEGIN PRIVATE KEY-----\\ntestonlynotakey\\n-----END PRIVATE KEY-----$''',
+  # No trailing $: private-key's match runs on past this fake key into the public-key block the
+  # report-download tests put below it (found by the 2026-10-05 weekly sweep, issue #435).
+  '''^-----BEGIN PRIVATE KEY-----\\ntestonlynotakey\\n-----END PRIVATE KEY-----''',
   # Two-step sign-in (issue #282), reviewed 2026-10-01: the too-short key the guardrails test expects refused,
   # the fake sops value in infra/scripts (tf-stubs/sops.mjs, tf.test.mjs), and the RFC 6238 test seed
   # "12345678901234567890" in base32 (backend/src/auth/totp.test.ts).
@@ -28,4 +30,21 @@ regexes = [
   # in frontend/src/lib/components/supply/UnitResultsTable.svelte's column list when its lines gained a help key.
   '''^avgSuppliedM3Day$''',
   '''^avgDeficitM3Day$''',
+  # The full-history sweep's findings once the repo's history was recreated (2026-09-28): .gitleaksignore pinned
+  # these by commit, and every commit changed. Reviewed 2026-10-09 (issue #435): fake values in tests and
+  # infra/scripts, and field or element names after "key:".
+  '''^synthetic-jwt-0123456789abcdef0123456789abcdef$''',
+  '''^a-test-edge-secret-of-enough-length-000$''',
+  '''^abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234$''',
+  '''^wr2012-penalty$''',
+  '''^suppliedM3Day$''',
+  '''^ewrShortfallM3Day$''',
+  '''^damOutletCapacityM3Day$''',
+  '''^divertCapacityM3Day$''',
+  '''^calibration\.catchmentAreaKm2$''',
+  # Pinned in .gitleaksignore by line, which drifts as the files grow: two water-account field names in
+  # reliability.ts, and the self-check's `s.avgRiverAbstractionM3Day` that vault-service-token reads as a token.
+  '''^consumptiveIrrigationM3$''',
+  '''^damEvaporationM3$''',
+  '''^s\.avgRiverAbstractionM3Day$''',
 ]
