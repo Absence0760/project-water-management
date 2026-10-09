@@ -158,6 +158,7 @@ import type {
 	MapImportReviewed,
 	MapLinkedNodes,
 	QuaternaryLookup,
+	MapGridLayer,
 	QuaternaryLayer,
 	RiverLayer,
 	GaugeStationLookup,
@@ -1129,6 +1130,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
 			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
 				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default), for the map's MAP grid layer. */
+			mapGrid: (id: string, bbox: readonly [number, number, number, number], dataset?: string | null) =>
+				request<MapGridLayer>('GET', `${p(id)}/map/map-grid?${new URLSearchParams({ bbox: bbox.join(','), ...(dataset ? { dataset } : {}) })}`),
 			/** The river network's reaches whose box meets `bbox` (at most 2° a side), biggest first, for the map's layer (issue #345). */
 			rivers: (id: string, bbox: readonly [number, number, number, number]) =>
 				request<RiverLayer>('GET', `${p(id)}/map/rivers?${new URLSearchParams({ bbox: bbox.join(',') })}`),

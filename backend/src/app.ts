@@ -26,6 +26,7 @@ import { feedFromUnitsRoutes } from './feeds/fromUnits.js';
 import { feedRoutes } from './feeds/routes.js';
 import { MAP_IMPORT_PATH, mapRoutes } from './geo/routes.js';
 import { quaternaryLayerRoutes } from './geo/quaternaryLayer.js';
+import { rainMapRoutes } from './geo/rainMapRoutes.js';
 import { stationRoutes } from './geo/stationRoutes.js';
 import { riverRoutes } from './geo/rivers.js';
 import { croplandRoutes } from './geo/croplandRoutes.js';
@@ -197,6 +198,7 @@ export function createApp() {
 	projects.route('/', feedFromUnitsRoutes);
 	projects.route('/', mapRoutes);
 	projects.route('/', quaternaryLayerRoutes);
+	projects.route('/', rainMapRoutes);
 	projects.route('/', stationRoutes);
 	projects.route('/', riverRoutes);
 	projects.route('/', damRoutes);
