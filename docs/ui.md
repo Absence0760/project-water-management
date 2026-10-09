@@ -6033,7 +6033,9 @@ part of the Settings tab's chunk; WP-2.10,
   (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01"
   (`history/timeline.ts`). A unit's feed card reads "3 cells of a
   unit's parcel (12.35 km²), area weighted" (`describePlace`). Opens at
-  once on `?rain=units`. Tested by `e2e/tests/unit-rain.spec.ts`.
+  once on `?rain=units`. Tested by `e2e/tests/unit-rain.spec.ts`, and
+  end to end (the unit feeds fetched offline, the units' MAPs, the switch, a
+  run's Rain for each unit) by `e2e/tests/unit-rain-run.spec.ts`.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment

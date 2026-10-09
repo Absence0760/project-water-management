@@ -981,7 +981,8 @@ unit, averaged over the unit's own polygon, so that under
   units share cells, so their raw CHIRPS is nearly the same: the differences
   between units come from each unit's MAP (`node.mapMm`, with its source).
 - **Local-first.** With `FEED_SOURCE=fixtures` a unit inside the fixtures'
-  cover fetches offline (`fromUnits.db.test.ts`).
+  cover fetches offline (`fromUnits.db.test.ts`); `runs/unitRain.db.test.ts`
+  takes the fetched feeds through a per-unit run and a calibration's fit record.
 
 ## Quaternary lookup
 
