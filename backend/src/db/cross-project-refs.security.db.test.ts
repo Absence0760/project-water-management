@@ -147,7 +147,8 @@ async function world(name: string): Promise<World> {
 		const one = async (sql: string, params: unknown[]) => (await q(`${sql} RETURNING id::text`, params))[0]!.id as string;
 		const job = (kind: string) => one(`INSERT INTO job (project_id, kind, payload, status, finished_at, acting_user_id) VALUES ($1, $2, '{}', 'done', now(), $3)`, [projectId, kind, u]);
 		return {
-			feedId: await one(`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, acting_user_id, created_by) VALUES ($1, 'chirps', '{}', 'rain_catchment_mm', 'feed', $2, $2)`, [projectId, u]),
+			// Switched off: only a reference target, and an enabled feed (due at once, with no cells) would be scheduled by a later file's tick and fail there.
+			feedId: await one(`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled, acting_user_id, created_by) VALUES ($1, 'chirps', '{}', 'rain_catchment_mm', 'feed', false, $2, $2)`, [projectId, u]),
 			publicationId: await one('INSERT INTO run_publication (project_id, run_id, published_by) VALUES ($1, $2, $3)', [projectId, runId, u]),
 			inviteId: await one(`INSERT INTO invite (email, project_id, project_role, invited_by, token_hash, expires_at) VALUES ($1, $2, 'farmer', $3, $4, now() + interval '7 days')`, [
 				`invitee-${randomUUID()}@example.com`,
