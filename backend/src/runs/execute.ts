@@ -19,8 +19,11 @@ import {
 	seriesOrigin,
 	type SeriesOrigin,
 	type SeriesProvenance,
+	type UnitRainKind,
+	unitRainSeriesKey,
 	withoutForecastTail
 } from '@water-management/engine';
+import { isUnitRainKind } from '../series/site.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -65,7 +68,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	}>(
 		// The outlet's: the first of each kind among the series with no site. A gauge node's own
 		// flow records (084_gauge_records): the first of each kind per site, keyed `<kind>@<node id>`
-		// (engine gaugeSeriesKey), which only the plausibility checks read.
+		// (engine gaugeSeriesKey), which only the plausibility checks read. A land unit's own rain likewise (209).
 		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id,
 			source, source_unit, source_unit_factor
 		 FROM time_series WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name`,
@@ -74,7 +77,14 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	const series: ModelInput['series'] = {};
 	const seriesIds: InputSeriesIds = {};
 	for (const r of s) {
-		const key = r.site_node_id === null ? r.kind : gaugeSeriesKey(r.kind as CalibrationFlowKind, r.site_node_id);
+		// A land unit's own rain (209_unit_rain_series, issue #482): `<kind>@<unit id>` (engine unitRainSeriesKey), which
+		// only settings.unitRain `perUnit` reads. The site CHECK allows no other kind a site.
+		const key =
+			r.site_node_id === null
+				? r.kind
+				: isUnitRainKind(r.kind)
+					? unitRainSeriesKey(r.kind as UnitRainKind, r.site_node_id)
+					: gaugeSeriesKey(r.kind as CalibrationFlowKind, r.site_node_id);
 		seriesIds[key] = r.id;
 		// The product and version (032_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;

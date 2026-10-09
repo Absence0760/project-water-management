@@ -2860,6 +2860,60 @@ export interface DemGridLayer {
 	max: number;
 }
 
+/** A land unit, by its node. */
+export interface UnitRef {
+	nodeId: string;
+	name: string;
+}
+
+/** A unit's MAP from the chosen grid (GET …/map/unit-map). */
+export interface UnitMapUnit extends UnitRef {
+	featureId: string;
+	/** The area-weighted MAP over the unit's parcel, whole mm/yr. */
+	mapMm: number;
+	/** How many grid cells with a value the parcel touches. */
+	cells: number;
+	/** The share of the parcel with values, 0–1. */
+	coveredShare: number;
+	/** What the unit's form holds now. */
+	current: { mapMm: number | null; mapSource: string | null };
+	/** The unit already holds this MAP from this grid. */
+	same: boolean;
+}
+
+/** A loaded MAP grid and how many of the units it covers. */
+export interface UnitMapCandidate {
+	label: string;
+	version: string;
+	cellDeg: number;
+	synthetic: boolean;
+	covered: number;
+	missing: UnitRef[];
+}
+
+/** Each unit's MAP from one MAP grid (GET /projects/:id/map/unit-map; docs/maps.md § MAP for each unit). */
+export interface UnitMapProposal {
+	/** The grid proposed: the one asked for, else the first (real before synthetic, finest first) covering every unit, else the one covering the most; null with none covering any. */
+	dataset: { label: string; version: string; source: string; attribution: string; cellDeg: number; synthetic: boolean } | null;
+	coversAll: boolean;
+	units: UnitMapUnit[];
+	/** Units with a polygon the grid doesn't cover: never filled from another grid. */
+	uncovered: (UnitRef & { coveredShare: number; reason: string })[];
+	withoutPolygon: UnitRef[];
+	refused: (UnitRef & { reason: string })[];
+	/** Units outside this proposal whose MAP came from another grid: an apply is refused (grid_mixed) until they are cleared. */
+	otherGrid: (UnitRef & { mapSource: string })[];
+	candidates: UnitMapCandidate[];
+}
+
+/** What POST …/map/unit-map wrote. */
+export interface UnitMapApplied {
+	dataset: string;
+	units: { nodeId: string; mapMm: number; mapSource: string }[];
+	changed: number;
+	revisionId: string | null;
+}
+
 /** A reach of the loaded river network (GET …/map/rivers, issue #345). */
 export interface RiverReach {
 	dataset: string;
@@ -3386,4 +3440,57 @@ export interface DelineationRequest {
 	refusal: { reason: string; message: string; larger?: LargerChannel } | null;
 	createdAt: string;
 	finishedAt: string | null;
+}
+
+/** CHIRPS v3's two daily products a unit rain feed reads (backend feeds/config.ts CHIRPS_DAILY_PRODUCTS). */
+export type UnitRainProduct = 'sat' | 'rnl';
+
+/**
+ * One land unit in GET …/feeds/chirps/from-units (issue #482, docs/api.md § Data feeds): its
+ * delineated parcel (`map_feature.node_id`), the CHIRPS cells it covers (exact clipped overlap
+ * × cos latitude, `share` = the part of the cell inside the parcel), and its own feed, if any.
+ */
+export interface UnitRainProposalUnit {
+	nodeId: string;
+	name: string;
+	featureId: string;
+	areaKm2: number;
+	cells: { lat: number; lon: number; share: number; weight: number }[];
+	/** The CHIRPS feed into this unit's rain_chirps_mm series, or null before Create. */
+	feedId: string | null;
+	/** Days that series holds (0 before the first fetch). */
+	seriesDays: number;
+	/** What POST does for it: make its feed, give its (still empty) feed these cells or this product, or nothing (it reads them already). */
+	action: 'create' | 'update' | 'none';
+}
+
+/** GET …/feeds/chirps/from-units: every land unit's proposal, and the units it can't propose for. */
+export interface UnitRainProposal {
+	/** The product the unit feeds read (or would read). */
+	product: UnitRainProduct;
+	units: UnitRainProposalUnit[];
+	/** Land units with no parcel linked on the map. */
+	withoutPolygon: { nodeId: string; name: string }[];
+	/** Land units the server can't set up, and why (in words): several parcels, a parcel changed after its feed fetched, a series in the way. */
+	refused: { nodeId: string; name: string; reason: string }[];
+	/** Whether this caller may POST: feeds are set up by owners (data_feed's RLS); editors see the proposal. */
+	canApply: boolean;
+	/** The most feeds the project can have, the catchment's included (backend feeds/routes.ts MAX_FEEDS): the server's, so the UI never keeps its own copy. */
+	maxFeeds: number;
+}
+
+/** POST …/feeds/chirps/from-units body: the product (absent: the units' feeds' own, else rnl from 1981), the first day (absent: the product's first), and the units (absent: every proposed one). */
+export interface UnitRainApplyBody {
+	product?: UnitRainProduct;
+	startDate?: string;
+	nodeIds?: string[];
+}
+
+/** POST …/feeds/chirps/from-units answer: the feeds made and changed, one per unit. */
+export interface UnitRainApplyResult {
+	created: number;
+	updated: number;
+	feeds: { nodeId: string; feedId: string }[];
+	/** The units left out (refused, or with no parcel), and why. */
+	skipped?: { nodeId: string; name: string; reason: string }[];
 }

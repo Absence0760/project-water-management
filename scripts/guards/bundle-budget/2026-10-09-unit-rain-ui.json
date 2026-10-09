@@ -1,0 +1,4 @@
+{
+	"addKb": 14,
+	"why": "Issue #482 part D, rain for each hydrological unit: the Data feeds Rain for each unit panel (feeds/UnitRain.svelte, in the feeds chunk), the Settings group (settings/UnitRainFields.svelte, its own chunk), the run results panel (runs/UnitRainPanel.svelte, its own chunk), the unit MAP fields in the node form, the History line, the report row and the help tips, articles and guide step. Measured 1854 KB on origin/feat/unit-rain-types @ 0004f4df7 (main + #483, no frontend change in #484) and 1868 KB on the branch (+14 KB). Settings tab chunk 58 of 60 KB."
+}

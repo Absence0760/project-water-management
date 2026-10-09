@@ -22,8 +22,9 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 import { app, asOwner, signUp } from '../__tests__/helpers.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
-import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, utcToday } from './fetch.js';
-import { FIXTURE_CELL } from './fixtures.js';
+import { parseFetchRequest } from '../jobs/transport.js';
+import { CHIRPS_REVISION_DAYS, FEED_META_MAX_BYTES, runFetch, utcToday } from './fetch.js';
+import { FIXTURE_CELL, fixtureHttp } from './fixtures.js';
 import { MAX_FEEDS, RUN_NOW_RATE, runNowWait } from './routes.js';
 import { acceptIngestResult, scheduleDueFeeds } from './schedule.js';
 import { ingestResult } from './ingest.js';
@@ -37,6 +38,8 @@ afterEach(async () => {
 	vi.restoreAllMocks();
 	await asOwner('DELETE FROM data_feed');
 	await asOwner(`DELETE FROM job WHERE kind IN ('feed_fetch', 'feed_ingest')`);
+	// The shared cell cache (208) outlives a feed: each test starts from an empty one, as a new place would.
+	await asOwner('DELETE FROM chirps_cell_year');
 });
 
 const cell = () => ({ ...FIXTURE_CELL(), weight: 1 });
@@ -587,6 +590,22 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		const m = await runFetchJob();
 		return { owner, pid, feedId, jobId: m.fetchJobId, version: m.feedVersion, window: { start: m.request.start, end: m.request.end } };
 	}
+	/**
+	 * The production loop, on the fixtures: the fetch job sends its request,
+	 * the fetcher answers it from the fixture files as lambda-fetcher.ts would
+	 * (the request parsed off the queue, then runFetch), and the answer is
+	 * ingested. The cell cache it fills is the live one (origin chc), as
+	 * production's always is.
+	 */
+	async function fetchViaFetcher(): Promise<FetchMsg> {
+		const m = await runFetchJob();
+		const req = parseFetchRequest(JSON.stringify(m));
+		if (!req) throw new Error('the fetch job sent a request the fetcher would refuse');
+		const result = await runFetch(req.request, fixtureHttp());
+		expect(await acceptIngestResult({ v: 1, type: 'ingest', fetchJobId: m.fetchJobId, feedId: m.feedId, feedVersion: m.feedVersion, result })).toBe('queued');
+		expect((await tick()).done).toBe(1);
+		return m;
+	}
 	/** Days from the first the fetch asked for. */
 	const result = (o: { window: { start: string } }, values: (number | null)[] = [1.5, null, 2.5]) => ({ ok: true, startDate: o.window.start, values, meta: { days: values.length } });
 	const msg = (o: { feedId: string; jobId: string; version: string }, r: unknown) => ({ v: 1 as const, type: 'ingest' as const, fetchJobId: o.jobId, feedId: o.feedId, feedVersion: o.version, result: r });
@@ -730,8 +749,9 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect((await feedRow(o.feedId)).last_meta).toMatchObject({ through: o.window.end, finalThrough: plus(o.window.start, 4) });
 		await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
 		const next = await runFetchJob();
-		// It says which of those days the feed holds (the newest), so their preliminary values aren't read again.
-		expect(next.request).toEqual(expect.objectContaining({ start: plus(o.window.start, 5), end: o.window.end, heldThrough: plus(o.window.start, 9) }));
+		// The answer filled no cell cache (it carried the mean, as a fetcher before 208 answered), so the plan reads every day.
+		expect(next.request).toMatchObject({ start: plus(o.window.start, 5), end: o.window.end, cells: { plan: expect.stringMatching(/^0+$/) } });
+		expect(next.request).not.toHaveProperty('heldThrough');
 		// That fetch finds nothing final: the marker it started after stands.
 		await acceptIngestResult(msg({ ...o, jobId: next.fetchJobId }, { ok: true, startDate: next.request.start, values: [6, 7], meta: { days: 2 } }));
 		await tick();
@@ -765,72 +785,76 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		const pid = await project(owner);
 		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-60) } }))).body.feed.id as string;
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await tick()).done).toBe(1); // inline, from the fixtures: final up to 40 days back, preliminary to 3
+		await fetchViaFetcher(); // through the fetcher, from the fixtures: final up to 40 days back, preliminary to 3
 		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { finalThrough: addDays(-40), prelimDays: 37 } });
 		const before = (await series(owner, pid, 'rain_chirps_mm'))!;
-		// The next inline fetch reads nothing it holds: the preliminary days stay as they are, still counted, and the newest day stands.
+		// The next fetch reads nothing the cell cache holds: the preliminary days come from it as they were, still counted, and the newest day stands.
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await tick()).done).toBe(1);
+		await fetchViaFetcher();
 		expect(await series(owner, pid, 'rain_chirps_mm')).toEqual(before);
-		expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: addDays(-3), last_meta: { days: 0, prelimDays: 37, finalThrough: addDays(-40) } });
+		expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_data_date: addDays(-3), last_meta: { days: 37, prelimDays: 37, finalThrough: addDays(-40), cellDaysRead: 0 } });
+		// The plan: the held preliminary days' final files only (2), and the two days not out yet (0).
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), end: addDays(-1), heldThrough: addDays(-3) });
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), end: addDays(-1), cells: { plan: `${'2'.repeat(37)}00` } });
 		// Another place: the marker says nothing about it (data_feed_stamp clears last_meta).
 		await owner.call('PATCH', `/projects/${pid}/feeds/${feedId}`, { config: { cells: [cell(), cell()], startDate: addDays(-60) } });
 		expect((await feedRow(feedId)).last_meta).toBeNull();
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-60), end: addDays(-1) });
+		// It reads from the start date again, but its cell is the same one: the cache gives the final days without reading them.
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-60), end: addDays(-1), cells: { plan: `${'1'.repeat(21)}${'2'.repeat(37)}00` } });
 	});
 
-	it('a hole in the series inside what the feed read is read again and filled: held days end at the first empty one', async () => {
+	it('a hole in the series inside what the feed read is filled again from the cell cache, without reading the day again', async () => {
 		const owner = await signUp('Holes');
 		const pid = await project(owner);
 		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-60) } }))).body.feed.id as string;
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await tick()).done).toBe(1);
+		await fetchViaFetcher();
 		const full = (await series(owner, pid, 'rain_chirps_mm'))!;
-		// Day -20 (preliminary on the fixtures) loses its value: the newest day is still -3, but -20 isn't held.
+		// Day -20 (preliminary on the fixtures) loses its value: the cell cache still holds it.
 		const i = 40;
 		expect(full.startDate).toBe(addDays(-60));
 		expect(full.values[i]).not.toBeNull();
 		await asOwner(`UPDATE time_series SET "values"[$2] = NULL WHERE project_id = $1 AND kind = 'rain_chirps_mm'`, [pid, i + 1]);
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), heldThrough: addDays(-21) });
-		// The inline fetch reads it again from the preliminary product and fills it.
+		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), cells: { plan: `${'2'.repeat(37)}00` } });
+		// The next fetch computes it from the cache and fills it.
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await tick()).done).toBe(1);
+		await fetchViaFetcher();
 		expect((await series(owner, pid, 'rain_chirps_mm'))!.values).toEqual(full.values);
 		expect(await feedRow(feedId)).toMatchObject({ last_data_date: addDays(-3), last_meta: { prelimDays: 37, finalThrough: addDays(-40) } });
 	});
 
-	it('an rnl feed never sends heldThrough: it has no preliminary days (positive control: a sat feed holding the same days does)', async () => {
+	it('the plan holds a preliminary day only for sat: rnl has none (and neither sends heldThrough, which went with the cell cache)', async () => {
 		for (const product of ['rnl', 'sat'] as const) {
-			const o = await fetchJob({ config: { cells: [cell()], product } });
-			// The first day final: the next window starts on the second, which the series holds.
-			await acceptIngestResult(msg(o, { ...result(o, [1, 2, 3]), meta: { days: 3, finalThrough: o.window.start } }));
-			await tick();
-			await o.owner.call('POST', `/projects/${o.pid}/feeds/${o.feedId}/run-now`);
+			const owner = await signUp(`Plan${product}`);
+			const pid = await project(owner);
+			const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(-60), product } }))).body.feed.id as string;
+			await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+			await fetchViaFetcher(); // through the fetcher, from the fixtures
+			await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
 			const next = await runFetchJob();
-			expect(next.request.start).toBe(plus(o.window.start, 1));
-			if (product === 'rnl') expect(next.request).not.toHaveProperty('heldThrough');
-			else expect(next.request).toMatchObject({ heldThrough: plus(o.window.start, 2) });
+			expect(next.request).not.toHaveProperty('heldThrough');
+			// rnl: final to 6 days back, so the window after the marker is the five days not out yet. sat: as on the fixtures above.
+			expect(next.request).toMatchObject(product === 'rnl' ? { start: addDays(-5), cells: { plan: '00000' } } : { start: addDays(-39), cells: { plan: `${'2'.repeat(37)}00` } });
 		}
 	});
 
-	it('while a confirmed replacement stages, the held days are the stage’s; once the live series stops conflicting, the live series’', async () => {
+	it('while a confirmed replacement stages, the plan comes from the cell cache, whatever the stage or the live series hold', async () => {
 		const owner = await signUp('StageHeld');
 		const pid = await project(owner);
 		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: addDays(-150), values: [1, 2, 3], product: 'CHIRPS', productVersion: '2.0' });
 		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true })).body.feed.id as string;
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await tick()).done).toBe(1); // window 1 (120 days) staged, inline from the fixtures
+		await fetchViaFetcher(); // window 1 (120 days) staged, through the fetcher, from the fixtures
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		// The live series holds v2.0 there, but the answer goes to the stage, which holds every day through -31.
-		expect((await runFetchJob()).request).toMatchObject({ start: addDays(-39), heldThrough: addDays(-31) });
-		// The live series emptied: it no longer conflicts, so the ingest merges into it, and it holds none of those days.
+		// The first window read every day through -31 into the cache: those held as preliminary need only their final files.
+		const plan = { start: addDays(-39), cells: { plan: `${'2'.repeat(9)}${'0'.repeat(30)}` } };
+		expect((await runFetchJob()).request).toMatchObject(plan);
+		// The live series emptied: it no longer conflicts, so the ingest merges into it. The cache holds the same days still.
 		await asOwner(`UPDATE time_series SET "values" = array_fill(NULL::double precision, ARRAY[3]) WHERE project_id = $1 AND kind = 'rain_chirps_mm'`, [pid]);
 		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
-		expect((await runFetchJob()).request).not.toHaveProperty('heldThrough');
+		expect((await runFetchJob()).request).toMatchObject(plan);
 	});
 
 	// Issue #29: a DWS backfill starting before the station's record re-read the same empty window forever.
@@ -846,9 +870,24 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		expect((await runFetchJob()).request).toMatchObject({ start: '1978-12-27', end: '1998-12-21' });
 	});
 
-	it('a startDate in the future asks for no days: the fetch still goes out, an empty answer is fine and any day is refused', async () => {
-		const o = await fetchJob({ config: { cells: [cell()], startDate: addDays(10) } });
-		expect(o.window).toEqual({ start: addDays(10), end: addDays(-1) });
+	it('a startDate in the future asks for no days: a CHIRPS feed fetches nothing and records a success', async () => {
+		const owner = await signUp('FutureChirps');
+		const pid = await project(owner);
+		const feedId = (await owner.call('POST', `/projects/${pid}/feeds`, chirps({ config: { cells: [cell()], startDate: addDays(10) } }))).body.feed.id as string;
+		await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
+		vi.stubEnv('FEED_FETCHER', 'sqs');
+		sent.length = 0;
+		expect((await tick()).done).toBe(1);
+		vi.unstubAllEnvs();
+		// Nothing to read, so no request went out: the empty window's (no) days came from the cell cache.
+		expect(sent).toHaveLength(0);
+		expect(await feedRow(feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, last_data_date: null, last_meta: { days: 0, merged: 0, through: addDays(-1) } });
+		expect(await series(owner, pid, 'rain_chirps_mm')).toBeNull();
+	});
+
+	it('a startDate in the future asks for no days: a DWS fetch still goes out, an empty answer is fine and any day is refused', async () => {
+		const o = await fetchJob({ source: 'dws', config: { station: 'X0H000', startDate: addDays(10) }, targetKind: 'flow_observed_m3s' });
+		expect(o.window).toEqual({ start: addDays(10), end: addDays(0) });
 		await acceptIngestResult(msg(o, { ok: true, startDate: null, values: [], meta: { days: 0 } }));
 		await tick();
 		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 0, last_error: null, last_meta: { days: 0, merged: 0 } });
@@ -856,7 +895,7 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 		const next = await runFetchJob();
 		await acceptIngestResult(msg({ ...o, jobId: next.fetchJobId }, { ok: true, startDate: addDays(-2), values: [1], meta: { days: 1 } }));
 		await tick();
-		expect(await series(o.owner, o.pid, 'rain_chirps_mm')).toBeNull();
+		expect(await series(o.owner, o.pid, 'flow_observed_m3s')).toBeNull();
 		expect(await feedRow(o.feedId)).toMatchObject({ consecutive_failures: 1 });
 	});
 

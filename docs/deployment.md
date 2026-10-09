@@ -1309,7 +1309,8 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   nothing at rest, but each SQS event source polls continuously (~0.65 M
   receives a month each); with the `jobs` queue's that is ~1.9 M, ~0.9 M past
   the free tier, ≈ $0.40. Six alarms ≈ $0.60. The fetcher's own compute is
-  cents: a daily CHIRPS feed is ~200 range requests (~5 MB) in ~5 s at 512 MB.
+  cents: a caught-up daily CHIRPS feed reads a handful of range requests
+  (#69), and none for cell-days the shared cell cache already holds (208).
   No NAT, no new endpoint.
 
 ## Alert emails
@@ -2360,7 +2361,11 @@ at ~$14/month in us-east-1, ~$18 in af-south-1. The VPC Lambdas' four
 interface endpoints (Secrets Manager, SES API, SQS, S3) cost $7.30/month each
 per AZ in us-east-1 ($9.56 in af-south-1), which is still cheaper than a NAT
 (~$33/month plus data); the data feeds' fetcher and the report renderer run
-outside the VPC for the same reason. The database's customer-managed KMS key
+outside the VPC for the same reason. The shared CHIRPS cell cache
+(`chirps_cell_year`, 208) grows with the cells feeds use, about 1.5 KB per
+cell-year: a 100-cell project over 1981–2026 is about 7 MB, and the 20 GiB
+volume holds thousands of such projects; a project over cells another
+already read adds nothing and downloads nothing. The database's customer-managed KMS key
 (§ Decide before the first apply) adds $1–3. Total ≈ $77/month in
 af-south-1, ≈ $63 in us-east-1; the breakdown is in
 [deployment-tiers.md](./deployment-tiers.md) and

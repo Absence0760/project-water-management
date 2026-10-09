@@ -31,10 +31,13 @@
 // through the allowed routes is farms/farmer-privacy.security.db.test.ts, a
 // contributor scenarios/applications.db.test.ts; isolation.db.test.ts covers
 // non-members.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 type Check = { min: string; ok: boolean };
-const checks: Check[] = [];
+// Each probe's own list, carried with its request: a request still running
+// when its test ends (a timeout) can't write into the next test's probe.
+const checks = new AsyncLocalStorage<Check[]>();
 vi.mock('./access.js', async (orig) => {
 	const real = await orig<typeof import('./access.js')>();
 	return {
@@ -42,10 +45,10 @@ vi.mock('./access.js', async (orig) => {
 		requireRole: async (...args: Parameters<typeof real.requireRole>) => {
 			try {
 				const role = await real.requireRole(...args);
-				checks.push({ min: args[2], ok: true });
+				checks.getStore()?.push({ min: args[2], ok: true });
 				return role;
 			} catch (err) {
-				checks.push({ min: args[2], ok: false });
+				checks.getStore()?.push({ min: args[2], ok: false });
 				throw err;
 			}
 		}
@@ -109,6 +112,7 @@ const OWNER_ONLY = new Map<string, string>([
 	['PATCH /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['DELETE /projects/:id/feeds/:feedId', 'a feed writes into the project’s series on a schedule, unattended'],
 	['POST /projects/:id/feeds/chirps/from-boundary', 'it attaches or changes a feed, which writes into the project’s series on a schedule, unattended (#326 B-rain)'],
+	['POST /projects/:id/feeds/chirps/from-units', 'it attaches or changes a feed per unit, each writing into the project’s series on a schedule, unattended (#482)'],
 	['GET /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
@@ -206,6 +210,8 @@ const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
 	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)'],
 	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)'],
+	['GET /projects/:id/feeds/chirps/from-units', 'a proposal to attach a feed per unit, for the people who set the model up; viewers read the feeds themselves (#482)'],
+	['GET /projects/:id/map/unit-map', 'a proposal to set each unit’s MAP from a MAP grid, for the people who set the model up; viewers read the model’s MAPs themselves (#482)'],
 	['GET /projects/:id/registration-checks', 'the host’s checks of members’ professional registrations, for the people who issue packs (167)'],
 	['GET /projects/:id/map/channels', 'the elevation model’s channels, drawn only for the editors’ Delineate and Sub-catchments, and each tile computed counts against the caller’s elevation-model cap (#374)']
 ]);
@@ -230,13 +236,15 @@ async function probe(u: User, route: string, override: Record<string, string> = 
 	let path = pattern.replace(/:([A-Za-z]+)/g, (_, name: string) => ids[name] ?? ZERO);
 	if (s.query) path += `?${new URLSearchParams(s.query)}`;
 	const body = method === 'GET' || method === 'DELETE' ? undefined : (s.body ?? {});
-	checks.length = 0;
-	const r = await app.request(path, {
-		method,
-		headers: { cookie: u.cookie, origin: ORIGIN, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-		body: body !== undefined ? JSON.stringify(body) : undefined
-	});
-	return { status: r.status, text: await r.text(), checks: [...checks] };
+	const made: Check[] = [];
+	const r = await checks.run(made, () =>
+		app.request(path, {
+			method,
+			headers: { cookie: u.cookie, origin: ORIGIN, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+			body: body !== undefined ? JSON.stringify(body) : undefined
+		})
+	);
+	return { status: r.status, text: await r.text(), checks: made };
 }
 
 /** The highest role a request asked for (the one it stopped at, for someone below it). */

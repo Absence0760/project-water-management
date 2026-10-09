@@ -75,7 +75,16 @@ export default defineConfig({
 					// singleFork mapping would be `isolate: false`), so a pg pool or other
 					// module singleton never carries from one file into the next.
 					fileParallelism: false,
-					maxWorkers: 1
+					maxWorkers: 1,
+					// No wall-clock claim here either (the perf-db project makes those),
+					// so, as for unit, the timeout only catches a hang. vitest's 5 s
+					// default was a budget nobody chose: the route sweeps, the engine-
+					// backed runs and delineation take 1–3.5 s on a CI runner, and v8
+					// coverage (`test:db:coverage`, the Coverage workflow) costs them
+					// 2–6× (delineation's hot loops most), which took them past 5 s on
+					// one runner and not on the next. Files that need more still say so.
+					testTimeout: 60_000,
+					hookTimeout: 60_000
 				}
 			},
 			{

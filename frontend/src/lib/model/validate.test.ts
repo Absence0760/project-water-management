@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { modelRuleIssues, SUPPLY_RULES, type NetworkNode, type ProjectModel } from '@water-management/engine';
-import { ewrSiteIssue, issueHref, operatingIssues, supplyIssues, transferAnchor, validateModel } from './validate';
+import { ewrSiteIssue, issueHref, operatingIssues, supplyIssues, transferAnchor, unitMapIssue, unitMapProblem, validateModel, withUnitMap } from './validate';
 
 function node(id: string, name: string, down: string | null): NetworkNode {
 	return {
@@ -414,5 +414,43 @@ describe('validateModel', () => {
 			expect(backend, JSON.stringify(over)).toBe(bad);
 			expect(messages(m).some((x) => /demand object/i.test(x)), JSON.stringify(over)).toBe(bad);
 		}
+	});
+});
+
+describe('a unit’s MAP (issue #482)', () => {
+	const farm = (over: Partial<NetworkNode>) => ({ ...node('a', 'Upper', 'g'), ...over });
+
+	it('is fine unset, and with a MAP in range and its source', () => {
+		expect(unitMapIssue(farm({}))).toBeNull();
+		expect(unitMapIssue(farm({ mapMm: null, mapSource: null }))).toBeNull();
+		expect(unitMapIssue(farm({ mapMm: 820, mapSource: 'a MAP grid, 1991–2020' }))).toBeNull();
+	});
+
+	it('refuses a MAP out of range, one without its source and an overlong source, as the API does (engine mapMmError)', () => {
+		expect(unitMapIssue(farm({ mapMm: 0, mapSource: 's' }))).toBe('MAP must be a number from 1 to 12000 mm.');
+		expect(unitMapIssue(farm({ mapMm: 12_001, mapSource: 's' }))).toBe('MAP must be a number from 1 to 12000 mm.');
+		expect(unitMapIssue(farm({ mapMm: 800, mapSource: ' ' }))).toMatch(/^say where its MAP comes from/);
+		expect(unitMapIssue(farm({ mapMm: 800 }))).toMatch(/^say where its MAP comes from/);
+		expect(unitMapIssue(farm({ mapMm: 800, mapSource: 'x'.repeat(601) }))).toBe('MAP source longer than 600 characters.');
+		expect(messages(model([farm({ mapMm: 800, mapSource: '' }), node('g', 'Gauge', null)]))).toContain('"Upper": say where its MAP comes from: the source is required (the dataset or study, and its years).');
+	});
+
+	it('names the field each problem is fixed in', () => {
+		expect(unitMapProblem(farm({ mapMm: 0, mapSource: 's' }))?.field).toBe('map');
+		expect(unitMapProblem(farm({ mapMm: 800, mapSource: '' }))?.field).toBe('source');
+		expect(unitMapProblem(farm({ mapMm: 800, mapSource: 'x'.repeat(601) }))?.field).toBe('source');
+		expect(unitMapProblem(farm({ mapMm: 800, mapSource: 'ok' }))).toBeNull();
+	});
+
+	it('clears the source with the MAP, and keeps it while the MAP changes', () => {
+		const n = farm({ mapMm: 800, mapSource: 'a grid' });
+		withUnitMap(n, 900);
+		expect(n).toMatchObject({ mapMm: 900, mapSource: 'a grid' });
+		withUnitMap(n, null);
+		expect(n).toMatchObject({ mapMm: null, mapSource: null });
+	});
+
+	it('leaves a gauge that kept a MAP from being a unit alone, so a kind change never blocks Save with no field to fix', () => {
+		expect(unitMapIssue({ ...node('g', 'Gauge', null), mapMm: 800, mapSource: 'study' })).toBeNull();
 	});
 });

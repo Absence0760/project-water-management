@@ -186,6 +186,14 @@ describe('what an item says', () => {
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 1 }))).toBe(
 			'Gave the CHIRPS feed the cells of the catchment boundary “Sandspruit catchment” (1 cell)'
 		);
+		// Rain for each unit (issue #482): one entry for the action, naming its units.
+		const units = ['Upper', 'Middle', 'Lower', 'Spring'].map((name, i) => ({ nodeId: `n${i}`, name, feedId: `f${i}`, action: i ? 'created' : 'updated', cells: 2 }));
+		expect(eventLine(ev('feed.configured', { action: 'units', source: 'chirps', targetKind: 'rain_chirps_mm', product: 'rnl', startDate: '1981-01-01', created: 3, updated: 1, units }))).toBe(
+			'Set up rain for each unit: CHIRPS rnl feeds for 4 units (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01'
+		);
+		expect(eventLine(ev('feed.configured', { action: 'units', source: 'chirps', targetKind: 'rain_chirps_mm', product: 'sat', startDate: '1998-01-01', created: 1, updated: 0, units: units.slice(0, 1) }))).toBe(
+			'Set up rain for each unit: CHIRPS sat feeds for 1 unit (Upper), 1 created, from 1998-01-01'
+		);
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, feedId: 'f', source: 'chirps' }))).toBe(
 			'The CHIRPS feed added days to the Rainfall — CHIRPS “grid” series: 1 day changed'
 		);

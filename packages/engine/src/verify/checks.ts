@@ -29,7 +29,7 @@ import { cropSharesOf, REMOTE_SERIES } from '../network/cropSupply';
 import { hasPumpLimit, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, runReturnFlow, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer, UNIT_RAIN_SERIES } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -1327,6 +1327,38 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
 	if (!near(b.rainMm, tot.rain) || !near(b.petMm, tot.pet) || !near(b.aetMm, tot.aet) || !near(b.flowMm, tot.flow) || !near(b.exchangeMm, tot.ex) || !near(b.storageEndMm, before))
 		return `runoff summary ${JSON.stringify(b)} disagrees with the series`;
 	if (!near(b.rainMm - b.aetMm - b.flowMm + b.exchangeMm, b.storageEndMm - b.storageStartMm)) return 'runoff summary does not close its balance';
+	return checkUnitRunoff(out, get, b);
+}
+
+/**
+ * Under per-unit rain (engine ≥ 1.78.0, docs/model.md §2.4h): each unit's
+ * balance closes, its runoff series and rain series total its summary, the
+ * area is the units' and natural flow is their runoff summed every day.
+ */
+function checkUnitRunoff(out: ModelOutput, get: Map<string, number[]>, b: NonNullable<ModelOutput['summary']['runoff']>): string | null {
+	const u = out.summary.unitRain;
+	if (!u) return null;
+	const area = u.units.reduce((s, x) => s + x.areaKm2, 0);
+	if (Math.abs(area - b.areaKm2) > 1e-9 * Math.max(1, area)) return `per-unit runoff: the units' areas sum to ${area} km², not the ${b.areaKm2} km² the runoff summary is over`;
+	const nat = get.get('null|natural_flow')!;
+	const sum = new Float64Array(out.days);
+	for (const x of u.units) {
+		const near = (a: number, c: number) => Math.abs(a - c) <= 1e-9 * Math.max(1, Math.abs(x.rainMm) + Math.abs(x.aetMm) + Math.abs(x.flowMm) + Math.abs(x.exchangeMm) + x.storageStartMm + x.storageEndMm);
+		if (!near(x.rainMm - x.aetMm - x.flowMm + x.exchangeMm, x.storageEndMm - x.storageStartMm)) return `per-unit runoff: "${x.name}" doesn't close its balance`;
+		const rain = get.get(`${x.nodeId}|${UNIT_RAIN_SERIES.rain.key}`);
+		const runoff = get.get(`${x.nodeId}|${UNIT_RAIN_SERIES.runoff.key}`);
+		if (!rain || !runoff) return `per-unit runoff: "${x.name}" has no rain or runoff series`;
+		let r = 0;
+		let q = 0;
+		for (let t = 0; t < out.days; t++) {
+			if (!(rain[t]! >= 0) || !(runoff[t]! >= 0)) return `per-unit runoff: "${x.name}" day ${t}: rain ${rain[t]} or runoff ${runoff[t]} below 0`;
+			r += rain[t]!;
+			q += runoff[t]!;
+			sum[t] = sum[t]! + runoff[t]!;
+		}
+		if (!near(r, x.rainMm) || !near(q / (x.areaKm2 * 1000), x.flowMm)) return `per-unit runoff: "${x.name}"'s series disagree with its summary`;
+	}
+	for (let t = 0; t < out.days; t++) if (Math.abs(sum[t]! - nat[t]!) > 1e-9 * Math.max(1, nat[t]!)) return `per-unit runoff day ${t}: natural flow ${nat[t]} ≠ Σ the units' runoff ${sum[t]}`;
 	return null;
 }
 
@@ -2014,10 +2046,12 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 		}
 		if (!red) return `${n.id}: land-cover reduction series missing`;
 		const I = get.get(`${n.id}|runoff`)!;
+		// Under per-unit rain (engine ≥ 1.78.0, §2.4h) the unit's natural runoff is its own GR4J run's (0 for a farm with no area).
+		const own = out.summary.unitRain ? (get.get(`${n.id}|${UNIT_RAIN_SERIES.runoff.key}`) ?? new Array<number>(out.days).fill(0)) : null;
 		for (let t = 0; t < out.days; t++) {
 			const where = `${n.id} day ${t}`;
-			const i0 = natural[t]! * share[i]!;
-			if (Math.abs(I[t]! + red[t]! - i0) > tol(i0)) return `${where}: runoff ${I[t]} + land-cover reduction ${red[t]} ≠ natural × share ${i0}`;
+			const i0 = own ? own[t]! : natural[t]! * share[i]!;
+			if (Math.abs(I[t]! + red[t]! - i0) > tol(i0)) return `${where}: runoff ${I[t]} + land-cover reduction ${red[t]} ≠ ${own ? 'the unit’s own runoff' : 'natural × share'} ${i0}`;
 			const want = landCoverReduction(i0, q0 * share[i]!, u);
 			if (red[t]! < 0 || red[t]! > i0 + tol(i0) || Math.abs(red[t]! - want) > tol(i0)) return `${where}: land-cover reduction ${red[t]} ≠ ${want}`;
 			sum[t]! += red[t]!;

@@ -255,6 +255,19 @@ export async function plantLegacyRun(runId: string): Promise<void> {
 }
 
 /**
+ * A run's summary with `unitRain` (issue #482, engine with settings.unitRain
+ * per unit): the Runs page's Rain for each unit panel reads it. Planted so
+ * the panel's spec doesn't hang on the engine's per-unit forcing to make one;
+ * its run stamp no longer matches (it reads as unverified).
+ */
+export async function plantUnitRainSummary(runId: string, unitRain: unknown): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(`UPDATE model_run SET summary = jsonb_set(summary, '{unitRain}', $2::jsonb) WHERE id = $1`, [runId, JSON.stringify(unitRain)]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
+
+/**
  * A run as engine 1.54.0 stored it, before the validation signatures (CR-16,
  * engine 1.55.0): the summary loses `plausibility.signatures`. The API only
  * makes current runs, so the compare spec that shows how an older run reads

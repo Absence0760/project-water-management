@@ -7,7 +7,9 @@
 //
 // What a snapshot holds, per part of the model:
 //   - the runoff model's stores: GR4J's production and routing stores and
-//     both unit-hydrograph queues (no warm-up on resume: the state is it);
+//     both unit-hydrograph queues (no warm-up on resume: the state is it),
+//     one set per land unit under per-unit rain (engine ≥ 1.78.0), with
+//     each unit's rule and factors;
 //   - per node: the dam storage the day before (before any storage reset on
 //     the day), the soil-water store (m³ over the cropped area), the
 //     stream-depletion lag store, whether the river pump was on, each
@@ -31,6 +33,7 @@ import type { ModelInput } from '../project';
 import type { GapFillKind } from '../flowGapFill';
 import type { OutletEwrInfo } from '../reserve/dailySource';
 import type { PreparedFits } from '../prepare';
+import type { UnitRainRecipe } from '../runoff/unitRain';
 import { ENGINE_VERSION } from '../version';
 import { damCapacityOn } from '../network/development';
 import { decodePlain, encodePlain, Hasher, hashText, stableStringify, type Encoded } from './plain';
@@ -96,7 +99,13 @@ export interface PinnedStatistics {
 
 /** The decoded state (plain numbers). */
 export interface ModelState {
-	runoff: { model: 'gr4j'; state: number[] };
+	/**
+	 * The runoff model's state. Under per-unit rain (engine ≥ 1.78.0,
+	 * settings.unitRain `perUnit`, docs/model.md §2.4h) `state` is empty and
+	 * `units` holds each land unit's GR4J state, with each unit's rule and
+	 * factors (`unitRecipes`) pinned as the CHIRPS bias factors are.
+	 */
+	runoff: { model: 'gr4j'; state: number[]; units?: { id: string; state: number[] }[]; unitRecipes?: UnitRainRecipe[] };
 	nodes: ModelNodeState[];
 	pinned: PinnedStatistics;
 	/**

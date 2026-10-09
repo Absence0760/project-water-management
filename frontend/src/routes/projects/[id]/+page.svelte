@@ -970,6 +970,7 @@
 								flowRecordId={series?.find((x) => x.kind === 'flow_observed_m3s' || x.kind === 'flow_logger_m3s')?.id ?? null}
 								readonly={!canEdit}
 								{onProjectChange}
+								onModelChanged={reloadInputs}
 							/>
 						{/snippet}
 					</Lazy>

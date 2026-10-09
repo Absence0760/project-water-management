@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
 import { splitHalves } from '../__tests__/routeSamples.js';
 import { base32Decode, totp } from '../auth/totp.js';
 
@@ -721,6 +722,25 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		// Rain for each unit (#482): one feed.configured for the whole action, naming each unit it set up.
+		route: `POST ${P}/feeds/chirps/from-units`,
+		records: ['feed.configured'],
+		call: async (c) => {
+			const square = [[[21.4, -33.75], [21.43, -33.75], [21.43, -33.72], [21.4, -33.72], [21.4, -33.75]]];
+			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard unit parcel', nodeId: c.otherFarmId, geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-units`, { product: 'rnl', nodeIds: [c.otherFarmId] });
+		}
+	},
+	{
+		// Each unit's MAP from the MAP grid (#482): one model revision writing Farm A's mapMm and mapSource. Its area parcel (area-from-map, above) lies in the synthetic grid's region Z.
+		route: `POST ${P}/map/unit-map`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/map/unit-map`, { dataset: 'synthetic', nodeIds: [c.farmId] });
+		}
+	},
+	{
 		// Evaporation from the map (issue #326 B-evap): a settings revision whose reason names the dataset, version and method.
 		route: `POST ${P}/evaporation-from-map`,
 		records: ['revision'],
@@ -956,8 +976,10 @@ describe('every write route records its change', () => {
 
 	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render) and its re-run (pack_reproduce, 154_pack_reproduce); nothing here runs them, so no later file's tick may claim them.
 	// Issuing and withdrawing it also queue its emails (pack_notice, 133): settled here, or the next file's tick sends them into its outbox.
+	// The feed routes (from-boundary, from-units) leave enabled feeds behind, due at once: switched off here, with any fetch they queued, or the next file's tick schedules them.
 	afterAll(async () => {
-		await retirePendingJobs(ctx.packProjectId as string | undefined);
+		await asOwner('UPDATE data_feed SET enabled = false WHERE project_id = ANY($1::uuid[])', [[ctx.projectId, ctx.packProjectId].filter(Boolean)]);
+		await retirePendingJobs(ctx.projectId as string | undefined, ctx.packProjectId as string | undefined);
 		await settlePendingNotices(ctx.packProjectId as string | undefined);
 	});
 

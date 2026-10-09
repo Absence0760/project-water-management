@@ -212,7 +212,10 @@ const READ_ONLY = new Set([
 	'evidence_pack_applicant_copy',
 	// A reset of a lost second factor (205_mfa_recovery): the person reads their own, and only its SECURITY DEFINER
 	// functions write it, each checking the state it moves from, so no one moves effective_at to skip the 3-day wait.
-	'mfa_reset'
+	'mfa_reset',
+	// The shared CHIRPS cell cache (208_chirps_cell_cache): every project's feeds read it, so only chirps_cache_merge
+	// writes it, from a running data-feed job, checking every value and never replacing a final one with a preliminary one.
+	'chirps_cell_year'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).

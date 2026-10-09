@@ -5,16 +5,9 @@ import { createRawSnippet } from 'svelte';
 import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import SectionNav from './SectionNav.svelte';
+import { withoutComments } from '../__fixtures__/withoutComments';
 
-// Svelte's hydration markers out (looped until none is left, so one split by another can't survive).
-const bare = (html: string) => {
-	let s = html;
-	for (let prev = ''; prev !== s; ) {
-		prev = s;
-		s = s.replace(/<!--[\s\S]*?-->/g, '');
-	}
-	return s;
-};
+const bare = withoutComments;
 const groups = [
 	{ label: 'Inputs', sections: [{ id: 'a', label: 'Demand' }, { id: 'b', label: 'Flow', problem: true }] },
 	{ label: 'Elsewhere', sections: [{ id: 'c', label: 'Data tab', href: '?tab=series' }] }

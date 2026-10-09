@@ -2,7 +2,7 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
+import { arealRainText, DEFAULT_UNIT_MAP_PERIOD, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, modelFarmEfficiency, upgradeLegacyModel, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId, type Transfer } from '@water-management/engine';
 import { findSystem, systemLabel } from '$lib/model/systems';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -46,6 +46,13 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		rows.push(['GR4J potential evaporation', peText(s.pe) + kpSource]);
 		// Engine ≥ 1.13.0 (docs/model.md §2.4g); a snapshot without it ran with none.
 		rows.push(['Areal rainfall correction (GR4J rain)', arealRainText(resolveArealRain(s.arealRain, []))]);
+		// Rain for each unit (issue #482, docs/model.md §2.4h): only on a run that had it, so older reports read as before.
+		const u = s.unitRain;
+		if (u?.mode === 'perUnit') {
+			const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
+			const gauge = u.gaugeMapMm != null ? `; rain gauge’s MAP ${fmtNum(u.gaugeMapMm)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : '; no rain gauge MAP';
+			rows.push(['Rain for each unit (GR4J rain)', `on: GR4J ran once per unit with land on its own rain; MAP period ${p.start.slice(0, 4)}–${p.end.slice(0, 4)}${gauge}`]);
+		}
 	}
 	rows.push(
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],

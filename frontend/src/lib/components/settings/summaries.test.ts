@@ -70,4 +70,10 @@ describe('settingsSummaries', () => {
 		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');
 	});
+
+	it('names rain for each unit in Flow generation only while it is on (issue #482)', () => {
+		expect(settingsSummaries(base())['set-flow']).not.toContain('rain for each unit');
+		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-flow']).not.toContain('rain for each unit');
+		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-flow']).toMatch(/ · rain for each unit$/);
+	});
 });

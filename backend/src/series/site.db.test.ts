@@ -81,18 +81,19 @@ describe('a flow record’s site (084_gauge_records)', () => {
 		expect(i.series[gaugeSeriesKey('flow_observed_m3s', q.upper.id)]).toBeDefined();
 	});
 
-	it('refuses a site that is not a gauge above the outlet, a rain series, or another project’s node (positive control above)', async () => {
-		expect((await site(owner, p.id, p.gaugeRecord, p.farm.id)).body.error).toMatch(/a record's site is a gauge$/);
+	it('refuses a site that is not a gauge above the outlet, rain at a gauge, or another project’s node (positive control above)', async () => {
+		expect((await site(owner, p.id, p.gaugeRecord, p.farm.id)).body.error).toMatch(/a flow record’s site is a gauge$/);
 		expect((await site(owner, p.id, p.gaugeRecord, p.outlet.id)).body.error).toMatch(/that gauge is the outlet/);
-		expect((await site(owner, p.id, p.rainId, p.upper.id)).body.error).toMatch(/only an observed or logger flow record has a site/);
+		// Rain belongs to a land unit (209, unit-rain.db.test.ts), never a gauge.
+		expect((await site(owner, p.id, p.rainId, p.upper.id)).body.error).toMatch(/a unit’s own rain belongs to a land unit/);
 		const other = await gaugedProject(owner, 'Other');
 		const cross = await site(owner, p.id, p.gaugeRecord, other.upper.id);
 		expect(cross.status).toBe(400);
 		expect(cross.body.error).toMatch(/no such hydrological unit in this project/);
 		// Rain may still be told it is at the outlet (null): nothing to refuse.
 		expect((await site(owner, p.id, p.rainId, null)).status).toBe(200);
-		// The database holds both rules on its own (CHECK and the same-project trigger).
-		await expect(asOwner('UPDATE time_series SET site_node_id = $2 WHERE id = $1', [p.rainId, p.upper.id])).rejects.toThrow(/time_series_site_flow_only/);
+		// The database holds the rules on its own (the kind CHECK, 209's land-unit trigger and the same-project trigger).
+		await expect(asOwner('UPDATE time_series SET site_node_id = $2 WHERE id = $1', [p.rainId, p.upper.id])).rejects.toThrow(/belongs to a land unit/);
 		await expect(asOwner('UPDATE time_series SET site_node_id = $2 WHERE id = $1', [p.gaugeRecord, other.upper.id])).rejects.toThrow(/belongs to a different project/);
 		expect((await seriesList(owner, p.id)).find((s) => s.name === 'Upper weir')!.siteNodeId).toBe(p.upper.id);
 	});

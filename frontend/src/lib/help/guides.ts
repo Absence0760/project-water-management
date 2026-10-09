@@ -506,6 +506,25 @@ export const GUIDES: Guide[] = [
 				]
 			},
 			{
+				heading: 'Rain for each unit',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
+							'Open **Settings & calibration → Data feeds** and press **Rain for each unit**: one CHIRPS feed per unit, over the cells its parcel covers.',
+							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create**. Units without a parcel are listed, with a link to the map.',
+							'Give each unit its MAP and source on its form, then switch on **Settings → Flow generation → Rain for each unit**, and refit.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'tip',
+						text: 'See [[unit-rain|runoff from each unit’s own rain]] for which rain each unit runs on.'
+					}
+				]
+			},
+			{
 				heading: 'Attach a feed by hand',
 				blocks: [
 					{
@@ -540,7 +559,7 @@ export const GUIDES: Guide[] = [
 				]
 			}
 		],
-		terms: ['data-feeds', 'boundary-rain', 'chirps-version', 'dws-flow', 'chirps-gefs'],
+		terms: ['data-feeds', 'boundary-rain', 'unit-rain-feeds', 'chirps-version', 'dws-flow', 'chirps-gefs'],
 		related: ['add-data', 'start-from-the-map']
 	},
 	{

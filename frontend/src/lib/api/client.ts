@@ -160,6 +160,8 @@ import type {
 	QuaternaryLookup,
 	MapGridLayer,
 	DemGridLayer,
+	UnitMapApplied,
+	UnitMapProposal,
 	QuaternaryLayer,
 	RiverLayer,
 	GaugeStationLookup,
@@ -1137,6 +1139,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default), for the map's MAP grid layer. */
 			mapGrid: (id: string, bbox: readonly [number, number, number, number], dataset?: string | null) =>
 				request<MapGridLayer>('GET', `${p(id)}/map/map-grid?${new URLSearchParams({ bbox: bbox.join(','), ...(dataset ? { dataset } : {}) })}`),
+			/** Each land unit's MAP from one MAP grid, the grid chosen for the whole project unless `dataset` names one (editor; issue #482). */
+			unitMap: (id: string, dataset?: string) => request<UnitMapProposal>('GET', `${p(id)}/map/unit-map${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
+			/** Write the units' MAP from `dataset` into the model, one revision (editor); `nodeIds` absent: every unit it covers. */
+			applyUnitMap: (id: string, dataset: string, nodeIds?: string[]) => request<UnitMapApplied>('POST', `${p(id)}/map/unit-map`, { dataset, ...(nodeIds ? { nodeIds } : {}) }),
 			/** The river network's reaches whose box meets `bbox` (at most 2° a side), biggest first, for the map's layer (issue #345). */
 			rivers: (id: string, bbox: readonly [number, number, number, number]) =>
 				request<RiverLayer>('GET', `${p(id)}/map/rivers?${new URLSearchParams({ bbox: bbox.join(',') })}`),

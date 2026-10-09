@@ -14,6 +14,7 @@ import type { RiverReach } from '$lib/api';
 import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
 import type { RiverLayer } from './riverLayer.svelte';
+import { withoutComments } from '../__fixtures__/withoutComments';
 
 // HelpTip links to the glossary under the app's base path.
 vi.mock('$app/paths', () => ({ base: '' }));
@@ -49,15 +50,6 @@ function riversOn(reaches: RiverReach[], picked: RiverReach | null, added: numbe
 		addError: null,
 		featureFor: (r: RiverReach) => (added.includes(r.reachId) ? { id: `f${r.reachId}` } : null)
 	} as unknown as RiverLayer;
-}
-/**
- * Svelte's hydration markers (`<!--[-->`, `<!--]-->`, …) cut out, so the markup
- * reads as a person sees its text. Split at every opener, each piece keeping
- * what follows its closer: no marker survives, however they sit together.
- */
-function withoutComments(html: string): string {
-	const [head, ...rest] = html.split('<!--');
-	return head + rest.map((piece) => (piece.includes('-->') ? piece.slice(piece.indexOf('-->') + 3) : '')).join('');
 }
 const riverHtml = (rivers: RiverLayer, canEdit: boolean) =>
 	withoutComments(render(MapLayers, { props: { quaternaries, rivers, dark: false, canEdit, onshowfeature: () => {} } }).body);
