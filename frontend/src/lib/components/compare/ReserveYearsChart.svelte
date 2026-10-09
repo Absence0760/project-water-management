@@ -27,7 +27,8 @@
 	import { labelX, yearLabelIndices } from './yearAxis';
 
 	// The chart fills the height its box gives it (a flex column), at least `minHeight` px.
-	let { runs, minHeight = 240, below = 'the reserve' }: { runs: ChartRun[]; minHeight?: number; below?: string } = $props();
+	// `daily`: the outlet's daily test the bars count, by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table).
+	let { runs, minHeight = 240, below = 'the reserve', daily = 'the pragmatic EWR' }: { runs: ChartRun[]; minHeight?: number; below?: string; daily?: string } = $props();
 
 	// $state.raw: plain arrays, no deep proxies.
 	let years = $state.raw<(ReserveYear[] | null)[]>([]);
@@ -135,7 +136,7 @@
 			{/if}
 		</div>
 		<p class="muted small note">
-			Days in each water year (Oct–Sep) when the simulated outflow was below the pragmatic EWR at the outlet.{#if anyPart}{' '}Faded bars are part years: the run covers only some of that year.{/if}{#if missingRuns.length}{' '}{missingRuns.join(' and ')} stored no shortfall series.{/if}
+			Days in each water year (Oct–Sep) when the simulated outflow was below {daily} at the outlet.{#if anyPart}{' '}Faded bars are part years: the run covers only some of that year.{/if}{#if missingRuns.length}{' '}{missingRuns.join(' and ')} stored no shortfall series.{/if}
 		</p>
 		<details class="as-table">
 			<summary>Show as a table</summary>

@@ -3,6 +3,7 @@
 // results by): the choices Settings offers, what each is called, and whether a
 // stored choice still has its rule table. runs/ewrAssurance.ts resolveHeadline
 // applies the choice to a run.
+import { dailyEwrName, type DailyEwrSource } from './notMet';
 import type { EwrAssuranceSite, EwrRuleTable, NetworkNode } from '@water-management/engine';
 import type { EwrHeadline } from '$lib/api/types';
 
@@ -55,10 +56,14 @@ export function ruleTableSites(nodes: readonly Node[], ewrRules: readonly Pick<E
 /** The pragmatic EWR is set: some month above 0 (otherwise "never below it" says nothing). */
 export const pragmaticSet = (ewr: readonly number[]) => ewr.some((v) => v > 0);
 
+/** The daily test is set: the pragmatic EWR above 0 in some month, or a daily EWR from the DRM tables (engine ≥ 1.77.0). */
+const dailySet = (ewr: readonly number[], daily: DailyEwrSource) => pragmaticSet(ewr) || (!!daily && daily.method !== 'pragmatic');
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** What `auto` judges by today, in words, from the tables as they are (the order resolveHeadline follows). */
-export function autoText(sites: readonly { siteNodeId: string | null; label: string }[]): string {
+export function autoText(sites: readonly { siteNodeId: string | null; label: string }[], daily?: DailyEwrSource): string {
 	const first = sites.find((s) => s.siteNodeId === null) ?? sites[0];
-	return first ? `the Reserve rule table at ${first.label}` : 'the pragmatic EWR at the outflow gauge';
+	return first ? `the Reserve rule table at ${first.label}` : `${dailyEwrName(daily)} at the outflow gauge`;
 }
 
 export interface HeadlineOption {
@@ -72,10 +77,11 @@ export interface HeadlineOption {
  * longer on offer (its table gone, the pragmatic EWR cleared) keeps an option
  * so the select shows it, labelled as such; headlineProblem says why.
  */
-export function headlineOptions(nodes: readonly Node[], ewrRules: readonly Pick<EwrRuleTable, 'siteNodeId'>[], ewr: readonly number[], current: EwrHeadline): HeadlineOption[] {
+export function headlineOptions(nodes: readonly Node[], ewrRules: readonly Pick<EwrRuleTable, 'siteNodeId'>[], ewr: readonly number[], current: EwrHeadline, daily?: DailyEwrSource): HeadlineOption[] {
 	const sites = ruleTableSites(nodes, ewrRules);
-	const out: HeadlineOption[] = [{ key: 'auto', label: `Automatic: now ${autoText(sites)}` }];
-	if (pragmaticSet(ewr) || current.source === 'pragmatic') out.push({ key: 'pragmatic', label: 'The pragmatic EWR at the outflow gauge' });
+	const out: HeadlineOption[] = [{ key: 'auto', label: `Automatic: now ${autoText(sites, daily)}` }];
+	// The 'pragmatic' choice is the daily test at the outlet, whatever its source (engine ≥ 1.77.0).
+	if (dailySet(ewr, daily) || current.source === 'pragmatic') out.push({ key: 'pragmatic', label: `${cap(dailyEwrName(daily))} at the outflow gauge` });
 	for (const s of sites) out.push({ key: headlineKey({ source: 'ruleTable', siteNodeId: s.siteNodeId }), label: `The Reserve rule table at ${s.label}` });
 	const key = headlineKey(current);
 	if (!out.some((o) => o.key === key)) out.push({ key, label: 'A Reserve rule table no longer in the settings' });
@@ -99,8 +105,8 @@ export function headlineTest(h: EwrHeadline, nodes: readonly Node[], ewrRules: r
  * table that has gone (results then fall back to Automatic), or a pragmatic
  * EWR of 0 in every month.
  */
-export function headlineProblem(h: EwrHeadline, nodes: readonly Node[], ewrRules: readonly Pick<EwrRuleTable, 'siteNodeId'>[], ewr: readonly number[]): string | null {
-	if (h.source === 'pragmatic') return pragmaticSet(ewr) ? null : 'The pragmatic EWR is 0 in every month, so every day meets it.';
+export function headlineProblem(h: EwrHeadline, nodes: readonly Node[], ewrRules: readonly Pick<EwrRuleTable, 'siteNodeId'>[], ewr: readonly number[], daily?: DailyEwrSource): string | null {
+	if (h.source === 'pragmatic') return dailySet(ewr, daily) ? null : 'The pragmatic EWR is 0 in every month, so every day meets it.';
 	if (h.source !== 'ruleTable') return null;
 	if (ruleTableSites(nodes, ewrRules).some((s) => s.siteNodeId === h.siteNodeId)) return null;
 	return 'That site has no Reserve rule table any more, so results are judged automatically until you choose again.';
@@ -111,8 +117,8 @@ export function headlineProblem(h: EwrHeadline, nodes: readonly Node[], ewrRules
  * from the run itself (runs/ewrAssurance.ts resolveHeadline), so it names the
  * table the cards read, with "(automatic)" when the project hasn't chosen.
  */
-export function judgedByText(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> | null, choice: EwrHeadline | null | undefined): string {
-	const what = site ? `the Reserve rule table at ${site.isOutlet ? `the outlet, ${site.name}` : site.name}` : 'the pragmatic EWR at the outflow gauge';
+export function judgedByText(site: Pick<EwrAssuranceSite, 'isOutlet' | 'name'> | null, choice: EwrHeadline | null | undefined, daily?: DailyEwrSource): string {
+	const what = site ? `the Reserve rule table at ${site.isOutlet ? `the outlet, ${site.name}` : site.name}` : `${dailyEwrName(daily)} at the outflow gauge`;
 	return !choice || choice.source === 'auto' ? `${what} (automatic)` : what;
 }
 

@@ -25,6 +25,7 @@ import { type SheetCells, SheetReader } from './sheet';
 import type { DefinedName, RawCell, SheetSource, WorkbookSource } from './source';
 import { defaultStyles, readStyles, readWorkbookXml } from './workbookParts';
 import { XmlScanner } from './xml';
+import { EWR_OPTION_NAMES } from './ewrOptions';
 import { type ZipLimits, ZipArchive } from './zip';
 
 /**
@@ -38,7 +39,7 @@ export const MAX_WORKBOOK_BYTES = 150_000_000;
 export const MAX_WORKBOOK_SHEETS = 250;
 
 /** The sheets the b023 named ranges live on; read first so the Element sheets are never parsed. */
-export const B023_SHEETS = ['AppSettings', 'Home', 'Network', 'Farm spec', 'Crop demand', 'Farm demand', 'Transfers', 'Flow data', 'Flow Calibration Cfg', 'EWR Cfg'];
+export const B023_SHEETS = ['AppSettings', 'Home', 'Network', 'Farm spec', 'Crop demand', 'Farm demand', 'Transfers', 'Flow data', 'Flow Calibration Cfg', 'EWR Cfg', 'EWR options'];
 
 export interface ReadOptions extends ZipLimits {
 	/** Largest file accepted (default MAX_WORKBOOK_BYTES). */
@@ -266,7 +267,9 @@ export const OPTIONAL_NAMES = [
 	'zTransfers_HeaderFarmsInOut',
 	'zFarmDemand_GrossMthDays',
 	'zHome_CalcDate1',
-	'zHome_CalcDateN'
+	'zHome_CalcDateN',
+	// The daily outlet EWR's source (engine ≥ 1.77.0, ./ewrOptions.ts), on an optional [EWR options] sheet.
+	...EWR_OPTION_NAMES
 ] as const;
 
 const ALL_NAMES: readonly string[] = [...REQUIRED_NAMES, ...OPTIONAL_NAMES];

@@ -273,6 +273,17 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
+      [#455](https://github.com/Absence0760/project-water-management/issues/455),
+      model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
+      EWR). Awaiting the hydrologist: which scale factor (natural MAR or area
+      ratio) a project should use; the model's MAR from the natural flow at
+      the outlet over the historical days, before land cover and net of
+      natural bed losses; a rising natural percentile row read as its
+      running minimum; below the driest point the Reserve flow scaled with
+      q ÷ N₁₀ (as A1). Trigger: the hydrologist's answer, or the client's
+      first run judged by the DRM tables. Also left: scenarios can't switch
+      the source (`settings.set` doesn't list `ewrDailySource`).
 - [ ] **Network, supply, crops and dams: provisional decisions 2026-10-01**
       (issue #90, the hydrologist list from *Supply order at a dam* to
       *WP-1.35 Land-cover split*). Each item was researched against published

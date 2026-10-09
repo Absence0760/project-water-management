@@ -11,6 +11,10 @@ Writes, into OUTDIR (default scripts/wbt-import/fixtures/):
   synthetic_b023.gauge-reference.notes.txt      --gauge-scaling-from 2021-10-01 --gauge-scale-factor 0.8
   synthetic_b023.run-of-river.project.json      the same with --run-of-river (the browser importer's
   synthetic_b023.run-of-river.notes.txt         run-of-river option checks its parity against these)
+  synthetic_b023.ewr-options.xlsx            the same workbook with an [EWR options] sheet (engine >= 1.77.0,
+  synthetic_b023.ewr-options.json            issue #455): the daily outlet EWR from invented DRM percentile
+                                             tables; the JSON holds the settings.ewrDailySource and the
+                                             [EWR options] notes extract_project.py reads from it
 
 Everything in the workbook is made up: the farm, crop and gauge names, the
 areas, dams, crop factors and every daily value (a seeded random generator).
@@ -58,6 +62,8 @@ from extract_project import extract  # noqa: E402
 FIXTURES = HERE / "fixtures"
 STEM = "synthetic_b023"
 WORKBOOK_NAME = f"{STEM}.xlsx"
+EWR_OPTIONS_STEM = f"{STEM}.ewr-options"
+EWR_OPTIONS_WORKBOOK = f"{EWR_OPTIONS_STEM}.xlsx"
 GAUGE_REFERENCE_ARGS = {"gauge_reference": True, "scaling_from": "2021-10-01", "scale_factor": 0.8}
 
 SEED = 20260925
@@ -826,6 +832,50 @@ def ewr_cfg(wb) -> None:
     define(wb, "zEWR_Pragmatic", s, ref("J", 88, "J", 99))
 
 
+# Invented DRM tables for the [EWR options] sheet: natural flows falling with the percentile point and a Reserve
+# below them, wetter in winter (m3/s). Made up for the layout; no catchment's numbers.
+EWR_OPT_POINTS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+EWR_OPT_SEASON = [0.6, 0.4, 0.2, 0.1, 0.1, 0.2, 0.5, 1.4, 2.6, 3.1, 2.4, 1.5]  # Oct..Sep
+
+
+def ewr_options(wb) -> None:
+    """The optional [EWR options] sheet (engine >= 1.77.0): the daily outlet EWR from the percentile tables, by MAR."""
+    s = "EWR options"
+    ws = wb.create_sheet(s)
+    put(ws, "B2", "Daily EWR method")
+    put(ws, "C2", "Percentile tables")
+    put(ws, "B3", "Scaling")
+    put(ws, "C3", "MAR ratio")
+    put(ws, "B4", "Table MAR (Mm3/a)")
+    put(ws, "C4", 25.5)
+    put(ws, "B5", "Table area (km2)")  # left blank: the MAR ratio doesn't need it
+    put(ws, "B7", "TAB total flows, maint. (m3/s)")
+    for i, (lab, f) in enumerate(zip(MONTHS_WY, EWR_OPT_SEASON)):
+        put(ws, f"B{8 + i}", lab)
+        put(ws, f"C{8 + i}", round(0.3 * f, 3))
+    put(ws, "E7", "Month")
+    for j, p in enumerate(EWR_OPT_POINTS):
+        put(ws, f"{col('F', j)}7", p)
+    put(ws, "E21", "Month")
+    for j, p in enumerate(EWR_OPT_POINTS):
+        put(ws, f"{col('F', j)}21", p)
+    for i, (lab, f) in enumerate(zip(MONTHS_WY, EWR_OPT_SEASON)):
+        put(ws, f"E{8 + i}", lab)
+        put(ws, f"E{22 + i}", lab)
+        for j, p in enumerate(EWR_OPT_POINTS):
+            natural = round(f * (1.05 - p), 3)
+            put(ws, f"{col('F', j)}{8 + i}", natural)
+            put(ws, f"{col('F', j)}{22 + i}", round(natural * (0.6 - 0.3 * p), 3))
+    define(wb, "zEwrOpt_Method", s, ref("C", 2))
+    define(wb, "zEwrOpt_Scaling", s, ref("C", 3))
+    define(wb, "zEwrOpt_TableMar", s, ref("C", 4))
+    define(wb, "zEwrOpt_TableArea", s, ref("C", 5))
+    define(wb, "zEwrOpt_TabM3s", s, ref("C", 8, "C", 19))
+    define(wb, "zEwrOpt_PctPoints", s, ref("F", 7, "O", 7))
+    define(wb, "zEwrOpt_NaturalPct", s, ref("F", 8, "O", 19))
+    define(wb, "zEwrOpt_ReservePct", s, ref("F", 22, "O", 33))
+
+
 def ewr_pivot(wb) -> None:
     s = "EWR shortfalls Pivot Data"
     ws = wb.create_sheet(s)
@@ -929,7 +979,7 @@ def element_sheets(wb) -> None:
 # --------------------------------------------------------------------------
 
 
-def build() -> openpyxl.Workbook:
+def build(with_ewr_options: bool = False) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     app_settings(wb)
@@ -943,6 +993,8 @@ def build() -> openpyxl.Workbook:
     flow_data(wb, daily_series())
     flow_calibration(wb)
     ewr_cfg(wb)
+    if with_ewr_options:
+        ewr_options(wb)
     ewr_pivot(wb)
     shortfalls(wb)
     element_sheets(wb)
@@ -953,10 +1005,10 @@ def build() -> openpyxl.Workbook:
     return wb
 
 
-def write_workbook(path: Path) -> None:
+def write_workbook(path: Path, with_ewr_options: bool = False) -> None:
     """Save the workbook with fixed timestamps (core.xml and zip entries), so the bytes are reproducible."""
     buf = io.BytesIO()
-    build().save(buf)
+    build(with_ewr_options).save(buf)
     stamp = FIXED_TIME.strftime("%Y-%m-%dT%H:%M:%SZ")
     out = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as src, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
@@ -989,6 +1041,13 @@ def expected_outputs(workbook: Path) -> dict[str, str]:
     return out
 
 
+def ewr_options_output(workbook: Path) -> str:
+    """The [EWR options] variant's fixture: the settings.ewrDailySource and the [EWR options] notes the importer reads."""
+    project, _expected, notes = extract(workbook)
+    out = {"ewrDailySource": project["settings"].get("ewrDailySource"), "notes": [n for n in notes if "[EWR options]" in n]}
+    return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
+
+
 def main(argv: list[str]) -> int:
     outdir = Path(argv[1]) if len(argv) > 1 else FIXTURES
     outdir.mkdir(parents=True, exist_ok=True)
@@ -997,7 +1056,10 @@ def main(argv: list[str]) -> int:
     files = expected_outputs(workbook)
     for name, text in files.items():
         (outdir / name).write_text(text, encoding="utf-8")
-    print(f"{workbook} ({workbook.stat().st_size} bytes) + {', '.join(files)}")
+    variant = outdir / EWR_OPTIONS_WORKBOOK
+    write_workbook(variant, with_ewr_options=True)
+    (outdir / f"{EWR_OPTIONS_STEM}.json").write_text(ewr_options_output(variant), encoding="utf-8")
+    print(f"{workbook} ({workbook.stat().st_size} bytes) + {', '.join(files)}; {variant.name} + {EWR_OPTIONS_STEM}.json")
     return 0
 
 

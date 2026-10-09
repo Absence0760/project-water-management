@@ -48,6 +48,7 @@ import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calen
 import { DEFAULT_ANNUAL_THRESHOLD } from './network/reliability';
 import { sanitizeExclusions } from './calibrate/provenance';
 import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, resolveEwrRules } from './reserve/rules';
+import { resolveEwrDailySource } from './reserve/dailySource';
 import { RUNOFF_MODELS } from './runoff/types';
 import {
 	CALIBRATION_FLOW_KINDS,
@@ -534,6 +535,9 @@ export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): 
 		warnings.push('pragmatic EWR below 0 in some months; using 0 there');
 		s.ewrPragmaticM3PerDay = s.ewrPragmaticM3PerDay.map((v) => Math.max(v, 0)) as unknown as Monthly;
 	}
+	// The daily outlet EWR's source (engine ≥ 1.77.0, ./reserve/dailySource.ts): null = the pragmatic EWR, as is an
+	// unusable one (with a warning). Only when stored, so settings without it normalise as before.
+	if (raw?.ewrDailySource !== undefined) s.ewrDailySource = resolveEwrDailySource(raw.ewrDailySource, warnings);
 	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {
 		warnings.push(`dam evaporation factor "${String(s.lakeEvapFactor)}" is not a number ≥ 0; using ${d.lakeEvapFactor}`);
 		s.lakeEvapFactor = d.lakeEvapFactor;

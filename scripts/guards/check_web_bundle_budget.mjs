@@ -124,7 +124,8 @@ export const BUDGET = Object.freeze({
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
-	largestSpreadsheetWorkerKb: 32,
+	// 34 from issue #455: the b023 import's [EWR options] reader (spreadsheet/import/ewrOptions.ts, ~1 KB gzipped, no library).
+	largestSpreadsheetWorkerKb: 34,
 	largestAssetKb: 100,
 	landingKb: 25,
 	// MapLibre + PMTiles (issue #288, roadmap D8 (b); measured 2026-10-01: 301 KB, its two chunks, the PMTiles reader and its CSS, maplibre-gl 6.10.0 + pmtiles 4.5.0).

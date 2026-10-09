@@ -14,6 +14,8 @@
 	import { latestFileText } from '$lib/files/latest';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
+	import DrmFormatHelp from './DrmFormatHelp.svelte';
+	import { parseDrmFile, ruleTableFromRul, ruleTableFromTab } from './drmFiles';
 	import {
 		applyPaste,
 		categoryFromText,
@@ -96,7 +98,11 @@
 		value[i] = { ...value[i]!, component, ...(component === 'lowFlow' ? { lowFlow: null } : {}) };
 	}
 
-	/** A CSV or text file's contents into the paste box, to fill whichever grid the user picks. */
+	/**
+	 * A Desktop Reserve Model file fills the table at once (issue #455): a .rul its grids, unit, points and REC
+	 * (asking first over values), a .tab its natural MAR and REC. Any other text file (a CSV) goes into the paste
+	 * box, to fill whichever grid the user picks.
+	 */
 	// One file reader per table, removed with it: the latest file picked for a table wins (a
 	// large one still read can't land over a smaller one picked after it), and a read lands in
 	// the table it was picked for even when a table above it was removed meanwhile.
@@ -109,8 +115,47 @@
 		const text = await reader(f);
 		const at = readers.indexOf(reader);
 		if (text === null || at < 0) return;
-		pasteText[at] = text;
-		pasteNote[at] = { ok: true, text: `Read ${f.name}: pick which values to fill.` };
+		const drm = parseDrmFile(text);
+		if (drm === null) {
+			pasteText[at] = text;
+			pasteNote[at] = { ok: true, text: `Read ${f.name}: pick which values to fill.` };
+			return;
+		}
+		if ('error' in drm) {
+			pasteNote[at] = { ok: false, text: `${f.name}: ${drm.error}` };
+			return;
+		}
+		const t = value[at]!;
+		if (drm.kind === 'tab') {
+			value[at] = ruleTableFromTab(t, drm);
+			pasteNote[at] = {
+				ok: true,
+				text: `Read ${f.name} (DRM summary): ${drm.marMm3 !== null ? `the natural MAR, ${drm.marMm3} Mm³/a` : 'no MAR'}${drm.category ? ` and the REC, ${drm.category}` : ''}. Its monthly totals aren't a rule table: load the .rul file for the % points.`
+			};
+			return;
+		}
+		const filled = filledCells(t.ewr) + filledCells(t.lowFlow) + filledCells(t.natural);
+		if (
+			filled &&
+			!(await confirmDialog({
+				title: `Replace the rule table at ${siteLabel(t.siteNodeId)} with ${f.name}?`,
+				message: `${filled === 1 ? 'The 1 value' : `The ${filled} values`} in its grids will be replaced by the file's, and its unit and % points by the file's.`,
+				confirmLabel: 'Replace the values'
+			}))
+		)
+			return;
+		const next = ruleTableFromRul(t, drm, f.name);
+		value[at] = next;
+		pointsText[at] = next.points.join(', ');
+		pointsBad[at] = false;
+		pasteNote[at] = {
+			ok: true,
+			text:
+				`Read ${f.name} (DRM rule curves, ${drm.unit === 'm3s' ? 'm³/s' : 'Mm³ a month'}): the total Reserve as the EWR` +
+				`${drm.lowFlow ? ', the low flows' : ''}${drm.natural ? ', the natural duration curve' : ''}${drm.category ? ` and the REC, ${drm.category}` : ''}.` +
+				(drm.natural && next.naturalSource === 'run' ? ' To place each month on the file’s natural curve, set “Natural-flow percentile from” to the table’s natural flows.' : '') +
+				(drm.lowFlow ? '' : ' The file has no low-flow block.')
+		};
 	}
 
 	const exampleHref = (kind: 'total' | 'lowFlow') => `data:text/csv;charset=utf-8,${encodeURIComponent(exampleGridCsv(kind))}`;
@@ -356,14 +401,15 @@
 						<button type="button" class="btn btn-sm" onclick={() => paste(i, 'natural')}>Fill the natural flows</button>
 					{/if}
 					<label class="btn btn-sm file">
-						Load a CSV file
-						<input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange={(e) => loadFile(i, e)} />
+						Load a file (.rul, .tab or CSV)
+						<input type="file" accept=".rul,.tab,.csv,.tsv,.txt,text/csv,text/plain" onchange={(e) => loadFile(i, e)} />
 					</label>
 				</div>
 				<p class="small">
 					Example layouts (synthetic numbers): <a href={exampleHref('total')} download="ewr-total-example.csv">total-flow table</a>,
 					<a href={exampleHref('lowFlow')} download="ewr-low-flow-example.csv">low-flow table</a>.
 				</p>
+				<DrmFormatHelp target="ruleTable" name="into the rule table at {siteLabel(t.siteNodeId)}" />
 			</div>
 		{/if}
 		<EwrHighFlowsEditor bind:value={() => t.highFlows ?? [], (v) => (t.highFlows = v)} {readonly} siteLabel={siteLabel(t.siteNodeId)} />

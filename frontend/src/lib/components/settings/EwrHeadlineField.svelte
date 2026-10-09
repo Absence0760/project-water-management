@@ -7,7 +7,7 @@
 	Helpers in $lib/components/ewr/headline.ts.
 -->
 <script lang="ts">
-	import type { EwrChargeSource, EwrRuleTable, NetworkNode } from '@water-management/engine';
+	import type { EwrChargeSource, EwrDailySource, EwrRuleTable, NetworkNode } from '@water-management/engine';
 	import type { EwrHeadline } from '$lib/api/types';
 	import { headlineKey, headlineOfKey, headlineOptions, headlineProblem, headlineTest, ruleTableSites } from '$lib/components/ewr/headline';
 
@@ -15,6 +15,7 @@
 		value = $bindable(),
 		ewrRules,
 		ewrPragmatic,
+		ewrDaily = null,
 		chargeSource,
 		nodes,
 		readonly = false
@@ -24,14 +25,16 @@
 		ewrRules: readonly Pick<EwrRuleTable, 'siteNodeId'>[];
 		/** The pragmatic EWR as the form has it: offered only when some month is above 0. */
 		ewrPragmatic: readonly number[];
+		/** settings.ewrDailySource (engine ≥ 1.77.0): the daily test's source, which names the daily choice. */
+		ewrDaily?: EwrDailySource | null;
 		/** settings.ewrChargeSource, for the hint when the charge follows another test. */
 		chargeSource?: EwrChargeSource;
 		nodes: readonly NetworkNode[];
 		readonly?: boolean;
 	} = $props();
 
-	const options = $derived(headlineOptions(nodes, ewrRules, ewrPragmatic, value));
-	const problem = $derived(headlineProblem(value, nodes, ewrRules, ewrPragmatic));
+	const options = $derived(headlineOptions(nodes, ewrRules, ewrPragmatic, value, ewrDaily));
+	const problem = $derived(headlineProblem(value, nodes, ewrRules, ewrPragmatic, ewrDaily));
 	// Nothing to choose: no rule table, and no stored choice to show.
 	const nothing = $derived(ruleTableSites(nodes, ewrRules).length === 0 && value.source === 'auto');
 	// The charge, curtailment and water account follow settings.ewrChargeSource, a model input; this choice

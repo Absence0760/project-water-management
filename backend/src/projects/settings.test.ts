@@ -1024,6 +1024,36 @@ describe('SettingsPatch.ewrChargeSource and lowFlowMeasure (engine ≥ 1.3.0, is
 	});
 });
 
+describe('SettingsPatch.ewrDailySource (engine ≥ 1.77.0, issue #455)', () => {
+	const ok = (ewrDailySource: unknown) => SettingsPatch.safeParse({ ewrDailySource }).success;
+	const blank = { method: 'pragmatic', scaling: 'mar', tableMarMm3: null, tableAreaKm2: null, tabM3s: null, naturalPctM3s: null, reservePctM3s: null };
+	const grid = Array.from({ length: 12 }, () => [10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.5]);
+
+	it('accepts null, the pragmatic EWR with tables half entered, and a complete TAB or percentile source', () => {
+		expect(ok(null)).toBe(true);
+		expect(ok({ ...blank, naturalPctM3s: grid })).toBe(true);
+		expect(ok({ ...blank, method: 'tab', tabM3s: new Array(12).fill(0.5), tableMarMm3: 92.4 })).toBe(true);
+		expect(ok({ ...blank, method: 'percentile', scaling: 'area', naturalPctM3s: grid, reservePctM3s: grid, tableAreaKm2: 900 })).toBe(true);
+	});
+
+	it('refuses what the engine refuses: a method missing its tables or its divisor, a bad shape, an unknown field', () => {
+		const tab = { ...blank, method: 'tab', tabM3s: new Array(12).fill(0.5), tableMarMm3: 92.4 };
+		const r = SettingsPatch.safeParse({ ewrDailySource: { ...tab, scaling: 'area' } });
+		expect(r.success).toBe(false);
+		expect(JSON.stringify(r.error?.issues)).toContain('daily EWR source: tableAreaKm2: Scaling by area needs');
+		for (const v of [{ ...tab, tabM3s: null }, { ...tab, tabM3s: [1, 2] }, { ...tab, method: 'monthly' }, { ...tab, extra: 1 }, { ...blank, method: 'percentile', tableMarMm3: 1 }, 'tab', 1]) {
+			expect(ok(v), JSON.stringify(v)).toBe(false);
+		}
+	});
+
+	it('defaults to the pragmatic EWR, and a patch replaces the source whole', () => {
+		expect(mergeSettings({}).ewrDailySource).toBeNull();
+		const stored = mergeSettings({ ewrDailySource: { ...blank, naturalPctM3s: grid } });
+		expect(stored.ewrDailySource?.naturalPctM3s).toEqual(grid);
+		expect(patchSettings(stored, { ewrDailySource: blank }).ewrDailySource).toEqual(blank);
+	});
+});
+
 describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', () => {
 	const ok = (assuranceAnnualThreshold: unknown) => SettingsPatch.safeParse({ assuranceAnnualThreshold }).success;
 

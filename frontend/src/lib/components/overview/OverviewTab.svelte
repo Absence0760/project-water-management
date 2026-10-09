@@ -309,6 +309,7 @@
 				compliance={shown.summary.ewrCompliance}
 				forecastFrom={shown.summary.forecast?.from ?? null}
 				ruleTable={headlineSite(shown.summary, project.settings.ewrHeadline) !== null}
+				daily={shown.summary.catchment.outletEwr}
 				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
 			/>
 		{/if}
