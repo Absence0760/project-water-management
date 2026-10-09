@@ -19,8 +19,11 @@
 name: project-water-management
 
 services:
+  # From ECR Public's copy of Docker's official images (docker/library), the
+  # same digest as Docker Hub's: CI runs it on every job, and Docker Hub's
+  # anonymous pull limit refused them (issue #492).
   postgres:
-    image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     container_name: water-management-db
     ports:
       - "5434:5432"

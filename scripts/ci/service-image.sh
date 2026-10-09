@@ -32,8 +32,13 @@ name=${name_tag%:*}
 case "$cmd" in
 	save)
 		mkdir -p "$(dirname "$tar")"
-		docker pull "$name@$digest"
-		docker tag "$name@$digest" "$name_tag"
+		# By digest, so whichever registry answers serves the same bytes:
+		# Google's Docker Hub mirror first, Docker Hub itself only if the
+		# mirror hasn't cached it (issue #492).
+		src="mirror.gcr.io/$name@$digest"
+		case "$name" in */*) ;; *) src="mirror.gcr.io/library/$name@$digest" ;; esac
+		docker pull "$src" || { src="$name@$digest"; docker pull "$src"; }
+		docker tag "$src" "$name_tag"
 		docker save -o "$tar" "$name_tag"
 		docker image inspect --format '{{.Id}}' "$name_tag" > "$tar.id"
 		;;
