@@ -3275,12 +3275,13 @@ readable by anyone. The rules:
 - **gitleaks** runs as a pre-commit hook (`pre-commit install`, never
   `--no-verify`), in CI on every push and PR (part of the `CI gate`), and
   weekly over the whole history (`gitleaks-sweep.yml`, which opens a
-  `secret-scan` issue when it fails). Reviewed false positives are pinned by
-  exact fingerprint in `.gitleaksignore` (m³/day field names,
-  fake test tokens), or, for a placeholder repeated across files (the
-  mocked-provider Terraform tests' synthetic secrets), allowlisted by its
-  exact value in `.gitleaks.toml`, never by path; add one only after checking
-  the match isn't real. Before pushing a branch, check the diff
+  `secret-scan` issue when it fails). Reviewed false positives are
+  allowlisted by their exact value in `.gitleaks.toml` (m³/day field names,
+  fake test tokens, the mocked-provider Terraform tests' synthetic secrets),
+  never by path; add one only after checking the match isn't real.
+  `.gitleaksignore` (by fingerprint: commit, file, rule and line) is for a
+  one-off match only: a fingerprint breaks when its line moves or the
+  history is rewritten, as the 2026-09-28 recreation showed (issue #435). Before pushing a branch, check the diff
   for client names as well as for keys.
 - If something slips in: **don't push**. Rewrite the history locally, then tell
   the operator (see the incident playbook below).
