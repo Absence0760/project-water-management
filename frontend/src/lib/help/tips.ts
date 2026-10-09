@@ -692,6 +692,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.areaHiKm2', 'node.areaLoKm2']
 	},
 	{
+		id: 'unit-map',
+		term: 'Unit rainfall level',
+		short: 'The unit’s own MAP in mm and its source: with rain for each unit, it sets the level of the unit’s CHIRPS rain.',
+		units: 'mm/year',
+		category: 'farm',
+		fields: ['node.mapMm', 'node.mapSource']
+	},
+	{
 		id: 'flow-share',
 		term: 'Flow share (fragmentation)',
 		short: 'The fixed fraction of catchment natural flow (and EWR) assigned to each hydrological unit. Shares should add up to 100 %.',

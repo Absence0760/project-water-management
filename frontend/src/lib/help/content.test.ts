@@ -41,7 +41,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
 	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true, reachLossFrac: true, reachLossMaxM3Day: true,
 	cropWaterSource: true, cropRiverPumpM3Day: true, cropRiverPoolM3: true,
-	cropShareDam: true, cropShareRiver: true, cropShareRemote: true, cropRemoteNodeId: true, cropRemoteCapM3Day: true
+	cropShareDam: true, cropShareRiver: true, cropShareRemote: true, cropRemoteNodeId: true, cropRemoteCapM3Day: true, mapMm: true, mapSource: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationSystemId: true, irrigationEfficiency: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true, irrigationSystemId: true };

@@ -325,6 +325,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['flow-share', 'hi-lo-split', 'map'],
 		source: 'b023 Farm spec'
 	},
+	'unit-map': {
+		long: 'Used when each hydrological unit runs on its own rain (Settings, Rain for each unit). Rain varies a lot over short distances in the mountains, so a unit’s MAP sets the level of its rain:\n\n• With the rain gauge’s MAP: the unit runs on the gauge’s rain × unit MAP ÷ gauge MAP, and the unit’s own CHIRPS, scaled to its MAP, fills the days the gauge has none.\n• Without it: the unit runs on its own CHIRPS, scaled by MAP ÷ the CHIRPS mean annual rain over the same years (1991–2020 by default).\n\nEach factor is flat and held between 0.25 and 4. Take the MAP from a fine rainfall grid or a study of the catchment, and say which in the source. A unit without a MAP runs on its CHIRPS with the catchment’s CHIRPS correction, or on the catchment’s rain if it has no CHIRPS. The MAP is a fixed input, never calibrated.',
+		aliases: ['unit MAP', 'MAP of hydrological unit'],
+		related: ['map', 'hi-lo-map-area', 'flow-share'],
+		source: 'docs/model.md §2.4h; issue #482'
+	},
 	'flow-share': {
 		long: 'Catchment natural flow is split into the runoff of each hydrological unit by a fixed share per hydrological unit. Three methods:\n\n• Area — the hydrological unit’s area over the total area.\n• Hi/Lo — area-weighted separately in the high- and low-rainfall zones, then combined with the Hi/Lo split.\n• Manual — a share you enter per hydrological unit, typically computed in a separate study.\n\nThe same shares divide the pragmatic EWR into per-unit EWR shares. A warning appears when the shares don’t sum to 1 (tolerance 0.0002).\n\nChoose the method in Settings & calibration, under Flow share between hydrological units. The hydrological unit table’s In use column and each hydrological unit’s form (Share in use) show the share it gets with the saved method, and the table’s total row their sum.',
 		aliases: ['fragmentation', 'fragmented flow', 'share', 'share in use', 'in use'],

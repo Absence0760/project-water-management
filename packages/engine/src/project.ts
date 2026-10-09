@@ -380,6 +380,13 @@ export interface ProjectSettings {
 	 */
 	arealRain?: ArealRain | null;
 	/**
+	 * How each land unit's runoff is forced (docs/model.md §2.4h, issue
+	 * #482). Absent or `{ mode: 'catchment' }`: one GR4J run on the
+	 * catchment rain, split to the units by flow shares, as before.
+	 * `perUnit`: GR4J per land unit on its own rain (UnitRainSeriesKey).
+	 */
+	unitRain?: UnitRainSettings | null;
+	/**
 	 * Bias correction of CHIRPS rain where it fills in for blank catchment rain
 	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
@@ -727,6 +734,26 @@ export const calibrationSeriesKey = (kind: CalibrationFlowKind, siteNodeId: stri
 	siteNodeId ? gaugeSeriesKey(kind, siteNodeId) : kind;
 
 /**
+ * The rain kinds a land unit can hold its own record of (issue #482): its
+ * own gauge and its own CHIRPS, keyed `<kind>@<nodeId>` in ModelInput.series
+ * like a gauge's flow records. The backend builds them from
+ * time_series.site_node_id.
+ */
+export const UNIT_RAIN_KINDS = ['rain_catchment_mm', 'rain_chirps_mm'] as const;
+export type UnitRainKind = (typeof UNIT_RAIN_KINDS)[number];
+export type UnitRainSeriesKey = `${UnitRainKind}@${string}`;
+
+export const unitRainSeriesKey = (kind: UnitRainKind, nodeId: string): UnitRainSeriesKey => `${kind}@${nodeId}`;
+/** The kind and node of a unit rain record's key; null for any other key. */
+export function parseUnitRainSeriesKey(key: string): { kind: UnitRainKind; nodeId: string } | null {
+	const at = key.indexOf('@');
+	if (at < 0) return null;
+	const kind = key.slice(0, at);
+	const nodeId = key.slice(at + 1);
+	return (UNIT_RAIN_KINDS as readonly string[]).includes(kind) && nodeId ? { kind: kind as UnitRainKind, nodeId } : null;
+}
+
+/**
  * The calibration records a site has, in CALIBRATION_FLOW_KINDS order (null =
  * the outlet's). `series` is keyed as ModelInput.series; only whether a key
  * holds something is read, so a client can pass a map of the keys it knows.
@@ -893,6 +920,30 @@ export interface ArealRain {
 	/** Where the factors come from (the MAP and its reference, the period compared); required, at most PE_SOURCE_MAX characters. */
 	source: string;
 }
+
+export const UNIT_RAIN_MODES = ['catchment', 'perUnit'] as const;
+export type UnitRainMode = (typeof UNIT_RAIN_MODES)[number];
+
+/** `settings.unitRain` (docs/model.md §2.4h, issue #482). */
+export interface UnitRainSettings {
+	mode: UnitRainMode;
+	/**
+	 * The catchment rain gauge's own MAP, mm, and where it came from. With it,
+	 * a unit with a MAP runs on the gauge's rain × unit MAP ÷ gauge MAP, and
+	 * its own CHIRPS (scaled to its MAP) fills the days the gauge has none;
+	 * without it, on its own CHIRPS throughout (docs/model.md §2.4h).
+	 */
+	gaugeMapMm?: number | null;
+	gaugeMapSource?: string | null;
+	/**
+	 * The common period a unit's CHIRPS MAP factor compares its CHIRPS over
+	 * (ISO dates, inclusive). Absent = DEFAULT_UNIT_MAP_PERIOD, CHPclim2's
+	 * 1991–2020 climatology years.
+	 */
+	mapPeriod?: { start: string; end: string } | null;
+}
+
+export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
 
 /**
  * Bounds on one areal rainfall factor: the CHIRPS bias-correction clamp
@@ -1136,6 +1187,15 @@ export interface NetworkNode {
 	areaLoKm2: number;
 	/** Used when settings.flowShareMethod === 'manual'. 0–1. */
 	flowShareManual: number | null;
+	/**
+	 * The land unit's mean annual precipitation, mm (issue #482): under
+	 * settings.unitRain `perUnit` it sets the level of the unit's own CHIRPS
+	 * (docs/model.md §2.4h). Optional so models stored before it still type;
+	 * absent or null = none.
+	 */
+	mapMm?: number | null;
+	/** Where mapMm came from (a dataset or study, and its period); shown beside the run's MAP factor. */
+	mapSource?: string | null;
 	/** Fraction of upstream inflow entering above the dam. 0–1. */
 	pctUpstreamToDam: number;
 	/** Fraction of the farm's own runoff entering above the dam. 0–1. */
@@ -2526,9 +2586,10 @@ export interface ModelInput {
 	model: ProjectModel;
 	/**
 	 * Keyed by SeriesKind; only the first series of each kind is used. A gauge
-	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey.
+	 * node's own observed records (engine ≥ 1.4.0) are keyed GaugeSeriesKey,
+	 * and a land unit's own rain (issue #482) UnitRainSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries };
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries } & { [key: UnitRainSeriesKey]: DailySeries };
 }
 
 /** One daily output series. nodeId null = catchment level. */
