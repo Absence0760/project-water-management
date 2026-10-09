@@ -60,6 +60,7 @@ import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
 import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
 import { onSeriesDaysChanged } from '../series/newData.js';
 import { replaceSeries } from '../series/replace.js';
+import { unitFeedProblem } from './unitFeed.js';
 import { bboxCellCount, type FeedSource, feedProvenance, feedSourceText, type GridConfig, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
@@ -305,6 +306,10 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 			return { merged: 0, lastDate: null };
 		}
 	}
+
+	// A unit's feed (issue #482): its unit must still be a land unit of the model, or its rain has nowhere to go.
+	const unitProblem = await unitFeedProblem(db, feed);
+	if (unitProblem) return failed(db, feed, unitProblem);
 
 	// Ours, not the fetcher's: checked, then carried forward in the meta both paths below record.
 	const used = checkCellsUsed(feed, result);

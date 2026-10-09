@@ -185,7 +185,7 @@ describe('route auth inventory', () => {
 
 	// The data feeds (WP-2.10): auth-gated like every project route.
 	it('inventories the feed routes as auth-gated', () => {
-		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now', 'GET /projects/:id/feeds/chirps/from-boundary', 'POST /projects/:id/feeds/chirps/from-boundary'];
+		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now', 'GET /projects/:id/feeds/chirps/from-boundary', 'POST /projects/:id/feeds/chirps/from-boundary', 'GET /projects/:id/feeds/chirps/from-units', 'POST /projects/:id/feeds/chirps/from-units'];
 		for (const r of feeds) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);

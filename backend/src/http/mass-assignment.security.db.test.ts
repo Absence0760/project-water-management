@@ -483,6 +483,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
 		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
 	},
+	// Rain for each unit (#482): the ladder's farm A has its parcel; no feed in the way of a new one.
+	'POST /projects/:id/feeds/chirps/from-units': async () => {
+		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));
+		return { body: { product: 'rnl' } };
+	},
 	'POST /projects/:id/feeds/:feedId/run-now': async () => {
 		const feedId = await currentFeed();
 		await ok(ctx.owner.call('PATCH', `${at()}/feeds/${feedId}`, { enabled: true }));

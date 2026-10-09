@@ -22,6 +22,7 @@ import { logEvent } from './logging/logEvent.js';
 import { refuseAmbiguousPaths } from './http/rawPath.js';
 import { myInviteRoutes, projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedFromBoundaryRoutes } from './feeds/fromBoundary.js';
+import { feedFromUnitsRoutes } from './feeds/fromUnits.js';
 import { feedRoutes } from './feeds/routes.js';
 import { MAP_IMPORT_PATH, mapRoutes } from './geo/routes.js';
 import { quaternaryLayerRoutes } from './geo/quaternaryLayer.js';
@@ -193,6 +194,7 @@ export function createApp() {
 	projects.route('/', outlookRoutes);
 	projects.route('/', feedRoutes);
 	projects.route('/', feedFromBoundaryRoutes);
+	projects.route('/', feedFromUnitsRoutes);
 	projects.route('/', mapRoutes);
 	projects.route('/', quaternaryLayerRoutes);
 	projects.route('/', stationRoutes);

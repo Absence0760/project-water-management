@@ -130,11 +130,15 @@ export async function attachSlot(db: Db, projectId: string): Promise<void> {
 /**
  * The boundary mark (config.ts BoundaryMark) is written by the from-boundary
  * route only (feeds/fromBoundary.ts), which computed the cells it vouches
- * for; a plain attach or change can't claim it.
+ * for; a plain attach or change can't claim it. Nor the unit mark (UnitMark,
+ * feeds/fromUnits.ts), which also makes the feed's series a unit's own rain.
  */
 function refuseBoundaryMark(config: unknown) {
 	if (config !== null && typeof config === 'object' && 'boundary' in config) {
 		throw new ApiError(400, 'a feed’s cells are marked as the catchment boundary’s only by “Use the catchment boundary” (POST …/feeds/chirps/from-boundary)');
+	}
+	if (config !== null && typeof config === 'object' && 'unit' in config) {
+		throw new ApiError(400, 'a feed’s cells are marked as a unit’s only by “Rain for each unit” (POST …/feeds/chirps/from-units)');
 	}
 }
 
