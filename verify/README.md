@@ -33,7 +33,7 @@ returns. It imports the engine by path and the example catchments from
 
 | File | What |
 | --- | --- |
-| `model.py` | The Python model (stdlib only). `run(input)` returns the daily series, the allocation summary's run-dependent rows and coverage counts; `unsupported(input)` lists what an input uses beyond phases 1 and 2a; `Refused` is a run the docs say is refused |
+| `model.py` | The Python model (stdlib only). `run(input)` returns the daily series, the allocation summary's run-dependent rows and coverage counts; `unsupported(input)` lists what an input uses beyond phases 1 and 2a and per-unit rain; `Refused` is a run the docs say is refused |
 | `run_engine.ts` | `run <in> <out> …` runs `runModel` on each input; `examples <dir>` writes the three example catchments' inputs (`pnpm seed:examples`' data, without the automatic fit) |
 | `generate.py` | This harness's own seeded random-network generator (stdlib `random`; not the engine's fuzz generator, which is never read). Synthetic data only. `dense=True` puts every phase-2a feature in most networks (each in about a third otherwise) |
 | `probes.py` | Hand-built inputs, each pinning a point the docs left open (§ Findings), and a few coverage probes for rules the random networks rarely reach |
@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 87 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 108 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -176,14 +176,49 @@ Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent
 rows (`capReached`, `limitBound`, `scaled`) within the same tolerance.
 
+## What per-unit rain covers
+
+Added on engine 1.78.0 (issue #482 part E), written from docs/model.md
+§2.4h, in about a third of the random networks and most dense ones
+(`generate.py` `add_unit_rain`, its own random stream, so the rest of a
+network is unchanged):
+
+- **The rule** each land unit (a farm with an area above 0) gets, from the
+  records the input holds (any reading at all, a negative one on a unit's
+  record being a no-data code): its own gauge; the catchment gauge × clamp(unit
+  MAP ÷ gauge MAP); its own CHIRPS; the catchment forcing. A record of
+  nothing but blanks and no-data codes is no record.
+- **Each rule's chain**, day by day: the gauge rain G (the prepared catchment
+  rain on its recorded days, before the CHIRPS infill; a negative reading is
+  a reading and runs as 0), the unit's CHIRPS levelled by clamp(unit MAP ÷ its
+  mean annual rain) over the complete calendar years in the MAP period (every
+  complete year of the record when fewer than 5 are there; with none, or none
+  with rain, the catchment's §2.4b monthly factors, else raw), then the
+  catchment's rain × the MAP ratio (else × 1), and 0 mm with no value.
+- **Forecast days** through the catchment's rain (× the MAP ratio on a unit
+  where rule 2's conditions hold), the warm-up cycling each unit's
+  historical days only.
+- **Runoff**: GR4J per land unit with the one parameter set, the catchment
+  PE and its own area; its runoff as the unit's local inflow in place of
+  natural × share; natural flow the units' sum; the catchment area the units'
+  areas summed (`catchmentAreaKm2` ignored); the catchment's GR4J series as
+  the units' area-weighted means; no land unit at all runs the catchment
+  rain, as without the setting.
+- **Off**: a network with unit records and MAPs but `mode: 'catchment'`
+  (15 % of those networks) runs as without them.
+
+Compared: each land unit's `rain_unit` and `runoff_natural`, and every
+series downstream of them. The run summary's `unitRain` block (rules,
+factors, day counts, per-unit balances) is a reduction of these and not
+compared; the engine's `checkRunoffBalance` closes it. The areal correction
+(§2.4g) stays unsupported, so a rule-4 unit runs on the catchment rain × 1.
+
 ## Phase 2b (not covered yet)
 
 `model.unsupported()` names each of these, and the generator never produces
 them; diff.py refuses an input that uses one. Tracked as one item in
 docs/followups.md § Verification ("`verify/` phase 2b").
 
-- runoff from each unit's own rain (`settings.unitRain` `perUnit`), §2.4h
-  (issue #482; its port is part E of that issue);
 - Reserve rule tables (and audit A1–A7), §2.9c–d;
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
@@ -228,7 +263,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (87
+`test_verify.py` breaks `model.py` one documented rule at a time (108
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -264,7 +299,17 @@ the losses not capped at 1 − e (engine 1.71.0); a unit's own system on a
 planting ignored, a crop's default system ignored, and the project's
 systems table ignored for the SABI defaults (engine 1.72.0); bed losses left
 in the river, uncapped, a senior claim not grossed up for them, and the
-senior requirement crossing a reach whole (engine 1.75.0). Each mutant must disagree with the engine somewhere on the examples,
+senior requirement crossing a reach whole (engine 1.75.0). Per-unit
+rain's 21 (engine 1.78.0): the units' records used with the setting off; a
+unit's inflow as natural × share; `catchmentAreaKm2` kept; no land unit
+refused; the catchment's series weighting every unit alike; a unit's
+warm-up cycling the forecast tail; a record of blanks picking rule 1; a
+unit's negative gauge value read; CHIRPS before the gauge × the MAP ratio;
+either factor unclamped; the MAP period ignored, or used however few its
+years; incomplete years counted; a zero CHIRPS mean clamped to 4; a unit's
+CHIRPS without a MAP raw; rule 1 skipping the unit's CHIRPS, rule 2 never
+reaching it; G with the CHIRPS infill, or a negative G letting the CHIRPS
+in; the catchment's rain filling a gap × 1. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
@@ -309,6 +354,25 @@ fix, `model.py` also treats a forecast tail that starts on 1 October as
 starting a part year of its own (no historical days to fit on), as the engine
 does and §2.12a now says.
 
+Per-unit rain, 2026-10-09 (engine 1.78.0): the examples, the 24 probes and
+400 random and 400 dense networks (seeds 1000–1199 and 1–200 of each) agree
+on every compared column, `rain_unit` and `runoff_natural` included
+(largest difference 4e-9 m³/day). No engine behaviour departs from §2.4h.
+Two points §2.4h didn't settle, both now written into it from the engine's
+output (rows `unit-rain-map-period` and `unit-rain-no-land-unit` below):
+
+- **A CHIRPS mean annual rain of 0 mm.** §2.4h said "with no complete year,
+  the next sub-rule applies"; complete years that all read 0 mm left the MAP
+  factor as unit MAP ÷ 0. The engine treats them as no complete year (the
+  §2.4b factors, else raw, with a warning); a 0 mm year among rainy ones
+  still counts in the mean.
+- **Per-unit rain with no land unit.** §2.4h makes the catchment area the
+  land units' areas summed with `catchmentAreaKm2` ignored, which with no
+  land unit is 0, a run §2.4a refuses. The engine instead runs GR4J on the
+  catchment rain over `catchmentAreaKm2`, as if the setting were off, with a
+  warning. Python now does the same; a judgement call for the docs' owner,
+  not a defect.
+
 Points the docs left open, settled from `runModel`'s outputs (a probe each)
 and written into docs/model.md:
 
@@ -323,6 +387,8 @@ and written into docs/model.md:
 | `binding-site-tie` | A tie between two sites' charges goes to the more downstream site (already documented; pinned) | §2.7b |
 | `forecast-tail-warmup` | The warm-up cycles the historical days only, never a forecast tail (already documented; pinned) | §2.4a, §2.4f |
 | `full-allocation-tail-new-year` | Under a full allocation, a later water year a forecast tail runs into is a part year of its own, scaled over its tail days; only the year the tail starts in keeps its historical days' factor | §2.12a |
+| `unit-rain-map-period` | A unit's CHIRPS whose complete years read 0 mm (a mean annual rain of 0) isn't levelled by its MAP: the §2.4b factors, else raw. A 0 mm year among rainy ones counts in the mean | §2.4h |
+| `unit-rain-no-land-unit` | Per-unit rain with no land unit runs GR4J on the catchment rain over `catchmentAreaKm2`, with a warning, rather than refusing a zero area | §2.4h |
 | `scaled-no-demand-tail-year` | A no-demand year's `scaled` row lists the volume registered over the days it is scaled on: its run days, the historical days of the year a forecast tail starts in (engine ≥ 1.57.0; before, that year listed k × demand = 0) | §2.12a |
 
 Coverage probes (rules the docs settle, which the random networks rarely
@@ -342,4 +408,9 @@ source into three receivers whose rooms fill one after another, its water
 offered again twice: §2.6, engine 1.70.0, issue #90 Q25/Q26),
 `outage-reading-set-aside` (a 30 mm reading after 150 blank days is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
 and `short-blank-run-window` (7 blank days still count like zeros, so the
-reading is spread; its mutant moves the limit by one).
+reading is spread; its mutant moves the limit by one), and `unit-rain-rules`
+(§2.4h: one farm per point of the forcing rule, with gaps that walk each
+chain to its end, a clamped MAP ratio, a negative catchment reading on a
+gauge-MAP unit's wet CHIRPS day, a MAP period holding five of six complete
+years, a record of no-data codes only, a farm without area, a forecast tail
+and a `catchmentAreaKm2` that is ignored).
