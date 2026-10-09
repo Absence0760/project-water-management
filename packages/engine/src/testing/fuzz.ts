@@ -1256,3 +1256,53 @@ export function shrink(input: ModelInput, fails: (x: ModelInput) => boolean, max
 	}
 	return cur;
 }
+
+/**
+ * Runoff from each unit's own rain (engine ≥ 1.78.0, settings.unitRain
+ * `perUnit`, docs/model.md §2.4h) on a random input, from its own stream so
+ * the rest of the seed is unchanged: each land unit gets, at random, its own
+ * gauge (the catchment's rain × a factor, with gaps), its own CHIRPS (with or
+ * without a MAP to level it), only a MAP (rule 2 with a gauge MAP), or
+ * nothing (rule 4); now and then a MAP far enough off to be clamped, a gauge
+ * MAP, and a MAP period the CHIRPS barely covers.
+ */
+export function withUnitRain(input: ModelInput, seed: number): ModelInput {
+	const rng = new Rng(seed ^ 0x1f83d9ab);
+	const series = input.series as Record<string, DailySeries>;
+	const start = toEpochDay(series.rain_catchment_mm?.startDate ?? series.rain_chirps_mm?.startDate ?? input.settings.simulationStart ?? '2000-01-01');
+	const len = series.rain_catchment_mm?.values.length ?? series.rain_chirps_mm?.values.length ?? 365;
+	const gaugeMapMm = rng.bool(0.6) ? rng.float(200, 1500) : null;
+	const firstYear = Number(fromEpochDay(start).slice(0, 4));
+	input.settings.unitRain = {
+		mode: 'perUnit',
+		...(gaugeMapMm !== null ? { gaugeMapMm, gaugeMapSource: 'synthetic gauge MAP' } : {}),
+		...(rng.bool(0.3) ? { mapPeriod: { start: `${firstYear + rng.int(0, 2)}-01-01`, end: `${firstYear + rng.int(3, 8)}-12-31` } } : {})
+	};
+	for (const n of input.model.nodes) {
+		if (n.kind !== 'farm' || !(n.areaKm2 > 0)) continue;
+		const pick = rng.pick(['gauge', 'chirps', 'chirpsMap', 'map', 'none'] as const);
+		const map = rng.bool(0.1) ? rng.pick([5, 9000]) : rng.float(150, 2000);
+		// `complete`: whole calendar years with no gap from 1 January before the run, so a MAP can level it.
+		const own = (complete = false) => {
+			const jan1 = toEpochDay(`${firstYear}-01-01`);
+			const off = complete ? jan1 - start : rng.bool(0.7) ? 0 : rng.int(-60, 60);
+			const k = rng.float(0.3, 3);
+			const base = series.rain_catchment_mm ?? series.rain_chirps_mm;
+			const n = complete ? toEpochDay(`${firstYear + Math.max(1, Math.ceil(len / 365) + rng.int(0, 6))}-01-01`) - jan1 : Math.max(1, len + (rng.bool(0.5) ? 0 : rng.int(-90, 90)));
+			const values = Array.from({ length: n }, (_, i) => {
+				const t = i + off;
+				if (!complete && rng.bool(0.05)) return null;
+				const v = base?.values[t];
+				return typeof v === 'number' ? v * k : rng.bool(0.8) ? 0 : rng.float(0, 40);
+			});
+			return { startDate: fromEpochDay(start + off), values };
+		};
+		if (pick === 'gauge') series[`rain_catchment_mm@${n.id}`] = own();
+		if (pick === 'chirps' || pick === 'chirpsMap' || (pick === 'gauge' && rng.bool(0.5))) series[`rain_chirps_mm@${n.id}`] = own(pick === 'chirpsMap');
+		if (pick === 'chirpsMap' || pick === 'map' || (pick === 'gauge' && rng.bool(0.5))) {
+			n.mapMm = map;
+			n.mapSource = 'synthetic MAP';
+		}
+	}
+	return input;
+}

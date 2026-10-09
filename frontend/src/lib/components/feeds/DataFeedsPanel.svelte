@@ -14,6 +14,7 @@
 	import NearestGauges from './NearestGauges.svelte';
 	import { kindLabel } from '$lib/series/kinds';
 	import BoundaryRain from './BoundaryRain.svelte';
+	import UnitRain from './UnitRain.svelte';
 	import {
 		CHIRPS_PRODUCT_FIRST_DAY,
 		cellsUsedNote,
@@ -333,6 +334,8 @@
 		<!-- The rain feed from the map's catchment boundary (issue #326 B-rain): a proposal for editors, applied by an owner. -->
 		{#if data.canRun && !adding}
 			<div class="boundary"><BoundaryRain {projectId} feeds={data.feeds} onapplied={() => reload().then(() => undefined)} /></div>
+			<!-- One CHIRPS feed per land unit, from its parcel (issue #482): editors set them up. -->
+			<div class="boundary"><UnitRain {projectId} feeds={data.feeds} onapplied={() => reload().then(() => undefined)} /></div>
 		{/if}
 
 		{#if adding}

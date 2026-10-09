@@ -113,6 +113,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),
 	// A body of the right shape; with no boundary on the ladder's map the owner gets 409, past the role check.
 	'POST /projects/:id/feeds/chirps/from-boundary': () => ({ body: { featureId: crypto.randomUUID(), updatedAt: '2026-10-01T00:00:00.000Z' } }),
+	// Every unit the proposal lists (#482): the ladder's farm A, from its parcel.
+	'POST /projects/:id/feeds/chirps/from-units': () => ({ body: { product: 'rnl' } }),
 	'POST /projects/:id/report-schedules': (c) => ({ body: { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [c.owner.id] } }),
 	'POST /projects/:id/farmers': (c) => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, nodeIds: [c.farmId] } }),
 	'POST /projects/:id/farmers/bulk': () => ({ body: { rows: [{ email: `ladder-${crypto.randomUUID()}@example.com`, farm: 'Farm A' }] } }),
@@ -170,6 +172,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
 	// Needs the synthetic evaporation grid loaded (scripts/import-evaporation.ts) and a catchment boundary on the map inside it.
 	'POST /projects/:id/evaporation-from-map': () => ({ body: { dataset: 'synthetic' } }),
+	// Needs the synthetic MAP grid loaded (scripts/import-map-grid.ts); the ladder's parcel lies in its region Z.
+	'POST /projects/:id/map/unit-map': () => ({ body: { dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/allocations/import/commit': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/notes': (c) => ({ body: { body: 'Ladder note', nodeId: c.farmId } }),
@@ -314,7 +318,16 @@ export async function plantQuestion(projectId: string, sid: string): Promise<str
  * in the file's afterAll: the job queue is shared by every DB test file, and a
  * later file's tick would claim them (src/__tests__/db-setup.ts).
  */
-export const clearLadderJobs = (c: Pick<LadderCtx, 'projectId'> | undefined) => retirePendingJobs(c?.projectId);
+/**
+ * The ladder project's leftovers a later file's tick would claim: its pending
+ * jobs, and its feeds, switched off (the feed routes the sweeps call, POST
+ * /feeds and from-boundary / from-units, leave enabled feeds behind, due at
+ * once, and the next tick would schedule them).
+ */
+export async function clearLadderJobs(c: Pick<LadderCtx, 'projectId'> | undefined) {
+	if (c?.projectId) await asOwner('UPDATE data_feed SET enabled = false WHERE project_id = $1', [c.projectId]);
+	await retirePendingJobs(c?.projectId);
+}
 
 /**
  * An open start-from-the-map proposal on `projectId` (178_start_proposal),

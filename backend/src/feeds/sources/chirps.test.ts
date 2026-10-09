@@ -3,7 +3,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
-import { chirpsFinalUrl, chirpsPrelimUrl, chirpsRnlUrl, fetchChirps, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
+import { chirpsFinalUrl, chirpsPrelimUrl, chirpsRnlUrl, fetchChirps, fetchChirpsCells, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
 import { writeGrid } from './tiff-write.js';
 
 /** An http that serves given grids by URL, 404 otherwise. */
@@ -261,6 +261,59 @@ describe('fetchChirps', () => {
 		const prelim = r.values.at(-1)!;
 		const final = later.values[0]!;
 		expect(prelim).toBeCloseTo(final * 1.1, 1);
+	});
+});
+
+describe('fetchChirpsCells (the cell cache’s fetch, issue #482)', () => {
+	const g = (v: number) => grid([v, v + 0.5, -9999, v, v, v, v, v]);
+	const pts = [cell(0, 0), cell(0, 1), cell(0, 2)];
+
+	it('reads each cell’s own value, the sea as NaN, and only the days the plan asks for', async () => {
+		const files: Record<string, Uint8Array> = {};
+		for (let d = 1; d <= 4; d++) files[chirpsFinalUrl(`2026-01-0${d}`)] = g(d);
+		const http = served(files);
+		// Day 2 is skipped (the cache holds it final): its file is never asked for.
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0100', 'sat', { today: '2026-03-10' });
+		expect(r).toEqual({
+			startDate: '2026-01-01',
+			read: 'f-ff',
+			values: [
+				[1, null, 3, 4],
+				[1.5, null, 3.5, 4.5],
+				[Number.NaN, null, Number.NaN, Number.NaN]
+			]
+		});
+		expect(http.urls.some((u) => u.includes('2026.01.02'))).toBe(false);
+	});
+
+	it('a day held as preliminary reads only its final file; a day not held reads the preliminary file when no final is out', async () => {
+		const http = served({ [chirpsPrelimUrl('2026-03-02')]: g(9), [chirpsPrelimUrl('2026-03-03')]: g(3) });
+		// The 2nd is held (2), the 3rd not (0): the probe stops at the 2nd's missing final in a month still being published.
+		const r = await fetchChirpsCells(http, pts, '2026-03-02', '20', 'sat', { today: '2026-03-10' });
+		expect(r.read).toBe('-p');
+		expect(r.values[0]).toEqual([null, 3]);
+		expect(http.urls.filter((u) => u.includes('2026.03.02'))).toEqual([chirpsFinalUrl('2026-03-02')]);
+		// A held day whose final is out reads it.
+		const out = served({ [chirpsFinalUrl('2026-01-05')]: g(5) });
+		expect((await fetchChirpsCells(out, pts, '2026-01-05', '2', 'sat', { today: '2026-03-10' })).read).toBe('f');
+	});
+
+	it('probes finals as fetchChirps does: the first day alone, then a batch at a time, stopping after a batch that ends without one', async () => {
+		const files: Record<string, Uint8Array> = {};
+		for (let d = 1; d <= 9; d++) files[chirpsFinalUrl(`2026-01-0${d}`)] = g(d);
+		for (let d = 10; d <= 20; d++) files[chirpsPrelimUrl(`2026-01-${d}`)] = g(d);
+		const http = served(files);
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { concurrency: 4 });
+		expect(r.read).toBe(`${'f'.repeat(9)}${'p'.repeat(11)}`);
+		expect(new Set(http.urls.filter((u) => u.includes('/final/'))).size).toBe(13);
+	});
+
+	it('rnl reads its final files only, and refuses an implausible value as gridMean does', async () => {
+		const http = served({ [chirpsRnlUrl('2026-01-01')]: g(1), [chirpsPrelimUrl('2026-01-02')]: g(2) });
+		expect(await fetchChirpsCells(http, pts, '2026-01-01', '00', 'rnl')).toMatchObject({ read: 'f-' });
+		expect(http.urls.some((u) => u.includes('/prelim/') || u.includes('/sat/'))).toBe(false);
+		const bad = served({ [chirpsRnlUrl('2026-01-01')]: grid([2500, 1, 1, 1, 1, 1, 1, 1]) });
+		await expect(fetchChirpsCells(bad, pts, '2026-01-01', '0', 'rnl')).rejects.toThrow(FeedFormatError);
 	});
 });
 

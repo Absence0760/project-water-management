@@ -22,6 +22,10 @@
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
 	// project never draws it; its own chunk keeps the tab under its ceiling (the side index, issue #468, grew it).
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
+	// Rain for each unit (settings.unitRain, issue #482): its own chunk, for the same reason.
+	const loadUnitRain = () => import('./UnitRainFields.svelte');
+	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
+	const loadUnitMap = () => import('./UnitMapProposal.svelte');
 </script>
 
 <script lang="ts">
@@ -102,6 +106,7 @@
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 	import { AREAL_METHOD_OPTIONS, arealRainFormError, flatFactor, storedArealRain, withArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
+	import { unitRainFormError } from './unitRain';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
 	// ceiling in scripts/guards/check_web_bundle_budget.mjs). Data feeds, API keys and scheduled
@@ -125,7 +130,8 @@
 		apanSeries,
 		flowRecordId = null,
 		readonly,
-		onProjectChange
+		onProjectChange,
+		onModelChanged = () => {}
 	}: {
 		project: Project;
 		editor?: ModelEditor;
@@ -150,6 +156,8 @@
 		flowRecordId?: string | null;
 		readonly: boolean;
 		onProjectChange: (p: Project) => void;
+		/** A proposal saved to the model on the server (the units' MAP from the grid): the workspace reloads it. */
+		onModelChanged?: () => Promise<void> | void;
 	} = $props();
 
 	// The form edits the page's draft in place (settings/settingsDraft.svelte.ts), so a tab change keeps it.
@@ -177,6 +185,8 @@
 	const areal = $derived((s.arealRain ?? null) as unknown as EditableArealRain | null);
 	const arealError = $derived(arealRainFormError(areal));
 	const arealFlat = $derived(areal ? flatFactor(areal) : null);
+	// Rain for each unit (settings.unitRain, issue #482): checked here, so Save is blocked before its chunk has loaded.
+	const unitRainError = $derived(unitRainFormError(s.unitRain));
 	function setArealOn(on: boolean) {
 		if (!on && areal) draft.lastAreal = $state.snapshot(areal) as EditableArealRain;
 		s.arealRain = storedArealRain(withArealRain(on, draft.lastAreal));
@@ -213,6 +223,7 @@
 			{ id: 'set-rain', message: errs.rainSource },
 			{ id: 'set-flow', message: peError },
 			{ id: 'set-flow', message: arealError },
+			{ id: 'set-flow', message: unitRainError },
 			{ id: 'set-wr2012', message: errs.wr2012 },
 			{ id: 'set-ewr', message: errs.ewrSource },
 			{ id: 'set-ewr', message: reportError },
@@ -863,6 +874,10 @@
 				For a rain record that misses the catchment’s rain, such as a valley gauge or CHIRPS under a mountain range. A fixed input with its
 				source, never a calibrated parameter. Demand and the dams keep the recorded rain.
 			</span>
+			{#if s.unitRain?.mode === 'perUnit'}
+				<!-- A state line, not an explanation: it stays when the explanations are off. -->
+				<span class="hint" role="note" data-testid="areal-rain-unit-note">With rain for each unit on (below), it applies only to the units that fall back to the catchment rain.</span>
+			{/if}
 			{#if areal}
 				<div class="fields">
 					<div class="field">
@@ -949,6 +964,18 @@
 				<FieldHistoryLine field="settings:arealRain" />
 			{/if}
 		</fieldset>
+		<!-- Rain for each unit (settings.unitRain, issue #482): GR4J per unit with land on its own rain; arealRain then applies only to units on the catchment rain. -->
+		<Lazy load={loadUnitRain}>
+			{#snippet children(UnitRainFields)}
+				<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} />
+			{/snippet}
+		</Lazy>
+		{#if !readonly && editor && s.unitRain?.mode === 'perUnit'}
+			<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
+			<Lazy load={loadUnitMap}>
+				{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
+			</Lazy>
+		{/if}
 		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
 		     demand and dam evaporation read the A-pan row whichever is chosen. -->
 		<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">

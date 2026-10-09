@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { geometryAreaM2 } from './area.js';
 import { cultivatedFromCells } from './cropland.js';
 import type { Geometry, Position } from './geojson.js';
-import { cellAreaM2, cellSpan, gridShares } from './gridShares.js';
+import { cellAreaM2, cellSpan, gridShares, toGrid } from './gridShares.js';
 
 const D = 0.0025;
 const poly = (...rings: Position[][]): Geometry => ({ type: 'Polygon', coordinates: rings.map((r) => [...r, r[0]!]) });
@@ -90,5 +90,20 @@ describe('cultivatedFromCells', () => {
 		if ('problem' in r) throw new Error(r.problem);
 		expect(r.cultivatedM2 / (cellAreaM2(21.3, -33.68, D) / 2)).toBeCloseTo(1, 6);
 		expect(r.cultivatedM2).toBeLessThanOrEqual(r.areaM2);
+	});
+});
+
+describe('toGrid', () => {
+	it('moves a Polygon and every ring of a MultiPolygon by the grid’s origin, and leaves anything else as it is', () => {
+		const origin = { originLon: 0.05, originLat: 0.025 };
+		expect(toGrid({ type: 'Polygon', coordinates: [[[1, 2], [1.5, 2], [1.5, 2.5], [1, 2]]] }, origin)).toEqual({
+			type: 'Polygon',
+			coordinates: [[[0.95, 1.975], [1.45, 1.975], [1.45, 2.475], [0.95, 1.975]]]
+		});
+		const multi = toGrid({ type: 'MultiPolygon', coordinates: [[[[1, 2], [2, 2], [2, 3], [1, 2]]], [[[3, 4], [4, 4], [4, 5], [3, 4]]]] }, origin);
+		expect(multi.type).toBe('MultiPolygon');
+		expect((multi as { coordinates: Position[][][] }).coordinates[1]![0]![0]).toEqual([2.95, 3.975]);
+		const point: Geometry = { type: 'Point', coordinates: [1, 2] };
+		expect(toGrid(point, origin)).toBe(point);
 	});
 });

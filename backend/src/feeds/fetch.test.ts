@@ -12,13 +12,28 @@ import {
 	CHIRPS_MAX_DAYS,
 	CHIRPS_REVISION_DAYS,
 	FEED_META_MAX_BYTES,
+	type CellsResult,
+	CellsResult as CellsResultSchema,
 	FetchRequestSchema,
 	FetchResult,
 	fetchWindow,
-	heldThrough,
-	runFetch,
+	gridRead,
+	runFetch as runAny,
 	utcToday
 } from './fetch.js';
+import { CELL_VALUE_MAX_BITS, planFetch, seriesFromCache, uniqueCells } from './cellCache.js';
+import { gridCells } from './config.js';
+import { MAX_MESSAGE_BYTES } from '../jobs/transport.js';
+import { viewFromAnswers } from '../__tests__/cellCacheView.js';
+
+/** runFetch for a request without `cells`: the mean, as before the cell cache. */
+const runFetch = (...a: Parameters<typeof runAny>) => runAny(...a) as Promise<FetchResult>;
+/** runFetch for a request with `cells`: each cell's values. */
+const runCells = async (...a: Parameters<typeof runAny>) => {
+	const r = await runAny(...a);
+	if (!r.ok || !('cells' in r)) throw new Error(`not a cells answer: ${JSON.stringify(r)}`);
+	return r as CellsResult;
+};
 
 const grid = { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] };
 
@@ -173,11 +188,13 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 		expect(fetchWindow('dws', { station: 'X0H000' }, '2026-06-01', today, '2026-09-25', '2026-06-01')).toEqual({ start: '2025-06-01', end: '2026-09-25' });
 	});
 
-	// What the marker and the held days save, on the fixtures (sat final up to
-	// 40 days back, preliminary to 3; rnl final to 6): the range requests of a
-	// caught-up feed's daily fetch without either, and with both (#69). Before
-	// #69 the same fetch took 194 (sat) and 158 (rnl): every day probed its
-	// final file and re-read its preliminary one.
+	// What the marker and the cell cache save, on the fixtures (sat final up
+	// to 40 days back, preliminary to 3; rnl final to 6): the range requests
+	// of a caught-up feed's daily fetch without either, and with both (#69,
+	// #482). Before #69 the same fetch took 194 (sat) and 158 (rnl): every day
+	// probed its final file and re-read its preliminary one. The cache asks
+	// for no day it holds final, and only the final file of a day it holds
+	// preliminary, as the held days did before it.
 	it.each([
 		['sat', 160, 3],
 		['rnl', 158, 5]
@@ -187,26 +204,32 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 		let n = 0;
 		const http: FeedHttp = { range: (u, s, e) => (n++, fixtures.range(u, s, e)), text: fixtures.text };
 		const config = { ...grid, product };
+		const cells = uniqueCells(gridCells(config));
 		const first = fetchWindow('chirps', config, null, day);
-		const r = await runFetch({ source: 'chirps', config, ...first, today: day }, http);
-		if (!r.ok || r.startDate === null) throw new Error('the first fetch read nothing');
+		const plan = planFetch(cells, new Map(), first)!;
+		const answer = await runCells({ source: 'chirps', config, ...first, today: day, cells: { cells: plan.cells.map((c) => [c.row, c.col]), plan: plan.plan } }, http);
+		const view = viewFromAnswers([answer.cells]);
+		const r = seriesFromCache(gridCells(config), view, first);
 		const newest = new Date(Date.parse(`${r.startDate}T00:00:00Z`) + (r.values.length - 1) * 86_400_000).toISOString().slice(0, 10);
-		expect(r.meta.finalThrough).toBe(product === 'sat' ? '2026-01-29' : '2026-03-04');
-		const count = async (finalThrough: string | null, held: boolean) => {
-			n = 0;
-			const w = fetchWindow('chirps', config, newest, day, first.end, finalThrough);
-			// Every day after the marker is still in the window, through yesterday: nothing the re-read could revise is skipped.
-			expect(w.end).toBe(first.end);
-			if (finalThrough) expect(w.start).toBe(new Date(Date.parse(`${finalThrough}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10));
-			// What the series holds after the first fetch: its days.
-			const h = held ? heldThrough('chirps', w, { startDate: r.startDate!, values: r.values }) : undefined;
-			const again = await runFetch({ source: 'chirps', config, ...w, today: day, ...(h ? { heldThrough: h } : {}) }, http);
-			// The feed card's preliminary count is the same either way.
-			expect(again.ok ? (again.meta.prelimDays ?? 0) : null).toBe(product === 'sat' ? 37 : 0);
-			return n;
-		};
-		expect(await count(null, false)).toBe(before);
-		expect(await count(r.meta.finalThrough as string, true)).toBe(after);
+		expect(r.finalThrough).toBe(product === 'sat' ? '2026-01-29' : '2026-03-04');
+		// Without the marker or the cache: the mean read from the files, every day of the re-read window.
+		n = 0;
+		const w0 = fetchWindow('chirps', config, newest, day, first.end, null);
+		expect(w0.end).toBe(first.end);
+		const again = await runFetch({ source: 'chirps', config, ...w0, today: day }, http);
+		expect(again.ok ? (again.meta.prelimDays ?? 0) : null).toBe(product === 'sat' ? 37 : 0);
+		expect(n).toBe(before);
+		// With both: the window starts after the marker, and the plan reads only what the cache can't give.
+		n = 0;
+		const w = fetchWindow('chirps', config, newest, day, first.end, r.finalThrough);
+		// Every day after the marker is still in the window, through yesterday: nothing the re-read could revise is skipped.
+		expect(w.end).toBe(first.end);
+		expect(w.start).toBe(new Date(Date.parse(`${r.finalThrough}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10));
+		const next = planFetch(cells, view, w)!;
+		const cached = await runCells({ source: 'chirps', config, ...w, today: day, cells: { cells: next.cells.map((c) => [c.row, c.col]), plan: next.plan } }, http);
+		expect(n).toBe(after);
+		// The feed card's preliminary count is the same either way.
+		expect(seriesFromCache(gridCells(config), viewFromAnswers([cached.cells], view), w).prelimDays).toBe(product === 'sat' ? 37 : 0);
 	});
 });
 
@@ -461,7 +484,7 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(req('chirps', grid, '2026-07-01', '2026-05-31')).toBe(true);
 	});
 
-	// A queue message: heldThrough only ever names a CHIRPS day inside the window (heldThrough()).
+	// A queue message: heldThrough only ever names a CHIRPS day inside the window (from a worker before the cell cache).
 	it('takes heldThrough only as a CHIRPS sat day inside the window', () => {
 		const req = (source: string, config: unknown, held: unknown) =>
 			FetchRequestSchema.safeParse({ source, config, start: '2026-01-01', end: '2026-01-31', today: '2026-02-01', heldThrough: held }).success;
@@ -476,24 +499,6 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 		expect(req('chirps', { ...grid, product: 'rnl' }, undefined)).toBe(true);
 	});
 
-	it('heldThrough() is the last day of the window’s leading run the series holds a value on, CHIRPS only', () => {
-		const w = { start: '2026-01-10', end: '2026-01-20' };
-		const ser = (startDate: string, values: (number | null)[]) => ({ startDate, values });
-		expect(heldThrough('chirps', w, ser('2026-01-10', [1, 2, 3, 4, 5, 6]))).toBe('2026-01-15');
-		// A hole inside what the feed holds ends it: the hole is read again.
-		expect(heldThrough('chirps', w, ser('2026-01-10', [1, 2, null, 4, 5, 6]))).toBe('2026-01-11');
-		// Bounded to the window's end; a series from before the window counts from the window's first day.
-		expect(heldThrough('chirps', w, ser('2026-01-10', new Array(30).fill(1)))).toBe('2026-01-20');
-		expect(heldThrough('chirps', w, ser('2026-01-05', [null, null, null, null, null, 1, 2]))).toBe('2026-01-11');
-		// Nothing on the window's first day, a series that starts later, or none: nothing held.
-		expect(heldThrough('chirps', w, ser('2026-01-10', [null, 2, 3]))).toBeUndefined();
-		expect(heldThrough('chirps', w, ser('2026-01-12', [1, 2, 3]))).toBeUndefined();
-		expect(heldThrough('chirps', w, ser('2026-01-10', []))).toBeUndefined();
-		expect(heldThrough('chirps', w, null)).toBeUndefined();
-		expect(heldThrough('chirps', { start: '2026-02-01', end: '2026-01-20' }, ser('2026-01-01', new Array(60).fill(1)))).toBeUndefined();
-		expect(heldThrough('dws', w, ser('2026-01-10', [1, 2, 3]))).toBeUndefined();
-	});
-
 	it('every window fetchWindow asks for passes (positive control)', () => {
 		const today = '2026-06-01';
 		for (const last of [null, '2026-05-28', '2020-01-01', '1990-01-01']) {
@@ -501,8 +506,12 @@ describe('FetchRequestSchema (what the fetcher Lambda accepts)', () => {
 				for (const through of [null, '2026-05-31', '2020-03-01', '1995-01-01', '1970-12-31']) {
 					for (const final of [null, '2026-05-31', '2026-05-01', '2020-03-01', '1995-01-01']) {
 						const w = fetchWindow(source, config as never, last, today, through, final);
-						const held = heldThrough(source, w, last ? { startDate: '1950-01-01', values: new Array(30_000).fill(1) } : null);
-						expect(FetchRequestSchema.safeParse({ source, config, ...w, today, ...(held ? { heldThrough: held } : {}) }).success, `${source} ${last} ${through} ${final}`).toBe(true);
+						expect(FetchRequestSchema.safeParse({ source, config, ...w, today }).success, `${source} ${last} ${through} ${final}`).toBe(true);
+						// With the cell cache's plan: one day per day of the window (none for an empty one, which sends no plan).
+						const days = Math.round((Date.parse(w.end) - Date.parse(w.start)) / 86_400_000) + 1;
+						if (source === 'chirps' && days > 0) {
+							expect(FetchRequestSchema.safeParse({ source, config, ...w, today, cells: { cells: [[1, 2]], plan: '0'.repeat(days) } }).success, `${last} ${through} ${final}`).toBe(true);
+						}
 					}
 				}
 			}
@@ -515,5 +524,111 @@ describe('FetchResult meta fits its column (018_feeds.sql: 4 KB of JSON)', () =>
 		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'é'.repeat(38)}`, 'é'.repeat(100)]));
 		expect(FetchResult.safeParse({ ok: true, startDate: '2026-01-01', values: [1], meta }).success).toBe(false);
 		expect(FEED_META_MAX_BYTES).toBeLessThan(4096);
+	});
+});
+
+describe('the cell cache path (issue #482): each cell’s values, merged, then the mean computed from the cache', () => {
+	const today = '2026-03-10';
+	const http = fixtureHttp(() => today);
+	const plain = { start: '2026-01-15', end: '2026-03-09' };
+	const sea = { south: -20.3, west: 25.3, north: -20.2, east: 25.4 };
+	/** The fetch as the feed_fetch job makes it from an empty cache, and the feed's days from the cache it leaves. */
+	async function viaCache(config: Parameters<typeof gridCells>[0], w: { start: string; end: string }) {
+		const plan = planFetch(uniqueCells(gridCells(config)), new Map(), w)!;
+		const answer = await runCells({ source: 'chirps', config, ...w, today, cells: { cells: plan.cells.map((c) => [c.row, c.col]), plan: plan.plan } }, http);
+		expect(CellsResultSchema.parse(answer)).toEqual(answer);
+		const { noData, used } = gridRead(config);
+		return { answer, days: seriesFromCache(gridCells(config), viewFromAnswers([answer.cells]), w, noData), used: used() };
+	}
+
+	it.each([
+		['a listed cell, sat (final then preliminary)', grid, plain],
+		['a listed cell, rnl', { ...grid, product: 'rnl' as const }, plain],
+		['a bounding box, area weighted', { bbox: { south: -20.13, west: 25.12, north: -20.05, east: 25.2 } }, plain],
+		['a coastal box leaving out its sea cell', { bbox: sea, skipNoData: true }, plain],
+		['across a year end', grid, { start: '2025-12-20', end: '2026-01-10' }]
+	])('%s: the same days, preliminary count, final marker and cells used as reading the mean', async (_label, config, w) => {
+		const before = await runFetch({ source: 'chirps', config, ...w, today }, http);
+		if (!before.ok) throw new Error(before.error);
+		const { days, used } = await viaCache(config, w);
+		expect(days.values).toEqual(before.values);
+		expect(days.prelimDays).toBe(before.meta.prelimDays);
+		expect(days.finalThrough).toBe(before.meta.finalThrough);
+		expect(used.cellsUsed).toBe(before.meta.cellsUsed);
+	});
+
+	it('answers each cell’s own values: the sea as -1, a day not out as unread', async () => {
+		const { answer } = await viaCache({ bbox: sea, skipNoData: true }, plain);
+		expect(answer.cells.cells).toHaveLength(4);
+		// The fixture's sea cell (row 5, col 7 of its grid) is the box's south-east cell.
+		const seaRow = answer.cells.values[3]!;
+		expect(seaRow.filter((v) => v !== null).every((v) => v === -1)).toBe(true);
+		// Final through 40 days back, preliminary to 3, nothing for the last two days.
+		expect(answer.cells.read).toBe(`${'f'.repeat(15)}${'p'.repeat(37)}--`);
+		expect(answer.meta).toEqual({ product: 'sat', daysRead: 52, cellDaysRead: 208 });
+	});
+
+	it('the request takes a plan only for CHIRPS, one day per day of the window, of cells of the grid', () => {
+		const ok = { source: 'chirps', config: grid, start: '2026-01-01', end: '2026-01-03', today };
+		const req = (over: Record<string, unknown>) => FetchRequestSchema.safeParse({ ...ok, ...over }).success;
+		expect(req({ cells: { cells: [[1600, 4100]], plan: '012' } })).toBe(true);
+		expect(req({ cells: { cells: [[1600, 4100]], plan: '01' } })).toBe(false);
+		expect(req({ cells: { cells: [[1600, 4100]], plan: '013' } })).toBe(false);
+		expect(req({ cells: { cells: [], plan: '000' } })).toBe(false);
+		expect(req({ cells: { cells: [[1600, 4100], [1600, 4100]], plan: '000' } })).toBe(false);
+		expect(req({ cells: { cells: [[2400, 0]], plan: '000' } })).toBe(false);
+		expect(req({ cells: { cells: [[0, 7200]], plan: '000' } })).toBe(false);
+		expect(req({ cells: { cells: [[1.5, 3]], plan: '000' } })).toBe(false);
+		// The same read cost as a feed's own cells: at most 25 grid rows.
+		expect(req({ cells: { cells: Array.from({ length: 25 }, (_, i) => [i, 0]), plan: '000' } })).toBe(true);
+		expect(req({ cells: { cells: Array.from({ length: 26 }, (_, i) => [i, 0]), plan: '000' } })).toBe(false);
+		// Never with heldThrough, never for another source, never a held preliminary day for rnl.
+		expect(req({ heldThrough: '2026-01-02', cells: { cells: [[1600, 4100]], plan: '000' } })).toBe(false);
+		expect(req({ source: 'chirps_gefs', cells: { cells: [[1600, 4100]], plan: '000' } })).toBe(false);
+		expect(req({ config: { ...grid, product: 'rnl' }, cells: { cells: [[1600, 4100]], plan: '012' } })).toBe(false);
+		expect(req({ config: { ...grid, product: 'rnl' }, cells: { cells: [[1600, 4100]], plan: '011' } })).toBe(true);
+	});
+
+	it('the answer’s shape: one row of values per cell, a value on exactly the days read, no preliminary rnl, no value past 2000 mm', () => {
+		const answer = (over: Record<string, unknown>) => ({
+			ok: true,
+			cells: { product: 'sat', startDate: '2026-01-01', read: 'fp-', cells: [[1600, 4100]], values: [[0, 1065353216, null]], ...over },
+			meta: {}
+		});
+		const ok = (over: Record<string, unknown>) => CellsResultSchema.safeParse(answer(over)).success;
+		expect(ok({})).toBe(true);
+		expect(ok({ values: [[-1, -1, null]] })).toBe(true);
+		expect(ok({ values: [[0, null, null]] })).toBe(false);
+		expect(ok({ values: [[0, 1, 2]] })).toBe(false);
+		expect(ok({ values: [[0, 1]] })).toBe(false);
+		expect(ok({ values: [] })).toBe(false);
+		expect(ok({ values: [[0, CELL_VALUE_MAX_BITS + 1, null]] })).toBe(false);
+		expect(ok({ values: [[0, -2, null]] })).toBe(false);
+		expect(ok({ values: [[0, 1.5, null]] })).toBe(false);
+		expect(ok({ product: 'rnl' })).toBe(false);
+		expect(ok({ product: 'rnl', read: 'ff-' })).toBe(true);
+		expect(ok({ cells: [[1600, 4100], [1600, 4100]], values: [[0, 1, null], [0, 1, null]] })).toBe(false);
+		expect(ok({ read: 'fx-' })).toBe(false);
+		// The fetcher's sat answer can't claim a value is final for the worker: there is no such field.
+		expect(CellsResultSchema.safeParse({ ...answer({}), startDate: '2026-01-01' }).success).toBe(false);
+	});
+
+	it('the largest answer a fetch can give (100 cells × 120 days, every value ten digits) fits an SQS message with its envelope and the largest meta', () => {
+		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'k'.repeat(38)}`, 'k'.repeat(100)]));
+		const result = {
+			ok: true as const,
+			cells: {
+				product: 'sat' as const,
+				startDate: '2026-01-01',
+				read: 'p'.repeat(CHIRPS_MAX_DAYS),
+				cells: Array.from({ length: 100 }, (_, i): [number, number] => [1600 + (i % 25), 4100 + Math.floor(i / 25)]),
+				values: Array.from({ length: 100 }, () => new Array(CHIRPS_MAX_DAYS).fill(CELL_VALUE_MAX_BITS))
+			},
+			meta
+		};
+		expect(CellsResultSchema.safeParse(result).success).toBe(true);
+		const message = { v: 1, type: 'ingest', fetchJobId: '00000000-0000-4000-8000-000000000000', feedId: '00000000-0000-4000-8000-000000000000', feedVersion: 'x'.repeat(40), result };
+		const bytes = Buffer.byteLength(JSON.stringify(message));
+		expect(bytes).toBeLessThan(MAX_MESSAGE_BYTES * 0.6);
 	});
 });

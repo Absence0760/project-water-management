@@ -11,7 +11,9 @@ import { z } from 'zod';
 import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells } from './config.js';
 import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedNoDataError } from './errors.js';
 import type { FeedHttp } from './http.js';
-import { cellsUsed, fetchChirps, fetchGefs, type NoDataPolicy } from './sources/chirps.js';
+import { CELL_VALUE_MAX_BITS, CHC_COLS, CHC_ROWS, cellCentre, encodeCellValue } from './cellCache.js';
+import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_DAILY_PRODUCTS } from './config.js';
+import { cellsUsed, fetchChirps, fetchChirpsCells, fetchGefs, type NoDataPolicy } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
@@ -50,9 +52,18 @@ export interface FetchRequest {
 	end: string;
 	today: string;
 	/**
-	 * CHIRPS: the feed's newest day, when it falls in the window (heldThrough
-	 * below). A `sat` day on or before it with no final value out isn't read
-	 * again (fetchChirps).
+	 * CHIRPS through the cell cache (feeds/cellCache.ts planFetch, what every
+	 * feed_fetch job sends since 208_chirps_cell_cache): the grid cells to
+	 * read, as [row, column], and one DAY_* character per day of the window.
+	 * The answer is each cell's own values (CellsResult), never the mean.
+	 */
+	cells?: { cells: [number, number][]; plan: string };
+	/**
+	 * A CHIRPS request without `cells`, from a worker before the cell cache
+	 * (one still in flight while a release rolls out): the feed's newest day,
+	 * when it falls in the window. A `sat` day on or before it with no final
+	 * value out isn't read again (fetchChirps). Answered with the mean, as
+	 * before.
 	 */
 	heldThrough?: string;
 }
@@ -119,25 +130,6 @@ export function fetchWindow(
 	}
 }
 
-/**
- * What a CHIRPS fetch may skip as already held: the last day D such that
- * every day from the window's first through D holds a value in `series`, the
- * series the answer will merge into (store.ts heldSeries: its days from the
- * window's first on). Not the feed's newest day: a day before it can be
- * empty (published late, deleted, or a gap the merge kept), and a skipped
- * day is never filled until its final is out. None for another source, an
- * empty window, or when the first day holds nothing.
- */
-export function heldThrough(source: FeedSource, window: FetchWindow, series: { startDate: string; values: (number | null)[] } | null): string | undefined {
-	if (source !== 'chirps' || series === null || window.start > window.end) return undefined;
-	const from = toEpochDay(window.start) - toEpochDay(series.startDate);
-	if (from < 0) return undefined;
-	const last = Math.min(toEpochDay(window.end) - toEpochDay(series.startDate), series.values.length - 1);
-	let i = from;
-	while (i <= last && series.values[i] !== null && series.values[i] !== undefined) i++;
-	return i > from ? addDays(series.startDate, i - 1) : undefined;
-}
-
 /** Text Postgres will store: it refuses U+0000 in text and in jsonb. */
 const StoredText = (max: number) => z.string().max(max).refine((s) => !s.includes('\u0000'), 'contains U+0000');
 /**
@@ -148,6 +140,12 @@ const StoredText = (max: number) => z.string().max(max).refine((s) => !s.include
  */
 export const FEED_META_MAX_BYTES = 3072;
 
+/** What the source said about the data, for the status panel. Small and flat. */
+const FetchMeta = z
+	.record(StoredText(40), z.union([StoredText(100), z.number().finite()]))
+	.refine((m) => Object.keys(m).length <= 20)
+	.refine((m) => Buffer.byteLength(JSON.stringify(m)) <= FEED_META_MAX_BYTES, `meta is over ${FEED_META_MAX_BYTES} bytes`);
+
 /** The fetcher's answer: days to merge (nulls are gaps, never erasures), or a failure. */
 export const FetchResult = z.discriminatedUnion('ok', [
 	z
@@ -157,16 +155,66 @@ export const FetchResult = z.discriminatedUnion('ok', [
 			startDate: SeriesStartDate.nullable(),
 			values: z.array(z.number().finite().nonnegative().nullable()).max(MAX_SERIES_VALUES),
 			/** What the source said about the data, for the status panel. Small and flat. */
-			meta: z
-				.record(StoredText(40), z.union([StoredText(100), z.number().finite()]))
-				.refine((m) => Object.keys(m).length <= 20)
-				.refine((m) => Buffer.byteLength(JSON.stringify(m)) <= FEED_META_MAX_BYTES, `meta is over ${FEED_META_MAX_BYTES} bytes`)
+			meta: FetchMeta
 		})
 		.strict()
 		.refine((r) => (r.startDate === null) === (r.values.length === 0), 'startDate goes with values'),
 	z.object({ ok: z.literal(false), error: StoredText(FEED_ERROR_MAX).min(1) }).strict()
 ]);
 export type FetchResult = z.output<typeof FetchResult>;
+
+/**
+ * One cell's value in a CellsResult (feeds/cellCache.ts encodeCellValue): the
+ * float32's bit pattern of 0–2000 mm, -1 for no data (the sea), null where
+ * the day wasn't read.
+ */
+const CellValue = z.union([z.literal(-1), z.number().int().min(0).max(CELL_VALUE_MAX_BITS)]).nullable();
+
+/**
+ * The fetcher's answer to a request with `cells`: each cell's own values,
+ * which the worker merges into the shared cell cache (feeds/cellCacheStore.ts)
+ * before computing the feed's days from it. Untrusted like every answer: the
+ * shape is checked here, the days against the window and the cells against
+ * the feed's in the ingest, and every value again by the cache's merge
+ * function (208_chirps_cell_cache.sql chirps_cache_merge).
+ *
+ * Size: at most 100 cells × 120 days, a value at most ten digits of JSON, so
+ * the largest answer is about 135 KB, inside SQS's 256 KB with the envelope
+ * and the meta (fetch.test.ts checks the worst case).
+ */
+export const CellsResult = z
+	.object({
+		ok: z.literal(true),
+		cells: z
+			.object({
+				product: z.enum(CHIRPS_DAILY_PRODUCTS),
+				startDate: SeriesStartDate,
+				/** Per day: `f` read from the final file, `p` the preliminary, `-` not read. */
+				read: z.string().regex(/^[-fp]*$/).max(CHIRPS_MAX_DAYS),
+				/** [row, column] of the CHC grid. */
+				cells: z.array(z.tuple([z.number().int().min(0).max(CHC_ROWS - 1), z.number().int().min(0).max(CHC_COLS - 1)])).max(BBOX_MAX_CELLS),
+				/** Per cell, per day of `read`. */
+				values: z.array(z.array(CellValue).max(CHIRPS_MAX_DAYS)).max(BBOX_MAX_CELLS)
+			})
+			.strict()
+			.superRefine((c, ctx) => {
+				const bad = (message: string) => ctx.addIssue({ code: 'custom', message });
+				if (c.values.length !== c.cells.length) return bad('one row of values per cell');
+				if (new Set(c.cells.map(([r, k]) => `${r},${k}`)).size !== c.cells.length) return bad('a cell is listed twice');
+				if (c.product === 'rnl' && c.read.includes('p')) return bad('rnl has no preliminary files');
+				for (const row of c.values) {
+					if (row.length !== c.read.length) return bad('one value per day');
+					// A day read gives every cell a value or no data; a day not read gives none.
+					for (let d = 0; d < row.length; d++) if ((row[d] === null) !== (c.read[d] === '-')) return bad('a value for exactly the days read');
+				}
+			}),
+		meta: FetchMeta
+	})
+	.strict();
+export type CellsResult = z.output<typeof CellsResult>;
+
+/** What the fetcher answers: a CHIRPS request with `cells` gets a CellsResult, every other request a FetchResult. */
+export type FetchAnswer = FetchResult | CellsResult;
 
 /** The longest window per source, as fetchWindow caps it (GEFS reads its 16 days whatever the window). */
 const MAX_WINDOW_DAYS: Record<FeedSource, number> = { chirps: CHIRPS_MAX_DAYS, chirps_gefs: 16, dws: 365 * DWS_MAX_YEARS };
@@ -179,7 +227,20 @@ export const FetchRequestSchema = z
 		start: SeriesStartDate,
 		end: SeriesStartDate,
 		today: SeriesStartDate,
-		heldThrough: SeriesStartDate.optional()
+		heldThrough: SeriesStartDate.optional(),
+		cells: z
+			.object({
+				cells: z
+					.array(z.tuple([z.number().int().min(0).max(CHC_ROWS - 1), z.number().int().min(0).max(CHC_COLS - 1)]))
+					.min(1)
+					.max(BBOX_MAX_CELLS)
+					// The same read cost as a feed's own cells: one strip per grid row per day.
+					.refine((cs) => new Set(cs.map(([r]) => r)).size <= BBOX_MAX_ROWS, `at most ${BBOX_MAX_ROWS} grid rows`)
+					.refine((cs) => new Set(cs.map(([r, c]) => `${r},${c}`)).size === cs.length, 'a cell is listed twice'),
+				plan: z.string().regex(/^[012]+$/)
+			})
+			.strict()
+			.optional()
 	})
 	.strict()
 	.transform((v, ctx): FetchRequest => {
@@ -200,6 +261,15 @@ export const FetchRequestSchema = z
 			ctx.addIssue({ code: 'custom', path: ['heldThrough'], message: 'not a CHIRPS sat day inside the window' });
 			return z.NEVER;
 		}
+		// The cell cache's plan: CHIRPS only, one character per day of the window, never with heldThrough.
+		if (v.cells !== undefined && (v.source !== 'chirps' || v.heldThrough !== undefined || v.cells.plan.length !== Math.max(0, days))) {
+			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'not a CHIRPS plan of one day per day of the window' });
+			return z.NEVER;
+		}
+		if (v.cells !== undefined && chirpsProduct(config.data) === 'rnl' && v.cells.plan.includes('2')) {
+			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'rnl has no preliminary days to hold' });
+			return z.NEVER;
+		}
 		return { ...v, config: config.data };
 	});
 
@@ -209,7 +279,7 @@ export const FetchRequestSchema = z
  * The sea mask is static, so that count changing from one fetch to the next
  * means the grid itself changed (docs/architecture.md § Data feeds).
  */
-function gridRead(config: GridConfig): { cells: ReturnType<typeof gridCells>; noData?: NoDataPolicy; used: () => { cellsUsed?: number } } {
+export function gridRead(config: GridConfig): { cells: ReturnType<typeof gridCells>; noData?: NoDataPolicy; used: () => { cellsUsed?: number } } {
 	const cells = gridCells(config);
 	if (!(config.bbox && config.skipNoData)) return { cells, used: () => ({}) };
 	const noData: NoDataPolicy = { mask: null };
@@ -217,11 +287,22 @@ function gridRead(config: GridConfig): { cells: ReturnType<typeof gridCells>; no
 }
 
 /** Run one fetch. Never throws: a failure is a result, with a message written by us. */
-export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<FetchResult> {
+export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<FetchAnswer> {
 	try {
 		switch (req.source) {
 			case 'chirps': {
 				const product = chirpsProduct(req.config);
+				if (req.cells) {
+					// The cell cache's fetch: each planned cell's own values, read at its centre.
+					const cells = req.cells.cells;
+					const r = await fetchChirpsCells(http, cells.map(([row, col]) => cellCentre({ row, col })), req.start, req.cells.plan, product, { today: req.today });
+					const read = [...r.read].filter((d) => d !== '-').length;
+					return {
+						ok: true,
+						cells: { product, startDate: r.startDate, read: r.read, cells, values: r.values.map((row) => row.map(encodeCellValue)) },
+						meta: { product, daysRead: read, cellDaysRead: read * cells.length }
+					};
+				}
 				const { cells, noData, used } = gridRead(req.config as GridConfig);
 				const r = await fetchChirps(http, cells, req.start, req.end, product, { heldThrough: req.heldThrough ?? null, today: req.today, noData });
 				// Held preliminary days not read again still count (the feed card's "N preliminary days").
@@ -249,11 +330,20 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 			}
 		}
 	} catch (err) {
-		if (!(err instanceof Error) || !/^Feed(Format|Unavailable)Error$/.test(err.name)) console.error('feed fetch failed:', err);
-		// A box skips a sea cell only when asked to (skipNoData): otherwise it would quietly shrink the area the mean is over.
-		if (err instanceof FeedNoDataError && 'bbox' in req.config && req.config.bbox && !req.config.skipNoData) {
-			return { ok: false, error: feedErrorMessage(new FeedFormatError(`${err.message}, inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)`)) };
-		}
-		return { ok: false, error: feedErrorMessage(err) };
+		return fetchFailure(err, req.config);
 	}
+}
+
+/**
+ * A fetch's failure as a result, with our message: what runFetch answers, and
+ * what the ingest records when a feed's days computed from the cell cache
+ * fail the same checks (feeds/ingest.ts, cellCache.ts seriesFromCache).
+ */
+export function fetchFailure(err: unknown, config: FeedConfig): Extract<FetchResult, { ok: false }> {
+	if (!(err instanceof Error) || !/^Feed(Format|Unavailable)Error$/.test(err.name)) console.error('feed fetch failed:', err);
+	// A box skips a sea cell only when asked to (skipNoData): otherwise it would quietly shrink the area the mean is over.
+	if (err instanceof FeedNoDataError && 'bbox' in config && config.bbox && !config.skipNoData) {
+		return { ok: false, error: feedErrorMessage(new FeedFormatError(`${err.message}, inside the bounding box: shrink the box to the land, list the cells instead, or let the feed leave out sea cells (skipNoData)`)) };
+	}
+	return { ok: false, error: feedErrorMessage(err) };
 }

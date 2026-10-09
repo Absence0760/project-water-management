@@ -121,6 +121,13 @@ describe('boundaryCells', () => {
 		expect(boundaryCells(poly(rect(25, -61, 25.05, -60.5)))).toEqual({ problem: expect.stringMatching(/beyond 60°/) });
 	});
 
+	it('names the polygon it was given in a problem (a unit’s parcel, feeds/fromUnits.ts)', () => {
+		expect(boundaryCells({ type: 'Point', coordinates: [25, -20] }, 'the unit’s parcel')).toEqual({ problem: 'the unit’s parcel is not a polygon' });
+		expect(boundaryCells(poly(rect(25, -30.3, 25.05, -29)), 'the unit’s parcel')).toEqual({ problem: expect.stringMatching(/^the unit’s parcel covers \d+ of the 0\.05° CHIRPS cells in 26 rows/) });
+		// Positive control: the default still names the catchment boundary.
+		expect(boundaryCells({ type: 'Point', coordinates: [25, -20] })).toEqual({ problem: 'the catchment boundary is not a polygon' });
+	});
+
 	it('produces cells the feed config takes', () => {
 		const r = ok(poly(rect(25.1, -20.2, 25.2, -20.1)));
 		expect(FeedInput.safeParse({ source: 'chirps', config: { cells: r.cells.map(({ lat, lon, weight }) => ({ lat, lon, weight })) } }).success).toBe(true);

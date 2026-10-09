@@ -107,16 +107,16 @@
 					</table>
 				</div>
 			</details>
-			<div class="row">
+			<div class="action-row">
 				{#if p.canApply && p.apply.action !== 'none'}
-					<button type="button" class="btn btn-sm btn-primary" aria-disabled={applying} onclick={apply} data-testid="boundary-rain-apply">{applying ? 'Applying…' : 'Apply'}</button>
+					<button type="button" class="btn btn-primary" aria-disabled={applying} onclick={apply} data-testid="boundary-rain-apply">{applying ? 'Applying…' : 'Apply'}</button>
 				{:else if !p.canApply}
 					<p class="muted small">An owner of the project applies it.</p>
 				{/if}
-				<button type="button" class="btn btn-sm" onclick={close}>Close</button>
+				<button type="button" class="btn" onclick={close}>Close</button>
 			</div>
 		{:else}
-			<div class="row"><button type="button" class="btn btn-sm" onclick={close}>Close</button></div>
+			<div class="action-row"><button type="button" class="btn" onclick={close}>Close</button></div>
 		{/if}
 		<div role="status">{#if done}<p class="muted" data-testid="boundary-rain-done">{done}</p>{/if}</div>
 		{#if error}
@@ -164,13 +164,6 @@
 		padding: 0.2rem 0.6rem;
 		text-align: right;
 		border-bottom: 1px solid var(--border);
-	}
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		align-items: center;
-		margin-top: 0.4rem;
 	}
 	.btn[aria-disabled='true'] {
 		opacity: 0.55;

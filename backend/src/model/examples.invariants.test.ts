@@ -5,12 +5,28 @@
 // so they must balance as exactly as the random fuzz networks do. Built
 // without the stored fit (several seconds; it only changes GR4J's
 // parameters): examples.test.ts covers the examples as seeded.
-import { defaultProjectSettings, fromEpochDay, runModel, SUPPLY_DEFAULTS, toEpochDay, transferRatesM3s, withMonthlyRates, type DemandObject } from '@water-management/engine';
+import { defaultProjectSettings, fromEpochDay, runModel, SUPPLY_DEFAULTS, toEpochDay, transferRatesM3s, withMonthlyRates, type DailySeries, type DemandObject, type ModelInput } from '@water-management/engine';
 import { checkAll, sameOutput } from '@water-management/engine/testing';
 import { describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
 
 const examples = buildExamples({ fit: false });
+
+/**
+ * Synthetic unit rain records for an example: every third land unit its own gauge (the catchment rain × 1.2
+ * with a gap), every third its own CHIRPS (the catchment rain × 0.7), the rest none.
+ */
+function unitRecords(input: ModelInput): Record<string, DailySeries> {
+	const rain = input.series.rain_catchment_mm ?? input.series.rain_chirps_mm!;
+	const out: Record<string, DailySeries> = {};
+	input.model.nodes.forEach((n, i) => {
+		if (n.kind !== 'farm' || !(n.areaKm2 > 0)) return;
+		const scaled = (k: number) => rain.values.map((v, t) => (t === 30 ? null : typeof v === 'number' ? v * k : null));
+		if (i % 3 === 0) out[`rain_catchment_mm@${n.id}`] = { startDate: rain.startDate, values: scaled(1.2) };
+		else if (i % 3 === 1) out[`rain_chirps_mm@${n.id}`] = { startDate: rain.startDate, values: scaled(0.7) };
+	});
+	return out;
+}
 
 describe('engine invariants on the example catchments', () => {
 	it('builds all three', () => {
@@ -140,6 +156,37 @@ describe('engine invariants on the example catchments', () => {
 		input.settings = { ...input.settings, effectiveRainFractionMonthly: [0.5, 0.6, 0.7, 0.7, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.4, 0.45] as never };
 		expect(checkAll(input, 1)).toBeNull();
 	}, 60_000);
+
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h, issue #482): off, it changes nothing
+	// to the bit (absent, null, catchment mode, unit records in the input or not); on, every invariant holds.
+	it('per-unit rain off gives the identical run on every example', () => {
+		for (const ex of examples) {
+			const base = inputOf(ex);
+			const before = JSON.stringify(runModel(base));
+			for (const unitRain of [null, { mode: 'catchment' as const }]) {
+				const off = structuredClone(base);
+				off.settings = { ...off.settings, unitRain };
+				Object.assign(off.series, unitRecords(off));
+				for (const n of off.model.nodes) if (n.kind === 'farm') Object.assign(n, { mapMm: 600, mapSource: 'invented' });
+				expect(JSON.stringify(runModel(off)), `${ex.name} ${JSON.stringify(unitRain)}`).toBe(before);
+			}
+		}
+	}, 120_000);
+
+	it('every invariant holds with per-unit rain on every example', () => {
+		for (const ex of examples) {
+			const input = inputOf(ex);
+			input.settings = { ...input.settings, unitRain: { mode: 'perUnit', gaugeMapMm: 600, gaugeMapSource: 'invented gauge MAP' } };
+			Object.assign(input.series, unitRecords(input));
+			input.model.nodes.forEach((n, i) => {
+				if (n.kind === 'farm' && i % 3 !== 0) Object.assign(n, { mapMm: 500 + 40 * i, mapSource: 'invented' });
+			});
+			const out = runModel(input);
+			expect(out.summary.unitRain?.units.length, ex.name).toBeGreaterThan(1);
+			expect(new Set(out.summary.unitRain!.units.map((u) => u.rule)).size, ex.name).toBeGreaterThan(1);
+			expect(checkAll(input, 1), ex.name).toBeNull();
+		}
+	}, 180_000);
 
 	// The GR4J-run timing budget lives in examples.perf.test.ts, its own vitest
 	// project (run serially via `pnpm test:perf`, not part of `pnpm test`) —

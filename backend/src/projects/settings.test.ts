@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -403,6 +403,41 @@ describe('SettingsPatch.pe (engine ≥ 0.31.0, issue #39)', () => {
 		expect(forcing.safeParse({ ...base, pe: { kind: 'pan' } }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, pe: monthlyPe }).success).toBe(true);
 		expect(forcing.safeParse({ ...base, pe: { ...monthlyPe, source: '' } }).success).toBe(false);
+	});
+});
+
+describe('SettingsPatch.unitRain (issue #482)', () => {
+	const ok = (unitRain: unknown) => SettingsPatch.safeParse({ unitRain }).success;
+	const full = { mode: 'perUnit', gaugeMapMm: 700, gaugeMapSource: 'Synthetic gauge', mapPeriod: { start: '1991-01-01', end: '2020-12-31' } };
+
+	it('takes either mode, the gauge MAP with its source, a MAP period, or null; and agrees with the engine’s unitRainError', () => {
+		for (const good of [null, { mode: 'catchment' }, { mode: 'perUnit' }, full, { ...full, gaugeMapMm: null, gaugeMapSource: null }, { ...full, mapPeriod: null }]) {
+			expect(ok(good), JSON.stringify(good)).toBe(true);
+			expect(unitRainError(good)).toBeNull();
+		}
+		for (const [name, bad] of [
+			['an unknown mode', { mode: 'grid' }],
+			['no mode', { gaugeMapMm: 700, gaugeMapSource: 's' }],
+			['a gauge MAP without its source', { mode: 'perUnit', gaugeMapMm: 700 }],
+			['a gauge MAP of 0', { mode: 'perUnit', gaugeMapMm: 0, gaugeMapSource: 's' }],
+			['a gauge MAP above the bound', { mode: 'perUnit', gaugeMapMm: 12_001, gaugeMapSource: 's' }],
+			['a period under a year', { mode: 'perUnit', mapPeriod: { start: '2000-01-01', end: '2000-12-01' } }],
+			['a period without an end', { mode: 'perUnit', mapPeriod: { start: '2000-01-01' } }]
+		] as [string, unknown][]) {
+			expect(ok(bad), name).toBe(false);
+			expect(unitRainError(bad), name).not.toBeNull();
+		}
+		expect(ok({ ...full, extra: 1 })).toBe(false);
+		// The engine-only `pinned` rules (an outlook member's, docs/model.md §2.4h) never come from a client: a stored one would override every unit's fitted level.
+		expect(ok({ ...full, pinned: [{ nodeId: 'u1', rule: 'gaugeMap', gaugeMapFactor: 4 }] })).toBe(false);
+	});
+
+	it('is replaced whole by a patch, and kept by a patch of anything else', () => {
+		const stored = patchSettings({}, { unitRain: full });
+		expect(stored.unitRain).toEqual(full);
+		expect(patchSettings(stored, { unitRain: { mode: 'catchment' } }).unitRain).toEqual({ mode: 'catchment' });
+		expect(patchSettings(stored, { lakeEvapFactor: 0.8 }).unitRain).toEqual(full);
+		expect(patchSettings(stored, { unitRain: null }).unitRain).toBeNull();
 	});
 });
 
@@ -870,6 +905,17 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, panCoefficient: new Array(12).fill(2.1) } })).toBe(false); // out of bounds (0–2)
 		expect(ok({ ...record, forcing: { ...forcing, apanMm: forcing.apanMm.map(() => Infinity) } })).toBe(false); // must be finite
 		expect(ok({ ...record, forcing: { ...forcing, extra: 1 } })).toBe(false); // no other keys
+	});
+
+	it('accepts an optional unitRain fingerprint inside forcing (engine ≥ 1.78.0, issue #482), and refuses a malformed one', () => {
+		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
+		const unit = { nodeId: 'u1', rule: 'gaugeMap', rainKey: 'rain_catchment_mm', factor: 1.2, factorSource: 'gaugeMap', gaugeMapFactor: 1.2, chirpsSource: 'map', chirpsFactor: 1.9 };
+		const unitRain = { mode: 'perUnit', gaugeMapMm: 650, mapPeriod: { start: '1991-01-01', end: '2020-12-31' }, units: [unit] };
+		expect(ok({ ...record, forcing: { ...forcing, unitRain } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, unitRain: null } })).toBe(true);
+		expect(ok({ ...record, forcing })).toBe(true); // a fit on the catchment's rain records none
+		expect(ok({ ...record, forcing: { ...forcing, unitRain: { ...unitRain, mode: 'catchment' } } })).toBe(false);
+		expect(ok({ ...record, forcing: { ...forcing, unitRain: { ...unitRain, mapPeriod: undefined } } })).toBe(false);
 	});
 
 	it('accepts an optional chirpsBiasCorrection inside forcing, and a forcing from before it without', () => {

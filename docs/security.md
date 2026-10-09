@@ -1831,9 +1831,14 @@ In short:
   ACTION, block that project's deletion; `restored_from_run` is held the
   same way) and `alert_event.run_id`. A reference that is deliberately not
   a foreign key is held the same way on write: `time_series.site_node_id`
-  (084, a gauge record's site) by `time_series_site_same_project`, and the
-  PATCH route finds the node in the project first
-  (`series/site.db.test.ts`).
+  (084, a gauge record's site; 209, a land unit's own rain) by
+  `time_series_site_same_project`, and for rain also
+  `time_series_site_land_unit` (a farm of the same project); the PATCH
+  route, a series restore and an import apply one rule (`series/site.ts`)
+  and find the node in the project first (`series/site.db.test.ts`,
+  `series/unitRain.db.test.ts`). 209's `time_series_site_from_feed` sets a
+  new series' site only from a feed of the same project (SECURITY INVOKER,
+  under the writer's RLS).
 
 - Roles are **viewer < editor < owner**, per project (with `farmer` and
   `contributor` below viewer, WP-2.1 and WP-3.3: see below). A team grants one of
@@ -2607,7 +2612,7 @@ In short:
     and with no database access**: its role may only receive fetch requests and
     send results, and it refuses a request for a longer window than one fetch
     reads (120 CHIRPS days, 20 DWS years). The worker validates each result
-    again (`FetchResult`: size, dates, values, a flat `meta` within `last_meta`'s
+    again (`FetchResult`, or `CellsResult` for a CHIRPS answer's cells: size, dates, values, a flat `meta` within `last_meta`'s
     byte budget, no U+0000, so nothing it accepts can fail the database after
     the merge), checks it answers a real `feed_fetch` job of
     that feed, and drops one for a feed changed since, before anything merges
@@ -2616,7 +2621,32 @@ In short:
     recorded on the feed (`029_feed_fetch`; the window comes from the worker,
     never the answer). A compromised fetcher could at worst send wrong
     numbers for the days feeds asked it for, into the series those feeds
-    already target.
+    already target (and, for CHIRPS, the shared cell cache, below).
+  - **The shared CHIRPS cell cache** (`208_chirps_cell_cache`,
+    [data-model.md § The CHIRPS cell cache](./data-model.md#the-chirps-cell-cache-208_chirps_cell_cachesql))
+    is a cross-tenant table: every project's CHIRPS feeds over a cell read
+    the same row, so a wrong value written by one fetch reaches every
+    project over that cell. So `water_app` has SELECT only (any signed-in
+    session: the values are public CHIRPS data), and the only write is
+    `chirps_cache_merge`, `SECURITY DEFINER`, callable only from a running
+    job of the CHIRPS feed it names (lease live), whose acting user is still
+    an editor. It refuses, whole,
+    any value outside 0–2000 mm (NaN marks the sea), a day before the
+    product begins or after today, a preliminary `rnl` value, a malformed
+    fetch; and it never replaces a final value with a preliminary one, so a
+    late or forged preliminary answer can't undo a final. Before that, the
+    ingest accepts only the feed's own cells, the days of the window it
+    asked for and the feed's product, so an answer can't fill the cache
+    for a place no feed asked about (that check is the app's: the cells a
+    config names are worked out in TypeScript, so the function binds the
+    write to the feed and its product, not to its cells). What remains: the fetcher's values
+    are believed (it read the files; the worker can't), so a compromised
+    fetcher could write plausible wrong values for the cells it was asked
+    about, now into every project over them rather than one series. That
+    is the same trust as before, wider in reach; the fetcher's role still
+    only receives requests and sends answers. A fixture database's
+    synthetic values carry `origin = 'fixtures'` and are never read by a
+    live feed.
 - Svelte escapes output by default, and nothing in the frontend renders a
   string as markup: no `{@html …}` block, no `innerHTML` / `outerHTML` /
   `insertAdjacentHTML` / `document.write` / `createContextualFragment`, no
@@ -2898,7 +2928,9 @@ placed points. The server never trusts the browser with geometry:
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
   orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180), the MAP grid (`rain_map_dataset`, `rain_map_cell_reference`, 207) and `river_reference` (171) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
-  schema owner).
+  schema owner). The shared CHIRPS cell cache (`chirps_cell_year`, 208) is
+  read the same way but written by the data feeds, through one checked
+  function (Input handling, above).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
   (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
   with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and

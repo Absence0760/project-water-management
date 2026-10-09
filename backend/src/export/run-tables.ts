@@ -38,6 +38,8 @@ import {
 	type FdcPercentileRow,
 	type FdcPercentileTable,
 	type RunSummary,
+	type UnitRainSummary,
+	type UnitRainUnit,
 	type WaterBalanceRow,
 	type Wr2012FitStatKey,
 	type Wr2012FitStats,
@@ -922,6 +924,81 @@ export function* forecastLines(f: NonNullable<RunSummary['forecast']>): Generato
 	}
 }
 
+/** What each unit-rain rule is, as the summary CSV names it. */
+const UNIT_RAIN_RULE_TEXT: Record<UnitRainUnit['rule'], string> = {
+	unitGauge: "the unit's own rain gauge",
+	gaugeMap: "the catchment gauge × unit MAP ÷ gauge MAP",
+	unitChirps: "the unit's own CHIRPS",
+	catchment: 'the catchment rain (no rain of its own)'
+};
+const UNIT_RAIN_FACTOR_TEXT: Record<UnitRainUnit['factorSource'], string> = {
+	gauge: 'as recorded',
+	gaugeMap: 'unit MAP ÷ gauge MAP',
+	chirpsMap: 'unit MAP ÷ its CHIRPS mean annual rain',
+	chirpsBias: "the catchment's monthly CHIRPS factors",
+	chirpsRaw: 'raw',
+	catchment: 'as the catchment forcing'
+};
+
+/** The per-unit rain block (engine ≥ 1.78.0): the setting, then one row per land unit. */
+function* unitRainLines(u: UnitRainSummary): Generator<string> {
+	yield csvRow(["Runoff from each unit's own rain (docs/model.md §2.4h)"]);
+	yield csvRow(['Gauge MAP (mm)', u.gaugeMapMm, u.gaugeMapSource ?? '']);
+	yield csvRow(['MAP period', `${u.mapPeriod.start} to ${u.mapPeriod.end}`]);
+	yield csvRow([
+		'Unit',
+		'Area (km²)',
+		'MAP (mm)',
+		'MAP source',
+		'Rain from',
+		'Record',
+		'Factor',
+		'Factor from',
+		'Clamped',
+		'CHIRPS mean annual (mm)',
+		'CHIRPS years',
+		'Days: own gauge',
+		'Days: scaled catchment gauge',
+		'Days: own CHIRPS',
+		'Days: catchment rain',
+		'Days: forecast',
+		'Days: none',
+		'Rain (mm)',
+		'Actual evaporation (mm)',
+		'Runoff (mm)',
+		'Runoff (m³)',
+		'Runoff coefficient'
+	]);
+	for (const x of u.units) {
+		const map = x.chirps?.source === 'map' ? x.chirps : null;
+		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : x.rule === 'unitChirps' ? (map?.clamped ?? false) : false;
+		yield csvRow([
+			x.name,
+			x.areaKm2,
+			x.mapMm,
+			x.mapSource ?? '',
+			UNIT_RAIN_RULE_TEXT[x.rule],
+			x.rainKey ?? '',
+			x.factor,
+			UNIT_RAIN_FACTOR_TEXT[x.factorSource],
+			clamped ? 'yes' : 'no',
+			map ? map.meanAnnualMm : null,
+			map ? `${map.years[0]}–${map.years[map.years.length - 1]} (${map.years.length}${map.inPeriod ? '' : ', outside the MAP period'})` : '',
+			x.days.unitGauge,
+			x.days.gaugeMap,
+			x.days.unitChirps,
+			x.days.catchment,
+			x.days.forecast,
+			x.days.none,
+			x.rainMm,
+			x.aetMm,
+			x.flowMm,
+			x.runoffM3,
+			x.runoffCoefficient
+		]);
+	}
+}
+
 export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Generator<string> {
 	yield csvRow(['Project', meta.projectName]);
 	yield csvRow(['Run', meta.runLabel]);
@@ -976,6 +1053,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield* ewrAgreementLines(site.agreement, `EWR test at ${site.name}: its ${RECORD_TEXT[site.flowKind]} vs the simulated flow there and its own EWR, on the days with an observation`);
 	}
 	yield '';
+
+	// Runoff from each unit's own rain (engine ≥ 1.78.0, docs/model.md §2.4h): the rule, factor and runoff per unit.
+	if (summary.unitRain) {
+		yield* unitRainLines(summary.unitRain);
+		yield '';
+	}
 
 	if (summary.forecast) {
 		yield* forecastLines(summary.forecast);
