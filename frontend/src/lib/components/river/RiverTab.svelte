@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dailyEwrName } from '$lib/components/ewr/notMet';
 	// River & reserve (issue #17, option A · Outcomes): one run's river, for
 	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
 	// The page header and run picker, two KPI tiles (river.ts riverKpis), then
@@ -147,7 +148,7 @@
 	const ruleTable = $derived(!!judged?.site);
 	const hasAssurance = $derived(!!summary?.ewrAssurance?.length);
 	const ruleLine = $derived(!!shown && hasRuleLine(shown.series));
-	const yearsWords = $derived(reserveYearsWords(ruleTable));
+	const yearsWords = $derived(reserveYearsWords(ruleTable, summary?.catchment.outletEwr));
 	const kpis = $derived(
 		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null, headline) : []
 	);
@@ -245,7 +246,7 @@
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
 		<p class="judged muted small" data-testid="river-judged-by">
-			Results are judged by <strong>{judgedByText(judged.site, headline)}</strong>.
+			Results are judged by <strong>{judgedByText(judged.site, headline, summary?.catchment.outletEwr)}</strong>.
 			<a href="?tab=settings#set-judge">{canEdit ? 'Change' : 'Where this is set'}</a>{#if judged.fellBack}<span class="fell-back"
 					>This run has no Reserve rule table at the chosen site, so it is judged automatically.</span
 				>{/if}
@@ -292,6 +293,7 @@
 								runs={[{ name: name(shown!.run), projectId, runId: shown!.run.id, colour: 'var(--series-2)', forecastFrom: shown!.run.summary.forecast?.from ?? null }]}
 								minHeight={240}
 								below={yearsWords.below}
+								daily={dailyEwrName(summary?.catchment.outletEwr)}
 							/>
 						{/snippet}
 					</Lazy>
@@ -315,7 +317,7 @@
 			{/if}
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
-					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline)} />
+					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline)} daily={dailyEwrName(summary.catchment.outletEwr)} />
 				{:else}
 					<h3>EWR compliance by month</h3>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>

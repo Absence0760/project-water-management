@@ -194,6 +194,18 @@ describe('the figures, and where they come from', () => {
 		expect(row).toMatchObject({ farmsShort7: null, farmsShort30: null, farmCount: 3, lowestDamPct: null, damsKnown: false, publishedAt: null, restriction: null });
 	});
 
+	it('a daily EWR from the DRM TAB file counts as an EWR set, though the pragmatic EWR is 0 (engine ≥ 1.77.0, issue #455)', async () => {
+		const pid = await makeProject(admin, 'Echo TAB file', teamId, { ewr: false });
+		const ewrDailySource = { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 40, tabM3s: monthly(0.05), naturalPctM3s: null, reservePctM3s: null };
+		expect((await admin.call('PATCH', `/projects/${pid}`, { settings: { ewrDailySource } })).status).toBe(200);
+		await run(admin, pid);
+		const row = byId((await portfolio(admin)).body.projects, pid)!;
+		expect(row.ewr.reason).not.toBe('no-ewr');
+		expect(row.ewr.days30).toBeGreaterThan(0);
+		// Positive control: the same project on the pragmatic EWR alone (0) has none set.
+		expect(byId((await portfolio(admin)).body.projects, runOnly)!.ewr.reason).toBe('no-ewr');
+	});
+
 	it('the latest run’s EWR (counted in SQL) matches the publication of the same run (counted by the engine)', async () => {
 		const pid = await makeProject(admin, 'Delta consistency', teamId);
 		const runId = await run(admin, pid);

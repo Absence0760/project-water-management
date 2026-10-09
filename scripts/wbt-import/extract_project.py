@@ -1087,6 +1087,95 @@ def num_or_none(v: Any) -> float | None:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+# The daily outlet EWR's source (engine >= 1.77.0, issue #455, docs/model.md 2.9f): an optional "EWR options" sheet
+# with these defined names. A workbook without them imports as before: the pragmatic EWR, no settings key.
+EWR_OPT_METHODS = {"pragmatic": "pragmatic", "tab file": "tab", "percentile tables": "percentile"}
+EWR_OPT_SCALINGS = {"mar ratio": "mar", "area ratio": "area"}
+EWR_OPT_POINTS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99]
+EWR_OPT_METHOD_TEXT = {"pragmatic": "the pragmatic EWR", "tab": "the DRM TAB file", "percentile": "the DRM percentile tables"}
+
+
+def _ewr_opt_number(v: Any) -> float | None:
+    """A number above 0, else None (a blank, text or 0)."""
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+
+
+def _ewr_opt_values(cells: list[Any]) -> list[float] | None:
+    """Numbers >= 0, or None when any cell is blank, text or below 0."""
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 for v in cells):
+        return None
+    return [float(v) for v in cells]
+
+
+def read_ewr_options(wb: Workbook) -> dict[str, Any] | None:
+    """settings.ewrDailySource from the [EWR options] sheet, or None without it."""
+    names = wb.wb.defined_names
+    if "zEwrOpt_Method" not in names:
+        return None
+    raw = clean(wb.cell("zEwrOpt_Method"))
+    method = EWR_OPT_METHODS.get(raw.lower() or "pragmatic")
+    if method is None:
+        wb.notes.append(f"WARNING: [EWR options] the EWR method \"{raw}\" is not Pragmatic, TAB file or Percentile tables: imported as the pragmatic EWR")
+        method = "pragmatic"
+    raw_scaling = clean(wb.cell("zEwrOpt_Scaling")) if "zEwrOpt_Scaling" in names else ""
+    scaling = EWR_OPT_SCALINGS.get(raw_scaling.lower() or "mar ratio")
+    if scaling is None:
+        wb.notes.append(f"WARNING: [EWR options] the scaling \"{raw_scaling}\" is not MAR ratio or Area ratio: imported as MAR ratio")
+        scaling = "mar"
+    table_mar = _ewr_opt_number(wb.cell("zEwrOpt_TableMar")) if "zEwrOpt_TableMar" in names else None
+    table_area = _ewr_opt_number(wb.cell("zEwrOpt_TableArea")) if "zEwrOpt_TableArea" in names else None
+    tab = None
+    if "zEwrOpt_TabM3s" in names:
+        cells = [v for row in wb.named("zEwrOpt_TabM3s") for v in row]
+        tab = _ewr_opt_values(cells) if len(cells) == 12 else None
+
+    def grid(name: str) -> list[list[float]] | None:
+        if name not in names:
+            return None
+        rows = wb.named(name)
+        if len(rows) != 12 or any(len(r) != len(EWR_OPT_POINTS) for r in rows):
+            return None
+        out = [_ewr_opt_values(r) for r in rows]
+        return None if any(r is None for r in out) else out  # type: ignore[misc]
+
+    natural = grid("zEwrOpt_NaturalPct")
+    reserve = grid("zEwrOpt_ReservePct")
+    if "zEwrOpt_PctPoints" in names:
+        points = [v for row in wb.named("zEwrOpt_PctPoints") for v in row]
+        if len(points) != len(EWR_OPT_POINTS) or any(not isinstance(v, (int, float)) or abs(v - p) > 1e-9 for v, p in zip(points, EWR_OPT_POINTS)):
+            wb.notes.append("WARNING: [EWR options] the percentile points are not 0.1, 0.2 ... 0.9, 0.99: the tables are read as those ten points, in order")
+    missing = []
+    if method == "tab" and tab is None:
+        missing.append("the 12 TAB flows")
+    if method == "percentile" and natural is None:
+        missing.append("the natural flow percentile table")
+    if method == "percentile" and reserve is None:
+        missing.append("the total Reserve flow percentile table")
+    if method != "pragmatic" and scaling == "mar" and table_mar is None:
+        missing.append("the table MAR")
+    if method != "pragmatic" and scaling == "area" and table_area is None:
+        missing.append("the table area")
+    if missing:
+        wb.notes.append(
+            f"WARNING: [EWR options] {EWR_OPT_METHOD_TEXT[method]} needs {', '.join(missing)} (a number for every cell, none below 0): imported as the pragmatic EWR"
+        )
+        method = "pragmatic"
+    wb.notes.append(
+        f"[EWR options] the daily EWR at the outlet: {EWR_OPT_METHOD_TEXT[method]}"
+        + ("" if method == "pragmatic" else f", scaled by the {'MAR' if scaling == 'mar' else 'area'} ratio")
+        + " (docs/model.md 2.9f)"
+    )
+    return {
+        "method": method,
+        "scaling": scaling,
+        "tableMarMm3": table_mar,
+        "tableAreaKm2": table_area,
+        "tabM3s": tab,
+        "naturalPctM3s": natural,
+        "reservePctM3s": reserve,
+    }
+
+
 def read_shortfalls(wb: Workbook) -> dict[str, Any] | None:
     try:
         sheet, c1, r1, _, r2 = wb.ref("zShortfalls_Tbl")
@@ -1315,6 +1404,9 @@ def extract(
         }
         if extract_calibration_window is not None:
             settings.update(extract_calibration_window(wb.wb))
+        ewr_source = read_ewr_options(wb)
+        if ewr_source is not None:
+            settings["ewrDailySource"] = ewr_source
 
         flow = read_flow_data(wb)
         dates = flow["dates"]

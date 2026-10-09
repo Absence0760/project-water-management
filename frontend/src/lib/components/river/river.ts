@@ -8,7 +8,7 @@ import { metricDelta, type MetricDelta, type RunSummary } from '@water-managemen
 import type { EwrHeadline, RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import type { MetricSpec } from '$lib/components/compare/delta';
-import { daysBelowTest, ewrNotMet } from '$lib/components/ewr/notMet';
+import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '$lib/components/ewr/notMet';
 import { headlines } from '$lib/components/overview/latestRun';
 import { flowHeading } from '$lib/components/overview/summaryChart';
 import { fmtNum } from '$lib/format/number';
@@ -129,8 +129,8 @@ export function ewrRuleText(s: Pick<RunSummary, 'ewrAssurance'>): string {
  * "the reserve" (ewr/notMet.ts daysBelowTest, issue #177). `below` is the
  * test's name for the chart's own labels.
  */
-export function reserveYearsWords(ruleTable: boolean): { heading: string; below: string } {
-	const below = daysBelowTest(ruleTable);
+export function reserveYearsWords(ruleTable: boolean, daily?: DailyEwrSource): { heading: string; below: string } {
+	const below = daysBelowTest(ruleTable, daily);
 	return { heading: `Days below ${below}, each water year`, below };
 }
 

@@ -1656,4 +1656,8 @@ ceilings still append here.
             ceiling; MapLibre's 6 KB worker entry counts as a worker. The
             app's own map code (the tab, the map component, the quaternary
             proposal, the worker entry) is in the total, by entry file.
+2026-10-08  largestSpreadsheetWorkerKb 32 → 34 KB (issue #455): the b023
+            import worker reads the optional [EWR options] sheet
+            (frontend/src/lib/spreadsheet/import/ewrOptions.ts, ~1 KB
+            gzipped, no library); measured 33 KB locally.
 ```

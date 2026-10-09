@@ -88,7 +88,8 @@ export const CHILD_ERRORS = [
 	'wr2012',
 	'reserve',
 	'evidence',
-	'restrict'
+	'restrict',
+	'ewrSource'
 ] as const;
 export type ChildError = (typeof CHILD_ERRORS)[number];
 

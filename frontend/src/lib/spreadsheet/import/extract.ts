@@ -6,7 +6,7 @@
 // Python's project.json key for key and value for value, and `notes` are its
 // `note:` / `WARNING:` lines, same text, same order (the parity tests check
 // both). `unmapped` is TypeScript-only (plan.md 1b).
-import { DEFAULT_IRRIGATION_SYSTEMS, type CalibrationParams, type DemandObject, type FlowShareMethod, type IrrigationSystemDef, type NetworkNode, type ProjectModel, type ProjectSettings } from '@water-management/engine';
+import { DEFAULT_IRRIGATION_SYSTEMS, type CalibrationParams, type EwrDailySource, type DemandObject, type FlowShareMethod, type IrrigationSystemDef, type NetworkNode, type ProjectModel, type ProjectSettings } from '@water-management/engine';
 import type { WorkbookSource } from './source';
 import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
@@ -23,6 +23,7 @@ import { modelWindow } from './modelWindow';
 import { IMPORTED_OFFTAKE, offtakeNote, readTransfers } from './transfers';
 import { B023Workbook } from './workbook';
 import { zeroRainNote } from './zeroRain';
+import { readEwrOptions } from './ewrOptions';
 
 /** The settings extract_project.py writes (the rest take the app's defaults on import). */
 export type ImportedSettings = Pick<
@@ -37,6 +38,8 @@ export type ImportedSettings = Pick<
 	calibration: CalibrationParams;
 	/** Pragmatic EWR, m³/day per water-year month (one per row of zEWR_Pragmatic, 12 in b023). */
 	ewrPragmaticM3PerDay: number[];
+	/** The daily outlet EWR's source from an [EWR options] sheet (engine ≥ 1.77.0, ./ewrOptions.ts); absent without one. */
+	ewrDailySource?: EwrDailySource;
 };
 
 /**
@@ -295,6 +298,8 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		.named('zEWR_Pragmatic')
 		.map((row, i) => report.num(row[0]!, { sheet: ewrRef.sheet, col: ewrRef.c1, row: ewrRef.r1 + i, what: 'Pragmatic EWR' }));
 	const window = extractCalibrationWindow(wb);
+	// The daily outlet EWR's source (engine ≥ 1.77.0): read after the calibration window, where the Python reads it.
+	const ewrDailySource = readEwrOptions(wb, report);
 	// calibrationFlowKind may be 'flow_pitman_m3s' until the checks below; the type is the final one.
 	const settings = {
 		februaryDays: februaryDays(wb),
@@ -308,7 +313,8 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 		simulationEnd: null as string | null,
 		calibrationStart: window.calibrationStart,
 		calibrationEnd: window.calibrationEnd,
-		calibrationFlowKind: window.calibrationFlowKind
+		calibrationFlowKind: window.calibrationFlowKind,
+		...(ewrDailySource ? { ewrDailySource } : {})
 	};
 
 	step(6);

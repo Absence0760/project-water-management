@@ -21,6 +21,7 @@ import type { SeriesProvenance } from './seriesProvenance';
 import { QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN } from './quantileMap';
 import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
+import type { EwrDailySource, OutletEwrInfo } from './reserve/dailySource';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { NoFlowSummary, ServedWhileEwrFailsSite } from './reserve/riverMeasures';
 import type { SupplyAssurance } from './network/reliability';
@@ -411,6 +412,16 @@ export interface ProjectSettings {
 	/** Pragmatic EWR at the outflow gauge, m³/day per water-year month. */
 	ewrPragmaticM3PerDay: Monthly;
 	/**
+	 * Where the daily EWR at the outlet comes from (engine ≥ 1.77.0, issue
+	 * #455, ./reserve/dailySource.ts, docs/model.md §2.9f): the pragmatic EWR
+	 * above, the DRM TAB file's monthly total flows, or the DRM percentile
+	 * tables read at the day's natural flow, each table scaled to the model by
+	 * MAR or area. Everything downstream (fragmentation, shortfalls, charge,
+	 * curtailment, the compliance grid) follows it. Optional so settings
+	 * stored before it still type; absent or null = the pragmatic EWR.
+	 */
+	ewrDailySource?: EwrDailySource | null;
+	/**
 	 * The Reserve's assurance rules per EWR site (engine ≥ 0.21.0, hydrologist
 	 * Q6; ./reserve/rules.ts): at most one table per site (the outlet, or a
 	 * gauge). Each run then judges monthly compliance against them
@@ -773,6 +784,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		ewrRules: [],
 		ewrChargeSource: 'pragmatic',
 		lowFlowMeasure: 'total',
+		// The pragmatic EWR is the daily outlet EWR (engine ≥ 1.77.0, ./reserve/dailySource.ts).
+		ewrDailySource: null,
 		simulationStart: null,
 		simulationEnd: null,
 		reportStart: null,
@@ -3319,6 +3332,13 @@ export interface RunSummary {
 		runoffCoefficient?: number | null;
 		ewrDaysNotMet: number;
 		ewrFractionDaysNotMet: number;
+		/**
+		 * Where the daily EWR at the outlet came from when it isn't the
+		 * pragmatic EWR (engine ≥ 1.77.0, settings.ewrDailySource): the method,
+		 * the scaling, its inputs and the scale factor. Absent = the pragmatic
+		 * EWR, and on older runs.
+		 */
+		outletEwr?: OutletEwrInfo;
 		/**
 		 * The outlet EWR test on the observed record vs the simulated outflow
 		 * (engine ≥ 0.5.3). null when the run has no gauge or logger record

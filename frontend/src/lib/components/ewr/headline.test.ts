@@ -130,3 +130,16 @@ describe('headlineTest', () => {
 		expect(headlineTest({ source: 'ruleTable', siteNodeId: 'g1' }, nodes, [])).toBe('pragmatic');
 	});
 });
+
+describe('the daily test from the DRM tables (engine ≥ 1.77.0, issue #455)', () => {
+	const tab = { method: 'tab' as const };
+	it('names the daily choice by its source, and counts it as set with the pragmatic EWR at 0', () => {
+		expect(headlineOptions(nodes, [{ siteNodeId: 'g1' }], ZERO, { source: 'auto' }, tab).map((o) => o.label)).toContain('The daily EWR from the DRM TAB file at the outflow gauge');
+		expect(headlineOptions(nodes, [], ZERO, { source: 'auto' }, { method: 'percentile' })[0]!.label).toBe('Automatic: now the daily EWR from the DRM percentile tables at the outflow gauge');
+		expect(headlineProblem({ source: 'pragmatic' }, nodes, [], ZERO, tab)).toBeNull();
+		// Positive control: without the DRM source the same settings have no daily test.
+		expect(headlineProblem({ source: 'pragmatic' }, nodes, [], ZERO)).toMatch(/0 in every month/);
+		expect(judgedByText(null, { source: 'pragmatic' }, tab)).toBe('the daily EWR from the DRM TAB file at the outflow gauge');
+		expect(judgedByText(null, { source: 'pragmatic' }, { method: 'pragmatic' })).toBe('the pragmatic EWR at the outflow gauge');
+	});
+});

@@ -58,6 +58,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology'
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
+import { ewrDailyScale, ewrDailySourceNotes, fillOutletEwr, outletEwrNote, resolveEwrDailySource, type EwrDailySource, type OutletEwrInfo } from './reserve/dailySource';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
 import { naturalFlowFor, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
@@ -328,9 +329,18 @@ function runNetwork(
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
 		...(capturing ? { captureAt: captureAt! } : {}),
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
-		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {})
+		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {}),
+		// The daily outlet EWR's scale factor (engine ≥ 1.77.0): the capture run's, as its other record-wide figures.
+		...(resume?.pinned.outletEwr ? { outletEwr: resume.pinned.outletEwr } : {})
 	}, historyDays);
 	const { plan, topo } = built;
+	const outletEwr = built.outletEwr?.info;
+	if (outletEwr) {
+		// What the run's EWR was judged by (engine ≥ 1.77.0, §2.9f): every run that doesn't use the pragmatic EWR says so.
+		warnings.push(outletEwrNote(outletEwr));
+		if (!(outletEwr.scale > 0)) warnings.push('the daily EWR at the outlet is 0 on every day: its scale factor is 0 (the model has no natural flow at the outlet, or no unit has an area)');
+		else if (outletEwr.scale > 1) warnings.push(`the daily EWR's scale factor is above 1 (${outletEwr.scale.toPrecision(4)}): the tables are for a smaller catchment than the model's; check the table ${outletEwr.scaling === 'mar' ? 'MAR' : 'area'}`);
+	}
 	const nodes = input.model.nodes;
 	const ewr = plan.ewr;
 	if (lossy) wr2012 = wr2012Of(naturalAtOutlet(plan, topo.outflow, natural) ?? natural);
@@ -484,7 +494,7 @@ function runNetwork(
 		if (siteId === null) outletFlowFlags = flags;
 		scoredFlowFlags = flags;
 	}
-	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
+	push(null, 'ewr', outletEwr ? OUTLET_EWR_LABELS[outletEwr.method] : 'Pragmatic EWR', 'm³/day', ewr);
 	// The drought restriction (engine ≥ 1.54.0, docs/model.md §2.7i): the level in force each day and, per part a
 	// level cuts, that day's cut, on the catchment; each unit's demand after it is a unit column below.
 	const restrictionRule = plan.restriction ? resolveDroughtRestriction(settings.droughtRestriction, []) : null;
@@ -1111,6 +1121,8 @@ function runNetwork(
 			})),
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
+				// The daily outlet EWR's scale factor and its inputs (engine ≥ 1.77.0), without the resumed run's mark.
+				...(outletEwr ? { outletEwr: (({ pinned: _, ...rest }) => rest)(outletEwr) } : {}),
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
 				// A snapshot mid-month carries that month's CHIRPS before the day for the gap map (engine ≥ 1.53.0).
 				fits: { ...prepared.fits!, chirpsCorrection: withChirpsGapMapLead(prepared.fits!.chirpsCorrection, series.rain_chirps_mm, warm.captureDay!) }
@@ -1145,6 +1157,7 @@ function runNetwork(
 				runoffCoefficient,
 				ewrDaysNotMet,
 				ewrFractionDaysNotMet: days ? ewrDaysNotMet / days : 0,
+				...(outletEwr ? { outletEwr } : {}),
 				ewrAgreement: ewrObserved,
 				...(ewrAgreementSites.length ? { ewrAgreementSites } : {}),
 				...(topo.outflow >= 0 ? { noFlow: noFlowDays(simOutflow, days) } : {})
@@ -1405,10 +1418,10 @@ export function buildNetworkPlan(
 	 * `runStart`: a resumed run's capture run's first epoch day, which decides
 	 * whether a dam that came into service carries dam_capacity (§2.16).
 	 */
-	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[]; runStart?: number } = {},
+	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[]; runStart?: number; outletEwr?: OutletEwrInfo } = {},
 	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
 	historyDays: number = days
-): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array } {
+): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array; outletEwr?: OutletEwrPlan } {
 	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
 	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
@@ -1433,7 +1446,10 @@ export function buildNetworkPlan(
 
 	const ewrWy = settings.ewrPragmaticM3PerDay;
 	const ewr = new Float64Array(days);
-	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
+	// The daily outlet EWR from the DRM tables instead (engine ≥ 1.77.0, ./reserve/dailySource.ts, §2.9f): filled once the
+	// plan is built, since the percentile tables and the MAR scaling read the natural flow at the outlet.
+	const ewrSource = resolveEwrDailySource(settings.ewrDailySource, []);
+	if (!ewrSource) for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
 	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom, warm);
 	// Development over the run (engine ≥ 1.30.0, ./network/development.ts): a unit takes nothing before
@@ -1549,7 +1565,9 @@ export function buildNetworkPlan(
 	const reaches = nodes.map((n) => reachLossOf(n, warnings).reachLoss);
 	if (reaches.some((p) => p))
 		warnings.push(
-			'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
+			ewrSource
+				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too (docs/model.md §2.6b)`
+				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
 		);
 	const users = otherUsers(nodes, topo, shares.share, reaches, days, month, warnings, factorFrom, (i, d) => {
 		d.fill(0, 0, abstractFrom[i]!);
@@ -1674,8 +1692,49 @@ export function buildNetworkPlan(
 		},
 		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
 	});
-	if (warm.captureAt === undefined) return { plan, topo, allocation };
-	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
+	let outletEwr: OutletEwrPlan | undefined;
+	if (ewrSource) {
+		for (const note of ewrDailySourceNotes(ewrSource)) warnings.push(`daily EWR at the outlet: ${note}`);
+		// The area the natural flow was made on (the calibration override, else the units' areas), so the tables and
+		// the flow they're read against are on one area.
+		const areaKm2 = resolveCatchmentAreaKm2(settings.calibration, { ...input, model });
+		outletEwr = { source: ewrSource, info: fillPlanOutletEwr(plan, topo.outflow, natural, ewrSource, areaKm2, historyDays, days, warm.outletEwr) };
+	}
+	const ewrPart = outletEwr ? { outletEwr } : {};
+	if (warm.captureAt === undefined) return { plan, topo, allocation, ...ewrPart };
+	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0), ...ewrPart };
+}
+
+/** The daily outlet EWR's source when it isn't the pragmatic EWR (engine ≥ 1.77.0), and what the plan's `ewr` was filled from. */
+export interface OutletEwrPlan {
+	source: EwrDailySource;
+	info: OutletEwrInfo;
+}
+
+/**
+ * Fill plan.ewr[0 … n − 1] from a DRM table source (engine ≥ 1.77.0,
+ * ./reserve/dailySource.ts, docs/model.md §2.9f) on the natural flow at the
+ * outlet: the catchment's natural flow, or with bed losses on the units'
+ * shares of it routed to the outlet net of the natural losses (as a Reserve
+ * rule table at the outlet and WR2012 read it). The scale factor is worked
+ * out from this run's historical days, or taken whole from `pinned` (a
+ * resumed run's snapshot). Calibration calls it again for each candidate's
+ * natural flow.
+ */
+export function fillPlanOutletEwr(
+	plan: Pick<NetworkPlan, 'nodes' | 'order' | 'upstream' | 'month' | 'ewr'>,
+	outflow: number,
+	natural: Float64Array,
+	source: EwrDailySource,
+	areaKm2: number,
+	historyDays: number,
+	n: number,
+	pinned?: OutletEwrInfo
+): OutletEwrInfo {
+	const at = naturalAtOutlet(plan, outflow, natural) ?? natural;
+	const info: OutletEwrInfo = pinned ? { ...pinned, pinned: true } : ewrDailyScale(source, at, historyDays, areaKm2);
+	fillOutletEwr(source, info.scale, plan.month, at, plan.ewr, 0, n);
+	return info;
 }
 
 /**
@@ -2518,6 +2577,12 @@ function assessEwrRules(
 	}
 	return out;
 }
+
+/** The outlet `ewr` series' label when the daily EWR comes from the DRM tables (engine ≥ 1.77.0); 'Pragmatic EWR' otherwise. */
+export const OUTLET_EWR_LABELS: Record<OutletEwrInfo['method'], string> = {
+	tab: 'EWR from the DRM TAB file (scaled)',
+	percentile: 'EWR from the DRM percentile tables (scaled)'
+};
 
 /** The label of an EWR site's `ewr_charge_shortfall` series (engine ≥ 1.3.0, settings.ewrChargeSource 'ruleTable'). */
 export const EWR_CHARGE_SHORTFALL_LABEL = 'EWR shortfall the charge follows: the Reserve rule table’s requirement (negative)';

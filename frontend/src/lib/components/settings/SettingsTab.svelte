@@ -11,6 +11,8 @@
 	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
 	// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8): its own chunk, for the same reason.
 	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
+	// The daily EWR at the outlet (engine ≥ 1.77.0, issue #455): its own chunk, for the same reason.
+	const loadEwrDailySource = () => import('./EwrDailySourceFields.svelte');
 	// API keys render for owners only, so the rest of the team never downloads them.
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
@@ -206,6 +208,7 @@
 			{ id: 'set-flow', message: peError },
 			{ id: 'set-flow', message: arealError },
 			{ id: 'set-wr2012', message: errs.wr2012 },
+			{ id: 'set-ewr', message: errs.ewrSource },
 			{ id: 'set-ewr', message: reportError },
 			{ id: 'set-reserve', message: errs.reserve },
 			{ id: 'set-restrict', message: errs.restrict },
@@ -224,6 +227,11 @@
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
 	const ewrAnnual = $derived(annualMm3(s.ewrPragmaticM3PerDay, s.februaryDays));
+	// The daily EWR at the outlet from the DRM tables (engine ≥ 1.77.0): the pragmatic row then isn't read.
+	const dailyFromDrm = $derived(!!s.ewrDailySource && s.ewrDailySource.method !== 'pragmatic');
+	const dailyEwrHead = $derived(
+		!dailyFromDrm ? 'Pragmatic EWR at the outflow gauge' : s.ewrDailySource!.method === 'tab' ? 'Daily EWR from the DRM TAB file' : 'Daily EWR from the DRM percentile tables'
+	);
 	// Days in February sits behind an advanced disclosure (issue #174); its summary names the value, and says when it
 	// isn't the default, so a changed value is never hidden.
 	const FEB_DEFAULT = defaultProjectSettings().februaryDays;
@@ -405,6 +413,7 @@
 		bind:value={s.ewrHeadline}
 		ewrRules={s.ewrRules}
 		ewrPragmatic={s.ewrPragmaticM3PerDay}
+		ewrDaily={s.ewrDailySource}
 		chargeSource={s.ewrChargeSource}
 		nodes={editor?.model.nodes ?? []}
 		{readonly}
@@ -1069,7 +1078,7 @@
 	<section class="panel" id="set-ewr" aria-labelledby="ewr-h">
 		<div class="panel-head">
 			<h2 id="ewr-h">Environmental water requirement (EWR)</h2>
-			<span class="muted small">Pragmatic EWR at the outflow gauge</span>
+			<span class="muted small">{dailyEwrHead}</span>
 			<NotesDrawer projectId={project.id} target={settingTarget('ewr')} />
 		</div>
 		<p class="hint muted">
@@ -1077,6 +1086,14 @@
 			flow per month, so farmers can plan for it; the model checks it at the EWR sites (the outlet and every gauge) and charges
 			each shortfall to the hydrological units upstream by their net impact that day.
 		</p>
+		<!-- Where the daily EWR comes from (engine ≥ 1.77.0, issue #455) first: it decides whether the row below is used. -->
+		<Lazy load={loadEwrDailySource}>
+			{#snippet children(EwrDailySourceFields)}
+				<EwrDailySourceFields bind:value={s.ewrDailySource} bind:error={draft.errors.ewrSource} {readonly} modelAreaKm2={farmAreaKm2} projectId={project.id} />
+			{/snippet}
+		</Lazy>
+		<FieldHistoryLine field="settings:ewrDailySource" />
+		{#if dailyFromDrm}<p class="hint" data-testid="pragmatic-unused">Not used while the daily EWR comes from the DRM tables: kept for switching back.</p>{/if}
 		<div class="ewr">
 			<div class="table-wrap">
 				<table class="data compact monthly">
