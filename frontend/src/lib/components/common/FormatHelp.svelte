@@ -28,7 +28,7 @@
 		children?: Snippet;
 	} = $props();
 
-	const href = $derived(exampleFile ? exampleHref(exampleFile) : '');
+	const exampleUrl = $derived(exampleFile ? exampleHref(exampleFile) : '');
 </script>
 
 <details class="format-help" data-testid="format-help">
@@ -41,7 +41,7 @@
 			<pre class="mono" data-testid="format-example">{example}</pre>
 		{/if}
 		{#if exampleFile}
-			<p><a class="btn btn-sm" {href} download={exampleFile.name} data-testid="format-example-file">Download an example file</a></p>
+			<p><a class="btn btn-sm" href={exampleUrl} download={exampleFile.name} data-testid="format-example-file">Download an example file</a></p>
 		{/if}
 	</div>
 </details>

@@ -167,6 +167,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
 	exampleHref: { why: 'EWR editors: `data:text/csv;charset=utf-8,` + encodeURIComponent(synthetic CSV)', in: ['lib/components/settings/EwrHighFlowsEditor.svelte', 'lib/components/settings/EwrRuleTablesEditor.svelte'] },
 	csvHref: { why: 'GridPasteDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed)', in: ['lib/components/model/GridPasteDialog.svelte'] },
+	exampleUrl: { why: 'FormatHelp: exampleHref() = `data:<type>;charset=utf-8,` + encodeURIComponent(the example text); the type is a literal at every caller (text/csv by default, application/geo+json)', in: ['lib/components/common/FormatHelp.svelte'] },
 	templateHref: { why: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)', in: ['lib/components/allocations/AllocationImport.svelte'] }
 };
 
