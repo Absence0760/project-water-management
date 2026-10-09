@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { accountDeletedMail, erratumNoticeMail, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { accountDeletedMail, erratumNoticeMail, mfaCodeMail, mfaResetMail, resetWhen, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -316,5 +316,95 @@ describe('erratumNoticeMail (issue #103, the known-defect procedure)', () => {
 		const m = erratumNoticeMail('o@example.com', { ...base, erratum: { ...erratum, keyedOn: 'fit' } });
 		expect(m.text).toContain('3 runs in Upper dam use parameters from an automatic calibration made by engine 0.16.0 up to (not including) 0.19.0');
 		expect(erratumNoticeMail('o@example.com', { ...base, runCount: 1, erratum: { ...erratum, keyedOn: 'fit' } }).text).toContain('1 run in Upper dam uses parameters');
+	});
+});
+
+describe('mfaResetMail (205_mfa_recovery, recovering a lost second factor)', () => {
+	const at = new Date('2026-10-11T21:30:00Z');
+	const zone = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = zone;
+	});
+
+	it('the confirmation link: nothing changes until it is followed, it starts a 3-day wait, and someone else has the password', () => {
+		const m = mfaResetMail('a@example.com', { stage: 'confirm', url: `http://localhost:7777/mfa-reset?token=${TOKEN}` });
+		expect(m).toMatchObject({ kind: 'mfa_reset', to: 'a@example.com', subject: 'Confirm removing two-step sign-in — Water Management' });
+		expect(m.text).toContain('3-day wait');
+		expect(m.text).toContain(`Confirm and start the 3-day wait: http://localhost:7777/mfa-reset?token=${TOKEN}`);
+		expect(m.text).toContain('This link expires in 1 hour and works once.');
+		expect(m.text).toContain('someone knows your password');
+	});
+
+	it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'UTC'])('the wait: the date and time in South African time whatever the server’s zone (TZ %s)', (tz) => {
+		process.env.TZ = tz;
+		// 21:30 UTC on the 11th is 23:30 on the 11th in South Africa: the 12th in Kiritimati, still the 11th in Pago Pago.
+		expect(resetWhen(at)).toEqual({ date: '11 Oct 2026', time: '23:30 SAST' });
+		const m = mfaResetMail('a@example.com', { stage: 'started', cancelUrl: `http://localhost:7777/mfa-reset/cancel?token=${TOKEN}`, effectiveAt: at });
+		expect(m.subject).toBe('Two-step sign-in will be removed on 11 Oct 2026 — Water Management');
+		expect(m.text).toContain('Two-step sign-in will be removed from your account on 11 Oct 2026 at 23:30 SAST');
+		expect(m.text).toContain('was confirmed from this inbox');
+		expect(m.text).toContain(`Not you? Cancel it: http://localhost:7777/mfa-reset/cancel?token=${TOKEN}`);
+		expect(m.text).toContain('works without signing in');
+	});
+
+	it('the daily reminder says it is still waiting, with its own cancel link', () => {
+		const m = mfaResetMail('a@example.com', { stage: 'reminder', cancelUrl: 'http://localhost:7777/mfa-reset/cancel?token=x', effectiveAt: at });
+		expect(m.text).toContain('is still waiting');
+		expect(m.text).toContain('Not you? Cancel it: http://localhost:7777/mfa-reset/cancel?token=x');
+	});
+
+	it('the end, and a team admin’s reset: what happened, signed out everywhere, how to set it up again', () => {
+		const done = mfaResetMail('a@example.com', { stage: 'done' });
+		expect(done.subject).toBe('Two-step sign-in was removed — Water Management');
+		expect(done.text).toContain('every device was signed out');
+		expect(done.text).toContain('Sign in: http://localhost:7777/login');
+		const admin = mfaResetMail('a@example.com', { stage: 'admin', team: 'Upper <WUA>' });
+		expect(admin.subject).toBe('Your two-step sign-in was removed — Water Management');
+		expect(admin.text).toContain('An admin of the team “Upper <WUA>” removed two-step sign-in');
+		expect(admin.html).toContain('Upper &lt;WUA&gt;');
+	});
+
+	it('follows the person’s language, marked lang="af"', () => {
+		for (const f of [
+			{ stage: 'confirm', url: 'http://localhost:7777/mfa-reset?token=x' },
+			{ stage: 'started', cancelUrl: 'http://localhost:7777/mfa-reset/cancel?token=x', effectiveAt: at },
+			{ stage: 'reminder', cancelUrl: 'http://localhost:7777/mfa-reset/cancel?token=x', effectiveAt: at },
+			{ stage: 'done' },
+			{ stage: 'admin', team: 'Upper WUA' }
+		] as const) {
+			const m = mfaResetMail('a@example.com', f, 'af');
+			expect(m.html, f.stage).toMatch(/<html lang="af">/);
+			expect(m.subject, f.stage).not.toMatch(/two-step/i);
+		}
+	});
+});
+
+describe('the two-step sign-in code by email (206)', () => {
+	it('carries the code on its own line and in the HTML, no link and no button, and not in the subject', () => {
+		for (const reason of ['sign-in', 'confirm', 'enrol'] as const) {
+			const m = mfaCodeMail('ann@example.com', '012345', reason);
+			expect(m.kind).toBe('mfa_code');
+			expect(m.subject).toBe('Your sign-in code — Water Management');
+			expect(m.subject).not.toContain('012345');
+			expect(m.text).toMatch(/^012345$/m);
+			expect(m.html).toContain('>012345</p>');
+			expect(m.text).not.toMatch(/https?:\/\//);
+			expect(m.html).not.toContain('<a ');
+			expect(m.text).toContain('works once, for 10 minutes');
+			expect(m.text).toContain('Never give this code to anyone');
+		}
+	});
+
+	it('says what the code is for, so one nobody asked for stands out', () => {
+		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('Someone signed in to the Water Management account ann@example.com with its password');
+		expect(mfaCodeMail('ann@example.com', '012345', 'sign-in').text).toContain('someone knows your password');
+		expect(mfaCodeMail('ann@example.com', '012345', 'enrol').text).toContain('turn on sign-in codes by email');
+		expect(mfaCodeMail('ann@example.com', '012345', 'confirm').text).toContain('To confirm what you are doing');
+	});
+
+	it('is sent in the account’s language (English where a line has no translation yet)', () => {
+		const m = mfaCodeMail('ann@example.com', '012345', 'sign-in', 'af');
+		expect(m.html).toMatch(/<html lang="(af|en)">/);
+		expect(m.text).toMatch(/^012345$/m);
 	});
 });

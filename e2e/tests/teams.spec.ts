@@ -227,6 +227,34 @@ test('only a team admin edits the EWR traffic lights; a member reads which apply
 	await expectNoViolations(page, { tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] });
 });
 
+test('only a team admin turns two-step sign-in on for the team; a member reads whether it is on', async ({ page, owner, signIn }) => {
+	void owner;
+	// The e2e API has the requirement off (MFA_REQUIRED=false), so turning it on asks no factor here; the refusal is
+	// mfa-required.spec.ts's (the Project page's switch) and backend/src/auth/stepUp.db.test.ts's.
+	const { team } = (await (await page.request.post(`${API_URL}/teams`, { data: { name: 'Two-step Board' } })).json()) as { team: { id: string } };
+	const colleague = await signIn('Two-step member');
+	expect((await page.request.post(`${API_URL}/teams/${team.id}/members`, { data: { email: colleague.user.email, role: 'member' } })).status()).toBe(201);
+	await acceptInvites(colleague.user.email, team.id);
+
+	await page.goto(`/teams/${team.id}`);
+	const part = (await openTeamSettings(page)).getByRole('region', { name: 'Two-step sign-in' });
+	await expect(part).toContainText('Members who manage this team need two-step sign-in');
+	const toggle = part.getByRole('switch', { name: 'Require two-step sign-in' });
+	await expect(toggle).not.toBeChecked();
+	await toggle.click();
+	await expect(part.getByRole('status')).toHaveText('Saved. Two-step sign-in is now required.');
+	await expect(toggle).toBeChecked();
+	expect((await (await page.request.get(`${API_URL}/teams/${team.id}`)).json()).team.requireMfa).toBe(true);
+	await expectNoViolations(page, { include: '[data-require-two-step]' });
+
+	// The member reads it, with no switch.
+	await colleague.page.goto(`/teams/${team.id}`);
+	const theirs = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Two-step sign-in' });
+	await expect(theirs).toContainText('Require two-step sign-in On');
+	await expect(theirs).toContainText('Only admins can change it.');
+	await expect(theirs.getByRole('switch')).toHaveCount(0);
+});
+
 /** A team with one published catchment (a traffic light to show) and one never run. */
 async function teamWithProjects(request: APIRequestContext, name: string) {
 	const team = (await (await request.post(`${API_URL}/teams`, { data: { name } })).json()).team as { id: string };
@@ -326,7 +354,7 @@ test('an admin sets the privacy contact; a member reads it; a farmer finds it fr
 	await colleague.page.goto(`/teams/${team.id}`);
 	panel = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Privacy contact' });
 	await expect(panel).toContainText('Information Officer, io@contact-board.example');
-	await expect(panel).toContainText('Only owners can change it.');
+	await expect(panel).toContainText('Only admins can change it.');
 	await expect(panel.getByRole('button', { name: 'Save contact' })).toHaveCount(0);
 
 	// A farmer of a team catchment: Menu → Who decides about your farm's information.

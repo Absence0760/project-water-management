@@ -280,6 +280,15 @@ describe('what an item says', () => {
 		expect(eventLine(ev('map.subcatchments_saved', { pieces: 1 }))).toBe('Saved 1 sub-catchment from clicks on the rivers');
 	});
 
+	it('writes the project’s and the team’s two-step sign-in requirement turned on and off (204)', () => {
+		expect(eventLine(ev('project.mfa_requirement', { on: true }))).toBe('Required two-step sign-in for the project’s owners');
+		expect(eventLine(ev('project.mfa_requirement', { on: false }))).toBe('Stopped requiring two-step sign-in for the project’s owners');
+		expect(eventLine(ev('team.mfa_requirement', { team: 'Upper WUA', on: true }))).toBe(
+			'Required two-step sign-in for the team “Upper WUA”: its owners, and the owners of its projects'
+		);
+		expect(eventLine(ev('team.mfa_requirement', { team: 'Upper WUA', on: false }))).toBe('Stopped requiring two-step sign-in for the team “Upper WUA”');
+	});
+
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {
 		const from = { green: 5, amber: 20, source: 'default' };
 		const to = { green: 2.5, amber: 12.5, source: 'team' };
@@ -302,6 +311,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from editor to owner');
 		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (owner) from the team “Upper WUA”');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true }))).toBe('Ben left the team “Upper WUA”');
+		expect(eventLine(ev('team_member.mfa_reset', { ...who, teamRole: 'member' }))).toBe('Removed two-step sign-in from Ben (a member of the team “Upper WUA”) after a lost phone');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true, accountDeleted: true }))).toBe('Ben deleted their account and left the team “Upper WUA”');
 		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
 	});

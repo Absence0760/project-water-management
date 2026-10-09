@@ -8,7 +8,10 @@
 	import { PUBLIC_WAF_CAPTCHA_API_KEY, PUBLIC_WAF_CAPTCHA_SCRIPT_URL } from '$env/static/public';
 	import { captchaConfig } from '$lib/auth/wafCaptcha';
 	import SignInCaptcha from '$lib/components/auth-extras/SignInCaptcha.svelte';
-	import { onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
+	import type { MfaMethod } from '$lib/api';
+	import { resendTimer } from '$lib/auth/resendTimer.svelte';
+	import { firstMode, otherModes, sendState } from '$lib/auth/codeMethods';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
 	import Rich from '$lib/i18n/Rich.svelte';
@@ -17,6 +20,8 @@
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import { t, tRich } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
+	import { afterResetAskFailed, resetAsked, type ResetAsked } from '$lib/auth/mfaReset';
+	import { fmtStampTime } from '$lib/components/farm/format';
 
 	// Dev-only shortcut to the seeded demo account; never in a production build.
 	const DEMO = import.meta.env.DEV ? { email: 'demo@example.com', password: 'demo-password' } : null;
@@ -76,13 +81,55 @@
 		await signIn();
 	}
 
-	// Two-step sign-in (issue #282): with an authenticator on the account, a
-	// right password asks for a code next (POST /auth/mfa/verify), from the
-	// app or, if the phone is lost, one of the recovery codes.
+	// Two-step sign-in (issue #282): with a second factor on the account, a
+	// right password asks for a code next (POST /auth/mfa/verify): from the
+	// authenticator app, from an email (206: "Email me a code", POST
+	// /auth/mfa/challenge/email), or, if neither can be had, one of the
+	// recovery codes. `methods` is what the account has, the app first.
 	let step = $state<'password' | 'code'>('password');
 	let code = $state('');
-	let useRecovery = $state(false);
+	let methods = $state<MfaMethod[]>(['totp']);
+	let mode = $state<MfaMethod | 'recovery'>('totp');
 	let codeInput: HTMLInputElement | undefined = $state();
+	// The emailed code: whether one went out on this step, and the wait before another may.
+	let emailSent = $state(false);
+	let sending = $state(false);
+	const codeTimer = resendTimer();
+	onDestroy(() => codeTimer.stop());
+	const send = $derived(sendState(sending, codeTimer.left, emailSent));
+	const others = $derived(otherModes(methods, mode));
+
+	async function sendEmailCode() {
+		sending = true;
+		error = null;
+		try {
+			const sent = await api.auth.mfa.emailSignInCode();
+			emailSent = true;
+			codeTimer.start(sent.resendInSeconds);
+			await tick();
+			codeInput?.focus();
+		} catch (err) {
+			// A code went out moments ago (this step or an earlier sign-in): show its field, and count down to the next.
+			if (err instanceof ApiError && err.code === 'mfa_email_wait') {
+				emailSent = true;
+				codeTimer.start(Number(err.params?.seconds) || 60);
+			}
+			if (err instanceof ApiError && err.code === 'mfa_challenge_expired') backToPassword();
+			error = errorText(err);
+		} finally {
+			sending = false;
+		}
+	}
+
+	function backToPassword() {
+		step = 'password';
+		lost = false;
+		asked = null;
+		password = '';
+		code = '';
+		emailSent = false;
+		codeTimer.stop();
+	}
 
 	async function finish() {
 		try {
@@ -96,7 +143,12 @@
 	async function submitCode(e: SubmitEvent) {
 		e.preventDefault();
 		if (!code.trim()) {
-			error = useRecovery ? t('Enter one of your recovery codes.') : t('Enter the 6-digit code from your authenticator app.');
+			error =
+				mode === 'recovery'
+					? t('Enter one of your recovery codes.')
+					: mode === 'email'
+						? t('Enter the 6-digit code from the email.')
+						: t('Enter the 6-digit code from your authenticator app.');
 			return;
 		}
 		busy = true;
@@ -107,10 +159,51 @@
 			await finish();
 		} catch (err) {
 			// The 5 minutes ran out, or the password was reset meanwhile: back to the first step.
-			if (err instanceof ApiError && err.code === 'mfa_challenge_expired') {
+			if (err instanceof ApiError && err.code === 'mfa_challenge_expired') backToPassword();
+			error = errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	// Lost the phone and the recovery codes too (205_mfa_recovery): ask for a
+	// reset. A confirmation link is emailed; following it starts a 3-day wait
+	// (docs/security.md § Two-step sign-in → Recovery). Needs the live
+	// challenge, so it is offered only here, after the password.
+	let lost = $state(false);
+	let asked = $state<ResetAsked | null>(null);
+	let lostHeading: HTMLHeadingElement | undefined = $state();
+	// Worded for the factor the account has: the phone (the app, or both), or the email alone.
+	const lostLabel = $derived(
+		methods.includes('totp') ? t('Lost your phone and your recovery codes?') : t('Can’t get the email and lost your recovery codes?')
+	);
+
+	async function showLost() {
+		lost = true;
+		asked = null;
+		error = null;
+		await tick();
+		lostHeading?.focus();
+	}
+
+	async function backToCode() {
+		lost = false;
+		error = null;
+		await tick();
+		codeInput?.focus();
+	}
+
+	async function askReset() {
+		busy = true;
+		error = null;
+		try {
+			asked = resetAsked(await api.auth.mfa.reset.request());
+		} catch (err) {
+			// The 5 minutes ran out: back to the first step, as for a code.
+			if (afterResetAskFailed(err) === 'password') {
 				step = 'password';
+				lost = false;
 				password = '';
-				code = '';
 			}
 			error = errorText(err);
 		} finally {
@@ -118,8 +211,8 @@
 		}
 	}
 
-	async function toggleRecovery() {
-		useRecovery = !useRecovery;
+	async function useMode(next: MfaMethod | 'recovery') {
+		mode = next;
 		code = '';
 		error = null;
 		await tick();
@@ -137,7 +230,11 @@
 			if ('mfaRequired' in result) {
 				step = 'code';
 				code = '';
-				useRecovery = false;
+				methods = result.methods;
+				mode = firstMode(result.methods);
+				emailSent = false;
+				lost = false;
+				asked = null;
 				password = '';
 				await tick();
 				codeInput?.focus();
@@ -225,24 +322,69 @@
 			}}
 		/>
 	{/if}
-	{#if step === 'code'}
-		<form onsubmit={submitCode} novalidate aria-labelledby="code-h">
+	{#if step === 'code' && lost}
+		<section class="lost" aria-labelledby="lost-h" data-mfa-lost>
+			<h2 id="lost-h" class="step-title" tabindex="-1" bind:this={lostHeading}>{lostLabel}</h2>
+			{#if asked?.kind === 'sent'}
+				<div class="notice" role="status" data-reset-sent>
+					<p class="notice-title">{t('Check your email')}</p>
+					<p>{t('We sent a link to the address on your account. Open it within 1 hour to start the 3-day wait. Nothing changes until you do.')}</p>
+				</div>
+			{:else if asked?.kind === 'pending'}
+				<div class="notice" role="status" data-reset-pending>
+					<p class="notice-title">{t('Two-step sign-in is already being removed')}</p>
+					<p>{t('It will be removed at {when}. Then sign in with your password alone, and set it up again on your Account page.', { when: fmtStampTime(asked.effectiveAt) })}</p>
+				</div>
+			{:else}
+				<p>{t('We can remove two-step sign-in from your account, so you can sign in with your password and set it up again.')}</p>
+				<p>{t('To keep your account safe, this takes 3 days. We email you a link to confirm. Once you open it, two-step sign-in is removed 3 days later, and we email you every day until then, so you can cancel it if it wasn’t you.')}</p>
+				<p class="muted">{t('If you’re in a team, a team admin can remove it for you straight away.')}</p>
+				<button type="button" class="btn btn-primary" onclick={askReset} disabled={busy}>{busy ? t('Sending…') : t('Email me a link')}</button>
+			{/if}
+			<button type="button" class="linkish" onclick={backToCode}>{t('Back to the code')}</button>
+		</section>
+	{:else if step === 'code'}
+		<form onsubmit={submitCode} novalidate aria-labelledby="code-h" data-mfa-mode={mode}>
 			<h2 id="code-h" class="step-title">{t('Two-step sign-in')}</h2>
-			<div class="field">
-				{#if useRecovery}
-					<label for="mfa-code">{t('Recovery code')}</label>
-					<input id="mfa-code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
-					<span class="hint" id="mfa-code-hint">{t('One of the codes you saved when you set up two-step sign-in. Each works once.')}</span>
-				{:else}
-					<label for="mfa-code">{t('Code from your authenticator app')}</label>
-					<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
-					<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for Water Management.')}</span>
+			{#if mode === 'email'}
+				<p class="hint" id="mfa-email-intro">
+					{emailSent
+						? t('We emailed you a 6-digit code. It works for 10 minutes. Check your spam folder if it isn’t there.')
+						: t('We’ll email a 6-digit code to the address you signed in with.')}
+				</p>
+				<div class="send-row">
+					<button type="button" class="btn {emailSent ? '' : 'btn-primary'}" onclick={sendEmailCode} disabled={send.kind !== 'ready'}>
+						{#if send.kind === 'sending'}{t('Sending…')}{:else if send.kind === 'wait'}{t('Send again (in {n} s)', { n: send.seconds })}{:else if send.again}{t('Send again')}{:else}{t('Send code')}{/if}
+					</button>
+				</div>
+			{/if}
+			{#if mode !== 'email' || emailSent}
+				<div class="field">
+					{#if mode === 'recovery'}
+						<label for="mfa-code">{t('Recovery code')}</label>
+						<input id="mfa-code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
+						<span class="hint" id="mfa-code-hint">{t('One of the codes you saved when you set up two-step sign-in. Each works once.')}</span>
+					{:else if mode === 'email'}
+						<label for="mfa-code">{t('Code from the email')}</label>
+						<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-email-intro" />
+					{:else}
+						<label for="mfa-code">{t('Code from your authenticator app')}</label>
+						<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
+						<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for Water Management.')}</span>
+					{/if}
+				</div>
+				<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Sign in')}</button>
+			{/if}
+			<div class="other-ways">
+				{#each others.modes as other (other)}
+					<button type="button" class="linkish" onclick={() => useMode(other)}>
+						{#if other === 'email'}{t('Email me a code instead')}{:else if other === 'totp'}{t('Use a code from the app instead')}{:else if others.recoveryFor === 'phone'}{t('Lost your phone? Use a recovery code')}{:else}{t('Can’t get the email? Use a recovery code')}{/if}
+					</button>
+				{/each}
+				{#if mode === 'recovery'}
+					<button type="button" class="linkish" onclick={showLost} data-mfa-lost-link>{lostLabel}</button>
 				{/if}
 			</div>
-			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Sign in')}</button>
-			<button type="button" class="linkish" onclick={toggleRecovery}>
-				{useRecovery ? t('Use a code from the app instead') : t('Lost your phone? Use a recovery code')}
-			</button>
 		</form>
 	{:else}
 	<form onsubmit={submit}>
@@ -305,9 +447,25 @@
 		font-size: 1rem;
 		color: var(--text-2);
 	}
+	.lost {
+		display: grid;
+		gap: 0.6rem;
+		justify-items: start;
+	}
+	.lost p {
+		margin: 0;
+	}
+	.send-row {
+		margin: 0.25rem 0 0.75rem;
+	}
+	.other-ways {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		margin-top: 0.5rem;
+	}
 	.linkish {
 		align-self: flex-start;
-		margin-top: 0.5rem;
 		padding: 0.35rem 0;
 		border: 0;
 		background: none;

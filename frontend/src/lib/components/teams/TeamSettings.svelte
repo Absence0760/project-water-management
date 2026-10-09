@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The team page's settings sheet (docs/ui.md § Teams): the team's name, the
-	// portfolio's traffic-light thresholds (D11), the privacy contact (168) and leaving or deleting the
+	// portfolio's traffic-light thresholds (D11), the privacy contact (168), whether
+	// two-step sign-in is required (204) and leaving or deleting the
 	// team, out of the page's reading path in a side sheet. Every member opens
 	// it: they read the thresholds and can leave; only admins rename, change the
 	// thresholds or delete. Leaving and deleting are the page's (they need its
@@ -12,6 +13,7 @@
 	import { api, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { thresholdsError, thresholdsRule, thresholdsSource } from '$lib/components/portfolio/portfolio';
+	import RequireTwoStep from '$lib/components/auth-extras/RequireTwoStep.svelte';
 
 	let {
 		open = $bindable(false),
@@ -130,6 +132,11 @@
 		} finally {
 			savingContact = false;
 		}
+	}
+
+	// Two-step sign-in for the team's admins and its projects' owners (204_mfa_opt_in).
+	async function saveRequireMfa(next: boolean) {
+		team = await api.teams.setRequireMfa(team.id, next);
 	}
 
 	function submitContact(e: SubmitEvent) {
@@ -260,10 +267,15 @@
 			<p class="small">
 				{team.privacyContact.name}, {team.privacyContact.email}{#if team.privacyContact.postal}<br />{team.privacyContact.postal}{/if}
 			</p>
-			<p class="muted small">Only owners can change it.</p>
+			<p class="muted small">Only admins can change it.</p>
 		{:else}
-			<p class="muted small">Not set yet. Only owners can set it.</p>
+			<p class="muted small">Not set yet. Only admins can set it.</p>
 		{/if}
+	</section>
+
+	<section class="part" aria-labelledby="mfa-h">
+		<h3 id="mfa-h">Two-step sign-in</h3>
+		<RequireTwoStep scope="team" on={team.requireMfa ?? false} canChange={isAdmin} save={saveRequireMfa} />
 	</section>
 
 	<section class="part danger" aria-labelledby="dz-h">

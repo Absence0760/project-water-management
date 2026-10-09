@@ -1,0 +1,4 @@
+{
+	"addKb": 11,
+	"why": "Recovering a lost second factor (the sign-in page's request panel, routes/mfa-reset/ and mfa-reset/cancel, the Account page's waiting-reset alert, recovery-code copy and low warning, 205) and codes by email (the Account page's two rows, the sign-in page's send and resend, the fresh-code dialog's send, lib/auth/codeMethods.ts and resendTimer, 206), with their Afrikaans: the combined build measured 1824 KB gzipped against a 1814 KB ceiling, so this covers the 10 KB and leaves 1 KB"
+}

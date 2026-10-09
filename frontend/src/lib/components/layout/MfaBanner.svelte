@@ -40,7 +40,7 @@
 	{#if kind === 'setup'}
 		<p>
 			<!-- Only a refused action brings it up (2026-10-03), never the role alone. -->
-			That needs two-step sign-in, and you haven’t set it up yet. Add an authenticator app on your Account page, then try again.
+			That needs two-step sign-in, and you haven’t set it up yet. Set it up on your Account page, then try again.
 		</p>
 		<div class="actions">
 			<a class="btn btn-sm" href="{base}/account#two-step">Set up two-step sign-in</a>
@@ -49,11 +49,11 @@
 	{:else}
 		<p>
 			{#if refused}
-				That needs a sign-in with a code from your authenticator app, and this session signed in with your password only. Sign in again
+				That needs a sign-in with a code, and this session signed in with your password only. Sign in again
 				to carry on.
 			{:else}
-				Your role needs two-step sign-in, and this session signed in with your password only. Sign in again with a code from your
-				authenticator app to manage members, publish to farmers or decide applications.
+				Your role needs two-step sign-in, and this session signed in with your password only. Sign in again with a code to
+				manage members, publish to farmers or decide applications.
 			{/if}
 		</p>
 		<div class="actions">

@@ -744,6 +744,14 @@ the result change?", and put back any earlier version.
   for a role change, `self` for a leaver, `via: 'invite'` for an accepted
   invite, which app_accept_invites records; `team.deleted` has `members`;
   each written on every project of the team),
+  `project.mfa_requirement` (`{ on }`: an owner turned the project's
+  two-step sign-in requirement on or off) and `team.mfa_requirement`
+  (`{ teamId, team, on }`, a team admin the team's, on every project of the
+  team; 204, [§ Requiring two-step
+  sign-in](#requiring-two-step-sign-in-204_mfa_opt_insql)),
+  `team_member.mfa_reset` (205: a team admin removed a member's lost
+  second factor; the same subject as `team_member.removed`, on every
+  project of the team; the member's access is unchanged),
   and restores. A key's ingest
   records `series.created/merged` as the key, with its optional `source`
   label in the subject, and no series revision (like a data feed).
@@ -1136,7 +1144,10 @@ results for plausibility; and that they read its known limitations
   sign-off of a pack that isn't a draft. `signoff_same_project` checks both
   targets. `signoff_select` (from 045) shows a pack's sign-off to whoever
   reads the pack. [§ Evidence packs](#evidence-packs-112_evidence_packsql).
-- **Not yet**: MFA on signing (Step 4). A signer's sign-offs are in their
+- Two-step sign-in on signing: a pack's sign-off always needs it with a
+  code from the last 10 minutes, a run's where the project requires it
+  (204; [security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+  A signer's sign-offs are in their
   data export (`app_subject_export`, 054; the registration columns since
   092; `packId` since 112). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
@@ -2865,28 +2876,115 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Goes with the account (cascade) and is in the data-subject export
   (`preferences`).
 
-### Two-step sign-in (150_mfa.sql)
+### Two-step sign-in (150_mfa.sql, 206_mfa_email_code.sql)
 
 | Table | Holds |
 | --- | --- |
 | `user_totp` | One row per account with an authenticator: `user_id` (primary key, cascade), `secret_enc` (the TOTP secret sealed by the backend, AES-256-GCM under `APP_ENCRYPTION_KEY` with the account id as authenticated data; `auth/secretBox.ts`), `confirmed_at` (null while enrolment waits for its first code; an unconfirmed row signs nobody in and satisfies no requirement), `last_used_step` (the last 30-second step a code was accepted for; earlier or equal steps are refused, so a code can't be replayed), `created_at` |
 | `user_recovery_code` | The account's unused recovery codes: `(user_id, code_hash)` (primary key; SHA-256 of the normalised code, 32 bytes), `created_at`. Ten at a time; a used one is deleted, a new set replaces the old |
 | `mfa_throttle` | The code throttle, per account: `user_id` (primary key, cascade), `failures`, `locked_until`, `last_attempt_at`. Deny-all policy; only `app_mfa_attempt(free, base, max)` and `app_mfa_succeeded()` (SECURITY DEFINER, the current user only) touch it, like `login_throttle` |
-| `account_security_event` | The account's own security log: `id`, `user_id` (cascade), `kind` (`mfa.enrolled`, `mfa.disabled`, `mfa.recovery_used`, `mfa.recovery_regenerated`), `created_at`. Append-only |
+| `account_security_event` | The account's own security log: `id`, `user_id` (cascade), `kind` (`mfa.enrolled`, `mfa.disabled` (the authenticator removed), `mfa.recovery_used`, `mfa.recovery_regenerated`, and since 206 `mfa.email_enrolled`, `mfa.email_disabled`), `created_at`. Append-only |
+| `user_email_otp` | Codes by email (206): one row per account that turned them on: `user_id` (primary key, cascade), `confirmed_at` (null while the first emailed code is awaited; an unconfirmed row signs nobody in and satisfies no requirement), `created_at` |
+| `mfa_email_code` | The live emailed code (206), one per account: `user_id` (primary key, cascade), `code_hash` (HMAC-SHA256 under a key derived from `APP_ENCRYPTION_KEY`, over the account, the purpose and the code; 32 bytes; null once used), `purpose` (`enrol` or `use`), `expires_at` (10 minutes after the send); all three null together. The row stays as the send limit's lock. Deny-all; only `app_mfa_email_send(hash, purpose, ttl, gap, per_hour)`, `app_mfa_email_use(hash, purpose)` (SECURITY DEFINER, the current user only) and the removals (`mfa_remove_factor(s)`, 205 replaced in 206, which void it with the factor) touch it |
+| `mfa_email_send` | When codes were emailed (206), for the send limits (a minute apart, five an hour): `id`, `user_id` (cascade; index `(user_id, sent_at)`), `sent_at` (index, for the day-old prune). Deny-all; only `app_mfa_email_send` writes it |
 
-- RLS: `user_totp` is the account's own row for every command
-  (`user_totp_own`); `user_recovery_code` its own rows for select, insert
-  and delete (no update grant); `account_security_event` its own rows for
-  select and insert only (no update or delete grant, even for its owner).
-  Proven with positive controls in `src/auth/mfa.db.test.ts`.
+- RLS: `user_totp` and `user_email_otp` are the account's own row for
+  every command (`user_totp_own`, `user_email_otp_own`);
+  `user_recovery_code` its own rows for select, insert and delete (no
+  update grant); `account_security_event` its own rows for select and
+  insert only (no update or delete grant, even for its owner);
+  `mfa_throttle`, `mfa_email_code` and `mfa_email_send` deny-all. Proven
+  with positive controls in `src/auth/mfa.db.test.ts` and
+  `src/auth/mfa-email.db.test.ts`.
+- "Is two-step on" is one test, SQL `mfa_has_factor(p_user)` (205, replaced
+  in 206 to count codes by email), which `hasConfirmedFactor`
+  (`auth/stepUp.ts`) calls: a confirmed `user_totp` or `user_email_otp`
+  row. Invoker's rights and granted to `water_app`, so from the API RLS
+  limits it to the caller's own rows, while the definer functions of 205
+  call it for any account. Recovery codes are one set
+  per account, made when the first factor is confirmed and deleted with the
+  last.
 - `audit_event` isn't used for these: it is a project's log (`project_id`
   not null), and these events belong to no project.
-- All four go with the account (cascade). The data-subject export has
-  `twoStepSignIn` (when it was added and confirmed, and how many recovery
-  codes are left, never the secret or the hashes) and `securityEvents`.
+- All seven go with the account (cascade). The data-subject export has
+  `twoStepSignIn` (when the authenticator was added and confirmed, and how
+  many recovery codes are left, never the secret or the hashes),
+  `twoStepEmail` (the same for codes by email, never the code or the send
+  log) and `securityEvents`.
 - The session JWT's `amr` (`["pwd"]` or `["pwd", "otp"]`) is not stored:
-  the requirement for owners, team admins and assessors reads it from the
-  request ([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+  the requirement reads it from the request ([security.md § Two-step
+  sign-in](./security.md#two-step-sign-in)).
+
+### Requiring two-step sign-in (204_mfa_opt_in.sql)
+
+Opt-in per project and team since the operator's decision of 2026-10-08
+([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+
+- `project.require_mfa`, `team.require_mfa` (boolean, not null, default
+  `false`): the project's owner actions (and a run's sign-off), or the
+  team's admin actions and the owner actions on every team project, need a
+  session signed in with a code. Every member reads them; an owner changes
+  the project's (`project_require_mfa_guard` refuses water_app's change by
+  anyone below owner, since `project_update` lets an editor update the
+  row), a team admin the team's (`team_update` is admin-only). The API
+  refuses turning one on to someone not signed in with a second factor.
+- `app_project_requires_mfa(project)` (SECURITY DEFINER, `search_path`
+  pinned, EXECUTE to water_app only): the project's setting or its team's,
+  null for a non-member. A definer, because someone shared a team project
+  directly can't read the team row (`team_select`) and must still be held
+  to it.
+- Changes are audited: `project.mfa_requirement` (`{ on }`) and
+  `team.mfa_requirement` (`{ teamId, team, on }`, on each of the team's
+  projects). Neither is a model input, so neither moves the project's
+  `updated_at`; a copy and the project document don't carry it.
+
+### Recovering a lost second factor (205_mfa_recovery.sql)
+
+| Table | Holds |
+| --- | --- |
+| `mfa_reset` | A person's request to remove their lost factor: `id`, `user_id` (cascade), `requested_at`, `confirm_hash` (SHA-256 of the emailed confirmation token; cleared once used or ended), `confirm_expires_at` (1 hour), `confirmed_at` and `effective_at` (the link was followed: the 3-day wait ends then), `notified_at` (the last email of the wait), `ended_at` and `end_reason` (`completed`, `cancel_link`, `code_used`, `factor_removed`, `unconfirmed`). One not-ended row per account (partial unique index) |
+| `mfa_reset_cancel` | The cancel links: `token_hash` (primary key, SHA-256), `reset_id` (cascade), `created_at`. One per email of the wait (the start and each reminder), all valid until the reset ends, then deleted |
+| `mfa_reset_quota` | The cap on asking: `user_id` (cascade), `sent_at`; 3 in 24 hours, rows gone after a day |
+
+- RLS: `mfa_reset` is the person's own to **read** (`mfa_reset_own_select`)
+  and nobody's to write: `water_app` has only `SELECT`, so no one can move
+  `effective_at` to skip the wait. `mfa_reset_cancel` and `mfa_reset_quota`
+  are owner-only (RLS on, no policy, no grant). Every write goes through a
+  SECURITY DEFINER function that checks the state it moves from:
+  `app_mfa_reset_request` (as the person, with a live sign-in challenge;
+  `issued`, `pending`, `capped` or `not_enrolled`), `app_mfa_reset_confirm`
+  and `app_mfa_reset_cancel` (the emailed tokens, no person),
+  `app_mfa_reset_cancel_own` (a code was just given), `app_mfa_reset_due`,
+  `app_mfa_reset_remind`, `app_mfa_reset_complete` and
+  `app_mfa_reset_purge` (the tick; completing refuses a reset whose
+  `effective_at` hasn't passed), `app_mfa_team_reset` (a team admin, for a
+  member of their team below admin, never themselves and never another
+  admin: `co_admin`) and `app_mfa_remove_own_factor(method, watermark)`
+  (the owner turning one factor off). Proven with positive controls in
+  `src/auth/mfa-reset.db.test.ts`.
+- **Two functions remove second factors, and nothing else does** (neither
+  granted to `water_app`; the functions above call them, the operator as the
+  schema owner): `mfa_remove_factors(p_user, p_watermark)` deletes every
+  factor of the account (`user_totp`, `user_email_otp` and its live
+  `mfa_email_code`, and `user_recovery_code`), ends a waiting reset
+  (`factor_removed`) and moves `sessions_revoked_at` to the watermark;
+  `mfa_remove_factor(p_user, method, p_watermark)` deletes one factor
+  (`totp` or `email`), keeps the recovery codes while another factor is
+  still on, moves the watermark, and with the last factor falls through to
+  `mfa_remove_factors`. A waiting reset survives the removal of one factor
+  of two at this layer; the routes that call it took a right code first,
+  which ends the reset (`code_used`) on its own. A new kind of factor is
+  added to these two and to `mfa_has_factor`. The send log
+  (`mfa_email_send`) is kept, so a removal can't reset the send limits.
+- `account_security_event.kind` gains `mfa.reset_requested`,
+  `mfa.reset_confirmed`, `mfa.reset_cancelled`, `mfa.reset_completed` and
+  `mfa.reset_by_admin`, `mfa.reset_by_operator` (206 keeps them beside
+  its own two); a team admin's reset is also `team_member.mfa_reset`
+  on each of the team's projects (§ Change history).
+- Retention: an ended reset is deleted 90 days after it ended (the tick,
+  `app_mfa_reset_purge`); the security log keeps that it happened. The
+  data-subject export has `twoStepSignInResets` (the dates and how each
+  ended, never a hash).
 
 ### Languages (080_language.sql)
 

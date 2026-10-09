@@ -100,22 +100,39 @@ export interface User {
 	farmNoticeCurrent?: boolean;
 }
 
+/** A second factor: an authenticator app, or a code by email (206; docs/api.md § Two-step sign-in). */
+export type MfaMethod = 'totp' | 'email';
+
 /** GET /auth/mfa: two-step sign-in on the Account page (issue #282, docs/api.md § Two-step sign-in). */
 export interface MfaStatus {
-	/** An authenticator app is set up. */
+	/** Two-step sign-in is on: an authenticator app, codes by email, or both. */
 	enrolled: boolean;
 	enrolledAt: string | null;
+	/** The factors that are on, the app first. */
+	methods: MfaMethod[];
+	/** Codes by email are being turned on: a code went out and hasn't come back yet. */
+	emailPending: boolean;
 	/** Unused recovery codes left (0 when off). */
 	recoveryCodesLeft: number;
-	/** The person is a project owner, team admin or assessor: those actions need it. */
+	/** The person's roles need it: an owner or admin where a project or team requires it, or someone who takes part in licence decisions. */
 	required: boolean;
 	/** This session signed in with a code. */
 	sessionVerified: boolean;
+	/** A confirmed reset of the factor is waiting (205_mfa_recovery): when it takes effect. Null when none. */
+	pendingReset: { effectiveAt: string } | null;
 }
 
-/** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */
+/** POST /auth/login for an account with two-step sign-in: no session yet, enter a code (api.auth.mfa.verify). */
 export interface MfaChallenge {
 	mfaRequired: true;
+	/** The factors the account has, the app first (an older server sends none: the app). */
+	methods: MfaMethod[];
+}
+
+/** A code was emailed (202): when another may be asked for, and how long this one works. */
+export interface EmailCodeSent {
+	resendInSeconds: number;
+	expiresInSeconds: number;
 }
 
 export interface UserPreferences {
@@ -236,6 +253,10 @@ export interface Project extends ProjectSummary {
 	rerunQueuedFor?: string | null;
 	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
 	actsForAuthority?: boolean;
+	/** The project's own two-step sign-in setting (204_mfa_opt_in): its owners' actions need a code. Absent from an older API. */
+	requireMfa?: boolean;
+	/** Whether its owners' actions need two-step sign-in: its setting or its team's. Absent from an older API. */
+	mfaRequired?: boolean;
 }
 
 /** What a series merge or replace answers: the series, and when the automatic re-run it queued is due (null: none queued). */
@@ -406,6 +427,8 @@ export interface Team {
 	portfolioThresholds: PortfolioThresholds;
 	/** Whom to ask about the personal information in the team's projects (168, POPIA s18(1)(b)); null = not set. */
 	privacyContact: PrivacyContact | null;
+	/** Its admins' actions, and its projects' owners', need two-step sign-in (204_mfa_opt_in). Absent from an older API. */
+	requireMfa?: boolean;
 }
 
 /** A team's privacy contact: a name (or office) and an email address, a postal address optional (168). */

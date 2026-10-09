@@ -24,6 +24,18 @@ const PUBLIC = new Set([
 	// only a right password gets is the credential, under the code throttle
 	// (auth/mfa.db.test.ts).
 	'POST /auth/mfa/verify',
+	// Recovering a lost second factor (205_mfa_recovery, auth/mfa-reset-routes.ts):
+	// asking needs the same challenge cookie as the code step (a right password,
+	// just now), under a daily cap; the confirm and cancel links' single-use or
+	// reset-bound tokens are the credential, as for a password reset, and a cancel
+	// link can only stop a removal (auth/mfa-reset.db.test.ts).
+	'POST /auth/mfa/reset',
+	'POST /auth/mfa/reset/confirm',
+	'POST /auth/mfa/reset/cancel',
+	// Its "Email me a code" (206): the same challenge cookie is the credential, and
+	// it only sends a code to the account's own address, under the send limits
+	// (auth/mfa-email.db.test.ts).
+	'POST /auth/mfa/challenge/email',
 	// The headless report renderer's sign-in (WP-2.15 Phase B): the single-use
 	// render token is the credential, and the session it buys reads one
 	// project and run only (reports/reports.db.test.ts).
@@ -139,12 +151,36 @@ describe('route auth inventory', () => {
 
 	// Two-step sign-in (issue #282): everything but the sign-in step needs a session (auth/mfa.db.test.ts).
 	it('inventories the two-step sign-in routes: the sign-in step public, the rest auth-gated', () => {
-		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes', 'POST /auth/mfa/step-up']) {
+		for (const r of [
+			'GET /auth/mfa',
+			'POST /auth/mfa/totp/enrol',
+			'POST /auth/mfa/totp/confirm',
+			'DELETE /auth/mfa/totp',
+			'POST /auth/mfa/recovery-codes',
+			'POST /auth/mfa/step-up',
+			'POST /auth/mfa/email/enrol',
+			'POST /auth/mfa/email/confirm',
+			'DELETE /auth/mfa/email',
+			'POST /auth/mfa/email/send'
+		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
-		expect(routes).toContain('POST /auth/mfa/verify');
-		expect(PUBLIC.has('POST /auth/mfa/verify')).toBe(true);
+		for (const r of ['POST /auth/mfa/verify', 'POST /auth/mfa/challenge/email']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(true);
+		}
+	});
+
+	// Recovering a lost second factor (205): the person's own steps are public (the challenge or an emailed token),
+	// a team admin's reset of a member is auth-gated (auth/mfa-reset.db.test.ts).
+	it('inventories the second-factor recovery routes', () => {
+		for (const r of ['POST /auth/mfa/reset', 'POST /auth/mfa/reset/confirm', 'POST /auth/mfa/reset/cancel']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(true);
+		}
+		expect(routes).toContain('POST /teams/:id/members/:userId/mfa-reset');
+		expect(PUBLIC.has('POST /teams/:id/members/:userId/mfa-reset')).toBe(false);
 	});
 
 	// The data feeds (WP-2.10): auth-gated like every project route.

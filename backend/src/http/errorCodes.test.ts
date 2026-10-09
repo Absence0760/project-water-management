@@ -15,6 +15,7 @@ const FILES = [
 	'auth/export.ts',
 	'auth/middleware.ts',
 	'auth/mfa-routes.ts',
+	'auth/mfa-reset-routes.ts',
 	'auth/stepUp.ts',
 	'notes/routes.ts',
 	'alerts/routes.ts',

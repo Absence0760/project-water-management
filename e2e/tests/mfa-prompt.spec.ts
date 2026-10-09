@@ -70,7 +70,7 @@ test('an owner without an authenticator is not prompted for the role alone; a re
 	await expect(page).toHaveURL('/account#two-step');
 	const panel = page.locator('#two-step');
 	await expect(panel).toHaveAttribute('data-two-step', 'off');
-	await expect(panel.getByRole('button', { name: 'Set up two-step sign-in' })).toBeVisible();
+	await expect(panel.getByRole('button', { name: 'Set up the app' })).toBeVisible();
 	// The Account page is translated and says it in its own panel: no English banner over it.
 	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
 });
@@ -84,7 +84,7 @@ test('a delete refused with 403 mfa_step_up offers “Sign in again”, which si
 			contentType: 'application/json',
 			headers: { 'access-control-allow-origin': new URL(baseURL!).origin, 'access-control-allow-credentials': 'true' },
 			body: JSON.stringify({
-				error: 'this needs two-step sign-in: sign out and sign in again with a code from your authenticator app',
+				error: 'this needs two-step sign-in: sign out and sign in again with a code',
 				code: 'mfa_step_up'
 			})
 		});
@@ -98,7 +98,7 @@ test('a delete refused with 403 mfa_step_up offers “Sign in again”, which si
 	await answerConfirm(page, true, 'Delete project “Step-up farm”?');
 	const banner = page.getByRole('region', { name: 'Two-step sign-in' });
 	await expect(banner).toHaveAttribute('data-mfa-prompt', 'step-up');
-	await expect(banner).toContainText('That needs a sign-in with a code from your authenticator app');
+	await expect(banner).toContainText('That needs a sign-in with a code, and this session');
 	await expectNoViolations(page);
 
 	await banner.getByRole('button', { name: 'Sign in again' }).click();

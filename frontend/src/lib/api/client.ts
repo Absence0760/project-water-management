@@ -25,7 +25,9 @@ import type {
 } from '@water-management/engine';
 import type {
 	MapAreaBasis,
+	EmailCodeSent,
 	MfaChallenge,
+	MfaMethod,
 	MfaStatus,
 	AddMemberResult,
 	AlertChoiceChange,
@@ -359,28 +361,54 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 */
 			login: (email: string, password: string, wafToken?: string): Promise<User | MfaChallenge> =>
 				request<{ user: User } | MfaChallenge>('POST', '/auth/login', { email, password }, wafToken ? { [WAF_TOKEN_HEADER]: wafToken } : undefined).then(
-					(r) => ('mfaRequired' in r ? { mfaRequired: true as const } : r.user)
+					(r) => ('mfaRequired' in r ? { mfaRequired: true as const, methods: r.methods?.length ? r.methods : (['totp'] as MfaMethod[]) } : r.user)
 				),
 			/**
 			 * Two-step sign-in (issue #282, docs/api.md § Two-step sign-in).
-			 * `code` is six digits from the authenticator app, or a recovery code
-			 * where one is accepted (verify, disable). ApiError 400 mfa_code_wrong,
-			 * 429 mfa_locked (5 wrong codes in a row).
+			 * `code` is six digits from the authenticator app or the newest
+			 * emailed code, or a recovery code where one is accepted (verify,
+			 * turning a factor off, step-up). ApiError 400 mfa_code_wrong, 429
+			 * mfa_locked (5 wrong codes in a row); a send 429 mfa_email_wait
+			 * (params.seconds) within a minute of the last, or past five an hour.
 			 */
 			mfa: {
 				status: () => request<MfaStatus>('GET', '/auth/mfa'),
 				/** Start adding an authenticator: the current password (403 wrong_current_password), then the secret and its otpauth URI, shown once. */
 				enrol: (password: string) => request<{ secret: string; uri: string }>('POST', '/auth/mfa/totp/enrol', { password }),
-				/** The first code from the app: turns it on, and returns the ten recovery codes (shown once). */
-				confirm: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/totp/confirm', { code }).then((r) => r.recoveryCodes),
-				/** Turn it off (a code from the app or a recovery code). */
+				/** The first code from the app: turns it on, and returns the ten recovery codes (shown once), or null when another factor already had them. */
+				confirm: (code: string) => request<{ recoveryCodes: string[] | null }>('POST', '/auth/mfa/totp/confirm', { code }).then((r) => r.recoveryCodes),
+				/** Remove the authenticator (a code from either factor or a recovery code). */
 				disable: (code: string) => request<void>('DELETE', '/auth/mfa/totp', { code }),
-				/** A new set of recovery codes, the old ones void (a code from the app). */
+				/** A new set of recovery codes, the old ones void (a code from the app or by email). */
 				regenerate: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/recovery-codes', { code }).then((r) => r.recoveryCodes),
 				/** The sign-in's second step, after login answered MfaChallenge. 401 mfa_challenge_expired: sign in again. */
 				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code }),
+				/** Under the sign-in challenge: email a code for verify. */
+				emailSignInCode: () => request<EmailCodeSent>('POST', '/auth/mfa/challenge/email'),
 				/** A code again inside the session, for the actions that need one from the last 10 minutes (401 mfa_fresh_code). */
-				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code })
+				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code }),
+				/**
+				 * Recovering a lost phone and recovery codes (205_mfa_recovery, docs/api.md § Two-step sign-in).
+				 * `request`: at the sign-in's code step (the challenge cookie): a confirmation link is emailed (`sent`),
+				 * or a confirmed reset already waits (`pending`); 429 mfa_reset_limit, 401 mfa_challenge_expired.
+				 * `confirm` / `cancel`: the emailed links' tokens; 400 link_invalid.
+				 */
+				reset: {
+					request: () => request<{ sent: true } | { pending: true; effectiveAt: string }>('POST', '/auth/mfa/reset'),
+					confirm: (token: string) => request<{ effectiveAt: string }>('POST', '/auth/mfa/reset/confirm', { token }),
+					cancel: (token: string) => request<{ cancelled: true }>('POST', '/auth/mfa/reset/cancel', { token })
+				},
+				/** Codes by email (206). */
+				email: {
+					/** Turn them on: the current password, then a code goes to the account's address. */
+					enrol: (password: string) => request<EmailCodeSent>('POST', '/auth/mfa/email/enrol', { password }),
+					/** The emailed code back: on; the ten recovery codes when it is the first factor, else null. */
+					confirm: (code: string) => request<{ recoveryCodes: string[] | null }>('POST', '/auth/mfa/email/confirm', { code }).then((r) => r.recoveryCodes),
+					/** Turn them off (a code from either factor or a recovery code). */
+					disable: (code: string) => request<void>('DELETE', '/auth/mfa/email', { code }),
+					/** Signed in: email a code (to finish turning them on, or for step-up and the code checks above). */
+					send: () => request<EmailCodeSent>('POST', '/auth/mfa/email/send')
+				}
 			},
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a
@@ -461,6 +489,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					settings?: Partial<ProjectSettings>;
 					/** Move into a team you're in, or null for personal. Owner only. */
 					teamId?: string | null;
+					/** Owner actions need two-step sign-in (204_mfa_opt_in). Owner only; turning it on needs your own second factor. */
+					requireMfa?: boolean;
 					/** Why the settings changed, kept in the history (only with `settings`). */
 					reason?: string;
 				}
@@ -587,6 +617,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Whom to ask about the team's projects' personal information (team admin, 168); null removes it. */
 			setPrivacyContact: (id: string, privacyContact: { name: string; email: string; postal: string | null } | null) =>
 				request<{ team: Team }>('PATCH', t(id), { privacyContact }).then((r) => r.team),
+			/** Admin actions, and an owner's on every team project, need two-step sign-in (team admin, 204_mfa_opt_in). */
+			setRequireMfa: (id: string, requireMfa: boolean) => request<{ team: Team }>('PATCH', t(id), { requireMfa }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
 			/** Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136). */
 			addMember: (id: string, email: string, role: TeamRole) =>
@@ -598,6 +630,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Remove a member (admin), or yourself to leave the team. */
 			removeMember: (id: string, userId: string) =>
 				request<void>('DELETE', `${t(id)}/members/${enc(userId)}`),
+			/** Remove a member's lost second factor at once (admin, a code from the last 10 minutes; never yourself). 204. */
+			resetMemberMfa: (id: string, userId: string) => request<void>('POST', `${t(id)}/members/${enc(userId)}/mfa-reset`),
 			/** Every team catchment you can see, with its latest figures (WP-2.14). */
 			portfolio: (id: string) => request<Portfolio>('GET', `${t(id)}/portfolio`)
 		},

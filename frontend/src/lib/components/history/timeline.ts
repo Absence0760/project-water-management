@@ -417,6 +417,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Created an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
 		case 'api_key.revoked':
 			return `Revoked an API key${str(s.name) ? ` “${str(s.name)}”` : ''}`;
+		// Two-step sign-in required, or no longer (204_mfa_opt_in): the project's, or its team's (on each team project).
+		case 'project.mfa_requirement':
+			return s.on ? 'Required two-step sign-in for the project’s owners' : 'Stopped requiring two-step sign-in for the project’s owners';
+		case 'team.mfa_requirement':
+			return s.on
+				? `Required two-step sign-in for the team “${str(s.team)}”: its owners, and the owners of its projects`
+				: `Stopped requiring two-step sign-in for the team “${str(s.team)}”`;
 		// A team admin changed the portfolio's traffic lights (D11, 055): recorded on each team project.
 		case 'team_thresholds.changed':
 			return `Changed the portfolio traffic lights of the team “${str(s.team)}” from ${trafficLights(s.from)} to ${trafficLights(s.to)}`;
@@ -430,6 +437,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'team_member.removed':
 			if (s.accountDeleted) return `${who} deleted their account and left the team “${str(s.team)}”`;
 			return s.self ? `${who} left the team “${str(s.team)}”` : `Removed ${who} (${role(s.teamRole)}) from the team “${str(s.team)}”`;
+		// A team admin removed a member's lost second factor (205_mfa_recovery): their access is unchanged.
+		case 'team_member.mfa_reset':
+			return `Removed two-step sign-in from ${who} (a member of the team “${str(s.team)}”) after a lost phone`;
 		case 'team.deleted':
 			return `Deleted the team “${str(s.team)}”: its ${plural(num(s.members) ?? 0, 'member')} no longer reach this project through it`;
 		default:

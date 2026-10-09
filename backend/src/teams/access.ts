@@ -1,7 +1,7 @@
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { UUID } from '../projects/access.js';
-import { requireStepUp } from '../auth/stepUp.js';
+import { requireTeamStepUp } from '../auth/stepUp.js';
 
 /** Team roles, lowest first: viewer → project viewer, member → editor, admin → owner. */
 export const TEAM_ROLES = ['viewer', 'member', 'admin'] as const;
@@ -17,9 +17,9 @@ export function hasTeamRole(role: string | null | undefined, min: TeamRole): boo
 
 /**
  * 404 unless the current user is in the team; 403 if their team role is below
- * `min` (`viewer` = any member of the team). Team admin's actions need
- * two-step sign-in (auth/stepUp.ts): 403 mfa_required / mfa_step_up after
- * the role check passes.
+ * `min` (`viewer` = any member of the team). A team admin's actions need
+ * two-step sign-in where the team requires it (auth/stepUp.ts): 403
+ * mfa_required / mfa_step_up after the role check passes.
  */
 export async function requireTeamRole(db: Db, teamId: string, min: TeamRole, notFound = 'not found'): Promise<TeamRole> {
 	if (!UUID.test(teamId)) throw new ApiError(404, notFound);
@@ -27,6 +27,6 @@ export async function requireTeamRole(db: Db, teamId: string, min: TeamRole, not
 	const role = rows[0]?.role;
 	if (!role) throw new ApiError(404, notFound);
 	if (!hasTeamRole(role, min)) throw new ApiError(403, `requires team ${min}`);
-	if (min === 'admin') await requireStepUp(db);
+	if (min === 'admin') await requireTeamStepUp(db, teamId);
 	return role as TeamRole;
 }

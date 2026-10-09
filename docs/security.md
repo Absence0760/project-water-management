@@ -101,7 +101,9 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   cooldown at 50 and 70 seconds; time moved in the database, never slept).
 - **Credentials never stand in for each other.** Most of the app's
   credentials share one shape (43 base64url characters, stored as SHA-256:
-  verify, reset, invite, share, render and unsubscribe tokens), so each is
+  verify, reset, invite, share, render and unsubscribe tokens, and a
+  second-factor reset's confirm and cancel tokens, 205, each in its own
+  table: `mfa_reset.confirm_hash`, `mfa_reset_cancel`), so each is
   looked up only in its own table and, for email tokens, for its own purpose.
   The backend reads a credential in exactly three places: the `wm_session`
   cookie (`auth/session.ts`), `Authorization: Bearer` on `/ingest/*` only
@@ -118,15 +120,46 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 
 TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`. One phished
 password could otherwise publish a restriction to a catchment's farmers or
-decide a licence application.
+decide a licence application. Three decisions of the operator's, of
+2026-10-08, shape it now:
+
+1. **Who must use it** (`204_mfa_opt_in.sql`): required for the actions that
+   reach people outside the team, and opt-in per project and team for the
+   rest (Who must use it, below).
+2. **Which factors count** (`206_mfa_email_code.sql`): an authenticator
+   app, or a code by email (hydrologists find authenticator apps hard),
+   beside or instead of the app; a recovery code stands in for either
+   (Code by email, below).
+3. **Recovering a lost factor** (`205_mfa_recovery.sql`): the person
+   themselves after a 3-day wait, or a team admin for a member below admin
+   at once, before the operator (Recovery, below).
+
+"Has a factor" is **one test**, the SQL function `mfa_has_factor(p_user)`
+(invoker's rights: as `water_app` RLS limits it to the caller's own rows;
+called from the definer functions it sees any account), true for a confirmed
+authenticator or confirmed codes by email; the API's `hasConfirmedFactor`
+(`auth/stepUp.ts`) calls it, so the requirement, the sign-in challenge,
+`GET /auth/mfa`, a sign-off's `cannotSign`, the reset functions and the team
+admin's reset can't disagree. Removing factors is **two functions**:
+`mfa_remove_factors(p_user, watermark)` removes every factor (the
+authenticator, codes by email and their live code, the recovery codes), ends
+a waiting reset and moves the session watermark, for a completed reset, a
+team admin's reset and the operator; `mfa_remove_factor(p_user, method,
+watermark)` is the owner turning off one factor (Recovery codes, below), and
+falls through to the first when it was the last. Neither is granted to
+`water_app`; the owner reaches the second through
+`app_mfa_remove_own_factor`.
 
 - **What it is.** An account can add an authenticator app (Account page,
-  `POST /auth/mfa/totp/enrol` then `…/confirm`). From then on a right
-  password at `POST /auth/login` buys no session: it answers
-  `{ mfaRequired: true }` and sets a **5-minute challenge** cookie
+  `POST /auth/mfa/totp/enrol` then `…/confirm`), codes by email (below), or
+  both. From then on a right password at `POST /auth/login` buys no
+  session: it answers `{ mfaRequired: true, methods }` (`methods`, the
+  factors the account has, `totp` and/or `email`, so the page can offer
+  "Email me a code"; `mfaRequired` stays for older clients) and sets a
+  **5-minute challenge** cookie
   (`wm_mfa`, `HttpOnly`, `SameSite=Strict`), and `POST /auth/mfa/verify`
-  trades the challenge and a code (six digits from the app, or a recovery
-  code) for the session and the trusted-device cookie. The challenge is a
+  trades the challenge and a code (six digits from the app or the email, or
+  a recovery code) for the session and the trusted-device cookie. The challenge is a
   JWT under the session key with **its own issuer**, so it never passes as
   a session nor a session as it; it is good once (its `jti` goes into
   `revoked_session`), and a password reset voids it like a session (the
@@ -135,12 +168,18 @@ decide a licence application.
   code (accepted).
 - **The session says how it signed in.** The JWT carries `amr` (RFC 8176):
   `["pwd"]`, or `["pwd", "otp"]` after a code (from verify, or from
-  confirming an enrolment on this browser). A token without `amr` (from
-  before) is password-only; an unknown value makes the token invalid.
-  Changing the password keeps the session's `amr`; turning two-step sign-in
-  off moves the session watermark (every other session is signed out, so
-  none signed in with a code outlives it and counts again after a later
-  re-enrolment) and reissues this browser's session as `["pwd"]`.
+  confirming an enrolment on this browser). `otp` covers an emailed code
+  too: RFC 8176's `otp` is any one-time password, and the method isn't a
+  claim (an unknown `amr` value makes a token invalid, so none was added;
+  the security log records which factor was turned on or off). A token
+  without `amr` (from before) is password-only; an unknown value makes the
+  token invalid.
+  Changing the password keeps the session's `amr`; turning a factor off
+  moves the session watermark (every other session is signed out, so none
+  signed in with it outlives it and counts again after a later
+  re-enrolment) and reissues this browser's session: as `["pwd", "otp"]`
+  while another factor is still on (the person just gave a code), else
+  `["pwd"]`.
 - **The code.** `auth/totp.ts`, on `node:crypto` (an HMAC-SHA1, the
   dynamic truncation and a modulus, RFC 4226 § 5.3), 6 digits, 30-second
   steps, one step either side of now. A step at or before the last one
@@ -154,18 +193,79 @@ decide a licence application.
   (`auth/secretBox.ts`). `APP_ENCRYPTION_KEY` is an API runtime secret (the
   sops key `app_encryption_key`, § Runtime secrets); the committed dev value
   is a `dev-only-` placeholder `check:env` pins and the API refuses in
-  production. Rotating it voids every authenticator: clear `user_totp` and
-  `user_recovery_code` as the schema owner and have each person set theirs
-  up again (deployment.md § Runbooks).
-- **Recovery codes.** Ten, shown once when the authenticator is confirmed
-  or when a new set is made (`POST /auth/mfa/recovery-codes`, which needs a
-  code from the app): 10 characters from a 30-letter alphabet without
-  look-alikes (about 49 bits each), stored as SHA-256, each deleted when
-  used. Only while an authenticator is confirmed.
-- **Enrolment needs the password.** `…/enrol` checks the current password
-  through the sign-in lockout, as changing the password does, so a stolen
-  session can't put its own authenticator on the account and lock its owner
-  out. Turning it off needs a code from the app or a recovery code.
+  production. Rotating it voids every authenticator: remove each through
+  `mfa_remove_factor(…, 'totp', now())` as the schema owner (which keeps the
+  recovery codes of accounts with codes by email still on) and have each
+  person set theirs up again (deployment.md § Runbooks 15). Codes by email survive a rotation:
+  only a live code (10 minutes) stops matching, and the next send is under
+  the new key.
+- **Code by email** (`206_mfa_email_code.sql`, `auth/emailCode.ts`,
+  `auth/mfa-routes.ts`). Turned on from the Account page with the current
+  password (`POST /auth/mfa/email/enrol`, through the sign-in lockout like
+  the app's), which emails a code to the account's confirmed address;
+  `…/email/confirm` takes it back and the factor is on. At sign-in, `POST
+  /auth/mfa/challenge/email` (public: the `wm_mfa` challenge is the
+  credential, as for verify) emails a code, and `…/mfa/verify` takes it like
+  an app code; signed in, `POST /auth/mfa/email/send` emails one for the
+  step-up, for turning a factor off and for new recovery codes. The code: six
+  digits from `crypto.randomInt`, **10 minutes**, good once, one live code
+  per account (a new send replaces it, whatever it was for), bound to its
+  purpose (`enrol` confirms a pending factor, `use` everything else). It is
+  stored as an **HMAC-SHA256 under a key derived from `APP_ENCRYPTION_KEY`**
+  (HKDF-SHA256 with its own `info`, over the account id, the purpose and the
+  code), not a plain SHA-256: a six-digit code has under 20 bits, so anyone
+  who read the table (a backup, a leaked dump, an SQL injection) could try
+  all million against a plain digest in a moment, account id mixed in or
+  not; under a key the database never sees, the stored value is useless
+  alone. The code table and the send log are deny-all; only
+  `app_mfa_email_send` and `app_mfa_email_use` (SECURITY DEFINER, the
+  current user only) and the removals (`mfa_remove_factor(s)`, which void the
+  live code with the factor) write them, so nobody can plant a
+  code of their choosing or skip the limits. **Every check goes through the
+  code throttle** like an app code (a wrong emailed code counts the same).
+  **Send limits** (an email costs money, and a stream of them is abuse): a
+  minute between sends and at most five in a rolling hour per account,
+  under the account's row lock (parallel sends queue; one goes), answering
+  `429 mfa_email_wait` with `params.seconds` and `Retry-After`; a send the
+  transport refused answers `503 mfa_email_failed` and still counts. The
+  limits are per account, so someone who knows the password can spend the
+  hour's five sends from the sign-in challenge and keep the owner's code
+  email back for up to an hour; the recovery codes (or the app, if on) are
+  the way in meanwhile, and the password should be changed, since it is
+  known. On an account with both factors a six-digit guess is tried against
+  the app and the email under one throttle count, so a guesser gets one more
+  valid code per attempt; with the lockout the odds stay negligible. The
+  email has no link (the code is typed where it was asked for) and keeps
+  the code out of the subject (a lock screen's preview); it says what the
+  code is for, so one nobody asked for stands out ("someone knows your
+  password"). **The tradeoff, said on the Account page:** whoever reads the
+  inbox can also reset the password (§ Password reset), so with codes by
+  email the inbox alone guards the account, where the app needs the phone
+  too. The app stays the stronger factor and is offered first; codes by
+  email still stop a phished or reused password from working on its own.
+  Tests: `auth/mfa-email.db.test.ts` (enrolment needs the password; the
+  right, wrong, expired, reused and replaced code; the throttle; the send
+  limits and the race; step-up and the fresh code; RLS with positive
+  controls, the edges), `auth/emailCode.test.ts`, `mail/templates.test.ts`,
+  `lib/auth/codeMethods.test.ts`, and end to end with the emails really
+  sent, `e2e/tests/mfa-email-mailpit.spec.ts` (turning it on, signing in,
+  Send again, a pack sign-off's fresh code, both ways on, turning it off).
+- **Recovery codes.** Ten, shown once when the first factor (of either
+  kind) is confirmed or when a new set is made (`POST
+  /auth/mfa/recovery-codes`, which needs a code from the app or by email):
+  10 characters from a 30-letter alphabet without look-alikes (about 49
+  bits each), stored as SHA-256, each deleted when used. One set per
+  account, kept while any factor is confirmed: adding a second factor shows
+  none (`recoveryCodes: null`), and removing one keeps them while the other
+  stays; they go with the last factor. Made harder to lose
+  (205): the Account page offers them as a text file and on the clipboard
+  (both made in the browser; the server sends them once, `no-store`), says
+  how many are left, and warns at two or fewer to make a new set.
+- **Enrolment needs the password.** `…/totp/enrol` and `…/email/enrol`
+  check the current password through the sign-in lockout, as changing the
+  password does, so a stolen session can't put its own factor on the
+  account and lock its owner out. Turning a factor off needs a code (from
+  the app, by email, or a recovery code).
 - **Code throttle.** Every code check (sign-in, confirm, turn off, new
   codes) counts on the account's `mfa_throttle` row first, in its own
   transaction under a row lock, like `login_throttle`: the 5th wrong code in
@@ -175,40 +275,88 @@ decide a licence application.
   nobody can clear their own count. Each wrong code logs `login_failed`
   with reason `bad_code`, counted by the login-failed alarm. The WAF's
   per-IP limit on `/api/auth/*` covers `/api/auth/mfa/verify` too.
-- **Who must use it.** Project owners, team admins and assessors
-  (`auth/stepUp.ts`). `requireRole(…, 'owner')` and
-  `requireTeamRole(…, 'admin')` call `requireStepUp` after the role check
-  passes (so an outsider still gets 404 and learns nothing), and so do the
-  editor-level actions those roles exist for: publishing to farmers (`POST`
-  and `PATCH …/publication`, publishing and withdrawing an outlook),
-  recording the authority's decision on an application (`…/decide`),
-  endorsing a published baseline (`…/publication/:pubId/endorse`), issuing
-  or withdrawing an evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
-  `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
-  needs an authenticator: a sign-off is the professional record an
-  authority relies on, and without it is only as strong as the signer's
-  password (operator decision, 2026-10-01). The owner and admin checks a route makes by hand are
-  stepped up too: removing someone else from a project or a team (leaving
-  isn't), and an owner making or revoking a share link of any kind. A guard
-  (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
-  `rank.owner` comparison in the backend and fails unless its file calls
-  `requireStepUp` or is listed with why it gates no action. Without an authenticator the answer is
-  `403 mfa_required` ("set one up on your Account page"); with one but a
-  password-only session, `403 mfa_step_up` ("sign in again"). The check
-  reads the session's `amr` from the request's `requestAuth`
-  (AsyncLocalStorage, set by `requireUser`) and the account's confirmed
-  factor, so a factor turned off since sign-in no longer counts. Work
-  outside a request (the job runner) isn't stepped up: no job kind needs
-  more than editor, and the request that queued it was checked. Everyone
-  else may turn it on, and is asked for a code at sign-in once they have.
-  `GET /auth/mfa` says whether the person's roles need it (`required`,
-  false while the switch below is off, so the prompts say what the routes
-  do).
+- **Who must use it.** Opt-in per project and team, and always for the
+  actions that reach people outside the team (`auth/stepUp.ts`,
+  `204_mfa_opt_in.sql`). The operator's decision of 2026-10-08, replacing
+  the role-based requirement of 2026-10-01 (every project owner, team admin
+  and assessor, and every signer): a requirement on every owner made a
+  first-time owner set up an authenticator before they could invite a
+  colleague to their own catchment, for actions whose harm stays inside the
+  team (the team can see and undo who was added, what key was made), so it
+  is the team's choice now.
+  - **Opt-in.** `project.require_mfa` and `team.require_mfa`, off by
+    default. An owner sets the project's, a team admin the team's (`PATCH
+    /projects/:id { requireMfa }`, `PATCH /teams/:id { requireMfa }`; the
+    switch on the Project page and in the team settings). Where the project
+    requires it, or its team does (`app_project_requires_mfa`, a definer, so
+    an owner shared a team project directly, who can't read the team row,
+    is still held to it), its owners need a session signed in with a code
+    before any owner action: `requireRole(…, 'owner')` calls
+    `requireProjectStepUp` after the role check passes (so an outsider still
+    gets 404 and learns nothing): members, invites, API keys, data feeds,
+    share links, deleting the project, and the owner checks a route makes
+    by hand (removing someone else from the project, leaving isn't; an
+    owner making or revoking a share link of any kind). A run's sign-off
+    (`POST …/runs/:runId/signoffs`) follows the project's setting too, with
+    its fresh code (below): with the setting off it needs neither. Where
+    the team requires it, `requireTeamRole(…, 'admin')` calls
+    `requireTeamStepUp`, and removing someone else from the team is stepped
+    up too; the team's setting also covers the owner actions on every team
+    project.
+  - **Always, whatever the settings.** The actions that reach farmers, the
+    public or a licence decision, where a phished password does harm the
+    team can't undo: publishing to farmers (`POST` and `PATCH
+    …/publication`, publishing and withdrawing an outlook), recording the
+    authority's decision on an application (`…/decide`), endorsing a
+    published baseline (`…/publication/:pubId/endorse`), recording a
+    signer's registration check (`…/registration-checks`), and signing,
+    issuing and withdrawing an evidence pack (`requireFreshCode`, below).
+    And a team admin removing a member's lost factor (Recovery, below)
+    always needs a fresh code: it takes a factor off someone else's account.
+    The legal reasoning of 2026-10-01 stands for these: a pack's sign-off
+    is a professional statement under a real name on the public verify
+    page, which an authority relies on, so it is only as strong as the
+    signer's password without a second factor (a false one would be a GN
+    R267 reg 20 offence by whoever made it, and a POPIA s19 failure by us),
+    and a published restriction or a recorded decision reaches people who
+    can't check who made it.
+  - **Turning a setting on** needs the person turning it on to be signed in
+    with a second factor themselves (`requireOwnSecondFactor`, the same
+    `403 mfa_required` / `mfa_step_up`, so the prompt below shows), so a
+    project can't lock out everyone at once. **Turning it off** is an
+    owner's (admin's) action under the setting, so it is stepped up by the
+    setting itself. Both are recorded in the history
+    (`project.mfa_requirement`, `team.mfa_requirement` on each team
+    project); only an owner may change the project's column, even through
+    the database (`project_require_mfa_guard`, since `project_update` lets
+    an editor update the row; `team_update` is admin-only already).
+  - **The guards.** `auth/stepUp.test.ts` finds every hand-rolled `'owner'`
+    / `'admin'` / `rank.owner` comparison in the backend and fails unless
+    its file calls a step-up (`requireProjectStepUp`, `requireTeamStepUp`
+    or `requireStepUp`) or is listed with why it gates no action, and
+    checks that each always-required route still calls the unconditional
+    check. Without a factor the answer is `403 mfa_required` ("set it up
+    on your Account page"); with one but a password-only session, `403
+    mfa_step_up` ("sign in again with a code"). Either factor counts. The
+    check reads the session's `amr` from the request's `requestAuth`
+    (AsyncLocalStorage, set by `requireUser`) and whether the account has a
+    confirmed factor (`hasConfirmedFactor`, the one test above), so a
+    factor turned off since sign-in no longer counts. Work outside a request (the job runner) isn't stepped up: no
+    job kind needs more than editor, and the request that queued it was
+    checked. Everyone may turn two-step sign-in on for their account, and
+    is asked for a code at sign-in once they have. `GET /auth/mfa` says
+    whether the person's roles need it (`required`: an owner or admin
+    where a project or team requires it, a member acting for a responsible
+    authority, or an assessor; false while the switch below is off, so the
+    prompts say what the routes do). Any editor may publish to farmers, so
+    an editor isn't told up front; the refused action prompts.
 - **A fresh code for signing, issuing and withdrawing** (licensing
   positions item 9; provisional position, pre-counsel research,
-  2026-10-01). A sign-off (of a run or an evidence pack, the applicant's
-  specialist's included), issuing a pack and withdrawing one also need a
-  code from the authenticator **within the last 10 minutes**, not only at
+  2026-10-01). A sign-off of an evidence pack (the applicant's
+  specialist's included), issuing a pack and withdrawing one, and a run's
+  sign-off where the project requires two-step sign-in
+  (`requireProjectFreshCode`), also need a
+  code (from the app or by email) **within the last 10 minutes**, not only at
   sign-in: a sign-off publishes a professional statement under a real name
   on the public verify page, and a session left open on a shared computer
   mustn't make one (a false one would be a GN R267 reg 20 offence by whoever
@@ -221,18 +369,22 @@ decide a licence application.
   it is older than 10 minutes (or more than a minute ahead), after
   `requireStepUp`, so enrolment still comes first (`403 mfa_required` before
   a first sign-off). The workspace asks for a code in a dialog
-  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`),
+  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`;
+  with codes by email on, **Email me a code instead** sends one through
+  `POST /auth/mfa/email/send`, which the same field takes),
   POSTs it to `/auth/mfa/step-up` (same throttle as every code check; a
   recovery code works and is recorded) and sends the action again, once
   (`lib/api/client.ts`). The step-up also turns a password-only session into
   a two-step one. Off with the switch below. Tests:
   `auth/stepUp.db.test.ts` (each action at 11 minutes, the step-up and the
   control), `lib/api/client.test.ts` (the retry).
-- **The prompt.** Only a refused action prompts, never the role alone (the
-  operator's decision, 2026-10-03, replacing the up-front banner of
-  2026-10-01: a project that never does a protected action is never asked,
-  and one that does meets the prompt at that action, which the API refuses
-  as before, so nothing is less protected). A `403 mfa_required` or
+- **The prompt.** Only a refused action prompts, never the role or a
+  project's setting alone (the operator's decision, 2026-10-03, replacing
+  the up-front banner of 2026-10-01, and kept by the opt-in of 2026-10-08: a
+  project that never does a protected action is never asked, and one that
+  does meets the prompt at that action, which the API refuses, so nothing is
+  less protected). Turning a project's or team's requirement on without a
+  second factor is refused the same way, so it prompts too. A `403 mfa_required` or
   `mfa_step_up` from any request (the API client's `onError`) shows a banner
   (`layout/MfaBanner.svelte`, its own chunk, mounted by
   `routes/+layout.svelte`; the state is `lib/auth/mfaPrompt.svelte.ts`):
@@ -243,7 +395,8 @@ decide a licence application.
   again when the tab comes back into view) only clears a refusal it shows
   resolved; its `required` still tells the Account page which roles need it.
   End to end against a server with the requirement on:
-  `e2e/tests/mfa-required.spec.ts` (a second e2e API, `MFA_API_URL`). The banner is English
+  `e2e/tests/mfa-required.spec.ts` (a second e2e API, `MFA_API_URL`: the
+  Project page's switch refused, the prompt, set up, the switch on). The banner is English
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal
   (every refused action brings it back, operator's decision, 2026-10-01), and
@@ -254,25 +407,110 @@ decide a licence application.
   signing out forgets the dismissal. Tests: `lib/auth/mfaPrompt.test.ts`,
   `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
   so the spec plays the production answers with `page.route`).
-  Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
-  the same person signed in with a code as the positive control; outsiders
-  and viewers still get their 404 and 403).
+  Tests: `auth/stepUp.db.test.ts` (with the setting off, an owner's and a
+  team admin's actions and a run's sign-off on a password; with the
+  project's or team's on, each refused without, with the same person signed
+  in with a code as the positive control; the always-required actions
+  refused with the setting off; turning it on without a factor refused;
+  outsiders and viewers still get their 404 and 403).
 - **The switch.** `MFA_REQUIRED=false` turns the requirement off for the
-  backend's DB tests and the e2e API server, whose hundreds of owner
-  fixtures sign in with a password; `stepUp.db.test.ts` turns it back on.
+  backend's DB tests and the e2e API server, whose hundreds of fixtures
+  publish, decide and sign with a password; `stepUp.db.test.ts` turns it
+  back on. With it off, so is the check on turning a project's or team's
+  setting on, and the settings themselves have no effect.
   Lambda refuses `false` at startup (`config/production.ts`) and so does the
   check itself (`mfaRequired`). Local dev requires it unless
   `.env.development.local` says otherwise (run-locally.md).
-- **RLS.** `user_totp` and `user_recovery_code` are the account's own rows
-  for every command; `account_security_event` (enrolled, turned off, a
-  recovery code used, new codes) is the account's own and append-only
-  (no update or delete, even for its owner, so a thief can't erase that they
-  turned it off); `mfa_throttle` is deny-all. `auth/mfa.db.test.ts` proves
-  each, with the owner's own rows as the positive control.
-- **Lost phone and codes.** The operator, after verifying who is asking,
-  deletes the account's `user_totp` and `user_recovery_code` rows as the
-  schema owner (deployment.md § Runbooks); the person then signs in with the
-  password and sets up again.
+- **RLS.** `user_totp`, `user_email_otp` and `user_recovery_code` are the
+  account's own rows for every command; `account_security_event` (a factor
+  turned on or off, a recovery code used, new codes, a reset's steps) is the
+  account's own and append-only (no update or delete, even for its owner, so
+  a thief can't erase that they turned it off); `mfa_throttle`,
+  `mfa_email_code` and `mfa_email_send` are deny-all. `auth/mfa.db.test.ts`
+  and `auth/mfa-email.db.test.ts` prove each, with the owner's own rows as
+  the positive control. A reset of a
+  lost factor (`mfa_reset`, 205) is the person's own to read and nobody's to
+  write; its cancel links and request cap are owner-only (Recovery, below).
+- **Recovery** (operator decision, 2026-10-08; `205_mfa_recovery.sql`,
+  `auth/mfaReset.ts`, `auth/mfa-reset-routes.ts`,
+  `teams/mfa-reset-routes.ts`). A lost phone (or an inbox out of reach) with
+  the recovery codes is a recovery code at sign-in, and with both factors on
+  the other factor works. No code at all *and* lost codes has three ways
+  out, the first two without the operator:
+  - **The person, with a wait.** At the sign-in's code step (**Lost your
+    phone and your recovery codes?**), `POST /auth/mfa/reset` needs the
+    live `wm_mfa` challenge, so the password was proven a moment ago, and
+    reveals nothing a person without the password could learn (the
+    challenge is what only a right password buys). It changes nothing: it
+    emails a confirmation link to the account's address (its own token
+    kind, SHA-256 in `mfa_reset.confirm_hash`, single use, 1 hour; a new
+    request voids an unused one). Following it starts a **3-day wait**
+    (`effective_at = now + 72 h`, the constant `MFA_RESET_WAIT`: no
+    environment can shorten it). During the wait the factor keeps working;
+    the start, a reminder every 24 hours (none in the last 2 hours) and the
+    end are emailed, each with a **cancel link that needs no sign-in**
+    (another token kind, `mfa_reset_cancel`, one per email, all valid until
+    the reset ends). Any right code from the owner cancels it (`…/verify`,
+    `…/step-up`, new recovery codes and turning a factor off; from the app, by email, or a
+    recovery code), since it proves they still have a factor. So a thief
+    who has the password *and* the inbox of an account with only the app
+    still has to get past three days of emails to the owner, any one of
+    which stops it (with codes by email on, the inbox is already a factor,
+    the tradeoff under Code by email); one who has
+    only the password gets a link mailed to the owner, which the email
+    says means the password is known. At `effective_at` the job worker's
+    tick (`runMfaResets`, every transport's tick; not a job kind, since a
+    job belongs to a project) completes it in one transaction:
+    `app_mfa_reset_complete` refuses a reset whose wait isn't over, removes
+    every second factor (both kinds) through `mfa_remove_factors`, which
+    moves the session watermark (every session signed out), and logs it; then the completion
+    email goes. Abuse limits: one reset waits at a time per account (a
+    partial unique index), 3 requests per account in 24 hours (each an
+    email: SES bills it; `mfa_reset_quota`, `429 mfa_reset_limit`, logged as
+    `login_failed` `locked`), dead links logged as `login_failed`
+    `invalid_link`. If the start email can't be sent, the reset is marked
+    unnotified (`app_mfa_reset_notice_failed`) and the next tick sends a
+    reminder with a cancel link at once. The confirm and cancel pages act only on a button, so a
+    mail scanner that opens a link starts or stops nothing.
+  - **A team admin, at once, for a member below admin.** `POST
+    /teams/:id/members/:userId/mfa-reset`: team admin and, always, a code
+    from the last 10 minutes (`requireFreshCode`, whatever the team's
+    setting, since it takes a factor off someone else's account); never
+    the admin themselves (`409`: they use the self-service path), and
+    **never another admin** (`403 mfa_reset_admin`; operator decision,
+    2026-10-08: one admin's stolen session must not be able to strip a
+    co-admin's factor, so a locked-out admin uses the self-service path or
+    the operator); someone outside the team gets the usual `404`, and so
+    does an admin naming someone not in it. `app_mfa_team_reset` checks the
+    facts again in the database (the target's role included), removes every
+    factor through `mfa_remove_factors` (the authenticator and codes by
+    email alike), signs the member out everywhere and logs
+    `mfa.reset_by_admin`; the route records `team_member.mfa_reset` on each
+    of the team's projects and emails the member. An admin can thus take a
+    member's factor away; it gives them nothing they couldn't do already
+    (an admin owns every team project), and the member, emailed, sees it in
+    their security log. The team page offers it only on rows below admin.
+  - **The operator, last** (deployment.md § Runbooks 14): when the person
+    can't reach the inbox or can't wait and has no team admin, after
+    checking who is asking out of band.
+
+  `mfa_remove_factors` and `mfa_remove_factor` are the only places a
+  second factor is removed, and `mfa_has_factor` the one test that an
+  account has one (all three at the top of this section). The reset's
+  steps are in the
+  person's security log (`mfa.reset_requested`, `…_confirmed`,
+  `…_cancelled`, `…_completed`, `…_by_admin`, `…_by_operator`). RLS:
+  `mfa_reset` is the person's own to read and nobody's to write (only
+  `SELECT` is granted), so no one can move `effective_at` to skip the
+  wait; `mfa_reset_cancel` and `mfa_reset_quota` are owner-only. Tests:
+  `auth/mfa-reset.db.test.ts` (the lifecycle, the reminders, every cancel,
+  the dead and reused links, the cap, one at a time, RLS with positive
+  controls, the team admin's reset and its refusals),
+  `auth/token-confusion.security.db.test.ts` (both new tokens in every
+  slot), `mail/templates.test.ts` (the emails, the date in South African
+  time under skewed time zones), `e2e/tests/mfa-reset-mailpit.spec.ts` (the
+  emails really sent, through Mailpit, for an app factor and an emailed
+  one).
 
 ## Sign-up by invitation
 
@@ -540,7 +778,8 @@ across Lambda instances and whatever the request came through (issue #126):
 | `POST /auth/login` (and `change-password`'s current-password check) | 5 free attempts, then a lock of 1 minute doubling to 15 minutes; a trusted device counts on its own record | `005_login_throttle.sql`, `070_login_device_trust.sql`, `auth/routes.ts` `LOGIN_THROTTLE` ([§ Authentication](#authentication)) |
 | `POST /auth/forgot-password` | 1 reset email a minute, 10 a day (plus 10 per trusted device) | `app_issue_email_token`, `078_account_mail_cap.sql` (Mail-bombing throttle above) |
 | `POST /auth/resend-confirmation`, `POST /auth/resend-verification`, a sign-up with a taken address | the same cooldown and daily cap, on verification emails | the same |
-| `POST /auth/reset-password`, `POST /auth/verify-email` | none per account, by design: the account isn't known until a token matches, and a token is 256 random bits, single-use and short-lived, so guessing one is not a feasible attack at any rate; malformed tokens are refused before any database work | `auth/tokens.ts`, `auth/email-routes.ts` |
+| `POST /auth/mfa/reset` (a reset of a lost second factor, 205) | 3 requests (each an email) per account in 24 hours, under a per-account advisory lock; only with a live sign-in challenge, so only after a right password; one reset waits at a time, which bounds its reminders to one a day | `app_mfa_reset_request`, `205_mfa_recovery.sql` (§ Two-step sign-in → Recovery) |
+| `POST /auth/reset-password`, `POST /auth/verify-email`, `POST /auth/mfa/reset/confirm`, `POST /auth/mfa/reset/cancel` | none per account, by design: the account isn't known until a token matches, and a token is 256 random bits, single-use and short-lived, so guessing one is not a feasible attack at any rate; malformed tokens are refused before any database work | `auth/tokens.ts`, `auth/email-routes.ts` |
 
 `POST /auth/register` is the one auth limit keyed by client address (sign-up
 has no account yet; above), with a global ceiling that doesn't depend on it.
@@ -564,7 +803,9 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
   current password is `bad_password` on `/auth/change-password`, and "Delete
   my account"'s password on `/auth/me`, issue #112), `locked`
   (refused by the lockout before the password is checked), and `invalid_link`
-  (a malformed, used, expired or unknown reset or verification token).
+  (a malformed, used, expired or unknown reset or verification token, or a
+  second-factor reset's confirm or cancel link; `locked` on
+  `/auth/mfa/reset` is its daily cap).
 - *No personal data:* the line holds the route's pattern and the reason only,
   never the typed address, an account id, the client address or a token; the
   logger's signature takes two closed unions, so a caller can't pass one.
@@ -2878,7 +3119,9 @@ PDF someone else asked for kept the person as a recipient
 | Elevation-model requests per account, for the hourly and running caps (184) | `dem_attempt` | 1 day | Deleted | – |
 | Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
 | Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
-| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
+| Codes by email (206): whether they are on and since when; the live emailed code (HMAC under `APP_ENCRYPTION_KEY`, with its purpose and expiry); when codes were emailed, for the send limits; the factor own row only under RLS, the code and the log deny-all; in the export as `twoStepEmail` (never the code or the send log) | `user_email_otp`, `mfa_email_code`, `mfa_email_send` | The factor until turned off or removed by a reset; a code until used, replaced or 10 minutes old (then cleared); sends a day | Deleted | – |
+| The account's own security log: an authenticator or codes by email turned on or off, a recovery code used, new codes (150, 206), a reset of a lost factor asked for, confirmed, cancelled, completed, or done by a team admin or the operator (205); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
+| Resets of a lost second factor (205): when asked for, confirmed and ended, and how; the confirm and cancel links' hashes (SHA-256); requests counted for the daily cap | `mfa_reset`, `mfa_reset_cancel`, `mfa_reset_quota` | An ended reset 90 days (the tick, `app_mfa_reset_purge`); a link's hash until used or the reset ends; counts 24 hours | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
@@ -3475,10 +3718,11 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     ECSA or SACNASP register, and printed "self-declared"; the report prints
     the chosen register's address beside each signature); dam
     safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
-    finding on lawfulness and doesn't verify the app's software; signing
-    doesn't require two-step sign-in (it is the signer's choice, § Two-step
-    sign-in; requiring it for every signer waits on a decision,
-    followups.md), so a sign-off is as strong as the signer's sign-in. The typed name and registration are personal data: the
+    finding on lawfulness and doesn't verify the app's software. Signing a
+    pack always needs two-step sign-in and a code from the last 10 minutes;
+    signing a run does where the project requires two-step sign-in (opt-in,
+    204_mfa_opt_in; § Two-step sign-in), and otherwise a run's sign-off is
+    as strong as the signer's password. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
     with the account cleared, until the closing date of the licence record it
     supports (161; [§ Personal information](#personal-information-popia)).

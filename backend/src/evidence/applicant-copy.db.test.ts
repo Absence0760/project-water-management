@@ -171,11 +171,14 @@ describe("the applicant's printable copy", () => {
 		const get = (path: string) => anon('GET', path, undefined, cookie);
 		expect((await get(`${P()}/scenarios/${app}/packs/${pack}`)).status).toBe(200);
 		// Every signed-in route the app has, with this pack's ids: only the one read answers (docs/security.md § Render tokens).
-		// (Not the public ones: POST /auth/logout would end the session the sweep is using.)
+		// (Not the public ones: POST /auth/logout would end the session the sweep is using, and the sign-in
+		// step's routes under /auth/mfa take their own credential, the challenge cookie or an emailed link's
+		// token, and never read a session: on routes.test.ts's public allowlist.)
 		const signedIn = /^\/(projects|teams|me|compare|auth\/me|auth\/mfa)(\/|$)/;
-		const routes = [
-			...new Set(api.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS' && signedIn.test(r.path)).map((r) => `${r.method} ${r.path}`))
-		];
+		const signInStep = new Set(['POST /auth/mfa/verify', 'POST /auth/mfa/challenge/email', 'POST /auth/mfa/reset', 'POST /auth/mfa/reset/confirm', 'POST /auth/mfa/reset/cancel']);
+		const all = new Set(api.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS').map((r) => `${r.method} ${r.path}`));
+		for (const r of signInStep) expect(all, r).toContain(r);
+		const routes = [...all].filter((r) => signedIn.test(r.slice(r.indexOf(' ') + 1)) && !signInStep.has(r));
 		const opened: string[] = [];
 		for (const route of routes) {
 			const [method, pattern] = route.split(' ') as [string, string];

@@ -47,14 +47,18 @@ const CODES: Record<string, Msg> = {
 	run_unverified: msg('This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.'),
 	account_sole_holder: msg('You are the only owner of a project or the only admin of a team. Hand it to someone else first.'),
 	// Two-step sign-in (issue #282).
-	mfa_code_wrong: msg('That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.'),
+	mfa_code_wrong: msg('That code isn’t right. Enter the newest code from your authenticator app or your email, or one of your recovery codes.'),
 	mfa_locked: msg('Too many wrong codes. Try again in {wait}.'),
 	mfa_challenge_expired: msg('Your sign-in timed out. Enter your email and password again.'),
-	mfa_already_enrolled: msg('Two-step sign-in is already on. Turn it off first to set up another authenticator app.'),
+	mfa_already_enrolled: msg('This is already on. Turn it off first to set it up again.'),
 	mfa_not_started: msg('Start setting up two-step sign-in again.'),
 	mfa_not_enrolled: msg('Two-step sign-in is off.'),
-	mfa_required: msg('This needs two-step sign-in. Set up an authenticator app on your Account page first.'),
-	mfa_step_up: msg('This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.'),
+	mfa_required: msg('This needs two-step sign-in. Set it up on your Account page first.'),
+	mfa_step_up: msg('This needs two-step sign-in. Sign out, then sign in again with a code.'),
+	mfa_reset_limit: msg('You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.'),
+	mfa_reset_admin: msg('A team admin can’t remove another admin’s two-step sign-in. They can remove it themselves when they sign in, after a 3-day wait.'),
+	mfa_email_wait: msg('We just emailed you a code. You can ask for another in {wait}.'),
+	mfa_email_failed: msg('We couldn’t send the email. Try again in a minute.'),
 	comment_throttled: msg('You have posted 10 comments in the last hour. Wait a while, then try again.'),
 	// Not from the API: the WAF's sign-in CAPTCHA (client.ts CAPTCHA_REQUIRED), on a page that can't show the puzzle.
 	captcha_required: msg('Too many sign-in attempts from your network. Wait a few minutes, then try again.')
@@ -62,6 +66,7 @@ const CODES: Record<string, Msg> = {
 
 // i18n-section: error.minutes
 const MINUTES = plural({ one: '{n} minute', other: '{n} minutes' });
+const SECONDS = plural({ one: '{n} second', other: '{n} seconds' });
 
 /** The message for a status the server gave no code for. */
 function byStatus(status: number): string {
@@ -95,6 +100,12 @@ export function errorText(err: unknown): string {
 	const words = err.code && Object.hasOwn(CODES, err.code) ? CODES[err.code]! : null;
 	if (!words) return byStatus(err.status);
 	const params = err.params ?? {};
+	// A send limit is usually under a minute: say the seconds, then minutes.
+	if (err.code === 'mfa_email_wait') {
+		const seconds = n(params.seconds);
+		const s = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60;
+		return t(words, { wait: s < 60 ? tn(SECONDS, s) : tn(MINUTES, Math.ceil(s / 60)) });
+	}
 	if (WAITS.has(err.code!)) {
 		const seconds = n(params.seconds);
 		const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;

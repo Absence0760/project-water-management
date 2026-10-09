@@ -9,7 +9,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
 import { DEM_FIXTURE } from './support/dem.ts';
 import { WATER_FIXTURE } from './support/water.ts';
-import { API_PORT, API_URL, APP_E2E_URL, MFA_API_PORT, MFA_API_URL, WEB_PORT, WEB_URL } from './support/env.ts';
+import { API_PORT, API_URL, APP_E2E_URL, E2E_APP_ENCRYPTION_KEY, MFA_API_PORT, MFA_API_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 // The site under test is `vite build` output with the e2e API URL baked in
 // (support/build-site.ts), served with the SPA fallback like CloudFront. Not
@@ -89,13 +89,16 @@ export default defineConfig({
 				// far past the sign-up throttle's 10 an hour (backend/src/auth/signupThrottle.ts;
 				// its own tests are in the backend). Lambda refuses the setting.
 				SIGNUP_THROTTLE: 'off',
-				// TEST-ONLY: the second-factor requirement for owners, team admins and
-				// assessors off (backend/src/auth/stepUp.ts). Hundreds of specs make a
-				// project owner who signs in with a password only; two-step sign-in
+				// TEST-ONLY: the second-factor requirement off (backend/src/auth/stepUp.ts:
+				// the actions that always need it, and owners' and team admins' where a
+				// project or team requires it). Hundreds of specs publish, decide or sign
+				// as someone who signs in with a password only; two-step sign-in
 				// itself (enrolment, the sign-in step, recovery codes) works the same
 				// either way and is tested in two-step-signin.spec.ts, and the
 				// requirement in backend/src/auth/stepUp.db.test.ts. Lambda refuses it.
 				MFA_REQUIRED: 'false',
+				// Known to the specs, which plant emailed two-step codes under it (support/db.ts plantEmailCode).
+				APP_ENCRYPTION_KEY: E2E_APP_ENCRYPTION_KEY,
 				// The pack specs sign with invented registrations nobody checked against a register (167_signers).
 				REGISTRATION_CHECK_REQUIRED: 'false',
 				// Delineation on, against the committed synthetic DEM (invented terrain; map-delineate.spec.ts).
@@ -105,8 +108,9 @@ export default defineConfig({
 			}
 		},
 		// The same API with the second-factor requirement on (MFA_REQUIRED unset, production's default), on the
-		// same database: mfa-required.spec.ts sends the browser's API calls here, so a real server refuses an
-		// owner's action and the page meets the real 403 (the requirement itself: backend/src/auth/stepUp.db.test.ts).
+		// same database: mfa-required.spec.ts, mfa-email-mailpit.spec.ts and mfa-reset-mailpit.spec.ts send the browser's API calls here, so a
+		// real server refuses turning a project's requirement on and the page meets the real 403 (the requirement
+		// itself: backend/src/auth/stepUp.db.test.ts).
 		{
 			command: 'pnpm -C ../backend exec tsx src/server.ts',
 			url: `${MFA_API_URL}/health`,
@@ -118,10 +122,17 @@ export default defineConfig({
 				DATABASE_URL: APP_E2E_URL,
 				ALLOWED_ORIGINS: WEB_URL,
 				SITE_URL: WEB_URL,
-				MAIL_TRANSPORT: 'log',
+				// Through Mailpit (SMTP_HOST/SMTP_PORT, as local dev and CI's e2e job run it): mfa-email-mailpit.spec.ts reads
+				// the emailed two-step codes there, mfa-reset-mailpit.spec.ts a second-factor reset's emails (205). Without
+				// Mailpit running a send fails and is logged; a code send answers 503, other requests still succeed
+				// (mail/transport.ts trySendMail), so mfa-required.spec.ts needs no Mailpit.
+				MAIL_TRANSPORT: 'smtp',
+				SMTP_HOST: '127.0.0.1',
+				SMTP_PORT: '1026',
 				PASSWORD_HASH_FAST: '1',
 				SIGNUP_THROTTLE: 'off',
-				REGISTRATION_CHECK_REQUIRED: 'false'
+				REGISTRATION_CHECK_REQUIRED: 'false',
+				APP_ENCRYPTION_KEY: E2E_APP_ENCRYPTION_KEY
 			}
 		},
 		DEV_SERVER

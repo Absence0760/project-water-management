@@ -1323,7 +1323,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   | Variable | Value |
   | --- | --- |
   | `APP_ENCRYPTION_KEY` | The sops key `app_encryption_key` (32+ alphanumeric characters), in the API's runtime secret. Seals two-step sign-in's TOTP secrets (AES-256-GCM, `auth/secretBox.ts`); the API refuses a missing, short or `dev-only-` value at cold start. Rotate only if it leaked ([§ Runbooks](#runbooks) 15) |
-  | `MFA_REQUIRED` | Unset (or `true`). The API and worker refuse `false` at cold start: owners, team admins and assessors always need two-step sign-in in production (`auth/stepUp.ts`) |
+  | `MFA_REQUIRED` | Unset (or `true`). The API and worker refuse `false` at cold start: in production, publishing to farmers, licence decisions and evidence packs always need two-step sign-in, and owners' and team admins' actions do where a project or team requires it (`auth/stepUp.ts`, 204_mfa_opt_in) |
   | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links and the "Was this useful?" links (151). Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
   | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
@@ -2099,26 +2099,45 @@ Every step is an ordinary app action by an owner unless it says "operator".
        record it in the operator log.
 
 14. **Someone lost their authenticator app and their recovery codes**
-    (operator; two-step sign-in, [security.md § Two-step sign-in](./security.md#two-step-sign-in)).
-    There is no reset route by design: a reset link to the inbox would be a
-    way round the second factor for anyone who holds the inbox. Confirm who
-    is asking out of band (a call to a number the WUA or consultancy has on
-    file, not one in the request), then, as the schema owner, in one
-    transaction:
-    `DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…';`
-    (the last line signs out every session, a thief's included). They sign
-    in with the password and set up a new authenticator on the Account
-    page; if they are an owner, team admin or assessor, they need it before
-    those actions again. If the password may be known to someone else too,
-    have them reset it first. Record the request and how identity was
-    checked in the operator log.
+    (operator, the last resort; two-step sign-in, [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery).
+    There are two ways without the operator, and they come first: the
+    person asks at the sign-in's code step (**Lost your phone and your
+    recovery codes?**: an emailed link, then a 3-day wait with a cancel
+    link in every email), or, in a team, a team admin removes it at once
+    from the team's member list (for a member below admin only: an admin's
+    factor is never reset by another admin). Use this only when neither
+    can: the person can't reach the account's inbox and has no team admin
+    (or is a team admin), or can't wait three days and has no team admin. A
+    reset link alone would be a way round the second factor for anyone who
+    holds the inbox, which is why the self-service path waits; this path
+    has no wait, so identity is checked by hand. Confirm who is asking out
+    of band (a call to a number the WUA or consultancy has on file, not one
+    in the request), then, as the schema owner, in one transaction:
+    `SELECT mfa_remove_factors('…', now()); INSERT INTO account_security_event (user_id, kind) VALUES ('…', 'mfa.reset_by_operator');`
+    (`mfa_remove_factors`, 205 and 206, removes every second factor of the
+    account, the authenticator and codes by email alike, with the recovery
+    codes and any live emailed code, ends a waiting reset, and moves the
+    session watermark, which signs out every session, a thief's included;
+    the event is in the person's own security log and data export). They
+    sign in with the password and set up a factor again on the Account
+    page; where their roles need it, they need it before those actions
+    again. If the password may be known to someone else too, have them
+    reset it first. Record the request and how identity was checked in the
+    operator log.
 15. **`APP_ENCRYPTION_KEY` leaked, or must change** (operator). The key seals
-    every TOTP secret; a new one can't open the old rows. Edit
-    `app_encryption_key` with sops and apply (§ Rotating a secret), then, as
-    the schema owner, `DELETE FROM user_recovery_code; DELETE FROM user_totp;`
-    and tell every person who had two-step sign-in on to set it up again
-    (owners, team admins and assessors can't do those actions until they
-    have). Their security log keeps the history.
+    every TOTP secret; a new one can't open the old rows. Edit `app_encryption_key` with sops and apply
+    (§ Rotating a secret), then, as the schema owner, take the
+    authenticators off through the one removal, which keeps everyone's
+    codes by email and their recovery codes while that factor stays on:
+    `SELECT mfa_remove_factor(user_id, 'totp', now()) FROM user_totp;`
+    (`mfa_remove_factor`, 205 and 206: with no other factor left it removes
+    the recovery codes too, and either way it signs the account out) and
+    tell every person who had an authenticator to set it up again
+    (the actions that need it, always or where a project or team requires
+    it, are refused until they have). Their security log keeps the history. Codes by email (206) need
+    nothing: only a code sent in the last 10 minutes stops matching (the
+    HMAC key comes from the same setting), and the next one is sent under the
+    new key.
 16. **A licence record past its closing date** (operator; the "This licence
     record can now be deleted" email, or a review that went unanswered;
     [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing

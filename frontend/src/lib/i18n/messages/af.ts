@@ -37,6 +37,10 @@ export const af: Catalogue = {
 	'bb72711c': 'Gebruik hoogstens 200 karakters.',
 	// The two passwords don’t match.
 	'd62a92b9': 'Die twee wagwoorde stem nie ooreen nie.',
+	// Enter a display name.
+	'a7f2031b': 'Tik ’n vertoonnaam in.',
+	// Use at most 100 characters.
+	'c5951029': 'Gebruik hoogstens 100 karakters.',
 	// Enter your password.
 	'fed4dc29': 'Tik jou wagwoord in.',
 	// Delete my account
@@ -91,60 +95,118 @@ export const af: Catalogue = {
 	'6476ae31': 'Vee tans uit…',
 	// {n} recovery code left. / {n} recovery codes left.
 	'4aaaac52': { one: '{n} herstelkode oor.', other: '{n} herstelkodes oor.' },
+	// We emailed you a code. It works for 10 minutes.
+	'd8c6fbd5': 'Ons het vir jou ’n kode ge-e-pos. Dit bly 10 minute geldig.',
 	// Enter your current password.
 	'f555922c': 'Tik jou huidige wagwoord in.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
+	// Enter the 6-digit code from the email.
+	'8cb9ab8a': 'Tik die 6-syferkode uit die e-pos in.',
 	// Enter the 6-digit code from your authenticator app.
 	'7feb1b8c': 'Tik die 6-syferkode van jou verifikasie-app in.',
+	// Codes by email are on.
+	'1d8d9cfd': 'Kodes per e-pos is aan.',
+	// The authenticator app is on.
+	'6cbb604d': 'Die verifikasie-app is aan.',
+	// Make new recovery codes
+	'2cd1bc62': 'Skep nuwe herstelkodes',
+	// Remove the authenticator app
+	'74fb1a16': 'Verwyder die verifikasie-app',
+	// Turn off codes by email
+	'eb083566': 'Skakel kodes per e-pos af',
+	// Cancel the removal
+	'6703e968': 'Kanselleer die verwydering',
+	// Enter a code.
+	'20fafe8f': 'Tik ’n kode in.',
+	// The removal is cancelled. Two-step sign-in stays on.
+	'98d4403a': 'Die verwydering is gekanselleer. Tweestap-intekening bly aan.',
+	// The authenticator app is removed.
+	'f8b3c676': 'Die verifikasie-app is verwyder.',
+	// Codes by email are off.
+	'7067a2c9': 'Kodes per e-pos is af.',
 	// Two-step sign-in is off.
 	'7aa9d2cc': 'Tweestap-intekening is af.',
 	// Water Management recovery codes for {email}
 	'e65b3921': 'Water Management-herstelkodes vir {email}',
-	// Each code works once, in place of a code from your authenticator app.
-	'16b901ba': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app.',
+	// Each code works once, in place of a code from your authenticator app or your email.
+	'49c661fe': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app of jou e-pos.',
+	// Sending…
+	'967aa5dd': 'Stuur tans…',
+	// Send again (in {n} s)
+	'a875e674': 'Stuur weer (oor {n} s)',
+	// Email me a code
+	'01a688f1': 'E-pos vir my ’n kode',
 	// Two-step sign-in
 	'67ca1ae1': 'Tweestap-intekening',
-	// You’re a project owner, team admin or assessor, so publishing, deciding applications and managing members need two-step sign-in. Set it up here.
-	'174d5a26': 'Omdat jy ’n projekeienaar, spanadministrateur of beoordelaar is, het jy tweestap-intekening nodig om te publiseer, oor aansoeke te besluit en lede te bestuur. Stel dit hier op.',
+	// A project or team you manage requires two-step sign-in, or you take part in licence decisions, which always need it. Set it up here.
+	'9512751d': '’n Projek of span wat jy bestuur, vereis tweestap-intekening, of jy neem deel aan lisensiebesluite, wat dit altyd nodig het. Stel dit hier op.',
 	// Your recovery codes
 	'950aa263': 'Jou herstelkodes',
-	// Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.
-	'083eca42': 'Hou hulle op ’n veilige plek, weg van jou foon af. As jy jou foon verloor, teken elke kode jou een keer in. Hulle sal nie weer gewys word nie.',
+	// Keep these somewhere safe, away from your phone and your email. If you can’t get a code, each one signs you in once. They won’t be shown again.
+	'3ca7220c': 'Bêre hulle op ’n veilige plek, weg van jou foon en jou e-pos. As jy nie ’n kode kan kry nie, teken elkeen jou een keer in. Hulle word nie weer gewys nie.',
 	// The download could not be loaded. Copy the codes from the list below instead.
 	'ac2f42d0': 'Die aflaai kon nie gelaai word nie. Kopieer eerder die kodes uit die lys hieronder.',
 	// Download the codes
 	'61a0db4c': 'Laai die kodes af',
+	// Copy the codes
+	'5224ab6d': 'Kopieer die kodes',
 	// I’ve saved them
 	'f7156f45': 'Ek het hulle gestoor',
-	// On
-	'60e47df0': 'Aan',
-	// Signing in asks for a code from your authenticator app after your password.
-	'fdc7e615': 'Wanneer jy inteken, word ná jou wagwoord ’n kode van jou verifikasie-app gevra.',
+	// Copied. Paste them somewhere safe, such as a password manager.
+	'0d2472d6': 'Gekopieer. Plak hulle êrens veilig, soos in ’n wagwoordbestuurder.',
+	// Copying didn’t work here. Download them, or write them down.
+	'3e7d8f8f': 'Kon nie hier kopieer nie. Laai hulle af, of skryf hulle neer.',
+	// After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.
+	'b6f90a9c': 'Ná jou wagwoord kom ’n tweede stap: ’n 6-syferkode. Iemand wat jou wagwoord uitvind, kan steeds nie inkom nie. Kies hoe jy die kode kry; jy kan albei aanskakel.',
+	// Someone asked to remove two-step sign-in from your account, saying they can’t get a code. It will be removed at {when}, unless it’s cancelled.
+	'7842bac5': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder, en gesê hulle kan nie ’n kode kry nie. Dit word om {when} verwyder, tensy dit gekanselleer word.',
+	// If that wasn’t you, cancel it now with a code from your authenticator app or your email, then change your password.
+	'e96926b3': 'As dit nie jy was nie, kanselleer dit nou met ’n kode van jou verifikasie-app of jou e-pos, en verander dan jou wagwoord.',
 	// This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.
 	'c08216a1': 'Hierdie blaaier het ingeteken voordat tweestap-intekening opgestel is. Teken uit en weer in voordat jy iets doen wat dit nodig het.',
-	// Code from your authenticator app
-	'8dcd2213': 'Kode van jou verifikasie-app',
-	// Code from your authenticator app, or a recovery code
-	'a0fb5ebd': 'Kode van jou verifikasie-app, of ’n herstelkode',
-	// Make new recovery codes
-	'2cd1bc62': 'Skep nuwe herstelkodes',
-	// Turn off two-step sign-in
-	'ecddfcbd': 'Skakel tweestap-intekening af',
-	// New recovery codes
-	'3695d1ea': 'Nuwe herstelkodes',
+	// Authenticator app
+	'744f34d3': 'Verifikasie-app',
+	// On
+	'60e47df0': 'Aan',
+	// Off
+	'0dc6b4aa': 'Af',
+	// Stronger
+	'3b06b3cd': 'Sterker',
+	// A code from an app on your phone, such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.
+	'1b137731': '’n Kode van ’n app op jou foon, soos Google Authenticator, Microsoft Authenticator of Aegis. Net jou foon kan die kodes maak.',
+	// Remove
+	'21a5901d': 'Verwyder',
+	// Set up the app
+	'179105cc': 'Stel die app op',
+	// Code by email
+	'6d0090d9': 'Kode per e-pos',
+	// Easier
+	'8e289988': 'Makliker',
+	// We email a code to {email} each time. Easier, but less safe: whoever can read your email can also reset your password, so with codes by email your inbox guards your account. Keep your email account secure.
+	'7af10615': 'Ons e-pos elke keer ’n kode na {email}. Makliker, maar minder veilig: wie jou e-pos kan lees, kan ook jou wagwoord terugstel, so met kodes per e-pos hang jou rekening se veiligheid van jou inkassie af. Hou jou e-posrekening veilig.',
 	// Turn off
 	'cd03e04b': 'Skakel af',
-	// Add a second step to signing in: after your password, a 6-digit code from an authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Aegis). Someone who learns your password still can’t get in.
-	'c11c725f': 'Voeg ’n tweede stap by wanneer jy inteken: ná jou wagwoord, ’n 6-syferkode van ’n verifikasie-app op jou foon (soos Google Authenticator, Microsoft Authenticator of Aegis). Iemand wat jou wagwoord uitvind, kan dan steeds nie inkom nie.',
-	// Set up two-step sign-in
-	'6580af84': 'Stel tweestap-intekening op',
+	// Finish turning on
+	'31453bc4': 'Voltooi aanskakeling',
+	// Turn on
+	'65a0c5a7': 'Skakel aan',
+	// Turn on codes by email
+	'7baf539a': 'Skakel kodes per e-pos aan',
+	// Set up the authenticator app
+	'e1d327d3': 'Stel die verifikasie-app op',
 	// Current password
 	'8eedf1f3': 'Huidige wagwoord',
 	// Checking…
 	'732bdad5': 'Kontroleer tans…',
 	// Continue
 	'ab43d664': 'Gaan voort',
+	// We emailed a code to {email}. It works for 10 minutes.
+	'6b682727': 'Ons het ’n kode na {email} ge-e-pos. Dit bly 10 minute geldig.',
+	// Code from the email
+	'4082756f': 'Kode uit die e-pos',
+	// Send again
+	'f5910557': 'Stuur weer',
 	// Scan this code with your authenticator app.
 	'79170ef4': 'Skandeer hierdie kode met jou verifikasie-app.',
 	// QR code for your authenticator app
@@ -153,14 +215,24 @@ export const af: Catalogue = {
 	'3e40e69a': 'Kan jy dit nie skandeer nie? Tik eerder hierdie sleutel in die app in:',
 	// Enter the code the app shows
 	'96778761': 'Tik die kode in wat die app wys',
-	// Turn on two-step sign-in
-	'd9156f01': 'Skakel tweestap-intekening aan',
+	// Turn on the authenticator app
+	'7a8a0030': 'Skakel die verifikasie-app aan',
+	// Recovery codes
+	'c901fa44': 'Herstelkodes',
+	// You’re running out of recovery codes. Make a new set now, so a lost phone or email can’t lock you out.
+	'45395f8d': 'Jou herstelkodes raak op. Skep nou ’n nuwe stel, sodat jy nie uit jou rekening gesluit word as jy jou foon of jou e-pos verloor nie.',
+	// Make a new set
+	'3f861156': 'Skep ’n nuwe stel',
+	// New recovery codes
+	'3695d1ea': 'Nuwe herstelkodes',
+	// Code from your authenticator app or your email
+	'4b632513': 'Kode van jou verifikasie-app of jou e-pos',
+	// Code from your authenticator app or your email, or a recovery code
+	'346151bd': 'Kode van jou verifikasie-app of jou e-pos, of ’n herstelkode',
 	// Right away
 	'52eea1c1': 'Dadelik',
 	// Once a day (06:00)
 	'983ec4ee': 'Een keer ’n dag (06:00)',
-	// Off
-	'0dc6b4aa': 'Af',
 	// Dam running low
 	'25f39a9c': 'Dam raak laag',
 	// River flow at risk in the forecast
@@ -223,22 +295,6 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
-	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
-	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
-	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
-	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
-	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
-	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
-	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
-	// Licence records, and the names they keep, are kept until a set date and then deleted.
-	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
-	// Outside the organisation, registered water use is shown only as totals, never with a name.
-	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
-	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
-	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
-	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
-	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -263,12 +319,32 @@ export const af: Catalogue = {
 	'307ccd54': 'E-posbevestiging',
 	// Please confirm your email address. We sent a link to
 	'1ec5e7a0': 'Bevestig asseblief jou e-posadres. Ons het ’n skakel gestuur na',
-	// Sending…
-	'967aa5dd': 'Stuur tans…',
 	// Resend email
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
 	'265915f3': 'Maak toe',
+	// Two-step sign-in is now needed only to publish to farmers, for licence decisions and evidence packs, and in a project or team that turns it on.
+	'2ecf63e3': 'Tweestap-intekening is nou net nodig om aan boere te publiseer, vir lisensiebesluite en bewyspakkette, en in ’n projek of span wat dit aanskakel.',
+	// If you can’t get a code, you can remove two-step sign-in yourself after a 3-day wait, or ask a team admin. We keep a record of the request for 90 days.
+	'4e41f8e4': 'As jy nie ’n kode kan kry nie, kan jy tweestap-intekening self ná ’n wagtyd van 3 dae verwyder, of ’n spanadministrateur vra. Ons hou ’n rekord van die versoek 90 dae lank.',
+	// You can now get your sign-in codes by email instead of from an app. We keep each emailed code until it is used or 10 minutes old.
+	'de49689a': 'Jy kan nou jou intekenkodes per e-pos kry, eerder as van ’n app. Ons hou elke kode wat ons vir jou e-pos totdat dit gebruik is of 10 minute oud is.',
+	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
+	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
+	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
+	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
+	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
+	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
+	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
+	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
+	// Licence records, and the names they keep, are kept until a set date and then deleted.
+	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
+	// Outside the organisation, registered water use is shown only as totals, never with a name.
+	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
+	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
+	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
+	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
+	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
 	// Hide (password field)
 	'2bd339e0': 'Versteek',
 	// Show (password field)
@@ -1573,26 +1649,36 @@ export const af: Catalogue = {
 	'04f58c9d': 'Hierdie lopie is nie deur die modellopie self gestoor nie, so dit kan nie afgeteken word nie, en geen besluit kan daaroor geneem word nie. Vee dit uit en laat dit weer loop.',
 	// You are the only owner of a project or the only admin of a team. Hand it to someone else first.
 	'72b3c72f': 'Jy is die enigste eienaar van ’n projek of die enigste administrateur van ’n span. Gee dit eers aan iemand anders oor.',
-	// That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.
-	'adb80c07': 'Daardie kode is nie reg nie. Tik die nuutste kode van jou verifikasie-app in, of een van jou herstelkodes.',
+	// That code isn’t right. Enter the newest code from your authenticator app or your email, or one of your recovery codes.
+	'03c7e607': 'Daardie kode is nie reg nie. Tik die nuutste kode van jou verifikasie-app of jou e-pos in, of een van jou herstelkodes.',
 	// Too many wrong codes. Try again in {wait}.
 	'c7ae688e': 'Te veel verkeerde kodes. Probeer weer oor {wait}.',
 	// Your sign-in timed out. Enter your email and password again.
 	'af1c1fed': 'Jou intekening het verval. Tik weer jou e-posadres en wagwoord in.',
-	// Two-step sign-in is already on. Turn it off first to set up another authenticator app.
-	'0343cbd2': 'Tweestap-intekening is reeds aan. Skakel dit eers af om ’n ander verifikasie-app op te stel.',
+	// This is already on. Turn it off first to set it up again.
+	'6d59b4f6': 'Dit is reeds aan. Skakel dit eers af om dit weer op te stel.',
 	// Start setting up two-step sign-in again.
 	'362ea51a': 'Begin weer om tweestap-intekening op te stel.',
-	// This needs two-step sign-in. Set up an authenticator app on your Account page first.
-	'32d75bec': 'Hiervoor is tweestap-intekening nodig. Stel eers op jou rekeningbladsy ’n verifikasie-app op.',
-	// This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.
-	'380b94ff': 'Hiervoor is tweestap-intekening nodig. Teken uit, en teken dan weer in met ’n kode van jou verifikasie-app.',
+	// This needs two-step sign-in. Set it up on your Account page first.
+	'2a311dd6': 'Dit het tweestap-intekening nodig. Stel dit eers op jou Rekening-bladsy op.',
+	// This needs two-step sign-in. Sign out, then sign in again with a code.
+	'9d6d2ca6': 'Dit het tweestap-intekening nodig. Teken uit en teken dan weer met ’n kode in.',
+	// You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.
+	'65455dcb': 'Jy het vandag al ’n paar keer hiervoor gevra. Kyk in jou inkassie en gemorspos, of probeer môre weer.',
+	// A team admin can’t remove another admin’s two-step sign-in. They can remove it themselves when they sign in, after a 3-day wait.
+	'972426a2': '’n Spanadministrateur kan nie ’n ander administrateur se tweestap-intekening verwyder nie. Hulle kan dit self verwyder wanneer hulle inteken, ná ’n wagtyd van 3 dae.',
+	// We just emailed you a code. You can ask for another in {wait}.
+	'5edf5f13': 'Ons het pas vir jou ’n kode ge-e-pos. Jy kan oor {wait} vir nog een vra.',
+	// We couldn’t send the email. Try again in a minute.
+	'74fb1c93': 'Ons kon nie die e-pos stuur nie. Probeer oor ’n minuut weer.',
 	// You have posted 10 comments in the last hour. Wait a while, then try again.
 	'2ae5aea1': 'Jy het die afgelope uur 10 kommentare geplaas. Wag ’n rukkie en probeer dan weer.',
 	// Too many sign-in attempts from your network. Wait a few minutes, then try again.
 	'3c2a05a7': 'Te veel pogings om van jou netwerk af in te teken. Wag ’n paar minute en probeer dan weer.',
 	// {n} minute / {n} minutes
 	'a60f17d2': { one: '{n} minuut', other: '{n} minute' },
+	// {n} second / {n} seconds
+	'3d0ad24e': { one: '{n} sekonde', other: '{n} sekondes' },
 	// Couldn’t reach the server. Check your connection and try again.
 	'058318a7': 'Kon nie die bediener bereik nie. Kyk jou verbinding na en probeer weer.',
 	// Something went wrong on our side. Try again in a moment.
@@ -1613,10 +1699,6 @@ export const af: Catalogue = {
 	'9df7013d': 'Iets het verkeerd geloop. Probeer weer.',
 	// The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.
 	'25601c1d': 'Die herinnering om jou e-posadres te bevestig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
-	// Enter a display name.
-	'a7f2031b': 'Tik ’n vertoonnaam in.',
-	// Use at most 100 characters.
-	'c5951029': 'Gebruik hoogstens 100 karakters.',
 	// Email
 	'43352167': 'E-pos',
 	// Status
@@ -1855,6 +1937,10 @@ export const af: Catalogue = {
 	'9a0aaea5': 'As {email} nog bevestig moet word, is ’n nuwe skakel op pad. Kyk in jou inkassie en gemorspos.',
 	// Enter one of your recovery codes.
 	'5457b62c': 'Tik een van jou herstelkodes in.',
+	// Lost your phone and your recovery codes?
+	'68d6839c': 'Jou foon en jou herstelkodes verloor?',
+	// Can’t get the email and lost your recovery codes?
+	'ec9da085': 'Kry jy nie die e-pos nie en het jy jou herstelkodes verloor?',
 	// Welcome back. Sign in to your catchment projects.
 	'0650eb3f': 'Welkom terug. Teken in by jou opvanggebiedprojekte.',
 	// Your account has been deleted
@@ -1873,16 +1959,44 @@ export const af: Catalogue = {
 	'1ed87a58': 'Stuur die skakel weer',
 	// **Your email address isn’t confirmed yet.** Open the link we emailed to {email}, then sign in again.
 	'5b10b774': '**Jou e-posadres is nog nie bevestig nie.** Maak die skakel oop wat ons na {email} ge-e-pos het, en teken dan weer in.',
+	// We sent a link to the address on your account. Open it within 1 hour to start the 3-day wait. Nothing changes until you do.
+	'f9c5c303': 'Ons het ’n skakel na die adres op jou rekening gestuur. Maak dit binne 1 uur oop om die wagtyd van 3 dae te begin. Niks verander voordat jy dit doen nie.',
+	// Two-step sign-in is already being removed
+	'a84070fc': 'Tweestap-intekening word reeds verwyder',
+	// It will be removed at {when}. Then sign in with your password alone, and set it up again on your Account page.
+	'be095c85': 'Dit word om {when} verwyder. Teken dan net met jou wagwoord in, en stel dit weer op jou rekeningbladsy op.',
+	// We can remove two-step sign-in from your account, so you can sign in with your password and set it up again.
+	'8ff22513': 'Ons kan tweestap-intekening van jou rekening verwyder, sodat jy met jou wagwoord kan inteken en dit weer kan opstel.',
+	// To keep your account safe, this takes 3 days. We email you a link to confirm. Once you open it, two-step sign-in is removed 3 days later, and we email you every day until then, so you can cancel it if it wasn’t you.
+	'98ea5d5f': 'Om jou rekening veilig te hou, neem dit 3 dae. Ons e-pos vir jou ’n skakel om te bevestig. Sodra jy dit oopmaak, word tweestap-intekening 3 dae later verwyder, en ons e-pos jou elke dag tot dan, sodat jy dit kan kanselleer as dit nie jy was nie.',
+	// If you’re in a team, a team admin can remove it for you straight away.
+	'6317a642': 'As jy in ’n span is, kan ’n spanadministrateur dit dadelik vir jou verwyder.',
+	// Email me a link
+	'ba861fd4': 'E-pos vir my ’n skakel',
+	// Back to the code
+	'69cb4275': 'Terug na die kode',
+	// We emailed you a 6-digit code. It works for 10 minutes. Check your spam folder if it isn’t there.
+	'11962fca': 'Ons het vir jou ’n 6-syferkode ge-e-pos. Dit bly 10 minute geldig. Kyk in jou gemorspos as dit nie daar is nie.',
+	// We’ll email a 6-digit code to the address you signed in with.
+	'd5419f3e': 'Ons e-pos ’n 6-syferkode na die adres waarmee jy ingeteken het.',
+	// Send code
+	'fc840afc': 'Stuur kode',
 	// Recovery code
 	'd01c975f': 'Herstelkode',
 	// One of the codes you saved when you set up two-step sign-in. Each works once.
 	'ea77aa7b': 'Een van die kodes wat jy gestoor het toe jy tweestap-intekening opgestel het. Elkeen werk een keer.',
+	// Code from your authenticator app
+	'8dcd2213': 'Kode van jou verifikasie-app',
 	// Open the app on your phone and enter the 6-digit code it shows for Water Management.
 	'fa62aa3c': 'Maak die app op jou foon oop en tik die 6-syferkode in wat dit vir Water Management wys.',
+	// Email me a code instead
+	'09eeb9c3': 'E-pos eerder vir my ’n kode',
 	// Use a code from the app instead
 	'a43288ae': 'Gebruik eerder ’n kode van die app',
 	// Lost your phone? Use a recovery code
 	'3023ae8f': 'Foon verloor? Gebruik ’n herstelkode',
+	// Can’t get the email? Use a recovery code
+	'd69c9b84': 'Kry jy nie die e-pos nie? Gebruik ’n herstelkode',
 	// Forgot password?
 	'e2619568': 'Wagwoord vergeet?',
 	// Signing in…
@@ -1891,6 +2005,40 @@ export const af: Catalogue = {
 	'07494a6a': 'Geen rekening nie?',
 	// Create one
 	'67674c65': 'Skep een',
+	// Remove two-step sign-in
+	'd21fbdcf': 'Verwyder tweestap-intekening',
+	// For when your phone and your recovery codes are both lost.
+	'c9827bff': 'Vir wanneer jy jou foon en jou herstelkodes albei verloor het.',
+	// The 3-day wait has started. Two-step sign-in will be removed at {when}, and every device will be signed out.
+	'40ebc819': 'Die wagtyd van 3 dae het begin. Tweestap-intekening word om {when} verwyder, en jy word op elke toestel uitgeteken.',
+	// We’ll email you every day until then. Then sign in with your password alone, and set up two-step sign-in again on your Account page.
+	'2f80677f': 'Ons e-pos jou elke dag tot dan. Teken dan net met jou wagwoord in, en stel tweestap-intekening weer op jou rekeningbladsy op.',
+	// Back to sign in
+	'5b7ba2af': 'Terug na inteken',
+	// This link is invalid, already used, or older than 1 hour. Sign in again and ask for a new one.
+	'70b40324': 'Hierdie skakel is ongeldig, reeds gebruik, of ouer as 1 uur. Teken weer in en vra vir ’n nuwe een.',
+	// Confirm to start a 3-day wait. When it ends, two-step sign-in is removed from your account and every device is signed out.
+	'0b583da5': 'Bevestig om ’n wagtyd van 3 dae te begin. Wanneer dit verby is, word tweestap-intekening van jou rekening verwyder en jy word op elke toestel uitgeteken.',
+	// Until then your codes keep working, and we email you every day with a link to cancel. Signing in with a code also cancels it.
+	'57539337': 'Tot dan werk jou kodes steeds, en ons e-pos vir jou elke dag ’n skakel om dit te kanselleer. As jy met ’n kode inteken, word dit ook gekanselleer.',
+	// Start the 3-day wait
+	'c4750873': 'Begin die wagtyd van 3 dae',
+	// If you didn’t ask for this, close this page: someone knows your password, so choose a new one.
+	'9943bba0': 'As jy nie hiervoor gevra het nie, maak hierdie bladsy toe: iemand ken jou wagwoord, kies dus ’n nuwe een.',
+	// Keep two-step sign-in
+	'21249c88': 'Behou tweestap-intekening',
+	// Cancel the request to remove it from your account.
+	'9d8d846f': 'Kanselleer die versoek om dit van jou rekening te verwyder.',
+	// Cancelled. Two-step sign-in stays on your account.
+	'f36ed2b7': 'Gekanselleer. Tweestap-intekening bly op jou rekening.',
+	// If you didn’t ask for it to be removed, someone knows your password and can read your email: change both passwords now.
+	'410218bb': 'As jy nie gevra het dat dit verwyder word nie, ken iemand jou wagwoord en kan hulle jou e-pos lees: verander nou albei wagwoorde.',
+	// Choose a new password
+	'042e1946': 'Kies ’n nuwe wagwoord',
+	// This link no longer works: the request was already cancelled, or two-step sign-in has already been removed.
+	'fa2d8e30': 'Hierdie skakel werk nie meer nie: die versoek is reeds gekanselleer, of tweestap-intekening is reeds verwyder.',
+	// Someone asked to remove two-step sign-in from your account. If it wasn’t you, or you found your phone, cancel it.
+	'2aafd905': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder. As dit nie jy was nie, of as jy jou foon weer gekry het, kanselleer dit.',
 	// Sent. Check your inbox (and spam folder) for the confirmation link.
 	'3aff6ef6': 'Gestuur. Kyk in jou inkassie (en gemorspos) vir die bevestigingskakel.',
 	// Your address is already confirmed.
@@ -1969,8 +2117,6 @@ export const af: Catalogue = {
 	'50dc6622': 'Skep rekening',
 	// Already registered?
 	'0fa8342a': 'Reeds geregistreer?',
-	// Choose a new password
-	'042e1946': 'Kies ’n nuwe wagwoord',
 	// Pick a password you don’t use anywhere else.
 	'87daf9cc': 'Kies ’n wagwoord wat jy nêrens anders gebruik nie.',
 	// Your password has been changed and you’ve been signed out everywhere. Sign in with your new password.
@@ -1987,8 +2133,6 @@ export const af: Catalogue = {
 	'4a62d996': 'Stel nuwe wagwoord',
 	// Back to your projects
 	'5b46b440': 'Terug na jou projekte',
-	// Back to sign in
-	'5b7ba2af': 'Terug na inteken',
 	// Shared application
 	'28c82702': 'Gedeelde aansoek',
 	// Shared evidence pack

@@ -46,14 +46,18 @@ describe('errorText', () => {
 		account_sole_holder: 'You are the only owner of a project or the only admin of a team. Hand it to someone else first.',
 		note_comment_closed: 'This application isn’t open for comment right now.',
 		note_audience_denied: 'You can’t post a comment here.',
-		mfa_code_wrong: 'That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.',
+		mfa_code_wrong: 'That code isn’t right. Enter the newest code from your authenticator app or your email, or one of your recovery codes.',
 		mfa_locked: 'Too many wrong codes. Try again in 1 minute.',
 		mfa_challenge_expired: 'Your sign-in timed out. Enter your email and password again.',
-		mfa_already_enrolled: 'Two-step sign-in is already on. Turn it off first to set up another authenticator app.',
+		mfa_already_enrolled: 'This is already on. Turn it off first to set it up again.',
 		mfa_not_started: 'Start setting up two-step sign-in again.',
 		mfa_not_enrolled: 'Two-step sign-in is off.',
-		mfa_required: 'This needs two-step sign-in. Set up an authenticator app on your Account page first.',
-		mfa_step_up: 'This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.',
+		mfa_required: 'This needs two-step sign-in. Set it up on your Account page first.',
+		mfa_step_up: 'This needs two-step sign-in. Sign out, then sign in again with a code.',
+		mfa_reset_limit: 'You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.',
+		mfa_reset_admin: 'A team admin can’t remove another admin’s two-step sign-in. They can remove it themselves when they sign in, after a 3-day wait.',
+		mfa_email_wait: 'We just emailed you a code. You can ask for another in 1 minute.',
+		mfa_email_failed: 'We couldn’t send the email. Try again in a minute.',
 		comment_throttled: 'You have posted 10 comments in the last hour. Wait a while, then try again.'
 	};
 
@@ -89,6 +93,14 @@ describe('errorText', () => {
 		const throttled = (seconds: number) => errorText(new ApiError(429, 'x', undefined, 'signup_throttled', { seconds }));
 		expect(throttled(3599)).toBe('Too many accounts were made from your network. Try again in 60 minutes.');
 		expect(throttled(90)).toBe('Too many accounts were made from your network. Try again in 2 minutes.');
+	});
+
+	it('says how long until another emailed code may be sent: seconds under a minute, then minutes', () => {
+		const wait = (seconds: unknown) => errorText(new ApiError(429, 'x', undefined, 'mfa_email_wait', { seconds: seconds as number }));
+		expect(wait(1)).toBe('We just emailed you a code. You can ask for another in 1 second.');
+		expect(wait(42.2)).toBe('We just emailed you a code. You can ask for another in 43 seconds.');
+		expect(wait(600)).toBe('We just emailed you a code. You can ask for another in 10 minutes.');
+		expect(wait(undefined)).toBe('We just emailed you a code. You can ask for another in 1 minute.');
 	});
 
 	it('words a failed download (the account page’s “Download my data”) the same way', () => {

@@ -15,9 +15,11 @@ export const GUEST_PATHS = ['/login', '/register', '/forgot-password'];
  * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13) and its
  * "Was this useful?" link (/alerts/feedback, 151_alert_feedback). An
  * evidence pack's verify page (/verify/<code>, WP-3.14) answers anyone holding
- * the code printed on the pack, signed in or not.
+ * the code printed on the pack, signed in or not. The links of a reset of a
+ * lost second factor (/mfa-reset, /mfa-reset/cancel, 205_mfa_recovery) are
+ * opened signed out, by someone who can't sign in.
  */
-export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe', '/alerts/feedback', '/verify'];
+export const OPEN_PATHS = ['/reset-password', '/verify-email', '/mfa-reset', '/share', '/alerts/unsubscribe', '/alerts/feedback', '/verify'];
 
 /**
  * The public landing page's own address (issue #57): prerendered static HTML

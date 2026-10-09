@@ -19,7 +19,8 @@ const NO_RLS = new Set(['schema_migrations']);
  * purge write it as SECURITY DEFINER functions, and only the operator, as the
  * schema owner, reads it (deployment.md § Restoring the database).
  */
-const OWNER_ONLY = new Set(['erasure_log', 'reference_load']);
+// A reset's cancel-link hashes and the cap on asking for one (205_mfa_recovery): only its SECURITY DEFINER functions touch them.
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -206,7 +207,10 @@ const READ_ONLY = new Set([
 	'registration_check',
 	'signoff_registration_check',
 	'application_question',
-	'evidence_pack_applicant_copy'
+	'evidence_pack_applicant_copy',
+	// A reset of a lost second factor (205_mfa_recovery): the person reads their own, and only its SECURITY DEFINER
+	// functions write it, each checking the state it moves from, so no one moves effective_at to skip the 3-day wait.
+	'mfa_reset'
 ]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
@@ -330,6 +334,13 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'user_recovery_code.user_id': 'cascade',
 	'mfa_throttle.user_id': 'cascade',
 	'account_security_event.user_id': 'cascade',
+	// Resets of a lost second factor and the cap on asking (205_mfa_recovery): the person's own.
+	'mfa_reset.user_id': 'cascade',
+	'mfa_reset_quota.user_id': 'cascade',
+	// Codes by email are the person's own too (206_mfa_email_code.sql).
+	'user_email_otp.user_id': 'cascade',
+	'mfa_email_code.user_id': 'cascade',
+	'mfa_email_send.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
 };
 

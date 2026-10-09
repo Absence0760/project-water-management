@@ -87,7 +87,7 @@
 			requires: sign those as the authority asks. The professional registration shown with it is typed in by the person signing: we
 			don’t check it against the professional body’s register. A project’s host may record that it checked one, and the pack’s verify
 			page then says by whom and when; that check is the host’s, not ours. Signing off, and issuing or withdrawing an evidence pack,
-			need a code from your authenticator app from the last 10 minutes.
+			need a code from the last 10 minutes, from your authenticator app or by email.
 		</li>
 	</ul>
 	<p>

@@ -162,6 +162,10 @@ export async function recordModelRevision(db: Db, projectId: string, o: Revision
  */
 export type AuditKind =
 	| 'project.changed'
+	// An owner turned the project's two-step sign-in requirement on or off (204_mfa_opt_in): { on }.
+	| 'project.mfa_requirement'
+	// A team admin turned the team's on or off, recorded on each of its projects (204): { teamId, team, on }.
+	| 'team.mfa_requirement'
 	| 'member.added'
 	| 'member.removed'
 	| 'member.role'
@@ -277,6 +281,8 @@ export type AuditKind =
 	| 'team_member.added'
 	| 'team_member.role'
 	| 'team_member.removed'
+	// A team admin removed a member's second factor (205_mfa_recovery, teams/mfa-reset-routes.ts).
+	| 'team_member.mfa_reset'
 	| 'team.deleted'
 	| 'restore';
 

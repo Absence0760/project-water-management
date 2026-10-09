@@ -5,7 +5,7 @@
 // API hands out (totp.ts). The clock (Date only: pg and timers are real) is
 // moved one 30-second step before each code, so every code is from a fresh
 // step and the replay rule never refuses a code the test means to be good.
-// The requirement for owners, team admins and assessors is stepUp.db.test.ts.
+// The requirement (opt-in per project and team, always for the actions that reach outsiders) is stepUp.db.test.ts.
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodeJwt } from 'jose';
 import { anon, asOwner, signUp } from '../__tests__/helpers.js';
@@ -128,7 +128,7 @@ describe('signing in with two steps', () => {
 	it('a right password buys a challenge, not a session, and says nothing more', async () => {
 		const r = await login(u);
 		expect(r.status).toBe(200);
-		expect(r.body).toEqual({ mfaRequired: true });
+		expect(r.body).toEqual({ mfaRequired: true, methods: ['totp'] });
 		expect(r.session).toBeUndefined();
 		expect(r.challenge).toBeDefined();
 		// The challenge can't stand in for a session, nor a session for a challenge.

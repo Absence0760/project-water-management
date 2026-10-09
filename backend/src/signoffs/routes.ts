@@ -20,7 +20,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
-import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
+import { projectStepUpRefusal, requireProjectFreshCode } from '../auth/stepUp.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -239,7 +239,7 @@ export const signoffRoutes = new Hono<AuthEnv>()
 								? FORECAST_NOT_SIGNABLE
 								: !verified
 									? RUN_UNVERIFIED
-									: ((await stepUpRefusal(db))?.message ?? null),
+									: ((await projectStepUpRefusal(db, id))?.message ?? null),
 				signoffs: rows
 			});
 		});
@@ -249,8 +249,8 @@ export const signoffRoutes = new Hono<AuthEnv>()
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			// A sign-off is the professional record an authority relies on: it needs two-step sign-in and a code from the last 10 minutes (auth/stepUp.ts).
-			await requireFreshCode(db);
+			// A sign-off is the professional record an authority relies on: where the project requires two-step sign-in, it needs a code from the last 10 minutes (auth/stepUp.ts).
+			await requireProjectFreshCode(db, id);
 			// Citing a run: not while a trim or delete of this project's runs is under way.
 			await lockProjectRuns(db, id);
 			const { statement, sha256: expected, legacy, forecast, verified } = await statementFor(db, id, runId);
