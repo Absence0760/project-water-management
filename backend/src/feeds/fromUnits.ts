@@ -237,7 +237,8 @@ async function plan(db: Db, projectId: string, asked?: ChirpsDailyProduct): Prom
 
 const publicProposal = ({ detail: _detail, ...p }: Plan): UnitsProposal => p;
 
-const ProductQuery = z.enum(CHIRPS_DAILY_PRODUCTS).optional();
+/** The query, parsed whole as the other routes' are (a single named read is what the credential sweep looks for, token-confusion.security.db.test.ts). */
+const ProductQuery = z.object({ product: z.enum(CHIRPS_DAILY_PRODUCTS).optional() });
 
 const ApplyBody = z
 	.object({
@@ -252,7 +253,7 @@ const ApplyBody = z
 
 export const feedFromUnitsRoutes = new Hono<AuthEnv>()
 	.get('/:id/feeds/chirps/from-units', async (c) => {
-		const product = ProductQuery.parse(c.req.query('product'));
+		const { product } = ProductQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			const role = await requireRole(db, id, 'editor');

@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { loadSyntheticMapGrid } from '../../scripts/import-map-grid.js';
 import { splitHalves } from '../__tests__/routeSamples.js';
 import { base32Decode, totp } from '../auth/totp.js';
 
@@ -728,6 +729,15 @@ const WRITE_ROUTES: Entry[] = [
 			const square = [[[21.4, -33.75], [21.43, -33.75], [21.43, -33.72], [21.4, -33.72], [21.4, -33.75]]];
 			await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard unit parcel', nodeId: c.otherFarmId, geometry: { type: 'Polygon', coordinates: square } });
 			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-units`, { product: 'rnl', nodeIds: [c.otherFarmId] });
+		}
+	},
+	{
+		// Each unit's MAP from the MAP grid (#482): one model revision writing Farm A's mapMm and mapSource. Its area parcel (area-from-map, above) lies in the synthetic grid's region Z.
+		route: `POST ${P}/map/unit-map`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticMapGrid(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/map/unit-map`, { dataset: 'synthetic', nodeIds: [c.farmId] });
 		}
 	},
 	{

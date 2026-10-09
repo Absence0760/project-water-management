@@ -208,6 +208,7 @@ const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)'],
 	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)'],
 	['GET /projects/:id/feeds/chirps/from-units', 'a proposal to attach a feed per unit, for the people who set the model up; viewers read the feeds themselves (#482)'],
+	['GET /projects/:id/map/unit-map', 'a proposal to set each unit’s MAP from a MAP grid, for the people who set the model up; viewers read the model’s MAPs themselves (#482)'],
 	['GET /projects/:id/registration-checks', 'the host’s checks of members’ professional registrations, for the people who issue packs (167)'],
 	['GET /projects/:id/map/channels', 'the elevation model’s channels, drawn only for the editors’ Delineate and Sub-catchments, and each tile computed counts against the caller’s elevation-model cap (#374)']
 ]);
