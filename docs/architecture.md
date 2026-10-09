@@ -997,6 +997,18 @@ merges into:
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
+- **Rain for each unit** (issue #482, `feeds/fromUnits.ts`,
+  [maps.md § Rain for each unit](./maps.md#rain-for-each-unit)): one CHIRPS
+  feed per land unit, its cells the unit's map parcel's (area weighted, as the
+  boundary's) and its `config.unit` naming the unit and the parcel version.
+  Each writes the unit's own `rain_chirps_mm` series (`site_node_id` = the
+  unit, 209_unit_rain_series; [data-model.md § Unit rain
+  series](./data-model.md#unit-rain-series-209_unit_rain_seriessql)), which a
+  run reads under `rain_chirps_mm@<unit id>` and only `settings.unitRain`
+  `perUnit` uses. The fetch, the ingest and the health are those of any CHIRPS
+  feed; the series is created sited before the first fetch, and a trigger
+  sites it again if the feed ever recreates it. The feeds count against the
+  20-feed cap like any other.
 - **A bounding box** (`config.bbox`, `{ south, west, north, east }` in
   degrees; `feeds/config.ts` `bboxCells`) is expanded, before every fetch, into
   the 0.05° cells it overlaps. CHIRPS cell edges fall on multiples of 0.05°
