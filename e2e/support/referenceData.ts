@@ -1,6 +1,7 @@
 // Which e2e tests need reference data loaded (the operator-loaded tables the
 // proposal panels and map layers read: land cover, the register of dams,
-// evaporation, quaternaries, the river network, gauging stations), and the
+// evaporation, quaternaries, the river network, gauging stations, the MAP
+// grid), and the
 // check that each one loads it itself (referenceData.test.ts, run by `pnpm
 // test`). The loaders replace the synthetic data and never unload it, so a
 // test that reads a panel without calling the loader passes only when another
@@ -22,7 +23,8 @@ export const REFERENCE_FAMILIES: readonly ReferenceFamily[] = [
 	{ what: 'evaporation', testIds: /['"]evaporation-(rows|accepted|implied|same|problem)['"]/, loader: 'loadSyntheticEvaporation' },
 	{ what: 'quaternaries', testIds: /['"](map-quaternar[a-z-]*|quaternary-(code|rows|synthetic|none|proposal|no-dataset))['"]/, loader: 'loadSyntheticQuaternaries' },
 	{ what: 'the river network', testIds: /['"]map-rivers[a-z-]*['"]/, loader: 'loadSyntheticRivers' },
-	{ what: 'gauging stations', testIds: /['"]nearest-gauges-table['"]/, loader: 'loadSyntheticStations' }
+	{ what: 'gauging stations', testIds: /['"]nearest-gauges-table['"]/, loader: 'loadSyntheticStations' },
+	{ what: 'the MAP grid', testIds: /['"]map-mapgrid-(summary|dataset|dense|empty|source)['"]/, loader: 'loadSyntheticMapGrid' }
 ];
 
 /** A top-level statement that declares tests (a `test(…)`, a `test.describe(…)`, or a loop or condition around them), with its first line (1-based). */

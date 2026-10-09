@@ -1854,6 +1854,19 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   are stored. Global, loaded by the operator as the schema owner (`pnpm
   import:evaporation`; in production `load-reference.yml` through the
   migrate Lambda, deployment.md § Reference datasets), readable by anyone signed in, written by no app role.
+- **`rain_map_dataset`** and **`rain_map_cell_reference`**
+  (`207_rain_map_reference.sql`, [maps.md § MAP grid](./maps.md#map-grid)):
+  the mean annual precipitation grids the Map tab's MAP grid layer draws. A
+  dataset row: `dataset` (primary key, 1–50; `synthetic` for the committed
+  fixture), `source`, `version`, `attribution`, `cell_deg`, `origin_lon` and
+  `origin_lat` (0 ≤ origin < cell), `cell_count` (the cells the load wrote,
+  so a request never counts a 100 m grid's millions of rows), `loaded_at`. A cell row: `dataset`
+  (cascades with it), `row_idx`, `col_idx` (the cell with south-west corner
+  `origin + index × cell_deg`; primary key `(dataset, row_idx, col_idx)`,
+  also a view's range lookup) and `map_mm` (0–20 000). A cell not listed has
+  no value. Global reference data: RLS lets any signed-in user read it,
+  water_app is granted SELECT only, and `pnpm import:map-grid` writes it as
+  the schema owner.
 - **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
   evaporation row accepted from the map came from. Primary key
   `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the

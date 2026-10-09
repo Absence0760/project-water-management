@@ -3864,6 +3864,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
       `scripts/release/map-data-gates.mjs`, the workflow's choices), which
       refuses it until then.
+- [ ] **Decision: the MAP grids' licences** (operator; maps.md § MAP grid,
+      § Sources, decision D-B). The MAP grid layer shows a mean annual
+      precipitation grid the operator loads (`pnpm import:map-grid`): the
+      Lynch (2004) national grid from the WRC's Atlas of Climatology and
+      Agrohydrology (its portal lists CC BY-SA 4.0 and "No License Provided"
+      at once; share-alike may reach a map of it), or a provincial ~100 m
+      surface whose terms are its owner's. Ask the WRC (and each surface's
+      owner) in writing whether the grid may be shown in a commercial
+      service; until then they are loaded locally only and production loads
+      refuse the `map-grid` kind (`geo/referenceLoad.ts`). On a yes: record
+      it in the sources table and allow the kind (with an `--out` file form
+      for the reference bucket, as the evaporation grid has).
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
       on two conditions, both met. The HydroSHEDS Exhibit B statement

@@ -12,6 +12,13 @@
 	the reaches around the catchment, biggest first; a reach picked here or on
 	the map shows its facts and source, and an editor adds it to the project
 	as a river (one reach at a time: the layer proposes, the modeller decides).
+	Hydrological units (`layers=units`, docs/maps.md § Hydrological units
+	layer) outlines each unit's polygon and writes its name on it, listed here
+	too; the MAP grid (`layers=mapgrid`, § MAP grid) draws one loaded mean
+	annual precipitation grid's points in view, each labelled with its MAP,
+	with a dataset picker when more than one is loaded; the CHIRPS grid
+	(`layers=chirps`, § CHIRPS grid) draws CHIRPS v3's 0.05° cells and their
+	centres, where its daily rainfall values sit.
 -->
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -19,8 +26,23 @@
 	import { page } from '$app/state';
 	import type { MapFeature } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
-	import { type MapLayer, layersStatus, reachFacts, reachKey, reachLabel, RIVER_BBOX_MAX_DEG, withLayer } from './mapLayers';
-	import { quaternaryColour, riverNetworkColour } from './mapStyle';
+	import {
+		CHIRPS_CELL_DEG,
+		CHIRPS_MAX_POINTS,
+		type ChirpsCell,
+		MAP_GRID_BBOX_MAX_DEG,
+		type MapLayer,
+		layersStatus,
+		mapLabel,
+		reachFacts,
+		reachKey,
+		reachLabel,
+		RIVER_BBOX_MAX_DEG,
+		type UnitLabel,
+		withLayer
+	} from './mapLayers';
+	import { chirpsColour, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
+	import type { MapGridLayer } from './mapGridLayer.svelte';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
 
@@ -31,7 +53,11 @@
 		canEdit = false,
 		onriveradded,
 		onshowfeature,
-		relief = null
+		relief = null,
+		units = null,
+		mapGrid = null,
+		chirps = null,
+		labels = true
 	}: {
 		quaternaries: QuaternaryLayer;
 		rivers: RiverLayer;
@@ -44,6 +70,14 @@
 		onshowfeature?: (id: string) => void;
 		/** The Relief layer: whether it is on and whether its DEM failed to load. Null: no DEM configured, no toggle. */
 		relief?: { on: boolean; failed: boolean } | null;
+		/** The Hydrological units layer: whether it is on, and the units it labels. Null: no toggle. */
+		units?: { on: boolean; labels: readonly UnitLabel[] } | null;
+		/** The MAP grid layer's state. Null: no toggle. */
+		mapGrid?: MapGridLayer | null;
+		/** The CHIRPS grid layer: whether it is on, and the cells in view (null: the view is too wide). Null: no toggle. */
+		chirps?: { on: boolean; cells: readonly ChirpsCell[] | null } | null;
+		/** The map writes labels (glyphs are configured); without, the lists here are the only place to read them. */
+		labels?: boolean;
 	} = $props();
 	const uid = $props.id();
 
@@ -73,11 +107,34 @@
 	const pickedReach = $derived(rivers.pickedReach);
 	const pickedFeature = $derived(pickedReach ? rivers.featureFor(pickedReach) : null);
 
+	const mg = $derived(mapGrid?.answer ?? null);
+	const mgRange = $derived(mapGrid?.range ?? null);
+	const degrees = (d: number) => fmtNum(d, d < 0.01 ? 4 : 3, true);
+	const mgSummary = $derived.by(() => {
+		if (!mg?.dataset) return '';
+		const n = mg.cells.length;
+		const r = mgRange ? `: ${mapLabel(mgRange[0])} to ${mapLabel(mgRange[1])}` : '';
+		return `${fmtNum(n, 0, true)} ${n === 1 ? 'point' : 'points'} in view from ${mg.dataset.dataset} (${degrees(mg.dataset.cellDeg)}° cells)${r}.`;
+	});
+	/** The ramp's swatch: the MAP colours left to right, lowest first. */
+	const rampGradient = `linear-gradient(90deg, ${MAP_RAMP.map(([, c]) => c).join(', ')})`;
+
 	const status = $derived(
 		layersStatus(
 			{ on: quaternaries.on, idle: quaternaries.nothingAround, failed: !!quaternaries.error, count: answer ? answer.quaternaries.length : null },
 			{ on: rivers.on, idle: rivers.nothingAround, failed: !!rivers.error, count: rv ? rv.reaches.length : null },
-			pickedReach ? reachLabel(pickedReach) : null
+			pickedReach ? reachLabel(pickedReach) : null,
+			[
+				units?.on ? `${units.labels.length} ${units.labels.length === 1 ? 'hydrological unit' : 'hydrological units'} labelled.` : null,
+				mapGrid?.on && !mapGrid.zoomIn && !mapGrid.error
+					? mg
+						? mg.tooDense
+							? 'Too many MAP grid points in view: zoom in.'
+							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
+						: 'Loading the MAP grid…'
+					: null,
+				chirps?.on && chirps.cells ? `${chirps.cells.length} CHIRPS grid ${chirps.cells.length === 1 ? 'point' : 'points'} shown.` : null
+			]
 		)
 	);
 
@@ -182,6 +239,94 @@
 			{/if}
 		</div>
 	{/if}
+	{#if units}
+		<label class="toggle">
+			<input type="checkbox" checked={units.on} onchange={(e) => toggle('units', e.currentTarget.checked)} data-testid="map-layer-units" />
+			<span class="swatch units-swatch" style:--un={overlayColours(dark).parcel} aria-hidden="true"></span>
+			Hydrological units
+		</label>
+		{#if units.on}
+			<div class="qt small" data-testid="map-units">
+				{#if !units.labels.length}
+					<p class="muted" data-testid="map-units-none">No hydrological unit polygons on the map yet: upload or draw each unit’s sub-catchment as a farm parcel linked to its unit.</p>
+				{:else}
+					<p class="muted" data-testid="map-units-summary">
+						{units.labels.length} {units.labels.length === 1 ? 'unit' : 'units'}, each outlined and named on the map{labels ? '' : ' (the map has no fonts for labels here, so read the names below)'}.
+					</p>
+					<ul class="codes reaches" aria-label="Hydrological units on the map" data-testid="map-unit-list">
+						{#each units.labels as u (u.featureId)}
+							<li>
+								{#if onshowfeature}
+									<button type="button" class="code" onclick={() => onshowfeature(u.featureId)}>
+										{u.label}{#if u.polygonName}<span class="order">{` · “${u.polygonName}”`}</span>{/if}{#if u.areaKm2 !== null}<span class="order">{` · ${fmtNum(u.areaKm2, 2, true)} km²`}</span>{/if}
+									</button>
+								{:else}
+									<span class="code">{u.label}</span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+		{/if}
+	{/if}
+	{#if mapGrid}
+		<label class="toggle">
+			<input type="checkbox" checked={mapGrid.on} onchange={(e) => toggle('mapgrid', e.currentTarget.checked)} data-testid="map-layer-mapgrid" />
+			<span class="swatch ramp-swatch" style:--ramp={rampGradient} aria-hidden="true"></span>
+			MAP grid
+		</label>
+		{#if mapGrid.on}
+			<div class="qt small" data-testid="map-mapgrid">
+				{#if mapGrid.zoomIn}
+					<p class="muted" data-testid="map-mapgrid-zoom">Zoom in to see the MAP grid (to about {MAP_GRID_BBOX_MAX_DEG}° across).</p>
+				{:else if mapGrid.error}
+					<p class="err" role="alert">The MAP grid couldn’t be loaded: {mapGrid.error} <button type="button" class="btn btn-sm" onclick={() => mapGrid.retry()}>Try again</button></p>
+				{:else if !mg}
+					<p class="muted">Loading the MAP grid…</p>
+				{:else if !mg.dataset}
+					<p class="muted" data-testid="map-mapgrid-none">No MAP grid is loaded (<code>pnpm import:map-grid</code>, docs/maps.md § MAP grid).</p>
+				{:else}
+					{#if mg.datasets.length > 1}
+						<label class="pick">
+							Grid
+							<select value={mg.dataset.dataset} onchange={(e) => mapGrid.pick(e.currentTarget.value)} data-testid="map-mapgrid-dataset">
+								{#each mg.datasets as d (d.dataset)}<option value={d.dataset}>{d.dataset} ({degrees(d.cellDeg)}°){d.synthetic ? ', synthetic' : ''}</option>{/each}
+							</select>
+						</label>
+					{/if}
+					{#if mg.tooDense}
+						<p class="muted" data-testid="map-mapgrid-dense">This view holds more than {fmtNum(mg.max, 0, true)} of the grid’s points: zoom in to see them.</p>
+					{:else if !mg.cells.length}
+						<p class="muted" data-testid="map-mapgrid-empty">The grid has no point in this view.</p>
+					{:else}
+						<p class="muted" data-testid="map-mapgrid-summary">
+							{mgSummary}{#if mg.dataset.synthetic}{' '}<strong>Synthetic test data, never real rainfall.</strong>{/if}{labels ? '' : ' The map has no fonts for labels here, so it shows the points without their values.'}
+						</p>
+					{/if}
+					<p class="muted" data-testid="map-mapgrid-source">Mean annual precipitation, mm a year. Source: {mg.dataset.source}</p>
+				{/if}
+			</div>
+		{/if}
+	{/if}
+	{#if chirps}
+		<label class="toggle">
+			<input type="checkbox" checked={chirps.on} onchange={(e) => toggle('chirps', e.currentTarget.checked)} data-testid="map-layer-chirps" />
+			<span class="swatch chirps-swatch" style:--ch={chirpsColour(dark)} aria-hidden="true"></span>
+			CHIRPS grid
+		</label>
+		{#if chirps.on}
+			<div class="qt small" data-testid="map-chirps">
+				{#if !chirps.cells}
+					<p class="muted" data-testid="map-chirps-zoom">Zoom in to see the CHIRPS grid (at most {fmtNum(CHIRPS_MAX_POINTS, 0, true)} points in view).</p>
+				{:else}
+					<p class="muted" data-testid="map-chirps-summary">
+						{fmtNum(chirps.cells.length, 0, true)} CHIRPS v3 grid {chirps.cells.length === 1 ? 'point' : 'points'} in view, each the centre of a {CHIRPS_CELL_DEG}° cell (about 5 km): where CHIRPS gives its daily rainfall.
+					</p>
+				{/if}
+			</div>
+		{/if}
+	{/if}
 	{#if relief}
 		<div class="tip-row">
 			<label class="toggle">
@@ -243,6 +388,27 @@
 	.order,
 	.on-map {
 		color: var(--text-muted);
+	}
+	/* A unit's outline as the layer draws it: a solid line in the parcels' green. */
+	.units-swatch {
+		border-top: 3px solid var(--un);
+	}
+	/* The MAP ramp, lowest to highest (mapStyle.ts MAP_RAMP). */
+	.ramp-swatch {
+		height: 0.8rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 2px;
+		background: var(--ramp);
+	}
+	/* A CHIRPS cell: dashed, in its orange. */
+	.chirps-swatch {
+		border-top: 2px dashed var(--ch);
+	}
+	.pick {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0.25rem 0;
 	}
 	/* A light-to-dark ramp: the shading the relief draws. */
 	.relief-swatch {

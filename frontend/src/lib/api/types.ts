@@ -2817,6 +2817,33 @@ export interface QuaternaryLayer {
 	datasets: { dataset: string; count: number }[];
 }
 
+/** A mean annual precipitation grid loaded for the MAP grid layer (GET …/map/map-grid; docs/maps.md § MAP grid). */
+export interface MapGridDataset {
+	dataset: string;
+	source: string;
+	version: string;
+	attribution: string;
+	/** The grid's cell size, degrees. */
+	cellDeg: number;
+	/** How many cells have a value. */
+	cells: number;
+	/** The repo's invented grid: never real rainfall. */
+	synthetic: boolean;
+}
+
+/** One dataset's MAP grid points in a box (GET …/map/map-grid). */
+export interface MapGridLayer {
+	bbox: [number, number, number, number];
+	/** The dataset read: the one asked for, else the default (a real one before the synthetic, the finest first); null when none is loaded. */
+	dataset: MapGridDataset | null;
+	datasets: MapGridDataset[];
+	/** Each point's centre and its MAP, whole mm/yr. */
+	cells: [lon: number, lat: number, mapMm: number][];
+	/** The box holds more of the grid's points than one answer carries (`max`): no cells, zoom in. */
+	tooDense: boolean;
+	max: number;
+}
+
 /** A reach of the loaded river network (GET …/map/rivers, issue #345). */
 export interface RiverReach {
 	dataset: string;

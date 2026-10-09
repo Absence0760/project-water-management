@@ -603,9 +603,15 @@ did, and refuses the whole file on any problem, listing them per feature:
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
-  feature's name (made one line, as every feature name is, since the map
-  draws it as a label: line breaks and control characters become spaces;
-  api.md § Catchment map), and `description` and `ref`, trimmed and capped. Everything
+  feature's name; a feature with none of those takes its `layer` (any key
+  case) as the name when that value names no kind, since QGIS's "Merge
+  vector layers" writes each source layer's name there, so a file of
+  sub-catchments carries their names only in `layer`. That name then also
+  links it to the unit of the same name (below), and the `layer` proposes no
+  kind. The name is made one line, as every feature name is, since the map
+  draws it as a label (line breaks and control characters become spaces;
+  api.md § Catchment map). `description` and `ref` are kept too, trimmed and
+  capped. Everything
   else is dropped: an attribute table can carry owners' names or ID numbers,
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file
@@ -1986,6 +1992,85 @@ only reads them.
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
 
+## Hydrological units layer
+
+The Map tab's **Hydrological units** layer (`layers=units`, a toggle in the
+Layers box, in the URL so Back undoes it) outlines each unit's polygon over
+the features and writes the unit's name on it. A unit's polygon is a farm
+parcel (`farm_parcel`) linked to the unit: its sub-catchment, as Start from
+the map saves one and an upload of sub-catchments brings in ([§
+Uploads](#uploads); a QGIS file whose names are only in `layer` links by
+them). The label is the linked unit's name, else the polygon's own, placed
+at a point inside the polygon (`mapLayers.ts` `unitLabels`, `pieces.ts`
+`interiorPoint`), so a concave unit's name lands on it. The Layers box lists
+the units by name, each with its polygon's own name when it differs and its
+area; a name in the list shows its polygon on the map and in the card. The
+names are written on the map only with glyphs configured ([§ Labels](#labels));
+without them the outlines are drawn and the list is where to read the names.
+Nothing is fetched: the layer reads the features already loaded.
+
+## MAP grid
+
+The Map tab's **MAP grid** layer (`layers=mapgrid`) draws a mean annual
+precipitation grid's points in the map's view, each a dot coloured on a
+light-to-dark blue ramp by its MAP (`mapStyle.ts` `MAP_RAMP`, ringed in the
+halo colour so both ends read in either theme) and labelled with its value
+in whole mm ("812 mm"; labels thin themselves where they would overlap, and
+need glyphs). The Layers box says how many points are in view, from which
+grid, at what cell size, and their range ("396 points in view from
+synthetic (0.01° cells): 449 mm to 799 mm."), then the grid's source
+line; **Synthetic test data, never real rainfall.** for the repo's grid.
+
+- **One grid at a time.** With more than one loaded, a **Grid** picker
+  chooses; the default is a real grid before the synthetic one, the finest
+  first (`rainMapDatasets`). A view never mixes two grids: a 100 m
+  provincial surface and the 1.7 km national one can differ by tens of
+  percent in mountain catchments, where the national grid's regression has
+  few stations to lean on, so a map of both would read as one field that
+  isn't. Check whichever grid is used against the catchment's own gauges.
+- **The view decides what is asked.** `GET …/map/map-grid?bbox=&dataset=`
+  ([api.md § Catchment map](./api.md#catchment-map)) with the view snapped
+  out to 0.02° (`mapGridViewBbox`), at most 2° a side; past that, "Zoom in
+  to see the MAP grid". A view holding more than 5 000 of the grid's points
+  (counted from the grid before any read) comes back `tooDense`: "This view
+  holds more than 5 000 of the grid’s points: zoom in to see them." A 100 m
+  grid shows from about a 7 km view; the national grid's points across a
+  whole catchment.
+- **The data** (`rain_map_dataset`, `rain_map_cell_reference`, migration
+  207; [data-model.md](./data-model.md)): one row per grid and one per cell
+  with a value, keyed by the cell's south-west indices, like the evaporation
+  grid. `pnpm import:map-grid` loads one, as the schema owner, replacing its
+  dataset: with no argument the committed synthetic grid (invented rainfall
+  over region Z; `pnpm setup` loads it), else `<grid.asc> --dataset <label>
+  --source "<product, author, year>" [--version …] [--attribution …]
+  [--bbox w,s,e,n]`, an ESRI ASCII grid in WGS84 degrees (`gdal_translate
+  -of AAIGrid`; a grid on the Cape datum, as the Atlas's is, is reprojected
+  first with `gdalwarp -s_srs EPSG:4222 -t_srs EPSG:4326`). A 100 m
+  provincial surface is millions of cells: load the box around the
+  catchments with `--bbox`. A projected grid, a short or long row and a
+  value past 20 000 mm are refused, naming the line.
+- **Licences.** Both grids in hand are blocked for production ([§
+  Sources](#sources)): the national grid's portal lists CC BY-SA 4.0 and "No
+  License Provided" at once, and a provincial surface's terms are its
+  owner's. They are loaded locally only, never committed, and the
+  production loader refuses the `map-grid` kind (`geo/referenceLoad.ts`) until
+  the decision in followups.md is made.
+- Not yet read by the model: the per-unit hydrology option that scales a
+  unit's rain by its MAP is planned work. The layer shows the grid so its
+  values can be checked against the units and the gauges first.
+
+## CHIRPS grid
+
+The Map tab's **CHIRPS grid** layer (`layers=chirps`) draws CHIRPS v3's
+0.05° cells in the map's view, each a thin dashed square in an orange apart
+from the other overlays, with its centre as a ringed dot: where CHIRPS gives
+its daily rainfall, and so which cells a unit's CHIRPS rain comes from
+([§ Rain from the boundary](#rain-from-the-boundary)). The grid is built
+in the browser from its definition (corners on whole multiples of 0.05° from
+180° W, 60° N; `mapLayers.ts` `chirpsCells`): no data is read, so the points
+carry no values. The Layers box says how many are in view; past 2 500
+(about a 2.5° view) it says to zoom in.
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on
@@ -2016,6 +2101,9 @@ fixtures only.
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |
+| Lynch (2004) mean annual precipitation, 1 arc minute (~1.7 km), South Africa, Lesotho and Eswatini: the MAP grid layer ([§ MAP grid](#map-grid)) | S.D. Lynch, *Development of a raster database of annual, monthly and daily rainfall for southern Africa*, WRC Report 1156/1/04 (2004); distributed as `GISData/grids/gmap` (an ESRI grid on the Cape datum, Clarke 1880) in R.E. Schulze (ed.), *South African Atlas of Climatology and Agrohydrology*, WRC Report 1489/1/06 (2007), from the Water Research Observatory ([dataset page](https://wrcwro01.arc.agric.za/dataset/atlas-of-agrohydrology-2008-zip), download behind a free account) | **Unconfirmed.** Read 2026-10-09: the dataset page lists "Open (Creative commons)" linking CC BY-SA 4.0 and, in its header, "No License Provided". CC BY-SA's share-alike on adapted material may reach a published map of it, which D-B rejects | "Schulze, R.E. and Lynch, S.D. 2007. Annual Precipitation. In: Schulze, R.E. (Ed). South African Atlas of Climatology and Agrohydrology. WRC Report 1489/1/06, Section 6.2", if allowed | the 2008 Atlas zip | none (a 2004 surface) | **Blocked: licence unconfirmed.** Loaded locally only (`pnpm import:map-grid`), never committed; production loads refused. To unblock: the WRC's or the Atlas editor's written terms for showing the grid in a commercial service, recorded here with the date |
+| Provincial MAP surfaces (about 100 m, e.g. a provincial water availability study's) | the study's client or consultant, per surface | **Unconfirmed**: each is a project deliverable whose reuse terms are its owner's | as its owner asks | per surface | none | **Blocked: licence unconfirmed.** Loaded locally only, by the operator who holds the file; never committed; production loads refused |
+| Synthetic MAP grid (`backend/fixtures/geo/map-grid.synthetic.json`) | this repo (invented rainfall over region Z) | the repo's own | none | 1 | never | in use (tests, e2e, `pnpm setup`) |
 | dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method, and on the Data sources and credits page (`/data-sources#dpet`) | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
