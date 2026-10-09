@@ -1,0 +1,34 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Example catchment", "kind": "catchment boundary" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[21.30, -33.70], [21.42, -33.70], [21.42, -33.60], [21.30, -33.60], [21.30, -33.70]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Example farm", "kind": "farm parcel", "description": "Invented example" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[21.32, -33.68], [21.35, -33.68], [21.35, -33.65], [21.32, -33.65], [21.32, -33.68]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Example river", "kind": "river" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[21.31, -33.69], [21.36, -33.66], [21.40, -33.62]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Example weir", "kind": "gauge" },
+      "geometry": { "type": "Point", "coordinates": [21.40, -33.62] }
+    }
+  ]
+}

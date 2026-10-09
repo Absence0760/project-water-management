@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BULK_MAX_ROWS, bulkSummary, farmNames, outcomeText, parseFarmerCsv, toggleFarm } from './farmers';
+import { BULK_MAX_ROWS, bulkSummary, farmNames, inviteExampleCsv, outcomeText, parseFarmerCsv, toggleFarm } from './farmers';
 
 const farms = [
 	{ id: 'a', name: 'Farm A' },
@@ -58,6 +58,24 @@ describe('parseFarmerCsv', () => {
 		expect(parseFarmerCsv('email,farm,language\n').problems).toEqual(['The file has a header row but no farmers under it.']);
 		const big = Array.from({ length: BULK_MAX_ROWS + 1 }, (_, i) => `f${i}@example.com,Farm A`).join('\n');
 		expect(parseFarmerCsv(big).problems).toEqual(['At most 200 rows at a time; this has 201. Split it into several files.']);
+	});
+});
+
+describe('inviteExampleCsv (issue #456)', () => {
+	it("reads back as it is: a header, then the project's first two units with a language each", () => {
+		const csv = inviteExampleCsv([{ name: 'Upper farm' }, { name: 'Smit, "Oos"' }, { name: 'Third' }]);
+		expect(csv.split('\r\n')[0]).toBe('email,farm,language');
+		expect(parseFarmerCsv(csv)).toEqual({
+			rows: [
+				{ line: 2, email: 'farmer1@example.com', farm: 'Upper farm', locale: 'en' },
+				{ line: 3, email: 'farmer2@example.com', farm: 'Smit, "Oos"', locale: 'af' }
+			],
+			problems: []
+		});
+	});
+
+	it('has one placeholder row when the project has no named units', () => {
+		expect(parseFarmerCsv(inviteExampleCsv([{ name: ' ' }])).rows).toEqual([{ line: 2, email: 'farmer1@example.com', farm: 'Hydrological unit name', locale: 'en' }]);
 	});
 });
 

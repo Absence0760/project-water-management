@@ -22,6 +22,7 @@
 	import { workspaceNameProblem } from '$lib/format/visibleName';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
 	import type { WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
 	import type { WorkbookImportSession } from '$lib/spreadsheet/import/runner';
 	import ImportPreview from './ImportPreview.svelte';
@@ -315,6 +316,33 @@
 					<em>Download project (JSON)</em> on a project's Overview writes, or the workbook importer's
 					<span class="mono">project.json</span>. It becomes a new project; nothing existing changes.
 				</p>
+			{/if}
+			{#if isWorkbook}
+				<FormatHelp accepts={`A b023 Water Balance Tool workbook (.xlsm or .xlsx), up to ${WORKBOOK_MAX_MB} MB, from a b02x build (b022, b023 …).`}>
+					<ul>
+						<li>The whole tool: the importer finds its tables through the workbook’s named ranges, so a workbook without them is refused, and the message lists the ones missing.</li>
+						<li>It reads [Network], [Farm spec], [Crop demand], [Farm demand], [Transfers], [Flow Calibration Cfg] and [Flow data]; the per-farm result sheets are left out.</li>
+						<li>A cell it can’t get past is named by its sheet and cell; what it imported with a caveat is listed in the review, each with its sheet and cell.</li>
+					</ul>
+				</FormatHelp>
+			{:else}
+				<FormatHelp accepts="A project file (.json), at most 5 MB, in UTF-8.">
+					<ul>
+						<li>
+							One JSON object: a <span class="mono">name</span>; a <span class="mono">model</span> with lists of <span class="mono">nodes</span>,
+							<span class="mono">crops</span>, <span class="mono">cropAreas</span> and <span class="mono">transfers</span>; and optionally
+							<span class="mono">settings</span> and <span class="mono">series</span>.
+						</li>
+						<li>
+							Each series is <span class="mono">kind</span>, <span class="mono">name</span>, <span class="mono">unit</span>, <span class="mono">startDate</span> (YYYY-MM-DD)
+							and <span class="mono">values</span>, one a day from that date, <span class="mono">null</span> for no reading.
+						</li>
+						<li>
+							The surest way to one is <em>Download project (JSON)</em> on any project’s Overview. JSON that doesn’t parse is refused with the line and column where it
+							stops; the server checks the rest and lists every problem before anything is created.
+						</li>
+					</ul>
+				</FormatHelp>
 			{/if}
 			<div class="field">
 				<label for="imp-file">{inputLabel}</label>
