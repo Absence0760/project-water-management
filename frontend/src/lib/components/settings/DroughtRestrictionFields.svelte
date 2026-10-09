@@ -162,7 +162,7 @@
 		<input type="checkbox" disabled={readonly} checked={!!rule} aria-describedby="{uid}-hint" onchange={(e) => setOn(e.currentTarget.checked)} data-testid="restriction-on" />
 		Apply drought restrictions in runs
 	</label>
-	<p class="hint" id="{uid}-hint">
+	<p class="hint explain" id="{uid}-hint">
 		Cut demand by level when the farm dams fall below a share of their capacity. A model rule, not the restriction notice farmers see;
 		<strong>off, runs are as before.</strong>
 	</p>
@@ -213,7 +213,7 @@
 			</fieldset>
 		{/each}
 
-		<p class="hint">
+		<p class="hint explain">
 			Levels, mildest first: each starts below a share of the farm dams’ capacity and cuts each part of demand by its own %. Blank is not cut.
 			Domestic and municipal demand objects keep their basic-needs floor of {DEMAND_NORMS.basicLitresPerPersonDay} litres a person a day.
 		</p>

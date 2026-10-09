@@ -123,7 +123,7 @@
 		>
 			{#each CHIRPS_FIT_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
-		<span class="hint" id="{uid}-h">{option?.help}</span>
+		<span class="hint explain" id="{uid}-h">{option?.help}</span>
 		{#if inactive}<span class="hint" data-testid="chirps-fit-inactive">Not used while CHIRPS bias correction is off: raw CHIRPS has no factors. The setting is kept for when it is turned back on.</span>{/if}
 	</div>
 	{#if propose && !readonly}

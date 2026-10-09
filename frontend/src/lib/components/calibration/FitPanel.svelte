@@ -176,7 +176,7 @@
 	{#if !hasObserved}
 		<p class="muted small">Upload an observed or logger flow record (Data) to fit the parameters to it.</p>
 	{:else}
-		<p class="muted small">
+		<p class="muted small explain">
 			Searches the GR4J parameters for the best match between the run and the observed record, over the
 			calibration window above. It uses the form as it stands, fits in your browser, and never saves: check the result, apply it to the form,
 			then save.

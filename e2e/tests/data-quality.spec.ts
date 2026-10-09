@@ -1,6 +1,6 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { saveChanges, saveSettings, showExplanations } from '../support/settings.ts';
 
 // Synthetic records only. The gauge reads 80 % of the logger for 120 days of
 // one water year; the logger has one negative reading.
@@ -178,8 +178,10 @@ test('the Data quality panel says it holds limits runs use, and its Rain gaps li
 	const project = await createProject(page.request, 'Data quality words');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const section = page.getByTestId('data-quality-settings');
+	// The panel's words are explanations: shown with the page's switch (issue #468).
+	await showExplanations(page);
 	await expect(section).toContainText('Input checks, and the zero-rain and low-vs-CHIRPS limits runs use');
 	await section.getByRole('link', { name: 'Rain gaps' }).click();
 	await expect(page).toHaveURL(/#set-rain$/);
-	await expect(page.getByRole('heading', { level: 2, name: 'Rain gaps and CHIRPS' })).toBeInViewport();
+	await expect(page.getByRole('heading', { level: 2, name: 'Rain gaps', exact: true })).toBeInViewport();
 });

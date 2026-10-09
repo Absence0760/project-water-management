@@ -16,6 +16,8 @@
 	import { newTable, rulesError, siteOptions } from './ewrRules';
 
 	let {
+		/** What the panel is set to now, under its heading (settings/summaries.ts). */
+		summary = null,
 		value = $bindable(),
 		error = $bindable(null),
 		chargeSource = $bindable(),
@@ -24,6 +26,7 @@
 		nodes,
 		projectId = null
 	}: {
+		summary?: string | null;
 		value: EwrRuleTable[];
 		error?: string | null;
 		/** settings.ewrChargeSource (engine ≥ 1.3.0); undefined = 'pragmatic'. */
@@ -55,15 +58,16 @@
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h">Reserve rule tables <HelpTip key="settings.ewrRules" /></h2>
-		<span class="muted small">Optional: judge each month against the Ecological Reserve’s assurance rules</span>
 		{#if projectId}<NotesDrawer {projectId} target={settingTarget('reserve')} />{/if}
 		<!-- In the head, above the tables: with several sites they run screens long (a "new" action goes above a long list). -->
 		{#if !readonly}
 			<button type="button" class="btn btn-sm head-add" disabled={!canAdd} onclick={add} aria-describedby={!canAdd && value.length ? `${uid}-full` : undefined}>Add a rule table</button>
 		{/if}
 	</div>
+	{#if summary}<p class="summary" data-testid="summary-reserve">{summary}</p>{/if}
+	<p class="hint muted explain">Optional: judge each month against the Ecological Reserve’s assurance rules.</p>
 	{#if !readonly && !canAdd && value.length}<p class="hint muted" id="{uid}-full">Every EWR site has a table. Add a gauge on the Network tab for another site.</p>{/if}
-	<p class="hint muted">
+	<p class="hint muted explain">
 		A Reserve determination gives the EWR as a table: for each month, the flow required at each assurance level (“% point”, the share of
 		time it should be equalled or exceeded; 10 % is the wet-condition flow, 99 % the drought flow). Each month’s <strong>natural flow</strong>
 		picks the point it sits at, and the run checks whether the simulated flow at the site met the EWR at that point. The result is a
@@ -92,7 +96,7 @@
 					<option value="pragmatic">The pragmatic EWR</option>
 					<option value="ruleTable">The rule tables</option>
 				</select>
-				<span class="hint" id="{uid}-charge-h">Which daily requirement sets the EWR charge, curtailment and the water account at a site with a table. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
+				<span class="hint explain" id="{uid}-charge-h">Which daily requirement sets the EWR charge, curtailment and the water account at a site with a table. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="{uid}-low">Low flows judged on</label><HelpTip key="settings.lowFlowMeasure" /></span>
@@ -100,7 +104,7 @@
 					<option value="total">The month’s total flow</option>
 					<option value="baseflow">The month’s base flow</option>
 				</select>
-				<span class="hint" id="{uid}-low-h">Base flow keeps a flood month from passing its low flows. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
+				<span class="hint explain" id="{uid}-low-h">Base flow keeps a flood month from passing its low flows. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
 			</div>
 		</div>
 	{/if}
@@ -118,8 +122,9 @@
 	h2 :global(.helptip) {
 		margin-left: 0.15rem;
 	}
-	.head-add {
-		margin-left: auto;
+	/* The heading takes the spare room, so Notes and Add a rule table sit together at the right, as on the other panels. */
+	.panel-head > h2 {
+		margin-right: auto;
 	}
 	/* As Settings' .fields: the two method choices side by side, stacked on a phone. */
 	.methods {

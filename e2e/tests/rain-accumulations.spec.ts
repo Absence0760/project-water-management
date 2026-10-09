@@ -46,7 +46,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await expect(shaded).toBeVisible();
 	await expect(chart).toHaveAttribute('data-shaded', '1');
 
-	// Settings → Rain gaps and CHIRPS: spread is the default; keep the reading as recorded (a reason is required).
+	// Settings → Rain gaps: spread is the default; keep the reading as recorded (a reason is required).
 	await tab('Settings & calibration').click();
 	const section = page.getByTestId('zero-rain-settings');
 	const mode = section.getByLabel('Accumulated readings');

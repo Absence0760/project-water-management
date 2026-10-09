@@ -4458,9 +4458,45 @@ to its own redesign.
   form), so it stays stuck to the last panel.
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
   with every link (no More), the marked link kept in view, never the page.
-- `e2e/tests/section-nav.spec.ts` pins the rows at 1440 and 1280, More's
-  keyboard use and axe scan at 1024, the phone strip, and each new page's
-  menu, jumps and loaded links.
+- **The side rail** (issue #468, Settings & calibration only so far): a
+  page that passes its content as SectionNav's `children` and a `railFrom`
+  width (rem) gets, from that content width, a sticky column on the left
+  instead of the bar: every group's name a heading over its links (a list
+  named by it), the section being read marked with `aria-current` and an
+  accent edge, a problem dot as on the bar, and Up/Down, Home and End moving
+  between its links (Up from the first returns to the find box). It sticks
+  under the header (`top: var(--header-h) + 0.75rem`) and is capped at the
+  window's height less the save bar (`--dock-h`), scrolling inside itself
+  only in a window shorter than its tallest state. Narrower it is the bar,
+  with the same sections; a page whose links differ between the two binds
+  `layout` (Settings' bar folds four panels into one Automation & access
+  link, its rail lists them). Without `children` the wrapper draws no box
+  (`display: contents`), so the bar still sticks down the whole page.
+- **Find** (`find`, the box's label): in the rail, a search box at its top;
+  on the bar, a **Find** button at its start (in the fit's lead) opening the
+  same box in a popover (under the whole strip on a phone). Typing lists, in
+  page order, the sections and the settings inside them whose names hold
+  every word typed (case and accents ignored, `findEntries` in
+  `common/sectionNav.ts`): the labels, legends, sub-headings and monthly
+  rows of each section and the panels it `covers`, read from the page when
+  the query changes. A section's match is a link to it; a setting's is a
+  button that opens any `<details>` folding it, brings it to the middle of
+  the window and focuses its control (the label's field, a legend's first
+  field, a row's first input; the heading itself otherwise), and names its
+  panel (", in Demand"). Enter takes the first match, Down moves into the
+  list, a live line says how many match. In the rail Escape clears the box;
+  in the popover it closes it, focus back on Find.
+- **Other pages.** A section may link to another page (`href` on it): it is
+  listed like the rest and never marked as the one being read. Runs &
+  results, River & reserve, Hydrological units and Data keep the bar for
+  now; adopting the rail is wrapping the page's content in SectionNav,
+  choosing a `railFrom` where its widest content (River's EWR grid, Data's
+  table) still fits beside a 13rem column, and moving any sticky panel's
+  offset off the bar's height (`--nav-h` on Hydrological units).
+- `e2e/tests/section-nav.spec.ts` pins the rows at 1280, the rail at 1440,
+  More's keyboard use and axe scan at 1024, the phone strip, and each new
+  page's menu, jumps and loaded links; `settings-index.spec.ts` the find
+  box, the rail's keys and the problem marks.
 
 ## Data
 
@@ -4897,41 +4933,69 @@ section header, which it fills (`fillHeader`) like the other sections.
   while the page settles (`holdAnchor`), with focus on its heading. Before,
   the browser's own jump ran before the lazy tab existed and the page opened
   at the top.
-- **On this page.** Under the header, a **Settings sections** menu links to
-  each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
-  `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`,
-  `#set-restrict`, `#set-period`, `#set-quality`, `#set-outcomes`,
-  `#set-outlook`, `#set-evidence`, then one **Automation & access** link to
-  `#set-auto`; listed by `settings/sections.ts`, `settingsNavGroups`), in
-  three groups named for screen readers only, its links evenly spaced (the
-  names on the bar would push links into More at 1280 px, issue #162):
-  **Model inputs** (Demand … Data quality: its zero-rain and low-vs-CHIRPS
-  limits change results, issue #173), **How results are read** (Outcome
-  matrix, Seasonal outlook, Evidence: they change no result) and
-  **Automation & access**. That last link stands for the four panels that
-  run or connect by themselves: Automatic runs (`#set-auto`, last in the
-  form), then after the form Data feeds (`#set-feeds`), API keys
-  (`#set-api-keys`, owners only) and Scheduled reports
-  (`#set-report-schedules`). They keep their own headings and ids, so a link
-  to any of them still lands, and the group's link is marked while any of
-  them is read; a Save blocker on any of them puts its dot on that link. One
-  link for four keeps the bar's sixteen links in two rows at 1280 px in CI's
-  fonts, which the drought restrictions link's nineteenth did not (2026-09-30,
-  `section-nav.spec.ts`). It is the shared in-page menu
-  (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
-  above the form rather than in it, so it stays stuck down the panels after
-  the form too (inside it, it scrolled away at Data feeds): a bar of pill links
-  that sticks at the top (under the phone bar on a phone) down the long form and marks the group
-  being read with `aria-current="location"` (scroll spy: `activeSectionId`
-  in `common/sectionNav.ts`, the last section whose top has passed under the
-  menu, or the last one at the bottom of the page). A group with a Save
-  blocker gets a red dot ("has a problem" to screen readers). It is a bar
-  rather than a side rail because the monthly input rows need the full
-  width. On phones it is one strip that scrolls sideways inside itself (the
-  marked link kept in view), never the page. While shown, the menu raises
-  the page's `scroll-padding-top` by its height, and the workspace page sets
+- **On this page** (issue #468). A **Settings sections** menu
+  (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu))
+  wraps the whole tab. From a content width of 80rem (a 1440 px window) it is
+  a **side index**: a sticky column on the left listing every panel by its
+  heading, word for word, under its task, in page order (`settings/sections.ts`,
+  `settingsNavGroups`): **Data & rain** (Simulation period `#set-period`, Rain
+  gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
+  low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
+  (Demand `#set-demand`, Flow share `#set-share`, Drought restrictions
+  `#set-restrict`), **Runoff & calibration** (Flow calibration `#set-flow`,
+  Calibration record `#set-record`, Fit the parameters `#set-fit`, WR2012
+  check `#set-wr2012`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
+  tables `#set-reserve`), **Reading results** (Outcome matrix
+  `#set-outcomes`, Seasonal outlook `#set-outlook`, Evidence
+  `#set-evidence`: they change no result) and **Automation & access**
+  (Automatic runs `#set-auto`, last in the form, then after it Data feeds
+  `#set-feeds`, API keys `#set-api-keys` for owners and Scheduled reports
+  `#set-report-schedules`). Judge results by (`#set-judge`) heads the form
+  above them all, as the client asked (issue #444), and isn't in the menu.
+  The panels sit in that order on the page, so the marked link moves down the
+  column as you read. Beside the index, every 12-month row still fits (the
+  month cells' padding is slim: twelve months and a year total at 1440 px,
+  `settings.spec.ts`). Narrower (1280 px and down) it is the bar under the
+  header, its links evenly spaced, with the four automation panels behind one
+  **Automation & access** link (`covers`), so sixteen links stay in two rows
+  at 1280 px in CI's fonts; on a phone the sideways strip. Both have
+  **Find a setting**: type part of a setting's name (`pan coef`,
+  `february`) and the index narrows to the panels and settings that match;
+  picking a setting opens what folds it (Advanced: days in February) and
+  focuses it. A panel with a Save blocker gets a red dot ("has a problem"),
+  and on the bar's Automation link a problem on any panel it stands for.
+  The menu marks the panel being read with `aria-current="location"` and,
+  as a bar, raises the page's `scroll-padding-top` by its height (the rail
+  sits beside the panels, so it doesn't), and the workspace page sets
   `scroll-padding-bottom` to the save bar's while it shows, so a jumped-to
-  group or a focused control is never hidden under either (WCAG 2.4.11).
+  panel or a focused control is never hidden (WCAG 2.4.11).
+- **Each panel's current values** (`settings/summaries.ts`,
+  `settingsSummaries`): under each heading one line says what the panel is
+  set to now, following the unsaved form: "1 Oct 2015 – 30 Sep 2020" or
+  "The whole rain record"; "CHIRPS bias-corrected per month fills gaps ·
+  fitted on the whole record · zero runs treated as missing"; "A-pan
+  1 730 mm a year · effective rain 65% · soil-water store 25 mm · dam
+  evaporation 0.75 × A-pan"; GR4J's X1, X3, X4 (and X2), the catchment area
+  and the PE a year; the calibration window, site and periods left out; the
+  header's fit line; where the daily EWR comes from, its volume and the
+  reporting window; WR2012 on with its quaternary and MAR, or off; the rule
+  tables and what the EWR charge follows (nothing when there is none: the
+  panel's own line says so); how many data-quality limits differ from the
+  defaults; the year classes; the outlook's season and planning share;
+  whether an evidence rule is declared; automatic runs on or off.
+- **Explanations behind a switch.** The explanation under a field (what it
+  does, its default, where the value comes from) is hidden until **Explain
+  each setting under its field**, at the top of the form, is ticked; the
+  choice is kept in the browser (`localStorage` `wm.settings.explain`). Each
+  field keeps its ⓘ, and a hidden explanation is still the field's
+  description (`aria-describedby` reads hidden text), so a screen reader
+  hears it either way. The explanations carry the class `explain`
+  (`.settings-form:not(.explained) .explain` hides them, in the panels'
+  own components too); what reports state rather than explains always
+  shows: a warning or error, the catchment area now, where the A-pan comes
+  from, "Not used while…", a required source, the WR2012 monthly units, and
+  "With no rule declared, an evidence report cites no ensemble". A panel's
+  old one-line description under its heading is an explanation too.
 - **Saving.** The settings save through the workspace's one save bar
   ([§ Project workspace](#project-workspace), `model/SaveBar.svelte`), with
   the model's edits and the project details: the page holds the form
@@ -4960,7 +5024,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   correction, GR4J's monthly PE, the CHIRPS gap map and drought
   restrictions. The page's draft keeps them (`kept`, `last…`) until the
   settings are saved or discarded.
-- **Headings.** Each panel is an `h2`; inside the long ones each sub-group is
+- **Headings.** Each panel is an `h2` (Flow calibration, Rain gaps, Flow
+  share and EWR were shortened to the menu's words; the summary line under
+  each says the rest); inside the long ones each sub-group is
   an `h3` in the order shown (in its fieldset's legend where it has one), so
   heading navigation reaches them: under Flow calibration the areal rainfall
   correction, GR4J potential evaporation and Evaporation from the map; under
@@ -5021,9 +5087,9 @@ two.
   28.25") and adds "(not the default 28.25)" in amber when it differs, so a
   changed value is never hidden.
 - **Calibration is four panels**, each its own menu entry, rather than one
-  long one: Flow calibration, Rain gaps and CHIRPS, Calibration record and
-  Fit automatically, in that order.
-- **Flow calibration (rain → natural flow)** (`#set-flow`): the **runoff
+  long one: Flow calibration, Calibration record, Fit the parameters and the
+  WR2012 check, in that order, after Rain gaps (under Data & rain).
+- **Flow calibration** (rain → natural flow, `#set-flow`): the **runoff
   model**, shown read-only as "GR4J (Perrin et al. 2003)" (`RUNOFF_MODEL_LABEL`;
   there is no picker since engine 1.0.0, issue #16). Its hint says the legacy
   b023 workbook model was removed in engine 1.0.0 and that runs made with it
@@ -5139,7 +5205,7 @@ two.
     the Map; a boundary the grid can't stand for (no value inside, under
     half covered) says why. Synthetic data carries the "Synthetic test data"
     warning. With more than one grid loaded, a **Grid** picker.
-- **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
+- **Rain gaps** (`#set-rain`, CHIRPS and the rest): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to the runoff model and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
@@ -5225,7 +5291,13 @@ two.
   model, or with no record*). Its hint says the fit then scores the simulated
   flow at that gauge against its record, that the gauged ranges and gap
   filling are the outlet records', and that a run's statistics are scored
-  there too while the outlet's EWR test stays the outlet's. A stored site
+  there too while the outlet's EWR test stays the outlet's, and links to the
+  project's first flow record on the Data tab
+  (`?tab=series&series=<id>#data-chart`), whose row says where it was
+  measured. With no gauge record yet (and a flow record to place), an editor
+  sees that line in its stead: "Scored at the outlet. To score at a gauge
+  inside the network, set where its flow record was measured on the Data
+  tab", so the choice is findable before it exists. A stored site
   whose gauge has left the model or has no record attached any more gets a
   warning under the select (runs score the outlet's record and warn, and Fit
   automatically refuses the site). The site's records decide *Compare with*'s choices, Fit
@@ -5511,7 +5583,7 @@ two.
   it). Unticking **Compare runs with WR2012 naturalised flow**, or the MAR
   band, and ticking it again brings back what was typed until the settings
   are saved or discarded.
-- **Flow share between hydrological units**: the method, and the **High/low
+- **Flow share** (between hydrological units): the method, and the **High/low
   MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
   is *High/low MAP split*, the one method that reads it (issue #174); under
   *by area* or *manual* it is hidden and its saved value kept.

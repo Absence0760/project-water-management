@@ -175,6 +175,10 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
+						text: '**Settings & calibration** is one long form. On a wide screen a column down its left lists every panel under its task (**Data & rain**, **Demand & supply**, **Runoff & calibration**, **EWR & Reserve**, **Reading results**, **Automation & access**), marks the one you are reading and stays in view as you scroll; in a narrower window it is the row of links over the page. **Find a setting** (at the top of the column, or **Find** at the start of the row) lists the panels and the settings whose names match what you type: pick one to go straight to it, or press Enter for the first. Each panel says what it is set to now under its heading. The explanation under each field is hidden until you tick **Explain each setting under its field**, at the top of the form (your browser remembers it); every field keeps its ⓘ. A panel with something to fix before saving has a red dot in the menu, and the save bar links to it.'
+					},
+					{
+						type: 'p',
 						text: 'Nothing you edit takes you off the page. **Tables** opens a full table over the page: the Network’s has the **Hydrological unit table**, **Crop factors**, **Planted areas**, **Transfers** and **Demands**, Crops & demand’s the crop factors and planted areas. **+ Add hydrological unit**, or **Edit** on its row under **All hydrological units** (or a double-click on it in the drawing), opens its form in a sheet over the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard model changes** and **Done**, which brings you back where you were. The **Hydrological unit table**, **Crop factors** and **Planted areas** also take a block copied from a spreadsheet: paste it into any cell, or use **Paste from a spreadsheet…** under the grid. With the names in the first column and a heading row (as **Download the table as CSV** gives them), rows and columns can come in any order; a bare block of numbers fills from the cell you pasted into. A preview lists every value it would change before **Apply**, and nothing is kept until you save.'
 					},
 					{
@@ -885,7 +889,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. **River & reserve**, **Hydrological units**, **Data** and **Settings & calibration** have the same menu.'
+						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. **River & reserve**, **Hydrological units**, **Data** and **Settings & calibration** have the same menu; on a wide screen Settings & calibration’s is a column down the left of the page instead.'
 					},
 					{
 						type: 'p',

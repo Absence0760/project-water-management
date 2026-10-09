@@ -40,7 +40,7 @@
 		<select id="st-zero-rain" disabled={readonly} bind:value={value.mode} aria-describedby="st-zero-rain-h">
 			{#each ZERO_RAIN_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
-		<span class="hint" id="st-zero-rain-h">{option?.help}</span>
+		<span class="hint explain" id="st-zero-rain-h">{option?.help}</span>
 	</div>
 	{#if value.mode === 'missing'}
 		<PeriodList
@@ -79,7 +79,7 @@
 		<select id="st-acc" disabled={readonly} bind:value={value.accumulationMode} aria-describedby="st-acc-h2">
 			{#each ACCUMULATION_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
-		<span class="hint" id="st-acc-h2">{accOption?.help}</span>
+		<span class="hint explain" id="st-acc-h2">{accOption?.help}</span>
 	</div>
 	{#if value.accumulationMode === 'spread'}
 		<PeriodList

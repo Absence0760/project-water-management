@@ -11,23 +11,32 @@ import { openRiver, seedRiverProject } from '../support/river.ts';
 import { openSupply, seedSupplyProject } from '../support/supply.ts';
 
 const SETTINGS_LINKS = [
-	'Demand',
-	'Flow calibration',
-	'Rain gaps',
-	'Calibration record',
-	'Fit automatically',
-	'WR2012 check',
-	'Flow share',
-	'EWR',
-	'Reserve rules',
-	'Drought restrictions',
 	'Simulation period',
+	'Rain gaps',
 	'Data quality',
+	'Demand',
+	'Flow share',
+	'Drought restrictions',
+	'Flow calibration',
+	'Calibration record',
+	'Fit the parameters',
+	'WR2012 check',
+	'EWR',
+	'Reserve rule tables',
 	'Outcome matrix',
 	'Seasonal outlook',
 	'Evidence',
-	// Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
+	// On the bar, Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
 	'Automation & access'
+];
+/** The side index's groups at 1440 px (issue #468): every panel, under its task. */
+const SETTINGS_RAIL: [string, string[]][] = [
+	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
+	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions']],
+	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
+	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
+	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
+	['Automation & access', ['Automatic runs', 'Data feeds', 'API keys', 'Scheduled reports']]
 ];
 const moreButton = (menu: Locator) => menu.getByRole('button', { name: /^More sections/ });
 
@@ -69,22 +78,31 @@ async function expectEvenGaps(menu: Locator): Promise<void> {
 /** The menu's height: two rows of 30 px links and their gaps come to about 78 px; three to 112. */
 const TWO_ROWS = 90;
 
-test('Settings: at 1440 and 1280 px every link is on the bar, in at most two rows', async ({ page, owner }) => {
+test('Settings: at 1280 px every link is on the bar, in at most two rows; at 1440 px the menu is a side index', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Menu rows settings');
-	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const menu = page.getByRole('navigation', { name: 'Settings sections' });
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
-	for (const width of [1440, 1280]) {
-		await page.setViewportSize({ width, height: 900 });
-		await expect(moreButton(menu)).toHaveCount(0);
-		await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
-		expect(await barRows(menu)).toBeLessThanOrEqual(2);
-		expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
-		// Its group names would push links into More at 1280 px, so it has none and spaces its links evenly.
-		await expectEvenGaps(menu);
+	await expect(moreButton(menu)).toHaveCount(0);
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+	expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
+	// Its group names would push links into More at 1280 px, so it has none and spaces its links evenly.
+	await expectEvenGaps(menu);
+
+	// Wider, the same menu is a column beside the panels, every group named over its links.
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await expect(menu.getByRole('link')).toHaveText(SETTINGS_RAIL.flatMap(([, links]) => links));
+	for (const [name, links] of SETTINGS_RAIL) {
+		await expect(menu.getByRole('list', { name, exact: true }).getByRole('link')).toHaveText(links);
+		await expect(menu.getByText(name, { exact: true })).toBeVisible();
 	}
+	const rail = (await menu.boundingBox())!;
+	const panel = (await page.locator('#set-period').boundingBox())!;
+	expect(rail.x + rail.width).toBeLessThanOrEqual(panel.x);
+	// Its tallest state fits the window, so it never scrolls inside itself (playbook § 2).
+	expect(await menu.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
 });
 
 test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most two rows (three before)', async ({ page, owner }) => {
@@ -175,8 +193,8 @@ test('the open More menu passes axe; wider, More goes; on a phone the strip has 
 	await expect(more).toHaveAttribute('aria-expanded', 'true');
 	await expectNoViolations(page, { include: 'nav[aria-label="Settings sections"]' });
 
-	// Wide again: everything back on the bar, no More.
-	await page.setViewportSize({ width: 1440, height: 900 });
+	// Wider again: everything back on the bar, no More.
+	await page.setViewportSize({ width: 1280, height: 900 });
 	await expect(more).toHaveCount(0);
 	await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
 

@@ -61,15 +61,16 @@
 
 <div class="evidence" data-testid="evidence-rule">
 	<label class="check">
-		<input type="checkbox" disabled={readonly} checked={!!value} aria-describedby="{uid}-hint" onchange={(e) => setOn(e.currentTarget.checked)} />
+		<input type="checkbox" disabled={readonly} checked={!!value} aria-describedby="{uid}-hint{value ? '' : ` ${uid}-off`}" onchange={(e) => setOn(e.currentTarget.checked)} />
 		Declare an uncertainty rule for evidence
 	</label>
-	<p class="hint" id="{uid}-hint">
+	<p class="hint explain" id="{uid}-hint">
 		The uncertainty bands an evidence report shows come only from an ensemble run to this rule: its size, bounds, pan-coefficient shift and the
 		tests a parameter set must pass to be kept. Declare it before anyone sees a band, so the rule can’t be tuned until the bands look kind.
 		Changing it later is recorded in the History tab, and a new ensemble must then be run to it.
-		{#if !value}<strong>With no rule declared, an evidence report cites no ensemble.</strong>{/if}
 	</p>
+	<!-- What leaving it off means, shown whether or not the explanations are (Settings' switch, issue #468). -->
+	{#if !value}<p class="hint" id="{uid}-off"><strong>With no rule declared, an evidence report cites no ensemble.</strong></p>{/if}
 
 	{#if value}
 		<div class="grid">

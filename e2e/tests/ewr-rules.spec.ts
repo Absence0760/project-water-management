@@ -61,7 +61,7 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	// A new table needs a source before it can be saved; the save bar links here.
 	await expect(table.getByText('Say where the table comes from (Reserve determination, gazette notice, table).')).toBeVisible();
 	await expect(save).toBeDisabled();
-	await expect(page.getByRole('link', { name: 'Reserve rules: 1 rule table has a problem to fix.' })).toHaveAttribute('href', '#set-reserve');
+	await expect(page.getByRole('link', { name: 'Reserve rule tables: 1 rule table has a problem to fix.' })).toHaveAttribute('href', '#set-reserve');
 	await table.getByLabel('Source', { exact: true }).fill('Synthetic determination, table 1');
 	// The REC (ER9): a band of two classes that aren't neighbours blocks Save; the typed text is upper-cased.
 	const rec = table.getByLabel('Recommended ecological category (REC)');

@@ -48,7 +48,7 @@
 
 <div class="gap-fill" data-testid="flow-gap-fill-settings">
 	<h3 class="sub">Flow gaps <HelpTip key="settings.flowGapFill" /></h3>
-	<p class="hint">
+	<p class="hint explain">
 		Fill gaps in an observed record in a run only; the record you uploaded is never changed. Short gaps are interpolated on a log scale (a
 		recession), longer ones filled from another record scaled by the ratio of their totals on shared days. Off unless you turn it on.
 	</p>

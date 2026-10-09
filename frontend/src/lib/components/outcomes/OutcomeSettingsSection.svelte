@@ -11,7 +11,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import type { OutcomeSettings } from '$lib/api/types';
 
-	let { value = $bindable(), readonly, error }: { value: OutcomeSettings; readonly: boolean; error: string | null } = $props();
+	let { value = $bindable(), readonly, error, summary = null }: { value: OutcomeSettings; readonly: boolean; error: string | null; summary?: string | null } = $props();
 
 	const METHODS: { value: YearClassMethod; label: string }[] = [
 		{ value: 'auto', label: `Automatic: terciles, quintiles from ${YEAR_CLASS_QUINTILE_MIN_YEARS} years (default)` },
@@ -47,8 +47,9 @@
 <section class="panel" aria-labelledby="out-h-t" data-testid="outcome-settings">
 	<div class="panel-head">
 		<h2 id="out-h"><span id="out-h-t">Outcome matrix</span> <HelpTip key="outcome-matrix" /></h2>
-		<span class="muted small">How the Runs tab reads a demand sweep by class of year</span>
 	</div>
+	{#if summary}<p class="summary" data-testid="summary-outcomes">{summary}</p>{/if}
+	<p class="hint muted explain">How the Runs tab reads a demand sweep by class of year.</p>
 	<div class="field">
 		<label for="out-method">Water-year classes <HelpTip key="year-class" /></label>
 		<select id="out-method" disabled={readonly} bind:value={value.yearClassMethod} aria-describedby="out-method-h">
@@ -56,7 +57,7 @@
 				<option value={m.value}>{m.label}</option>
 			{/each}
 		</select>
-		<span class="hint" id="out-method-h">
+		<span class="hint explain" id="out-method-h">
 			The base run’s complete water years ranked by their natural flow. Automatic uses quintiles once the record has
 			{YEAR_CLASS_QUINTILE_MIN_YEARS} complete years.
 		</span>
@@ -87,7 +88,7 @@
 			<p class="hint">{m.hint}</p>
 		</fieldset>
 	{/each}
-	<p class="hint muted">
+	<p class="hint muted explain">
 		These only decide how the matrix labels a result; they never change a model run. The defaults are placeholders until the hydrologist
 		confirms them (client question O1).
 	</p>

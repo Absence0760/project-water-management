@@ -35,7 +35,8 @@ test('a run lists the CHIRPS factors it applied, and Settings can turn the corre
 	const mode = page.getByLabel('CHIRPS bias correction', { exact: true });
 	await expect(mode).toHaveValue('monthly');
 	await mode.selectOption('none');
-	await expect(page.getByText(/^CHIRPS is used as stored/)).toBeVisible();
+	// Its explanation is the select's description (shown under it with Settings' Explain switch, issue #468).
+	await expect(mode).toHaveAccessibleDescription(/^CHIRPS is used as stored/);
 	await saveSettings(page);
 	await page.reload();
 	await expect(mode).toHaveValue('none');

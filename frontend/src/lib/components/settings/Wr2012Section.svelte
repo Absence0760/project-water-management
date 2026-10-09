@@ -26,6 +26,8 @@
 	import { mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, type MarBand, type Wr2012Draft } from './wr2012';
 
 	let {
+		/** What the panel is set to now, under its heading (settings/summaries.ts). */
+		summary = null,
 		value = $bindable(),
 		error = $bindable(null),
 		readonly = false,
@@ -34,6 +36,7 @@
 		last = $bindable(),
 		lastBand = $bindable()
 	}: {
+		summary?: string | null;
 		value: Wr2012Settings;
 		error?: string | null;
 		/** The reference unticking the check turned off, kept until saved or discarded. */
@@ -107,10 +110,11 @@
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h2>
-		<span class="muted small">Optional: compare simulated natural flow with the quaternary’s naturalised flow</span>
 		{#if projectId}<NotesDrawer {projectId} target={settingTarget('wr2012')} />{/if}
 	</div>
-	<p class="hint muted">
+	{#if summary}<p class="summary" data-testid="summary-wr2012">{summary}</p>{/if}
+	<p class="hint muted explain">Optional: compare simulated natural flow with the quaternary’s naturalised flow.</p>
+	<p class="hint muted explain">
 		Enter the naturalised flow the WR2012 study publishes for the quaternary catchment this project lies in. Each run then compares its
 		<strong>simulated natural flow</strong> (before hydrological units and dams take any water) with it, scaled to the modelled catchment. The numbers are
 		yours to enter (or to take, one by one, from the quaternary under a point on the map, when a quaternary dataset is loaded); the app doesn’t ship WR2012 data.
@@ -134,7 +138,7 @@
 			{:else}
 				<p class="propose">
 					<button type="button" class="btn btn-sm" onclick={() => (proposing = true)} bind:this={proposeBtn}>Propose from the map</button>
-					<span class="hint muted">Look up the quaternary under a point and use its reference values one by one.</span>
+					<span class="hint muted explain">Look up the quaternary under a point and use its reference values one by one.</span>
 				</p>
 			{/if}
 		{/if}
@@ -251,7 +255,7 @@
 				</div>
 			{/if}
 			{#if err('lowFlowMonths')}<p class="err" id="{uid}-months-e">{err('lowFlowMonths')}</p>{/if}
-			<span class="hint">
+			<span class="hint explain">
 				Unticked, each run uses the project’s own low-flow months: those whose simulated natural flow is below half the average month.
 			</span>
 		</fieldset>
@@ -275,7 +279,7 @@
 					</div>
 				{/each}
 			</div>
-			<span class="hint">Shown as run warnings. Defaults 10, 25 (or 15 wetter) and 50 %.</span>
+			<span class="hint explain">Shown as run warnings. Defaults 10, 25 (or 15 wetter) and 50 %.</span>
 		</fieldset>
 
 		<fieldset class="plain penalty">
@@ -329,7 +333,7 @@
 					</span>
 				{/if}
 			{/if}
-			<span class="hint">Off by default. The fit then also runs without it, so you can see what it changed.</span>
+			<span class="hint explain">Off by default. The fit then also runs without it, so you can see what it changed.</span>
 		</fieldset>
 	{/if}
 </section>

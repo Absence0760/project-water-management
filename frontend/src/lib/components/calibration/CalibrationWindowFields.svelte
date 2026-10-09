@@ -18,7 +18,8 @@
 		error = $bindable(null),
 		readonly = false,
 		availableKinds = null,
-		sites = []
+		sites = [],
+		dataHref = null
 	}: {
 		start: string | null;
 		end: string | null;
@@ -31,6 +32,11 @@
 		availableKinds?: string[] | null;
 		/** The gauges inside the network with a record (engine calibrationSites): the other places calibration can score. */
 		sites?: CalibrationSite[];
+		/**
+		 * A flow record on the Data tab (`?tab=series&series=<id>#data-chart`), whose row says where it was
+		 * measured: a record placed at a gauge inside the network makes that gauge a place to score at.
+		 */
+		dataHref?: string | null;
 	} = $props();
 
 	const uid = $props.id();
@@ -88,9 +94,14 @@
 			<p class="hint muted" id="{uid}-site-hint">
 				At a gauge inside the network, a fit scores the simulated flow there against that gauge's record. The gauged ranges and gap
 				filling below are the outlet records', so they don't apply to it. A run scores its calibration statistics here too; the
-				outlet's EWR test stays the outlet's.
+				outlet's EWR test stays the outlet's.{#if dataHref}{' '}A record is placed at a gauge on the <a href={dataHref}>Data tab</a>, where it was measured.{/if}
 			</p>
 		</div>
+	{:else if dataHref && !readonly}
+		<!-- No gauge has a record of its own yet: say where one is placed, or the choice never appears. -->
+		<p class="hint muted" data-testid="calibration-site-how">
+			Scored at the outlet. To score at a gauge inside the network, set where its flow record was measured on the <a href={dataHref}>Data tab</a>.
+		</p>
 	{/if}
 	<div class="field">
 		<label for="{uid}-kind">Compare with</label>
@@ -99,7 +110,7 @@
 			{#each options as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
 		</select>
 	</div>
-	<p class="hint muted" id="{uid}-hint">
+	<p class="hint muted explain" id="{uid}-hint">
 		Calibration statistics only score days inside this window. Leave blank to use every day with an observation. The
 		workbook calibrates on a fixed period (e.g. Oct 2005 – Sep 2012).
 	</p>

@@ -129,7 +129,7 @@ test('a simulation end before its start cannot be saved', async ({ page, owner }
 	await expect(saveChanges(page)).toBeEnabled();
 });
 
-test('the On this page menu stays in view, jumps to each group below it and marks the one being read', async ({ page, owner }) => {
+test('the side index stays in view, jumps to each panel beside it and marks the one being read', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings menu');
 	await page.setViewportSize({ width: 1600, height: 800 });
@@ -137,37 +137,39 @@ test('the On this page menu stays in view, jumps to each group below it and mark
 
 	const menu = page.getByRole('navigation', { name: 'Settings sections' });
 	await expect(menu.getByRole('link')).toHaveText([
-		'Demand',
-		'Flow calibration',
-		'Rain gaps',
-		'Calibration record',
-		'Fit automatically',
-		'WR2012 check',
-		'Flow share',
-		'EWR',
-		'Reserve rules',
-		'Drought restrictions',
 		'Simulation period',
+		'Rain gaps',
 		'Data quality',
+		'Demand',
+		'Flow share',
+		'Drought restrictions',
+		'Flow calibration',
+		'Calibration record',
+		'Fit the parameters',
+		'WR2012 check',
+		'EWR',
+		'Reserve rule tables',
 		'Outcome matrix',
 		'Seasonal outlook',
 		'Evidence',
-		// Automatic runs, Data feeds, API keys and Scheduled reports behind one link.
-		'Automation & access'
+		'Automatic runs',
+		'Data feeds',
+		'API keys',
+		'Scheduled reports'
 	]);
-	await expect(menu.getByRole('link', { name: 'Demand' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Simulation period' })).toHaveAttribute('aria-current', 'location');
 
-	await menu.getByRole('link', { name: 'EWR' }).click();
+	await menu.getByRole('link', { name: 'EWR', exact: true }).click();
 	await expect(page).toHaveURL(/#set-ewr$/);
-	const ewr = page.getByRole('heading', { name: 'Environmental water requirement (EWR)' });
+	const ewr = page.getByRole('heading', { name: 'EWR', exact: true });
 	await expect(ewr).toBeInViewport();
 	await expect(menu).toBeInViewport();
-	await expect(menu.getByRole('link', { name: 'EWR' })).toHaveAttribute('aria-current', 'location');
-	await expect(menu.getByRole('link', { name: 'Demand' })).not.toHaveAttribute('aria-current', 'location');
-	// The jumped-to heading sits below the sticky menu, not under it.
+	await expect(menu.getByRole('link', { name: 'EWR', exact: true })).toHaveAttribute('aria-current', 'location');
+	await expect(menu.getByRole('link', { name: 'Simulation period' })).not.toHaveAttribute('aria-current', 'location');
+	// The index sits beside the panels, never over them.
 	const menuBox = (await menu.boundingBox())!;
 	const headBox = (await ewr.boundingBox())!;
-	expect(headBox.y).toBeGreaterThanOrEqual(menuBox.y + menuBox.height);
+	expect(headBox.x).toBeGreaterThanOrEqual(menuBox.x + menuBox.width);
 
 	// The EWR monthly row has the panel's full width: all twelve months fit without a sideways scroll.
 	await expect(page.getByLabel('Pragmatic EWR, Sep, m³/day')).toBeInViewport();
@@ -190,22 +192,26 @@ test('the data-quality ratios read as a short percentage, not the stored two thi
 	await expect(anySaveBar(page)).toHaveCount(0);
 });
 
-test('the monthly rows fit a 1280px screen without sideways scrolling, six-digit values included', async ({ page, owner }) => {
-	void owner;
-	await page.setViewportSize({ width: 1280, height: 900 });
-	const project = await createProject(page.request, 'Settings monthly fit');
-	await page.goto(`/projects/${project.id}?tab=settings`);
-	const jun = page.getByLabel('Pragmatic EWR, Jun, m³/day');
-	await jun.fill('170800');
-	const tables = page.locator('table.monthly');
-	await expect(tables.first()).toBeVisible();
-	for (const t of await tables.all()) {
-		expect(await t.evaluate((el) => el.parentElement!.scrollWidth - el.parentElement!.clientWidth)).toBeLessThanOrEqual(0);
-	}
-	// The value shows in full, not clipped by its box.
-	expect(await jun.evaluate((i: HTMLInputElement) => i.scrollWidth - i.clientWidth)).toBeLessThanOrEqual(0);
-	await expect(page.getByLabel('Pragmatic EWR, Sep, m³/day')).toBeInViewport();
-});
+for (const width of [1280, 1440]) {
+	test(`the monthly rows fit a ${width}px screen without sideways scrolling, six-digit values included`, async ({ page, owner }) => {
+		void owner;
+		// 1440: beside the side index (issue #468); 1280: under the bar.
+		await page.setViewportSize({ width, height: 900 });
+		const project = await createProject(page.request, `Settings monthly fit ${width}`);
+		await page.goto(`/projects/${project.id}?tab=settings`);
+		const jun = page.getByLabel('Pragmatic EWR, Jun, m³/day');
+		await jun.fill('170800');
+		const tables = page.locator('table.monthly');
+		await expect(tables.first()).toBeVisible();
+		for (const t of await tables.all()) {
+			expect(await t.evaluate((el) => el.parentElement!.scrollWidth - el.parentElement!.clientWidth)).toBeLessThanOrEqual(0);
+		}
+		// The value shows in full, not clipped by its box.
+		expect(await jun.evaluate((i: HTMLInputElement) => i.scrollWidth - i.clientWidth)).toBeLessThanOrEqual(0);
+		await jun.scrollIntoViewIfNeeded();
+		await expect(page.getByLabel('Pragmatic EWR, Sep, m³/day')).toBeInViewport();
+	});
+}
 
 test('flow calibration is split into its own groups, and a bad exclusion points Save at the calibration record', async ({ page, owner }) => {
 	void owner;
@@ -213,13 +219,13 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 	await page.goto(`/projects/${project.id}?tab=settings`);
 
 	// Each part of calibration is its own panel with its own heading.
-	const rain = page.getByRole('region', { name: 'Rain gaps and CHIRPS' });
+	const rain = page.getByRole('region', { name: 'Rain gaps', exact: true });
 	await expect(rain.getByLabel('CHIRPS bias correction', { exact: true })).toBeVisible();
 	await expect(rain.getByLabel('Flagged zero runs', { exact: true })).toBeVisible();
 	const record = page.getByRole('region', { name: 'Calibration record' });
 	await expect(record.getByRole('group', { name: /^Calibration exclusions/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Fit automatically/ })).toBeVisible();
-	const flow = page.getByRole('region', { name: 'Flow calibration (rain → natural flow)' });
+	const flow = page.getByRole('region', { name: 'Flow calibration', exact: true });
 	await expect(flow.getByTestId('runoff-model')).toHaveText('GR4J (Perrin et al. 2003)');
 	await expect(flow.getByLabel('CHIRPS bias correction', { exact: true })).toHaveCount(0);
 
