@@ -23,7 +23,8 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { cachedSeries } from '$lib/components/runs/cache';
-	import { EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
+	import { EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartCaption, ewrChartSeries, ewrLineWords, type CatchmentFlows } from '$lib/components/runs/flowSeries';
+	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import { fmtNum } from '$lib/format/number';
 	import { belowReserve, FLOW_OPEN_DAYS, FLOW_WINDOWS, flowHeading, hasRuleLine } from './summaryChart';
@@ -36,7 +37,8 @@
 		height = 240,
 		units = false,
 		pannable = false,
-		ruleTable = false
+		ruleTable = false,
+		daily
 	}: {
 		projectId: string;
 		runId: string;
@@ -52,6 +54,8 @@
 		pannable?: boolean;
 		/** The project has a Reserve rule table (ewrAssurance.ts headlineSite): names the heading (flowHeading). */
 		ruleTable?: boolean;
+		/** The run's daily outlet EWR source (summary.catchment.outletEwr, engine ≥ 1.77.0): names the line, the shading and the heading. */
+		daily?: DailyEwrSource;
 	} = $props();
 
 	// The outlet's Reserve rule requirement too, when it has a table (issue #51): the headline judges that line.
@@ -89,7 +93,7 @@
 
 	let unit = $state<'m³/s' | 'm³/day'>('m³/s');
 	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', unit).values;
-	const series = $derived(ewrChartSeries(flows, conv));
+	const series = $derived(ewrChartSeries(flows, conv, daily));
 	const band = $derived(forecastBand(forecastFrom));
 	const record = (d: DailySeries) => ({ startDate: d.startDate, values: Array.from(beforeForecast(d.values, d.startDate, forecastFrom)) });
 	const shade = $derived(flows.shortfall ? belowReserve(record(flows.shortfall)) : []);
@@ -97,10 +101,10 @@
 	const before = $derived(forecastFrom ? ' before the forecast' : '');
 	const pragmatic = $derived(
 		flows.shortfall && shortDays === 0
-			? `The outflow never fell below the pragmatic EWR line${before}: the EWR was met every day.`
+			? `The outflow never fell below ${ewrLineWords(daily)}${before}: the EWR was met every day.`
 			: flows.shortfall
-			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'}${before} the outflow was below the pragmatic EWR line (EWR not met).`
-			: 'Days the outflow dips below the pragmatic EWR line count as EWR not met.'
+			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'}${before} the outflow was below ${ewrLineWords(daily)} (EWR not met).`
+			: ewrChartCaption(daily)
 	);
 	const caption = $derived(flows.ewrRule ? `${pragmatic} ${EWR_RULE_CAPTION}` : pragmatic);
 </script>
@@ -114,7 +118,7 @@
 
 <section class="panel flow" aria-labelledby="flow-h" aria-busy={loading}>
 	<div class="head">
-		<h2 id="flow-h">{flowHeading(ruleTable, hasRuleLine(refs))}</h2>
+		<h2 id="flow-h">{flowHeading(ruleTable, hasRuleLine(refs), daily)}</h2>
 	</div>
 	<LoadState {loading} {error} retry={() => attempt++}>
 		{#if series.length === 0}

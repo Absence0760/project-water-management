@@ -10,8 +10,21 @@
 	import { DEFAULT_OUTCOME_RISK_CUTOFFS, YEAR_CLASS_QUINTILE_MIN_YEARS, type YearClassMethod } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import type { OutcomeSettings } from '$lib/api/types';
+	import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
 
-	let { value = $bindable(), readonly, error }: { value: OutcomeSettings; readonly: boolean; error: string | null } = $props();
+	let {
+		value = $bindable(),
+		readonly,
+		error,
+		daily
+	}: {
+		value: OutcomeSettings;
+		readonly: boolean;
+		error: string | null;
+		/** settings.ewrDailySource: the daily EWR the days below are counted against, by name (engine ≥ 1.77.0). */
+		daily?: DailyEwrSource;
+	} = $props();
+	const dailyName = $derived(dailyEwrName(daily));
 
 	const METHODS: { value: YearClassMethod; label: string }[] = [
 		{ value: 'auto', label: `Automatic: terciles, quintiles from ${YEAR_CLASS_QUINTILE_MIN_YEARS} years (default)` },
@@ -20,7 +33,7 @@
 	];
 
 	type Metric = keyof OutcomeSettings['riskCutoffs'];
-	const METRICS: { id: Metric; legend: string; lower: string; increasing: string; hint: string }[] = [
+	const METRICS: { id: Metric; legend: string; lower: string; increasing: string; hint: string }[] = $derived([
 		{
 			id: 'reserveMonthsMet',
 			legend: 'Reserve months met',
@@ -30,12 +43,12 @@
 		},
 		{
 			id: 'daysBelowEwr',
-			legend: 'Days below the pragmatic EWR',
+			legend: `Days below ${dailyName}`,
 			lower: 'Lower risk up to',
 			increasing: 'Increasing risk up to',
-			hint: 'Share of a class’s days below the pragmatic EWR at the outlet; above “increasing risk” is high risk. Used otherwise.'
+			hint: `Share of a class’s days below ${dailyName} at the outlet; above “increasing risk” is high risk. Used otherwise.`
 		}
-	];
+	]);
 
 	/** Use the engine's placeholder cut-offs (null), or start custom ones from them. */
 	function setDefault(m: Metric, on: boolean) {

@@ -47,6 +47,7 @@
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import { heatmapHeadlineNote, reportJudgedBy } from '$lib/components/ewr/headline';
+	import { dailyEwrName } from '$lib/components/ewr/notMet';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
 	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
@@ -62,7 +63,7 @@
 	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
-	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
+	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartCaption, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
@@ -225,7 +226,7 @@
 	const conv = (d: { values: readonly (number | null)[] }) => toDisplayUnit(d.values, 'm³/day', 'm³/s').values;
 	// The printed report has no legend to click, so natural flow shows from the start.
 	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
-	const ewrLines = $derived(ewrChartSeries(flows, conv));
+	const ewrLines = $derived(ewrChartSeries(flows, conv, run?.summary?.catchment.outletEwr));
 	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function;
 	// a forecast run's forecast days left out (issue #51).
 	const fdc = $derived(
@@ -479,14 +480,14 @@
 							log
 							series={ewrLines}
 							band={forecastBand(summary.forecast?.from)}
-							caption={`Days the outflow dips below the pragmatic EWR line count as EWR not met.${flows.ewrRule ? ` ${EWR_RULE_CAPTION}` : ''}`}
+							caption={`${ewrChartCaption(summary.catchment.outletEwr)}${flows.ewrRule ? ` ${EWR_RULE_CAPTION}` : ''}`}
 						/>
 						{#each summary.ewrAssurance ?? [] as site (site.nodeId ?? '(outlet)')}
 							<div class="sub"><EwrAssurancePanel sites={[site]} print /></div>
 						{/each}
 						{#if summary.ewrCompliance}
 							{#each ['outlet', ...summary.ewrCompliance.farms.map((f) => f.nodeId ?? 'outlet')] as site, j (j)}
-								<div class="sub"><EwrHeatmap compliance={summary.ewrCompliance} {site} print headlineNote={heatmapHeadlineNote(resolveHeadline(summary, project!.settings.ewrHeadline).site, project!.settings.ewrHeadline)} /></div>
+								<div class="sub"><EwrHeatmap compliance={summary.ewrCompliance} {site} print headlineNote={heatmapHeadlineNote(resolveHeadline(summary, project!.settings.ewrHeadline).site, project!.settings.ewrHeadline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} /></div>
 							{/each}
 						{:else}
 							<p class="muted">This run was made before the monthly EWR compliance grid existed.</p>

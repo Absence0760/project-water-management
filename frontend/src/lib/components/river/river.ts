@@ -145,12 +145,12 @@ export function reserveYearsWords(ruleTable: boolean, daily?: DailyEwrSource): {
  * settings.ewrHeadline, issue #444), which names the flow chart as it does
  * the chart's own heading; by default, whenever the run has a table.
  */
-export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean, headlineRuleTable = hasReserveCompliance): NavGroup[] {
+export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean, headlineRuleTable = hasReserveCompliance, daily?: DailyEwrSource): NavGroup[] {
 	return [
 		{
 			label: 'The reserve',
 			sections: [
-				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine) },
+				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine, daily) },
 				{ id: 'res-reserve-years', label: 'Days below, by year' },
 				...(hasReserveCompliance ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
 				{ id: 'res-ewr-grid', label: 'EWR by month' }

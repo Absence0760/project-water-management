@@ -85,6 +85,20 @@ describe('buildLicenceImpactBoard', () => {
 		expect(v.notes).toEqual(['Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.']);
 	});
 
+	it('names the runs’ daily EWR when it came from the DRM tables (engine ≥ 1.77.0), and each run’s when they differ', () => {
+		const drm = (r: RunCompareResponse['a'], method: 'tab' | 'percentile') =>
+			({ ...r, run: { ...r.run, summary: { ...r.run.summary, catchment: { ...r.run.summary.catchment, outletEwr: { method } } } } }) as RunCompareResponse['a'];
+		const s = series((wy) => (wy <= 2002 ? 5 : 0), (wy) => (wy <= 2002 ? 9 : 0));
+		const both = buildLicenceImpactBoard({ data: { a: drm(side('Baseline', 100), 'tab'), b: drm(side('More orchard', 160), 'tab') }, series: s, method: 'auto' });
+		if (both.status !== 'ok') throw new Error(both.reason);
+		expect(both.belowLabel).toBe('Days below the daily EWR from the DRM TAB file at the outlet');
+		expect(both.columns[0]!.text).toMatch(/^The daily EWR from the DRM TAB file was not met on 12 more days/);
+		expect(both.notes).toEqual(['Neither run has a Reserve rule table at the outlet, so the board counts days below the daily EWR from the DRM TAB file.']);
+		const mixed = buildLicenceImpactBoard({ data: { a: side('Baseline', 100), b: drm(side('More orchard', 160), 'percentile') }, series: s, method: 'auto' });
+		if (mixed.status !== 'ok') throw new Error(mixed.reason);
+		expect(mixed.belowLabel).toBe('Days below each run’s daily EWR at the outlet');
+	});
+
 	it('names the compared run as the caller asks (the evidence report’s “the application”), with the same numbers', () => {
 		const input = { data: { a: side('Baseline', 100), b: side('More orchard', 160) }, series: series((wy) => (wy <= 2002 ? 5 : 0), (wy) => (wy <= 2002 ? 9 : 0)), method: 'auto' as const };
 		const v = buildLicenceImpactBoard({ ...input, applicationName: 'the application' });

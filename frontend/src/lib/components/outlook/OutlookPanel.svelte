@@ -30,6 +30,7 @@
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
 	import { resolveOutlook } from './settings';
+	import type { DailyEwrSource } from '$lib/components/ewr/notMet';
 	import {
 		buildOutlookView,
 		DEFAULT_OUTLOOK_LEVELS,
@@ -48,6 +49,7 @@
 		outlook: outlookSettings,
 		canEdit,
 		droughtRestriction = null,
+		daily,
 		onProjectChange
 	}: {
 		projectId: string;
@@ -58,6 +60,8 @@
 		canEdit: boolean;
 		/** settings.droughtRestriction (engine ≥ 1.54.0): the rule the triggers would replace; null = none. */
 		droughtRestriction?: DroughtRestrictionRule | null;
+		/** The base run's daily outlet EWR source (summary.catchment.outletEwr): what its days below are counted against, by name. */
+		daily?: DailyEwrSource;
 		/** Saving the triggers as the drought restriction rule changed the project's settings: the page takes the new project. */
 		onProjectChange?: (p: Project) => void;
 	} = $props();
@@ -90,7 +94,7 @@
 	const shown = $derived(outlook ? outlookState(outlook) : null);
 	const view = $derived.by((): OutlookView | null => {
 		if (!outlook || shown?.kind !== 'complete' || !outlook.result) return null;
-		return buildOutlookView({ ...outlook, result: outlook.result });
+		return buildOutlookView({ ...outlook, result: outlook.result }, daily);
 	});
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
 	const triggers = $derived(outlook && shown?.kind === 'complete' ? buildTriggersView(outlook) : null);

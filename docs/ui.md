@@ -5582,12 +5582,20 @@ two.
   the pragmatic EWR", and the run's warnings repeat it. Wherever a screen
   names the outlet's daily test (Judge results by's choice and Automatic, the
   Summary's reserve strip, River & reserve's judged-by line, water-year bars
-  and EWR by month note, Compare runs' water-year bars) it uses
-  `ewr/notMet.ts dailyEwrName`: "the pragmatic EWR", or "the daily EWR from
-  the DRM TAB file / percentile tables"; runs compared with different sources
-  are "each run's daily EWR" (`dailyEwrNameOf`), each run's own named in the
-  chart's legend and caption. A DRM source counts as a daily test set for
-  Judge results by.
+  and EWR by month note, Compare runs' water-year bars, the outcome matrix's
+  and the seasonal outlook's days-below measure, the licence impact board,
+  the evidence report's days-below rows and the export workbook's EWR grid)
+  it uses `ewr/notMet.ts dailyEwrName`: "the pragmatic EWR", or "the daily
+  EWR from the DRM TAB file / percentile tables"; runs compared with
+  different sources are "each run's daily EWR" (`dailyEwrNameOf`), each
+  run's own named in the chart's legend and caption. The EWR flow chart
+  (River & reserve, the printed report) labels the outlet's EWR line as the
+  run stored it, "EWR from the DRM TAB file (scaled)" or "… percentile tables
+  (scaled)" (the engine's `OUTLET_EWR_LABELS`), else "Pragmatic EWR", and its
+  caption counts the days below "the daily EWR line (from the DRM TAB file)"
+  (`runs/flowSeries.ts ewrLineWords`); beside a rule table at another site
+  it is headed **Flow vs daily EWR**. A DRM source counts as a daily test set
+  for Judge results by.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -6086,8 +6094,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **On this page.** A **River sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one row
   from 1280 px), and sticks down the
-  panels: **Flow vs reserve** (**Flow vs pragmatic EWR** when its heading
-  is), **Days below, by year**, **Reserve
+  panels: **Flow vs reserve** (**Flow vs pragmatic EWR**, or **Flow vs
+  daily EWR** from the DRM tables, when its heading is), **Days below, by year**, **Reserve
   compliance** (with a rule table), **EWR by month**, **Uncertainty**,
   **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
   above (`river/river.ts`, `riverNavGroups`), in three groups: The reserve;
@@ -6533,7 +6541,8 @@ read it before.
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
   months", the longest run not met and a link to the panel; the days card is
-  then labelled "Days below the pragmatic EWR", the secondary measure), irrigation
+  then labelled "Days below the pragmatic EWR", or "Days below the daily EWR"
+  when it came from the DRM tables, the secondary measure), irrigation
   supplied, and NSE and PBIAS (no rating words: model.md §2.10; PBIAS read
   in plain words by `runs/rating.ts`), labelled by whether they are in-sample
   (issue #45, `calibration/sample.ts`, from the run's

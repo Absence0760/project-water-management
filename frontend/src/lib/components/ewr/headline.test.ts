@@ -112,6 +112,9 @@ describe('heatmapHeadlineNote', () => {
 		expect(heatmapHeadlineNote({ isOutlet: false, name: 'Gauge A' }, { source: 'ruleTable', siteNodeId: 'g1' })).toBe(
 			'These bands count days below the pragmatic EWR; the results are judged by the Reserve rule table at Gauge A instead.'
 		);
+		expect(heatmapHeadlineNote({ isOutlet: false, name: 'Gauge A' }, { source: 'ruleTable', siteNodeId: 'g1' }, { method: 'percentile' })).toBe(
+			'These bands count days below the daily EWR from the DRM percentile tables; the results are judged by the Reserve rule table at Gauge A instead.'
+		);
 		expect(heatmapHeadlineNote({ isOutlet: true, name: 'Outlet weir' }, undefined)).toBe(
 			'These bands count days below the pragmatic EWR; the results are judged by the Reserve rule table at the outlet, Outlet weir (automatic) instead.'
 		);

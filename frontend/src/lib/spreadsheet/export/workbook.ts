@@ -16,6 +16,7 @@ import { parseCsv } from './csv';
 import { cellFormat, DATE_FORMAT, numberFormat, unitOf } from './formats';
 import { defuse, sheetNamer } from './names';
 import { splitSummary, type SummarySheet } from './summary';
+import { dailyEwrName, type DailyEwrSource } from '$lib/components/ewr/notMet';
 import { XlsxWorkbook, type XlsxCell } from './writer';
 
 /** One daily column: the daily CSV's header and the series' unit and values. */
@@ -95,6 +96,9 @@ export function rowCells(rows: readonly Row[]): { cells: (XlsxCell | undefined)[
 
 // ── The sheets built from the run's JSON ───────────────────────────────────
 
+/** What the outlet's grid compares the outflow with: the full pragmatic EWR, or the daily EWR from a DRM table (engine ≥ 1.77.0). */
+const outletVs = (daily: DailyEwrSource) => (!daily || daily.method === 'pragmatic' ? 'the full pragmatic EWR' : dailyEwrName(daily));
+
 /** The water-year × month EWR grid (RunSummary.ewrCompliance, engine ≥ 0.3.0), days and volume per site. */
 export function ewrGridRows(summary: RunSummary): Row[] {
 	const g = summary.ewrCompliance;
@@ -116,7 +120,7 @@ export function ewrGridRows(summary: RunSummary): Row[] {
 	grid('Days simulated', g.days);
 	for (const site of [g.outlet, ...g.farms]) {
 		rows.push([]);
-		rows.push(['Site', site.nodeId === null ? 'Outlet: simulated outflow vs the full pragmatic EWR' : defuse(site.name)]);
+		rows.push(['Site', site.nodeId === null ? `Outlet: simulated outflow vs ${outletVs(summary.catchment?.outletEwr)}` : defuse(site.name)]);
 		grid('Days the EWR was not met', site.daysNotMet);
 		grid('Volume short of the EWR', site.shortfallM3, 'm³');
 	}
