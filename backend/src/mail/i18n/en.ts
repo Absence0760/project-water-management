@@ -177,8 +177,8 @@ export const en = {
 	// Recovering a lost second factor (205_mfa_recovery; auth/mfaReset.ts). The confirmation link, asked for at the sign-in's code step.
 	'mail.mfaReset.confirm.subject': 'Confirm removing two-step sign-in — {product}',
 	'mail.mfaReset.confirm.heading': 'Remove two-step sign-in from your account?',
-	'mail.mfaReset.confirm.body': 'Someone signed in to the {product} account {email} with the right password and said they have lost their phone and their recovery codes.',
-	'mail.mfaReset.confirm.wait': 'If you confirm, two-step sign-in is removed after a 3-day wait. Until then your authenticator app keeps working, and we email you every day with a link to cancel.',
+	'mail.mfaReset.confirm.body': 'Someone signed in to the {product} account {email} with the right password and said they can’t get a two-step sign-in code and have lost their recovery codes.',
+	'mail.mfaReset.confirm.wait': 'If you confirm, two-step sign-in is removed after a 3-day wait. Until then your codes keep working, and we email you every day with a link to cancel.',
 	'mail.mfaReset.confirm.action': 'Confirm and start the 3-day wait',
 	'mail.mfaReset.confirm.expires': 'This link expires in 1 hour and works once.',
 	'mail.mfaReset.confirm.notYou': 'If this wasn’t you, don’t open the link: someone knows your password. Choose a new one with “Forgot password?” on the sign-in page.',
@@ -187,8 +187,8 @@ export const en = {
 	'mail.mfaReset.pending.heading': 'Two-step sign-in will be removed from your account',
 	'mail.mfaReset.pending.started': 'A request to remove two-step sign-in from the {product} account {email} was confirmed from this inbox.',
 	'mail.mfaReset.pending.reminder': 'A request to remove two-step sign-in from the {product} account {email} is still waiting.',
-	'mail.mfaReset.pending.when': 'Two-step sign-in will be removed from your account on {date} at {time}, and every device will be signed out. Until then your authenticator app keeps working.',
-	'mail.mfaReset.pending.code': 'Signing in with a code from your authenticator app, or with a recovery code, also cancels it.',
+	'mail.mfaReset.pending.when': 'Two-step sign-in will be removed from your account on {date} at {time}, and every device will be signed out. Until then your codes keep working.',
+	'mail.mfaReset.pending.code': 'Signing in with a code from your authenticator app or your email, or with a recovery code, also cancels it.',
 	'mail.mfaReset.pending.action': 'Not you? Cancel it',
 	'mail.mfaReset.pending.noSignIn': 'The cancel link works without signing in, until two-step sign-in is removed.',
 	'mail.mfaReset.pending.notYou': 'If this wasn’t you, cancel it now and choose a new password: someone knows yours and can read this inbox.',
@@ -238,7 +238,7 @@ export const sections: Record<string, string> = {
 	'mail.deleted':
 		'Email: sent once an account has been deleted, from the account page’s “Delete my account”, saying what was deleted and what was kept (the law asks us to tell the person what we did). {list} is the names of the catchments and teams they left, joined with “and”.',
 	'mail.mfaReset':
-		'Emails about removing two-step sign-in (a code from an authenticator app on the phone, asked for after the password) when someone lost their phone and recovery codes. “confirm” lines: the link that starts a 3-day wait; “pending” lines: sent when the wait starts and once a day after, with a link to cancel; “done” lines: the wait is over; “admin” lines: an admin of the person’s team removed it at once. {date} is a date like “3 Oct 2026”, {time} a time like “14:05 SAST”; {team} is the team’s name.',
+		'Emails about removing two-step sign-in (a code from an authenticator app on the phone or one sent by email, asked for after the password) when someone can’t get a code and lost their recovery codes. “confirm” lines: the link that starts a 3-day wait; “pending” lines: sent when the wait starts and once a day after, with a link to cancel; “done” lines: the wait is over; “admin” lines: an admin of the person’s team removed it at once. {date} is a date like “3 Oct 2026”, {time} a time like “14:05 SAST”; {team} is the team’s name.',
 	'mail.mfaCode':
 		'Email: a six-digit code for two-step sign-in, sent instead of a code from an authenticator app. It goes out when someone signs in with the right password, when they confirm an action that needs a recent code, and when they turn this on from the Account page. The code itself is shown on its own line below the text.',
 	'mail.pack':

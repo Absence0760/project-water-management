@@ -9,8 +9,8 @@ export type TwoStepScope = 'project' | 'team';
 /** What the switch does, in plain words. */
 export function requirementText(scope: TwoStepScope): string {
 	return scope === 'project'
-		? 'Members who manage this project need an authenticator app: its owners give a code from it when they sign in before they manage members, invites, share links, API keys or data feeds, or delete the project, and so does anyone who signs a run.'
-		: 'Members who manage this team need an authenticator app: its owners give a code from it when they sign in before they manage the team or its members, and before an owner’s actions on every team project.';
+		? 'Members who manage this project need two-step sign-in: its owners give a code (from an authenticator app or by email) when they sign in before they manage members, invites, share links, API keys or data feeds, or delete the project, and so does anyone who signs a run.'
+		: 'Members who manage this team need two-step sign-in: its admins give a code (from an authenticator app or by email) when they sign in before they manage the team or its members, and before an owner’s actions on every team project.';
 }
 
 /** The actions that need it whatever the switch says (they reach farmers, the public or a licence decision). */
@@ -34,5 +34,5 @@ export function inheritedText(own: boolean, effective: boolean, teamName: string
  */
 export function turnOnHint(on: boolean, sessionVerified: boolean | null): string | null {
 	if (on || sessionVerified !== false) return null;
-	return 'To turn it on, sign in with a code from your authenticator app first (set one up on your Account page), so it can’t lock everyone out.';
+	return 'To turn it on, sign in with a code first (set up two-step sign-in on your Account page), so it can’t lock everyone out.';
 }

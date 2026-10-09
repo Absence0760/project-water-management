@@ -36,7 +36,7 @@ test('with the requirement on, turning on a project’s two-step requirement nee
 	await expect(page.locator('[data-mfa-badge]')).toHaveCount(0);
 	// The project's panel; the workspace's banner is a region of the same name (data-mfa-prompt).
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' }).filter({ has: page.locator('[data-require-two-step]') });
-	await expect(panel).toContainText('Members who manage this project need an authenticator app');
+	await expect(panel).toContainText('Members who manage this project need two-step sign-in');
 	const toggle = panel.getByRole('switch', { name: 'Require two-step sign-in' });
 	await expect(toggle).not.toBeChecked();
 	await expectNoViolations(page, { include: '[data-require-two-step]' });
@@ -51,15 +51,15 @@ test('with the requirement on, turning on a project’s two-step requirement nee
 
 	// Set it up from the banner's link.
 	await banner.getByRole('link', { name: 'Set up two-step sign-in' }).click();
-	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
-	await panel.getByRole('button', { name: 'Set up the app' }).click();
-	await panel.getByLabel('Current password').fill(PASSWORD);
-	await panel.getByRole('button', { name: 'Continue' }).click();
-	const secret = (await panel.locator('[data-totp-secret]').getAttribute('data-totp-secret'))!;
-	await panel.getByLabel('Enter the code the app shows').fill(hotp(base32Decode(secret)!, totpStep(Date.now())));
-	await panel.getByRole('button', { name: 'Turn on the authenticator app' }).click();
-	await panel.getByRole('button', { name: 'I’ve saved them' }).click();
-	await expect(panel).toHaveAttribute('data-two-step', 'on');
+	const account = page.getByRole('region', { name: 'Two-step sign-in' });
+	await account.getByRole('button', { name: 'Set up the app' }).click();
+	await account.getByLabel('Current password').fill(PASSWORD);
+	await account.getByRole('button', { name: 'Continue' }).click();
+	const secret = (await account.locator('[data-totp-secret]').getAttribute('data-totp-secret'))!;
+	await account.getByLabel('Enter the code the app shows').fill(hotp(base32Decode(secret)!, totpStep(Date.now())));
+	await account.getByRole('button', { name: 'Turn on the authenticator app' }).click();
+	await account.getByRole('button', { name: 'I’ve saved them' }).click();
+	await expect(account).toHaveAttribute('data-two-step', 'on');
 
 	// Now the switch turns on, and the setting is saved.
 	await openProject(page, project.id);

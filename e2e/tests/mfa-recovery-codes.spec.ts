@@ -15,12 +15,12 @@ test('at set-up the codes download as a text file and copy, then the Account pag
 	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 	await page.goto('/account');
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
-	await panel.getByRole('button', { name: 'Set up two-step sign-in' }).click();
+	await panel.getByRole('button', { name: 'Set up the app' }).click();
 	await panel.getByLabel('Current password').fill(PASSWORD);
 	await panel.getByRole('button', { name: 'Continue' }).click();
 	const secret = (await panel.locator('[data-totp-secret]').getAttribute('data-totp-secret'))!;
 	await panel.getByLabel('Enter the code the app shows').fill(hotp(base32Decode(secret)!, totpStep(Date.now())));
-	await panel.getByRole('button', { name: 'Turn on two-step sign-in' }).click();
+	await panel.getByRole('button', { name: 'Turn on the authenticator app' }).click();
 	await expect(panel.getByRole('heading', { name: 'Your recovery codes' })).toBeFocused();
 	const codes = await panel.locator('.code-list li').allTextContents();
 	expect(codes).toHaveLength(10);
@@ -29,7 +29,7 @@ test('at set-up the codes download as a text file and copy, then the Account pag
 	const [download] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download the codes' }).click()]);
 	expect(download.suggestedFilename()).toBe('water-management-recovery-codes.txt');
 	const file = await readFile((await download.path())!, 'utf8');
-	expect(file).toBe(`Water Management recovery codes for ${owner.email}\n\n${codes.join('\n')}\n\nEach code works once, in place of a code from your authenticator app.\n`);
+	expect(file).toBe(`Water Management recovery codes for ${owner.email}\n\n${codes.join('\n')}\n\nEach code works once, in place of a code from your authenticator app or your email.\n`);
 
 	// The clipboard: the same text.
 	await panel.getByRole('button', { name: 'Copy the codes' }).click();
@@ -53,7 +53,7 @@ test('at set-up the codes download as a text file and copy, then the Account pag
 	await expect(warning).toContainText('You’re running out of recovery codes.');
 	await expectNoViolations(page);
 	await warning.getByRole('button', { name: 'Make a new set' }).click();
-	await panel.getByLabel('Code from your authenticator app').fill(hotp(base32Decode(secret)!, totpStep(Date.now()) + 1));
+	await panel.getByLabel('Code from your authenticator app or your email', { exact: true }).fill(hotp(base32Decode(secret)!, totpStep(Date.now()) + 1));
 	await panel.getByRole('button', { name: 'Make new recovery codes' }).click();
 	await expect(panel.getByRole('heading', { name: 'Your recovery codes' })).toBeFocused();
 	await panel.getByRole('button', { name: 'I’ve saved them' }).click();

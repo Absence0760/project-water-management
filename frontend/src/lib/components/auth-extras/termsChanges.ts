@@ -23,13 +23,14 @@ export function changesSince<T>(changes: readonly TermsChange<T>[], accepted: st
 // (session.user.termsVersion) is shown every change since, so two versions landing between deploys never
 // hide the first one's changes (persona-wua-manager, round 4). An account that accepted none sees them all.
 export const TERMS_CHANGES: readonly TermsChange<Msg>[] = [
-	// Privacy §9: who must use two-step sign-in (opt-in per project and team; always for publishing to farmers, licence
-	// decisions and evidence packs; the operator's decision, docs/legal-status.md, 2026-10-08).
+	// Two-step sign-in (the operator's decisions of 2026-10-08, docs/legal-status.md): who must use it (204, Privacy §9),
+	// recovering a lost factor (205, Privacy §3 and §7) and codes by email (206, Privacy §3, §7 and §9).
 	{
 		version: '2026-10-08',
 		items: [
-			msg('Two-step sign-in is now required only for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. Anyone can still turn it on for their own account.'),
-			msg('If you lose your phone and ask us to remove two-step sign-in, or a team admin removes it, we keep a record of the request and how it ended for 90 days, and the record that it happened with your account.')
+			msg('Two-step sign-in is now needed only to publish to farmers, for licence decisions and evidence packs, and in a project or team that turns it on.'),
+			msg('If you can’t get a code, you can remove two-step sign-in yourself after a 3-day wait, or ask a team admin. We keep a record of the request for 90 days.'),
+			msg('You can now get your sign-in codes by email instead of from an app. We keep each emailed code until it is used or 10 minutes old.')
 		]
 	},
 	// The Terms §9 clause on map data licensed to us (HydroRIVERS' end-user terms, docs/legal-status.md, 2026-10-02).

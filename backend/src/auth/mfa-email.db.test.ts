@@ -514,6 +514,8 @@ describe('step-up and the fresh code by email', () => {
 	it('an owner with codes by email passes requireStepUp and requireFreshCode; a password-only session doesn’t', async () => {
 		const u = await emailEnrolled('MeOwner');
 		const projectId = (await u.call('POST', '/projects', { name: 'Email step-up' })).body.project.id;
+		// The project requires two-step sign-in (204, opt-in): its owner actions are stepped up.
+		expect((await u.call('PATCH', `/projects/${projectId}`, { requireMfa: true })).status).toBe(200);
 		vi.stubEnv('MFA_REQUIRED', 'true');
 		expect(await u.call('POST', `/projects/${projectId}/api-keys`, { name: 'logger' })).toMatchObject({ status: 403, body: { code: 'mfa_step_up' } });
 		// Positive control: the two-step session the emailed code gave.
@@ -638,7 +640,7 @@ describe('RLS on the emailed-code tables (206)', () => {
 		for (const sql of [
 			`SELECT app_mfa_email_send(decode(repeat('00', 32), 'hex'), 'use', '10 minutes', '1 minute', 5)`,
 			`SELECT app_mfa_email_use(decode(repeat('00', 32), 'hex'), 'use')`,
-			'SELECT app_mfa_email_void()'
+			`SELECT app_mfa_remove_own_factor('email', now())`
 		]) {
 			await expect(withoutUser((db) => db.query(sql)), sql).rejects.toMatchObject({ code: '42501' });
 		}

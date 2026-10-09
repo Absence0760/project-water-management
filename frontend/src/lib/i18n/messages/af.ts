@@ -105,8 +105,6 @@ export const af: Catalogue = {
 	'8cb9ab8a': 'Tik die 6-syferkode uit die e-pos in.',
 	// Enter the 6-digit code from your authenticator app.
 	'7feb1b8c': 'Tik die 6-syferkode van jou verifikasie-app in.',
-	// The removal is cancelled. Two-step sign-in stays on.
-	'98d4403a': 'Die verwydering is gekanselleer. Tweestap-intekening bly aan.',
 	// Codes by email are on.
 	'1d8d9cfd': 'Kodes per e-pos is aan.',
 	// The authenticator app is on.
@@ -117,8 +115,12 @@ export const af: Catalogue = {
 	'74fb1a16': 'Verwyder die verifikasie-app',
 	// Turn off codes by email
 	'eb083566': 'Skakel kodes per e-pos af',
+	// Cancel the removal
+	'6703e968': 'Kanselleer die verwydering',
 	// Enter a code.
 	'20fafe8f': 'Tik ’n kode in.',
+	// The removal is cancelled. Two-step sign-in stays on.
+	'98d4403a': 'Die verwydering is gekanselleer. Tweestap-intekening bly aan.',
 	// The authenticator app is removed.
 	'f8b3c676': 'Die verifikasie-app is verwyder.',
 	// Codes by email are off.
@@ -155,18 +157,18 @@ export const af: Catalogue = {
 	'0d2472d6': 'Gekopieer. Plak hulle êrens veilig, soos in ’n wagwoordbestuurder.',
 	// Copying didn’t work here. Download them, or write them down.
 	'3e7d8f8f': 'Kon nie hier kopieer nie. Laai hulle af, of skryf hulle neer.',
-	// On
-	'60e47df0': 'Aan',
-	// Make a new set
-	'3f861156': 'Skep ’n nuwe stel',
-	// Cancel the removal
-	'6703e968': 'Kanselleer die verwydering',
 	// After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.
 	'b6f90a9c': 'Ná jou wagwoord kom ’n tweede stap: ’n 6-syferkode. Iemand wat jou wagwoord uitvind, kan steeds nie inkom nie. Kies hoe jy die kode kry; jy kan albei aanskakel.',
+	// Someone asked to remove two-step sign-in from your account, saying they can’t get a code. It will be removed at {when}, unless it’s cancelled.
+	'7842bac5': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder, en gesê hulle kan nie ’n kode kry nie. Dit word om {when} verwyder, tensy dit gekanselleer word.',
+	// If that wasn’t you, cancel it now with a code from your authenticator app or your email, then change your password.
+	'e96926b3': 'As dit nie jy was nie, kanselleer dit nou met ’n kode van jou verifikasie-app of jou e-pos, en verander dan jou wagwoord.',
 	// This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.
 	'c08216a1': 'Hierdie blaaier het ingeteken voordat tweestap-intekening opgestel is. Teken uit en weer in voordat jy iets doen wat dit nodig het.',
 	// Authenticator app
 	'744f34d3': 'Verifikasie-app',
+	// On
+	'60e47df0': 'Aan',
 	// Off
 	'0dc6b4aa': 'Af',
 	// Stronger
@@ -217,6 +219,10 @@ export const af: Catalogue = {
 	'7a8a0030': 'Skakel die verifikasie-app aan',
 	// Recovery codes
 	'c901fa44': 'Herstelkodes',
+	// You’re running out of recovery codes. Make a new set now, so a lost phone or email can’t lock you out.
+	'45395f8d': 'Jou herstelkodes raak op. Skep nou ’n nuwe stel, sodat jy nie uit jou rekening gesluit word as jy jou foon of jou e-pos verloor nie.',
+	// Make a new set
+	'3f861156': 'Skep ’n nuwe stel',
 	// New recovery codes
 	'3695d1ea': 'Nuwe herstelkodes',
 	// Code from your authenticator app or your email
@@ -317,10 +323,12 @@ export const af: Catalogue = {
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
 	'265915f3': 'Maak toe',
-	// Two-step sign-in is now required only for publishing to farmers, for licence decisions and evidence packs, and for managing a project or team that turns it on. Anyone can still turn it on for their own account.
-	'fac7fd5e': 'Tweestap-intekening word nou slegs vereis vir publisering aan boere, vir lisensiebesluite en bewyspakkette, en vir die bestuur van ’n projek of span wat dit aanskakel. Enigiemand kan dit steeds vir hul eie rekening aanskakel.',
-	// If you lose your phone and ask us to remove two-step sign-in, or a team admin removes it, we keep a record of the request and how it ended for 90 days, and the record that it happened with your account.
-	'9512f727': 'As jy jou foon verloor en jy ons vra om tweestap-intekening te verwyder, of ’n spanadministrateur dit verwyder, hou ons 90 dae lank ’n rekord van die versoek en hoe dit afgeloop het, en ons hou die rekord dat dit gebeur het saam met jou rekening.',
+	// Two-step sign-in is now needed only to publish to farmers, for licence decisions and evidence packs, and in a project or team that turns it on.
+	'2ecf63e3': 'Tweestap-intekening is nou net nodig om aan boere te publiseer, vir lisensiebesluite en bewyspakkette, en in ’n projek of span wat dit aanskakel.',
+	// If you can’t get a code, you can remove two-step sign-in yourself after a 3-day wait, or ask a team admin. We keep a record of the request for 90 days.
+	'4e41f8e4': 'As jy nie ’n kode kan kry nie, kan jy tweestap-intekening self ná ’n wagtyd van 3 dae verwyder, of ’n spanadministrateur vra. Ons hou ’n rekord van die versoek 90 dae lank.',
+	// You can now get your sign-in codes by email instead of from an app. We keep each emailed code until it is used or 10 minutes old.
+	'de49689a': 'Jy kan nou jou intekenkodes per e-pos kry, eerder as van ’n app. Ons hou elke kode wat ons vir jou e-pos totdat dit gebruik is of 10 minute oud is.',
 	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
 	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
 	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
@@ -1651,12 +1659,14 @@ export const af: Catalogue = {
 	'6d59b4f6': 'Dit is reeds aan. Skakel dit eers af om dit weer op te stel.',
 	// Start setting up two-step sign-in again.
 	'362ea51a': 'Begin weer om tweestap-intekening op te stel.',
-	// You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.
-	'65455dcb': 'Jy het vandag al ’n paar keer hiervoor gevra. Kyk in jou inkassie en gemorspos, of probeer môre weer.',
 	// This needs two-step sign-in. Set it up on your Account page first.
 	'2a311dd6': 'Dit het tweestap-intekening nodig. Stel dit eers op jou Rekening-bladsy op.',
 	// This needs two-step sign-in. Sign out, then sign in again with a code.
 	'9d6d2ca6': 'Dit het tweestap-intekening nodig. Teken uit en teken dan weer met ’n kode in.',
+	// You asked for this a few times today already. Check your inbox and spam folder, or try again tomorrow.
+	'65455dcb': 'Jy het vandag al ’n paar keer hiervoor gevra. Kyk in jou inkassie en gemorspos, of probeer môre weer.',
+	// A team admin can’t remove another admin’s two-step sign-in. They can remove it themselves when they sign in, after a 3-day wait.
+	'972426a2': '’n Spanadministrateur kan nie ’n ander administrateur se tweestap-intekening verwyder nie. Hulle kan dit self verwyder wanneer hulle inteken, ná ’n wagtyd van 3 dae.',
 	// We just emailed you a code. You can ask for another in {wait}.
 	'5edf5f13': 'Ons het pas vir jou ’n kode ge-e-pos. Jy kan oor {wait} vir nog een vra.',
 	// We couldn’t send the email. Try again in a minute.
@@ -1927,6 +1937,10 @@ export const af: Catalogue = {
 	'9a0aaea5': 'As {email} nog bevestig moet word, is ’n nuwe skakel op pad. Kyk in jou inkassie en gemorspos.',
 	// Enter one of your recovery codes.
 	'5457b62c': 'Tik een van jou herstelkodes in.',
+	// Lost your phone and your recovery codes?
+	'68d6839c': 'Jou foon en jou herstelkodes verloor?',
+	// Can’t get the email and lost your recovery codes?
+	'ec9da085': 'Kry jy nie die e-pos nie en het jy jou herstelkodes verloor?',
 	// Welcome back. Sign in to your catchment projects.
 	'0650eb3f': 'Welkom terug. Teken in by jou opvanggebiedprojekte.',
 	// Your account has been deleted
@@ -1945,8 +1959,6 @@ export const af: Catalogue = {
 	'1ed87a58': 'Stuur die skakel weer',
 	// **Your email address isn’t confirmed yet.** Open the link we emailed to {email}, then sign in again.
 	'5b10b774': '**Jou e-posadres is nog nie bevestig nie.** Maak die skakel oop wat ons na {email} ge-e-pos het, en teken dan weer in.',
-	// Lost your phone and your recovery codes?
-	'68d6839c': 'Jou foon en jou herstelkodes verloor?',
 	// We sent a link to the address on your account. Open it within 1 hour to start the 3-day wait. Nothing changes until you do.
 	'f9c5c303': 'Ons het ’n skakel na die adres op jou rekening gestuur. Maak dit binne 1 uur oop om die wagtyd van 3 dae te begin. Niks verander voordat jy dit doen nie.',
 	// Two-step sign-in is already being removed
@@ -2007,8 +2019,8 @@ export const af: Catalogue = {
 	'70b40324': 'Hierdie skakel is ongeldig, reeds gebruik, of ouer as 1 uur. Teken weer in en vra vir ’n nuwe een.',
 	// Confirm to start a 3-day wait. When it ends, two-step sign-in is removed from your account and every device is signed out.
 	'0b583da5': 'Bevestig om ’n wagtyd van 3 dae te begin. Wanneer dit verby is, word tweestap-intekening van jou rekening verwyder en jy word op elke toestel uitgeteken.',
-	// Until then your authenticator app keeps working, and we email you every day with a link to cancel. Signing in with a code also cancels it.
-	'e3e0da0a': 'Tot dan werk jou verifikasie-app steeds, en ons e-pos jou elke dag met ’n skakel om dit te kanselleer. As jy met ’n kode inteken, word dit ook gekanselleer.',
+	// Until then your codes keep working, and we email you every day with a link to cancel. Signing in with a code also cancels it.
+	'57539337': 'Tot dan werk jou kodes steeds, en ons e-pos vir jou elke dag ’n skakel om dit te kanselleer. As jy met ’n kode inteken, word dit ook gekanselleer.',
 	// Start the 3-day wait
 	'c4750873': 'Begin die wagtyd van 3 dae',
 	// If you didn’t ask for this, close this page: someone knows your password, so choose a new one.

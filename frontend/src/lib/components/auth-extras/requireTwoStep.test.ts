@@ -3,8 +3,8 @@ import { inheritedText, requirementText, turnOnHint } from './requireTwoStep';
 
 describe('the two-step requirement switch’s words (204_mfa_opt_in)', () => {
 	it('says in plain words what it does, for a project and a team', () => {
-		expect(requirementText('project')).toMatch(/^Members who manage this project need an authenticator app/);
-		expect(requirementText('team')).toMatch(/^Members who manage this team need an authenticator app/);
+		expect(requirementText('project')).toMatch(/^Members who manage this project need two-step sign-in/);
+		expect(requirementText('team')).toMatch(/^Members who manage this team need two-step sign-in/);
 	});
 
 	it('says when the team requires it and the project’s own switch is off, naming the team when it can', () => {
@@ -16,7 +16,7 @@ describe('the two-step requirement switch’s words (204_mfa_opt_in)', () => {
 	});
 
 	it('warns before turning it on only when this session is known to have signed in without a code', () => {
-		expect(turnOnHint(false, false)).toMatch(/sign in with a code from your authenticator app first/);
+		expect(turnOnHint(false, false)).toMatch(/sign in with a code first/);
 		expect(turnOnHint(false, true)).toBeNull();
 		expect(turnOnHint(false, null)).toBeNull();
 		// Turning it off needs no warning: the server steps it up under the setting.

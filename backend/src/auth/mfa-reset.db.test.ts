@@ -56,7 +56,7 @@ async function enrolled(name: string) {
 /** The sign-in challenge a right password buys. */
 async function challenge(u: { email: string }): Promise<string> {
 	const r = await anon('POST', '/auth/login', { email: u.email, password: 'correct horse' });
-	expect(r.body).toEqual({ mfaRequired: true });
+	expect(r.body).toMatchObject({ mfaRequired: true });
 	return cookieOf(r.headers, MFA_CHALLENGE_COOKIE)!;
 }
 
@@ -83,7 +83,8 @@ const resets = (userId: string) =>
 	asOwner('SELECT confirmed_at, effective_at, ended_at, end_reason FROM mfa_reset WHERE user_id = $1 ORDER BY requested_at', [userId]);
 const events = async (userId: string) =>
 	(await asOwner('SELECT kind FROM account_security_event WHERE user_id = $1 ORDER BY id', [userId])).map((r) => r.kind as string);
-const hasFactor = async (userId: string) => (await asOwner('SELECT 1 FROM user_totp WHERE user_id = $1', [userId])).length > 0;
+/** The one test (mfa_has_factor, 205/206), as the schema owner: either factor. */
+const hasFactor = async (userId: string) => (await asOwner('SELECT mfa_has_factor($1) AS has', [userId]))[0].has as boolean;
 /** The wait is over: the reset's end moved into the past. */
 const endWait = (userId: string) =>
 	asOwner(`UPDATE mfa_reset SET effective_at = now() - interval '1 second' WHERE user_id = $1 AND ended_at IS NULL`, [userId]);
@@ -214,8 +215,9 @@ describe('the self-service reset', () => {
 
 		const b = await enrolled('ResetOff');
 		await started(b);
+		// The right code that turns it off ends the reset first, as any right code does (code_used); the factor then goes.
 		expect((await anon('DELETE', '/auth/mfa/totp', { code: code(b.secret) }, b.twoStep)).status).toBe(204);
-		expect((await resets(b.id)).at(-1)).toMatchObject({ end_reason: 'factor_removed' });
+		expect((await resets(b.id)).at(-1)).toMatchObject({ end_reason: 'code_used' });
 		expect(await events(b.id)).toEqual(['mfa.enrolled', 'mfa.reset_requested', 'mfa.reset_confirmed', 'mfa.reset_cancelled', 'mfa.disabled']);
 	});
 
@@ -506,7 +508,7 @@ describe('RLS on the reset tables', () => {
 
 	it('the person’s own functions refuse without a person', async () => {
 		for (const sql of [
-			'SELECT app_mfa_remove_own_factors()',
+			`SELECT app_mfa_remove_own_factor('totp', now())`,
 			'SELECT app_mfa_reset_cancel_own()',
 			`SELECT * FROM app_mfa_reset_request('\\x00'::bytea, '1 hour', 3, '1 day')`,
 			`SELECT * FROM app_mfa_team_reset(gen_random_uuid(), gen_random_uuid(), now())`
@@ -514,7 +516,8 @@ describe('RLS on the reset tables', () => {
 			await expect(withoutUser((db) => db.query(sql)), sql).rejects.toMatchObject({ code: '42501' });
 		}
 		// The internal one is not water_app's to call at all.
-		await expect(withUser(a.id, (db) => db.query('SELECT mfa_remove_factors($1)', [b.id]))).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(a.id, (db) => db.query('SELECT mfa_remove_factors($1, now())', [b.id]))).rejects.toMatchObject({ code: '42501' });
+		await expect(withUser(a.id, (db) => db.query(`SELECT mfa_remove_factor($1, 'totp', now())`, [b.id]))).rejects.toMatchObject({ code: '42501' });
 		expect(await hasFactor(b.id)).toBe(true);
 	});
 
@@ -610,5 +613,183 @@ describe('a team admin resets a member’s second factor', () => {
 		const before = outbox.length;
 		expect((await reset(admin.twoStep, m.id)).status).toBe(204);
 		expect(outbox.slice(before).map((x) => x.to)).toEqual([m.email]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The three parts together: codes by email (206) in the reset (205), and the
+// team admin's reset limited to members below admin (2026-10-08).
+// ---------------------------------------------------------------------------
+
+/** The six-digit code in the newest email to `to` (206). */
+function emailedCode(to: string): string {
+	const mail = lastMailTo(to);
+	expect(mail?.kind).toBe('mfa_code');
+	return mail!.text.match(/^(\d{6})$/m)![1]!;
+}
+/** Past the minute between emailed codes (206's send limit). */
+const pastSendGap = (userId: string) => asOwner(`UPDATE mfa_email_send SET sent_at = sent_at - interval '2 minutes' WHERE user_id = $1`, [userId]);
+
+/** Sign up and turn codes by email on (206): the user and the two-step session the confirm gave. */
+async function emailEnrolled(name: string) {
+	const u = await signUp(name);
+	expect((await u.call('POST', '/auth/mfa/email/enrol', { password: 'correct horse' })).status).toBe(202);
+	const r = await anon('POST', '/auth/mfa/email/confirm', { code: emailedCode(u.email) }, u.cookie);
+	expect(r.status).toBe(200);
+	return { ...u, twoStep: cookieOf(r.headers, SESSION_COOKIE)! };
+}
+
+/** Every trace of a second factor the account has, as the schema owner. */
+async function factorRows(userId: string) {
+	const [r] = await asOwner(
+		`SELECT (SELECT count(*)::int FROM user_totp WHERE user_id = $1) AS totp,
+			(SELECT count(*)::int FROM user_email_otp WHERE user_id = $1) AS email,
+			(SELECT count(*)::int FROM user_recovery_code WHERE user_id = $1) AS codes,
+			(SELECT count(*)::int FROM mfa_email_code WHERE user_id = $1 AND code_hash IS NOT NULL) AS live_code`,
+		[userId]
+	);
+	return r;
+}
+
+describe('the self-service reset with codes by email (206)', () => {
+	it('an email-only account: the reset removes the emailed factor, its live code and the recovery codes, and the password alone signs in', async () => {
+		const u = await emailEnrolled('ResetEmailOnly');
+		expect(await hasFactor(u.id)).toBe(true);
+		await started(u);
+		// A code emailed during the wait (the factor keeps working), still live when the wait ends.
+		await pastSendGap(u.id);
+		expect((await anon('POST', '/auth/mfa/email/send', undefined, u.twoStep)).status).toBe(202);
+		expect(await factorRows(u.id)).toEqual({ totp: 0, email: 1, codes: 10, live_code: 1 });
+		await endWait(u.id);
+		// The process clock (Date only) past the session's issue, so the watermark lands after it.
+		vi.setSystemTime(Date.now() + 1000);
+		await runMfaResets();
+		expect(await factorRows(u.id)).toEqual({ totp: 0, email: 0, codes: 0, live_code: 0 });
+		expect(await hasFactor(u.id)).toBe(false);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ end_reason: 'completed' });
+		expect((await anon('GET', '/auth/me', undefined, u.twoStep)).status).toBe(401);
+		const login = await anon('POST', '/auth/login', { email: u.email, password: 'correct horse' });
+		expect(login.status).toBe(200);
+		expect(login.body.mfaRequired).toBeUndefined();
+	});
+
+	it('an account with both factors: the reset removes both', async () => {
+		const u = await enrolled('ResetBoth');
+		expect((await anon('POST', '/auth/mfa/email/enrol', { password: 'correct horse' }, u.twoStep)).status).toBe(202);
+		expect((await anon('POST', '/auth/mfa/email/confirm', { code: emailedCode(u.email) }, u.twoStep)).status).toBe(200);
+		expect(await factorRows(u.id)).toEqual({ totp: 1, email: 1, codes: 10, live_code: 0 });
+		await started(u);
+		await endWait(u.id);
+		await runMfaResets();
+		expect(await factorRows(u.id)).toEqual({ totp: 0, email: 0, codes: 0, live_code: 0 });
+		expect((await events(u.id)).at(-1)).toBe('mfa.reset_completed');
+	});
+
+	it('signing in with an emailed code cancels a waiting reset (code_used), and the factor stays', async () => {
+		const u = await emailEnrolled('ResetEmailCancel');
+		const cancel = await started(u);
+		await pastSendGap(u.id);
+		const ch = await challenge(u);
+		expect((await anon('POST', '/auth/mfa/challenge/email', undefined, ch)).status).toBe(202);
+		const r = await anon('POST', '/auth/mfa/verify', { code: emailedCode(u.email) }, ch);
+		expect(r.status).toBe(200);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ end_reason: 'code_used' });
+		expect((await events(u.id)).at(-1)).toBe('mfa.reset_cancelled');
+		expect((await anon('POST', '/auth/mfa/reset/cancel', { token: cancel })).status).toBe(400);
+		// The tick has nothing to complete: the factor stays.
+		await endWait(u.id);
+		await runMfaResets();
+		expect(await factorRows(u.id)).toMatchObject({ email: 1, codes: 10 });
+	});
+
+	it('a step-up with an emailed code cancels a waiting reset too', async () => {
+		const u = await emailEnrolled('ResetEmailStepUp');
+		await started(u);
+		await pastSendGap(u.id);
+		expect((await anon('POST', '/auth/mfa/email/send', undefined, u.twoStep)).status).toBe(202);
+		expect((await anon('POST', '/auth/mfa/step-up', { code: emailedCode(u.email) }, u.twoStep)).status).toBe(200);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ end_reason: 'code_used' });
+		expect((await anon('GET', '/auth/mfa', undefined, u.twoStep)).body.pendingReset).toBeNull();
+	});
+});
+
+describe('the owner turning off one factor of two (mfa_remove_factor)', () => {
+	it('the recovery codes stay while the other factor does; the right code ends a waiting reset; the last factor takes the codes', async () => {
+		const u = await enrolled('RemoveOneOfTwo');
+		expect((await anon('POST', '/auth/mfa/email/enrol', { password: 'correct horse' }, u.twoStep)).status).toBe(202);
+		expect((await anon('POST', '/auth/mfa/email/confirm', { code: emailedCode(u.email) }, u.twoStep)).status).toBe(200);
+		await started(u);
+		// The app off with its own code: the email and the codes stay, and the code ended the reset.
+		const off = await anon('DELETE', '/auth/mfa/totp', { code: code(u.secret) }, u.twoStep);
+		expect(off.status).toBe(204);
+		expect(await factorRows(u.id)).toEqual({ totp: 0, email: 1, codes: 10, live_code: 0 });
+		expect((await resets(u.id)).at(-1)).toMatchObject({ end_reason: 'code_used' });
+		const session = cookieOf(off.headers, SESSION_COOKIE)!;
+		expect((await anon('GET', '/auth/mfa', undefined, session)).body).toMatchObject({ enrolled: true, methods: ['email'], recoveryCodesLeft: 10, pendingReset: null });
+		// The last one off: the recovery codes go with it.
+		await pastSendGap(u.id);
+		expect((await anon('POST', '/auth/mfa/email/send', undefined, session)).status).toBe(202);
+		expect((await anon('DELETE', '/auth/mfa/email', { code: emailedCode(u.email) }, session)).status).toBe(204);
+		expect(await factorRows(u.id)).toEqual({ totp: 0, email: 0, codes: 0, live_code: 0 });
+	});
+
+	it('in SQL: one of two leaves a waiting reset to the code that ends it; the last ends it as factor_removed; both move the watermark', async () => {
+		const u = await enrolled('RemoveSqlLayer');
+		expect((await anon('POST', '/auth/mfa/email/enrol', { password: 'correct horse' }, u.twoStep)).status).toBe(202);
+		expect((await anon('POST', '/auth/mfa/email/confirm', { code: emailedCode(u.email) }, u.twoStep)).status).toBe(200);
+		await started(u);
+		const wm1 = new Date(Date.now() + 1000);
+		expect(await asOwner(`SELECT mfa_remove_factor($1, 'totp', $2) AS left`, [u.id, wm1])).toEqual([{ left: true }]);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ ended_at: null });
+		expect((await asOwner('SELECT sessions_revoked_at FROM app_user WHERE id = $1', [u.id]))[0].sessions_revoked_at.getTime()).toBe(wm1.getTime());
+		const wm2 = new Date(Date.now() + 2000);
+		expect(await asOwner(`SELECT mfa_remove_factor($1, 'email', $2) AS left`, [u.id, wm2])).toEqual([{ left: false }]);
+		expect((await resets(u.id)).at(-1)).toMatchObject({ end_reason: 'factor_removed' });
+		expect(await factorRows(u.id)).toEqual({ totp: 0, email: 0, codes: 0, live_code: 0 });
+		expect((await asOwner('SELECT sessions_revoked_at FROM app_user WHERE id = $1', [u.id]))[0].sessions_revoked_at.getTime()).toBe(wm2.getTime());
+		await expect(asOwner(`SELECT mfa_remove_factor($1, 'sms', now())`, [u.id])).rejects.toMatchObject({ code: '22023' });
+		await expect(asOwner('SELECT mfa_remove_factors($1, NULL)', [u.id])).rejects.toMatchObject({ code: '22023' });
+	});
+});
+
+describe('the team admin’s reset with codes by email, and never another admin (2026-10-08)', () => {
+	let admin: Awaited<ReturnType<typeof enrolled>>;
+	let teamId: string;
+
+	beforeAll(async () => {
+		admin = await enrolled('TeamResetAdmin2');
+		teamId = (await admin.call('POST', '/teams', { name: 'Reset WUA 2' })).body.team.id;
+	});
+	const reset = (cookie: string, userId: string) => anon('POST', `/teams/${teamId}/members/${userId}/mfa-reset`, undefined, cookie);
+
+	it('removes an email-factor member’s factor, its live code and the recovery codes, and signs them out', async () => {
+		const m = await emailEnrolled('TeamResetEmailMember');
+		expect((await admin.call('POST', `/teams/${teamId}/members`, { email: m.email, role: 'member' })).status).toBe(201);
+		await pastSendGap(m.id);
+		expect((await anon('POST', '/auth/mfa/email/send', undefined, m.twoStep)).status).toBe(202);
+		expect(await factorRows(m.id)).toEqual({ totp: 0, email: 1, codes: 10, live_code: 1 });
+		vi.setSystemTime(Date.now() + 1000);
+		expect((await reset(admin.twoStep, m.id)).status).toBe(204);
+		expect(await factorRows(m.id)).toEqual({ totp: 0, email: 0, codes: 0, live_code: 0 });
+		expect((await anon('GET', '/auth/me', undefined, m.twoStep)).status).toBe(401);
+		expect((await events(m.id)).at(-1)).toBe('mfa.reset_by_admin');
+	});
+
+	it('refuses another admin (403 mfa_reset_admin), whose factor stays; a member below admin is reset (positive control)', async () => {
+		const coAdmin = await enrolled('TeamResetCoAdmin');
+		expect((await admin.call('POST', `/teams/${teamId}/members`, { email: coAdmin.email, role: 'admin' })).status).toBe(201);
+		const r = await reset(admin.twoStep, coAdmin.id);
+		expect(r).toMatchObject({ status: 403, body: { code: 'mfa_reset_admin' } });
+		expect(await hasFactor(coAdmin.id)).toBe(true);
+		expect((await anon('GET', '/auth/me', undefined, coAdmin.twoStep)).status).toBe(200);
+		expect((await events(coAdmin.id)).filter((k) => k === 'mfa.reset_by_admin')).toEqual([]);
+		// The database refuses it too, whatever the route: the definer reads the target's role.
+		const [row] = await withUser(admin.id, (db) => db.query('SELECT status FROM app_mfa_team_reset($1, $2, now())', [teamId, coAdmin.id])).then((x) => x.rows);
+		expect(row).toEqual({ status: 'co_admin' });
+		expect(await hasFactor(coAdmin.id)).toBe(true);
+		// The co-admin demoted to member: now it goes through.
+		await asOwner(`UPDATE team_member SET role = 'member' WHERE team_id = $1 AND user_id = $2`, [teamId, coAdmin.id]);
+		expect((await reset(admin.twoStep, coAdmin.id)).status).toBe(204);
+		expect(await hasFactor(coAdmin.id)).toBe(false);
 	});
 });

@@ -16,6 +16,7 @@ import { requireUser, type AuthEnv } from './middleware.js';
 import { dummyHash, hashPassword, needsRehash, verifyPassword } from './password.js';
 import { clearSession, issueMfaChallenge, issueSession, revokeSession } from './session.js';
 import { confirmedMethods } from './mfa.js';
+import { hasConfirmedFactor } from './stepUp.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
@@ -378,7 +379,8 @@ export const authRoutes = new Hono<AuthEnv>()
 			await attemptSucceeded(db, body.email, device);
 			await storeRehash(db, row.id, row.password_hash, upgraded);
 			const user = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
-			return user ? { user, methods: await confirmedMethods(db, row.id) } : undefined;
+			// "Has a factor" is the one test (mfa_has_factor, stepUp.ts); `methods` only says which to offer.
+			return user ? { user, enrolled: await hasConfirmedFactor(db, row.id), methods: await confirmedMethods(db, row.id) } : undefined;
 		});
 		if (!found) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		const { user } = found;
@@ -394,7 +396,7 @@ export const authRoutes = new Hono<AuthEnv>()
 		// codes by email, 206), so the page can offer "Email me a code" (POST
 		// /auth/mfa/challenge/email); nothing else about the account is said
 		// before the code. `mfaRequired` stays for older clients.
-		if (found.methods.length) {
+		if (found.enrolled) {
 			await issueMfaChallenge(c, row.id);
 			return c.json({ mfaRequired: true as const, methods: found.methods });
 		}

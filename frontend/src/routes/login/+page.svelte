@@ -344,7 +344,6 @@
 			<button type="button" class="linkish" onclick={backToCode}>{t('Back to the code')}</button>
 		</section>
 	{:else if step === 'code'}
-	{#if step === 'code'}
 		<form onsubmit={submitCode} novalidate aria-labelledby="code-h" data-mfa-mode={mode}>
 			<h2 id="code-h" class="step-title">{t('Two-step sign-in')}</h2>
 			{#if mode === 'email'}

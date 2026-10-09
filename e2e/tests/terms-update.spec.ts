@@ -19,7 +19,7 @@ test('after the terms change, the app waits for Accept; the legal pages stay ope
 	await expect(page.getByText('Terms-update catchment')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible();
 	// Accepted a version before both listed ones: every change since, the first version's included (round 4).
-	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(9);
+	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(11);
 	const summary = page.getByRole('region', { name: 'The main things you agree to' });
 	await expect(summary.getByRole('listitem')).toHaveCount(4);
 	await expectNoViolations(page);
@@ -62,6 +62,9 @@ test('an account that accepted the previous version is shown only what changed s
 	await page.goto('/');
 	await expect(page.getByRole('heading', { level: 1, name: 'Our terms have changed' })).toBeVisible();
 	const changes = page.locator('ul.changes').getByRole('listitem');
-	await expect(changes).toHaveCount(1);
-	await expect(changes).toHaveText(/If you lose your phone and ask us to remove two-step sign-in/);
+	// 2026-10-08's one entry: who must use two-step sign-in, recovering it, and codes by email.
+	await expect(changes).toHaveCount(3);
+	await expect(changes.nth(0)).toHaveText(/Two-step sign-in is now needed only to publish to farmers/);
+	await expect(changes.nth(1)).toHaveText(/remove two-step sign-in yourself after a 3-day wait, or ask a team admin/);
+	await expect(changes.nth(2)).toHaveText(/get your sign-in codes by email/);
 });

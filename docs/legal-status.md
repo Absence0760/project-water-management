@@ -487,17 +487,27 @@ cl. 3). The licensing ones are rows in
   unchanged: a clarification, not a material change, so it brings no
   `LEGAL_VERSION` bump of its own (it shares the 2026-10-01 text with any
   bump made that day).
-- 2026-10-08: codes by email as a second factor (206_mfa_email_code.sql).
-  Privacy §3 adds the code we last emailed (a keyed one-way hash, until used
-  or 10 minutes old) and that sign-in codes count among the account emails
-  in the security records, §7 their retention (the code 10 minutes, when they were sent a
-  day), §9 that a code can be emailed; Terms § sign-off: the fresh code may
-  come from the app or by email. New personal data kept, as 2026-10-01's
-  two-step entry was, so by that precedent this is material: **the
-  `LEGAL_VERSION` bump is still to make**, once, when the combined two-step
-  PR (opt-in requirement, recovery, codes by email) lands, with the
-  re-acceptance notice's "what changed" list naming it. Not bumped on this
-  branch so the three parts don't each bump it.
+- 2026-10-08: two-step sign-in, three operator decisions in one change
+  (204_mfa_opt_in, 205_mfa_recovery, 206_mfa_email_code; security.md §
+  Two-step sign-in). (1) Who must use it: Privacy §9 now says it is required
+  for publishing to farmers, licence decisions and evidence packs, and in a
+  project or team that turns it on, instead of "project owners, team admins
+  and assessors"; no new data, but the safeguard is narrower by default.
+  (2) Recovering a lost factor: Privacy §3 lists what a request to remove it
+  keeps (when it was asked for, confirmed, cancelled or done and how, the
+  day's request count, the emailed links as one-way hashes, a team admin's
+  removal), §7 their retention (an ended request 90 days, the links until it
+  ends, the count 24 hours), §9 that it can be removed after a 3-day wait or
+  by a team admin. (3) Codes by email: Privacy §3 adds the code we last
+  emailed (a keyed one-way hash) and counts sign-in codes among the account
+  emails in the security records, §7 their retention (a code until used or
+  10 minutes old, when codes were sent a day), §9 that a code can be emailed;
+  the Terms' sign-off clause: the fresh code may come from the app or by
+  email. New personal data kept and a narrower default safeguard, so the
+  operator judged the whole a **material change** (2026-10-08): one
+  `LEGAL_VERSION` 2026-10-08 (every account accepts again), with one entry
+  on the re-acceptance step naming all three. If it ships after 2026-10-08,
+  move `LEGAL_VERSION` (and this entry's date) to the deploy date.
 - 2026-10-01: two-step sign-in (issue #282, 150_mfa.sql). Privacy §3 lists
   the authenticator key (stored encrypted), the recovery codes (one-way
   hashes), wrong-code counts and the account's own record of turning it on
@@ -507,13 +517,6 @@ cl. 3). The licensing ones are rows in
   personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
   notice's "what changed" list now names this and the 2026-09-30 deletion
   change (it still listed 2026-09-28's).
-- 2026-10-08: recovering a lost second factor (205_mfa_recovery). Privacy
-  §3 lists what a request to remove two-step sign-in after a lost phone
-  keeps (when it was asked for, confirmed, cancelled or done and how, the
-  day's request count, the emailed links as one-way hashes, a team admin's
-  removal); §7 their retention (an ended request 90 days, the links until
-  it ends, the count 24 hours). New personal data kept: `LEGAL_VERSION`
-  2026-10-08, with its line on the re-acceptance step.
 - 2026-10-01: provisional positions (pre-counsel research, 2026-10-01; not
   legal advice, counsel review #92) on issue #90's D12, evidence that names
   its maker, and D3 (§ Positions taken pending counsel):
@@ -579,12 +582,3 @@ cl. 3). The licensing ones are rows in
   before them. The rivers load gate
   (`scripts/release/map-data-gates.mjs`) now checks for the clause as well
   as the Exhibit B statement.
-- 2026-10-08: Privacy §9 says who must use two-step sign-in under the
-  operator's decision of 2026-10-08 (opt-in per project and team, always
-  for publishing to farmers, licence decisions and evidence packs;
-  security.md § Two-step sign-in, 204_mfa_opt_in), instead of "project
-  owners, team admins and assessors". It collects no new personal
-  information and gives no new purpose, but the safeguard is narrower by
-  default, so the operator judged it a material change (2026-10-08):
-  `LEGAL_VERSION` 2026-10-08 (every account accepts again), and the
-  re-acceptance notice's "what changed" list names it.

@@ -88,6 +88,8 @@
 	const canAddProjects = $derived(hasTeamRole(team?.role, 'member'));
 	const adminCount = $derived(members.filter((m) => m.role === 'admin').length);
 	const soleAdmin = (m: TeamMember) => m.role === 'admin' && adminCount <= 1;
+	/** Whether this admin may reset `m`'s second factor: a member below admin, never themselves (teams/mfa-reset-routes.ts, 2026-10-08). */
+	const canResetMfa = (m: TeamMember) => isAdmin && m.userId !== me && m.role !== 'admin';
 
 	// --- the settings sheet: open while the URL says `settings` (Back closes it) ---
 	const settingsParam = $derived(page.url.searchParams.has('settings'));
@@ -211,14 +213,15 @@
 	}
 
 	/**
-	 * A member lost their phone and their recovery codes (205_mfa_recovery): remove their second factor now,
-	 * instead of their own 3-day wait. The API asks the admin for a fresh code first (the client's code dialog).
+	 * A member below admin can't get a code and lost their recovery codes (205_mfa_recovery): remove their
+	 * second factors now, instead of their own 3-day wait. Never another admin's (canResetMfa; the API refuses
+	 * it too, 403 mfa_reset_admin). The API asks the admin for a fresh code first (the client's code dialog).
 	 */
 	let notice = $state<string | null>(null);
 	async function resetMfa(m: TeamMember) {
 		const ok = await confirmDialog({
 			title: 'Remove two-step sign-in?',
-			message: `Remove two-step sign-in from ${m.displayName} (${m.email})? Do this only when you're sure it's them asking, for example in person or on a call: their authenticator app and recovery codes stop working, they're signed out everywhere, and anyone with their password can then sign in as them until they set it up again. They get an email, and it's recorded in the history of the team's projects.`,
+			message: `Remove two-step sign-in from ${m.displayName} (${m.email})? Do this only when you're sure it's them asking, for example in person or on a call: their authenticator app, codes by email and recovery codes stop working, they're signed out everywhere, and anyone with their password can then sign in as them until they set it up again. They get an email, and it's recorded in the history of the team's projects.`,
 			confirmLabel: 'Remove two-step sign-in',
 			danger: true
 		});
@@ -420,17 +423,20 @@
 											<td class="act">
 {#if isAdmin && m.userId !== me}
 													<div class="act-btns">
-																										<button
-															type="button"
-															class="btn btn-sm"
-															disabled={busy === m.userId}
-															onclick={() => resetMfa(m)}
-															aria-label="Reset two-step sign-in for {m.displayName}"
-															title="For a member who lost their phone and recovery codes"
-															data-reset-mfa
-														>
-															Reset two-step
-														</button>
+														<!-- Only for a member below admin: an admin's factor is never reset by another admin (2026-10-08). -->
+														{#if canResetMfa(m)}
+															<button
+																type="button"
+																class="btn btn-sm"
+																disabled={busy === m.userId}
+																onclick={() => resetMfa(m)}
+																aria-label="Reset two-step sign-in for {m.displayName}"
+																title="For a member who can’t get a code and lost their recovery codes"
+																data-reset-mfa
+															>
+																Reset two-step
+															</button>
+														{/if}
 														<button
 															type="button"
 															class="btn btn-sm btn-danger"

@@ -444,7 +444,7 @@ CREATE FUNCTION app_mfa_reset_purge(p_keep interval) RETURNS integer
 -- database sees them. Returns one row:
 --   'not_found'    the caller isn't the team's admin, or the person isn't in the team
 --   'self'         the caller named themselves (they use the self-service reset)
---   'admin'        the member is an admin of the team too: an admin's factor is
+--   'co_admin'     the member is an admin of the team too: an admin's factor is
 --                  never reset by another admin (operator decision, 2026-10-08),
 --                  only by the self-service reset or the operator
 --   'not_enrolled' the member has no second factor
@@ -469,7 +469,7 @@ CREATE FUNCTION app_mfa_team_reset(p_team uuid, p_user uuid, p_watermark timesta
 			RETURN;
 		END IF;
 		IF EXISTS (SELECT 1 FROM team_member m WHERE m.team_id = p_team AND m.user_id = p_user AND m.role = 'admin') THEN
-			RETURN QUERY SELECT 'admin'::text, NULL::citext, NULL::text;
+			RETURN QUERY SELECT 'co_admin'::text, NULL::citext, NULL::text;
 			RETURN;
 		END IF;
 		IF NOT mfa_has_factor(p_user) THEN

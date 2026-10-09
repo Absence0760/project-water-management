@@ -41,14 +41,14 @@ export const teamMfaResetRoutes = new Hono<AuthEnv>().post('/:id/members/:userId
 		}
 		const subject = await memberSubject(db, id, userId);
 		if (!subject) throw new ApiError(404, 'not found');
-		const { rows } = await db.query<{ status: 'not_found' | 'self' | 'admin' | 'not_enrolled' | 'done'; email: string | null; locale: string | null }>(
+		const { rows } = await db.query<{ status: 'not_found' | 'self' | 'co_admin' | 'not_enrolled' | 'done'; email: string | null; locale: string | null }>(
 			'SELECT status, email, locale FROM app_mfa_team_reset($1, $2, $3)',
 			[id, userId, watermark]
 		);
 		const r = rows[0]!;
 		if (r.status === 'not_found') throw new ApiError(404, 'not found');
 		if (r.status === 'self') throw new ApiError(409, 'you can’t remove your own two-step sign-in here');
-		if (r.status === 'admin') {
+		if (r.status === 'co_admin') {
 			throw ApiError.coded(
 				403,
 				'mfa_reset_admin',

@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { actForAuthority, anon, asOwner, DECISION, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { SESSION_COOKIE } from './session.js';
+import { hasConfirmedFactor, projectStepUpRefusal, requestAuth } from './stepUp.js';
 import { base32Decode, totp } from './totp.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -235,7 +236,7 @@ describe('the setting itself', () => {
 	it('turning it on without a second factor is refused (403 mfa_required), so a project can’t lock everyone out', async () => {
 		const r = await owner.call('PATCH', `/projects/${projectId}`, { requireMfa: true });
 		expect(r).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
-		expect(r.body.error).toMatch(/to require two-step sign-in here, you need it yourself: set up an authenticator app/);
+		expect(r.body.error).toMatch(/to require two-step sign-in here, you need it yourself: set it up on your Account page/);
 		expect((await owner.call('PATCH', `/teams/${openTeamId}`, { requireMfa: true })).body.code).toBe('mfa_required');
 		expect((await owner.call('GET', `/projects/${projectId}`)).body.project.requireMfa).toBe(false);
 	});
@@ -482,5 +483,50 @@ describe('GET /auth/mfa says whether the person’s roles need it', () => {
 			vi.stubEnv('MFA_REQUIRED', 'true');
 		}
 		expect((await owner.call('GET', '/auth/mfa')).body).toMatchObject({ required: true });
+	});
+});
+
+describe('codes by email alone count as the factor at a project that requires it (206 with 204)', () => {
+	let emailOwner: User;
+	let emailTwoStep: string;
+	let pid: string;
+
+	beforeAll(async () => {
+		emailOwner = await signUp('SuEmailOnly');
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		pid = (await emailOwner.call('POST', '/projects', { name: 'Step-up email only' })).body.project.id;
+		expect((await emailOwner.call('POST', '/auth/mfa/email/enrol', { password: 'correct horse' })).status).toBe(202);
+		const confirmed = await anon('POST', '/auth/mfa/email/confirm', { code: lastMailTo(emailOwner.email)!.text.match(/^(\d{6})$/m)![1]! }, emailOwner.cookie);
+		expect(confirmed.status).toBe(200);
+		emailTwoStep = sessionOf(confirmed.headers);
+		vi.stubEnv('MFA_REQUIRED', 'true');
+	});
+
+	it('hasConfirmedFactor (mfa_has_factor) is true for the email-only account, false for one with none, and the account’s own only', async () => {
+		expect(await withUser(emailOwner.id, (db) => hasConfirmedFactor(db, emailOwner.id))).toBe(true);
+		// Negative control: no factor.
+		expect(await withUser(owner.id, (db) => hasConfirmedFactor(db, owner.id))).toBe(false);
+		// RLS: another account can't learn it (invoker's rights).
+		expect(await withUser(owner.id, (db) => hasConfirmedFactor(db, emailOwner.id))).toBe(false);
+		// The definer side sees it for any account: the same function, as the schema owner.
+		expect(await asOwner('SELECT mfa_has_factor($1) AS has', [emailOwner.id])).toEqual([{ has: true }]);
+	});
+
+	it('the email-only owner turns the project’s setting on with the session the emailed code gave; the password-only session is refused', async () => {
+		expect(await emailOwner.call('PATCH', `/projects/${pid}`, { requireMfa: true })).toMatchObject({ status: 403, body: { code: 'mfa_step_up' } });
+		const on = await anon('PATCH', `/projects/${pid}`, { requireMfa: true }, emailTwoStep);
+		expect(on.status, JSON.stringify(on.body)).toBe(200);
+		expect(on.body.project).toMatchObject({ requireMfa: true, mfaRequired: true });
+	});
+
+	it('with the setting on, an owner action needs the emailed code’s session (positive control) and refuses the password-only one', async () => {
+		expect(await emailOwner.call('POST', `/projects/${pid}/api-keys`, { name: 'logger' })).toMatchObject({ status: 403, body: { code: 'mfa_step_up' } });
+		expect((await anon('POST', `/projects/${pid}/api-keys`, { name: 'logger' }, emailTwoStep)).status).toBe(201);
+		await withUser(emailOwner.id, async (db) => {
+			expect(await requestAuth.run({ userId: emailOwner.id, amr: ['pwd', 'otp'], otpAt: Date.now() }, () => projectStepUpRefusal(db, pid))).toBeNull();
+			expect((await requestAuth.run({ userId: emailOwner.id, amr: ['pwd'], otpAt: null }, () => projectStepUpRefusal(db, pid)))?.code).toBe('mfa_step_up');
+		});
+		// GET /auth/mfa says the role needs it and that it is on.
+		expect((await anon('GET', '/auth/mfa', undefined, emailTwoStep)).body).toMatchObject({ enrolled: true, methods: ['email'], required: true, sessionVerified: true });
 	});
 });

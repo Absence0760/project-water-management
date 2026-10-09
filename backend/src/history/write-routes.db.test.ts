@@ -1160,6 +1160,11 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/mfa/step-up', exempt: 'a code again inside the caller’s own session (a sign-off, issuing or withdrawing a pack need one from the last 10 minutes); a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/mfa/verify', exempt: 'signs the caller in with a code; a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	// Recovering a lost second factor (205_mfa_recovery): the account's own, in its own security log, never a project's.
+	{ route: 'POST /auth/mfa/email/enrol', exempt: 'starts turning on the caller’s own codes by email (unconfirmed; a code emailed); no project, and nothing to log until it is confirmed' },
+	{ route: 'POST /auth/mfa/email/confirm', exempt: 'the caller’s own codes by email turned on; recorded as mfa.email_enrolled in the account’s own security log, not a project’s history' },
+	{ route: 'DELETE /auth/mfa/email', exempt: 'the caller’s own codes by email turned off; recorded as mfa.email_disabled in the account’s own security log, not a project’s history' },
+	{ route: 'POST /auth/mfa/email/send', exempt: 'emails the caller a code (step-up, a code check, or finishing enrolment); changes nothing but the live code and the send log' },
+	{ route: 'POST /auth/mfa/challenge/email', exempt: 'emails a sign-in code to the account a sign-in challenge proved; changes nothing but the live code and the send log' },
 	{ route: 'POST /auth/mfa/reset', exempt: 'asks for a reset of the caller’s own lost second factor (emails a link); recorded as mfa.reset_requested in the account’s own security log' },
 	{ route: 'POST /auth/mfa/reset/confirm', exempt: 'starts the 3-day wait from the emailed link; recorded as mfa.reset_confirmed in the account’s own security log' },
 	{ route: 'POST /auth/mfa/reset/cancel', exempt: 'ends a waiting reset from an emailed cancel link; recorded as mfa.reset_cancelled in the account’s own security log' },

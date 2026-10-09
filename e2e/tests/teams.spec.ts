@@ -238,7 +238,7 @@ test('only a team admin turns two-step sign-in on for the team; a member reads w
 
 	await page.goto(`/teams/${team.id}`);
 	const part = (await openTeamSettings(page)).getByRole('region', { name: 'Two-step sign-in' });
-	await expect(part).toContainText('Members who manage this team need an authenticator app');
+	await expect(part).toContainText('Members who manage this team need two-step sign-in');
 	const toggle = part.getByRole('switch', { name: 'Require two-step sign-in' });
 	await expect(toggle).not.toBeChecked();
 	await toggle.click();

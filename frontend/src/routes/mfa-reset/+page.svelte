@@ -63,7 +63,7 @@
 	{:else}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 		<p>{t('Confirm to start a 3-day wait. When it ends, two-step sign-in is removed from your account and every device is signed out.')}</p>
-		<p>{t('Until then your authenticator app keeps working, and we email you every day with a link to cancel. Signing in with a code also cancels it.')}</p>
+		<p>{t('Until then your codes keep working, and we email you every day with a link to cancel. Signing in with a code also cancels it.')}</p>
 		<button type="button" class="btn btn-primary" onclick={startWait} disabled={busy}>{busy ? t('Checking…') : t('Start the 3-day wait')}</button>
 		<p class="muted">{t('If you didn’t ask for this, close this page: someone knows your password, so choose a new one.')}</p>
 	{/if}

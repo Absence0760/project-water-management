@@ -13,7 +13,7 @@ import { request as apiRequest, type APIRequestContext, type Page } from '@playw
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';
 import { acceptInvites, PASSWORD } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
-import { endMfaResetWait, mfaResetState } from '../support/db.ts';
+import { ageEmailCodeSends, endMfaResetWait, mfaResetState } from '../support/db.ts';
 import { API_URL, MFA_API_URL, WEB_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
@@ -40,7 +40,7 @@ async function viaMailpitApi(page: Page) {
 async function enrol(page: Page) {
 	await page.goto('/account');
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
-	await panel.getByRole('button', { name: 'Set up two-step sign-in' }).click();
+	await panel.getByRole('button', { name: 'Set up the app' }).click();
 	await panel.getByLabel('Current password').fill(PASSWORD);
 	await panel.getByRole('button', { name: 'Continue' }).click();
 	const secret = (await panel.locator('[data-totp-secret]').getAttribute('data-totp-secret'))!;
@@ -50,7 +50,7 @@ async function enrol(page: Page) {
 		return hotp(base32Decode(secret)!, step);
 	};
 	await panel.getByLabel('Enter the code the app shows').fill(hotp(base32Decode(secret)!, step));
-	await panel.getByRole('button', { name: 'Turn on two-step sign-in' }).click();
+	await panel.getByRole('button', { name: 'Turn on the authenticator app' }).click();
 	await panel.getByRole('button', { name: 'I’ve saved them' }).click();
 	await expect(panel).toHaveAttribute('data-two-step', 'on');
 	return next;
@@ -71,11 +71,36 @@ async function toCodeStep(page: Page, email: string) {
 	await expect(page.getByRole('heading', { name: 'Two-step sign-in' })).toBeVisible();
 }
 
-/** Signed out: ask at the code step, follow the emailed link, start the wait. The start email. */
-async function startReset(page: Page, email: string) {
+/** The six-digit code in the newest code email to `to` that isn't among `seen` (206). */
+async function emailedCode(to: string, seen: readonly string[]): Promise<string> {
+	const m = await waitForEmail(to, 'Your sign-in code — Water Management', seen);
+	const code = m.text.match(/^(\d{6})$/m)?.[1];
+	expect(code, 'a six-digit code on its own line').toMatch(/^\d{6}$/);
+	return code!;
+}
+
+/** Codes by email on, through the API (as the page's account), the code read from Mailpit (206). */
+async function emailOn(request: APIRequestContext, email: string) {
+	const seen = await emailIds(email);
+	expect((await request.post(`${MFA_API_URL}/auth/mfa/email/enrol`, { data: { password: PASSWORD } })).status()).toBe(202);
+	const r = await request.post(`${MFA_API_URL}/auth/mfa/email/confirm`, { data: { code: await emailedCode(email, seen) } });
+	expect(r.status(), await r.text()).toBe(200);
+}
+
+/**
+ * Signed out: ask at the code step, follow the emailed link, start the wait. The start email. `factor`: the
+ * account's only factor, which words the links (the app: "Lost your phone…"; codes by email alone: "Can’t get
+ * the email…").
+ */
+async function startReset(page: Page, email: string, factor: 'totp' | 'email' = 'totp') {
 	await toCodeStep(page, email);
-	await page.getByRole('button', { name: 'Lost your phone? Use a recovery code' }).click();
-	await page.getByRole('button', { name: 'Lost your phone and your recovery codes?' }).click();
+	if (factor === 'totp') {
+		await page.getByRole('button', { name: 'Lost your phone? Use a recovery code' }).click();
+		await page.getByRole('button', { name: 'Lost your phone and your recovery codes?' }).click();
+	} else {
+		await page.getByRole('button', { name: 'Can’t get the email? Use a recovery code' }).click();
+		await page.getByRole('button', { name: 'Can’t get the email and lost your recovery codes?' }).click();
+	}
 	await page.getByRole('button', { name: 'Email me a link' }).click();
 	await expect(page.locator('[data-reset-sent]')).toContainText('Check your email');
 
@@ -218,6 +243,10 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 	const teamId = ((await created.json()) as { team: { id: string } }).team.id;
 	expect((await page.request.post(`${API_URL}/teams/${teamId}/members`, { data: { email: member.user.email, role: 'member' } })).status()).toBe(201);
 	expect(await acceptInvites(member.user.email, teamId)).toBe(1);
+	// Another admin, whose factor this admin may never remove (2026-10-08): no button on their row.
+	const coAdmin = await signIn('Co Admin');
+	expect((await page.request.post(`${API_URL}/teams/${teamId}/members`, { data: { email: coAdmin.user.email, role: 'admin' } })).status()).toBe(201);
+	expect(await acceptInvites(coAdmin.user.email, teamId)).toBe(1);
 	const { secret } = (await (await member.context.request.post(`${API_URL}/auth/mfa/totp/enrol`, { data: { password: PASSWORD } })).json()) as { secret: string };
 	expect((await member.context.request.post(`${API_URL}/auth/mfa/totp/confirm`, { data: { code: hotp(base32Decode(secret)!, totpStep(Date.now())) } })).status()).toBe(200);
 	expect((await member.context.request.get(`${API_URL}/auth/me`)).status()).toBe(200);
@@ -225,6 +254,8 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 	// The admin's session gave its code 11 minutes ago: the action asks for a fresh one.
 	await context.addCookies([{ name: 'wm_session', value: sessionToken(owner.id, { amr: ['pwd', 'otp'], otp_at: Date.now() - 11 * 60_000 }), domain: 'localhost', path: '/' }]);
 	await page.goto(`/teams/${teamId}`);
+	await expect(page.getByRole('button', { name: 'Remove Co Admin' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Reset two-step sign-in for Co Admin' })).toHaveCount(0);
 	const action = page.getByRole('button', { name: 'Reset two-step sign-in for Phone Loser' });
 	await action.click();
 	await answerConfirm(page, true, "Do this only when you're sure it's them asking");
@@ -245,4 +276,53 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 	await member.page.getByLabel('Password').fill(PASSWORD);
 	await member.page.getByRole('button', { name: 'Sign in' }).click();
 	await expect(member.page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+});
+
+test('codes by email alone: “Can’t get the email…”, the emailed link, the wait, and when it is over the password alone signs in', async ({ page, owner }) => {
+	await viaMailpitApi(page);
+	await emailOn(page.request, owner.email);
+	await page.goto('/');
+	await signOut(page, owner.displayName);
+	await startReset(page, owner.email, 'email');
+
+	await endMfaResetWait(owner.email);
+	const seen = await emailIds(owner.email);
+	await runJobsTick({ projects: [crypto.randomUUID()], schedule: false });
+	const done = await waitForEmail(owner.email, DONE_SUBJECT, seen);
+	expect(done.to).toEqual([owner.email]);
+	expect(done.text).toContain('every device was signed out');
+	expect(await mfaResetState(owner.email)).toEqual({ waiting: false, endReason: 'completed' });
+
+	// The emailed factor is gone: the password alone signs in, and the Account page says both ways are off.
+	await page.goto('/login');
+	await page.getByLabel('Email').fill(owner.email);
+	await page.getByLabel('Password').fill(PASSWORD);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await page.goto('/account');
+	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
+	await expect(panel).toHaveAttribute('data-two-step', 'off');
+	await expect(panel.locator('[data-method="email"]')).toHaveAttribute('data-on', 'false');
+});
+
+test('signing in with an emailed code cancels a waiting reset', async ({ page, owner }) => {
+	await viaMailpitApi(page);
+	await emailOn(page.request, owner.email);
+	await page.goto('/');
+	await signOut(page, owner.displayName);
+	await startReset(page, owner.email, 'email');
+	expect(await mfaResetState(owner.email)).toEqual({ waiting: true, endReason: null });
+
+	// The send limit allows one a minute; the enrolment's was moments ago.
+	await ageEmailCodeSends(owner.email);
+	await toCodeStep(page, owner.email);
+	const seen = await emailIds(owner.email);
+	await page.getByRole('button', { name: 'Send code' }).click();
+	await page.getByLabel('Code from the email').fill(await emailedCode(owner.email, seen));
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	expect(await mfaResetState(owner.email)).toEqual({ waiting: false, endReason: 'code_used' });
+	await page.goto('/account');
+	await expect(page.locator('[data-pending-reset]')).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Two-step sign-in' })).toHaveAttribute('data-two-step', 'on');
 });
