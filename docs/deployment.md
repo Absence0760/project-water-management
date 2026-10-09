@@ -1755,7 +1755,7 @@ Lambda's list against the Sources table):
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
 | `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
-| `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+| `quaternaries`, `dam-register`, `gauge-stations`, `map-grid` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
 sha256sum worldcover.json.gz

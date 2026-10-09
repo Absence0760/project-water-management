@@ -72,7 +72,8 @@
 	import { areaSourceOf, boundaryNextStep, type BoundaryNextStep, delineationLines, featureName, headerLine, inListOrder, keyGroups, pickedFeature, presentKey } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
-	import { layersOn } from './mapLayers';
+	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
+	import { MapGridLayer } from './mapGridLayer.svelte';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import { RiverLayer } from './riverLayer.svelte';
@@ -794,6 +795,18 @@
 		await load();
 	}
 
+	// --- the hydrological units, the MAP grid and the CHIRPS grid (docs/maps.md): on while `layers=` names them ---
+	const unitsOn = $derived(layersOn(params).has('units'));
+	const unitsLabelled = $derived(unitsOn ? unitLabels(features) : []);
+	const mapGrid = new MapGridLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('mapgrid'),
+		view: () => mapView,
+		load: api.map.mapGrid
+	});
+	const chirpsOn = $derived(layersOn(params).has('chirps'));
+	const chirpsInView = $derived(chirpsOn ? chirpsCells(mapView) : null);
+
 	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
 	/**
 	 * A delineated proposal waits for a decision and no other tool has the map: the channels stay drawn, dimmed, so
@@ -1271,6 +1284,10 @@
 		onriveradded={riverAdded}
 		onshowfeature={(id) => void selectFromList(id)}
 		relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
+		units={{ on: unitsOn, labels: unitsLabelled }}
+		{mapGrid}
+		chirps={{ on: chirpsOn, cells: chirpsInView }}
+		labels={!!glyphs}
 	/>
 {/snippet}
 {#snippet keyBody()}
@@ -1431,6 +1448,9 @@
 									proposal={clickPieces ?? pendingProposal ?? pieces}
 									onpiecehover={(k) => (dividing ? (clickLit = k) : (pieceLit = k))}
 									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
+									units={unitsLabelled}
+									mapGrid={mapGrid.points}
+									chirps={chirpsInView}
 								/>
 							{/snippet}
 						</Lazy>
