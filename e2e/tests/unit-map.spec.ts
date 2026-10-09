@@ -9,6 +9,7 @@
 //   The panel passes axe; a cancelled Use writes nothing.
 // - A unit outside the grid is listed with why, never filled; a unit holding
 //   another grid's MAP is named and holds Use.
+// - Unsaved model edits hold Use, saying why; saved, Use works again.
 // - A viewer has no panel (the proposal is an editor's).
 import type { APIRequestContext } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -18,7 +19,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box } from '../support/map.ts';
 import { loadSyntheticMapGrid } from '../support/mapGrid.ts';
-import { openNodeForm } from '../support/network.ts';
+import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
 import { openSettings } from '../support/settings.ts';
 
 /** The sample model with rain for each unit on and a parcel for each unit: inside the synthetic grid (region Z), or Lower farm's outside it. */
@@ -107,6 +108,44 @@ test('a unit outside the grid is listed and left alone, and a unit holding anoth
 	await expect(panel.getByTestId('unit-map-other-grid')).toContainText('Lower farm has a MAP from another grid');
 	await expect(panel.getByRole('button', { name: 'Use for 1 unit' })).toBeDisabled();
 	await expectNoViolations(page, { include: '[data-testid="unit-map-proposal"]' });
+});
+
+test('unsaved model edits hold Use, saying why, and once saved it works again', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticMapGrid();
+	const { id } = await seed(page.request, 'Unit MAP unsaved model');
+	await openSettings(page, id);
+	const panel = page.getByTestId('unit-map-proposal');
+	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
+	const use = panel.getByRole('button', { name: 'Use for 2 units' });
+	await expect(use).toBeEnabled();
+
+	// An unsaved edit to a unit's form (not its MAP), then back to Settings within the workspace.
+	await panel.getByTestId('unit-map-rows').getByRole('link', { name: 'Upper farm' }).click();
+	await expect(page).toHaveURL(/[?&]tab=network&edit=/);
+	const form = await openNodeForm(page, 'Upper farm');
+	await form.getByLabel('Return flow (% of supply)').fill('5');
+	await form.getByLabel('Return flow (% of supply)').press('Tab');
+	await closeModal(page);
+	await page.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(panel.getByTestId('unit-map-body')).toHaveAttribute('data-ready', 'true');
+
+	// Use waits: it saves straight to the model, which would drop the unsaved edit.
+	await expect(use).toBeDisabled();
+	await expect(use).toHaveAccessibleDescription('Save or discard your model changes first: MAPs used here are saved straight away.');
+
+	// Saved, Use works again, and the edit is kept.
+	expect((await saveModelChanges(page)).status()).toBe(200);
+	await expect(use).toBeEnabled();
+	await use.click();
+	await answerConfirm(page, true, '2 units get their MAP and source from synthetic synthetic 1');
+	await expect(panel.getByTestId('unit-map-notice')).toContainText('2 units now have their MAP from synthetic synthetic 1');
+	// The saved edit survived the apply's reload, beside the new MAP.
+	await panel.getByTestId('unit-map-rows').getByRole('link', { name: 'Upper farm' }).click();
+	await expect(page).toHaveURL(/[?&]tab=network&edit=/);
+	const after = await openNodeForm(page, 'Upper farm');
+	await expect(after.getByLabel('Return flow (% of supply)')).toHaveValue('5');
+	await expect(after.getByLabel('Source of the MAP')).toHaveValue(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel/);
 });
 
 test('a viewer has no MAP from the grid panel', async ({ page, owner, signIn }) => {
