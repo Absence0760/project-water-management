@@ -1,7 +1,7 @@
 // Settings → the daily EWR at the outlet (engine ≥ 1.77.0, issue #455): the form's helpers.
 import { blankEwrDailySource, type EwrDailySource } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { dailySourceError, exampleDailyCsv, lastRunScale, parseMonthlyRow, scaleFactor } from './ewrDailySource';
+import { dailySourceError, exampleDailyCsv, lastRunScale, parseMonthlyRow, rulLoad, scaleFactor } from './ewrDailySource';
 import { parseGrid } from './ewrRules';
 
 const tab = (over: Partial<EwrDailySource> = {}): EwrDailySource => ({ ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(0.5), tableMarMm3: 100, ...over });
@@ -57,4 +57,26 @@ it('the example CSV reads as a percentile table of the ten points', () => {
 	const g = parseGrid(exampleDailyCsv());
 	expect('error' in g).toBe(false);
 	if (!('error' in g)) expect(g.points).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 99]);
+});
+
+describe('rulLoad: a .rul fills the percentile tables and never changes the method', () => {
+	const tables = { naturalPctM3s: [[1]], reservePctM3s: [[0.5]] };
+	it('under the TAB file: the tables only, the TAB file still in use, the switch offered', () => {
+		const out = rulLoad('tab', tables, 'x.rul', 'm3s');
+		expect(out.patch).toEqual(tables);
+		expect('method' in out.patch).toBe(false);
+		expect(out.offerPercentile).toBe(true);
+		expect(out.text).toBe(
+			'Read x.rul (DRM rule curves, m³/s): filled the two percentile tables (the total Reserve and the natural duration curve). The daily EWR still comes from the DRM TAB file; the tables are used only once you pick them.'
+		);
+	});
+	it('under the percentile tables: the tables, no switch to offer; an Mm³ file says it was converted', () => {
+		const out = rulLoad('percentile', tables, 'x.rul', 'mcm');
+		expect(out.patch).toEqual(tables);
+		expect(out.offerPercentile).toBe(false);
+		expect(out.text).toBe('Read x.rul (DRM rule curves, converted from Mm³ a month to m³/s, February 28 days): the total Reserve and the natural duration curve fill the two tables.');
+	});
+	it('names the pragmatic EWR when that is the method', () => {
+		expect(rulLoad('pragmatic', tables, 'x.rul', 'm3s').text).toContain('still comes from the pragmatic EWR');
+	});
 });

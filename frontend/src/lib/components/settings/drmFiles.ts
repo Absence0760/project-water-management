@@ -17,6 +17,7 @@
 // mean, SD and CV, then the modified flows: low flows (maintenance,
 // drought), high flows (maintenance) and the total flows (maintenance), the
 // last column, in Mm³ a month.
+import type { ExampleFile } from '$lib/components/common/formatHelp';
 import { DEFAULT_ASSURANCE_POINTS, EWR_PERCENTILE_POINTS, type EwrDailySource, type EwrRuleTable } from '@water-management/engine';
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -285,7 +286,13 @@ export function exampleTabFile(): string {
 	].join('\r\n');
 }
 
-/** A data: URL to download an example file from. */
-export const exampleHref = (text: string) => `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`;
+/** The example files the "Expected format" note offers (DrmFormatHelp.svelte), plain text, as the DRM writes them. */
+export function drmExampleFiles(): ExampleFile[] {
+	return [
+		{ name: 'drm-example.rul', text: exampleRulFile('m3s'), type: 'text/plain', label: 'Example .rul (m³/s)' },
+		{ name: 'drm-example-mcm.rul', text: exampleRulFile('mcm'), type: 'text/plain', label: 'Example .rul (Mm³ a month)' },
+		{ name: 'drm-example.tab', text: exampleTabFile(), type: 'text/plain', label: 'Example .tab' }
+	];
+}
 
 export { WY as DRM_MONTHS };

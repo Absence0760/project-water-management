@@ -19,6 +19,7 @@
 		type RunSummary
 	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
+	import { dailyEwrName, dailyEwrNameOf } from '$lib/components/ewr/notMet';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
 	import { packVerifyLine, type VerifyRef } from '$lib/components/packs/pack';
 	import { evidenceBoard } from '../licenceImpact';
@@ -115,6 +116,13 @@
 	 * application's period is the baseline's (a report on another period is
 	 * refused), so the baseline's first day serves both.
 	 */
+	// The daily EWR the days below count against, by name (engine ≥ 1.77.0 it can be a DRM table, summary.catchment.outletEwr):
+	// the baseline's, or both runs' when the application has a summary ("each run’s daily EWR" when they differ).
+	const baseDaily = $derived(dailyEwrName(report.summaries.baseline?.catchment?.outletEwr));
+	const dailyName = $derived(
+		dailyEwrNameOf([report.summaries.baseline, report.summaries.application].filter((x) => !!x).map((x) => x!.catchment?.outletEwr))
+	);
+
 	const board = $derived.by(() => {
 		const appSummary = report.summaries.application;
 		if (!app || !appSummary || !id.application || !report.licenceImpact) return null;
@@ -184,7 +192,7 @@
 				<!-- evidence-12: the locality map, frozen into the report from the project's map features (issue #326 A5). -->
 				<LocalityMap {report} {frozen} />
 				{#if !report.river.length}
-					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only the pragmatic EWR (page 1) is.</p>
+					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only {dailyName} (page 1) is.</p>
 				{/if}
 				{#each report.river as site (site.key)}
 					<div class="sub-block">
@@ -204,8 +212,8 @@
 						<div class="two">
 							{#if site.isOutlet && report.byMonth}
 								<IntervalPlot
-									title="Extra days below the pragmatic EWR at the outlet by month of the year, application minus baseline, paired median and 5 to 95 percent range"
-									caption="Extra days below the pragmatic EWR at the outlet, by month of the year (R2), summed over the years."
+									title="Extra days below {dailyName} at the outlet by month of the year, application minus baseline, paired median and 5 to 95 percent range"
+									caption="Extra days below {dailyName} at the outlet, by month of the year (R2), summed over the years."
 									rows={report.byMonth.map((m) => ({ label: monthName(m.month), band: m.band, run: m.run }))}
 									unit="days"
 								/>
@@ -315,7 +323,7 @@
 						<table class="data compact">
 							<thead><tr><th scope="col">Measure</th><th scope="col" class="num">The run</th><th scope="col" class="num">5 – 50 – 95 %</th></tr></thead>
 							<tbody>
-								<tr><th scope="row">Days below the pragmatic EWR</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.ewrDaysNotMet)}</td><td class="num">{bandRange(bandsA.ewrDaysNotMet, 0)}</td></tr>
+								<tr><th scope="row">Days below {baseDaily}</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.ewrDaysNotMet)}</td><td class="num">{bandRange(bandsA.ewrDaysNotMet, 0)}</td></tr>
 								<tr><th scope="row">Shortfall against the EWR (Mm³)</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.shortfallMm3, 2)}</td><td class="num">{bandRange(bandsA.shortfallMm3, 2)}</td></tr>
 								<tr><th scope="row">No-flow days at the outlet</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.noFlowDays)}</td><td class="num">{bandsA.noFlowDays ? bandRange(bandsA.noFlowDays, 0) : `no band (an ensemble from before engine ${ENSEMBLE_MEASURES_SINCE})`}</td></tr>
 								<tr><th scope="row">Natural MAR (Mm³/a)</th><td class="num">{fmtNum(report.uncertainty.baseline?.reference?.marNaturalMm3, 3)}</td><td class="num">{bandRange(bandsA.marNaturalMm3, 3)}</td></tr>
@@ -337,7 +345,7 @@
 							<table class="data compact">
 								<thead><tr><th scope="col">Change, application − baseline</th><th scope="col" class="num">Paired band</th><th scope="col" class="num">Worse in</th></tr></thead>
 								<tbody>
-									<tr><th scope="row">Days below the pragmatic EWR</th><td class="num">{bandText(paired.ewrDaysNotMet, 0)}</td><td class="num">{worseText({ run: null, band: null, bandNote: null, worse: paired.ewrDaysNotMetWorse === null ? null : { k: Math.round(paired.ewrDaysNotMetWorse * paired.members), n: paired.members } })}</td></tr>
+									<tr><th scope="row">Days below {dailyName}</th><td class="num">{bandText(paired.ewrDaysNotMet, 0)}</td><td class="num">{worseText({ run: null, band: null, bandNote: null, worse: paired.ewrDaysNotMetWorse === null ? null : { k: Math.round(paired.ewrDaysNotMetWorse * paired.members), n: paired.members } })}</td></tr>
 									<tr><th scope="row">Shortfall against the EWR (Mm³)</th><td class="num">{bandText(paired.shortfallMm3, 2)}</td><td class="num">{worseText({ run: null, band: null, bandNote: null, worse: paired.shortfallWorse === null ? null : { k: Math.round(paired.shortfallWorse * paired.members), n: paired.members } })}</td></tr>
 									<tr><th scope="row">Outflow MAR (Mm³/a)</th><td class="num">{bandText(paired.marOutflowMm3, 3)}</td><td class="num">—</td></tr>
 									{#each report.rows.filter((r) => r.id === 'noFlowDays' || r.id === 'applicantSupply') as r (r.id)}
@@ -508,7 +516,7 @@
 								<tr>
 									<th scope="col">Application</th>
 									<th scope="col">Status</th>
-									<th scope="col" class="num">Days below the pragmatic EWR, change</th>
+									<th scope="col" class="num">Days below {dailyName}, change</th>
 									<th scope="col" class="num">Reserve months met at the outlet, change</th>
 								</tr>
 							</thead>
@@ -557,7 +565,7 @@
 									<tr>
 										<th scope="col">Application</th>
 										<th scope="col">Status</th>
-										<th scope="col" class="num">Days below the pragmatic EWR, change</th>
+										<th scope="col" class="num">Days below {dailyName}, change</th>
 										<th scope="col" class="num">Reserve months met at the outlet, change</th>
 									</tr>
 								</thead>

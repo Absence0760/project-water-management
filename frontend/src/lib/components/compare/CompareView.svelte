@@ -58,7 +58,7 @@
 	import PairedUncertaintyPanel from '$lib/components/uncertainty/PairedUncertaintyPanel.svelte';
 	import CompareOverlay from '$lib/components/compare/CompareOverlay.svelte';
 	import ReserveYearsChart from '$lib/components/compare/ReserveYearsChart.svelte';
-	import { daysBelowTestOf } from '$lib/components/ewr/notMet';
+	import { dailyEwrName, daysBelowTestOf } from '$lib/components/ewr/notMet';
 	// A scenario run's overrides (issue #18): their own chunk, fetched only when a side is a scenario run.
 	const loadOverrides = () => import('$lib/components/scenarios/ScenarioOverrides.svelte');
 	const runoffModelOf = (s: RunCompareResponse['a']) => (s.run.inputs.settings?.runoffModel as string | undefined) ?? 'legacy';
@@ -344,11 +344,16 @@
 	});
 	// A forecast run's bars stop before its forecast days (RunMeta.forecastFrom, from the runs lists loaded above).
 	const forecastOf = (ref: RunRef) => runs[ref.projectId]?.find((r) => r.id === ref.runId)?.forecastFrom ?? null;
+	// Each run's own daily EWR, by name (engine ≥ 1.77.0 it can be a DRM table): the baseline's from either comparison that has loaded.
+	const baseDaily = $derived(whatIfs.map((s) => cmp[s].data?.a.run.summary).find(Boolean));
 	const chartRuns = $derived(
 		refA
 			? [
-					{ name: NAME.a, projectId: refA.projectId, runId: refA.runId, colour: COLOUR.a, forecastFrom: forecastOf(refA) },
-					...whatIfs.map((s) => ({ name: NAME[s], projectId: refOf(s)!.projectId, runId: refOf(s)!.runId, colour: COLOUR[s], forecastFrom: forecastOf(refOf(s)!) }))
+					{ name: NAME.a, projectId: refA.projectId, runId: refA.runId, colour: COLOUR.a, forecastFrom: forecastOf(refA), daily: baseDaily ? dailyEwrName(baseDaily.catchment?.outletEwr) : undefined },
+					...whatIfs.map((s) => {
+						const sum = cmp[s].data?.b.run.summary;
+						return { name: NAME[s], projectId: refOf(s)!.projectId, runId: refOf(s)!.runId, colour: COLOUR[s], forecastFrom: forecastOf(refOf(s)!), daily: sum ? dailyEwrName(sum.catchment?.outletEwr) : undefined };
+					})
 				]
 			: []
 	);

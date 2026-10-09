@@ -1283,7 +1283,7 @@
 
 	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
 	<div id="set-outcomes">
-		<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} />
+		<OutcomeSettingsSection bind:value={s.outcomes} {readonly} error={outError} daily={s.ewrDailySource} />
 	</div>
 	<div id="set-outlook">
 		<OutlookSettingsSection bind:value={s.outlook} {readonly} error={outlookErr} />

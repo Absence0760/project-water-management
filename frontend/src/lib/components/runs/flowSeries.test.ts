@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVED_SERIES_LABEL } from '@water-management/engine';
-import { calibrationSiteOf, ewrChartSeries, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
+import { calibrationSiteOf, ewrChartCaption, ewrChartSeries, ewrLineWords, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
 
 const d = (v: number) => ({ startDate: '2020-01-01', values: [v, v] });
 const conv = (s: { values: (number | null)[] }) => s.values.map((v) => (v == null ? null : v * 10));
@@ -108,5 +108,20 @@ describe('fdcCaption (issue #51)', () => {
 			'Natural and simulated flow rank all 200 days of the run before the forecast; observed flow only its 120 days with a reading. The 14 forecast days are left out: the curves rank the history only.'
 		);
 		expect(fdcCaption({ ...base, partial: true, onObserved: true, obsDays: 120 })).toBe('Every curve ranks the 120 days with an observed reading, so they compare like with like.');
+	});
+});
+
+describe('the EWR line follows the run’s daily EWR (engine ≥ 1.77.0, issue #455)', () => {
+	const d = (v: number) => ({ startDate: '2020-10-01', values: [v, v] });
+	const conv = (s: { values: readonly (number | null)[] }) => s.values as number[];
+	it('labels the line by its source: the engine’s own label for a DRM table, “Pragmatic EWR” otherwise', () => {
+		expect(ewrChartSeries({ ewr: d(1) }, conv, { method: 'tab' })[0]!.label).toBe('EWR from the DRM TAB file (scaled)');
+		expect(ewrChartSeries({ ewr: d(1) }, conv, { method: 'percentile' })[0]!.label).toBe('EWR from the DRM percentile tables (scaled)');
+		expect(ewrChartSeries({ ewr: d(1) }, conv, null)[0]!.label).toBe('Pragmatic EWR');
+	});
+	it('says in the caption which line counts as EWR not met', () => {
+		expect(ewrChartCaption()).toBe('Days the outflow dips below the pragmatic EWR line count as EWR not met.');
+		expect(ewrChartCaption({ method: 'percentile' })).toBe('Days the outflow dips below the daily EWR line (from the DRM percentile tables) count as EWR not met.');
+		expect(ewrLineWords({ method: 'tab' })).toBe('the daily EWR line (from the DRM TAB file)');
 	});
 });

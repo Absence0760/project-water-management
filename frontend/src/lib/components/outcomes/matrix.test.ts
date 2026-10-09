@@ -111,6 +111,7 @@ describe('buildMatrixView', () => {
 		expect(v.rows.map((r) => r.label)).toEqual(['100 %', '85 %']);
 		expect(v.metric).toBe('daysBelowEwr');
 		expect(v.metricLabel).toBe('Days below the pragmatic EWR at the outlet');
+		expect(metricLabel('daysBelowEwr', undefined, { method: 'tab' })).toBe('Days below the daily EWR from the DRM TAB file at the outlet');
 	});
 
 	it('colours by the default cut-offs (5 % / 20 % of days), marked pending the hydrologist', () => {

@@ -1,7 +1,9 @@
 <!--
 	The per-table editor of Settings → Reserve rule tables (EwrRulesSection.svelte,
 	which loads it only once the project has a table, so a project without one
-	downloads none of it): site, source and its kind, the REC, what it covers, unit, natural source,
+	downloads none of it): first the file load (a DRM .rul / .tab or a CSV,
+	with its Expected format), since a .rul fills nearly every field below; then
+	site, source and its kind, the REC, what it covers, unit, natural source,
 	scale, the determination's natural MAR, % points, the EWR and natural grids, paste from a spreadsheet, the
 	plausibility notes and Remove. Remove, and a Fill over a grid that already
 	holds values, ask first. Helpers in ./ewrRules.ts.
@@ -51,6 +53,8 @@
 	let pointsBad = $state<boolean[]>([]);
 	let pasteText = $state<string[]>([]);
 	let pasteNote = $state<{ ok: boolean; text: string }[]>([]);
+	// What the last file load did, said beside the file picker at the top (the paste box's result stays under it).
+	let fileNote = $state<{ ok: boolean; text: string }[]>([]);
 
 	// A new table, Discard or a save can change the tables under the typed points: follow them, unless the text is mid-edit and not yet valid.
 	$effect(() => {
@@ -75,7 +79,7 @@
 		});
 		if (!ok) return;
 		value.splice(i, 1);
-		for (const list of [pointsText, pointsBad, pasteText, pasteNote, readers] as unknown[][]) list.splice(i, 1);
+		for (const list of [pointsText, pointsBad, pasteText, pasteNote, fileNote, readers] as unknown[][]) list.splice(i, 1);
 	}
 
 	function onPoints(i: number, text: string) {
@@ -101,7 +105,7 @@
 	/**
 	 * A Desktop Reserve Model file fills the table at once (issue #455): a .rul its grids, unit, points and REC
 	 * (asking first over values), a .tab its natural MAR and REC. Any other text file (a CSV) goes into the paste
-	 * box, to fill whichever grid the user picks.
+	 * box, to fill whichever grid the user picks. What happened is said beside the picker, at the top of the table.
 	 */
 	// One file reader per table, removed with it: the latest file picked for a table wins (a
 	// large one still read can't land over a smaller one picked after it), and a read lands in
@@ -118,17 +122,17 @@
 		const drm = parseDrmFile(text);
 		if (drm === null) {
 			pasteText[at] = text;
-			pasteNote[at] = { ok: true, text: `Read ${f.name}: pick which values to fill.` };
+			fileNote[at] = { ok: true, text: `Read ${f.name} into the paste box below the table: pick which values to fill.` };
 			return;
 		}
 		if ('error' in drm) {
-			pasteNote[at] = { ok: false, text: `${f.name}: ${drm.error}` };
+			fileNote[at] = { ok: false, text: `${f.name}: ${drm.error}` };
 			return;
 		}
 		const t = value[at]!;
 		if (drm.kind === 'tab') {
 			value[at] = ruleTableFromTab(t, drm);
-			pasteNote[at] = {
+			fileNote[at] = {
 				ok: true,
 				text: `Read ${f.name} (DRM summary): ${drm.marMm3 !== null ? `the natural MAR, ${drm.marMm3} Mm³/a` : 'no MAR'}${drm.category ? ` and the REC, ${drm.category}` : ''}. Its monthly totals aren't a rule table: load the .rul file for the % points.`
 			};
@@ -148,7 +152,7 @@
 		value[at] = next;
 		pointsText[at] = next.points.join(', ');
 		pointsBad[at] = false;
-		pasteNote[at] = {
+		fileNote[at] = {
 			ok: true,
 			text:
 				`Read ${f.name} (DRM rule curves, ${drm.unit === 'm3s' ? 'm³/s' : 'Mm³ a month'}): the total Reserve as the EWR` +
@@ -158,7 +162,11 @@
 		};
 	}
 
-	const exampleHref = (kind: 'total' | 'lowFlow') => `data:text/csv;charset=utf-8,${encodeURIComponent(exampleGridCsv(kind))}`;
+	// The CSV layouts the Expected format offers beside the DRM files (synthetic numbers, DRM style).
+	const csvFiles = [
+		{ name: 'ewr-total-example.csv', text: exampleGridCsv('total'), label: 'Example CSV (total-flow table)' },
+		{ name: 'ewr-low-flow-example.csv', text: exampleGridCsv('lowFlow'), label: 'Example CSV (low-flow table)' }
+	];
 
 	async function paste(i: number, which: GridKey) {
 		const g = parseGrid(pasteText[i] ?? '');
@@ -200,8 +208,21 @@
 	{@const errs = tableErrors(t)}
 	{@const notes = Object.keys(errs).length ? [] : tableNotes(t)}
 	{@const u = UNIT[t.unit] ?? t.unit}
-	<fieldset class="plain rule" aria-describedby="{uid}-{i}-status">
+	<fieldset class="plain rule" aria-describedby="{uid}-{i}-file {uid}-{i}-status">
 		<legend>Rule table at {siteLabel(t.siteNodeId)}</legend>
+		{#if !readonly}
+			<div class="load" data-testid="rule-file-load">
+				<div class="load-row">
+					<label class="btn btn-sm file">
+						Load a DRM file (.rul / .tab) or a CSV
+						<input type="file" accept=".rul,.tab,.csv,.tsv,.txt,text/csv,text/plain" onchange={(e) => loadFile(i, e)} aria-describedby="{uid}-{i}-load-h" />
+					</label>
+					<span class="hint" id="{uid}-{i}-load-h">A .rul fills the grids, unit, % points and REC; a .tab the natural MAR and REC; a CSV goes into the paste box below the table.</span>
+				</div>
+				<p id="{uid}-{i}-file" class="small" class:err={fileNote[i] && !fileNote[i].ok} role="status" aria-label="File result">{fileNote[i]?.text ?? ''}</p>
+				<DrmFormatHelp target="ruleTable" {csvFiles} context="of a file for the rule table at {siteLabel(t.siteNodeId)}" />
+			</div>
+		{/if}
 		<div class="fields">
 			<div class="field">
 				<label for="{uid}-{i}-site">EWR site</label>
@@ -400,16 +421,7 @@
 					{#if t.naturalSource === 'table'}
 						<button type="button" class="btn btn-sm" onclick={() => paste(i, 'natural')}>Fill the natural flows</button>
 					{/if}
-					<label class="btn btn-sm file">
-						Load a file (.rul, .tab or CSV)
-						<input type="file" accept=".rul,.tab,.csv,.tsv,.txt,text/csv,text/plain" onchange={(e) => loadFile(i, e)} />
-					</label>
 				</div>
-				<p class="small">
-					Example layouts (synthetic numbers): <a href={exampleHref('total')} download="ewr-total-example.csv">total-flow table</a>,
-					<a href={exampleHref('lowFlow')} download="ewr-low-flow-example.csv">low-flow table</a>.
-				</p>
-				<DrmFormatHelp target="ruleTable" name="into the rule table at {siteLabel(t.siteNodeId)}" />
 			</div>
 		{/if}
 		<EwrHighFlowsEditor bind:value={() => t.highFlows ?? [], (v) => (t.highFlows = v)} {readonly} siteLabel={siteLabel(t.siteNodeId)} />
@@ -488,6 +500,21 @@
 		min-width: 78px;
 		padding-left: 0.3rem;
 		padding-right: 0.3rem;
+	}
+	.load {
+		display: grid;
+		gap: 0.35rem;
+		margin: 0.25rem 0 0.5rem;
+		max-width: 75ch;
+	}
+	.load-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem 0.75rem;
+	}
+	.load p {
+		margin: 0;
 	}
 	.paste {
 		display: grid;

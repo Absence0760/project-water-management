@@ -69,3 +69,32 @@ export function exampleDailyCsv(): string {
 	const rows = wy.map((m, i) => [m, ...DEFAULT_ASSURANCE_POINTS.map((p) => (season[i]! * (1.6 - (1.5 * p) / 100)).toFixed(3))].join(','));
 	return `${['Month', ...DEFAULT_ASSURANCE_POINTS.map((p) => `${p}%`)].join(',')}\n${rows.join('\n')}\n`;
 }
+
+/** The method's name in a sentence ("The daily EWR still comes from the DRM TAB file."). */
+const METHOD_NAME: Record<EwrDailySource['method'], string> = {
+	pragmatic: 'the pragmatic EWR',
+	tab: 'the DRM TAB file',
+	percentile: 'the DRM percentile tables'
+};
+
+/**
+ * What a .rul loaded into the daily EWR does (issue #455): it fills the two
+ * percentile tables and nothing else. The method the person picked stays: a
+ * .rul loaded under the TAB file fills the tables for later, says the TAB file
+ * is still in use, and offers the switch (`offerPercentile`) as a choice.
+ */
+export function rulLoad(
+	method: EwrDailySource['method'],
+	tables: Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s'>,
+	fileName: string,
+	unit: 'm3s' | 'mcm'
+): { patch: Pick<EwrDailySource, 'naturalPctM3s' | 'reservePctM3s'>; text: string; offerPercentile: boolean } {
+	const read = `Read ${fileName} (DRM rule curves${unit === 'mcm' ? ', converted from Mm³ a month to m³/s, February 28 days' : ', m³/s'})`;
+	const patch = { naturalPctM3s: tables.naturalPctM3s, reservePctM3s: tables.reservePctM3s };
+	if (method === 'percentile') return { patch, text: `${read}: the total Reserve and the natural duration curve fill the two tables.`, offerPercentile: false };
+	return {
+		patch,
+		text: `${read}: filled the two percentile tables (the total Reserve and the natural duration curve). The daily EWR still comes from ${METHOD_NAME[method]}; the tables are used only once you pick them.`,
+		offerPercentile: true
+	};
+}

@@ -239,6 +239,8 @@ const count = (n: number, one: string, other: string) => `${n} ${n === 1 ? one :
 export interface LicenceImpactNames {
 	background: string;
 	application: string;
+	/** The daily test the days count, as the runs have it ("the daily EWR from the DRM TAB file", engine ≥ 1.77.0); default "the pragmatic EWR". */
+	ewr?: string;
 }
 
 const DEFAULT_NAMES: LicenceImpactNames = { background: 'the background run', application: 'the application' };
@@ -254,7 +256,8 @@ export function describeLicenceImpact(metric: OutcomeMetric, c: LicenceImpactCla
 	if (!c.enoughYears || !c.below) {
 		return c.nYears === 0 ? `No ${cls} years both runs cover: not enough years to judge.` : `Only ${years} both runs cover: not enough years to judge.`;
 	}
-	const what = metric === 'reserveMonthsMet' ? 'The Reserve was' : 'The pragmatic EWR was';
+	const ewr = names.ewr ?? 'the pragmatic EWR';
+	const what = metric === 'reserveMonthsMet' ? 'The Reserve was' : `${ewr.charAt(0).toUpperCase()}${ewr.slice(1)} was`;
 	const [one, other, prep] = metric === 'reserveMonthsMet' ? ['month', 'months', 'in'] : ['day', 'days', 'on'];
 	const { background: bg, application: app, change } = c.below;
 	if (change === 0) {
