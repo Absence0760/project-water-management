@@ -5922,7 +5922,7 @@ sequential scans of `river_reference`, the bbox query (21 ms: the btree
 `river_reference_bbox_idx` on `(min_lon, max_lon, min_lat, max_lat)` can't
 serve a four-sided overlap, so the planner skips it) and `riverDatasets()`'
 `count(*) … GROUP BY dataset` (25 ms), on every pan. Fine at South Africa's
-network; linear in the table, so about 0.2 s a request if the operator loads
+network; linear in the table, so a much slower request if the operator loads
 all of Africa. `GET …/map/stations` counts its datasets the same way.
 
 - **Durable fix:** in one migration, an expression GiST index on

@@ -356,8 +356,8 @@ model, scenarios, runs, transfers-page and diagram-labels specs at 6 workers
 (issue #138). The traces showed no slow step: 7 s alone, 15–24 s in that mix,
 with the time spread evenly over the steps (settings' 24 fills 1.1 s → 3.6 s,
 the network 0.7 → 2.1 s, registering 0.7 → 2.6 s). Its 103 API requests took
-1.5 s in all alone and 5–7.5 s in the mix; the slowest, the model run, 0.2 s
-and 0.9 s. A CPU profile of twelve Settings fills (~300 ms) put ~5 ms in the
+1.5 s in all alone and 5–7.5 s in the mix; the slowest, the model run, well under a second
+alone and 0.9 s in the mix. A CPU profile of twelve Settings fills (~300 ms) put ~5 ms in the
 app's code, no long tasks, and a third in Playwright's selector engine
 resolving `getByLabel`; the rest was idle and protocol round trips. There was
 nothing in the app to fix.

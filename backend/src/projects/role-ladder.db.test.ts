@@ -31,10 +31,13 @@
 // through the allowed routes is farms/farmer-privacy.security.db.test.ts, a
 // contributor scenarios/applications.db.test.ts; isolation.db.test.ts covers
 // non-members.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 type Check = { min: string; ok: boolean };
-const checks: Check[] = [];
+// Each probe's own list, carried with its request: a request still running
+// when its test ends (a timeout) can't write into the next test's probe.
+const checks = new AsyncLocalStorage<Check[]>();
 vi.mock('./access.js', async (orig) => {
 	const real = await orig<typeof import('./access.js')>();
 	return {
@@ -42,10 +45,10 @@ vi.mock('./access.js', async (orig) => {
 		requireRole: async (...args: Parameters<typeof real.requireRole>) => {
 			try {
 				const role = await real.requireRole(...args);
-				checks.push({ min: args[2], ok: true });
+				checks.getStore()?.push({ min: args[2], ok: true });
 				return role;
 			} catch (err) {
-				checks.push({ min: args[2], ok: false });
+				checks.getStore()?.push({ min: args[2], ok: false });
 				throw err;
 			}
 		}
@@ -233,13 +236,15 @@ async function probe(u: User, route: string, override: Record<string, string> = 
 	let path = pattern.replace(/:([A-Za-z]+)/g, (_, name: string) => ids[name] ?? ZERO);
 	if (s.query) path += `?${new URLSearchParams(s.query)}`;
 	const body = method === 'GET' || method === 'DELETE' ? undefined : (s.body ?? {});
-	checks.length = 0;
-	const r = await app.request(path, {
-		method,
-		headers: { cookie: u.cookie, origin: ORIGIN, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-		body: body !== undefined ? JSON.stringify(body) : undefined
-	});
-	return { status: r.status, text: await r.text(), checks: [...checks] };
+	const made: Check[] = [];
+	const r = await checks.run(made, () =>
+		app.request(path, {
+			method,
+			headers: { cookie: u.cookie, origin: ORIGIN, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+			body: body !== undefined ? JSON.stringify(body) : undefined
+		})
+	);
+	return { status: r.status, text: await r.text(), checks: made };
 }
 
 /** The highest role a request asked for (the one it stopped at, for someone below it). */

@@ -9,6 +9,10 @@
 //
 //   ../infra-secrets/water-management/client-terms.txt   (or $CLIENT_TERMS_FILE)
 //
+// "../" is next to this checkout, or, in a linked git worktree, next to the
+// main checkout: a worktree under .claude/worktrees/ has no infra-secrets
+// beside it, and the guard silently skipped there before.
+//
 // One term per line; `#` starts a comment. Matching ignores case, and a space
 // in a term also matches "", "_", "-", or a line break plus comment markers,
 // so "Some River" catches "SomeRiver", "some-river" and a name split across a
@@ -33,7 +37,27 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export const DEFAULT_TERMS_FILE = resolve(ROOT, '../infra-secrets/water-management/client-terms.txt');
+const TERMS_PATH = '../infra-secrets/water-management/client-terms.txt';
+export const DEFAULT_TERMS_FILE = resolve(ROOT, TERMS_PATH);
+
+/**
+ * Where the terms file may be: beside this checkout, then beside the main
+ * checkout that a linked worktree belongs to (the parent of the shared .git).
+ * @param {string} root @param {string | null} commonDir absolute git common dir
+ */
+export function termsFileCandidates(root, commonDir) {
+	const out = [resolve(root, TERMS_PATH)];
+	if (commonDir) out.push(resolve(dirname(commonDir), TERMS_PATH));
+	return [...new Set(out)];
+}
+
+function gitCommonDir() {
+	try {
+		return execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' }).trim() || null;
+	} catch {
+		return null;
+	}
+}
 
 /** @param {string} text */
 export function parseTerms(text) {
@@ -109,9 +133,10 @@ function report(findings, what) {
 
 function main() {
 	const args = process.argv.slice(2);
-	const termsFile = process.env.CLIENT_TERMS_FILE || DEFAULT_TERMS_FILE;
-	if (!existsSync(termsFile)) {
-		console.log(`No client terms file at ${termsFile}; skipping (see docs/security.md § Public repo hygiene).`);
+	const candidates = process.env.CLIENT_TERMS_FILE ? [process.env.CLIENT_TERMS_FILE] : termsFileCandidates(ROOT, gitCommonDir());
+	const termsFile = candidates.find((f) => existsSync(f));
+	if (!termsFile) {
+		console.log(`No client terms file at ${candidates.join(' or ')}; skipping (see docs/security.md § Public repo hygiene).`);
 		return;
 	}
 	const patterns = compileTerms(parseTerms(readFileSync(termsFile, 'utf8')));

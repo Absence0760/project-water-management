@@ -7666,7 +7666,7 @@ confirmed farmers see the outlook, O5, issue #90).
   date. A table that couldn't be drawn (no farm dam, no such day in the
   record) says why.
 - **Farmers** (issue #53 R5, E3): *Published to farmers: 85 % for 1 Oct
-  2018 – 30 Apr 2019, on … by …, 12 hydrological units* (or *from another
+  2018 – 30 Apr 2019, on … by …, … hydrological units* (or *from another
   outlook*), or *No outlook is published to farmers*. Editors pick **Level
   the WUA has set** (the levels that ran), then, in the action row under
   it and its hint, **Publish to farmers**,

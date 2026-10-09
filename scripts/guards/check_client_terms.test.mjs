@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addedLines, compileTerms, parseTerms, scanText } from './check_client_terms.mjs';
+import { addedLines, compileTerms, parseTerms, scanText, termsFileCandidates } from './check_client_terms.mjs';
 
 // Synthetic terms only: the real list lives outside the repo.
 const patterns = compileTerms(parseTerms('# invented client\nMadeup River\nFakefarm  # a farm\n\n'));
@@ -53,4 +53,12 @@ test('addedLines keeps only added lines, with new-file line numbers', () => {
 			{ line: 12, text: 'new' },
 		],
 	});
+});
+
+test('a linked worktree also looks beside the main checkout for the terms file', () => {
+	const f = '/infra-secrets/water-management/client-terms.txt';
+	assert.deepEqual(termsFileCandidates('/r/wm-a', '/r/main/.git'), ['/r' + f]);
+	assert.deepEqual(termsFileCandidates('/r/main/.claude/worktrees/x', '/r/main/.git'), ['/r/main/.claude/worktrees' + f, '/r' + f]);
+	assert.deepEqual(termsFileCandidates('/r/main', '/r/main/.git'), ['/r' + f]);
+	assert.deepEqual(termsFileCandidates('/r/main', null), ['/r' + f]);
 });

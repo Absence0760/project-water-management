@@ -193,6 +193,18 @@ table to the run's summary with the HTML as an artifact. It stays out of
 `ci.yml` because coverage costs about 27 % more wall clock (engine: 2 min 37 s
 → 3 min 19 s) and the unit and DB jobs are already CI's slowest.
 
+The cost isn't even: CPU-heavy code pays most. Delineation's tests take about
+1 s in CI's DB job and 3–6 s under coverage, the role ladder's route sweeps
+and the engine-backed runs 2.5–3.5 s and 5–6.5 s. So no project leans on
+vitest's 5 s default timeout: neither the unit nor the DB tests make a
+wall-clock claim (the perf projects do), and both set a 60 s
+`testTimeout`/`hookTimeout` that only catches a hang
+(`backend/vitest.config.ts`). Until 2026-10 the DB project had the default,
+and the Coverage workflow failed on whichever runner was slow that day. A
+test that records what its requests do keeps the record per request
+(`role-ladder.db.test.ts` carries it in an `AsyncLocalStorage`), so a request
+still running after its test ends can't fail the next one.
+
 What it can't see:
 
 - **e2e.** Playwright drives a production build with no coverage counters, so

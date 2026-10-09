@@ -24,7 +24,8 @@
 // is. Where it would snap shows as a ring while the pointer moves.
 import type { MapPosition } from '$lib/api/types';
 import type { Draft } from './draft.svelte';
-import { DRAFT_CORNER_LAYER, DRAFT_MID_LAYER } from './drawLayers';
+import { DRAWN_RADIUS } from './drawLayers';
+import { midpoints } from './shape';
 import { SNAP_PX, snapPoint, type SnapHit } from './snap';
 
 type LngLat = { lng: number; lat: number };
@@ -44,34 +45,58 @@ export interface DrawMap {
 	getCenter(): LngLat;
 	unproject(point: [number, number]): LngLat;
 	project(lngLat: [number, number]): Pt;
-	queryRenderedFeatures(geometry: [Pt, Pt] | Pt, options: { layers: string[] }): { properties?: Record<string, unknown> }[];
 	doubleClickZoom: { enable(): void; disable(): void };
 	dragPan: { enable(): void; disable(): void };
-	getLayer(id: string): unknown;
 }
 
 const at = (l: LngLat): MapPosition => [round(l.lng), round(l.lat)];
 /** 7 decimals (~1 cm), the server's own rounding. */
 const round = (v: number) => Math.round(v * 1e7) / 1e7;
-/** How far from a corner or a middle (px) a click still hits it: a 24 px target (WCAG 2.5.8). */
+/** How far beyond a drawn corner or middle (px) a click still hits it: well over a 24 px target (WCAG 2.5.8). */
 const HIT = 12;
 
-/** What is under a screen point: a corner's index, an edge's middle, or nothing. */
-function hitAt(map: DrawMap, p: Pt): { corner: number } | { mid: number } | null {
-	const layers = [DRAFT_CORNER_LAYER, DRAFT_MID_LAYER].filter((l) => map.getLayer(l));
-	if (!layers.length) return null;
-	const hits = map.queryRenderedFeatures(
-		[
-			{ x: p.x - HIT, y: p.y - HIT },
-			{ x: p.x + HIT, y: p.y + HIT }
-		],
-		{ layers }
+/**
+ * What is under a screen point: a corner's index, an edge's middle, or
+ * nothing. Read from the draft itself, projected to the screen, not from the
+ * rendered `draft-corner`/`draft-mid` layers: MapLibre redraws those a frame
+ * or more after each `setData`, so a click on the first corner right after
+ * the last was placed could miss it and add another corner instead of
+ * closing the shape (e2e map-draw.spec.ts, "with the mouse"). The same
+ * corners and middles `draftData` draws (none for a whole pasted shape, the
+ * middles only once drawn), reached as the rendered layers were: a drawn
+ * circle (DRAWN_RADIUS) touching the HIT box around the click. The nearest
+ * centre wins, a corner over any middle.
+ */
+function hitAt(map: DrawMap, draft: Draft, p: Pt): { corner: number } | { mid: number } | null {
+	if (draft.whole) return null;
+	const nearest = (points: readonly MapPosition[], r: number): number | null => {
+		let best: number | null = null;
+		let bestD = Infinity;
+		for (let i = 0; i < points.length; i++) {
+			const s = map.project([points[i]![0], points[i]![1]]);
+			const dx = Math.abs(s.x - p.x);
+			const dy = Math.abs(s.y - p.y);
+			// The circle touches the box when its centre is within r of the box.
+			const ox = Math.max(0, dx - HIT);
+			const oy = Math.max(0, dy - HIT);
+			if (ox * ox + oy * oy > r * r) continue;
+			const d = dx * dx + dy * dy;
+			if (d < bestD) {
+				bestD = d;
+				best = i;
+			}
+		}
+		return best;
+	};
+	const corner = nearest(draft.coords, draft.shape === 'point' ? DRAWN_RADIUS.point : DRAWN_RADIUS.corner);
+	if (corner !== null) return { corner };
+	if (draft.phase === 'drawing') return null;
+	const mids = midpoints(draft.shape, draft.coords);
+	const mid = nearest(
+		mids.map((m) => m.at),
+		DRAWN_RADIUS.mid
 	);
-	const corner = hits.find((h) => h.properties?.role === 'corner');
-	if (corner) return { corner: Number(corner.properties!.index) };
-	const mid = hits.find((h) => h.properties?.role === 'mid');
-	if (mid) return { mid: Number(mid.properties!.after) };
-	return null;
+	return mid === null ? null : { mid: mids[mid]!.after };
 }
 
 /**
@@ -121,7 +146,7 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 
 	const onClick = (e: Ev) => {
 		if (!draft.active || dragging !== null) return;
-		const hit = hitAt(map, e.point);
+		const hit = hitAt(map, draft, e.point);
 		if (draft.phase === 'drawing' && draft.shape !== 'point') {
 			const n = draft.coords.length;
 			if (hit && 'corner' in hit) {
@@ -164,14 +189,14 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 			return;
 		}
 		draft.snapHint = draft.shape === 'point' ? placed(e).hit : null;
-		const hit = draft.phase === 'review' ? hitAt(map, e.point) : null;
+		const hit = draft.phase === 'review' ? hitAt(map, draft, e.point) : null;
 		canvas.style.cursor = hit ? ('corner' in hit ? 'move' : 'copy') : draft.shape === 'point' ? 'crosshair' : '';
 	};
 
 	const startDrag = (e: Ev) => {
 		if (!draft.active || draft.phase !== 'review' || draft.whole) return;
 		if (e.points && e.points.length > 1) return;
-		const hit = hitAt(map, e.point);
+		const hit = hitAt(map, draft, e.point);
 		if (!hit || !('corner' in hit)) return;
 		e.preventDefault();
 		map.dragPan.disable();

@@ -2,7 +2,8 @@
 // (the map's middle) for the keyboard, and at the mouse pointer while the
 // mouse is over the map, until an arrow key, the mouse leaving, the map
 // taking the focus or a touch brings the crosshair back. A fake map stands in for MapLibre: its events by name, a
-// centre and an unproject.
+// centre, an unproject and a project. Corners and edge middles are hit from
+// the draft itself, so the fake renders nothing.
 import { describe, expect, it, vi } from 'vitest';
 import { attachDrawing, type DrawMap } from './attachDrawing';
 import { Draft } from './draft.svelte';
@@ -27,10 +28,8 @@ function setup() {
 		// A screen point 100 px across is 0.01° of longitude, down is south.
 		unproject: ([x, y]) => ({ lng: 20 + x / 10000, lat: -33 - y / 10000 }),
 		project: ([lng, lat]) => ({ x: (lng - 20) * 10000, y: (-33 - lat) * 10000 }),
-		queryRenderedFeatures: () => [],
 		doubleClickZoom: { enable() {}, disable() {} },
-		dragPan: { enable() {}, disable() {} },
-		getLayer: () => undefined
+		dragPan: { enable() {}, disable() {} }
 	};
 	let onKey: ((e: KeyboardEvent) => void) | null = null;
 	const keysOn = {
@@ -46,7 +45,7 @@ function setup() {
 	const move = (x: number, y: number) => fire('mousemove', { point: { x, y }, lngLat: map.unproject([x, y]) });
 	const focus = () => canvasListeners.get('focus')?.();
 	const click = (x: number, y: number, altKey = false) => fire('click', { point: { x, y }, lngLat: map.unproject([x, y]), originalEvent: { altKey }, preventDefault() {} });
-	return { draft, press, move, fire, focus, aims, detach, click };
+	return { draft, press, move, fire, focus, aims, detach, click, canvas };
 }
 
 describe('attachDrawing: where Enter adds', () => {
@@ -186,5 +185,129 @@ describe('attachDrawing: snapping (#326 C2)', () => {
 		draft.follow = false;
 		click(101, 199);
 		expect(draft.coords).toHaveLength(4);
+	});
+});
+
+describe('attachDrawing: what a click hits (the draft’s own corners, not the rendered layers)', () => {
+	// The fake map renders nothing (no queryRenderedFeatures, no layers), like a layer MapLibre hasn't redrawn yet after setData.
+	const triangle = (click: (x: number, y: number) => void) => {
+		click(100, 100);
+		click(300, 100);
+		click(200, 300);
+	};
+
+	it('a click on the first corner right after the third closes the polygon instead of adding a fourth', () => {
+		const { draft, click } = setup();
+		triangle(click);
+		expect(draft.phase).toBe('drawing');
+		click(105, 96);
+		expect(draft.phase).toBe('review');
+		expect(draft.coords).toHaveLength(3);
+	});
+
+	it('a click near another corner while drawing adds nothing; one beyond its reach adds a corner (positive control)', () => {
+		const { draft, click } = setup();
+		triangle(click);
+		// Reach: the 12 px box around the click touching the drawn corner (11 px across its middle with the stroke), 23 px in all.
+		click(300, 122);
+		expect(draft.coords).toHaveLength(3);
+		expect(draft.phase).toBe('drawing');
+		click(300, 125);
+		expect(draft.coords).toHaveLength(4);
+	});
+
+	it('while drawing, an edge’s middle is not a target: a click there adds a corner', () => {
+		const { draft, click } = setup();
+		triangle(click);
+		// The middle of the edge from (100, 100) to (300, 100).
+		click(200, 100);
+		expect(draft.coords).toHaveLength(4);
+		expect(draft.coords[3]).toEqual([20.02, -33.01]);
+	});
+
+	it('once closed, a click near an edge’s middle inserts a corner there, after the right corner', () => {
+		const { draft, click } = setup();
+		triangle(click);
+		click(100, 100);
+		// The north edge's middle (200, 100), between corners 0 and 1.
+		click(203, 98);
+		expect(draft.coords).toHaveLength(4);
+		expect(draft.coords[1]).toEqual([20.0203, -33.0098]);
+		expect(draft.coords[2]).toEqual([20.03, -33.01]);
+	});
+
+	it('a click on a corner picks it, and a corner wins over a nearer edge middle', () => {
+		const { draft, click } = setup();
+		click(100, 100);
+		click(160, 100);
+		click(130, 300);
+		click(100, 100);
+		expect(draft.phase).toBe('review');
+		// The middle of edge 0–1 is at (130, 100), corner 1 at (160, 100): at (142, 100) the middle is nearer, the corner still within reach.
+		click(142, 100);
+		expect(draft.corner).toBe(1);
+		expect(draft.coords).toHaveLength(3);
+		// On the middle itself, 30 px from either corner, it adds a corner (positive control).
+		click(130, 100);
+		expect(draft.coords).toHaveLength(4);
+		expect(draft.coords[1]).toEqual([20.013, -33.01]);
+	});
+
+	it('the cursor once closed: move over a corner, copy over a middle, none elsewhere', () => {
+		const { click, move, canvas } = setup();
+		triangle(click);
+		click(100, 100);
+		move(300, 100);
+		expect(canvas.style.cursor).toBe('move');
+		move(200, 100);
+		expect(canvas.style.cursor).toBe('copy');
+		move(200, 200);
+		expect(canvas.style.cursor).toBe('');
+	});
+
+	it('a line has a middle on each segment and none back to its first point', () => {
+		const { draft, click } = setup();
+		draft.draw(DRAW_CHOICES.find((c) => c.id === 'river')!);
+		triangle(click);
+		// A second click on the last point finishes the line.
+		click(200, 300);
+		expect(draft.phase).toBe('review');
+		// The middle of the last segment, (250, 200): a corner after corner 1.
+		click(250, 200);
+		expect(draft.coords).toHaveLength(4);
+		expect(draft.coords[2]).toEqual([20.025, -33.02]);
+		// Where a polygon's closing edge would have its middle, (150, 200): nothing to hit, so nothing is added.
+		click(150, 200);
+		expect(draft.coords).toHaveLength(4);
+		expect(draft.corner).toBeNull();
+	});
+
+	it('a press on a corner once closed drags it, read from the draft too', () => {
+		const { draft, click, fire, move } = setup();
+		triangle(click);
+		click(100, 100);
+		fire('mousedown', { point: { x: 302, y: 98 }, lngLat: { lng: 0, lat: 0 }, preventDefault() {} });
+		expect(draft.corner).toBe(1);
+		move(400, 150);
+		expect(draft.coords[1]).toEqual([20.04, -33.015]);
+		fire('mouseup');
+	});
+
+	it('a whole pasted shape has no corners or middles to hit', () => {
+		const { draft, click } = setup();
+		triangle(click);
+		click(100, 100);
+		draft.whole = {
+			type: 'MultiPolygon',
+			coordinates: [
+				[[[20.01, -33.01], [20.03, -33.01], [20.02, -33.03], [20.01, -33.01]]],
+				[[[20.05, -33.05], [20.06, -33.05], [20.06, -33.06], [20.05, -33.05]]]
+			]
+		};
+		draft.corner = 0;
+		click(100, 100);
+		expect(draft.corner).toBeNull();
+		click(200, 100);
+		expect(draft.coords).toHaveLength(3);
 	});
 });

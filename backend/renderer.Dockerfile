@@ -62,8 +62,8 @@ FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b7
 # archive is only a second place to download the same files from.
 #   - Ubuntu's `main` component only, and no third-party list: every package
 #     below and each of its dependencies is in main (checked with
-#     `apt-get install -s` against the snapshot). That is ~11 MB of indexes
-#     instead of ~64 MB.
+#     `apt-get install -s` against the snapshot). That is a smaller set of indexes
+#     than every component's ~64 MB.
 #   - snapshot.ubuntu.com is slow (~100-230 kB/s) and answers 500/503 now and
 #     then. The 2026-09-29 CI run failed on an index and a local build on a
 #     .deb, each after apt's retries. So archive.ubuntu.com is listed too,
