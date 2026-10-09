@@ -16,18 +16,16 @@
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';
 import { acceptInvites, addMember, createProject, PASSWORD } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { API_URL, MFA_API_URL } from '../support/env.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { viaMfaApi } from '../support/mfaApi.ts';
 import { openProject } from '../support/project.ts';
 
 test('with the requirement on, turning on a project’s two-step requirement needs your own authenticator; once set up, the switch turns on', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Required farm');
 	// Every API call the page makes goes to the API with the requirement on.
-	await page.route(`${API_URL}/**`, async (route) => {
-		const response = await route.fetch({ url: route.request().url().replace(API_URL, MFA_API_URL) });
-		await route.fulfill({ response });
-	});
+	await viaMfaApi(page);
 	const saved = async () => (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project;
 
 	// Working on the project needs nothing: no banner, no badge. The panel says what the switch does, off by default.
