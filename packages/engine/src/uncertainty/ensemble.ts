@@ -28,7 +28,7 @@ import { prepareCalibration } from '../calibrate/calibrate';
 import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
-import { calibrationRecordsAt, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
+import { calibrationRecordsAt, parseUnitRainSeriesKey, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
 import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
@@ -203,6 +203,9 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	}
 	const series = { ...input.series, rain_chirps_mm: { startDate: run.startDate, values } };
 	delete series.rain_catchment_mm;
+	// A land unit's own gauge goes too (engine ≥ 1.78.0, docs/model.md §2.4h): the member runs on CHIRPS alone, each unit on its
+	// own CHIRPS where it has one, levelled by its MAP (a unit without a MAP runs it raw, as the member's catchment CHIRPS is).
+	for (const k of Object.keys(series)) if (parseUnitRainSeriesKey(k)?.kind === 'rain_catchment_mm') delete (series as Record<string, unknown>)[k];
 	return { input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series }, reason: null };
 }
 

@@ -23,7 +23,8 @@ const TEXT = fileURLToPath(new URL('./methodology-text.generated.ts', import.met
 const PUBLISHED: Record<string, string> = {
 	'methodology-1': '8f26d0e2f723b302a0a499f6072db8c3c6ad35f4d12dc90f1501a2357cfcad88',
 	'methodology-2': '4e342a3cf5a7636f469aeec76aa41d06e8dda765ef9e2c3f10062f0342095370',
-	'methodology-3': 'bab17f104f6c20bf4ba4bfa4936b681b13066b39e77e4fe82f483b13a989b4b9'
+	'methodology-3': 'bab17f104f6c20bf4ba4bfa4936b681b13066b39e77e4fe82f483b13a989b4b9',
+	'methodology-4': '7cd4583826ab33421e9889337dd09da333375cecddca1848d2be82bb9480083b'
 };
 
 describe('methodology statement (generated from docs/methodology)', () => {

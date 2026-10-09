@@ -366,6 +366,12 @@ class Generator(unittest.TestCase):
         self.assertEqual(json.dumps(generate.random_input(7)), json.dumps(generate.random_input(7)))
         self.assertEqual(json.dumps(generate.random_input(7, True)), json.dumps(generate.random_input(7, True)))
 
+    def test_per_unit_rain_is_out_of_scope(self):
+        # model.md §2.4h (issue #482): not ported yet, so a per-unit input is never cross-checked.
+        doc = {"settings": {"unitRain": {"mode": "perUnit"}}, "model": {"nodes": []}}
+        self.assertEqual(model.unsupported(doc), ["runoff from each unit's own rain (perUnit)"])
+        self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "catchment"}}, "model": {}}), [])
+
     def test_known_differences_name_their_followup(self):
         for key, why in diff.KNOWN_DIFFERENCES.items():
             self.assertIn("followups.md", why, key)

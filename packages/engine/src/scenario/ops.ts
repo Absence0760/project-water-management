@@ -56,7 +56,9 @@ import {
 	type PeInput,
 	type Transfer,
 	type ZeroRainMode,
-	returnFlowFromLossReturn
+	returnFlowFromLossReturn,
+	parseUnitRainSeriesKey,
+	type UnitRainSeriesKey
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
 import { droughtRestrictionIssues } from '../network/restriction';
@@ -565,6 +567,15 @@ export function settingsValueError(path: string, value: unknown): string | null 
  */
 export const SCALABLE_SERIES_KINDS = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'rain_catchment_alt_mm', 'rain_reanalysis_mm', 'evap_apan_mm'] as const;
 export type ScalableSeriesKind = (typeof SCALABLE_SERIES_KINDS)[number];
+/**
+ * What `series.scale` may name: a ScalableSeriesKind, or (engine ≥ 1.78.0,
+ * docs/model.md §2.4h) a land unit's own rain record (UnitRainSeriesKey), so
+ * the rain sensitivity moves every rain a per-unit run reads.
+ */
+export type ScalableSeriesKey = ScalableSeriesKind | UnitRainSeriesKey;
+/** `v` as a key series.scale may scale, or null. */
+export const scalableSeriesKey = (v: unknown): ScalableSeriesKey | null =>
+	typeof v === 'string' && ((SCALABLE_SERIES_KINDS as readonly string[]).includes(v) || parseUnitRainSeriesKey(v) !== null) ? (v as ScalableSeriesKey) : null;
 /** Largest factor series.scale accepts: a scenario scales a driver, it doesn't replace it. */
 export const SERIES_SCALE_MAX = 10;
 
@@ -986,7 +997,7 @@ export type ScenarioOp =
 	| { op: 'demandObject.remove'; demandObjectId: string }
 	| SettingsSetOp
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
-	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string }
+	| { op: 'series.scale'; kind: ScalableSeriesKey; factor: number; from?: string; to?: string }
 	| DemandScaleOp
 	| EwrRuleSetOp
 	/** Remove the Reserve rule table of one EWR site (engine ≥ 1.35.0): null = the outlet. Always a baseline assumption. */
@@ -1323,9 +1334,9 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 			break;
 		}
 		case 'series.scale': {
-			const kind = need('kind', oneOf(SCALABLE_SERIES_KINDS)) as ScalableSeriesKind;
+			const kind = need('kind', (v) => (scalableSeriesKey(v) ? null : `must be one of ${SCALABLE_SERIES_KINDS.join(', ')}, or a unit's own rain record (rain_catchment_mm@<unit id>, rain_chirps_mm@<unit id>)`)) as ScalableSeriesKey;
 			const factor = need('factor', range(0, SERIES_SCALE_MAX)) as number;
-			const s: { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string } = { op: 'series.scale', kind, factor };
+			const s: { op: 'series.scale'; kind: ScalableSeriesKey; factor: number; from?: string; to?: string } = { op: 'series.scale', kind, factor };
 			for (const k of ['from', 'to'] as const) {
 				if (raw[k] === undefined) continue;
 				if (isIsoDate(raw[k])) s[k] = raw[k];

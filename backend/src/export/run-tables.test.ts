@@ -96,6 +96,47 @@ describe('summary sheet', () => {
 		expect(lines[farmHeader]).toContain('Average EWR charge (m³/day charged),Days charged for the EWR');
 	});
 
+	it('writes the per-unit rain block (engine ≥ 1.78.0) only when the run had it', () => {
+		expect([...summaryCsvLines(meta, summary)].some((l) => l.startsWith('Runoff from each unit'))).toBe(false);
+		const s = structuredClone(summary);
+		const unit = {
+			areaKm2: 10,
+			mapSource: 'invented isohyet',
+			rainKey: 'rain_chirps_mm@u1',
+			gaugeMapFactor: null,
+			gaugeMapOwnFactor: null,
+			gaugeMapClamped: false,
+			days: { unitGauge: 0, gaugeMap: 0, unitChirps: 360, catchment: 6, forecast: 0, none: 0 },
+			rainMm: 700,
+			petMm: 1500,
+			aetMm: 600,
+			flowMm: 70,
+			exchangeMm: 0,
+			storageStartMm: 200,
+			storageEndMm: 230,
+			runoffM3: 700_000,
+			runoffCoefficient: 0.1
+		};
+		s.unitRain = {
+			mode: 'perUnit',
+			gaugeMapMm: null,
+			gaugeMapSource: null,
+			mapPeriod: { start: '1991-01-01', end: '2020-12-31' },
+			units: [
+				{ ...unit, nodeId: 'u1', name: 'Upper unit', mapMm: 800, rule: 'unitChirps', factor: 1.6, factorSource: 'chirpsMap', chirps: { source: 'map', factor: 1.6, ownFactor: 1.6, clamped: false, meanAnnualMm: 500, years: [1991, 2020], inPeriod: true } },
+				{ ...unit, nodeId: 'u2', name: 'Lower unit', mapMm: null, mapSource: null, rule: 'catchment', rainKey: null, factor: null, factorSource: 'catchment', chirps: null }
+			]
+		};
+		const lines = [...summaryCsvLines(meta, s)];
+		const at = lines.indexOf("Runoff from each unit's own rain (docs/model.md §2.4h)");
+		expect(at).toBeGreaterThan(0);
+		expect(lines[at + 1]).toBe('Gauge MAP (mm),,');
+		expect(lines[at + 3]).toMatch(/^Unit,Area \(km²\),MAP \(mm\),MAP source,Rain from,Record,Factor,/);
+		expect(lines[at + 4]).toBe("Upper unit,10,800,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.6,unit MAP ÷ its CHIRPS mean annual rain,no,500,1991–2020 (2),0,0,360,6,0,0,700,600,70,700000,0.1");
+		expect(lines[at + 5]).toMatch(/^Lower unit,10,,,the catchment rain \(no rain of its own\),,,as the catchment forcing,no,/);
+		expect(lines.filter((l) => l === '').length).toBe(21);
+	});
+
 	it('writes fractions as percentages without binary noise', () => {
 		const s = structuredClone(summary);
 		s.farms[0]!.fractionSupplied = 0.07;

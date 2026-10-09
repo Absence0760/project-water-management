@@ -7,7 +7,9 @@
 // - RunoffModel: one conceptual model stepped a day at a time in mm over the
 //   catchment (./gr4j.ts), wrapped into a generator by ./simulate.ts. Its
 //   stores are explicit, so the water balance can be checked every day.
-import type { ModelInput, ProjectSettings, RunoffBalance, SeriesKind } from '../project';
+import type { ModelInput, ProjectSettings, RunoffBalance, SeriesKind, UnitRainSummary } from '../project';
+import type { ChirpsCorrection } from '../rain';
+import type { UnitRainRecipe } from './unitRain';
 
 /**
  * Runoff models a run can use (settings.runoffModel). GR4J only since engine
@@ -96,6 +98,21 @@ export interface NaturalFlowInput {
 	balance?: RunoffBalance;
 	/** The model's state at the start of run day `ctx.warm.captureAt`, when asked (engine ≥ 1.1.0, ../warmstart). */
 	state?: number[];
+	/**
+	 * Runoff from each unit's own rain (engine ≥ 1.78.0, settings.unitRain
+	 * `perUnit`, docs/model.md §2.4h): each land unit's runoff (m³/day, before
+	 * land cover), its local inflow in place of natural × share, in node-id
+	 * order; naturalFlowM3Day is their sum. Absent under catchment rain.
+	 */
+	unitRunoff?: { nodeId: string; runoffM3Day: Float64Array }[];
+	/** Per-unit series (rain_unit, runoff_natural) for the run's output; with unitRunoff. */
+	nodeSeries?: { nodeId: string; key: string; label: string; unit: string; values: number[] }[];
+	/** summary.unitRain; with unitRunoff. */
+	unitRain?: UnitRainSummary;
+	/** Each unit's rule and factors, for a snapshot to pin; with unitRunoff. */
+	unitRecipes?: UnitRainRecipe[];
+	/** Each unit's GR4J state at `ctx.warm.captureAt` (in place of `state`), when asked. */
+	unitStates?: { id: string; state: number[] }[];
 }
 
 export interface RunContext {
@@ -110,7 +127,19 @@ export interface RunContext {
 	 * NaturalFlowInput.state; or start the run from `resume`, a state captured
 	 * that way, instead of the initial fill and the warm-up.
 	 */
-	warm?: { captureAt?: number; resume?: readonly number[] };
+	warm?: {
+		captureAt?: number;
+		resume?: readonly number[];
+		/** Under per-unit rain: each unit's state to resume from, and the rules and factors the capture run used. */
+		resumeUnits?: readonly { id: string; state: readonly number[] }[];
+		unitRecipes?: readonly UnitRainRecipe[];
+	};
+	/**
+	 * The run's §2.4b CHIRPS correction (prepareRun's): what per-unit rain
+	 * (settings.unitRain `perUnit`) corrects a unit's CHIRPS with when the unit
+	 * has no MAP. Required under per-unit rain.
+	 */
+	chirpsCorrection?: ChirpsCorrection | null;
 	/**
 	 * The run's historical days, before its forecast tail (../forecastTail.ts;
 	 * absent = every day). A warm-up that cycles the forcing cycles only

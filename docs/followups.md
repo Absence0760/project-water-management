@@ -300,6 +300,29 @@ and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain
 runs and accumulations are real) can't be decided without the client.
 
+- [ ] **Runoff from each unit's own rain (engine 1.78.0,
+      [#482](https://github.com/Absence0760/project-water-management/issues/482),
+      model.md §2.4h).** Built off by default (`settings.unitRain` absent
+      runs as before, to the bit). Provisional calls awaiting the
+      hydrologist: (1) is a unit's CHIRPS levelled by unit MAP ÷ its mean
+      annual over 1991–2020 the right correction, against the catchment
+      gauge's monthly §2.4b factors, when both exist; (2) should the clamp
+      stay 0.25–4 for the per-unit MAP factors; (3) `rnl` (from 1981) or
+      `sat` (from 1998) as the per-unit feeds' default product; (4) the
+      5-year minimum, and falling back to every complete year below it;
+      (5) the forecast (CHIRPS-GEFS) staying catchment-wide × the MAP
+      ratio; (6) a unit's own gauge used as recorded, with no zero-run or
+      accumulation check of its own. Trigger: the hydrologist's answer, or
+      the client's first per-unit run once part B's feeds and part D's
+      settings land. Also left: `verify/` ports §2.4h (part E of #482); the
+      run window still follows the catchment rain series; and a seasonal
+      outlook's members (§2.15) run their season on the analogue's
+      catchment rain, so a unit off the MAP ratio runs its season at the
+      catchment level. The durable fix: each unit's season rain from the
+      base run's `rain_unit` on the analogue days (a per-unit forecast
+      record the chain reads first), with an outlook invariant that an
+      analogue equal to the history reproduces the base run's unit rain.
+      Trigger: the first per-unit project that runs an outlook.
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
