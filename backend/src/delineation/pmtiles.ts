@@ -28,7 +28,7 @@ export interface Header {
 	bounds: [number, number, number, number];
 }
 
-interface Entry {
+export interface Entry {
 	tileId: number;
 	offset: number;
 	length: number;
@@ -127,7 +127,8 @@ function boundedLength(length: number, max: number, what: string): number {
 	return length;
 }
 
-function parseDirectory(b: Uint8Array): Entry[] {
+/** A directory's entries (exported for the fixture tests, scripts/pmtiles-content.ts). */
+export function parseDirectory(b: Uint8Array): Entry[] {
 	const p = { i: 0 };
 	const n = readVarint(b, p);
 	// Each entry takes at least four bytes (one per field), so a count the bytes can't hold is a corrupt directory, refused before allocating it.
@@ -253,6 +254,18 @@ export class PmtilesReader {
 }
 
 /**
+ * gzip with the header's OS byte (RFC 1952 § 2.3.1, byte 9) pinned to 3
+ * (Unix): zlib writes the platform's code there (3 on Linux, 19 on macOS),
+ * so without this the same archive came out two bytes different on a Mac.
+ * Readers ignore the byte.
+ */
+function gzip(b: Uint8Array): Buffer {
+	const out = gzipSync(b);
+	out[9] = 3;
+	return out;
+}
+
+/**
  * A small single-directory PMTiles archive (gzip directories, uncompressed
  * tiles): what backend/scripts/dem-fixture.ts writes the synthetic DEM as.
  */
@@ -275,8 +288,8 @@ export function writePmtiles(
 		writeVarint(out, i === 0 ? offset + 1 : 0);
 		offset += t.data.length;
 	});
-	const root = gzipSync(Buffer.from(out));
-	const meta = gzipSync(Buffer.from(JSON.stringify(opts.metadata)));
+	const root = gzip(Buffer.from(out));
+	const meta = gzip(Buffer.from(JSON.stringify(opts.metadata)));
 	const data = Buffer.concat(sorted.map((t) => t.data));
 	const h = Buffer.alloc(127);
 	h.write('PMTiles', 0, 'latin1');

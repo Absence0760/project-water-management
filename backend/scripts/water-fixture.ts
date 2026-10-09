@@ -3,7 +3,9 @@
 // defined in src/delineation/waterFixture.ts): Terrarium-encoded PNG tiles
 // whose "height" is the occurrence in percent, in a PMTiles archive, the
 // format bin/tiles-dev.sh water writes from JRC Global Surface Water.
-// Invented water only. Deterministic: re-running it rewrites the same bytes.
+// Invented water only. Deterministic on a given zlib: re-running it rewrites
+// the same bytes. water-fixture.test.ts compares the committed file with it by
+// content, not by bytes, so a different zlib can't fail it but a water change does.
 //
 //   pnpm -C backend gen:water-fixture
 import { writeFileSync } from 'node:fs';
@@ -24,14 +26,14 @@ import {
 /** Terrarium for a whole-percent value: v + 32768 = R·256 + G, so R = 128, G = v, B = 0. */
 const pixel = (v: number) => (0xff000000 | (128 << 16) | ((v & 255) << 8)) >>> 0;
 
-/** The fixture's bytes (the test checks the committed file still equals them). */
-export function buildWaterFixture(): Buffer {
+/** The fixture's bytes (the test checks the committed file still holds the same content); `occurrence` is fixtureOccurrence unless a test changes it. */
+export function buildWaterFixture(occurrence: (x: number, y: number) => number = fixtureOccurrence): Buffer {
 	const tiles = [];
 	for (let ty = 0; ty < WATER_FIXTURE_TILES; ty++) {
 		for (let tx = 0; tx < WATER_FIXTURE_TILES; tx++) {
 			const argb = new Uint32Array(WATER_FIXTURE_TILE * WATER_FIXTURE_TILE);
 			for (let y = 0; y < WATER_FIXTURE_TILE; y++) {
-				for (let x = 0; x < WATER_FIXTURE_TILE; x++) argb[y * WATER_FIXTURE_TILE + x] = pixel(fixtureOccurrence(tx * WATER_FIXTURE_TILE + x, ty * WATER_FIXTURE_TILE + y));
+				for (let x = 0; x < WATER_FIXTURE_TILE; x++) argb[y * WATER_FIXTURE_TILE + x] = pixel(occurrence(tx * WATER_FIXTURE_TILE + x, ty * WATER_FIXTURE_TILE + y));
 			}
 			tiles.push({ z: WATER_FIXTURE_ZOOM, x: WATER_FIXTURE_X0 + tx, y: WATER_FIXTURE_Y0 + ty, data: encodePng({ width: WATER_FIXTURE_TILE, height: WATER_FIXTURE_TILE, argb }) });
 		}
