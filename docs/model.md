@@ -5395,7 +5395,9 @@ wherever the determination publishes a natural curve; the default stays
 
 No table: nothing changes. By default the pragmatic EWR stays the daily EWR
 everywhere (the shortfall charge, curtailment, days not met), with or without
-tables; the rule tables add a report. From engine 1.3.0 the charge can follow
+tables; the rule tables add a report. From engine 1.77.0 the outlet's daily
+EWR itself can come from the DRM's TAB file or its percentile tables read
+each day (§2.9f). From engine 1.3.0 the charge can follow
 the tables instead (`settings.ewrChargeSource`, below, § The charge from the
 rule table).
 
@@ -5944,6 +5946,123 @@ days (G7: never a chosen window).
 Both are banded by the uncertainty ensemble (§2.10e, `noFlowDays`,
 `ewrSiteDaysNotMet`); the evidence report prints them on page 1 and in § 4
 (ui.md § Evidence report).
+
+### 2.9f The daily EWR at the outlet: pragmatic, DRM TAB file or DRM percentile tables (engine ≥ 1.77.0, issue #455)
+
+The daily EWR at the outlet (`ewr`, §2.5) is what every day is judged by: it
+is fragmented to the units by flow share (`ewr`, `ewr_cumulative` per unit),
+each unit's flow is compared with its cumulative share (`ewr_shortfall`), and
+the shortfall attribution and charge (§2.7b), curtailment, the compliance grid
+(§2.9), the observed-record agreement (§2.9b), the drought restriction's EWR
+trigger, hands-off EWR flows and the exports all read it. A client
+hydrologist asked to choose where that series comes from.
+`settings.ewrDailySource` (`packages/engine/src/reserve/dailySource.ts`) picks
+the source; everything downstream of the series follows unchanged.
+
+```
+settings.ewrDailySource = null (absent: the pragmatic EWR, every run before 1.77.0) | {
+  method:        'pragmatic' | 'tab' | 'percentile',
+  scaling:       'mar' | 'area',
+  tableMarMm3:   number | null,   // the tables' natural MAR, Mm³/a (the TAB header's "MAR =")
+  tableAreaKm2:  number | null,   // the tables' catchment area, km²
+  tabM3s:        number[12] | null,          // TAB "Total Flows, Maint.", m³/s, Oct … Sep
+  naturalPctM3s: number[12][10] | null,      // RUL "Natural Flow Percentile Table", m³/s
+  reservePctM3s: number[12][10] | null       // RUL "Total Reserve Flow Percentile Table", m³/s
+}
+```
+
+The tables' columns are the DRM's ten points, 0.1 0.2 … 0.9 0.99
+(`EWR_PERCENTILE_POINTS`); a natural row falls with the point. Values are
+≥ 0 and at most 10⁶ m³/s; the MAR and area are above 0. A method needs its
+tables (`tab`: `tabM3s`; `percentile`: both grids) and its scaling's divisor
+(`mar`: `tableMarMm3`; `area`: `tableAreaKm2`); the settings API refuses a
+source that lacks them (`ewrDailySourceIssues`, shared by the API, the form
+and the engine), and the engine runs the pragmatic EWR with a warning if one
+reaches it anyway. `method: 'pragmatic'` keeps tables half entered, so
+switching back loses nothing; it runs exactly as `null`. A run comparison
+lists a change of source, scaling, divisor or table values only when the
+source isn't the pragmatic EWR on both sides.
+
+**The three methods**, on day t of water-year month m (Oct = 0):
+
+1. **Pragmatic** (the default): `EWR_t = ewrPragmaticM3PerDay[m]`, bit-identical
+   to every earlier run, including the series label `Pragmatic EWR`.
+2. **TAB file**: `EWR_t = TAB_m3s[m] × s × 86 400` m³/day.
+3. **Percentile tables**: with q = the day's natural flow at the outlet in m³/s
+   (m³/day ÷ 86 400; a negative one reads as 0) and the month's rows scaled,
+   N'_k = N_k × s (each natural row's running minimum first, since a duration
+   curve can't rise; the run notes a row that rises) and R'_k = R_k × s:
+
+   ```
+   q ≥ N'_1:   R = R'_1                                        (at or above the wettest point)
+   q ≤ N'_10:  R = N'_10 > 0 ? R'_10 × q ÷ N'_10 : R'_10        (below the driest point the requirement scales with the flow)
+   otherwise:  k = the last point with N'_k ≥ q (1 … 9)
+               w = N'_k = N'_k+1 ? 0 : (N'_k − q) ÷ (N'_k − N'_k+1)
+               R = R'_k + w × (R'_k+1 − R'_k)
+   EWR_t = R × 86 400 m³/day
+   ```
+
+   This is a **daily** lookup, the difference from the rule tables (§2.9c),
+   which judge a month's volume. Below the driest point it uses the same
+   convention the rule tables do (engine-audit A-rows): the requirement falls
+   in proportion to the flow.
+
+**The natural flow at the outlet** is the catchment's natural flow, or with
+bed losses on (§2.6b) the units' shares of it routed to the outlet net of the
+natural losses (`naturalAtOutlet`, what a rule table at the outlet and WR2012
+read). It is the catchment's natural flow, before land cover's reduction,
+which is a human impact (§2.7e). Natural flow doesn't depend on the EWR, so
+nothing is circular.
+
+**The scale factor s.** The DRM tables are for the catchment the Reserve was
+determined for, usually larger than the modelled one, so every table value is
+multiplied by s, the user's choice:
+
+- `'mar'`: s = the model's natural MAR ÷ `tableMarMm3`, where the model's natural
+  MAR (Mm³/a) = the mean daily natural flow at the outlet (m³/day) over the
+  run's historical days × 365.25 ÷ 10⁶. Historical days: a forecast tail
+  never moves it (as the Reserve's curves, K1); without a tail, every day.
+- `'area'`: s = the modelled area ÷ `tableAreaKm2`, where the modelled area
+  (km²) is the area the natural flow is made on: `calibration.catchmentAreaKm2`
+  when set, else the units' areas summed (in node-id order), so the table and
+  the flow it is read against are on one area.
+
+A resumed run (§2.16) takes the capture run's s and its inputs from the
+snapshot (`pinned.outletEwr`), so it is the uninterrupted run's to the bit.
+Calibration (§2.10b) re-reads the EWR from each candidate's natural flow, as
+the run on it would (with the MAR scaling it simulates every day, since the
+MAR reads the whole record); without hands-off EWR flows or a drought
+restriction's EWR trigger the outflow doesn't depend on the EWR, so neither
+does the score. Each member of an uncertainty ensemble (§2.10e) runs on its
+own natural flow, so with the MAR scaling or the percentile tables each has
+its own EWR (and s): the ensemble's EWR line (`ewrByMonthM3Day`) is member
+0's, and its banded days not met carry the EWR's spread with the flow's.
+
+**What a run says.** With a source other than the pragmatic EWR the run
+carries `summary.catchment.outletEwr` = `{ method, scaling, scale,
+modelMarMm3 + tableMarMm3 | modelAreaKm2 + tableAreaKm2, pinned? }`, the
+`ewr` series is labelled `EWR from the DRM TAB file (scaled)` or `… DRM
+percentile tables (scaled)`, and a warning names the source and s, e.g. *the
+daily EWR at the outlet comes from the DRM TAB file (total flows,
+maintenance), scaled by s = 0.4123 (the model's natural MAR at the outlet,
+31.6 Mm³/a, ÷ the table's 92.4 Mm³/a)*. s = 0 (no natural flow, or no area)
+and s > 1 (tables for a smaller catchment than the model) warn.
+Absent `outletEwr` = the pragmatic EWR. The Overview's checklist, the
+portfolio and the evidence report's zero-EWR flag count a TAB or percentile
+source as an EWR set (and a TAB row or Reserve table of zeros, or a run whose s came out 0, as an
+EWR of 0). A percentile row whose Reserve flow is above the natural flow at
+its point (the running minimum) is noted in the run's warnings: even natural
+flow fails there, as with a rule table (§2.9c).
+
+**The workbook.** The b023 importers read an optional `[EWR options]` sheet
+(defined names `zEwrOpt_Method`: Pragmatic | TAB file | Percentile tables,
+`zEwrOpt_Scaling`: MAR ratio | Area ratio, `zEwrOpt_TableMar`,
+`zEwrOpt_TableArea`, `zEwrOpt_TabM3s` 12 cells, `zEwrOpt_PctPoints` 10 cells,
+`zEwrOpt_NaturalPct` and `zEwrOpt_ReservePct` 12 × 10) into
+`settings.ewrDailySource` (scripts/wbt-import/README.md); a workbook without
+it imports as before. The Settings form also reads the DRM's own output
+files, the `.tab` summary and the `.rul` rule curves (ui.md § The daily EWR
+at the outlet).
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 

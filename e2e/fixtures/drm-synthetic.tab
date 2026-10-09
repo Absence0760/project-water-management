@@ -1,0 +1,26 @@
+        Desktop Version 2, Generated on 01/01/2026
+        Summary of Desktop (Version 2) estimate for Quaternary Catchment Area : SYNTHETIC EXAMPLE
+
+        Annual Flows (Mill. cu. m or index values):
+        MAR               =   49.800
+
+        Ecological Category = C
+
+        Monthly Distributions (Mill. cu. m.)
+        Distribution Type : Synthetic
+
+        Month    Natural Flows           Modified Flows (IFR)
+                                         Low flows    High Flows Total Flows
+               Mean    SD      CV     Maint.  Drought    Maint.    Maint.
+         Oct    3.600   2.880   0.800    1.260   0.180     0.000     1.260
+         Nov    2.000   1.600   0.800    0.700   0.100     0.000     0.700
+         Dec    0.800   0.640   0.800    0.280   0.040     0.000     0.280
+         Jan    0.400   0.320   0.800    0.140   0.020     0.000     0.140
+         Feb    0.400   0.320   0.800    0.140   0.020     0.000     0.140
+         Mar    0.600   0.480   0.800    0.210   0.030     0.000     0.210
+         Apr    1.600   1.280   0.800    0.560   0.080     0.000     0.560
+         May    5.200   4.160   0.800    1.820   0.260     0.780     2.600
+         Jun    9.600   7.680   0.800    3.360   0.480     1.440     4.800
+         Jul   11.200   8.960   0.800    3.920   0.560     1.680     5.600
+         Aug    8.400   6.720   0.800    2.940   0.420     1.260     4.200
+         Sep    6.000   4.800   0.800    2.100   0.300     0.900     3.000

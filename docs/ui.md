@@ -5486,6 +5486,53 @@ two.
   10 %, the Allocations tab's "within band"), each with its help tip and
   field history. Either is a model setting: saving it makes the latest run
   out of date.
+- **The daily EWR at the outlet** (inside `#set-ewr`, first, above the
+  pragmatic EWR row, which then says it isn't used while the daily EWR comes
+  from the DRM tables (kept for switching back), and the panel's head names
+  the source in use; `settings/EwrDailySourceFields.svelte`, its own chunk; helpers in
+  `settings/ewrDailySource.ts` and `settings/drmFiles.ts`; engine ≥ 1.77.0,
+  issue #455, [model.md §2.9f](./model.md)). **Daily EWR from** picks
+  `settings.ewrDailySource.method`: *The pragmatic EWR (above)*, the default;
+  *The DRM TAB file (monthly total flows)*; or *The DRM percentile tables
+  (read at each day's natural flow)*. With either DRM source: **Scale the
+  tables by** (*MAR ratio* or *Area ratio*), **Table MAR** (Mm³/a) and
+  **Table catchment area** (km², its hint naming the modelled area, the units'
+  areas summed), and a line with the **scale factor**: for the area ratio its
+  value and inputs; for the MAR ratio the last run's natural MAR ÷ the table
+  MAR (the last run's own s when it used the tables, else an estimate from its
+  mean natural flow, so labelled; "Run the model to see it" without a run).
+  Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
+  **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
+  ten points, m³/s), each before scaling. **Load a DRM file (.tab or .rul)**
+  reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
+  Maint.*, in Mm³ and converted to m³/s (÷ the month's days × 86 400 s,
+  February 28 days) in a preview with **Use these values** (which fills the TAB
+  flows and the table MAR from its `MAR =` line; under the percentile tables
+  the button is **Use its MAR only**, since a .tab and a .rul from one
+  determination go together) and Cancel; a `.rul` fills both percentile
+  tables (the total Reserve and the natural duration curve, converted from Mm³
+  a month when its unit line says so), asking first over tables already
+  there, and loaded under the TAB method switches to the percentile tables
+  and says so. The paste box's buttons are **Fill the natural flow table** /
+  **Fill the total Reserve table** (or **Fill the TAB flows**). A paste box takes the 12 TAB flows (a row or a
+  column) or a percentile table (as the rule tables' paste: 12 month rows,
+  optional % heading). **Which files can I load into the daily EWR, and what
+  do they fill?** (`settings/DrmFormatHelp.svelte`, named per place: "… into
+  the rule table at …" under each rule table) describes the `.rul` and `.tab` layouts,
+  the unit handling and the paste, with synthetic example files to download
+  (`.rul` in m³/s and in Mm³, `.tab`, a CSV). A file that doesn't parse names
+  the line (“line 13: the Jan row of the total Reserve block needs 10
+  numbers…”). A DRM source missing its tables or its divisor blocks Save
+  (the save bar links to `#set-ewr`); the pragmatic choice keeps tables half
+  entered. Run results say which EWR a run used: the *EWR not met* stat on
+  Runs & results and in the printed report (the same `RunSummaryView`)
+  carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)" or "EWR:
+  the pragmatic EWR", and the run's warnings repeat it. Wherever a screen
+  names the outlet's daily test (Judge results by's choice and Automatic, the
+  Summary's reserve strip, River & reserve's judged-by line, water-year bars
+  and EWR by month note) it uses `ewr/notMet.ts dailyEwrName`: "the pragmatic
+  EWR", or "the daily EWR from the DRM TAB file / percentile tables"; a DRM
+  source counts as a daily test set for Judge results by.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -5530,8 +5577,17 @@ two.
   **Also enter the low flows (maintenance and drought)**, which adds a blank
   **Low flows (maintenance to drought)** grid (blank cells block Save; switching
   the table to *Low flows only* drops it) and a **Fill the low flows** button;
-  **Load a CSV file** reads a file into the paste box, and two links download
-  synthetic example layouts (a total-flow and a low-flow table, DRM style).
+  **Load a file (.rul, .tab or CSV)** (issue #455) reads a CSV into the paste
+  box; a Desktop Reserve Model **.rul** fills the table at once (its unit, the
+  % points, the total Reserve as the EWR, *Reserve Flows without High Flows*
+  as the low flows, the *Natural Duration curves* as the natural flows, the
+  REC, the kind *desktop estimate* and, when none is typed, a source naming
+  the file; asking first over values; the natural-flow choice is kept and the
+  status line says how to use the file's curve), and a **.tab** fills the
+  determination's natural MAR and the REC. Two links download synthetic
+  example layouts (a total-flow and a low-flow table, DRM style), and **Which
+  files can I load, and what do they fill?** describes the formats, with
+  synthetic `.rul` and `.tab` files.
   Under each table, **High flows: freshets and floods**
   (`settings/EwrHighFlowsEditor.svelte`) lists the components (name, the
   months it may peak in typed as "Nov-Jan" or "Nov Dec Jan", the

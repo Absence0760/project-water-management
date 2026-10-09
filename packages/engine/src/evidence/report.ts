@@ -4,6 +4,7 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
+import { resolveEwrDailySource } from '../reserve/dailySource';
 import { allocationStatus, DEFAULT_ALLOCATION_TOLERANCE, type AllocationNodeComparison, type AllocationSourceComparison, type AllocationWaterSource, type AllocationYear } from '../allocations/compare';
 import { FARMER_K } from '../views/farmView';
 import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
@@ -1777,10 +1778,17 @@ function evidenceFlags(
 	if (ctx.assumptionsChanged) add('assumptions', 'red', 'Baseline assumptions changed: this report is a preview and can’t be issued.', 'The change column mixes the application with a changed baseline.');
 	if (ctx.baseSum && !ctx.baseSum.referenceAccepted) add('reference', 'red', 'The nominated run fails its own uncertainty rule: it is outside the set of parameter sets the rule keeps.', 'The run’s own figures are not among the plausible ones.');
 	// G16: the EWR can't be off.
-	const settings = b.inputs?.settings as { ewrRules?: { ewr?: number[][] }[]; ewrPragmaticM3PerDay?: number[] } | undefined;
+	const settings = b.inputs?.settings as { ewrRules?: { ewr?: number[][] }[]; ewrPragmaticM3PerDay?: number[]; ewrDailySource?: unknown } | undefined;
 	const zeroTable = (settings?.ewrRules ?? []).some((t) => Array.isArray(t?.ewr) && t.ewr.every((row) => Array.isArray(row) && row.every((v) => v === 0)));
+	// The daily outlet EWR (engine ≥ 1.77.0): the pragmatic EWR, or the DRM table the run read it from.
+	const daily = resolveEwrDailySource(settings?.ewrDailySource, []);
 	const pragmatic = settings?.ewrPragmaticM3PerDay;
-	if (zeroTable || (Array.isArray(pragmatic) && pragmatic.length && pragmatic.every((v) => v === 0)))
+	const zeroDaily = daily
+		? (daily.method === 'tab' ? daily.tabM3s! : daily.reservePctM3s!.flat()).every((v) => v === 0)
+		: Array.isArray(pragmatic) && pragmatic.length > 0 && pragmatic.every((v) => v === 0);
+	// A run whose daily EWR scale factor came out 0 (no natural flow, or no area) asked for 0 every day too (§2.9f).
+	const zeroScale = b.summary.catchment?.outletEwr?.scale === 0;
+	if (zeroTable || zeroDaily || zeroScale)
 		add('ewrZero', 'red', 'An EWR is set to 0: a site with a zero requirement always passes.', 'Compliance at that site is overstated.');
 	if (!ctx.river.length) add('noReserve', 'caution', 'No Reserve rule table at any EWR site: Reserve compliance is not assessed; only the pragmatic EWR is.', 'The Reserve’s monthly assurance rules are not applied.');
 	if (ctx.coverageWarning) {

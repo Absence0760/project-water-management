@@ -1,7 +1,7 @@
 import type { FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunSeriesRef } from '$lib/api/types';
-import { m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit } from './results';
+import { m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit, outletEwrLine } from './results';
 
 const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({
 	nodeId,
@@ -97,5 +97,13 @@ describe('runDamCapacity', () => {
 	it('falls back to the live model for a run without a model snapshot', () => {
 		expect(runDamCapacity(undefined, live).get('a')).toBe(50_000);
 		expect(runDamCapacity({ nodes: [] }, live).get('a')).toBe(50_000);
+	});
+});
+
+describe('outletEwrLine (engine ≥ 1.77.0)', () => {
+	it('names the pragmatic EWR when the run has no daily source, else the table, the factor and its inputs', () => {
+		expect(outletEwrLine(undefined)).toBe('EWR: the pragmatic EWR');
+		expect(outletEwrLine({ method: 'tab', scaling: 'mar', scale: 0.41234, modelMarMm3: 31.6, tableMarMm3: 92.415 })).toBe('EWR: the DRM TAB file × 0.4123 (natural MAR 31.6 ÷ 92.42 Mm³/a)');
+		expect(outletEwrLine({ method: 'percentile', scaling: 'area', scale: 0.25, modelAreaKm2: 4, tableAreaKm2: 16, pinned: true })).toBe('EWR: the DRM percentile tables × 0.25 (area 4 ÷ 16 km², the factor of the run it continues from)');
 	});
 });

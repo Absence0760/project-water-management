@@ -357,6 +357,29 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// stays, since the run allows it with a warning.
 	capFlowShares(settings, nodes);
 
+	// The daily outlet EWR from the DRM tables (engine ≥ 1.77.0, ../reserve/dailySource.ts), from its own stream so the
+	// rest of the seed is unchanged: TAB or percentile, either scaling, rows that rise and a driest point of 0 included.
+	const dsr = new Rng(seed ^ 0x3c7a91d5);
+	if (dsr.bool(0.25)) {
+		const flow = dsr.logFloat(1e-3, 50);
+		const row = () => {
+			const r = Array.from({ length: 10 }, (_, i) => flow * (1.6 - (1.5 * i) / 9) * dsr.float(0.7, 1.3));
+			if (dsr.bool(0.3)) r.sort((a, b) => b - a);
+			if (dsr.bool(0.15)) r[9] = 0;
+			return r;
+		};
+		const natural = Array.from({ length: 12 }, row);
+		settings.ewrDailySource = {
+			method: dsr.pick(['tab', 'percentile', 'pragmatic'] as const),
+			scaling: dsr.pick(['mar', 'area'] as const),
+			tableMarMm3: dsr.logFloat(0.01, 500),
+			tableAreaKm2: dsr.logFloat(0.1, 5000),
+			tabM3s: Array.from({ length: 12 }, () => (dsr.bool(0.1) ? 0 : dsr.logFloat(1e-4, flow * 2))),
+			naturalPctM3s: natural,
+			reservePctM3s: natural.map((r) => r.map((v) => v * dsr.float(0.05, 1.2)))
+		};
+	}
+
 	// Land cover (WP-1.35), from its own stream: the rest of the seed is unchanged.
 	const landCover = randomLandCover(new Rng(seed ^ 0x1f83d9ac), nodes);
 	// Individual boreholes (WP-3.9), from their own stream too.

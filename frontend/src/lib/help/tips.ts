@@ -1408,6 +1408,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.ewrChargeSource', 'run.ewr_charge_shortfall']
 	},
 	{
+		id: 'ewr-daily-source',
+		term: 'The daily EWR at the outlet',
+		short: 'Where the outlet’s daily EWR comes from: the pragmatic EWR, the DRM TAB file, or the DRM percentile tables, scaled to the model.',
+		units: 'm³/s in the tables; m³/day in the run',
+		category: 'ewr',
+		fields: ['settings.ewrDailySource', 'catchment.outletEwr']
+	},
+	{
 		id: 'low-flow-measure',
 		term: 'Low flows judged on',
 		short: 'The month’s total flow (default; provisional, not hydrologist-confirmed), or its base flow, so a flood can’t hide short low flows.',

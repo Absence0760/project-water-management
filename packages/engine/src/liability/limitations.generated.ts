@@ -123,6 +123,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Decided (from the literature, engine 0.33.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
+		"id": "A8",
+		"source": "finding",
+		"severity": "Medium (projects whose daily outlet EWR comes from the DRM tables)",
+		"title": "A DRM table scaled to the model rests on choices the hydrologist hasn't confirmed",
+		"status": "Built (engine 1.77.0, issue #455), off by default (the pragmatic EWR); the hydrologist's confirmation of the scaling and the conventions pending"
+	},
+	{
 		"id": "L1",
 		"source": "finding",
 		"severity": "Medium (licence applications that insert a senior other water user on a reach)",

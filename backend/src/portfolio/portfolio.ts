@@ -115,8 +115,9 @@ const RUN_UNTIL = `LEAST(r.end_date, GREATEST(r.start_date, COALESCE(
 	 FROM jsonb_each(r.inputs->'series') s
 	 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0),
 	r.end_date)))`;
-// The run had an outlet EWR: some month of the pragmatic EWR above 0.
-const EWR_SET = `EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(r.inputs->'settings'->'ewrPragmaticM3PerDay', '[]'::jsonb)) v WHERE v::float8 > 0)`;
+// The run had an outlet EWR: some month of the pragmatic EWR above 0, or (engine ≥ 1.77.0, issue #455) a daily EWR
+// from the DRM tables (settings.ewrDailySource), which the run checked was usable or else ran the pragmatic EWR.
+const EWR_SET = `(r.inputs->'settings'->'ewrDailySource'->>'method' IN ('tab', 'percentile') OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(r.inputs->'settings'->'ewrPragmaticM3PerDay', '[]'::jsonb)) v WHERE v::float8 > 0))`;
 
 // Which projects: one team's (the portfolio), or every project the user can
 // see (the project list, GET /projects/outcomes), each with its team's

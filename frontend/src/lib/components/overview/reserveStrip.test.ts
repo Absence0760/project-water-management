@@ -101,3 +101,13 @@ describe('stripWords (issue #177: "reserve" named two different tests)', () => {
 		expect(stripWhat(ms.slice(0, 1), stripWords(false))).toBe('Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last month: Oct 2021');
 	});
 });
+
+describe('stripWords with a daily EWR from the DRM tables (engine ≥ 1.77.0)', () => {
+	it('names the daily test by its source beside a rule table', () => {
+		const w = stripWords(true, { method: 'tab' });
+		expect(w.heading).toBe('Days below the daily EWR from the DRM TAB file');
+		expect(w.test).toBe('the daily EWR from the DRM TAB file');
+		expect(w.what).toMatch(/below the daily EWR from the DRM TAB file/);
+		expect(stripWords(true).heading).toBe('Days below the pragmatic EWR');
+	});
+});

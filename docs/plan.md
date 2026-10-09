@@ -295,6 +295,13 @@ writing, or gives a ranked change list.
   [ui.md § Scenarios](./ui.md#scenarios-tabscenarios)).
 - ⬜ **EWR tooling:** derive the pragmatic EWR from Desktop Reserve tables
   (percentile, scale factor, per-month overrides), as `[EWR Cfg]` does (Q10).
+  Partly built differently (engine 1.77.0, issue #455, [model.md
+  §2.9f](./model.md)): the daily outlet EWR can come straight from the DRM's
+  TAB file or its percentile tables, read each day at the natural flow and
+  scaled by MAR or area, with the DRM's `.tab` / `.rul` files loaded on
+  Settings (`settings.ewrDailySource`; the scaling and conventions pending the
+  hydrologist, engine-audit A8). Still left: deriving the 12 pragmatic
+  values themselves with per-month overrides, as `[EWR Cfg]` does.
 - ✅ **Reports:** EWR analysis by farm × year × month, count and % of days not
   met, and annual water balance (observed vs simulated MAR per year). Built:
   the EWR compliance grid (`EwrHeatmap`, outlet and per farm, engine

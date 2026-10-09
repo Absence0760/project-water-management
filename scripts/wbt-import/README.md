@@ -207,6 +207,25 @@ rows and columns don't break it.
   fills it; Settings → Zero-rain runs keeps a real dry spell as recorded, so
   there is no need to re-export the zeros as blanks. The low-vs-CHIRPS year check is
   engine-only (it shows in every run and on the Time series tab).
+- **The daily EWR's source** (engine ≥ 1.77.0, issue #455, `docs/model.md`
+  §2.9f): an optional `[EWR options]` sheet with the defined names
+  `zEwrOpt_Method` (*Pragmatic*, *TAB file* or *Percentile tables*, case
+  ignored; blank = Pragmatic), `zEwrOpt_Scaling` (*MAR ratio* or *Area
+  ratio*; blank = MAR ratio), `zEwrOpt_TableMar` (Mm³/a) and
+  `zEwrOpt_TableArea` (km², may be blank), `zEwrOpt_TabM3s` (12 cells, Oct …
+  Sep, m³/s), `zEwrOpt_PctPoints` (10 cells, 0.1 … 0.99) and
+  `zEwrOpt_NaturalPct` / `zEwrOpt_ReservePct` (12 rows × 10 columns, m³/s)
+  becomes `settings.ewrDailySource` (`read_ewr_options`): `method` `pragmatic`
+  | `tab` | `percentile`, `scaling` `mar` | `area`, `tableMarMm3`,
+  `tableAreaKm2`, `tabM3s`, `naturalPctM3s`, `reservePctM3s`. A MAR or area
+  that isn't a number above 0 is `null`; a table with a blank, text or
+  negative cell (or the wrong shape) is `null`. A note says which EWR the
+  workbook uses. `WARNING`s, each importing the pragmatic EWR (keeping the
+  values it read): an unknown method or scaling (the scaling falls back to MAR
+  ratio), a method that lacks its table or its scaling's MAR or area, and
+  points other than 0.1 … 0.99 (the tables are read as those points, in
+  order). A workbook without `zEwrOpt_Method` imports exactly as before: no
+  `ewrDailySource` key, no note.
 - **expected.json `ewrPivot`**: the [EWR shortfalls Pivot Data] rows (year,
   month, farm, summed shortfall, days not met). A macro writes that table, so
   it can be stale; see `docs/model.md` §2.9.
@@ -298,11 +317,13 @@ produce the committed Python output:
 | `synthetic_b023.project.json` / `.notes.txt` | `extract_project.py` output and its notes, one per line (a `WARNING: ` prefix kept) |
 | `synthetic_b023.gauge-reference.project.json` / `.notes.txt` | the same with `--gauge-as-reference --gauge-scaling-from 2021-10-01 --gauge-scale-factor 0.8` |
 | `synthetic_b023.run-of-river.project.json` / `.notes.txt` | the same with `--run-of-river` (Delta and India Farm converted) |
+| `synthetic_b023.ewr-options.xlsx` | the same workbook with an invented `[EWR options]` sheet (the percentile tables, by MAR; issue #455) |
+| `synthetic_b023.ewr-options.json` | its `settings.ewrDailySource` and `[EWR options]` notes (`test_ewr_options.py` keeps it in step; the browser importer's `ewrOptions.test.ts` checks parity and that the sheet adds nothing else) |
 
 `expected.json` isn't committed: the Element sheets hold only a week of
 invented values, enough for the reader to run.
 
-Regenerate after changing the generator or the importer, then commit all seven
+Regenerate after changing the generator or the importer, then commit all nine
 files (the TypeScript port must follow an importer change):
 
 ```sh

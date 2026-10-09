@@ -46,17 +46,32 @@ export function ewrNotMet(c: Pick<RunSummary['catchment'], 'ewrDaysNotMet' | 'ew
 	};
 }
 
+/** The outlet's daily EWR, as settings.ewrDailySource or a run's summary.catchment.outletEwr has it (engine ≥ 1.77.0). */
+export type DailyEwrSource = { method: 'pragmatic' | 'tab' | 'percentile' } | null | undefined;
+
 /**
- * What a count of days below the pragmatic EWR is called on a heading: "the
+ * What the outlet's daily EWR test is called (engine ≥ 1.77.0, issue #455):
+ * "the pragmatic EWR", or the DRM table it comes from. The one name every
+ * screen gives the daily test, so a run judged by the TAB file never reads
+ * as judged by the pragmatic EWR.
+ */
+export function dailyEwrName(daily: DailyEwrSource): string {
+	if (!daily || daily.method === 'pragmatic') return 'the pragmatic EWR';
+	return daily.method === 'tab' ? 'the daily EWR from the DRM TAB file' : 'the daily EWR from the DRM percentile tables';
+}
+
+/**
+ * What a count of days below the daily EWR is called on a heading: "the
  * reserve", or, when the project has a Reserve rule table (ewrAssurance.ts
- * headlineSite is not null), "the pragmatic EWR". With a table the Reserve is
+ * headlineSite is not null), the daily test's own name (dailyEwrName: "the
+ * pragmatic EWR", or the DRM table it comes from). With a table the Reserve is
  * judged by the table, whole months at a site, so calling the daily pragmatic
  * count "the reserve" would name a different test (issue #177). The Summary's
  * strip (overview/reserveStrip.ts) and River & reserve's water-year panel
  * (river/river.ts) name their counts here.
  */
-export function daysBelowTest(ruleTable: boolean): 'the reserve' | 'the pragmatic EWR' {
-	return ruleTable ? 'the pragmatic EWR' : 'the reserve';
+export function daysBelowTest(ruleTable: boolean, daily?: DailyEwrSource): string {
+	return ruleTable ? dailyEwrName(daily) : 'the reserve';
 }
 
 /**
@@ -65,6 +80,6 @@ export function daysBelowTest(ruleTable: boolean): 'the reserve' | 'the pragmati
  * mix and is used as soon as one run is judged by a rule table, each by its
  * own project's choice (settings.ewrHeadline, issue #444; none = automatic).
  */
-export function daysBelowTestOf(runs: readonly { summary: Pick<RunSummary, 'ewrAssurance'>; choice?: EwrHeadline | null }[]): 'the reserve' | 'the pragmatic EWR' {
+export function daysBelowTestOf(runs: readonly { summary: Pick<RunSummary, 'ewrAssurance'>; choice?: EwrHeadline | null }[]): string {
 	return daysBelowTest(runs.some((r) => headlineSite(r.summary, r.choice) !== null));
 }

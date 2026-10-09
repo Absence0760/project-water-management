@@ -10,7 +10,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
-	import { m3DayToM3s, m3DayToMm3a, SUPPLY_TARGET } from './results';
+	import { m3DayToM3s, m3DayToMm3a, outletEwrLine, SUPPLY_TARGET } from './results';
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
@@ -105,9 +105,11 @@
 		</div>
 	{/if}
 	<div class="stat" class:flagged={c.ewrFractionDaysNotMet > 0.05}>
-		<dt>{reserve ? 'Days below the pragmatic EWR' : 'EWR not met'} <HelpTip key="catchment.ewrFractionDaysNotMet" /></dt>
+		<dt>{reserve ? `Days below ${c.outletEwr ? 'the daily EWR' : 'the pragmatic EWR'}` : 'EWR not met'} <HelpTip key="catchment.ewrFractionDaysNotMet" /></dt>
 		<dd>{fmtPct(c.ewrFractionDaysNotMet)}<small>of days</small></dd>
 		<dd class="sub">{fmtNum(c.ewrDaysNotMet)} of {fmtNum(days)} days at the outflow gauge</dd>
+		<!-- Which EWR the run was judged by (engine ≥ 1.77.0, settings.ewrDailySource); absent = the pragmatic EWR. -->
+		<dd class="sub" data-testid="outlet-ewr-source">{outletEwrLine(c.outletEwr)}</dd>
 	</div>
 	<div class="stat" class:flagged={shortCount > 0}>
 		<dt>Irrigation supplied <HelpTip key="summary.fractionSupplied" /></dt>

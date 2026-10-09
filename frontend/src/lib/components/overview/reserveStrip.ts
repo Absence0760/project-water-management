@@ -10,7 +10,7 @@
 // table gives a verdict per month, not a count of days, so it can't be drawn
 // as days below.
 import { ewrBand, type EwrBand, type EwrCompliance } from '@water-management/engine';
-import { EWR_NOT_MET, daysBelowTest } from '$lib/components/ewr/notMet';
+import { EWR_NOT_MET, dailyEwrName, daysBelowTest, type DailyEwrSource } from '$lib/components/ewr/notMet';
 import { WATER_YEAR_CALENDAR, monthName } from '$lib/format/months';
 
 export interface StripMonth {
@@ -80,12 +80,12 @@ export interface StripWords {
  * rule table (ewrAssurance.ts headlineSite), so "the reserve" would name a
  * different test from the one the strip counts.
  */
-export function stripWords(ruleTable: boolean): StripWords {
-	const what = `Days each month the outflow was below the pragmatic EWR (${EWR_NOT_MET})`;
-	const heading = `Days below ${daysBelowTest(ruleTable)}`;
+export function stripWords(ruleTable: boolean, daily?: DailyEwrSource): StripWords {
+	const what = `Days each month the outflow was below ${dailyEwrName(daily)} (${EWR_NOT_MET})`;
+	const heading = `Days below ${daysBelowTest(ruleTable, daily)}`;
 	const list = `${heading} by month`;
 	return ruleTable
-		? { heading, list, what, note: 'The Reserve rules card above judges whole months by the rule table instead.', test: 'the pragmatic EWR' }
+		? { heading, list, what, note: 'The Reserve rules card above judges whole months by the rule table instead.', test: dailyEwrName(daily) }
 		: { heading, list, what, note: '', test: 'the EWR' };
 }
 

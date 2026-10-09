@@ -67,7 +67,9 @@ export type ImportNoteCode =
 	/** WARNING: rUseFlow calibrates against Pitman flow, which the app doesn't support. */
 	| 'pitman-calibration-unset'
 	/** rUseFlow picks a series with no values. */
-	| 'calibration-flow-missing';
+	| 'calibration-flow-missing'
+	| 'ewr-options'
+	| 'ewr-options-fallback';
 
 export interface ImportNote {
 	code: ImportNoteCode;
