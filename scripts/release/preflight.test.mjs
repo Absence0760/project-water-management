@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { branchPolicyProblem, ciGateState, compareVersions, environmentProblem, missingConfig, notNewerThan, parseReleaseTag, tagRulesetProblem, trustedCiGateRuns } from './preflight.mjs';
+import { branchPolicyProblem, ciGateState, compareVersions, environmentProblem, missingConfig, notNewerThan, parseReleaseTag, runningCiRuns, tagRulesetProblem, trustedCiGateRuns } from './preflight.mjs';
 
 test('release tags are <component>@semver', () => {
 	assert.deepEqual(parseReleaseTag('web@1.2.3', 'web'), { ok: true, version: '1.2.3', prerelease: false });
@@ -213,4 +213,33 @@ test('environment mode: refuses a missing or unprotected environment, clears a p
 	const unconfigured = run(protectedEnv, { MIGRATE_FUNCTION_NAME: '' });
 	assert.equal(unconfigured.status, 1);
 	assert.match(unconfigured.stdout, /not configured: MIGRATE_FUNCTION_NAME/);
+});
+
+test('while ci.yml is still running on the commit, the missing CI gate is a wait, not a verdict', () => {
+	// CI gate is the fan-in job: GitHub creates its check run only once every job it needs has finished
+	const running = (over = {}) => ciRun({ status: 'in_progress', ...over });
+	assert.equal(runningCiRuns([running(), running({ status: 'queued' })], SHA, REPO), 2);
+	assert.equal(runningCiRuns([running({ event: 'workflow_dispatch' }), running({ path: '.github/workflows/ci.yml@refs/heads/main' })], SHA, REPO), 2);
+	// a finished run, a PR run, another workflow, another commit or a fork's run is not one to wait on
+	assert.equal(
+		runningCiRuns(
+			[
+				running({ status: 'completed' }),
+				running({ event: 'pull_request' }),
+				running({ path: '.github/workflows/scorecard.yml' }),
+				running({ head_sha: 'f'.repeat(40) }),
+				running({ head_repository: 'someone/fork' }),
+			],
+			SHA,
+			REPO,
+		),
+		0,
+	);
+	const pending = ciGateState([], [], 0, 1);
+	assert.equal(pending.state, 'pending');
+	assert.match(pending.detail, /still running/);
+	// nothing running and no gate: CI never ran
+	assert.equal(ciGateState([], [], 0, 0).state, 'fail');
+	// once a trusted gate exists it decides, running or not
+	assert.equal(ciGateState([{ id: 1, status: 'completed', conclusion: 'failure' }], [], 0, 1).state, 'fail');
 });
