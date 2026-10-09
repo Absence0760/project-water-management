@@ -473,58 +473,32 @@ describe('delineateUnits (synthetic DEM)', () => {
 		expect((e2 as DelineationRefused).code).toBe('too_large');
 		expect((e2 as Error).message).toMatch(/Pick an outlet gauge further upstream, or type the units in\.$/);
 		// A gauge on a main stem: no gauge further upstream helps; the units are typed, or the river outlined in pieces (finding 11).
-		const e3 = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), outletHints: { expectedKm2: 340_724 }, boundary: null, points: [] }, { windows: [64] }).catch((e: unknown) => e);
+		const e3 = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), outletMappedKm2: 340_724, boundary: null, points: [] }, { windows: [64] }).catch((e: unknown) => e);
 		expect((e3 as DelineationRefused).code).toBe('too_large');
 		expect((e3 as Error).message).toMatch(/^The river at the outlet drains about 340\s724 km² \(its mapped reach\), more than fits in the \d+ km the app delineates around it/);
 	});
 });
 
-describe('delineateUnits: each point placed as Delineate places it (start-7, the hydrologist’s review finding 3)', () => {
-	// A gauge on a displaced river line: three cells (about 380 m) east of the river, on the valley's side, where a 150 m
-	// snap finds only the hillside's gully. The dam point five cells up the same line, as the review placed it.
+describe('delineateUnits: each point on the terrain channel nearest it (start-15, issue #472)', () => {
+	// A gauge on a displaced river line: three cells (about 380 m) east of the river, on one of the valley side's small terrain
+	// channels. The dam point forty cells up the same line.
 	const gauge = at(DAM_CELL.x + 3, DAM_CELL.y + 60);
 	const damPoint = (hints: Partial<UnitPoint> = {}): UnitPoint => ({ ...point('dam', DAM_CELL.x + 3, DAM_CELL.y + 20), ...hints });
 
-	it('reproduces the old path: snapped 150 m, the gauge lands in a gully, the dam is dropped, and the guard names the river', async () => {
+	it('puts the gauge on its own small channel, never moved onto the river, and the guard names the river', async () => {
 		const r = await delineateUnits(dem, { outlet: gauge, boundary: null, points: [damPoint()] });
 		const river = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 60));
 		expect(r.catchment.areaM2).toBeLessThan(0.02 * river.areaM2);
+		expect(r.outlet.snapDistanceM!).toBeLessThan(FIXTURE_CELL_M);
 		expect(r.dropped.map((d) => d.id)).toEqual(['dam']);
 		expect(r.outlet.placedBy).toBe('snapped');
-		// The outlet's larger-channel guard is kept (it was discarded before start-7): the river, a few cells west.
+		// The outlet's larger-channel guard: the river, a few cells west (the DEM alone).
 		expect(r.outlet.larger).toMatchObject({ distanceM: expect.any(Number), km2: expect.any(Number) });
 		expect(r.outlet.larger!.km2).toBeGreaterThan(100 * r.outlet.larger!.pointKm2);
-		expect(r.method).toMatch(/placed on the channel: the outlet snapped, 1 point snapped \(snapped: the most-accumulating cell within 150 m, a 100× larger channel within 1000 m named\)/);
-		expect(r.method).not.toMatch(/matched/);
-	});
-
-	it('matches the gauge and the dam to their reach’s area: the river’s catchment, the dam kept above it, as Delineate gives', async () => {
-		const river = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 60));
-		const atDam = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 20));
-		const r = await delineateUnits(dem, {
-			outlet: gauge,
-			outletHints: { expectedKm2: river.areaM2 / 1e6 },
-			boundary: null,
-			points: [damPoint({ expectedKm2: atDam.areaM2 / 1e6 })]
-		});
-		near(r.catchment.areaM2, river.areaM2, 0.02);
-		expect(r.outlet).toMatchObject({ placedBy: 'matched' });
-		expect(r.outlet.larger).toBeUndefined();
-		expect(r.dropped).toEqual([]);
-		const dam = r.units[0]!;
-		expect(dam).toMatchObject({ id: 'dam', placedBy: 'matched', drainsInto: null });
-		near(dam.totalAreaM2, atDam.areaM2, 0.03);
-		// The method says what ran, and only that.
-		expect(r.method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the reach’s area \(Lehner 2012/);
-		expect(r.method).not.toMatch(/snapped/);
+		expect(r.method).toMatch(
+			/placed on the channel: the outlet on the nearest terrain channel, 1 point on the nearest terrain channel \(the nearest terrain channel: the nearest cell within 150 m with at least 1 km² draining through it, the mapped river network not used; a 100× larger channel within 1000 m named\)/
+		);
 		expect(r.methodVersion).toBe(START_METHOD_VERSION);
-	});
-
-	it('says when a reach is near but no channel matches it (unmatched), and keeps the guard', async () => {
-		// An area no cell within 1 km has: matching fails and the gauge falls back to the snap.
-		const r = await delineateUnits(dem, { outlet: gauge, outletHints: { expectedKm2: 1e6 }, boundary: null, points: [] });
-		expect(r.outlet).toMatchObject({ placedBy: 'snapped', unmatched: true });
-		expect(r.outlet.larger).toBeDefined();
 	});
 
 	it('puts a point on the larger channel when the editor chose it (useLarger), found again on the server', async () => {
@@ -533,19 +507,30 @@ describe('delineateUnits: each point placed as Delineate places it (start-7, the
 		expect(r.outlet.placedBy).toBe('larger');
 		near(r.catchment.areaM2, river.areaM2, 0.05);
 		expect(r.units.map((u) => [u.id, u.placedBy])).toEqual([['dam', 'larger']]);
-		expect(r.method).toMatch(/the outlet on the larger channel chosen, 1 point on the larger channel chosen \(snapped: /);
+		expect(r.method).toMatch(/the outlet on the larger channel chosen, 1 point on the larger channel chosen \(the nearest terrain channel: /);
 	});
 
-	it('keeps a delineated outlet on its own cell (exact) instead of snapping it further down the river', async () => {
+	it('refuses an outlet with no terrain channel within the radius, and drops such a point with why', async () => {
+		// Just past the ridge, where nothing drains a square kilometre.
+		const slope = at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120);
+		const e = await delineateUnits(dem, { outlet: slope, boundary: null, points: [] }).catch((x: unknown) => x);
+		expect((e as DelineationRefused).code).toBe('off_channel');
+		expect((e as Error).message).toBe('No terrain channel runs within 150 m of the outlet gauge. Move the gauge onto a terrain channel (Delineate and Sub-catchments draw them as red lines) and propose again.');
+		const r = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), boundary: null, points: [{ ...point('far', 0, 0), geometry: { type: 'Point', coordinates: slope } }] });
+		expect(r.dropped).toEqual([{ id: 'far', reason: 'has no terrain channel within 150 m: move it onto one of the elevation model’s channels' }]);
+	});
+
+	it('keeps a delineated outlet on its own cell (exact), and the plain snap leaves it there too: it is on a channel already', async () => {
 		const d = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 60));
 		const exact = await delineateUnits(dem, { outlet: d.outlet, outletHints: { exact: true }, boundary: null, points: [] });
 		expect(exact.outlet.point).toEqual(d.outlet);
 		expect(exact.outlet.placedBy).toBe('exact');
 		near(exact.catchment.areaM2, d.areaM2, 0.01);
-		// The plain snap moves it to the most-drained cell within 150 m: downstream on the river, a little more area.
+		// The nearest channel cell to a channel cell's centre is itself: never moved down the river to a more-drained one.
 		const snapped = await delineateUnits(dem, { outlet: d.outlet, boundary: null, points: [] });
-		expect(snapped.outlet.point).not.toEqual(d.outlet);
-		expect(snapped.catchment.areaM2).toBeGreaterThan(exact.catchment.areaM2);
+		expect(snapped.outlet.point).toEqual(d.outlet);
+		expect(snapped.outlet.placedBy).toBe('snapped');
+		near(snapped.catchment.areaM2, exact.catchment.areaM2, 1e-9);
 	});
 });
 
@@ -573,12 +558,14 @@ describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
 		near(gauge.totalNonContributingM2, r.pans.nonContributingM2, 1e-6);
 		// Reported, not taken out: the areas are what they were.
 		near(dam.areaM2 + r.rest.areaM2, r.catchment.areaM2, 1e-12);
-		expect(r.methodVersion).toBe('start-14');
+		expect(r.methodVersion).toBe(START_METHOD_VERSION);
 	});
 
-	it('never counts a depression a unit’s point is in: a dam put on the pan makes it that unit’s own basin', async () => {
+	it('never counts a depression a unit’s point is in: a dam drawn on the pan makes it that unit’s own basin', async () => {
 		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
-		const r = await delineateUnits(dem, { outlet, boundary: null, points: [point('on-pan', PAN.x, PAN.y)] });
+		// The dam's outline over the pan's floor (a point there is on no terrain channel: the pan's catchment is under a km²).
+		const ring = [at(PAN.x - 3, PAN.y - 3), at(PAN.x + 3, PAN.y - 3), at(PAN.x + 3, PAN.y + 3), at(PAN.x - 3, PAN.y + 3), at(PAN.x - 3, PAN.y - 3)];
+		const r = await delineateUnits(dem, { outlet, boundary: null, points: [{ ...point('on-pan', PAN.x, PAN.y), geometry: { type: 'Polygon', coordinates: [ring] } }] });
 		expect(r.units.map((u) => u.id)).toEqual(['on-pan']);
 		expect(r.pans.count).toBe(0);
 		expect(r.pans.nonContributingM2).toBe(0);
@@ -601,30 +588,29 @@ describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
 });
 
 describe('placementText and startMethod', () => {
+	const NEAREST = 'the nearest terrain channel: the nearest cell within 150 m with at least 1 km² draining through it, the mapped river network not used; a 100× larger channel within 1000 m named';
+
 	it('names only the rules that ran, the outlet first, with counts, each defined once', () => {
-		expect(placementText(['matched', 'matched', 'polygon'], 0, 'exact', 150)).toBe(
-			'placed on the channel: the outlet on its delineated cell, 2 points matched, 1 point at a dam polygon’s outflow (matched: the cell within 1000 m (2500 m at a picked confluence) best matching the reach’s area (Lehner 2012, ≥ 50 %); outflow: its own if a river only clips it)'
+		expect(placementText(['snapped', 'snapped', 'polygon'], 'exact', 150)).toBe(
+			`placed on the channel: the outlet on its delineated cell, 2 points on the nearest terrain channel, 1 point at a dam polygon’s outflow (outflow: its own if a river only clips it; ${NEAREST})`
 		);
-		const t = placementText(['snapped', 'snapped', 'junction'], 1, 'boundary', 150);
-		expect(t).toBe(
-			'placed on the channel: the outlet at the boundary’s most-accumulating cell, 1 point at a junction, 2 points snapped (at a junction: the DEM’s junction for the river picked; snapped: the most-accumulating cell within 150 m (1 by an unmatched reach), a 100× larger channel within 1000 m named)'
-		);
-		expect(t).not.toMatch(/matched:/);
-		expect(placementText([], 0, null, 150)).toBe('no points placed');
+		expect(placementText(['larger'], 'boundary', 150)).toBe(`placed on the channel: the outlet at the boundary’s most-accumulating cell, 1 point on the larger channel chosen (${NEAREST})`);
+		expect(placementText(['polygon'], 'exact', 150)).not.toMatch(/terrain channel:/);
+		expect(placementText([], null, 150)).toBe('no points placed');
 	});
 
 	it('names a dam’s marked position only when one was marked (194), the unmarked rule only while a dam is unmarked', () => {
-		const unmarked = placementText(['polygon', 'polygon'], 0, null, 150);
-		expect(placementText(['polygon', 'polygon'], 0, null, 150, false, [])).toBe(unmarked);
+		const unmarked = placementText(['polygon', 'polygon'], null, 150);
+		expect(placementText(['polygon', 'polygon'], null, 150, false, [])).toBe(unmarked);
 		expect(unmarked).not.toMatch(/marked/);
-		expect(placementText(['polygon', 'polygon', 'polygon'], 0, null, 150, false, ['off_channel', 'on_channel'])).toBe(
+		expect(placementText(['polygon', 'polygon', 'polygon'], null, 150, false, ['off_channel', 'on_channel'])).toBe(
 			'placed on the channel: 3 points at a dam polygon’s outflow (1 marked off-channel, 1 marked on the river) (outflow: its own if a river only clips it; marked off-channel: its unit on the river where its own outflow (no cell carrying 100× the outline’s cells) joins it within 1000 m, what drains to that outflow the dam’s share; marked on the river: its most-accumulating cell)'
 		);
-		expect(placementText(['polygon'], 0, null, 150, false, ['off_channel'])).toBe(
+		expect(placementText(['polygon'], null, 150, false, ['off_channel'])).toBe(
 			'placed on the channel: 1 point at a dam polygon’s outflow (1 marked off-channel) (marked off-channel: its unit on the river where its own outflow (no cell carrying 100× the outline’s cells) joins it within 1000 m, what drains to that outflow the dam’s share)'
 		);
 		// The brief form keeps the counts, the rules named by the version.
-		expect(placementText(['polygon'], 0, null, 150, true, ['on_channel'])).toBe(
+		expect(placementText(['polygon'], null, 150, true, ['on_channel'])).toBe(
 			`placed on the channel: 1 point at a dam polygon’s outflow (1 marked on the river) (each rule as ${START_METHOD_VERSION} defines it, docs/maps.md)`
 		);
 	});
@@ -632,18 +618,18 @@ describe('placementText and startMethod', () => {
 	it('fits start_proposal.method (1 000 characters) whatever ran, every rule at once', () => {
 		// Every placement a point can have (a Record so a new kind fails to compile here until it's listed), twice, with the
 		// longest outlet's and a click outlet's note.
-		const kinds: Record<PlacedBy, true> = { matched: true, junction: true, snapped: true, larger: true, exact: true, polygon: true, boundary: true };
+		const kinds: Record<PlacedBy, true> = { snapped: true, larger: true, exact: true, polygon: true, boundary: true };
 		const points = Object.keys(kinds) as PlacedBy[];
-		const placement = (brief: boolean) => placementText([...points, ...points], 50, 'boundary', 150, brief, ['off_channel', 'on_channel']) + ' (the outlet: the click most water drains through)';
+		const placement = (brief: boolean) => placementText([...points, ...points], 'boundary', 99_999, brief, ['off_channel', 'on_channel']) + ' (the outlet: the click most water drains through)';
 		// In full it runs past the column, so the stored method names the version for the rules instead of failing the insert.
 		expect(startMethod(99_999, 11, placement(false)).length).toBeGreaterThan(METHOD_MAX_CHARS);
 		const m = fitMethod(99_999, 11, placement);
 		expect(m.length).toBeLessThanOrEqual(METHOD_MAX_CHARS);
 		expect(m).toContain(`each rule as ${START_METHOD_VERSION} defines it`);
-		expect(m).toContain('2 points matched');
+		expect(m).toContain('2 points on the nearest terrain channel');
 		// An ordinary proposal keeps every definition.
-		const usual = fitMethod(30, 11, (brief) => placementText(['matched', 'snapped'], 1, 'exact', 150, brief));
-		expect(usual).toContain('matched: the cell within');
+		const usual = fitMethod(30, 11, (brief) => placementText(['snapped', 'polygon'], 'exact', 150, brief));
+		expect(usual).toContain('the nearest terrain channel: the nearest cell within 150 m');
 		expect(usual).not.toContain('defines it');
 	});
 });

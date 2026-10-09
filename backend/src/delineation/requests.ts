@@ -95,20 +95,18 @@ export interface RequestRow {
 	click_lon: number;
 	click_lat: number;
 	keep_point: boolean;
-	reach: { dataset: string; reachId: number } | null;
 	from_window: number;
 	aim: WindowAim | null;
 	proposal_id: string | null;
 	refusal_code: string | null;
 	refusal: string | null;
 	larger: LargerChannel | null;
-	check_note: string | null;
 	created_at: Date;
 	finished_at: Date | null;
 }
 
-export const REQUEST_COLS = `r.id, r.project_id, r.job_id, r.status, r.click_kind, r.click_lon, r.click_lat, r.keep_point, r.reach, r.from_window, r.aim,
-	r.proposal_id, r.refusal_code, r.refusal, r.larger, r.check_note, r.created_at, r.finished_at`;
+export const REQUEST_COLS = `r.id, r.project_id, r.job_id, r.status, r.click_kind, r.click_lon, r.click_lat, r.keep_point, r.from_window, r.aim,
+	r.proposal_id, r.refusal_code, r.refusal, r.larger, r.created_at, r.finished_at`;
 
 /**
  * What the Map shows of a request: its own outcome, or while it has none,
@@ -125,8 +123,6 @@ export interface DelineationRequest {
 	error: string | null;
 	/** With `proposed`: the proposal it made, as it is now (null once pruned). */
 	proposal: DelineationProposal | null;
-	/** With `proposed`: the river-network check that came with it. */
-	check: string | null;
 	/** With `refused`: the same reason and sentence the request would have answered with. */
 	refusal: { reason: string; message: string; larger?: LargerChannel } | null;
 	createdAt: string;
@@ -154,7 +150,6 @@ export async function requestView(db: Db, projectId: string, r: RequestRow & { j
 		progress: status === 'running' ? r.job_progress : null,
 		error,
 		proposal,
-		check: r.check_note,
 		refusal: r.status === 'refused' ? { reason: r.refusal_code!, message: r.refusal!, ...(r.larger ? { larger: r.larger } : {}) } : null,
 		createdAt: r.created_at.toISOString(),
 		finishedAt: r.finished_at?.toISOString() ?? null
@@ -185,7 +180,6 @@ export interface QueueOptions {
 	lon: number;
 	lat: number;
 	keepPoint?: boolean;
-	reach?: { dataset: string; reachId: number } | null;
 	/** The smallest window the job tries. */
 	fromWindow: number;
 	/** Where the request's last window cut the catchment (DelineationRefused.aim), for the job's first window. */
@@ -228,9 +222,9 @@ export async function queueDelineation(db: Db, o: QueueOptions): Promise<{ reque
 		);
 	}
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO delineation_request (project_id, click_kind, click_lon, click_lat, keep_point, reach, from_window, aim, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, app_current_user_id()) RETURNING id`,
-		[o.projectId, o.from, o.lon, o.lat, o.keepPoint === true, o.reach ? JSON.stringify(o.reach) : null, o.fromWindow, o.aim ? JSON.stringify(o.aim) : null]
+		`INSERT INTO delineation_request (project_id, click_kind, click_lon, click_lat, keep_point, from_window, aim, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
+		[o.projectId, o.from, o.lon, o.lat, o.keepPoint === true, o.fromWindow, o.aim ? JSON.stringify(o.aim) : null]
 	);
 	const requestId = rows[0]!.id;
 	const { job, created } = await enqueueJob(db, {

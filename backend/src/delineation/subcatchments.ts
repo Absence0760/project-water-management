@@ -17,9 +17,9 @@ import {
 	aimAt,
 	bearingWord,
 	boundsText,
-	cutChannel,
 	DelineationRefused,
 	EARTH_RADIUS_M,
+	offChannelText,
 	readWindow,
 	SNAP_RADIUS_M,
 	TARGET_ZOOM,
@@ -33,9 +33,8 @@ import {
 	type Aim,
 	type LargerChannel
 } from './delineate.js';
-import { JUNCTION_MATCH_M, JUNCTION_PATH_M, junctionOutlets, type JunctionRiver } from './junction.js';
-import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, expectedOnGrid, onOwnChannel, place, WIDE_MATCH_M, type HeadHint } from './place.js';
-import { accumulate, d8, DX, DY, edgeMask, fill, NO_DATA_EDGE, OUT, openFlags, touchesEdge, upstream } from './flow.js';
+import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place } from './place.js';
+import { accumulate, d8, DX, DY, edgeMask, fill, OUT, openFlags, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport } from './pans.js';
 
@@ -56,37 +55,30 @@ import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport 
  * start-12 (issue #390, findings 1 and 6 reaching Start, Divide and Sub-catchments): a river the window cuts at the outlet grows the
  * window instead of leaving the outlet in a gully, each larger window is placed over the catchment (delineate.ts windowOrigin), and a
  * cut click keeps its `unmatched` unless its reach is larger than the routed square;
- * start-13 (delineate-11 reaching them): a head reach's area at the point from the DEM's own area at its upper end (place.ts expectedOnGrid);
+ * start-13 (delineate-11 reaching them): a head reach's area at the point from the DEM's own area at its upper end (expectedOnGrid, removed in start-15);
  * start-14 (delineate-12 reaching them): a depression passing the pan tests that a mapped river flows out of over a wall, or a dam
  * holds, is storage on a river, listed apart and not counted as non-contributing.
  * Not bumped for the dam's position (194, map_feature.dam_position): an unset dam is placed exactly as before, and a set one is
  * named in the method (placementText) and its placement (`damPosition`).
+ * start-15 (issue #472, delineate-13 reaching them): every point and the outlet on the terrain channel nearest it within the snap
+ * radius (a click or the outlet with none refused, another point dropped); the mapped river network no longer matches, moves or
+ * chooses them (start-3's, -4's, -7's to -9's, -12's and -13's reach rules gone).
  */
-export const START_METHOD_VERSION = 'start-14';
+export const START_METHOD_VERSION = 'start-15';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
 export type UnitRole = 'dam' | 'abstraction' | 'user' | 'gauge';
 
 /**
- * How a point was put on the channel: matched to its nearby river reach's area, at the DEM's junction for the river picked at a
- * confluence, snapped to the most-drained cell near it, moved onto the much larger channel the editor chose (`useLarger`), on its
- * own cell (`exact`: a delineated outlet, already placed), a dam polygon's most-drained cell, or the boundary's most-drained cell.
+ * How a point was put on the channel: on the terrain channel nearest it (`snapped`), moved onto the much larger channel the editor
+ * chose (`useLarger`), on its own cell (`exact`: a delineated outlet, already placed), a dam polygon's most-drained cell, or the
+ * boundary's most-drained cell. Plans stored before start-15 can also say `matched` or `junction` (the mapped river's rules).
  */
-export type PlacedBy = 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary';
+export type PlacedBy = 'snapped' | 'larger' | 'exact' | 'polygon' | 'boundary';
 
-/** How a point is to be placed (the expected area, the confluence, the editor's choices); none of it means the plain snap. */
+/** How a point is to be placed (the editor's choices); none of it means the plain snap. */
 export interface PlacementHints {
-	/** A point's expected upstream area (km², a nearby river reach's): the point is matched to it (place.ts, issue #374). */
-	expectedKm2?: number | null;
-	/** The reach is a head reach: its upper end's area is read from the window's DEM in place of HEAD_KM2 (place.ts expectedOnGrid). */
-	head?: HeadHint | null;
-	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M (place.ts `chosen`). */
-	chosen?: boolean;
-	/** How far the point is from that reach's line (m): off the line, a point on a DEM channel of its own stays there (place.ts rule 3). */
-	reachDistanceM?: number | null;
-	/** At a confluence: its rivers and the one picked; the point goes on the DEM's own junction (junction.ts), else by area. */
-	junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 	/** Snapped beside a much larger channel, the editor chose that channel: the point goes on it. */
 	useLarger?: boolean;
 	/** Already on the DEM's channel (a delineated outlet): its own cell, not moved. */
@@ -356,8 +348,6 @@ export interface UnitPiece {
 	placedBy?: PlacedBy;
 	/** Snapped beside a much larger channel: that channel, to offer (the point stays where it snapped). */
 	larger?: LargerChannel;
-	/** It had an expected area (a nearby river reach) but no channel near it matched (place.ts): it may be on another stream. */
-	unmatched?: boolean;
 	/** A dam polygon placed by the position the editor marked (194; damOutflow), not by its outline. Absent when unset. */
 	damPosition?: DamPosition;
 	/**
@@ -376,12 +366,12 @@ export interface UnitPiece {
 
 export interface Subcatchments {
 	/** `id`: with `outlet: 'lowest'`, the point taken as the outlet (it owns the rest, and is not among the units). */
-	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string; placedBy?: PlacedBy; larger?: LargerChannel; unmatched?: boolean };
+	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string; placedBy?: PlacedBy; larger?: LargerChannel };
 	/** The whole catchment above the outlet: its outline and geodesic area. */
 	catchment: { geometry: Extract<Geometry, { type: 'Polygon' }>; areaM2: number };
 	units: UnitPiece[];
 	/** Points not proposed as units, with why. */
-	dropped: { id: string; reason: string; placedBy?: PlacedBy; larger?: LargerChannel; unmatched?: boolean; damPosition?: DamPosition }[];
+	dropped: { id: string; reason: string; placedBy?: PlacedBy; larger?: LargerChannel; damPosition?: DamPosition }[];
 	/** The outlet's own piece: what drains to it through no unit. */
 	rest: { geometry: Extract<Geometry, { type: 'Polygon' }> | null; areaM2: number; nonContributingM2: number; open?: boolean };
 	/** The catchment's pans (pans.ts): what of it drains into one (NaN when the catchment is cut at the window, as its area), and the largest. */
@@ -439,6 +429,8 @@ export interface SubcatchmentRequest {
 	outlet: Position | null | 'lowest';
 	/** How a fixed outlet (a Position) is placed: as a point is (PlacementHints); absent, the plain snap. */
 	outletHints?: PlacementHints;
+	/** The mapped river reach's area near a fixed outlet (km², reach.ts nearestReach), only to word a `too_large` refusal. */
+	outletMappedKm2?: number | null;
 	boundary: Geometry | null;
 	points: readonly UnitPoint[];
 }
@@ -448,28 +440,24 @@ export const METHOD_MAX_CHARS = 1000;
 
 /**
  * The method's sentence on where the points went, from what ran (never a rule that didn't): `placed` is each point's
- * placement but the outlet's, `outletPlaced` the outlet's (null when it is a click), `unmatched` how many snapped points had a
- * reach near but no match. Each rule that ran is defined once; `brief` names the method version for the definitions instead, the
+ * placement but the outlet's, `outletPlaced` the outlet's (null when it is a click). Each rule that ran is defined once; `brief` names the method version for the definitions instead, the
  * form fitMethod falls back to when every rule at once would pass METHOD_MAX_CHARS. Pure.
  */
 export function placementText(
 	placed: readonly PlacedBy[],
-	unmatched: number,
 	outletPlaced: PlacedBy | null,
 	snapRadiusM: number,
 	brief = false,
 	positions: readonly DamPosition[] = []
 ): string {
 	const short: Record<PlacedBy, string> = {
-		matched: 'matched',
-		junction: 'at a junction',
-		snapped: 'snapped',
+		snapped: 'on the nearest terrain channel',
 		larger: 'on the larger channel chosen',
 		exact: 'on its delineated cell',
 		polygon: 'at a dam polygon’s outflow',
 		boundary: 'at the boundary’s most-accumulating cell'
 	};
-	const order: PlacedBy[] = ['matched', 'junction', 'snapped', 'larger', 'exact', 'polygon', 'boundary'];
+	const order: PlacedBy[] = ['snapped', 'larger', 'exact', 'polygon', 'boundary'];
 	const parts: string[] = [];
 	if (outletPlaced) parts.push(`the outlet ${short[outletPlaced]}`);
 	for (const how of order) {
@@ -488,8 +476,6 @@ export function placementText(
 	if (!parts.length) return 'no points placed';
 	const ran = new Set([...placed, ...(outletPlaced ? [outletPlaced] : [])]);
 	const defs: string[] = [];
-	if (ran.has('matched'))
-		defs.push(`matched: the cell within ${MATCH_RADIUS_M} m (${JUNCTION_MATCH_M} m at a picked confluence) best matching the reach’s area (Lehner 2012, ≥ ${MIN_ACCORDANCE} %)`);
 	// The default (the outline's most-accumulating cell) needs no words; the exception does (damOutflow).
 	if (ran.has('polygon')) {
 		// A marked dam's rule replaces the outline's (damOutflow), so the outline's is defined only while a dam is unmarked.
@@ -500,9 +486,10 @@ export function placementText(
 			);
 		if (positions.includes('on_channel')) defs.push('marked on the river: its most-accumulating cell');
 	}
-	if (ran.has('junction')) defs.push('at a junction: the DEM’s junction for the river picked');
 	if (ran.has('snapped') || ran.has('larger'))
-		defs.push(`snapped: the most-accumulating cell within ${snapRadiusM} m${unmatched ? ` (${unmatched} by an unmatched reach)` : ''}, a ${LARGER_FACTOR}× larger channel within ${GUARD_RADIUS_M} m named`);
+		defs.push(
+			`the nearest terrain channel: the nearest cell within ${snapRadiusM} m with at least ${ON_CHANNEL_KM2} km² draining through it, the mapped river network not used; a ${LARGER_FACTOR}× larger channel within ${GUARD_RADIUS_M} m named`
+		);
 	if (brief && defs.length) return `placed on the channel: ${parts.join(', ')} (each rule as ${START_METHOD_VERSION} defines it, docs/maps.md)`;
 	return `placed on the channel: ${parts.join(', ')}${defs.length ? ` (${defs.join('; ')})` : ''}`;
 }
@@ -617,10 +604,8 @@ export async function delineateUnits(
 	const need = 2 * (Math.ceil(reach) + MARGIN_CELLS);
 	const first = windows.findIndex((c) => c >= need);
 	// What every window keeps inside around the centre, wherever it is placed (delineate.ts windowOrigin): the points and the
-	// boundary with their margin, and the junction's match and its path downhill.
-	const keep = Math.max(Math.ceil(reach) + MARGIN_CELLS, Math.ceil((JUNCTION_MATCH_M + JUNCTION_PATH_M) / cellSizeM) + 2);
-	const capCells = windows[windows.length - 1]!;
-	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
+	// boundary with their margin, and the larger-channel guard's reach.
+	const keep = Math.max(Math.ceil(reach) + MARGIN_CELLS, Math.ceil(GUARD_RADIUS_M / cellSizeM) + 2);
 	/** Where the last window cut the catchment: the next window is placed over it. */
 	let aim: Aim | null = null;
 	if (first < 0) {
@@ -650,39 +635,29 @@ export async function delineateUnits(
 		// The rows' latitudes unrounded (toLonLat keeps 7 decimals, a few parts in ten thousand of a 10 m cell).
 		for (let y = 0; y < nCells; y++) rowM2[y] = cellRowAreaM2(mercatorLat(y0 + y, W), mercatorLat(y0 + y + 1, W), W);
 		/** Each point's placement, by its key, for the pieces' facts. */
-		const how = new Map<string, { placedBy: PlacedBy; larger?: LargerChannel; unmatched?: boolean; damPosition?: DamPosition }>();
+		const how = new Map<string, { placedBy: PlacedBy; larger?: LargerChannel; damPosition?: DamPosition }>();
 		/** The outlet's own key in `how` (no point's id is empty). */
 		const OUTLET = '';
-		/** Each point's area matched to in this window (expectedOnGrid), by its key. */
-		const expectedAt = new Map<string, number>();
+		/** The points (by key) with no terrain channel within the snap radius (place.ts): never placed. */
+		const offChannel = new Set<string>();
 		const snapAt = (p: Position, key?: string, hints: PlacementHints = {}): number | null => {
 			const [x, y] = toGrid(p);
 			if (x < 0 || y < 0 || x >= nCells || y >= nCells) return null;
-			const record = (v: { placedBy: PlacedBy; larger?: LargerChannel; unmatched?: boolean }) => key !== undefined && how.set(key, v);
+			const record = (v: { placedBy: PlacedBy; larger?: LargerChannel }) => key !== undefined && how.set(key, v);
 			if (hints.exact) {
 				const c = Math.floor(y) * nCells + Math.floor(x);
 				if (edge[c]) return null;
 				record({ placedBy: 'exact' });
 				return c;
 			}
-			const g0 = { nx: nCells, ny: nCells, acc, edge, cellSizeM };
-			// A head reach's area at the point, from the DEM's own area at its upper end where this window reads it (place.ts).
-			const expectedKm2 = expectedOnGrid({ ...g0, dir, open: cutFlags }, x, y, { snapRadiusM, expectedKm2: hints.expectedKm2, chosen: hints.chosen, reachDistanceM: hints.reachDistanceM }, hints.head, toGrid);
-			if (key !== undefined && expectedKm2) expectedAt.set(key, expectedKm2);
-			const placed = place(g0, x, y, { snapRadiusM, expectedKm2, chosen: hints.chosen, reachDistanceM: hints.reachDistanceM });
-			// Beside a junction nobody picked a river at, a point on a DEM channel of its own stays there (place.ts rule 3), as in Delineate.
-			const ownChannel = !hints.chosen && onOwnChannel(g0, x, y, { expectedKm2, reachDistanceM: hints.reachDistanceM });
-			const atJunction = hints.junction && !ownChannel ? junctionOutlets({ ...g0, dir }, x, y, hints.junction.rivers, snapRadiusM)?.get(hints.junction.chosenKey) : undefined;
-			if (atJunction !== undefined) {
-				record({ placedBy: 'junction' });
-				return atJunction;
+			const placed = place({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, x, y, { snapRadiusM });
+			if (!placed) {
+				if (key !== undefined) offChannel.add(key);
+				return null;
 			}
-			if (!placed) return null;
-			// A channel matching the reach, offered (place.ts rules 3 and 4), says more than "unmatched" would.
-			const unmatched = !!expectedKm2 && placed.how === 'snapped' && !placed.larger?.reach;
 			if (placed.larger && hints.useLarger) {
 				// The editor chose the channel the guard named: the point goes on it (found again here, never taken from the request).
-				record({ placedBy: 'larger', ...(unmatched ? { unmatched } : {}) });
+				record({ placedBy: 'larger' });
 				return placed.larger.cell;
 			}
 			const larger = placed.larger
@@ -692,12 +667,11 @@ export async function delineateUnits(
 							at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]),
 							distanceM: placed.larger.distanceM,
 							km2: km2(acc[placed.larger.cell]!),
-							pointKm2: km2(acc[placed.cell]!),
-							...(placed.larger.reach && expectedKm2 ? { reachKm2: expectedKm2 } : {})
+							pointKm2: km2(acc[placed.cell]!)
 						};
 					})()
 				: undefined;
-			record({ placedBy: placed.how, ...(larger ? { larger } : {}), ...(unmatched ? { unmatched } : {}) });
+			record({ placedBy: 'snapped', ...(larger ? { larger } : {}) });
 			return placed.cell;
 		};
 		const cellPos = (c: number): Position => {
@@ -720,6 +694,7 @@ export async function delineateUnits(
 			for (const p of req.points) {
 				if (p.geometry.type !== 'Point') continue;
 				const c = snapAt(p.geometry.coordinates, p.id, p);
+				if (offChannel.has(p.id)) throw new DelineationRefused('off_channel', offChannelText(p.name ?? 'a click', snapRadiusM));
 				if (c === null || (outlet >= 0 && acc[c]! <= acc[outlet]!)) continue;
 				outlet = c;
 				outletId = p.id;
@@ -728,6 +703,7 @@ export async function delineateUnits(
 			if (outlet < 0) throw new DelineationRefused('no_data', 'The elevation model has no data around the clicks.');
 		} else if (fixedOutlet) {
 			const c = snapAt(fixedOutlet, OUTLET, req.outletHints);
+			if (offChannel.has(OUTLET)) throw new DelineationRefused('off_channel', offChannelText('the outlet gauge', snapRadiusM, 'gauge'));
 			if (c === null) throw new DelineationRefused('no_data', 'The elevation model has no data around the outlet.');
 			outlet = c;
 			outletSnap = movedM(fixedOutlet, c);
@@ -735,32 +711,6 @@ export async function delineateUnits(
 			outlet = mostDrained(rasterize(nCells, nCells, boundaryRings.map((r) => r.map(toGrid))), acc, edge);
 			if (outlet < 0) throw new DelineationRefused('no_data', 'The elevation model has no data inside the boundary.');
 			how.set(OUTLET, { placedBy: 'boundary' });
-		}
-		// The outlet's river cut by the window (delineate.ts, delineate-6): a reach near the outlet, nothing matching its area, a
-		// channel in reach cut by the window with under twice it. In a window smaller than the river, a gauge on it snaps into a
-		// gully whose catchment never reaches the border, and the plan was proposed whole. Grown (placed over that channel) up to
-		// the cap, as long as the reach fits the cap's square; not when the editor chose the guard's channel or a matching channel
-		// is already offered (place.ts rules 3 and 4).
-		const outletHints: PlacementHints | undefined = lowest ? req.points.find((p) => p.id === outletId) : fixedOutlet ? req.outletHints : undefined;
-		const outletAt: Position | null = lowest ? (req.points.find((p) => p.id === outletId)?.geometry as { coordinates?: Position } | undefined)?.coordinates ?? null : fixedOutlet;
-		const outletHow = how.get(lowest ? (outletId ?? OUTLET) : OUTLET);
-		const expectedKm2 = expectedAt.get(lowest ? (outletId ?? OUTLET) : OUTLET) ?? outletHints?.expectedKm2;
-		if (expectedKm2 && outletAt && outletHow?.placedBy === 'snapped' && outletHow.larger?.reachKm2 === undefined && !outletHints?.useLarger) {
-			const [cx, cy] = toGrid(outletAt);
-			const gully = acc[outlet]! * cellKm2 < GULLY_SHARE * expectedKm2;
-			const radiusM = outletHints?.chosen || gully ? WIDE_MATCH_M : MATCH_RADIUS_M;
-			const cut = cutChannel({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, cutFlags, cx, cy, radiusM, (2 * expectedKm2) / cellKm2);
-			if (cut >= 0 && cutFlags[cut]! & NO_DATA_EDGE) {
-				throw new DelineationRefused('no_data', `The river at ${theOutlet} runs past the edge of the elevation model’s data, so its catchment can’t be divided whole.`);
-			}
-			if (cut >= 0 && nCells < capCells && expectedKm2 <= (capCells * cellSizeM) ** 2 / 1e6) {
-				const next = windows[wi + 1]!;
-				if ((now() - started) * (1 + (next / nCells) ** 2) > budget) {
-					throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), expectedKm2));
-				}
-				aim = aimAt(upstream(nCells, nCells, dir, cut), nCells, x0, y0);
-				continue;
-			}
 		}
 		const catchment = upstream(nCells, nCells, dir, outlet);
 		const touch = touchesEdge(grid, edge, catchment);
@@ -781,7 +731,7 @@ export async function delineateUnits(
 			const next = windows[wi + 1];
 			const elapsed = now() - started;
 			if (next === undefined || elapsed * (1 + (next / nCells) ** 2) > budget) {
-				throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), req.outletHints?.expectedKm2));
+				throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), req.outletMappedKm2));
 			}
 			aim = aimAt(catchment, nCells, x0, y0);
 			continue;
@@ -858,6 +808,10 @@ export async function delineateUnits(
 					cell = snapAt(rings[0]![0]!, p.id);
 					if (cell !== null) moved = movedM(rings[0]![0]!, cell);
 				}
+			}
+			if (offChannel.has(p.id)) {
+				dropped.push({ id: p.id, reason: `has no terrain channel within ${snapRadiusM} m: move it onto one of the elevation model’s channels` });
+				continue;
 			}
 			if (cell === null || !catchment[cell]) {
 				if (cell !== null) droppedKm2.set(p.id, km2(acc[cell]!));
@@ -950,22 +904,6 @@ export async function delineateUnits(
 			if (open.every((v, o) => v || (o < R && !ownsLand(kept[o]!.p.role)))) {
 				const past = touch.noData ? 'the edge of the elevation model’s data' : `the ${Math.round((nCells * cellSizeM) / 1000)} km the app routes around the clicks`;
 				throw new DelineationRefused(touch.noData ? 'no_data' : 'too_large', allOpenText(past, req.points, outletId, droppedKm2, how));
-			}
-		}
-		// A click whose catchment runs past the window can't be matched to its reach in it (the Orange's 340 724 km² in a 100 km
-		// window): calling it unmatched was a false alarm on every main-stem click (the hydrologist's review, finding 11). Cut are
-		// the lowest click, and every unit with an open piece and those below it. Only a reach larger than the routed square loses
-		// it (as Delineate grows only for a reach that fits, start-12): a smaller one could have matched, so the warning stands.
-		if (truncated) {
-			const cut = new Set<string>(outletId !== undefined ? [outletId] : []);
-			kept.forEach((_, i) => {
-				if (!open[i]) return;
-				for (let k = i; k >= 0; k = part.down[k]!) cut.add(kept[k]!.p.id);
-			});
-			for (const id of cut) {
-				const h = how.get(id);
-				const reachKm2 = req.points.find((p) => p.id === id)?.expectedKm2;
-				if (h?.unmatched && reachKm2 && reachKm2 > (nCells * cellSizeM) ** 2 / 1e6) how.set(id, { placedBy: h.placedBy, ...(h.larger ? { larger: h.larger } : {}) });
 			}
 		}
 		// An open piece isn't outlined (it would be cut at the window, and the API doesn't show it): no geometry, no area.
@@ -1062,7 +1000,6 @@ export async function delineateUnits(
 				(brief) =>
 					placementText(
 						req.points.flatMap((p) => (p.id === outletId || !how.has(p.id) ? [] : [how.get(p.id)!.placedBy])),
-						req.points.filter((p) => p.id !== outletId && how.get(p.id)?.unmatched).length,
 						lowest ? (outletId !== undefined ? (how.get(outletId)?.placedBy ?? null) : null) : (how.get(OUTLET)?.placedBy ?? null),
 						snapRadiusM,
 						brief,

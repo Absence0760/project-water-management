@@ -1150,8 +1150,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 */
 			propose: (
 				id: string,
-				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; reach?: { dataset: string; reachId: number }; background?: boolean }
-			) => request<{ proposal: DelineationProposal; check: string | null } | { request: DelineationRequest }>('POST', `${p(id)}/map/delineation`, body),
+				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; background?: boolean }
+			) => request<{ proposal: DelineationProposal } | { request: DelineationRequest }>('POST', `${p(id)}/map/delineation`, body),
 			/** A delineation the worker has: waiting, running, or what came of it (viewer). */
 			request: (id: string, rid: string) => request<{ request: DelineationRequest }>('GET', `${p(id)}/map/delineation/requests/${enc(rid)}`),
 			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
@@ -1163,21 +1163,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
 		subcatchments: {
-			pieces: (id: string, clicks: { lon: number; lat: number; reach?: { dataset: string; reachId: number } }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
-			save: (id: string, clicks: { lon: number; lat: number; reach?: { dataset: string; reachId: number } }[]) =>
+			pieces: (id: string, clicks: { lon: number; lat: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
+			save: (id: string, clicks: { lon: number; lat: number }[]) =>
 				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
 		start: {
 			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
-			propose: (id: string, body: { outletFeatureId?: string | null; outletReach?: PlacementChoice['reach']; outletUseLarger?: boolean; points: ({ featureId: string; role: StartRole } & PlacementChoice)[] }) =>
+			propose: (id: string, body: { outletFeatureId?: string | null; outletUseLarger?: boolean; points: ({ featureId: string; role: StartRole } & PlacementChoice)[] }) =>
 				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
 			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
 			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
 		},
 		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
 		divide: {
-			propose: (id: string, body: { outletFeatureId?: string | null; outletReach?: PlacementChoice['reach']; outletUseLarger?: boolean; points: ({ featureId: string; nodeId: string | null } & PlacementChoice)[] }) =>
+			propose: (id: string, body: { outletFeatureId?: string | null; outletUseLarger?: boolean; points: ({ featureId: string; nodeId: string | null } & PlacementChoice)[] }) =>
 				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
 			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
 		},

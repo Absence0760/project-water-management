@@ -34,9 +34,9 @@ import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { delineate, DelineationRefused, type WindowAim } from './delineate.js';
-import { checkNote, loadProposal, SELECT, storeProposal, toProposal, type ProposalRow } from './proposals.js';
+import { loadProposal, SELECT, storeProposal, toProposal, type ProposalRow } from './proposals.js';
 import { delineationLimits, jobWindowsFrom, loadRequest, nextJobWindow, queueDelineation, waitingRequest } from './requests.js';
-import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear } from './reach.js';
+import { nearestReach } from './reach.js';
 
 /** Delineations one project may ask for in an hour: each is seconds of CPU on the API (docs/design/delineation.md § Where it runs). */
 export const DELINEATIONS_PER_HOUR = 30;
@@ -52,8 +52,6 @@ export const DelineateBody = z
 		from: z.enum(['outlet', 'dam_wall']),
 		/** Keep the point even beside a much larger channel (otherwise 422 `larger_channel`, naming it; place.ts). */
 		keepPoint: z.boolean().optional(),
-		/** At a confluence, the river reach the editor means (one of the 422 `confluence` choices; its area is read from the database). */
-		reach: ReachChoiceBody.optional(),
 		/** A catchment the editor knows is large: straight to the worker (202 with the request), skipping the request's own attempt. */
 		background: z.boolean().optional()
 	})
@@ -103,7 +101,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const userId = c.get('userId');
 		const queue = (db: Db, fromWindow: number, aim: WindowAim | null = null) =>
-			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, reach: body.reach ?? null, fromWindow, aim });
+			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, fromWindow, aim });
 		const attempt = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			const { rows } = await db.query<{ n: number }>(
@@ -113,22 +111,14 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			if (rows[0]!.n >= DELINEATIONS_PER_HOUR) {
 				throw new ApiError(429, `This catchment has asked for ${DELINEATIONS_PER_HOUR} delineations in the last hour; try again later.`);
 			}
-			// The river reach the click means, for matching the outlet to its area (issue #374): the one chosen at a
-			// confluence, else the nearest; at a confluence with none chosen, the editor is asked (422 `confluence`).
-			let reach;
-			let junction = null;
-			try {
-				({ reach, junction } = await reachFor(db, [body.lon, body.lat], body.reach ?? null));
-			} catch (err) {
-				if (err instanceof ConfluenceAmbiguity) throw new ApiError(422, err.message, { reason: 'confluence', choices: err.choices });
-				if (err instanceof ReachNotNear) throw new ApiError(400, err.message);
-				throw err;
-			}
+			// The mapped river near the click, only to word a refusal: it never places the outlet (place.ts, issue #472).
+			const near = await nearestReach(db, [body.lon, body.lat]);
+			const mapped = near ? { name: `reach ${near.reachId} of ${near.dataset}`, km2: near.upstreamKm2 } : null;
 			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt); a request for the background as well.
 			const attemptId = await beginDemAttempt(db, 'delineation');
-			if (!body.background) return { id: attemptId, reach, junction, queued: null };
+			if (!body.background) return { id: attemptId, mapped, queued: null };
 			if (!configuredDem()) throw new ApiError(409, 'Delineation is off: the server has no elevation model (DEM_URL is empty).');
-			return { id: attemptId, reach, junction, queued: await queue(db, delineationLimits.jobWindows[0]!) };
+			return { id: attemptId, mapped, queued: await queue(db, delineationLimits.jobWindows[0]!) };
 		});
 		try {
 			if (attempt.queued) {
@@ -141,10 +131,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			try {
 				result = await delineate(dem, [body.lon, body.lat], {
 					windows: delineationLimits.requestWindows,
-					// A river cut at the request's last window goes on to the worker's windows.
-					capCells: delineationLimits.jobWindows[delineationLimits.jobWindows.length - 1],
-					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach, distanceM: attempt.reach.distanceM, head: attempt.reach.head } : null,
-					junction: attempt.junction,
+					mapped: attempt.mapped,
 					keepPoint: body.keepPoint,
 					panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id)
 				});
@@ -170,8 +157,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			return await withUser(userId, async (db) => {
 				await requireRole(db, id, 'editor');
 				const proposal = await storeProposal(db, id, body.from, r);
-				// The river-network check (issue #374): with this answer only, not stored.
-				return c.json({ proposal, check: checkNote(r) }, 201);
+				return c.json({ proposal }, 201);
 			});
 		} finally {
 			await finishDemAttempt(userId, attempt.id);

@@ -23,52 +23,16 @@ describe('delineate: windows over a river longer than half the window', () => {
 		const whole = await delineate(dem, at(0, 0), { windows: [512] });
 		expect(whole.cells).toBeGreaterThan((2 * HW + 1) * LONG);
 		// Centred, a 256-cell window reaches 128 cells north of the outlet: the valley's 200 run past it. Placed over the valley
-		// once the 128-cell window cut it at the north, it reaches about 228.
+		// once the 128-cell window cut it at the north, it reaches past the valley's 200 (all but the few cells kept south of the outlet).
 		const r = await delineate(dem, at(0, 0), { windows: [128, 256] });
 		expect(r.windowCells).toBe(256);
 		expect(r.cells).toBe(whole.cells);
 	});
 
 	it('still refuses a catchment longer than the placed window, at the window it stopped at', async () => {
-		const e = await refusal(delineate(functionDem(valley(240)), at(0, 0), { windows: [128, 256] }));
+		const e = await refusal(delineate(functionDem(valley(260)), at(0, 0), { windows: [128, 256] }));
 		expect(e.code).toBe('too_large');
 		expect(e.windowCells).toBe(256);
-	});
-
-	it('grows when the river the click means is cut by the window, instead of settling beside it (finding 1)', async () => {
-		const whole = await delineate(dem, at(0, -3), { windows: [512] });
-		const expected = { km2: (whole.cells * whole.cellAreaM2) / 1e6, reach: 'reach 1 of test' };
-		// Three cells (about 800 m) east of the river, on the valley's side: in a 128-cell window the river carries only the third
-		// of its area that lies inside, so no channel matches the reach and the click's own few cells were all there was.
-		const r = await delineate(dem, at(3, -3), { windows: [128, 256], expected });
-		expect(r.windowCells).toBe(256);
-		expect(r.unmatched).toBeUndefined();
-		expect(r.method).toMatch(/best matches reach 1 of test/);
-		expect(Math.abs(r.cells / whole.cells - 1)).toBeLessThan(0.05);
-	});
-
-	it('hands a river cut at the request’s last window on to the worker’s windows (too_large at the window it stopped)', async () => {
-		const whole = await delineate(dem, at(0, -3), { windows: [512] });
-		const expected = { km2: (whole.cells * whole.cellAreaM2) / 1e6, reach: 'reach 1 of test' };
-		const e = await refusal(delineate(dem, at(3, -3), { windows: [128], capCells: 256, expected }));
-		expect(e.code).toBe('too_large');
-		expect(e.windowCells).toBe(128);
-	});
-
-	it('at the last window of all, falls back to the snap and its guard as before', async () => {
-		const whole = await delineate(dem, at(0, -3), { windows: [512] });
-		const expected = { km2: (whole.cells * whole.cellAreaM2) / 1e6, reach: 'reach 1 of test' };
-		expect((await refusal(delineate(dem, at(3, -3), { windows: [128], expected }))).code).toBe('larger_channel');
-	});
-
-	it('keeps a kept point where it is, without growing for the river', async () => {
-		const whole = await delineate(dem, at(0, -3), { windows: [512] });
-		const expected = { km2: (whole.cells * whole.cellAreaM2) / 1e6, reach: 'reach 1 of test' };
-		const windows: number[] = [];
-		// The valley's side: a few cells drain to it, too few to propose, but it is judged where it is, in the first window.
-		const e = await refusal(delineate(dem, at(3, -3), { windows: [128, 256], expected, keepPoint: true, onWindow: (i) => void windows.push(i) }));
-		expect(e.code).toBe('too_small');
-		expect(windows).toEqual([0]);
 	});
 });
 
@@ -81,12 +45,6 @@ describe('delineate: the data’s edge (finding 2)', () => {
 		const e = await refusal(delineate(dem, at(0, 0), { windows: [512] }));
 		expect(e.code).toBe('no_data');
 		expect(e.message).toMatch(/runs past the edge of the elevation model’s data/);
-	});
-
-	it('refuses a river the data’s edge cuts, rather than settle on a gully beside it', async () => {
-		const whole = await delineate(functionDem(valley(200)), at(0, -3), { windows: [512] });
-		const e = await refusal(delineate(functionDem(valley(200), holeAbove), at(3, -3), { windows: [512], expected: { km2: (whole.cells * whole.cellAreaM2) / 1e6, reach: 'reach 1 of test' } }));
-		expect(e.code).toBe('no_data');
 	});
 
 	it('proposes a catchment that stops short of the hole, whole: the land beside no data is not a sink', async () => {
@@ -118,26 +76,5 @@ describe('windowOrigin', () => {
 		expect(windowOrigin(40, 10.5, 15.5, 3, { box: [10, 0, 10, 15], cut: [false, false, false, true] })).toEqual([-10, -3]);
 		// The click stays `keep` cells inside, however far the box runs the other way.
 		expect(windowOrigin(40, 10.5, 15.5, 3, { box: [10, -50, 10, 15], cut: [false, false, false, true] })).toEqual([-10, -21]);
-	});
-});
-
-describe('delineate: a click near the head of a head reach (delineate-11)', () => {
-	// The invented valley 60 cells long: its head drains about 2 km², its outlet about 64; HydroRIVERS would start the reach at
-	// 10 km². A click 3 cells below the head drains about 5 km², under half the 13 km² the constant gives there.
-	const L = 60;
-	const dem = functionDem(valley(L));
-	const fraction = 3 / L;
-
-	it('is matched at the click from the DEM’s area at the reach’s upper end, where the constant slid it down the valley', async () => {
-		const reachKm2 = (await delineate(dem, at(0, 0), { windows: [512] })).areaM2 / 1e6;
-		const own = await delineate(dem, at(0, -L + 3), { windows: [512] });
-		const expected = { km2: 10 + (reachKm2 - 10) * fraction, reach: 'reach 1 of test', distanceM: 0 };
-		const slid = await delineate(dem, at(0, -L + 3), { windows: [512], expected });
-		expect(slid.snapDistanceM).toBeGreaterThan(250);
-		const d = await delineate(dem, at(0, -L + 3), { windows: [512], expected: { ...expected, head: { at: at(0, -L), fraction, reachKm2 } } });
-		expect(d.method).toMatch(/best matches reach 1 of test \(5 km² at the point, from the DEM’s own area at the head reach’s upper end;/);
-		expect(d.snapDistanceM).toBeLessThan(150);
-		expect(d.areaM2).toBeCloseTo(own.areaM2, -3);
-		expect(d.methodVersion).toBe('delineate-12');
 	});
 });

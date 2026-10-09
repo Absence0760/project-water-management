@@ -86,7 +86,10 @@ point is never moved more than 150 m; `start-6`
 takes every area from the cells instead of the simplified outline;
 `start-7` makes `start-3`'s and `start-4`'s claims true for Start and
 Divide, which until then never looked a point's reach up (§ Sub-catchments:
-the method, steps 2 and 3).)
+the method, steps 2 and 3); `start-8` to `start-14` are listed in
+data-model.md § `start_proposal`; `start-15`, issue #472, puts every point
+on the nearest terrain channel and retires the mapped river's rules of
+`start-3`, `start-4`, `start-7` to `start-9`, `start-12` and `start-13`.)
 
 ## Sub-catchments: the method
 
@@ -104,35 +107,36 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    step 2):
    - **Placed over the catchment**: each larger window is placed by the
      catchment the last one cut (`windowOrigin`), keeping the points and
-     the boundary (with their margin) and 6.5 km round the centre inside,
+     the boundary (with their margin) and 1 km and two cells round the
+     centre (the larger-channel guard's reach; 6.5 km, for the junction,
+     before `start-15`) inside,
      so a catchment running one way from its gauge isn't refused at half
      the window.
-   - **Grown for a river cut at the outlet**: when the outlet (a gauge
-     with its reach's area, `start-7`, or the lowest click) matched no
-     channel, and a channel within the match radius is cut by the window
-     with under twice the reach's area, the window grows over it rather
-     than leave the outlet in a gully, whose small catchment never reached
-     the border, so the plan was proposed whole. Up to the cap, for a
-     reach that fits the cap's square; not when the editor chose the
-     guard's channel or a matching channel is offered; a river cut at the
-     DEM's missing data is refused `no_data`.
-   - **`unmatched` on a cut click** is kept unless the click's reach is
-     larger than the routed square (`start-10` dropped it for every cut
-     click, which hid a miss on a river that would have fit).
+   - **Grown for a river cut at the outlet** and **`unmatched` on a cut
+     click** (`start-10` and `start-12`): both hung on a nearby river
+     reach's area, so both were retired with the area match in
+     `start-15` (issue #472). The window grows only while the outlet's
+     catchment reaches its edge.
 2. **The outlet.** A gauge is placed as a Delineate click is
-   (`pointPlacement.ts`, since `start-7`): its nearest river reach within
-   1 km looked up in the reading transaction, and the gauge put on the cell
-   whose upstream area matches the reach's at the point (`place.ts`; since
-   `start-9` all of Delineate's `delineate-5` rules: a point on a DEM
-   channel of its own stays on it, the reach's channel offered, and a gully
-   snap offers the reach's channel out to 2.5 km); at a confluence the
-   editor picks the river (422 `confluence`, every such point at once) and
-   it goes at the DEM's junction (`junction.ts`); with no reach, the
-   most-drained cell within 150 m. A delineated outlet is already on the
+   (`pointPlacement.ts`, `place.ts`; since `start-15`, issue #472): on the
+   nearest terrain channel, the nearest cell within 150 m with at least
+   1 km² draining through it, measured from the point to each cell's
+   centre; with none, the proposal is refused (422 `off_channel`). The
+   mapped river network is not used to place it. From `start-7` to
+   `start-14` it was placed by the mapped river's rules instead: the cell
+   matching the nearest reach's upstream area within 1 km, the river asked
+   for at a confluence (422 `confluence`) and the gauge put at the DEM's
+   junction (`junction.ts`, deleted with issue #472), a red-line or gully
+   click offered the reach's channel (`start-9`), a head reach's area read
+   from the DEM (`start-13`); see [delineation.md § Method](./delineation.md#method)
+   step 6 for why they went. A delineated outlet is already on the
    channel, so it keeps its own cell (it used to be snapped again, up to
    150 m further down the river). Otherwise it is the most-drained cell
    inside the boundary.
-3. **Each unit's point** is placed the same way. A dam *polygon* takes the
+3. **Each unit's point** is placed the same way; a gauge, an abstraction
+   point or a dam drawn as a point with no terrain channel within 150 m is
+   dropped with the reason "has no terrain channel within 150 m: move it
+   onto one of the elevation model’s channels". A dam *polygon* takes the
    most-drained cell inside it (or within the snap radius of it): its
    spillway, near enough, when the river runs through the reservoir. An
    outline that only clips a river (an off-channel dam filled by a pump or
@@ -171,23 +175,28 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    outline wholly on the river is dropped with its reason. Neither offers a
    channel. Unset, the rule above decides and only the old runoff tick is
    proposed (no method version bump); a marked dam carries `damPosition` in
-   its placement, `damShares` in its unit, and the method counts it. A snapped point beside a channel with 100× its
+   its placement, `damShares` in its unit, and the method counts it. A point placed beside a channel with 100× its
    upstream area keeps the guard's finding in its `placement.larger` and a
    warning (the outlet's first, since every unit is placed against it);
    **use that channel** proposes again with `useLarger` for that point, and
    the server puts it on the channel the guard finds again (never a cell
-   from the request). Each point's `placement` (how, which reach, the larger
-   channel, a reach unmatched) is kept in the plan, and the method names
+   from the request). Each point's `placement` (`{ placedBy, larger,
+   damPosition? }`; before `start-15` also which reach and a reach
+   unmatched) is kept in the plan, and the method names
    only the rules that ran (`placementText`). Two points on one cell, or a
    point whose cell isn't upstream of the outlet, are dropped with a
    warning, not guessed at.
 
-   Why (the hydrologist's review, finding 3): before `start-7` every point
-   was snapped 150 m with no reach. On 12 HydroRIVERS reaches of 100–600
+   Why `start-7` placed points as Delineate does (the hydrologist's review,
+   finding 3; the rules it measured were retired in `start-15`, but the
+   point stands: Start and Divide place as Delineate does): before
+   `start-7` every point was snapped 150 m to the most-drained cell with no
+   reach. On 12 HydroRIVERS reaches of 100–600
    km², a gauge at the reach's second-to-last vertex landed in a gully 5
    times, and the dam five vertices up the same line was then dropped as
    "not upstream"; the stored method still claimed the area match. Run
-   with `backend/scripts/research/snap-start.ts` on the local GLO-30:
+   with `backend/scripts/research/snap-start.ts` (deleted with issue #472,
+   in git history) on the local GLO-30:
 
    | Reach (km²) | Delineate | `start-6` | `start-7` |
    |---|---|---|---|

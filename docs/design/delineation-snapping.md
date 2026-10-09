@@ -1,5 +1,19 @@
 # Research: putting a click on the DEM's channel
 
+> **Retired, 2026-10-09 (issue #472).** The rules this record measured (the
+> HydroRIVERS area match, the confluence question, the junction side, the
+> head reach's area, the red-line rule 3 and the gully rule 4) were removed
+> in `delineate-13` / `start-15`. The outlet now goes on the nearest terrain
+> channel (a DEM cell with at least 1 km² draining through it) within
+> 150 m, and the mapped river network never places it: the operator decided
+> that the DEM's rivers, which often sit elsewhere than HydroRIVERS, are
+> the ones to click ([delineation.md § Method](./delineation.md#method),
+> step 6). The experiments below stand as the record of why those rules
+> were built. Their harnesses under `backend/scripts/research/` (`snap-confluence`,
+> `snap-gauges`, `snap-head`, `snap-junction-side`, `snap-junction-side-summary`,
+> `snap-methods`, `snap-outlets`, `snap-redline`, `snap-start`, `snap-summary`)
+> were deleted with them and are in git history only; `snap-burn.ts` remains.
+
 Why a click on a river line can land in a gully, what the literature does
 about it, and what each way of moving a click onto the channel gets right on
 real South African rivers. Written for issue #374; the rules it led to are
@@ -95,7 +109,7 @@ boundary beside a HydroRIVERS reach of **343 037 km²**. Measured there:
 ## The experiment
 
 `backend/scripts/research/snap-methods.ts` (run by hand, not in CI; the
-header says how) samples HydroRIVERS reaches inside South Africa from the
+header says how; deleted with issue #472, in git history) samples HydroRIVERS reaches inside South Africa from the
 operator's loaded `HydroRIVERS-v10` in four classes by upstream area: 60
 each of 10–100, 100–1 000 and 1 000–1 500 km², and 40 main stems (Strahler
 ≥ 7, ≥ 20 000 km²), in a fixed pseudo-random order (seed `snap-1`). For
@@ -289,7 +303,7 @@ out of the product ("validation only, offline, with permission"): the
 operator should tell GRDC about this use (grdc@bafg.de) as its policy asks.
 
 **The harness.** `backend/scripts/research/snap-gauges.ts` (run by hand; the
-header says how) clicks each station at its published position and runs the
+header says how; deleted with issue #472, in git history) clicks each station at its published position and runs the
 app's Delineate path: `reachFor` (the nearest HydroRIVERS reach within 1 km,
 or the confluence question) and `delineate` (the 1 024 → 2 048 → 3 072-cell
 ladder, `place`'s area match or snap with the guard, `junctionOutlets` at a
@@ -851,8 +865,9 @@ spots before it runs:
 
 ## Appendix: the full tables
 
-Regenerate with `tsx --env-file=.env.development scripts/research/snap-summary.ts <results.json>`
-(from `backend/`).
+Regenerated with `tsx --env-file=.env.development scripts/research/snap-summary.ts <results.json>`
+(from `backend/`); the script was deleted with issue #472 and is in git
+history only.
 
 ### small (60 reaches, 10–83 km²)
 

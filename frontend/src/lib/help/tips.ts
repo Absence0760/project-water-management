@@ -1764,7 +1764,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'outlet-placement',
 		term: 'Outlet placement on the channel',
-		short: 'A clicked outlet moves onto the elevation model’s channel: the one matching a nearby mapped river’s area, else the most-drained cell.',
+		short: 'A clicked outlet goes on the nearest terrain channel (the red lines) within 150 m; mapped rivers never move it.',
 		category: 'data'
 	},
 	{

@@ -14,7 +14,8 @@ Where the build had to differ, the section says so. Status: **built**
 1. On the Map tab an editor picks **Delineate** (beside Draw and Place).
    It is only there when the server has an elevation model (below); a
    viewer never sees it.
-2. They click the river at the outlet, or just below a dam wall, or type
+2. They click a terrain channel (the elevation model's own rivers, drawn
+   red) at the outlet, or just below a dam wall, or type
    the point's coordinates (the non-pointer path, as Place has). They say
    which it is (outlet or dam wall); it changes the proposal's name and
    nothing in the method.
@@ -177,33 +178,23 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      On an axis where it was cut at one end only, the window starts just
      short of the catchment's other end, so the whole window lies the way
      it runs; cut at both ends or neither, it is centred on the
-     catchment's box. The click always stays 6.5 km inside (the junction's
-     match and its path downhill, `junction.ts`), so the outlet's placement
-     sees what it would in a centred window. Centred, the 3 072-cell cap
+     catchment's box. The click always stays 1 km and two cells inside
+     (the larger-channel guard's radius, step 6; 6.5 km, for the junction's
+     match and its path downhill, before `delineate-13`), so the outlet's
+     placement sees what it would in a centred window. Centred, the 3 072-cell cap
      held only about 50 km upstream of the outlet and half the window lay
      downstream: A62H's outlet (DWS 873 km², a long catchment running
      east-south-east) was refused at every window, while placed it is
      890 km² in the 3 072-cell window (persona-hydrologist finding 6).
-   - **A river the window cuts** (since `delineate-6`): when a river
-     reach gives the click an expected area and no channel matches it
-     (step 6), but a channel within the match radius is cut by the window
-     with less than twice that area, its area here is only a lower bound,
-     so the window grows (placed over that channel's catchment) instead of
-     falling back to the snap. In a 1 024-cell window (about 1 150 km²)
-     a river of a few hundred km² carries only its in-window share, so no
-     cell matched it and the click went into a gully or was refused beside
-     a "much larger channel" quoted at its window-local area: D17D's
-     outlet (DWS 750 km²) gave 134 km², N22D's and C51D's were refused
-     (persona-hydrologist finding 1); grown, they are 747, 344 and
-     869 km². It looks as far as `place()` matches (2.5 km for a river
-     picked at a confluence or from a gully, else 1 km). Not when the point
-     is kept (`keepPoint`: the editor chose the small channel), not when a
-     channel matching the reach is already offered (place.ts rules 3 and
-     4), not for a reach larger than the worker's cap's
-     whole square (the Orange: no window can match it), and at the
-     worker's cap the snap and its guard apply as before. The request's
-     last window hands such a click to the worker like any other
-     (`too_large` with its window, `capCells`).
+   - **A river the window cuts** (`delineate-6` to `delineate-12`): when
+     a river reach gave the click an expected area that no channel matched
+     but a channel within the match radius was cut by the window, the
+     window grew over that channel's catchment instead of falling back to
+     the snap (persona-hydrologist finding 1: D17D's outlet, DWS 750 km²,
+     gave 134 km² before it). Retired with the area match in `delineate-13`
+     (issue #472): the outlet is now the terrain channel nearest the click,
+     whatever its area, and the window grows only while the catchment
+     reaches its edge, as above.
 3. **Depression filling: Priority-Flood+ε** (Barnes, Lehman & Mulla 2014,
    *Computers & Geosciences* 62, Algorithm 3), seeded from the window's
    border and from the cells beside no data, each at its own elevation
@@ -214,55 +205,52 @@ All in `backend/src/delineation/`, pure functions over typed arrays
 4. **Flow direction: D8**, steepest drop over distance to one of the eight
    neighbours, on the filled surface.
 5. **Accumulation**: upstream cell counts, in topological order.
-6. **Placing the outlet** (`place.ts`, since `delineate-2`; the evidence is
-   [delineation-snapping.md](./delineation-snapping.md), issue #374). River
-   lines sit off the channel the DEM routes along (a median 150–260 m from
-   HydroRIVERS on South African reaches, over 1.2 km at the 90th
-   percentile), so the old rule alone, the most-drained cell within 150 m,
-   put about half of the clicks on a river line into a gully.
-   - **Matched**: with a river reach within 1 km of the click
-     (`river_reference`, `reach.ts`), the cell within 1 km whose upstream
-     area best matches the reach's, by Lehner's (2012) station allocation:
-     cells within 50 % of the area, ranked by area misfit plus twice the
-     scaled distance. The reach's area is taken **at the click** (since
-     `delineate-5`): its upper end's area (what flows in, or HydroRIVERS'
-     10 km² threshold for a head reach) plus the rest in proportion to how
-     far down the line the click lies, so a click near the top of a long
-     reach no longer slides down it to the lower end's area. For a head
-     reach (since `delineate-11`) the routed window's own area at its
-     upper end replaces the 10 km²: climbing from the cell that figure
-     matches, up the channel (the larger branch at each fork), to its cell
-     nearest the reach's first vertex (within 1 km; not when that cell's
-     catchment is cut by the window or drains more than the whole reach),
-     the constant kept only where none qualifies (`place.ts`
-     `expectedOnGrid`). A click on
-     the DEM's own channel (1 km² or more within a cell and a half) more
-     than 150 m from the reach's line, whose own area is outside the 50 %
-     band, is **not moved** past the snap radius by the match: it snaps,
-     and the reach's matching channel is offered as below (a farm dam's
-     stream beside a river stays the stream unless the editor says
-     otherwise). A click on a channel *larger* than the band stays on it
-     wherever the line is (a gauge on a river whose nearest mapped line is a
-     tributary's, beside a junction), the tributary's channel offered. None passing falls through to:
-   - **Snapped**: the cell with the most upstream cells within **150 m**
-     (about five cells) of the click, measured from the exact click to
-     each cell's centre, so the distance moved never exceeds it (since
-     `delineate-4`, issue #387: the radius used to be counted in whole cells
-     from the clicked cell, which reached up to 160–180 m on GLO-30's cells
-     and 200 m on the synthetic DEM's), the nearest of equals;
-     the clicked cell itself always counts; and the **larger-channel
-     guard**: when a channel with 100× its upstream cells runs within 1 km,
-     the click is refused (422 `larger_channel`) naming that channel's
-     nearest cell, its distance and both areas, and the sheet offers **Use
-     that channel** or **Keep my point** (`keepPoint`). It is never moved
-     there silently: near a confluence the bigger channel is the wrong
-     river. When nothing within 1 km matched a nearby reach and the snap
-     landed in a gully (under a tenth of the reach's area), the match is
-     tried again out to 2.5 km and that channel offered the same way (since
-     `delineate-5`): that far off it can be another river, so it is never
-     taken silently.
+6. **Placing the outlet** (`place.ts`, since `delineate-13`, issue #472).
+   The outlet is a point **on a terrain channel**: a cell the DEM's own
+   routing drains at least **1 km²** through (`ON_CHANNEL_KM2`, the same
+   threshold as the red lines the Map draws, `channels.ts`
+   `CHANNEL_MIN_KM2`, kept equal by a test). The click goes on the
+   **nearest** such cell within **150 m**, measured from the exact click
+   to each cell's centre (so the distance moved never exceeds it; since
+   `delineate-4`, issue #387), a tie going to the larger area. Nearest,
+   not most-drained: a click on a tributary beside the main river stays on
+   the tributary. With no such cell within 150 m the click is refused
+   (422 `off_channel`), never put on a slope or in a gully the Map
+   doesn't draw.
+   - **The mapped river network never places it.** HydroRIVERS (and the
+     basemap's waterways) sit off the channel the DEM routes along: a
+     median 150–260 m on South African reaches, over 1.2 km at the 90th
+     percentile ([delineation-snapping.md](./delineation-snapping.md)).
+     From `delineate-2` to `delineate-11` (issue #374) the app used the
+     mapped network to correct for that: the outlet went on the cell
+     within 1 km whose upstream area best matched the nearby reach's
+     (Lehner's 2012 station allocation), the editor was asked which river
+     at a mapped confluence and the outlet put on that river's side of
+     the DEM's own junction, a click on the DEM's channel off the reach's
+     line was offered the reach's channel, and a gully snap was offered a
+     match out to 2.5 km. On 2026-10-09 the operator decided against it
+     (issue #472): the DEM's rivers often run somewhere other than the
+     HydroRIVERS lines, so those rules put the outlet where the mapped
+     river said rather than on the DEM river the editor clicked, and the
+     outline follows the DEM's rivers anyway. The editor now picks the
+     channel by clicking it, with the terrain channels drawn; the app
+     only puts the click on it. The network is still read near the click
+     for two things that don't place the outlet: the wording of a
+     `too_large` or `larger_channel` refusal (the mapped reach's own area,
+     `reach.ts` `nearestReach`) and the pans' storage-on-a-river
+     cross-check (§ Pans).
+   - **The larger-channel guard** stays, from the DEM alone: when a
+     channel with 100× the placed cell's upstream cells (`LARGER_FACTOR`)
+     runs within 1 km (`GUARD_RADIUS_M`), the click is refused (422
+     `larger_channel`) naming that channel's nearest cell (one with at
+     least half the biggest's cells, so on that channel), its distance and
+     both areas, and the sheet offers **Use that channel** or **Keep my
+     point** (`keepPoint`). It is never moved there silently: near a
+     confluence the bigger channel is the wrong river, and a gauge or a
+     dam on a hillside stream beside the river is the editor's call.
    The distance moved is shown. Fewer than 9 upstream cells is refused
-   ("click on the river itself").
+   (`too_small`), a guard that a cell on a terrain channel (about 900
+   cells at GLO-30's size) never meets.
 7. **Upstream cells**: every cell whose D8 path passes the snapped outlet.
 8. **Polygon**: the cells' outline traced along their edges, one ring
    (cells that touch only at a corner, which D8 joins, stay one piece,
@@ -275,8 +263,8 @@ All in `backend/src/delineation/`, pure functions over typed arrays
    vertices (a 600 km² catchment: about 650).
 9. **No data**: a catchment that reaches the data's edge (a cell beside a
    missing tile: the edge of the operator's extract) is refused, since what
-   lies beyond is unknown; so is a click whose river reach is cut there
-   with no channel matching it (step 2). The sea is data (elevation 0 or
+   lies beyond is unknown (until `delineate-13`, so was a click whose
+   river reach was cut there with no channel matching it). The sea is data (elevation 0 or
    below), not no data. The cells beside no data are edges like the
    window's border (`flow.ts` `edgeMask`, `NO_DATA_EDGE`): water leaves
    there only where that is the lowest way out. Until `delineate-6` no
@@ -302,8 +290,11 @@ placed over the catchment, grown for a river they cut, and no data as the
 data's edge, `delineate-8` for 5 and 7 together, `delineate-9` for the pans
 reported beside the catchment (§ Pans), `delineate-10` for 6 and 9
 together, `delineate-11` for a head reach's upper end read from the DEM, `delineate-12` for the pans' cross-check against the river
-network and the dams (§ Pans, storage on a river); bumped whenever the method changes what a click
-proposes), and the pans' report (193).
+network and the dams (§ Pans, storage on a river), `delineate-13` for the
+outlet on the nearest terrain channel within 150 m and the mapped river
+network no longer used to place it, retiring the rules of 2, 3, 5, 7, 8
+and 11 and the window growth for a cut river (issue #472); bumped whenever
+the method changes what a click proposes), and the pans' report (193).
 
 ## Pans
 
@@ -437,10 +428,10 @@ viewers read, editors propose and decide; RLS and grants in the same
 file; the accepted feature linked by a same-project composite key, kept
 when the feature is deleted with the link cleared; superseded and rejected
 proposals pruned past the newest 50 a project). Its `method` holds at most 1 000
-characters: the sentence is built by `delineationMethod` (every clause at
-once, the longest reach name, comes to about 750), and
-`fitDelineationMethod` falls back to naming the placement rule by the
-method version should it ever pass the limit, as Start's `fitMethod` does. No other table changes.
+characters: the sentence is built by `delineationMethod`, which names no
+reach since `delineate-13` and so has nothing in it that grows (it came to
+about 750 with the longest reach name before), and `fitDelineationMethod`
+stays the one place that checks the limit. No other table changes.
 Migration **193_delineation_pans.sql** adds `delineation_proposal.pans`
 (jsonb: the non-contributing area, the pans' count, the largest five and
 the method; NULL before delineate-9; from delineate-12 also `onRiver`,

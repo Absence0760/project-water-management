@@ -21,7 +21,7 @@ export interface StartDraft {
 	outlet: string | null;
 	pointsAsked: boolean;
 	ticks: Record<string, StartTicks>;
-	/** The rivers picked at confluences and the larger channels taken, by point ('' the outlet gauge): sent with every proposal (placement.ts). */
+	/** The larger channels taken, by point ('' the outlet gauge): sent with every proposal (placement.ts). */
 	placement: PlacementChoices;
 }
 

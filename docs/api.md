@@ -3249,7 +3249,7 @@ map feature like any other.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[], request: DelineationRequest \| null }`: the newest 10 proposals, any status, and the project's newest delineation still with the background worker (queued or running), else null. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
-| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId }, background?: boolean }` | `202 { request: DelineationRequest }` when the catchment runs past the request's largest window (3 072 cells, about 100 km, placed over the catchment), or the river reach near the point is still cut by it, or past its 20 s, or with `background: true` (straight to the worker, skipping the request's own attempt): the worker's `delineate` job goes on from the next window, up to 6 144 cells (about 200 km), and the outcome lands on the request (below). Otherwise `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream), or when keeping the point on its river's side of a confluence moved it more than 500 m (the DEM's rivers meet away from the mapped junction); with this answer only, not stored. `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment, or the river reach near the point, reaches where the DEM has no data), `too_large` (it runs past the largest window and the worker has no larger one; the worker's own refusal at its cap is on the request instead), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included, a request for the background as well; security.md § Map uploads), or for a delineation that would go to the worker while the account has one running, or waiting in another project (one per account; a new one in the same project supersedes the waiting one); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, background?: boolean }` (strict: another field, such as the `reach` older clients sent, is `400`) | `202 { request: DelineationRequest }` when the catchment runs past the request's largest window (3 072 cells, about 100 km, placed over the catchment), or past its 20 s, or with `background: true` (straight to the worker, skipping the request's own attempt): the worker's `delineate` job goes on from the next window, up to 6 144 cells (about 200 km), and the outcome lands on the request (below). Otherwise `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `off_channel` (no terrain channel, a cell with at least 1 km² draining through it, within 150 m of the point: "No terrain channel runs within 150 m of that point. Zoom in until the terrain channels (the red lines) show, and click on one …"), `too_large` (it runs past the largest window and the worker has no larger one; the worker's own refusal at its cap is on the request instead), `too_small` (almost nothing drains there), `outline` (no valid polygon), `larger_channel` (a terrain channel with 100× the placed cell's upstream area runs within 1 km: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. The outlet goes on the terrain channel nearest the point within 150 m (`place.ts`, issue #472); the mapped river network never places it, and is read only to word a `too_large` or `larger_channel` sentence with the nearby reach's own area. Before `delineate-13` the outlet was matched to a nearby river reach's area, a `confluence` refusal asked which river (the body's `reach` answered it), and the 201 carried a `check` sentence; all three are gone. `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included, a request for the background as well; security.md § Map uploads), or for a delineation that would go to the worker while the account has one running, or waiting in another project (one per account; a new one in the same project supersedes the waiting one); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
 | POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
 | GET | `/projects/:id/map/delineation/requests/:rid` | – | `200 { request: DelineationRequest }`: a delineation the worker has, as it is now; `404` for one of another project | viewer |
@@ -3273,11 +3273,11 @@ map feature like any other.
   over a wall, or a dam holds it), not counted in `nonContributingM2`.
 - `DelineationRequest = { id, status: 'queued' | 'running' | 'failed' |
   'proposed' | 'refused' | 'superseded', from, click, progress, error,
-  proposal, check, refusal, createdAt, finishedAt }` (191_delineation_request):
+  proposal, refusal, createdAt, finishedAt }` (191_delineation_request):
   `queued` / `running` while its job waits or runs (`progress` 0–100 while it
   runs, a step a window); `proposed` with `proposal` (the project's open
-  proposal it made, decided by the routes above; `null` once pruned) and
-  `check`; `refused` with `refusal = { reason, message, larger? }`, the
+  proposal it made, decided by the routes above; `null` once pruned);
+  `refused` with `refusal = { reason, message, larger? }`, the
   reasons and sentences of the request's own 422 (and `off` when the DEM went
   away first); `failed` when the job died (its `error`); `superseded` when the
   same editor clicked again before it ran. The Map asks every 2 s while it
@@ -3306,24 +3306,22 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/map/subcatchments` | `{ clicks: { lon, lat }[] }` (1 to 50) | `200 ClickPieces`; nothing is stored. `422 { error }` with a sentence when the DEM refuses (the clicks outside it, the lowest click's catchment past the largest window, about 100 km, almost nothing draining to it, no valid outline); `409` when it is off; `429` past the account's elevation-model cap (shared with delineate, start and divide, counted as delineation); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/subcatchments` | `{ clicks: { lon, lat }[] }` (1 to 50) | `200 ClickPieces`; nothing is stored. `422 { error }` with a sentence when the DEM refuses (the clicks outside it, a click with no terrain channel within 150 m, naming it, the lowest click's catchment past the largest window, about 100 km, almost nothing draining to it, no valid outline); `409` when it is off; `429` past the account's elevation-model cap (shared with delineate, start and divide, counted as delineation); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], dropped, summary }`: one `other` polygon per whole piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number), its area from the polygon and its description the outlet, where it drains, the area upstream, the dataset and the method version. The same refusals; `422` when no piece could be outlined | editor |
 
 - `ClickPieces = { pieces: ClickPiece[], dropped: { click, reason }[],
   lowest, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
   `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
   geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
-  totalAreaM2, nonContributingM2, open, placedBy, reach, larger, unmatched }` (`nonContributingM2`: of its own area,
-  what drains into pans, start-11, null when open; a saved piece's description says it; `placedBy`
-  `matched`, `junction` (at the DEM's junction for a river picked at a
-  confluence) or `snapped`); a click may carry `reach` as Delineate's
-  body does, and a click at a confluence without one answers 422
-  `confluence` with `details.click` (its index) and the choices; `unmatched` is
-  the river reach within 1 km of a snapped click whose area no channel near
-  it matched (`{ dataset, reachId, upstreamKm2 }`), else null; never on a
-  click whose catchment runs past the routed window (`start-10`). `click` and `drainsInto` are indexes into the request's
+  totalAreaM2, nonContributingM2, open, larger }` (`nonContributingM2`: of its own area,
+  what drains into pans, start-11, null when open; a saved piece's description says it).
+  A click is `{ lon, lat }` and nothing else (strict: the `reach` older
+  clients sent is `400`); since `start-15` (issue #472) there is no
+  `confluence` question, and a piece has no `placedBy`, `reach` or
+  `unmatched`. `click` and `drainsInto` are indexes into the request's
   clicks (`drainsInto` null for the lowest); `point` is where the click
-  snapped onto the channel; `totalAreaM2` everything upstream of it. `open`:
+  went, on the terrain channel nearest it within 150 m; `totalAreaM2`
+  everything upstream of it. `open`:
   an inflow point, its catchment past the routed window (about 100 km) or
   the DEM's data, with `geometry`, `areaM2` and `totalAreaM2` null; the
   totals of every piece below an inflow point are null too. Only when every
@@ -3333,10 +3331,8 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   the map's (`start-11`; every `areaM2` and `totalAreaM2` is summed from
   the DEM's cells, each at its own area on the ellipsoid, so the pieces add
   up to the catchment exactly; `geometry` is simplified for the map and its
-  own area may differ a little). `placedBy` is `matched` (on the channel matching
-  the river reach within 1 km of the click, `reach = { dataset, reachId,
-  upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
-  snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's
+  own area may differ a little). `larger` is a much larger terrain channel
+  beside a click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's
   refusal), else null. The click stays where it snapped; the client offers
   the channel.
 - Save is in the audit log (`map.subcatchments_saved`: the features' ids,
@@ -3363,10 +3359,10 @@ values now, taken only when ticked.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, startedFromMap, proposals: (StartProposal \| DivideProposal)[] }`: the newest 5 of either mode, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes; `startedFromMap` whether a start proposal was ever applied | viewer |
-| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, outletReach?: { dataset, reachId }, outletUseLarger?: boolean, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' \| 'gauge', reach?: { dataset, reachId }, useLarger?: boolean }[] }` (at most 50, each once; `reach` and `useLarger` below the table) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a point outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's), or `reason: 'confluence'` with `details.points: { featureId ('' for the outlet gauge), name, choices }[]`, every point at a confluence without a `reach` (with a DEM only); `400` for a `reach` not within 1 km of its point; `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, outletUseLarger?: boolean, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' \| 'gauge', useLarger?: boolean }[] }` (at most 50, each once; `useLarger` below the table; strict, so the `outletReach` and `reach` older clients sent are `400`) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a point outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's, and `off_channel` for an outlet gauge with no terrain channel within 150 m: "No terrain channel runs within 150 m of the outlet. …"; any other point with none is dropped, not refused); `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, areaBasis?, drainsInto, runoffToDam, upstreamToDam? }[], rest: { include, name, area, areaBasis? } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a user point a `user` node, a gauge point a `gauge` node), and the rest of the catchment if included, in one model revision ("Started from the map: …", saying which areas were gross and which effective). Only what is ticked is taken: a ticked area is saved as the unit's `farm_parcel` (linked, its description naming the dataset and method, with the piece's `nonContributingM2`) and becomes its area with `area_source = 'map'`: the piece's gross area, or with `areaBasis: 'effective'` (195) the piece less what drains into pans (`400` without the area ticked or a pans figure); an unticked one stays 0; an unticked drains-into is the outflow gauge; `runoffToDam` sets `pctRunoffToDam` to 1, or to a marked dam's `damShares.pctRunoffToDam` (dam units only); `upstreamToDam` sets `pctUpstreamToDam` to `damShares.pctUpstreamToDam` (a unit with `damShares` only, else `400`). Each point is linked to its node. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, a division, or a model that has nodes | editor |
 | POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }` (a start or a division; audited as `map.start_discarded` or `map.divide_discarded`); `409` for one that isn't open | editor |
-| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, outletReach?, outletUseLarger?, points: { featureId, nodeId: uuid \| null, reach?, useLarger? }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each point's role comes from its node (a `user`, a `gauge`, a `farm` with a dam or at a dam point, else an abstraction point). `400` for a point standing for the outflow, for a node its kind can't stand for (map_feature's `KIND_NODES`), or for another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals and the `confluence` question as starting's; `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
+| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, outletUseLarger?, points: { featureId, nodeId: uuid \| null, useLarger? }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each point's role comes from its node (a `user`, a `gauge`, a `farm` with a dam or at a dam point, else an abstraction point). `400` for a point standing for the outflow, for a node its kind can't stand for (map_feature's `KIND_NODES`), or for another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals as starting's (`off_channel` included); `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
 | POST | `/projects/:id/map/divide/:spid/apply` | `{ units: { key, area, areaBasis?, drainsInto, runoffToDam, upstreamToDam?, add, name? }[], rest: { to: 'none' } \| { to: 'node', nodeId, areaBasis? } \| { to: 'new', name, areaBasis? } }`, every proposed point once (`add` and `name` a new gauge's only) | `200 { proposal, model }`, one model revision ("Divided from the map: …", saying which areas were gross and which effective). Only what is ticked changes: a ticked area becomes the node's (`area_source = 'map'`, saved as its `farm_parcel`, "<name>: own sub-catchment", with the piece's `nonContributingM2`; a parcel an earlier start or division made for it is redrawn in place, even when the area taken changes): the piece's gross area, or with `areaBasis: 'effective'` (195) the piece less what drains into pans (`400` without the area ticked or a pans figure); a ticked drains-into is the proposed point's node (a new gauge's when added) or the outflow; `runoffToDam` sets `pctRunoffToDam` to 1, or to a marked dam's `damShares.pctRunoffToDam` (dam units); `upstreamToDam` sets `pctUpstreamToDam` to `damShares.pctUpstreamToDam` (a unit with `damShares` only; `current.pctUpstreamToDam` is checked like the others); `add` makes the new gauge a `gauge` node (draining into the outflow unless its order is ticked); the rest's area goes to one of the plan's `untouched` units, or a new unit draining into the outflow. Unlinked points are linked to their nodes. `409` for a ticked value whose current one changed since the proposal (the plan keeps each node's `current` values, and the rest's candidates' areas), a node gone, an outflow that moved, a proposal not open, or a start proposal; `400` for ticks that don't match the plan, a value not proposed, an order into a new gauge not added, a loop, a clashing name, or a rest node that is one of the points | editor |
 
 - `StartProposal = { id, status: 'proposed' | 'applied' | 'discarded' |
@@ -3395,14 +3391,16 @@ values now, taken only when ticked.
   areaKm2, areaSource, downstreamNodeId, downstreamName, pctRunoffToDam } \|
   null, placement, nonContributingM2?, totalNonContributingM2? }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
   land); a gauge's `totalAreaM2` is what it measures.
-- **Placing the points** (`start-7`, `delineation/pointPlacement.ts`): with a
-  DEM, the outlet gauge and every map point are put on the DEM's channel as
-  Delineate puts a click: matched to the upstream area of the river reach
-  within 1 km, at the DEM's junction for the river picked at a confluence,
-  else snapped within 150 m. `placement = { placedBy: 'matched' \| 'junction'
-  \| 'snapped' \| 'larger' \| 'exact' \| 'polygon' \| 'boundary', reach: {
-  dataset, reachId, upstreamKm2, chosen } \| null, larger: { at, distanceM,
-  km2, pointKm2 } \| null, unmatched }` (`exact`: a delineated outlet kept
+- **Placing the points** (`start-15`, issue #472; `delineation/pointPlacement.ts`,
+  `place.ts`): with a DEM, the outlet gauge and every map point are put on
+  the terrain channel nearest them within 150 m (a cell with at least 1 km²
+  draining through it), as Delineate puts a click; the mapped river network
+  never places them. An outlet gauge with none within 150 m is refused
+  (422 `off_channel`); any other point with none is in `dropped` with the
+  reason "has no terrain channel within 150 m: move it onto one of the
+  elevation model’s channels". `placement = { placedBy: 'snapped' \|
+  'larger' \| 'exact' \| 'polygon' \| 'boundary', larger: { at, distanceM,
+  km2, pointKm2 } \| null, damPosition? }` (`snapped`: on the nearest terrain channel; `exact`: a delineated outlet kept
   on its own cell; `polygon`: a dam polygon's outflow, its most-drained
   cell, or, when the outline only clips a much larger channel, its own
   footprint's, that channel in `larger` with `outline: true` (`start-10`);
@@ -3419,19 +3417,17 @@ values now, taken only when ticked.
   pans, the dam catchment's pans), the values `upstreamToDam` and `runoffToDam` take on
   apply; a Divide unit's `current` has `pctUpstreamToDam` (194);
   `boundary`: the boundary's; null without a DEM; absent on proposals
-  before `start-7`). A snapped point beside a channel with 100× its
+  before `start-7`; plans from `start-7` to `start-14` can also hold
+  `placedBy` `matched` or `junction`, with `reach` and `unmatched`, from the
+  mapped river's rules `start-15` retired). A point beside a channel with 100× its
   upstream area carries it in `larger` and a sentence in `warnings` (the
   outlet's first); proposing again with that point's `useLarger: true`
   (`outletUseLarger` for the outlet gauge; for a dam polygon, the channel
   its outline clips) puts it on that channel, which
   the server finds again (`placedBy: 'larger'`); a dropped point carries
-  its `placement` too, so one snapped into a gully beside its river can be
-  moved onto it the same way. A reach near a snapped
-  point that no channel matched is `unmatched` and a warning. A point at a
-  confluence (reaches within 200 m whose areas differ by 1.5×) is asked
-  about (422 `confluence`, every such point at once); its `reach` is one of
-  the choices offered. The proposal's `method` names only the rules that
-  ran.
+  its `placement` too, so one placed on a small stream beside its river can
+  be moved onto it the same way. The proposal's `method` names only the
+  rules that ran.
 - Each write is in the audit log (`map.start_proposed`, `map.start_applied`,
   `map.start_discarded`, `map.divide_proposed`, `map.divide_applied`,
   `map.divide_discarded`: ids and counts; never a polygon). A stranger gets

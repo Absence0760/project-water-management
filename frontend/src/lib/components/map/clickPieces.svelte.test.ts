@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ClickPiece, ClickPieces } from '$lib/api/types';
 import { ApiError } from '$lib/api/client';
-import { ClickDivider, clickShape, FAR_JUNCTION_M, pieceLine, savable } from './clickPieces.svelte';
+import { ClickDivider, clickShape, pieceLine, savable } from './clickPieces.svelte';
 
 const sq = (x: number): ClickPiece['geometry'] => ({ type: 'Polygon', coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 1], [x, 0]]] });
 const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 = km2): ClickPiece => ({
@@ -13,10 +13,7 @@ const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 =
 	areaM2: km2 * 1e6,
 	totalAreaM2: totalKm2 * 1e6,
 	open: false,
-	placedBy: 'snapped',
-	reach: null,
-	larger: null,
-	unmatched: null
+	larger: null
 });
 /** An inflow point: its catchment ran past the routed window, so it has no piece. */
 const inflow = (click: number, drainsInto: number | null): ClickPiece => ({ ...piece(click, drainsInto, 0), geometry: null, areaM2: null, totalAreaM2: null, open: true });
@@ -68,46 +65,16 @@ describe('pieceLine', () => {
 		expect(pieceLine(answer([{ ...piece(0, null, 3), nonContributingM2: 0 }], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here');
 	});
 
-	it('says a click was put on the channel matching its river reach', () => {
-		const r = answer([{ ...piece(0, null, 410), placedBy: 'matched', reach: { dataset: 'HydroRIVERS-v10', reachId: 11492928, upstreamKm2: 412.5 } }], 0);
-		expect(pieceLine(r, 0)).toBe('410.00 km² · the lowest point: the rest drains out here · on the channel matching river reach 11492928 (412.50 km²)');
-	});
-
-	it('says a click at or beside a confluence went on its river’s side of the elevation model’s junction', () => {
-		const r = answer([{ ...piece(0, null, 250), placedBy: 'junction', reach: { dataset: 'HydroRIVERS-v10', reachId: 11491355, upstreamKm2: 497.3 } }], 0);
-		expect(pieceLine(r, 0)).toBe('250.00 km² · the lowest point: the rest drains out here · on river reach 11491355 (497.30 km²), on its side of the elevation model’s junction');
-	});
-
-	it('flags a junction placement that moved the click more than FAR_JUNCTION_M (issue #390), and not one that moved less', () => {
-		const at = (snapDistanceM: number) =>
-			pieceLine(answer([{ ...piece(0, null, 250), snapDistanceM, placedBy: 'junction', reach: { dataset: 'HydroRIVERS-v10', reachId: 11491355, upstreamKm2: 497.3 } }], 0), 0);
-		expect(at(FAR_JUNCTION_M + 1372)).toContain('moved 1872 m to the channel: the elevation model’s rivers meet away from the mapped junction, so check the point against the map');
-		expect(at(FAR_JUNCTION_M)).not.toContain('meet away');
-	});
-
-	it('names a much larger channel beside a click, instead of the missed-channel warning', () => {
+	it('names a much larger terrain channel beside a click, to use instead', () => {
 		const r = answer([{ ...piece(0, null, 0.02), point: [21.465, -28.389], larger: { at: [21.465, -28.3845], distanceM: 504, km2: 619.8, pointKm2: 0.02 } }], 0);
 		expect(pieceLine(r, 0)).toBe(
-			'0.02 km² · the lowest point: the rest drains out here · a much larger channel (620 km²) runs 504 m north: the river line may sit off the channel the elevation model sees'
+			'0.02 km² · the lowest point: the rest drains out here · a much larger terrain channel (620 km²) runs 504 m north: use it if that is the river you meant'
 		);
 	});
 
-	it('says how far a click moved to the channel, from 50 m', () => {
-		expect(pieceLine(answer([{ ...piece(0, null, 3), snapDistanceM: 128 }], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here · moved 128 m to the channel');
+	it('says how far a click moved to the nearest terrain channel, from 50 m', () => {
+		expect(pieceLine(answer([{ ...piece(0, null, 3), snapDistanceM: 128 }], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here · moved 128 m to the nearest terrain channel');
 		expect(pieceLine(answer([{ ...piece(0, null, 3), snapDistanceM: 40 }], 0), 0)).toBe('3.00 km² · the lowest point: the rest drains out here');
-	});
-
-	it('warns when a river reach nearby matches no channel at the click', () => {
-		const r = answer([{ ...piece(0, null, 3), unmatched: { dataset: 'HydroRIVERS-v10', reachId: 11492928, upstreamKm2: 412.5 } }], 0);
-		expect(pieceLine(r, 0)).toBe(
-			'3.00 km² · the lowest point: the rest drains out here · river reach 11492928 nearby drains 412.50 km², and no channel near the click matches it: check it is the right stream'
-		);
-	});
-
-	it('warns that a click with under a square kilometre upstream probably missed the channel', () => {
-		const r = answer([piece(0, 1, 0.02), piece(1, null, 5, 5.02)], 1);
-		expect(pieceLine(r, 0)).toBe('0.02 km² · drains into 2 · 0.02 km² upstream in all · very little drains here: it probably missed the channel; Undo and click closer to the river (the Relief layer shows the valley)');
-		expect(pieceLine(r, 1)).not.toMatch(/missed/);
 	});
 
 	it('says an inflow point has no piece, and the piece it flows into gets an inflow with no known total', () => {
@@ -184,12 +151,6 @@ describe('ClickDivider', () => {
 		expect(save).not.toHaveBeenCalled();
 	});
 
-	it('says at once when the newest click probably missed the channel', async () => {
-		const d = new ClickDivider(async () => answer([piece(0, null, 0.01)], 0), vi.fn());
-		await d.add([20, -33]);
-		expect(d.said).toMatch(/^Click 1: very little drains here: it probably missed the channel; /);
-	});
-
 	it('moves a click to the larger channel and routes again; Undo moves it back without asking', async () => {
 		const { d, fetch } = make();
 		await d.add([20, -33]);
@@ -213,35 +174,6 @@ describe('ClickDivider', () => {
 		await d.replace(0, [25, -30]);
 		expect(d.clicks).toEqual([{ lon: 20, lat: -33 }]);
 		expect(d.error).toBe('Click 1 not moved: The clicks are outside the elevation model.');
-	});
-
-	it('holds a click at a confluence until the river is picked, then routes it with that reach', async () => {
-		const { d, fetch } = make();
-		await d.add([20, -33]);
-		const choices = [{ dataset: 'H', reachId: 7, upstreamKm2: 420, distanceM: 90, role: 'below' as const, label: 'the river below the junction' }];
-		fetch.mockRejectedValueOnce(new ApiError(422, 'Click 2: This point is at a confluence', { reason: 'confluence', click: 1, choices }));
-		await d.add([20.1, -33.1]);
-		expect(d.clicks).toHaveLength(1);
-		expect(d.error).toBeNull();
-		expect(d.pendingChoice).toMatchObject({ click: 1, choices });
-		expect(d.said).toBe('Click 2 is at a confluence: pick the river you mean.');
-		await d.chooseReach(choices[0]!);
-		expect(fetch).toHaveBeenLastCalledWith([
-			{ lon: 20, lat: -33 },
-			{ lon: 20.1, lat: -33.1, reach: { dataset: 'H', reachId: 7 } }
-		]);
-		expect(d.pendingChoice).toBeNull();
-		expect(d.clicks).toHaveLength(2);
-	});
-
-	it('drops a click held at a confluence on request', async () => {
-		const { d, fetch } = make();
-		fetch.mockRejectedValueOnce(new ApiError(422, 'Click 1: …', { reason: 'confluence', click: 0, choices: [{ dataset: 'H', reachId: 7, upstreamKm2: 420, distanceM: 90, role: 'below', label: 'the river below the junction' }] }));
-		await d.add([20, -33]);
-		d.cancelChoice();
-		expect(d.pendingChoice).toBeNull();
-		expect(d.clicks).toEqual([]);
-		expect(d.said).toBe('Dropped the click at the confluence.');
 	});
 
 	it('keeps only the newest answer when clicks overlap', async () => {

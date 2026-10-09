@@ -47,10 +47,8 @@
 	import AreaBasisChoice from './AreaBasisChoice.svelte';
 	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
-	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
-	import { confluencePointsOf, damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
-	import type { ConfluencePoint } from '$lib/api/types';
+	import { damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
 	import { openDivide, outletGauges } from './startFlow';
 
 	let {
@@ -117,20 +115,15 @@
 		h.focus();
 	}
 
-	/** Points at confluences the last proposal asked about: each one's river is picked, then it proposes again. */
-	let asking = $state<ConfluencePoint[] | null>(null);
 	async function proposeNow() {
 		busy = 'propose';
 		error = null;
 		try {
 			const r = await api.divide.propose(projectId, withPlacement(divideBody(choices, outlet), draft.placement));
-			asking = null;
 			await onproposed(r.proposal);
 			void focusTitle();
 		} catch (err) {
-			const points = confluencePointsOf(err);
-			if (points) asking = points;
-			else error = err instanceof Error ? err.message : String(err);
+			error = err instanceof Error ? err.message : String(err);
 		} finally {
 			busy = null;
 		}
@@ -144,10 +137,9 @@
 		draft.placement.useLarger[key] = true;
 		void proposeNow();
 	}
-	/** Another outlet: the old one's river and channel choices don't carry over. */
+	/** Another outlet: the old one's channel choice doesn't carry over. */
 	function setOutlet(id: string) {
 		draft.outlet = id;
-		delete draft.placement.reaches[OUTLET_KEY];
 		delete draft.placement.useLarger[OUTLET_KEY];
 	}
 
@@ -290,7 +282,7 @@
 				{#if p.outlet.placement?.larger}
 					<p><button type="button" class="btn btn-sm" disabled={!!busy} onclick={() => useLarger(OUTLET_KEY)} data-testid="divide-outlet-use-larger">Use that channel for the outlet</button></p>
 				{/if}
-				{#if p.outlet.placement}<p class="hint" data-testid="divide-outlet-placement">The outlet: {placementLine(p.outlet.placement, p.outlet.snapDistanceM)}</p>{/if}
+				{#if p.outlet.placement}<p class="hint" data-testid="divide-outlet-placement">The outlet: {placementLine(p.outlet.placement, p.outlet.snapDistanceM, pending.methodVersion)}</p>{/if}
 				<p class="tick-all">
 					<button type="button" class="btn btn-sm" onclick={() => pending && (draft.ticks[pending.id] = tickAllDivide(pending.plan, ticks))} data-testid="divide-tick-all">Tick every value</button>
 					<span class="hint">{p.units.length} {p.units.length === 1 ? 'point' : 'points'}, upstream first.</span>
@@ -370,7 +362,7 @@
 									>
 								</label>
 							{/if}
-							{#if placementLine(u.placement, u.snapDistanceM)}<p class="hint" data-testid="divide-placement">{placementLine(u.placement, u.snapDistanceM)}</p>{/if}
+							{#if placementLine(u.placement, u.snapDistanceM, pending.methodVersion)}<p class="hint" data-testid="divide-placement">{placementLine(u.placement, u.snapDistanceM, pending.methodVersion)}</p>{/if}
 							{#if u.placement?.larger}
 								{#if u.placement.larger.outline}<p class="hint">If the dam is on that river, <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="divide-use-outline-channel">use that channel</button>; if it is filled by a pump or a furrow, keep it.</p>{:else}<p class="hint">A much larger channel runs {fmtNum(u.placement.larger.distanceM, 0)} m away: <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="divide-use-larger">use that channel</button>, or keep the point if it is on the small stream.</p>{/if}
 							{/if}
@@ -423,9 +415,6 @@
 					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it. <HelpTip key="elevation-model" label="About the elevation model’s accuracy" /></p>
 				</details>
 			</div>
-		{/if}
-		{#if asking && (step === 'points' || step === 'review')}
-			<PlacementAsk points={asking} bind:picked={draft.placement.reaches} busy={!!busy} onsubmit={() => void proposeNow()} testid="divide-confluence" />
 		{/if}
 		{#if error}<p class="err" role="alert" data-testid="divide-error">{error}</p>{/if}
 	</div>

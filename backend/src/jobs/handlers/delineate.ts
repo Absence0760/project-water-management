@@ -21,8 +21,8 @@ import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
 import { delineate, DelineationRefused, tooLargeText, type LargerChannel, type WindowAim } from '../../delineation/delineate.js';
 import { panReferenceLoader } from '../../delineation/panReference.js';
-import { checkNote, storeProposal } from '../../delineation/proposals.js';
-import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
+import { storeProposal } from '../../delineation/proposals.js';
+import { nearestReach } from '../../delineation/reach.js';
 import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
 import { ApiError } from '../../http/errors.js';
 import { logEvent } from '../../logging/logEvent.js';
@@ -73,17 +73,12 @@ export const delineateHandler = defineHandler({
 		const dem = configuredDem();
 		if (!dem) return refuse('off', 'Delineation is off: the server has no elevation model.');
 		const click: [number, number] = [req.click_lon, req.click_lat];
-		let near;
-		try {
-			near = await reachFor(db, click, req.reach);
-		} catch (err) {
-			// The river network changed since the click was checked: say so, as the request would have.
-			if (err instanceof ConfluenceAmbiguity || err instanceof ReachNotNear) return refuse('confluence', err.message);
-			throw err;
-		}
+		// The mapped river near the click, only to word a refusal: it never places the outlet (place.ts, issue #472).
+		const near = await nearestReach(db, click);
+		const mapped = near ? { name: `reach ${near.reachId} of ${near.dataset}`, km2: near.upstreamKm2 } : null;
 		const windows = jobWindowsFrom(req.from_window);
 		if (windows.length === 0) {
-			return refuse('too_large', tooLargeText('click', null, near.reach?.upstreamKm2));
+			return refuse('too_large', tooLargeText('click', null, mapped?.km2));
 		}
 		// Within the worker Lambda's time: a job claimed late in a tick goes back to the queue rather than be cut off.
 		const budgetMs = jobBudget(deadline, Date.now());
@@ -95,8 +90,7 @@ export const delineateHandler = defineHandler({
 			result = await delineate(dem, click, {
 				windows,
 				budgetMs,
-				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM, head: near.reach.head } : null,
-				junction: near.junction,
+				mapped,
 				keepPoint: req.keep_point,
 				// The request's last window cut the catchment here: the first window is placed over it, not centred on the click.
 				aim: parseAim(req.aim),
@@ -129,8 +123,8 @@ export const delineateHandler = defineHandler({
 			throw err;
 		}
 		await db.query(
-			`UPDATE delineation_request SET status = 'proposed', proposal_id = $3, check_note = $4, finished_at = now() WHERE id = $1 AND project_id = $2`,
-			[req.id, job.projectId, proposalId, checkNote(result)]
+			`UPDATE delineation_request SET status = 'proposed', proposal_id = $3, finished_at = now() WHERE id = $1 AND project_id = $2`,
+			[req.id, job.projectId, proposalId]
 		);
 	}
 });

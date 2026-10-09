@@ -73,19 +73,21 @@ describe('delineate (synthetic DEM)', () => {
 		expect(r.cells).toBeGreaterThan(100);
 	});
 
-	it('never snaps further than the stated radius (150 m), measured from the exact click (issue #387)', async () => {
-		// Clicks 0.6–1.49 cells (77–190 m) east of the river's centre line, between the dam and the outlet, some off their
-		// cell's middle. The old snap counted round(150 / 128) = 1 whole cell from the clicked cell, so it took the river from
-		// up to 200 m; now a click beyond 150 m keeps to its own side of the valley.
+	it('never snaps further than the stated radius (150 m), measured from the exact click, nor past the nearest channel (issues #387, #472)', async () => {
+		// Clicks 0.1–1.49 cells (13–190 m) east of the river's centre line, between the dam and the outlet, some off their cell's
+		// middle; the valley side's small channels run a cell east of the river. The nearest channel cell is taken: the river's
+		// own while it is the nearer, never a more-drained cell further off.
 		const river = DAM_CELL.x + 0.5;
 		const row = DAM_CELL.y + 60.5;
-		for (const dx of [0.6, 1.0, 1.1, 1.17, 1.2, 1.3, 1.49]) {
+		for (const dx of [0.1, 0.3, 0.6, 1.0, 1.2, 1.49]) {
 			for (const dy of [0, 0.3]) {
 				const r = await delineate(dem, fixtureLonLat(river + dx, row + dy), { keepPoint: true });
 				expect(r.snapDistanceM, `${dx}, ${dy}`).toBeLessThanOrEqual(SNAP_RADIUS_M);
-				// The river's nearest cell centre is hypot(dx, dy) cells away: taken exactly when that is within 150 m.
+				// The river's cell centre is hypot(dx, dy) cells away: the outlet is never further than that.
+				expect(r.snapDistanceM, `${dx}, ${dy}`).toBeLessThanOrEqual(Math.hypot(dx, dy) * FIXTURE_CELL_M + 1e-6);
 				const onRiver = Math.abs(r.outlet[0] - fixtureLonLat(river, row)[0]) < 1e-6;
-				expect(onRiver, `${dx}, ${dy}`).toBe(Math.hypot(dx, dy) * FIXTURE_CELL_M <= SNAP_RADIUS_M);
+				// Nearer the river's cell than the side channel's (a cell east): on the river.
+				expect(onRiver, `${dx}, ${dy}`).toBe(Math.hypot(dx, dy) < Math.hypot(1 - dx, dy));
 			}
 		}
 	});
@@ -97,8 +99,13 @@ describe('delineate (synthetic DEM)', () => {
 		expect(r.message).toMatch(/covers 20\.39° E to 21\.09° E, 33\.72° S to 33\.14° S\)\.$/);
 	});
 
-	it('refuses a click on a slope that almost nothing drains to', async () => {
-		expect((await refusal(delineate(dem, at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120), { snapRadiusM: 10 }))).code).toBe('too_small');
+	it('refuses a click with no terrain channel within the snap radius, saying to click on one (issue #472)', async () => {
+		// Just past the ridge, where nothing drains a square kilometre.
+		const e = await refusal(delineate(dem, at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120)));
+		expect(e.code).toBe('off_channel');
+		expect(e.message).toBe(
+			`No terrain channel runs within ${SNAP_RADIUS_M} m of that point. Zoom in until the terrain channels (the red lines) show, and click on one: they are the elevation model's rivers, which the outline follows.`
+		);
 	});
 
 	it('refuses a catchment that runs past the largest window rather than cut it off', async () => {
@@ -110,7 +117,7 @@ describe('delineate (synthetic DEM)', () => {
 	});
 
 	it('points a main stem at Sub-catchments, not "further upstream": its reach can’t fit the window anywhere (finding 11)', async () => {
-		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [64, 128], expected: { km2: 340_724, reach: 'reach 7' } }));
+		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [64, 128], mapped: { km2: 340_724, name: 'reach 7' } }));
 		expect(e.code).toBe('too_large');
 		expect(e.message).toMatch(/^The river here drains about 340\s724 km² \(its mapped reach\), more than fits in the \d+ km the app delineates around a click, so it can’t be proposed in one piece\. Divide it with Sub-catchments, one per click/);
 		expect(e.message).not.toMatch(/further upstream/);
@@ -147,20 +154,28 @@ describe('delineate (synthetic DEM)', () => {
 	});
 });
 
-describe('delineate: a click off the channel (issue #374)', () => {
-	// Three cells (about 380 m) east of the river, between the dam and the outlet: on the valley's side, as a displaced river line puts a click.
+describe('delineate: on the terrain channel nearest the click (issue #472)', () => {
+	// Three cells (about 380 m) east of the river, between the dam and the outlet: on one of the valley side's small terrain
+	// channels (about 1 km² each where they reach the river), as a displaced river line puts a click.
 	const off = at(DAM_CELL.x + 3, DAM_CELL.y + 60);
 	const onRiver = at(DAM_CELL.x, DAM_CELL.y + 60);
 
+	it('puts a click on the river on the river’s channel, and says the mapped river network wasn’t used', async () => {
+		const d = await delineate(dem, onRiver);
+		expect(d.snapDistanceM).toBeLessThanOrEqual(SNAP_RADIUS_M);
+		expect(d.areaM2 / 1e6).toBeGreaterThan(400);
+		expect(d.method).toMatch(/outlet placed on the terrain channel \(at least 1 km² draining through it\) nearest the point, within 150 m; the mapped river network not used to place it;/);
+		expect(d.methodVersion).toBe('delineate-13');
+	});
+
 	it('refuses beside a much larger channel, naming it: where, how far, and both areas', async () => {
-		const e = await delineate(dem, off).catch((x: unknown) => x);
-		expect(e).toBeInstanceOf(DelineationRefused);
-		const r = e as DelineationRefused;
+		const r = await refusal(delineate(dem, off));
 		expect(r.code).toBe('larger_channel');
 		// The channel's whole catchment is in the window: its area, not an "about" (finding 10).
-		expect(r.message).toMatch(/^A much larger channel runs \d+ m west of your point: [\d\s,]+ km² drains through it, against [\d.]+ km² at your point\. .*Use that channel, or keep your point/);
+		expect(r.message).toMatch(/^A much larger terrain channel runs \d+ m west of your point: [\d\s,]+ km² drains through it, against [\d.]+ km² on the terrain channel nearest your point\. Use that channel, or keep your point if you meant the small one\.$/);
 		expect(r.larger!.distanceM).toBeGreaterThan(200);
 		expect(r.larger!.distanceM).toBeLessThan(1000);
+		expect(r.larger!.pointKm2).toBeGreaterThanOrEqual(1);
 		// The channel it names is the river: delineating there gives the valley above it.
 		const river = await delineate(dem, r.larger!.at);
 		expect(river.areaM2 / 1e6).toBeGreaterThan(100 * r.larger!.pointKm2);
@@ -168,27 +183,20 @@ describe('delineate: a click off the channel (issue #374)', () => {
 
 	it('says "at least" when the channel runs past the window, and quotes the mapped river’s own area (the hydrologist’s review, finding 10)', async () => {
 		// A 128-cell window cuts the river: 619 km² was quoted for the Orange's 340 724 as "about".
-		const r = (await delineate(dem, off, { windows: [128], expected: { km2: 340_724, reach: 'reach 7 of HydroRIVERS' } }).catch((x: unknown) => x)) as DelineationRefused;
+		const r = await refusal(delineate(dem, off, { windows: [128], mapped: { km2: 340_724, name: 'reach 7 of HydroRIVERS' } }));
 		expect(r.code).toBe('larger_channel');
 		expect(r.message).toMatch(
-			/^A much larger channel runs \d+ m west of your point: at least [\d\s,]+ km² drains through it inside the \d+ km routed around your point, and more from beyond \(the mapped river here, reach 7 of HydroRIVERS, drains 340\s724 km²\), against [\d.]+ km² at your point\./
+			/^A much larger terrain channel runs \d+ m west of your point: at least [\d\s,]+ km² drains through it inside the \d+ km routed around your point, and more from beyond \(the mapped river here, reach 7 of HydroRIVERS, drains 340\s724 km²\), against [\d.]+ km² on the terrain channel nearest your point\./
 		);
 		expect(r.message).not.toMatch(/about/);
 	});
 
-	it('keeps the point when asked: the small catchment it snaps to', async () => {
-		const d = await delineate(dem, off, { keepPoint: true });
+	it('keeps the point when asked: the small catchment of the terrain channel it is on, never the mapped river’s', async () => {
+		const d = await delineate(dem, off, { keepPoint: true, mapped: { km2: 490, name: 'reach 1 of test' } });
 		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
-		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
-		expect(d.methodVersion).toBe(METHOD_VERSION);
-	});
-
-	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {
-		const river = await delineate(dem, onRiver);
-		const d = await delineate(dem, off, { expected: { km2: river.areaM2 / 1e6, reach: 'reach 1 of test' } });
-		expect(Math.abs(d.areaM2 / river.areaM2 - 1)).toBeLessThan(0.05);
-		expect(d.snapDistanceM).toBeGreaterThan(200);
-		expect(d.method).toMatch(/best matches reach 1 of test \(\d+ km²; Lehner 2012/);
+		// On the click's own channel: the nearest cell, not moved towards the river.
+		expect(d.snapDistanceM).toBeLessThan(FIXTURE_CELL_M);
+		expect(d.method).toMatch(/kept there by the editor though a channel with 100× its upstream cells within 1000 m was offered/);
 	});
 });
 
@@ -201,7 +209,7 @@ describe('the e2e copy of the fixture’s points', () => {
 		expect(pair('FIXTURE_MID_GAUGE')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 60));
 		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
 		expect(pair('FIXTURE_OFF_CHANNEL')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 60));
-		expect(pair('FIXTURE_JUNCTION')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 30));
+		expect(pair('FIXTURE_OFF_TERRAIN')).toEqual(at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120));
 	});
 });
 
@@ -266,8 +274,8 @@ describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
 	});
 
 	it('finds no pan in a catchment without one (positive control above)', async () => {
-		// A slope west of the river, away from the pan on the east flank.
-		const side = await delineate(dem, at(OUTLET_CELL.x - 30, OUTLET_CELL.y - 60), { keepPoint: true });
+		// A small channel on the west flank, away from the pan on the east flank.
+		const side = await delineate(dem, at(DAM_CELL.x - 5, DAM_CELL.y + 40), { keepPoint: true });
 		expect(side.pans).toEqual({ nonContributingM2: 0, count: 0, largest: [], method: PAN_METHOD });
 	});
 
@@ -299,43 +307,14 @@ describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
 });
 
 describe('the method fits delineation_proposal.method (175: at most 1 000 characters)', () => {
-	// The longest reach name the code makes (routes.ts and the delineate job: `reach <id> of <dataset>`): the largest id, and a
-	// dataset label at river_reference's 50-character limit (171); every clause on, every figure at its widest.
-	const name = `reach ${Number.MAX_SAFE_INTEGER} of ${'D'.repeat(50)}`;
-	const worst = (how: DelineationMethodFacts['how'], chosen: boolean): DelineationMethodFacts => ({
-		cellM: 99_999,
-		zoom: 30,
-		snapRadiusM: 99_999,
-		how,
-		reach: { name, km2: 99_999_999, chosen, fromHead: true },
-		keptBeside: { onChannel: false, distanceM: 99_999 },
-		gully: true,
-		checked: true
-	});
+	const worst = (kept: boolean): DelineationMethodFacts => ({ cellM: 99_999, zoom: 30, snapRadiusM: 99_999, kept, checked: true });
 
-	it('fits in full in the worst case of every placement, so the full rules are what is stored', () => {
-		for (const how of ['junction', 'matched', 'kept', 'snapped'] as const) {
-			for (const chosen of [false, true]) {
-				const full = delineationMethod(worst(how, chosen));
-				expect(full.length, `${how}${chosen ? ', chosen' : ''}`).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
-				expect(fitDelineationMethod(worst(how, chosen))).toBe(full);
-			}
+	it('fits in full in the worst case of either placement', () => {
+		for (const kept of [false, true]) {
+			const full = delineationMethod(worst(kept));
+			expect(full.length).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
+			expect(fitDelineationMethod(worst(kept))).toBe(full);
+			expect(full).toMatch(/storage on a river: not counted\)$/);
 		}
-		// Every clause is in the worst case: the head reach's, the gully's and the pans' cross-check.
-		expect(delineationMethod(worst('matched', false))).toMatch(/from the DEM’s own area at the head reach’s upper end/);
-		expect(delineationMethod(worst('snapped', false))).toMatch(/looked for since the point is in a gully\).*storage on a river: not counted\)$/);
-	});
-
-	it('falls back to naming the version for the rules rather than pass the limit (a reach name longer than any made today)', () => {
-		const long = { ...worst('snapped', false), reach: { name: 'R'.repeat(400), km2: 1, chosen: false, fromHead: false } };
-		expect(delineationMethod(long).length).toBeGreaterThan(DELINEATION_METHOD_MAX_CHARS);
-		const fit = fitDelineationMethod(long);
-		expect(fit.length).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
-		expect(fit).toContain(`each rule as ${METHOD_VERSION} defines it`);
-		expect(fit).toMatch(/^D8 steepest descent .* storage on a river: not counted\)$/);
-		// However long the name, the brief form fits: the name is cut.
-		const huge = fitDelineationMethod({ ...long, reach: { ...long.reach, name: 'R'.repeat(5000) } });
-		expect(huge.length).toBeLessThanOrEqual(DELINEATION_METHOD_MAX_CHARS);
-		expect(huge).toContain(`${'R'.repeat(119)}…`);
 	});
 });

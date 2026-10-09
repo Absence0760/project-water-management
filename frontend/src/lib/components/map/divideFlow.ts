@@ -21,7 +21,7 @@ export interface DivideDraft {
 	picked: Record<string, DivideChoice>;
 	outlet: string | null;
 	ticks: Record<string, DivideTicks>;
-	/** The rivers picked at confluences and the larger channels taken, by point ('' the outlet gauge): sent with every proposal (placement.ts). */
+	/** The larger channels taken, by point ('' the outlet gauge): sent with every proposal (placement.ts). */
 	placement: PlacementChoices;
 }
 

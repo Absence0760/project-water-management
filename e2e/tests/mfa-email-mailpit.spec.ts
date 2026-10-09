@@ -72,6 +72,13 @@ async function useMfaApi(page: Page) {
 	});
 }
 
+// The page's own background calls (the account's /auth/mfa refresh) can still be on their way through useMfaApi's proxy when a
+// test ends; its route.fetch then throws "Test ended" and fails the run though every test passed. Drop the routes first, letting
+// any call still in flight end quietly: the test is over, so no answer is wanted.
+test.afterEach(async ({ page }) => {
+	await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 /** Turn codes by email on through the API, the code read from Mailpit (the screens are test 1). */
 async function emailOn(request: APIRequestContext, email: string): Promise<void> {
 	const seen = (await mailIds(email)).length;

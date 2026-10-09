@@ -3,12 +3,12 @@ import { placementOf, placementWarnings, type PointPlacement } from './pointPlac
 
 // The warnings a Start or Divide plan carries for a point's placement (pure).
 
-const pl = (over: Partial<PointPlacement>): PointPlacement => ({ placedBy: 'snapped', reach: null, larger: null, unmatched: false, ...over });
+const pl = (over: Partial<PointPlacement>): PointPlacement => ({ placedBy: 'snapped', larger: null, ...over });
 
 describe('placementWarnings', () => {
 	it('names a much larger channel beside a snapped point, and offers it', () => {
 		const [w] = placementWarnings('Weir', [20.5, -33.5], pl({ larger: { at: [20.49, -33.5], distanceM: 420, km2: 300, pointKm2: 1.5 } }));
-		expect(w).toMatch(/^A much larger channel runs 420 m west of Weir: at least 300 km² drains through it, against 1\.50 km² where the point was put\. .*Use that channel, or keep the point if it is on the small stream\.$/);
+		expect(w).toMatch(/^A much larger terrain channel runs 420 m west of Weir: at least 300 km² drains through it, against 1\.50 km² where the point was put\. Use that channel, or keep the point if it is on the small stream\.$/);
 	});
 
 	it('says a dam outline only clips a much larger channel, and that the dam was taken as off it (the hydrologist’s review, finding 9)', () => {
@@ -19,14 +19,14 @@ describe('placementWarnings', () => {
 		);
 	});
 
-	it('says nothing for a matched point', () => {
-		expect(placementWarnings('Weir', [20.5, -33.5], pl({ placedBy: 'matched' }))).toEqual([]);
+	it('says nothing for a point on the nearest terrain channel with no larger channel beside it', () => {
+		expect(placementWarnings('Weir', [20.5, -33.5], pl({}))).toEqual([]);
 	});
 });
 
 describe('placementOf', () => {
 	it('keeps a dam’s marked position in the plan, and adds nothing for an unmarked one (194)', () => {
-		expect(placementOf({ placedBy: 'polygon', damPosition: 'off_channel' }, undefined)).toEqual({ placedBy: 'polygon', reach: null, larger: null, unmatched: false, damPosition: 'off_channel' });
-		expect(placementOf({ placedBy: 'polygon' }, undefined)).toEqual({ placedBy: 'polygon', reach: null, larger: null, unmatched: false });
+		expect(placementOf({ placedBy: 'polygon', damPosition: 'off_channel' })).toEqual({ placedBy: 'polygon', larger: null, damPosition: 'off_channel' });
+		expect(placementOf({ placedBy: 'polygon' })).toEqual({ placedBy: 'polygon', larger: null });
 	});
 });

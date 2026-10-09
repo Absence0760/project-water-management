@@ -3327,21 +3327,19 @@ map" card) stays the schematic; this is the geography.
   as its card in the sheet (R: the rest of the catchment) …" with **Review
   it**) says what the pieces are. The points step counts gauges apart ("1
   unit and 1 gauge, plus the rest of the catchment.").
-  **Where each point went** (`start-7`, `placement.ts`,
-  `PlacementAsk.svelte`): the outlet's line under the warnings ("The
-  outlet: On the channel matching river reach 11509680 (292 km²), 602 m
-  from the point."), and each card's ("Snapped to the most-drained cell
-  nearby, 143 m from the point: no channel near it matches …"). A point
-  snapped beside a much larger channel has its warning in the list and
-  **use that channel** on its card (**Use that channel for the outlet**
-  under the warnings), which proposes again with the point on that
-  channel. A point at a confluence stops the proposal with a box above
-  the sheet's error line: "These points are at a confluence …", a radio
-  group per point (legend: its name, or "The outlet (Weir)") with its
-  rivers ("The river along the point, 400 km²"), and **Propose with these
-  rivers** once each has one. The choices stay in the sheet's draft for
-  later proposals; picking another outlet drops the outlet's. Divide's
-  sheet does the same.
+  **Where each point went** (`start-15`, issue #472; `placement.ts`):
+  the outlet's line under the warnings ("The outlet: On the nearest
+  terrain channel, 42 m from the point."), and each card's ("On the
+  nearest terrain channel, 143 m from the point."). A plan proposed before
+  `start-15` still reads as it was made ("On the channel matching river
+  reach 11509680 (292 km²), 602 m from the point."). A point placed beside
+  a much larger terrain channel has its warning in the list and **use that
+  channel** on its card (**Use that channel for the outlet** under the
+  warnings), which proposes again with the point on that channel. A point
+  with no terrain channel within 150 m is among the dropped points, saying
+  so; an outlet gauge with none stops the proposal with the server's
+  sentence. There is no confluence question any more (it went with issue
+  #472). Divide's sheet does the same.
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, its own chunk, `divideFlow.ts`,
   [maps.md § Start from the map](./maps.md#start-from-the-map)). The
@@ -3391,22 +3389,23 @@ map" card) stays the schematic; this is the geography.
   catchment’s outlet / Just below a dam wall, the clicked position (or
   Latitude and Longitude behind **Enter coordinates**), the dataset line
   (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
-  (“Delineating…”). A refusal shows its sentence in the sheet ("That point
-  is outside the elevation model …"). A point beside a much larger channel
-  (issue #374) shows a warning box instead: "A much larger channel runs
-  504 m north of your point: at least 620 km² drains through it inside the
-  34 km routed around your point, and more from beyond (the mapped river
-  here, reach … of HydroRIVERS, drains 340 724 km²), against 0.18 km² at
-  your point." (a channel whose catchment fits the window gets its area
-  plainly: "620 km² drains through it"). River lines on the map can sit a few hundred
-  metres off the channel the elevation model sees. Use that channel, or
-  keep your point if you meant the small one.", with **Use that channel**
+  (“Delineating…”). Under the clicked position: "The point goes on the
+  nearest terrain channel (the red lines), within 150 m; mapped rivers
+  never move it." A refusal shows its sentence in the sheet ("That point
+  is outside the elevation model …"; off the channels, "No terrain channel
+  runs within 150 m of that point. Zoom in until the terrain channels (the
+  red lines) show, and click on one …"). A point beside a much larger terrain channel shows a
+  warning box instead: "A much larger terrain channel runs 504 m north of
+  your point: at least 620 km² drains through it inside the 34 km routed
+  around your point, and more from beyond (the mapped river here, reach …
+  of HydroRIVERS, drains 340 724 km²), against 0.18 km² on the terrain
+  channel nearest your point. Use that channel, or keep your point if you
+  meant the small one." (a channel whose catchment fits the window gets
+  its area plainly: "620 km² drains through it"), with **Use that channel**
   (primary: the coordinates move to it and it delineates there) and **Keep
-  my point** (delineates the point as asked, `keepPoint`). A point at a
-  confluence shows "This point is at a confluence. Which river do you mean?
-  The outlet goes on the channel whose area matches it." with one button
-  per river ("The river below the junction, 497 km²", "The main river above
-  the junction, 422 km²", "The tributary above the junction, 67 km²").
+  my point** (delineates the point as asked, `keepPoint`). Since issue #472
+  the sheet asks no confluence question and shows no river-network check
+  note with the proposal: the mapped rivers never place the outlet.
   A catchment too large for the request goes to the background worker
   (191_delineation_request; maps.md § Delineation): the form shows a box
   (`role="status"`) "The catchment is too large to work out at once, so it
@@ -3490,20 +3489,16 @@ map" card) stays the schematic; this is the geography.
   piece has on the map, so the list is the map's key): its area, where its
   water goes ("drains into 2", or "the lowest point: the rest drains out
   here"), the area upstream in all (or "more upstream than was routed"),
-  the inflow points entering it, how it was placed ("on the channel matching
-  river reach 11492928 (412.50 km²)", "moved 128 m to the channel" from
-  50 m), and its warnings: a much larger channel beside it ("a much larger
-  channel (620 km²) runs 504 m north: …" with **Use the larger channel**,
-  which moves the click there and routes again), a river reach nearby that
-  matches no channel ("river reach 11492928 nearby drains 412.50 km², and
-  no channel near the click matches it: check it is the right stream"), or
-  under 1 km² upstream ("very little drains here: it probably missed the
-  channel; …"); or why it is not a piece (an inflow point, a click that
-  doesn't drain to the lowest). A click at a confluence waits in a warning
-  box ("Click 2 is at a confluence. Which river do you mean? …") with a
-  button per river and **Drop the click**; picked, it goes at the elevation
-  model's junction ("at the elevation model's junction, on river reach
-  …"). A line with the focus or the pointer lights
+  the inflow points entering it, how far it moved ("· moved 128 m to the
+  nearest terrain channel", from 50 m), and a much larger terrain channel
+  beside it ("· a much larger terrain channel (620 km²) runs 504 m north:
+  use it if that is the river you meant", with **Use the larger channel**,
+  which moves the click there and routes again); or why it is not a piece
+  (an inflow point, a click that doesn't drain to the lowest). A click
+  with no terrain channel within 150 m is refused and taken back with the
+  reason. Since issue #472 there is no confluence box, no river-reach
+  warning and no "very little drains here" warning: a click always lands
+  on a channel with at least 1 km² draining through it. A line with the focus or the pointer lights
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
   piece against the map before you save."). **Enter coordinates** (folded,

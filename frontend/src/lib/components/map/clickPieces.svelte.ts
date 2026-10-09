@@ -11,8 +11,7 @@
 // (off the elevation model, a catchment too large) is taken back with the
 // reason, so the clicks before it keep working.
 import type { ClickPieces, MapFeature, MapPosition } from '$lib/api/types';
-import { confluenceOf, largerLine } from './largerChannel';
-import type { ConfluenceChoice } from '$lib/api/types';
+import { largerLine } from './largerChannel';
 import { interiorPoint, pieceTintsFor, type PiecesShape, type ProposalPiece } from './pieces';
 
 /** The map's shape for an answer: one piece per click, numbered by click, the lowest click as the outlet and every kept click marked. Pure. */
@@ -41,16 +40,6 @@ export function clickShape(r: ClickPieces | null, highlight: string | null = nul
 	};
 }
 
-/**
- * Under this much upstream (m²), a click has almost surely missed the channel: the server snaps within about 150 m, and a
- * river line can sit further off the channel the elevation model sees (HydroRIVERS by a few hundred metres, measured on the Orange).
- */
-export const MISSED_M2 = 1e6;
-/** A junction placement moved further than this (m) is flagged: the backend's JUNCTION_FLAG_M (delineation/junction.ts). */
-export const FAR_JUNCTION_M = 500;
-const MISSED = 'very little drains here: it probably missed the channel; Undo and click closer to the river (the Relief layer shows the valley)';
-const missed = (p: { open: boolean; totalAreaM2: number | null }) => !p.open && p.totalAreaM2 !== null && p.totalAreaM2 < MISSED_M2;
-
 /** What a piece's line says: its area, and where its water goes next. */
 export function pieceLine(r: ClickPieces, click: number): string {
 	const p = r.pieces.find((x) => x.click === click);
@@ -63,35 +52,19 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : `${p.drainsInto + 1}`} as an inflow`;
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.click + 1);
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
-	const placed = !p.reach
-		? ''
-		: p.placedBy === 'junction'
-			? ` · on river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)}), on its side of the elevation model’s junction`
-			: ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`;
-	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the channel` : '';
-	// A junction placement that far: the elevation model's rivers meet away from the mapped junction (the server's JUNCTION_FLAG_M).
-	const farJunction =
-		p.placedBy === 'junction' && p.snapDistanceM !== null && p.snapDistanceM > FAR_JUNCTION_M
-			? ': the elevation model’s rivers meet away from the mapped junction, so check the point against the map'
-			: '';
-	// A larger channel nearby explains a small piece better than the other warnings do.
-	const warn = p.larger
-		? ` · ${largerLine(p.point, p.larger)}`
-		: p.unmatched
-			? ` · river reach ${p.unmatched.reachId} nearby drains ${km2(p.unmatched.upstreamKm2 * 1e6)}, and no channel near the click matches it: check it is the right stream`
-			: missed(p)
-				? ` · ${MISSED}`
-				: '';
+	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the nearest terrain channel` : '';
+	// A much larger channel nearby: the click may be on a hillside stream beside the river meant.
+	const warn = p.larger ? ` · ${largerLine(p.point, p.larger)}` : '';
 	// What of its own area drains into pans (start-11): reported, still in the area.
 	const pans = p.nonContributingM2 ? ` · ${km2(p.nonContributingM2)} of it drains into pans (non-contributing)` : '';
-	return `${km2(p.areaM2)} · ${into}${upstream}${pans}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${moved}${farJunction}${warn}`;
+	return `${km2(p.areaM2)} · ${into}${upstream}${pans}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${moved}${warn}`;
 }
 
 /** The pieces Save keeps: whole and outlined. */
 export const savable = (r: ClickPieces | null) => (r ? r.pieces.filter((p) => !p.open && p.geometry && p.areaM2 !== null) : []);
 
-/** A click; `reach` is the river it means, picked at a confluence. */
-type Click = { lon: number; lat: number; reach?: { dataset: string; reachId: number } };
+/** A click, on a terrain channel. */
+type Click = { lon: number; lat: number };
 type Fetch = (clicks: Click[]) => Promise<ClickPieces>;
 type Save = (clicks: Click[]) => Promise<{ features: MapFeature[]; summary: string }>;
 
@@ -104,8 +77,6 @@ export class ClickDivider {
 	error = $state<string | null>(null);
 	/** The last change, for a polite live region. */
 	said = $state('');
-	/** A click held back at a confluence: the clicks it would make and which one it is, and the rivers to pick from. */
-	pendingChoice = $state.raw<{ clicks: Click[]; click: number; choices: ConfluenceChoice[] } | null>(null);
 	/** The answers before each click, for Undo without asking again. */
 	#history: { clicks: Click[]; result: ClickPieces | null }[] = [];
 	#seq = 0;
@@ -139,26 +110,8 @@ export class ClickDivider {
 		);
 	}
 
-	/** The river picked for the click held at a confluence: routed with it. */
-	async chooseReach(choice: Pick<ConfluenceChoice, 'dataset' | 'reachId'>) {
-		const p = this.pendingChoice;
-		if (!p || this.busy === 'save') return;
-		this.pendingChoice = null;
-		await this.#route(
-			p.clicks.map((c, k) => (k === p.click ? { ...c, reach: { dataset: choice.dataset, reachId: choice.reachId } } : c)),
-			p.click
-		);
-	}
-
-	/** Drop the click held at a confluence. */
-	cancelChoice() {
-		this.pendingChoice = null;
-		this.said = 'Dropped the click at the confluence.';
-	}
-
 	/** Route `clicks`, `changed` the index of the click that is new or moved (its piece is what the live line reports). */
 	async #route(clicks: Click[], changed: number) {
-		this.pendingChoice = null;
 		const before = { clicks: this.clicks, result: this.result };
 		this.clicks = clicks;
 		this.error = null;
@@ -178,22 +131,12 @@ export class ClickDivider {
 				? `Click ${changed + 1} is not a piece: it ${dropped.reason}.`
 				: newest?.larger
 					? `Click ${changed + 1}: ${largerLine(newest.point, newest.larger)}.`
-					: newest && missed(newest)
-						? `Click ${changed + 1}: ${MISSED}.`
-						: `${whole === 1 ? '1 sub-catchment' : `${whole} sub-catchments`}${open ? `, ${open === 1 ? '1 inflow point' : `${open} inflow points`}` : ''}.`;
+					: `${whole === 1 ? '1 sub-catchment' : `${whole} sub-catchments`}${open ? `, ${open === 1 ? '1 inflow point' : `${open} inflow points`}` : ''}.`;
 		} catch (err) {
 			if (seq !== this.#seq) return;
 			// Taken back: the clicks before it still divide as they did.
 			this.clicks = before.clicks;
 			this.result = before.result;
-			// At a confluence the click waits for the editor to pick the river (chooseReach), not refused.
-			const junction = confluenceOf(err);
-			if (junction && junction.click !== null) {
-				this.pendingChoice = { clicks, click: junction.click, choices: junction.choices };
-				this.error = null;
-				this.said = `Click ${junction.click + 1} is at a confluence: pick the river you mean.`;
-				return;
-			}
 			this.error = `${changed === clicks.length - 1 && clicks.length > before.clicks.length ? 'Click not added' : `Click ${changed + 1} not moved`}: ${err instanceof Error ? err.message : String(err)}`;
 			this.said = this.error;
 		} finally {
@@ -202,7 +145,6 @@ export class ClickDivider {
 	}
 
 	undo() {
-		this.pendingChoice = null;
 		const prev = this.#history.pop();
 		if (!prev) return;
 		this.#seq++;
@@ -216,7 +158,6 @@ export class ClickDivider {
 
 	clear() {
 		this.#seq++;
-		this.pendingChoice = null;
 		this.#history = [];
 		this.clicks = [];
 		this.result = null;

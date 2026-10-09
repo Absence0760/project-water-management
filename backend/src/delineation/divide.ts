@@ -34,16 +34,16 @@ import { ModelBody, modelProblems, nameText } from '../model/validate.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
-import { PlacementChoice, placementOf, placementWarnings, type PointPlacement, type PointReach } from './pointPlacement.js';
+import { PlacementChoice, placementOf, placementWarnings, type PointPlacement } from './pointPlacement.js';
 import {
 	BOUNDARY_MISMATCH,
 	km2,
 	loadProposal,
 	nodeCount,
-	OUTLET_KEY,
 	outletHints,
 	pointOf,
-	readReaches,
+	NO_CHOICES,
+	readPlacement,
 	START_POINTS_MAX,
 	START_PROPOSALS_KEPT,
 	START_PROPOSALS_PER_HOUR,
@@ -62,8 +62,7 @@ export const DivideBody = z
 	.object({
 		/** A gauge on the map at the outflow; absent or null = the boundary's own outlet. */
 		outletFeatureId: z.string().uuid().nullable().optional(),
-		/** The outlet gauge's river at a confluence, and its larger channel chosen (pointPlacement.ts). */
-		outletReach: PlacementChoice.reach,
+		/** The outlet gauge's larger channel chosen (pointPlacement.ts). */
 		outletUseLarger: PlacementChoice.useLarger,
 		points: z
 			.array(
@@ -296,7 +295,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 		const body = DivideBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		const { inputs, reaches, attempt } = await withUser(userId, async (db) => {
+		const { inputs, placing, attempt } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			if ((await nodeCount(db, id)) === 0) throw new ApiError(409, NOT_EMPTY_NEEDED);
 			const { rows } = await db.query<{ n: number }>(`SELECT count(*)::integer AS n FROM start_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`, [id]);
@@ -305,8 +304,8 @@ export const divideRoutes = new Hono<AuthEnv>()
 			const attempt = await beginDemAttempt(db, 'divide');
 			const inputs = await readInputs(db, id, body);
 			// Each point's river reach, with a DEM to place it on (without one the division is refused below).
-			const reaches = configuredDem() ? await readReaches(db, { name: inputs.outflow.name, point: inputs.outlet.point, foundIn: inputs.outlet.foundIn }, inputs.points, body) : new Map<string, PointReach>();
-			return { inputs, reaches, attempt };
+			const placing = configuredDem() ? await readPlacement(db, { point: inputs.outlet.point, foundIn: inputs.outlet.foundIn }, body) : NO_CHOICES;
+			return { inputs, placing, attempt };
 		});
 		try {
 			const dem = configuredDem();
@@ -315,9 +314,10 @@ export const divideRoutes = new Hono<AuthEnv>()
 			try {
 				r = await delineateUnits(dem, {
 					outlet: inputs.outlet.point,
-					outletHints: outletHints(inputs.outlet.foundIn, reaches),
+					outletHints: outletHints(inputs.outlet.foundIn, placing),
+					outletMappedKm2: placing.outletMappedKm2,
 					boundary: inputs.boundary?.geometry ?? null,
-					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry, damPosition: p.damPosition, ...reaches.get(p.featureId)?.hints }))
+					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry, damPosition: p.damPosition, ...placing.hints.get(p.featureId) }))
 				}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id) });
 			} catch (err) {
 				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
@@ -327,7 +327,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			const named = new Map(inputs.points.map((p) => [p.featureId, p]));
 			const nodes = new Map(inputs.model.nodes.map((n) => [n.id, n]));
 			const warnings: string[] = [];
-			const outletPlacement = placementOf(r.outlet, reaches.get(OUTLET_KEY));
+			const outletPlacement = placementOf(r.outlet);
 			// The outlet's placement first: every point is placed against it.
 			if (inputs.outlet.point) warnings.push(...placementWarnings(inputs.outflow.name, inputs.outlet.point, outletPlacement, true));
 			if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
@@ -361,15 +361,15 @@ export const divideRoutes = new Hono<AuthEnv>()
 								pctUpstreamToDam: n.pctUpstreamToDam
 							}
 						: null,
-					placement: placementOf(u, reaches.get(u.id)),
+					placement: placementOf(u),
 					nonContributingM2: u.nonContributingM2,
 					totalNonContributingM2: u.totalNonContributingM2,
 					...(land ? withDamShares(u) : {})
 				};
 			});
-			const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
+			const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d) } : {}) }));
 			// A dropped point snapped beside its river: the larger channel is how to bring it in.
-			for (const d of dropped) if (d.placement?.larger) warnings.push(...placementWarnings(d.name || 'A point', pointOf(named.get(d.featureId)!.geometry), { ...d.placement, unmatched: false }));
+			for (const d of dropped) if (d.placement?.larger) warnings.push(...placementWarnings(d.name || 'A point', pointOf(named.get(d.featureId)!.geometry), d.placement));
 			for (const u of units) {
 				warnings.push(...placementWarnings(u.name, pointOf(named.get(u.key)!.geometry), u.placement));
 				if (u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another one’s?`);

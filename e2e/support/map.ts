@@ -4,9 +4,6 @@
 // backend/scripts/import-quaternaries.ts). Invented data only: region Z, no
 // real place.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { createProject, node, putModel } from './api.ts';
@@ -82,31 +79,6 @@ export async function loadSyntheticRivers(): Promise<void> {
 			stdio: 'pipe'
 		});
 	});
-}
-
-/**
- * Load a river network of its own (a dataset label of the spec's, so parallel specs never share one) into the e2e
- * database, through the importer as an operator would: `reaches` as HydroRIVERS-style lines with their upstream areas.
- */
-export async function loadRiverNetwork(dataset: string, reaches: { id: number; upstreamKm2: number; order: number; line: [number, number][] }[]): Promise<void> {
-	const dir = mkdtempSync(join(tmpdir(), 'e2e-rivers-'));
-	const file = join(dir, `${dataset}.geojson`);
-	writeFileSync(
-		file,
-		JSON.stringify({
-			type: 'FeatureCollection',
-			features: reaches.map((r) => ({ type: 'Feature', properties: { HYRIV_ID: r.id, ORD_STRA: r.order, UPLAND_SKM: r.upstreamKm2 }, geometry: { type: 'LineString', coordinates: r.line } }))
-		})
-	);
-	try {
-		execFileSync('pnpm', ['exec', 'tsx', 'scripts/import-rivers.ts', file, '--dataset', dataset, '--source', 'e2e test reaches'], {
-			cwd: backendDir,
-			env: { ...process.env, MIGRATION_DATABASE_URL: OWNER_E2E_URL },
-			stdio: 'pipe'
-		});
-	} finally {
-		rmSync(dir, { recursive: true, force: true });
-	}
 }
 
 /**

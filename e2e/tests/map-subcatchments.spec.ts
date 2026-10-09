@@ -13,9 +13,9 @@ import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, node, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
-import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_OFF_CHANNEL, FIXTURE_OFF_TERRAIN, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { loadRiverNetwork, openMap, uploadThroughSheet } from '../support/map.ts';
+import { openMap, uploadThroughSheet } from '../support/map.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const bar = (page: Page) => page.getByTestId('map-click-bar');
@@ -106,7 +106,7 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	// The fixture's pan lies in it, so the piece reports what drains into it (start-11).
 	// The crosshair isn't on a cell's centre, so the click may say how far it moved.
 	await expect(line(page, 0)).toHaveText(
-		/^3[34]\d\.\d\d km² · the lowest point: the rest drains out here · \d+\.\d\d km² of it drains into pans \(non-contributing\)( · moved \d+ m to the channel)?$/
+		/^3[34]\d\.\d\d km² · the lowest point: the rest drains out here · \d+\.\d\d km² of it drains into pans \(non-contributing\)( · moved \d+ m to the nearest terrain channel)?$/
 	);
 	await expect(lines(page).nth(0).getByTestId('piece-badge')).toHaveText('Piece 1: 1');
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('1 sub-catchment.');
@@ -115,16 +115,16 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await typeOutlet(page, FIXTURE_OUTLET);
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(2);
-	await expect(line(page, 0)).toHaveText(/^3[34]\d\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all · \d+\.\d\d km² of it drains into pans \(non-contributing\)( · moved \d+ m to the channel)?$/);
+	await expect(line(page, 0)).toHaveText(/^3[34]\d\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all · \d+\.\d\d km² of it drains into pans \(non-contributing\)( · moved \d+ m to the nearest terrain channel)?$/);
 	await expect(line(page, 1)).toHaveText(/^2\d\d\.\d\d km² · the lowest point: the rest drains out here · 5[34]\d\.\d\d km² upstream in all$/);
 
 	// Above the dam: it takes the valley's head out of the dam's piece.
 	await typeOutlet(page, FIXTURE_UPPER);
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	await expect(lines(page)).toHaveCount(3);
-	await expect(line(page, 0)).toHaveText(/^\d+\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all · \d+\.\d\d km² of it drains into pans \(non-contributing\)( · moved \d+ m to the channel)?$/);
-	// Typed on a cell's centre beside the channel: it moves one cell onto it, and says so.
-	await expect(line(page, 2)).toHaveText(/^\d+\.\d\d km² · drains into 1 · \d+\.\d\d km² upstream in all · moved 128 m to the channel$/);
+	await expect(line(page, 0)).toHaveText(/^\d+\.\d\d km² · drains into 2 · 3[34]\d\.\d\d km² upstream in all · \d+\.\d\d km² of it drains into pans \(non-contributing\)( · moved \d+ m to the nearest terrain channel)?$/);
+	// Typed on a cell's centre that is on a terrain channel: it stays there (the nearest channel, not a more-drained one beside it).
+	await expect(line(page, 2)).toHaveText(/^\d+\.\d\d km² · drains into 1 · \d+\.\d\d km² upstream in all$/);
 	await expect(bar(page).getByTestId('map-click-total')).toHaveText(/^5[34]\d\.\d\d km² in 3 sub-catchments\. A proposal from Synthetic DEM/);
 	// The key: each line's badge carries its piece's tint, and touching pieces differ.
 	const tints = await lines(page).getByTestId('piece-badge').evaluateAll((els) => els.map((e) => getComputedStyle(e).boxShadow));
@@ -206,8 +206,8 @@ test('a click beside a much larger channel names it, and Use the larger channel 
 	await typeOutlet(page, FIXTURE_OFF_CHANNEL);
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
 	const off = lines(page).nth(1);
-	await expect(off).toContainText(/a much larger channel \([\d ,]+ km²\) runs \d+ m west: the river line may sit off the channel the elevation model sees/);
-	await expect(bar(page).getByTestId('map-click-said')).toHaveText(/^Click 2: a much larger channel/);
+	await expect(off).toContainText(/a much larger terrain channel \([\d ,]+ km²\) runs \d+ m west: use it if that is the river you meant/);
+	await expect(bar(page).getByTestId('map-click-said')).toHaveText(/^Click 2: a much larger terrain channel/);
 	await expectNoViolations(page);
 	await off.getByTestId('map-click-use-larger').click();
 	await expect(bar(page)).not.toHaveAttribute('data-busy');
@@ -217,29 +217,6 @@ test('a click beside a much larger channel names it, and Use the larger channel 
 	await bar(page).getByTestId('map-click-undo').click();
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Moved the click back.');
 	await expect(lines(page).nth(1)).toContainText('larger channel');
-});
-
-test('a click at a confluence waits for the river to be picked, then goes on that river’s channel', async ({ page, owner }) => {
-	void owner;
-	await loadRiverNetwork('e2e-confluence', [
-		{ id: 99100001, upstreamKm2: 400, order: 4, line: FIXTURE_JUNCTION_RIVER },
-		{ id: 99100002, upstreamKm2: 3, order: 1, line: FIXTURE_JUNCTION_TRIBUTARY }
-	]);
-	const project = await seedRunnableProject(page.request, 'Sub-catchments confluence');
-	await openMap(page, project.id);
-	await startClicks(page);
-	await typeOutlet(page, FIXTURE_OUTLET);
-	await typeOutlet(page, FIXTURE_JUNCTION);
-	const box = bar(page).getByTestId('map-click-confluence');
-	await expect(box).toContainText('Click 2 is at a confluence. Which river do you mean?');
-	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Click 2 is at a confluence: pick the river you mean.');
-	await expect(lines(page)).toHaveCount(1);
-	await expectNoViolations(page);
-	await box.getByTestId('map-click-choice').first().click();
-	await expect(bar(page)).not.toHaveAttribute('data-busy');
-	await expect(box).toHaveCount(0);
-	await expect(lines(page)).toHaveCount(2);
-	await expect(line(page, 1)).toContainText('on the channel matching river reach 99100001 (400.00 km²)');
 });
 
 test('a click off the elevation model is taken back with the reason; Done asks before dropping clicks; a viewer gets no Sub-catchments', async ({ page, owner, signIn }) => {
@@ -253,6 +230,13 @@ test('a click off the elevation model is taken back with the reason; Done asks b
 	await typeOutlet(page, [25, -30]);
 	await expect(bar(page).getByTestId('map-click-error')).toHaveText(/^Click not added: The clicks are outside the elevation model/);
 	await expect(lines(page)).toHaveCount(1);
+
+	// No terrain channel within 150 m (issue #472): taken back with what to do, the first click's piece unchanged.
+	const first = await lines(page).first().textContent();
+	await typeOutlet(page, FIXTURE_OFF_TERRAIN);
+	await expect(bar(page).getByTestId('map-click-error')).toHaveText(/^Click not added: No terrain channel runs within 150 m of click 2\. Zoom in until the terrain channels \(the red lines\) show, and click on one/);
+	await expect(lines(page)).toHaveCount(1);
+	await expect(lines(page).first()).toHaveText(first!);
 
 	await bar(page).getByTestId('map-click-done').click();
 	const ask = page.getByRole('alertdialog', { name: 'Drop these clicks?' });

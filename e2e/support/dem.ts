@@ -13,15 +13,7 @@ export const FIXTURE_DAM: [number, number] = [20.7428741, -33.4262838];
 export const FIXTURE_MID_GAUGE: [number, number] = [20.7428741, -33.4938799];
 /** Far up the river above the dam: an abstraction point there owns the valley's head. [lon, lat] */
 export const FIXTURE_UPPER: [number, number] = [20.7428741, -33.3104464];
-/** On the valley's side three cells (about 380 m) east of the mid gauge, as a displaced river line puts a click: beside a much larger channel. [lon, lat] */
+/** On the valley's side three cells (about 380 m) east of the mid gauge, as a displaced river line puts a click: on a small terrain channel beside a much larger one. [lon, lat] */
 export const FIXTURE_OFF_CHANNEL: [number, number] = [20.746994, -33.4938799];
-/** A junction away from every other spec's points (more than 3 km from each): a click there, a river reach along the valley through it and a tributary ending at it (e2e plants both). [lon, lat] */
-export const FIXTURE_JUNCTION: [number, number] = [20.746994, -33.4595156];
-export const FIXTURE_JUNCTION_RIVER: [number, number][] = [
-	[20.746994, -33.4423284],
-	[20.746994, -33.4766995]
-];
-export const FIXTURE_JUNCTION_TRIBUTARY: [number, number][] = [
-	[20.7772064, -33.4457661],
-	[20.7483673, -33.4595156]
-];
+/** Just past the valley's western ridge, where nothing drains a square kilometre: no terrain channel within 150 m, so a click is refused (issue #472). [lon, lat] */
+export const FIXTURE_OFF_TERRAIN: [number, number] = [20.6179047, -33.4022115];
