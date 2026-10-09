@@ -502,6 +502,48 @@ describe('the re-check end to end, on the fixtures with a rewrite (FEED_FETCHER=
 		expect((await asOwner('SELECT last_meta FROM data_feed WHERE id = $1', [fa]))[0].last_meta).not.toHaveProperty('filesChecked');
 	});
 
+	it('a confirmed replacement with no marker yet: a revision between its staged windows still reaches the series after the swap', async () => {
+		const owner = await signUp('RecheckStaged');
+		const pid = await project(owner);
+		// A v2 record from 150 days ago: the replacement backfills two windows, staged, then swaps in.
+		const first = addDays(-150);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: first, values: [1, 2, 3], product: 'CHIRPS', productVersion: '2.0' });
+		const feed = (await owner.call('POST', `/projects/${pid}/feeds`, { source: 'chirps', config: { cells: [cell()] }, replaceSeries: true })).body.feed.id as string;
+		const meta = async () => (await asOwner('SELECT last_meta FROM data_feed WHERE id = $1', [feed]))[0].last_meta as Record<string, unknown>;
+		await owner.call('POST', `/projects/${pid}/feeds/${feed}/run-now`);
+		expect((await tick()).done).toBe(1);
+		// Window 1 staged; the feed had never looked at revisions, so staging set its marker.
+		expect(await meta()).toMatchObject({ staged: 120 });
+		expect(typeof (await meta()).revisionXmin).toBe('string');
+
+		// Between the windows, another feed's re-check revises a staged day of this cell (its cached final, and the log).
+		const day = addDays(-120);
+		await asOwner(`UPDATE chirps_cell_year SET vals[$1] = 42 WHERE origin = 'fixtures' AND product = 'sat' AND year = $2 AND row_idx = $3 AND col_idx = $4`, [
+			doy(day) + 1,
+			Number(day.slice(0, 4)),
+			home().row,
+			home().col
+		]);
+		await asOwner(`INSERT INTO chirps_revision (origin, product, day, cells_changed) VALUES ('fixtures', 'sat', $1, 1)`, [day]);
+
+		// Window 2 swaps the stage in, computed before the revision, so the day is still the old value…
+		await owner.call('POST', `/projects/${pid}/feeds/${feed}/run-now`);
+		expect((await tick()).done).toBe(1);
+		const at = async () => {
+			const list = (await owner.call('GET', `/projects/${pid}/series`)).body.series as { id: string; kind: string }[];
+			const s = (await owner.call('GET', `/projects/${pid}/series/${list.find((x) => x.kind === 'rain_chirps_mm')!.id}`)).body as { startDate: string; values: (number | null)[] };
+			return s.values[toEpochDay(day) - toEpochDay(s.startDate)];
+		};
+		expect(await asOwner('SELECT 1 FROM feed_stage WHERE feed_id = $1', [feed])).toEqual([]);
+		expect(await at()).not.toBe(42);
+		// … and the next fetch's refresh, reading from the marker staging set, brings the revision in.
+		await owner.call('POST', `/projects/${pid}/feeds/${feed}/run-now`);
+		expect((await tick()).done).toBe(1);
+		expect(await at()).toBe(42);
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'series.merged' AND subject ? 'chirpsRevision'`, [pid]);
+		expect(ev.subject.chirpsRevision).toMatchObject({ days: 1, first: day, last: day });
+	});
+
 	describe('in production’s shape (FEED_FETCHER=sqs, the fetcher answering from the fixtures)', () => {
 		type Msg = { fetchJobId: string; feedId: string; feedVersion: string; request: { start: string; end: string; cells?: { cells: [number, number][]; plan: string }; recheck?: { cells: [number, number][]; head: string[]; read: string[] } } };
 		async function fetchJob(): Promise<Msg | null> {
