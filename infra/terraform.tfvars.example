@@ -47,6 +47,12 @@ budget_monthly_usd = 110
 # (infra/README.md § Operator steps, step 11: check for an existing monitor,
 # import it if there is one, then set 10 and apply).
 # cost_anomaly_threshold_usd = 10
+# Which CloudWatch alarms to create (variables.tf alarm_tier, alarms.tf § Alarm
+# tier). "essential" (12 alarm metrics) keeps the outage and account-risk
+# alarms inside the organization's shared 10-free CloudWatch tier at ~$0.20/month;
+# "full" (the default, ~50) adds the latency, RDS CPU/memory, request-flood,
+# login and per-feature failure alarms at ~$5/month in af-south-1.
+alarm_tier = "essential"
 # Required. Replace the placeholder: plan refuses an empty, malformed or
 # reserved address (example.com/.org/.net, .example, .test, .invalid,
 # .localhost), so an unedited copy of this file fails before it can page nobody.
