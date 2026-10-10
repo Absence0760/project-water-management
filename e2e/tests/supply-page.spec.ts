@@ -151,9 +151,9 @@ test('many hydrological units: every unit below the target or short this week sh
 	await unitCards(page).nth(28).scrollIntoViewIfNeeded();
 	// Its head is the unit picker (issue #467; the heading is for screen readers then).
 	await expect(unitChart(page).getByRole('combobox', { name: 'Hydrological unit shown' })).toBeInViewport();
-	// …under the "On this page" menu, not behind it.
+	// …beside the "On this page" index, not behind it (at 1440 the menu is a column on the left, issue #462).
 	const menu = (await page.getByRole('navigation', { name: 'Hydrological units sections' }).boundingBox())!;
-	expect((await unitChart(page).boundingBox())!.y).toBeGreaterThanOrEqual(menu.y + menu.height);
+	expect((await unitChart(page).boundingBox())!.x).toBeGreaterThanOrEqual(menu.x + menu.width);
 
 	// Pick one far down, then fold: its card stays, after the ones to look into; a reload of its link keeps it.
 	const far = unitCards(page).nth(30);
@@ -168,13 +168,14 @@ test('many hydrological units: every unit below the target or short this week sh
 	await expect(unitCards(page).last().locator('a.name')).toHaveAttribute('aria-current', 'true');
 	await expect(page.getByRole('button', { name: 'Show all 32 hydrological units' })).toBeVisible();
 
-	// The unit results table grows with its rows (no 70vh box), its header row sticking under the menu as the window scrolls.
+	// The unit results table grows with its rows (no 70vh box), its header row sticking under the app header as the window
+	// scrolls (the menu is the index beside it: under a bar it sticks under the bar, section-nav.spec.ts).
 	const results = page.getByRole('region', { name: 'Hydrological unit results' });
 	await expect(results.locator('tbody tr')).toHaveCount(32);
 	await results.locator('tbody tr').nth(30).scrollIntoViewIfNeeded();
 	const head = (await results.locator('thead').boundingBox())!;
-	const bar = (await page.getByRole('navigation', { name: 'Hydrological units sections' }).boundingBox())!;
-	expect(Math.abs(head.y - (bar.y + bar.height))).toBeLessThanOrEqual(2);
+	const headerH = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 0);
+	expect(Math.abs(head.y - headerH)).toBeLessThanOrEqual(2);
 	expect(await innerScrollers(page)).toEqual([]);
 
 	// On a phone: the same cards and the fold before the chart, still nothing scrolling inside itself, no sideways scroll.

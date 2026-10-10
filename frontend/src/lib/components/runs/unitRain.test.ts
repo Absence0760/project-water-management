@@ -3,7 +3,7 @@
 import { render } from 'svelte/server';
 import { describe, expect, it, vi } from 'vitest';
 import UnitRainPanel from './UnitRainPanel.svelte';
-import { factorClamped, factorText, periodText, sortResultUnits, unitRainNotes, unitRainOf, type UnitRainResult, type UnitRainResultUnit } from './unitRain';
+import { factorClamped, factorText, periodText, referenceFactorsText, sortResultUnits, unitRainNotes, unitRainOf, type UnitRainResult, type UnitRainResultUnit } from './unitRain';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
 vi.mock('$app/paths', () => ({ base: '' }));
@@ -125,5 +125,44 @@ describe('UnitRainPanel', () => {
 		const { body } = render(UnitRainPanel, { props: { result: result(many) } });
 		expect((body.match(/data-testid="run-unit-rain-row"/g) ?? []).length).toBe(8);
 		expect(body).toContain('Show all 12 units');
+	});
+});
+
+describe('the reference gauge (engine ≥ 1.80.0, issue #500)', () => {
+	const month = (m: number, over = {}) => ({ month: m, sharedDays: 120, gaugeMm: 400, chirpsMm: 200, ownFactor: 2, factor: 2, clamped: false, fitted: true, ...over });
+	const reference = {
+		gauge: 'rain_catchment_mm',
+		unitId: 'u0',
+		unitName: 'Gauge unit',
+		mapMm: 600,
+		cellKey: 'rain_chirps_cell_mm@u0',
+		pinned: false,
+		months: [month(1, { factor: 1, ownFactor: null, fitted: false }), month(2, { factor: 4, ownFactor: 5.5, clamped: true }), ...Array.from({ length: 10 }, (_, i) => month(i + 3))]
+	};
+	const levelled = unit({ rule: 'unitChirps', rainKey: 'rain_chirps_mm@u1', factor: null, factorSource: 'chirpsReference', chirps: { source: 'reference', factors: Array(12).fill(2), mapRatio: 1.5, mapOwnRatio: 1.5, mapClamped: false } });
+
+	it('says a unit’s factor as the MAP ratio on the monthly factors, and holds a clamped ratio', () => {
+		expect(factorText(levelled)).toBe('the reference gauge’s monthly factors × 1.5 (unit MAP ÷ the reference unit’s MAP)');
+		expect(factorClamped(levelled)).toBe(false);
+		expect(factorClamped({ ...levelled, chirps: { source: 'reference', factors: Array(12).fill(2), mapRatio: 4, mapOwnRatio: 5, mapClamped: true } })).toBe(true);
+	});
+
+	it('lists the factors, and notes the months with factor 1 and the held ones', () => {
+		const r = { ...result([levelled]), reference };
+		expect(referenceFactorsText(r)).toMatch(/^Jan 1, Feb 4, Mar 2, Apr 2/);
+		expect(referenceFactorsText(result([levelled]))).toBeNull();
+		const notes = unitRainNotes(r);
+		expect(notes).toContain('Reference gauge: Jan shares too little record with the CHIRPS cell (90 days, and 50 mm of CHIRPS on them), so its factor is 1.');
+		expect(notes).toContain('Reference gauge: the factor for Feb was held at the 0.25–4 bound; check the gauge and the cell describe the same rain.');
+		const none = { ...r, reference: { ...reference, months: reference.months.map((m) => ({ ...m, factor: 1, fitted: false, clamped: false })) } };
+		expect(unitRainNotes(none)[0]).toBe('Reference gauge: no month shares enough record with the CHIRPS cell (90 days, and 50 mm of CHIRPS on them), so every factor is 1.');
+		expect(unitRainNotes({ ...r, reference: { ...reference, pinned: true } }).some((n) => n.startsWith('Reference gauge'))).toBe(false);
+	});
+
+	it('the panel names the reference and its factors', () => {
+		const body = withoutComments(render(UnitRainPanel, { props: { result: { ...result([levelled]), reference } } }).body);
+		expect(body).toContain('data-testid="run-unit-rain-reference"');
+		expect(body).toMatch(/levelled by the reference gauge \(the catchment rain gauge, compared with the CHIRPS\s+cell of Gauge unit\): Jan 1, Feb 4, Mar 2/);
+		expect(withoutComments(render(UnitRainPanel, { props: { result: result([unit()]) } }).body)).not.toContain('run-unit-rain-reference');
 	});
 });

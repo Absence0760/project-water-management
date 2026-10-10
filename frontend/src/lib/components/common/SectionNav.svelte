@@ -14,8 +14,13 @@
 
 	The rail (issue #468): given the page's content as `children` and `railFrom`
 	(rem), from that content width the menu is a sticky column on the left
-	instead, every group's name shown as a heading over its links, and the
-	arrow keys move between its links; narrower it is the bar above. `find`
+	(`railSide="right"`: on the right, beside a page's own left column, Runs &
+	results' runs list) instead, every group's name shown as a heading over its
+	links, and the arrow keys move between its links; narrower it is the bar
+	above. Each link says its panel's heading (`label`); on the bar a section may
+	say a shorter `bar` name, to keep the bar to two rows (issue #462). A group
+	with no sections draws nothing, and with none at all the menu draws nothing
+	but the content (a page before its results load). `find`
 	adds a box that narrows the menu to the sections and the settings inside
 	them (labels, legends, sub-headings, table rows) whose names match, and
 	jumps to the setting itself: at the rail's top, or behind a Find button at
@@ -23,14 +28,16 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { activeSectionId, findEntries, navFitCount, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
+	import { activeSectionId, findEntries, navEmpty, navFitCount, navText, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
 		groups,
 		label,
 		groupNames = false,
 		railFrom,
+		railSide = 'left',
 		layout = $bindable('bar'),
+		barHeight = $bindable(0),
 		find,
 		children
 	}: {
@@ -40,8 +47,12 @@
 		groupNames?: boolean;
 		/** From this content width (rem) the menu is a side rail; needs `children`. */
 		railFrom?: number;
+		/** Which side of the content the rail sits on. */
+		railSide?: 'left' | 'right';
 		/** The layout drawn now, for a page whose links differ between the two. */
 		layout?: 'bar' | 'rail';
+		/** The sticky bar's height (0 in the rail, or with no sections): for a page with a sticky panel of its own under it. */
+		barHeight?: number;
 		/** A find box: its label ("Find a setting"). */
 		find?: string;
 		/** The page's content, laid out beside the rail (or under the bar). */
@@ -56,6 +67,7 @@
 	const PHONE = '(max-width: 640px)';
 
 	const uid = $props.id();
+	const empty = $derived(navEmpty(groups));
 	const flat = $derived(
 		groups.flatMap((g, gi) =>
 			g.sections.map((s, si) => {
@@ -85,9 +97,12 @@
 	let query = $state('');
 	let railEl = $state<HTMLElement>();
 
-	const rail = $derived(!!railFrom && !!children && wrapWidth > 0 && wrapWidth >= railFrom * rootRem());
+	const rail = $derived(!empty && !!railFrom && !!children && wrapWidth > 0 && wrapWidth >= railFrom * rootRem());
 	$effect(() => {
 		layout = rail ? 'rail' : 'bar';
+	});
+	$effect(() => {
+		barHeight = rail || empty ? 0 : height;
 	});
 	function rootRem() {
 		return typeof document === 'undefined' ? 14 : parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
@@ -288,7 +303,7 @@
 	$effect(() => {
 		const root = document.documentElement;
 		const header = parseFloat(getComputedStyle(root).getPropertyValue('--header-h')) || 0;
-		root.style.scrollPaddingTop = `${header + (rail ? 0 : height) + 12}px`;
+		root.style.scrollPaddingTop = `${header + (rail || empty ? 0 : height) + 12}px`;
 		return () => {
 			root.style.scrollPaddingTop = '';
 		};
@@ -343,8 +358,8 @@
 	More<span class="visually-hidden"> sections{current ? ', including the one being read' : ''}</span>
 	<span aria-hidden="true">▾</span>
 {/snippet}
-{#snippet linkText(sec: NavSection)}
-	{sec.label}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
+{#snippet linkText(sec: NavSection, where: 'bar' | 'rail' = 'rail')}
+	{navText(sec, where)}{#if sec.page}<span class="visually-hidden">, on {sec.page}</span>{/if}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
 {/snippet}
 {#snippet findText()}
 	<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -387,8 +402,10 @@
 {/snippet}
 
 <!-- Without content of its own (the pages that keep the bar) the wrapper draws no box, so the bar sticks down the whole page. -->
-<div class="nav-layout" class:rail class:bare={!children} bind:clientWidth={wrapWidth}>
-	{#if rail}
+<div class="nav-layout" class:rail class:right={railSide === 'right'} class:bare={!children} bind:clientWidth={wrapWidth}>
+	{#if empty}
+		<!-- No sections yet (the page's results still loading): only the content. -->
+	{:else if rail}
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions (the arrow keys move between its links) -->
 		<nav class="rail-nav" aria-label={label} bind:this={railEl} onkeydown={listKeydown}>
 			{#if find}{@render findBox()}{/if}
@@ -441,7 +458,7 @@
 									{#each g.bar as sec, si (sec.id)}
 										<li class="item" class:group-start={gi > 0 && si === 0 && groupNames && !!g.label}>
 											{#if groupNames && g.label && si === 0}<span class="grp-h" aria-hidden="true">{g.label}</span>{/if}
-											<a class="pill" href={hrefOf(sec)} aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}>{@render linkText(sec)}</a>
+											<a class="pill" href={hrefOf(sec)} aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}>{@render linkText(sec, 'bar')}</a>
 										</li>
 									{/each}
 								</ul>
@@ -492,11 +509,11 @@
 				{#if find}<button type="button" class="pill find-btn" tabindex="-1" data-find>{@render findText()}</button>{/if}
 				{#each flat as sec (sec.id)}
 					{#if sec.groupName}
-						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec)}</span></span>
-						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec)}</span></span>
+						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec, 'bar')}</span></span>
+						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec, 'bar')}</span></span>
 					{:else}
-						<span class="pill marked" data-m>{@render linkText(sec)}</span>
-						<span class="pill" data-p>{@render linkText(sec)}</span>
+						<span class="pill marked" data-m>{@render linkText(sec, 'bar')}</span>
+						<span class="pill" data-p>{@render linkText(sec, 'bar')}</span>
 					{/if}
 				{/each}
 				<button type="button" class="pill more-btn current" tabindex="-1" data-more>{@render moreText(true)}</button>
@@ -684,6 +701,19 @@
 		grid-template-columns: 13rem minmax(0, 1fr);
 		gap: 1.25rem;
 		align-items: start;
+	}
+	/* On the right (Runs & results, whose runs list is the page's left column): the menu stays first in the
+	   reading and tab order, set in the second column. */
+	.nav-layout.rail.right {
+		grid-template-columns: minmax(0, 1fr) 13rem;
+	}
+	.nav-layout.rail.right > .rail-nav {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.nav-layout.rail.right > .nav-body {
+		grid-column: 1;
+		grid-row: 1;
 	}
 	.nav-layout.bare {
 		display: contents;

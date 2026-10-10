@@ -317,7 +317,12 @@ runs and accumulations are real) can't be decided without the client.
       settings land. `verify/` cross-checks §2.4h (part E of #482). Also
       left: the run window still follows the catchment rain series. (The
       seasonal outlook runs each unit's season on its own rain, engine
-      1.78.0.)
+      1.78.0.) Issue #500 item 1, the reference gauge's monthly factors on
+      every unit's CHIRPS, is built in engine 1.80.0 (opt-in,
+      `settings.unitRain.reference`), with item 1a (× unit MAP ÷ the
+      reference unit's MAP on top) a provisional decision
+      (engine-audit.md § Provisional decisions 2026-10-10); the other
+      items of #500 stay open there.
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic

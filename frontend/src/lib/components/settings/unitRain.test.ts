@@ -5,7 +5,19 @@
 // e2e/tests/unit-rain.spec.ts.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_UNIT_MAP_PERIOD, unitRainError, type UnitRainSettings } from '@water-management/engine';
-import { mapPeriodNote, mapPeriodYears, unitMapCoverage, unitRainFormError, unitRainOn, unitRainProblem, withGaugeMap, withMapPeriodYears, withUnitRain } from './unitRain';
+import {
+	mapPeriodNote,
+	mapPeriodYears,
+	unitMapCoverage,
+	unitRainFormError,
+	unitRainOn,
+	unitRainProblem,
+	withGaugeMap,
+	withMapPeriodYears,
+	withReferenceGauge,
+	withReferenceUnit,
+	withUnitRain
+} from './unitRain';
 
 describe('withUnitRain', () => {
 	it('switches on per unit with nothing else set, or back to what was switched off, and off to none', () => {
@@ -77,7 +89,10 @@ describe('unitRainProblem', () => {
 			withMapPeriodYears({ mode: 'perUnit' }, 2015, 2001),
 			withMapPeriodYears({ mode: 'perUnit' }, 2010, 2010),
 			{ mode: 'catchment', gaugeMapMm: -1, gaugeMapSource: 's' },
-			{ mode: 'perUnit', mapPeriod: { start: '2001-01-01', end: '2001-06-30' } }
+			{ mode: 'perUnit', mapPeriod: { start: '2001-01-01', end: '2001-06-30' } },
+			{ mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: 'a' } },
+			{ mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: '' } },
+			{ mode: 'perUnit', reference: null }
 		];
 		for (const c of cases) expect(unitRainFormError(c) === null, JSON.stringify(c)).toBe(unitRainError(c) === null);
 	});
@@ -94,5 +109,21 @@ describe('unitMapCoverage', () => {
 		];
 		expect(unitMapCoverage(nodes)).toEqual({ land: 2, withMap: 1, text: '1 of 2 units with land has a MAP.', without: [nodes[1]] });
 		expect(unitMapCoverage(nodes.slice(1, 2)).text).toBe('0 of 1 unit with land have a MAP.');
+	});
+});
+
+describe('the reference gauge and unit (issue #500)', () => {
+	it('a unit’s own gauge makes that unit the reference; the catchment gauge keeps the unit chosen, else asks for one', () => {
+		const on: UnitRainSettings = { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record' };
+		expect(withReferenceGauge(on, 'rain_catchment_mm@b').reference).toEqual({ gauge: 'rain_catchment_mm@b', unitId: 'b' });
+		const catchment = withReferenceGauge(on, 'rain_catchment_mm');
+		expect(catchment.reference).toEqual({ gauge: 'rain_catchment_mm', unitId: '' });
+		expect(unitRainProblem(catchment)).toEqual({ field: 'reference', message: 'Pick the reference unit: the unit the reference gauge stands in.' });
+		const picked = withReferenceUnit(catchment, 'a');
+		expect(picked.reference).toEqual({ gauge: 'rain_catchment_mm', unitId: 'a' });
+		expect(unitRainProblem(picked)).toBeNull();
+		expect(withReferenceGauge(picked, 'rain_catchment_mm').reference).toEqual({ gauge: 'rain_catchment_mm', unitId: 'a' });
+		// None clears the reference, leaving the rest of the setting alone.
+		expect(withReferenceGauge(picked, '')).toEqual(on);
 	});
 });

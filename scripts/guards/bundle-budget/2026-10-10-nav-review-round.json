@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Round 2 navigation fixes (#463 grid action rows and one Tables menu, #464 Series details row, #465 River tool rows and stub, #466/#467 unit picker): measured 1884 KB on main, 1888 KB at 07c8842b7"
+}

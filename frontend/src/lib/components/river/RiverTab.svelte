@@ -147,6 +147,9 @@
 	// are named for it, not "the reserve" (issue #177); the flow chart keeps its name when it draws the outlet's rule
 	// requirement. Reserve compliance shows whenever the run has a table, whatever judges the headline.
 	const ruleTable = $derived(!!judged?.site);
+	/** The side index from this page width (rem), as Settings: a 1440 px window, where the EWR grid and the
+	 *  flow chart beside the years bars still fit the column beside it (issue #462). */
+	const RIVER_RAIL_FROM_REM = 80;
 	const hasAssurance = $derived(!!summary?.ewrAssurance?.length);
 	const ruleLine = $derived(!!shown && hasRuleLine(shown.series));
 	const yearsWords = $derived(reserveYearsWords(ruleTable, summary?.catchment.outletEwr));
@@ -240,10 +243,12 @@
 		{#if canEdit}<a class="btn btn-primary" href="?tab=runs">Run the model</a>{:else}<p class="muted small">An editor can run the model.</p>{/if}
 	</section>
 {:else}
-	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
-	     under its first screen. Its group names show on the bar (issue #162), so the gaps between
-	     the groups read as groups. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr)} label="River sections" />{/if}
+	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to eight panels
+	     under its first screen. From 80rem of page a side index on the left, every group named over
+	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
+	     page's own widths are read from river-body, the column beside the index. -->
+	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="River sections" railFrom={RIVER_RAIL_FROM_REM}>
+	<div class="river-body">
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
@@ -374,6 +379,8 @@
 			</div>
 		</section>
 	{/if}
+	</div>
+	</SectionNav>
 {/if}
 
 <style>
@@ -396,6 +403,9 @@
 	.judged .fell-back {
 		display: block;
 		color: var(--warning);
+	}
+	.river-body {
+		container: river-body / inline-size;
 	}
 	.first {
 		display: grid;
@@ -472,9 +482,11 @@
 	}
 	/* Wide: the bars beside the chart, as tall as it (the grid row stretches them; their plot takes what
 	   is left). Opening their table makes the row taller; the chart keeps its height at the row's top. */
-	@media (min-width: 1100px) {
+	/* From the column's width, not the window's: beside the side index the column is 13rem narrower (issue #462).
+	   56rem is the column a 1100 px window gave it before (240 px sidebar, gutters, scrollbar). */
+	@container river-body (min-width: 56rem) {
 		.cols {
-			grid-template-columns: minmax(0, 1fr) clamp(300px, 28vw, 400px);
+			grid-template-columns: minmax(0, 1fr) clamp(300px, 36cqi, 400px);
 			align-items: stretch;
 		}
 		.flow-cell {

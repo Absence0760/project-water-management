@@ -201,4 +201,35 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 		await call('PATCH', `/projects/${pid}`, { settings });
 		expect((await call('GET', `/projects/${pid}`)).project.settings.fitRecord.forcing.unitRain).toEqual(fp);
 	});
+
+	it('with a reference gauge (engine ≥ 1.80.0, issue #500), the input carries the CHIRPS of the cell under the reference unit’s centre from the cell cache, and the run levels every unit’s CHIRPS by its fit', async () => {
+		const [north, middle] = units;
+		// Positive control first: a reference unit with no parcel (the gauge has no land) gets no cell series, and the run says so.
+		await call('PATCH', `/projects/${pid}`, { settings: { unitRain: { ...unitRain, reference: { gauge: 'rain_catchment_mm', unitId: gaugeId } } } });
+		const without = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
+		expect(Object.keys(without.series ?? {}).filter((k) => k.startsWith('rain_chirps_cell_mm@'))).toEqual([]);
+
+		await call('PATCH', `/projects/${pid}`, { settings: { unitRain: { ...unitRain, reference: { gauge: 'rain_catchment_mm', unitId: north!.id } } } });
+		const input = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
+		const cell = (input.series as Record<string, { startDate: string; values: (number | null)[] } | undefined>)[`rain_chirps_cell_mm@${north!.id}`];
+		expect(cell).toBeDefined();
+		// The fetched days of the unit's own feed: the cell under its centre is one of its cells.
+		expect(cell!.startDate >= FEED_START).toBe(true);
+		expect(cell!.values.filter((v) => v !== null).length).toBeGreaterThan(60);
+		expect(cell!.values.every((v) => v === null || (v >= 0 && Math.round(v * 100) === v * 100))).toBe(true);
+
+		const runId = (await call('POST', `/projects/${pid}/runs`, { label: 'per unit, reference gauge' }, 201)).run.id as string;
+		const { run } = await call('GET', `/projects/${pid}/runs/${runId}`);
+		const ref = run.summary.unitRain.reference as { cellKey: string; unitName: string; mapMm: number; months: { sharedDays: number; factor: number; fitted: boolean }[] };
+		expect(ref).toMatchObject({ gauge: 'rain_catchment_mm', unitId: north!.id, unitName: north!.name, mapMm: north!.mapMm, cellKey: `rain_chirps_cell_mm@${north!.id}`, pinned: false });
+		// About 70 shared days over three months: no month reaches 90, so every factor is 1, and the run says so.
+		expect(ref.months.reduce((n, m) => n + m.sharedDays, 0)).toBeGreaterThan(30);
+		expect(ref.months.every((m) => m.factor === 1 && !m.fitted)).toBe(true);
+		expect((run.summary.warnings as string[]).join('\n')).toMatch(/too little in common/);
+		const mid = (run.summary.unitRain.units as UnitRainUnit[]).find((u) => u.nodeId === middle!.id)!;
+		expect(mid.chirps).toMatchObject({ source: 'reference', mapRatio: middle!.mapMm / north!.mapMm });
+		// The cell series is part of the run's stored input: the run reproduces from it alone.
+		expect((await call('GET', `/projects/${pid}/runs/${runId}/reproduce`)).status).toBe('identical');
+		await call('PATCH', `/projects/${pid}`, { settings: { unitRain } });
+	});
 });

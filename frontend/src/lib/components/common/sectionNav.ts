@@ -3,7 +3,14 @@
 
 export interface NavSection {
 	id: string;
+	/** Its name: the panel's heading, as the page shows it (issue #462), in the rail, the More menu and the find box. */
 	label: string;
+	/**
+	 * A shorter name for the bar, where every link has to fit two rows (issue
+	 * #462): the heading's first words ("Calibration" for "Calibration against
+	 * observed flow"). The rail, with a line of its own for each link, shows `label`.
+	 */
+	bar?: string;
 	/** Marks the link with a dot and "(has a problem)" for screen readers. */
 	problem?: boolean;
 	/**
@@ -11,6 +18,11 @@ export interface NavSection {
 	 * listed like the rest but never marked as the section being read.
 	 */
 	href?: string;
+	/**
+	 * The page an `href` link goes to ("River & reserve"): screen readers hear
+	 * ", on River & reserve" after its name, as its group's heading says it to the eye.
+	 */
+	page?: string;
 	/**
 	 * The ids of the panels after it that this one link stands for (Settings'
 	 * "Automation & access" on the bar): the link is marked while any of them is
@@ -23,6 +35,16 @@ export interface NavGroup {
 	/** The group's name before its links; null for a group that needs none. */
 	label: string | null;
 	sections: NavSection[];
+}
+
+/** What a link says: its short name on the bar, its whole name in the rail and the More menu (issue #462). */
+export function navText(sec: Pick<NavSection, 'label' | 'bar'>, where: 'bar' | 'rail'): string {
+	return where === 'bar' ? (sec.bar ?? sec.label) : sec.label;
+}
+
+/** True when the groups list no section at all: the menu then draws nothing, only the page's content. */
+export function navEmpty(groups: NavGroup[]): boolean {
+	return !groups.some((g) => g.sections.length > 0);
 }
 
 /**

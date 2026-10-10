@@ -32,26 +32,50 @@ const FACTOR_SOURCE: Record<UnitRainResultUnit['factorSource'], string> = {
 	chirpsMap: 'unit MAP ÷ its CHIRPS mean',
 	chirpsBias: 'the catchment’s monthly CHIRPS factors',
 	chirpsRaw: 'none: CHIRPS as published',
+	chirpsReference: 'the reference gauge’s monthly factors × unit MAP ÷ the reference unit’s MAP',
 	catchment: 'the catchment’s rain, with its areal correction'
 };
 
-/** "× 1.18, unit MAP ÷ gauge MAP" or the source alone when the factor varies by day. */
-export function factorText(u: Pick<UnitRainResultUnit, 'factor' | 'factorSource'>): string {
+/** "× 1.18, unit MAP ÷ gauge MAP" or the source alone when the factor varies by day; on the reference factors, the MAP ratio on top of them. */
+export function factorText(u: Pick<UnitRainResultUnit, 'factor' | 'factorSource'> & { chirps?: UnitRainResultUnit['chirps'] }): string {
 	const src = FACTOR_SOURCE[u.factorSource] ?? u.factorSource;
+	if (u.factor === null && u.factorSource === 'chirpsReference' && u.chirps?.source === 'reference')
+		return `the reference gauge’s monthly factors × ${fmtNum(u.chirps.mapRatio, 2, true)} (unit MAP ÷ the reference unit’s MAP)`;
 	return u.factor === null ? src : `× ${fmtNum(u.factor, 2, true)}, ${src}`;
 }
 
 /** Whether the unit's factor was held at the 0.25–4 bound. */
 export const factorClamped = (u: Pick<UnitRainResultUnit, 'gaugeMapClamped' | 'chirps' | 'rule'>): boolean =>
-	(u.rule === 'gaugeMap' && !!u.gaugeMapClamped) || (u.rule === 'unitChirps' && u.chirps?.source === 'map' && u.chirps.clamped);
+	(u.rule === 'gaugeMap' && !!u.gaugeMapClamped) ||
+	(u.rule === 'unitChirps' && ((u.chirps?.source === 'map' && u.chirps.clamped) || (u.chirps?.source === 'reference' && u.chirps.mapClamped)));
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The reference gauge's 12 factors in words ("Jan 1.20, Feb 1, …"), or null without a reference (engine ≥ 1.80.0). */
+export function referenceFactorsText(r: Pick<UnitRainResult, 'reference'>): string | null {
+	const ref = r.reference;
+	if (!ref || !Array.isArray(ref.months)) return null;
+	return ref.months.map((m) => `${MONTHS[m.month - 1]} ${fmtNum(m.factor, 2, true)}`).join(', ');
+}
 
 /**
  * What the hydrologist should look at, in words, one per unit: the units that
  * fell back to the catchment rain, the held factors, a CHIRPS mean taken
  * outside the MAP period, and CHIRPS used raw.
  */
-export function unitRainNotes(r: Pick<UnitRainResult, 'units'>): string[] {
+export function unitRainNotes(r: Pick<UnitRainResult, 'units'> & Partial<Pick<UnitRainResult, 'reference'>>): string[] {
 	const out: string[] = [];
+	// The reference gauge's months (engine ≥ 1.80.0): too little shared record keeps a factor of 1; a held factor.
+	const ref = r.reference;
+	if (ref && Array.isArray(ref.months) && !ref.pinned) {
+		const short = ref.months.filter((m) => !m.fitted).map((m) => MONTHS[m.month - 1]);
+		const need = '(90 days, and 50 mm of CHIRPS on them)';
+		if (short.length === 12) out.push(`Reference gauge: no month shares enough record with the CHIRPS cell ${need}, so every factor is 1.`);
+		else if (short.length)
+			out.push(`Reference gauge: ${short.join(', ')} ${short.length === 1 ? 'shares' : 'share'} too little record with the CHIRPS cell ${need}, so ${short.length === 1 ? 'its factor is' : 'those factors are'} 1.`);
+		const held = ref.months.filter((m) => m.clamped).map((m) => MONTHS[m.month - 1]);
+		if (held.length) out.push(`Reference gauge: the factor for ${held.join(', ')} was held at the 0.25–4 bound; check the gauge and the cell describe the same rain.`);
+	}
 	const fellBack = r.units.filter((u) => u.rule === 'catchment').map((u) => u.name);
 	if (fellBack.length)
 		out.push(`${fellBack.join(', ')} ${fellBack.length === 1 ? 'has' : 'have'} no rain of ${fellBack.length === 1 ? 'its' : 'their'} own (no gauge, and no CHIRPS feed or MAP to scale by), so ${fellBack.length === 1 ? 'it runs' : 'they run'} on the catchment rain.`);

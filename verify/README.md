@@ -206,6 +206,16 @@ network is unchanged):
   rain, as without the setting.
 - **Off**: a network with unit records and MAPs but `mode: 'catchment'`
   (15 % of those networks) runs as without them.
+- **The reference gauge** (engine 1.80.0, issue #500, §2.4h *Reference
+  gauge*), in half the per-unit networks (`add_unit_rain_reference`, drawn
+  last from the same stream): the catchment gauge or a farm's own as the
+  reference gauge, a reference farm (now and then one without area, so not
+  a land unit), and its cell series (the gauge × a bias per calendar month,
+  some past the clamp, with gaps and a no-data code, or none). Python fits
+  the 12 factors from the text (90 shared days and 50 mm, else 1; the
+  clamp) and levels every unit's CHIRPS by factor × clamp(unit MAP ÷ the
+  reference unit's MAP). The ensemble's engine-only `pinnedFactors` is
+  outside it.
 
 Compared: each land unit's `rain_unit` and `runoff_natural`, and every
 series downstream of them. The run summary's `unitRain` block (rules,
@@ -220,7 +230,9 @@ them; diff.py refuses an input that uses one. Tracked as one item in
 docs/followups.md § Verification ("`verify/` phase 2b").
 
 - the seasonal outlook's engine-only per-unit inputs (a unit's
-  `rain_forecast_mm@<unit>`, `settings.unitRain.pinned`), §2.4h and §2.15;
+  `rain_forecast_mm@<unit>`, `settings.unitRain.pinned`), §2.4h and §2.15,
+  and the uncertainty ensemble's pinned reference factors
+  (`settings.unitRain.reference.pinnedFactors`), §2.4h;
 - Reserve rule tables (and audit A1–A7), §2.9c–d;
 - forecast mode (`runForecastChecked`; forecast rain as the last rain source
   *is* covered), §2.4f;
@@ -416,4 +428,15 @@ reading is spread; its mutant moves the limit by one), `unit-rain-forecast-warmu
 chain to its end, a clamped MAP ratio, a negative catchment reading on a
 gauge-MAP unit's wet CHIRPS day, a MAP period holding five of six complete
 years, a record of no-data codes only, a farm without area, a forecast tail
-and a `catchmentAreaKm2` that is ignored).
+and a `catchmentAreaKm2` that is ignored), `unit-rain-reference` (§2.4h
+*Reference gauge*: a month with exactly 90 shared days and one with 89, a
+month under 50 mm of CHIRPS, a clamped month, a no-data code on the cell, a
+clamped MAP ratio, a unit without a MAP, a gauge unit's gaps filled from its
+levelled CHIRPS; mutants move the day minimum by one, drop the 50 mm test,
+the clamp and the MAP ratio) and `unit-rain-reference-not-land` (a reference
+farm without area: each unit's CHIRPS levelled as without a reference).
+
+Reference gauge, 2026-10-10 (engine 1.80.0): the examples, the 27 probes and
+30 random and 30 dense networks (seed 1000) agree on every compared column,
+written from §2.4h's text alone; `test_verify.py` with its six new mutants
+passes. Nothing in §2.4h *Reference gauge* needed a probe to settle.

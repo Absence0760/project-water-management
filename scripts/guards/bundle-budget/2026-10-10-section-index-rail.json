@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Issue #462: SectionNav's right-side rail, bar names and empty state, and the side index on Runs & results, River & reserve, Hydrological units and Data (the other-page links on Runs); measured 1888 -> 1889 KB against 07c8842b7 built alone"
+}

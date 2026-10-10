@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, findEntries, foldText, matchesQuery, navFitCount } from './sectionNav';
+import { activeSectionId, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText } from './sectionNav';
 
 describe('navFitCount', () => {
 	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
@@ -106,5 +106,20 @@ describe('the find box', () => {
 		expect(findEntries(sections, settings, 'flow')).toEqual([{ sectionId: 'b', text: 'Flow calibration', index: -1 }]);
 		expect(findEntries(sections, settings, 'evaporation', 2)).toHaveLength(2);
 		expect(findEntries(sections, settings, ' ')).toEqual([]);
+	});
+});
+
+describe('navText and navEmpty (issue #462)', () => {
+	it('says the panel’s heading in the rail, and the shorter bar name on the bar when there is one', () => {
+		const sec = { label: 'Calibration against observed flow', bar: 'Calibration' };
+		expect(navText(sec, 'rail')).toBe('Calibration against observed flow');
+		expect(navText(sec, 'bar')).toBe('Calibration');
+		expect(navText({ label: 'Publication' }, 'bar')).toBe('Publication');
+	});
+
+	it('is empty only when no group lists a section', () => {
+		expect(navEmpty([])).toBe(true);
+		expect(navEmpty([{ label: 'A', sections: [] }])).toBe(true);
+		expect(navEmpty([{ label: 'A', sections: [] }, { label: null, sections: [{ id: 'x', label: 'X' }] }])).toBe(false);
 	});
 });

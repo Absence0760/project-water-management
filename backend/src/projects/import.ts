@@ -208,7 +208,7 @@ const idOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  */
 export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyMap<string, string> } {
 	const old = new Set<string>();
-	for (const n of m.nodes) old.add(n.id), n.downstreamNodeId && old.add(n.downstreamNodeId);
+	for (const n of m.nodes) old.add(n.id), n.downstreamNodeId && old.add(n.downstreamNodeId), n.cropRemoteNodeId && old.add(n.cropRemoteNodeId);
 	for (const c of m.crops) old.add(c.id);
 	for (const a of m.cropAreas) old.add(a.nodeId), old.add(a.cropId);
 	for (const t of m.transfers) old.add(t.id), old.add(t.fromNodeId), old.add(t.toNodeId), t.lossReturnNodeId && old.add(t.lossReturnNodeId);
@@ -227,7 +227,8 @@ export function freshIds(m: ProjectModel): { model: ProjectModel; ids: ReadonlyM
 	const sys = (ref: string | null | undefined) => (ref == null ? ref : (map.get(ref) ?? ref));
 	return {
 		model: {
-			nodes: m.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId) })),
+			// The unit whose dam a crop supply table pipes from (engine ≥ 1.73.0) moves with the nodes too; absent stays absent.
+			nodes: m.nodes.map((n) => ({ ...n, id: id(n.id), downstreamNodeId: n.downstreamNodeId && id(n.downstreamNodeId), ...(n.cropRemoteNodeId ? { cropRemoteNodeId: id(n.cropRemoteNodeId) } : {}) })),
 			crops: m.crops.map((c) => ({ ...c, id: id(c.id), ...(c.irrigationSystemId != null ? { irrigationSystemId: sys(c.irrigationSystemId) } : {}) })),
 			cropAreas: m.cropAreas.map((a) => ({ ...a, nodeId: id(a.nodeId), cropId: id(a.cropId), ...(a.irrigationSystemId != null ? { irrigationSystemId: sys(a.irrigationSystemId) } : {}) })),
 			// The unit an off-take's seepage rejoins below (engine ≥ 1.42.0) moves with the nodes; absent stays absent.

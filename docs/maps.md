@@ -1002,6 +1002,18 @@ unit, averaged over the unit's own polygon, so that under
 - **Local-first.** With `FEED_SOURCE=fixtures` a unit inside the fixtures'
   cover fetches offline (`fromUnits.db.test.ts`); `runs/unitRain.db.test.ts`
   takes the fetched feeds through a per-unit run and a calibration's fit record.
+- **The reference cell** (engine ≥ 1.80.0, issue #500). With a reference
+  gauge in Settings (`settings.unitRain.reference`, [model.md §2.4h
+  *Reference gauge*](./model.md#reference-gauge-engine--1800-issue-500)),
+  a run's input also carries the CHIRPS of the single 0.05° cell holding the
+  centre of the reference unit's parcel (`centerOf`, the area centroid; the
+  parcel chosen as above), as `rain_chirps_cell_mm@<unit>`. It needs no feed
+  of its own: `runs/referenceCell.ts` reads it from the shared CHIRPS cell
+  cache, in the product the unit's own feed reads (`rnl` without one), as a
+  one-cell feed would write it. The unit's feed caches that cell whenever
+  the centre lies inside the parcel; a cell nobody has fetched (a concave
+  parcel whose centroid falls outside it) gives no series, and the run warns
+  that every month's factor is 1.
 
 ## Quaternary lookup
 
@@ -2021,6 +2033,14 @@ area; a name in the list shows its polygon on the map and in the card. The
 names are written on the map only with glyphs configured ([§ Labels](#labels));
 without them the outlines are drawn and the list is where to read the names.
 Nothing is fetched: the layer reads the features already loaded.
+
+The same polygons are the units' shapes on the Allocations tab's map (issue
+#510, [allocations.md § The map](./allocations.md#the-map)): each unit's
+linked parcels, shaded by its modelled use ÷ registered volume over this
+basemap (`basemapStyle`, in the app's theme), with MapLibre loaded the same
+way (`maplibre.ts`, a dynamic import of a dynamic import). A unit with no
+linked parcel is listed under that map instead, so drawing and linking a
+unit's area here is what puts it on that map too.
 
 ## MAP grid
 

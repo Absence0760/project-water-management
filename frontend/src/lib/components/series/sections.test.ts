@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { navText } from '$lib/components/common/sectionNav';
 import { DATA_ANCHORS, dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 
 const ids = (p: Parameters<typeof dataNavGroups>[0]) => dataNavGroups(p).flatMap((g) => g.sections.map((s) => s.id));
@@ -16,6 +17,18 @@ describe('dataNavGroups', () => {
 		expect(ids(none)).toEqual(['data-series', 'data-uses']);
 		expect(dataNavGroups(none).map((g) => g.label)).toEqual(['Series', 'Reference']);
 		expect(ids({ ...ALL, agreement: false })).toEqual(['data-series', 'data-chart', 'data-double-mass', 'data-checks', 'data-uses']);
+	});
+
+	it('names each link as its panel’s heading, the long ones shorter on the bar (issue #462)', () => {
+		const names = dataNavGroups(ALL).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
+		expect(names).toEqual([
+			['Input time series', 'Series'],
+			['Series chart', 'Chart'],
+			['Gauge vs logger agreement', 'Gauge vs logger'],
+			['Double mass: catchment rain vs CHIRPS', 'Double mass'],
+			['Data checks', 'Data checks'],
+			['What the model uses', 'What the model uses']
+		]);
 	});
 
 	it('knows its own anchors and no others; the retired #upload-csv is not one', () => {

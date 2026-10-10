@@ -12,6 +12,7 @@ import { daysBelowTest, ewrNotMet, type DailyEwrSource } from '$lib/components/e
 import { headlines } from '$lib/components/overview/latestRun';
 import { flowHeading } from '$lib/components/overview/summaryChart';
 import { fmtNum } from '$lib/format/number';
+import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING } from './links';
 
 const created = (r: RunMeta) => {
 	const t = Date.parse(r.createdAt);
@@ -134,15 +135,8 @@ export function reserveYearsWords(ruleTable: boolean, daily?: DailyEwrSource): {
 	return { heading: `Days below ${below}, each water year`, below };
 }
 
-/**
- * The two monthly panels' headings on this page, which tell them apart
- * (issue #465): Reserve compliance (`#res-reserve`) counts the months a
- * Reserve rule table's requirement was met; the EWR grid (`#res-ewr-grid`)
- * counts the days below the daily EWR. Both were "… compliance by month".
- * The printable report and Compare runs keep the panels' own names.
- */
-export const RESERVE_MONTHS_HEADING = 'Reserve rules met, by month';
-export const EWR_MONTHS_HEADING = 'Days below the EWR, by month';
+// The two monthly panels' headings (issue #465), in links.ts so Runs & results' side index names them too.
+export { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING };
 
 /**
  * What `#res-reserve` says without a Reserve rule table in the run (issue
@@ -161,7 +155,8 @@ export function reserveStubText(projectHasTable: boolean, canEdit: boolean): { l
  * order, by its `#res-…` id (links.ts RIVER_ANCHORS), grouped by the question
  * it answers: the findings first (the reserve, then the water account), then
  * the run-it-yourself tools (issue #465). Reserve rules met is always listed:
- * without a rule table its panel says what it needs.
+ * without a rule table its panel says what it needs. Each link says its
+ * panel's heading; the bar says the long ones shorter (issue #462).
  * `ruleLine`: the run stored the outlet's rule requirement, so the flow chart
  * draws it and keeps its "Flow vs reserve" name (summaryChart.ts flowHeading).
  * `headlineRuleTable`: the headline judges by a rule table (the project's
@@ -174,16 +169,16 @@ export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, da
 			label: 'The reserve',
 			sections: [
 				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine, daily) },
-				{ id: 'res-reserve-years', label: 'Days below, by year' },
-				{ id: 'res-reserve', label: 'Reserve rules met' },
-				{ id: 'res-ewr-grid', label: 'Days below, by month' }
+				{ id: 'res-reserve-years', label: reserveYearsWords(headlineRuleTable, daily).heading, bar: 'Days below, by year' },
+				{ id: 'res-reserve', label: RESERVE_MONTHS_HEADING, bar: 'Reserve rules met' },
+				{ id: 'res-ewr-grid', label: EWR_MONTHS_HEADING, bar: 'Days below, by month' }
 			]
 		},
 		{ label: 'Water balance', sections: [{ id: 'res-water-account', label: 'Water account' }] },
 		{
 			label: 'How sure, and what if',
 			sections: [
-				{ id: 'res-uncertainty', label: 'Uncertainty' },
+				{ id: 'res-uncertainty', label: 'Uncertainty bands', bar: 'Uncertainty' },
 				{ id: 'res-outcomes', label: 'Outcome matrix' },
 				{ id: 'res-outlook', label: 'Seasonal outlook' }
 			]

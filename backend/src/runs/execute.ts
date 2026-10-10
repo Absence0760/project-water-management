@@ -20,10 +20,12 @@ import {
 	type SeriesOrigin,
 	type SeriesProvenance,
 	type UnitRainKind,
+	type UnitRainSettings,
 	unitRainSeriesKey,
 	withoutForecastTail
 } from '@water-management/engine';
 import { isUnitRainKind } from '../series/site.js';
+import { referenceCellInput } from './referenceCell.js';
 import { type Db, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -104,6 +106,10 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// to, and what its summary compares with. Only when the project has any, so a project without them
 	// runs on the same input as before.
 	const allocations = await allocationsForRun(db, projectId);
+	// The reference gauge's CHIRPS cell (engine ≥ 1.80.0, issue #500, runs/referenceCell.ts): read from the cell cache, not a
+	// stored series, so it has no series id; only when settings.unitRain names a reference, so other inputs are as before.
+	const cell = await referenceCellInput(db, projectId, (settings as { unitRain?: UnitRainSettings | null }).unitRain);
+	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
 	return { input: { settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model, series }, seriesIds };
 }
 

@@ -760,7 +760,11 @@ function unitRainSettingChanged(now: unknown, then: UnitRainFingerprint | null):
 	if (!on || !then) return on !== !!then;
 	const gauge = u.gaugeMapMm ?? null;
 	const period = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
-	return gauge !== then.gaugeMapMm || period.start !== then.mapPeriod.start || period.end !== then.mapPeriod.end;
+	// The reference gauge and unit (engine ≥ 1.80.0): another one, or one on a side only.
+	const ref = u.reference ?? null;
+	const was = then.reference ?? null;
+	const refChanged = !ref || !was ? !ref !== !was : ref.gauge !== was.gauge || ref.unitId !== was.unitId;
+	return gauge !== then.gaugeMapMm || period.start !== then.mapPeriod.start || period.end !== then.mapPeriod.end || refChanged;
 }
 
 /** What the settings don't hold but a fit's forcing depends on: the CHIRPS series' product and version now (omit when not known). */

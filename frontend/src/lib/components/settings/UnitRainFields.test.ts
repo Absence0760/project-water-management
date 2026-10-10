@@ -55,6 +55,21 @@ describe('UnitRainFields', () => {
 		expect(reversed).toContain('The MAP period’s first year must not be after its last.');
 	});
 
+	it('offers the reference gauge (none by default), and once one is set the reference unit, with the problem under it until one is picked', () => {
+		const none = render(UnitRainFields, { props: { value: { mode: 'perUnit' }, nodes } }).body;
+		expect(none).toContain('Reference gauge');
+		expect(none).toContain('<option value="rain_catchment_mm@a">Upper unit’s own gauge</option>');
+		expect(none).not.toContain('Reference unit');
+		const unpicked = render(UnitRainFields, { props: { value: { mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: '' } }, nodes } }).body;
+		expect(unpicked).toContain('Reference unit');
+		expect(unpicked).toMatch(/data-testid="unit-rain-error">Pick the reference unit/);
+		const picked = render(UnitRainFields, { props: { value: { mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: 'a' } }, nodes } }).body;
+		expect(picked).not.toContain('data-testid="unit-rain-error"');
+		expect(picked).not.toContain('unit-rain-reference-gone');
+		const gone = render(UnitRainFields, { props: { value: { mode: 'perUnit', reference: { gauge: 'rain_catchment_mm', unitId: 'removed' } }, nodes } }).body;
+		expect(gone).toContain('data-testid="unit-rain-reference-gone"');
+	});
+
 	it('for a viewer, the switch is disabled and the source is read-only, still focusable', () => {
 		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit', gaugeMapMm: 640, gaugeMapSource: 'gauge record' }, nodes, readonly: true } });
 		expect(body).toMatch(/<input type="checkbox"[^>]*disabled/);

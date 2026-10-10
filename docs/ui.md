@@ -4559,20 +4559,25 @@ The long workspace pages share one in-page menu, `common/SectionNav.svelte`
 results**, **River & reserve**, **Hydrological units** and **Data**. Each page
 gives it its sections in groups (a `nav` labelled "Settings sections",
 "Result sections", "River sections", "Hydrological units sections", "Data
-sections"); each group is a list named for screen readers. With
+sections"); each group is a list named for screen readers. Each link says
+its panel's heading (`label`), so the menu and the page read alike ("EWR by
+month" against *EWR compliance by month* was one of the navigation review's
+findings, issue #462); on the bar a section may say a shorter `bar` name,
+the heading's first words, to keep the bar to two rows, while the side
+index, the More menu and the find box say the heading. With
 `groupNames` the bar shows the names too: a small muted label before each
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
 spaced: a wider gap with no name on it read as a spacing bug (issue #162).
-Hydrological units and Data show their names. Settings & calibration, Runs
-& results and River & reserve don't, and space their links evenly: with the
+On the bar Hydrological units and Data show their names (every rail does).
+Settings & calibration, Runs & results and River & reserve don't, and space their links evenly: with the
 names, Settings' links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
 Scenarios), the Summary (short once its lists fold, 2026-09-29), Dams (one card list beside a sticky chart) and the pages with at most two panels past their
 first screen at 1440×960 (Transfers, one card; Allocations, Project, Compare
-runs, Applications) have none (surveyed 2026-09-27 with the example catchments); History is left
-to its own redesign.
+runs, Applications) have none (surveyed 2026-09-27 with the example catchments; Compare runs has
+since grown past ten panels, issue #462); History is left to its own redesign.
 
 - **Two rows at most** from 641 px. The links flow like words, so a group
   may break across rows; laid out as whole blocks, a long group pushed the
@@ -4602,13 +4607,19 @@ to its own redesign.
   form), so it stays stuck to the last panel.
 - **Phones** (up to 640 px): one strip that scrolls sideways inside itself
   with every link (no More), the marked link kept in view, never the page.
-- **The side rail** (issue #468, Settings & calibration only so far): a
+- **The side rail** (issue #468 on Settings & calibration; issue #462 on
+  Runs & results, River & reserve, Hydrological units and Data): a
   page that passes its content as SectionNav's `children` and a `railFrom`
-  width (rem) gets, from that content width, a sticky column on the left
-  instead of the bar: every group's name a heading over its links (a list
-  named by it), the section being read marked with `aria-current` and an
-  accent edge, a problem dot as on the bar, and Up/Down, Home and End moving
-  between its links (Up from the first returns to the find box). It sticks
+  width (rem) gets, from that content width, a sticky 13rem column on the
+  left (`railSide="right"`: on the right, Runs & results, whose runs list is
+  its left column) instead of the bar: every group's name a heading over its
+  links (a list named by it), the section being read marked with
+  `aria-current` and an accent edge, a problem dot as on the bar, and
+  Up/Down, Home and End moving between its links (Up from the first returns
+  to the find box). The menu stays first in the reading and tab order on
+  either side. Every page's rail starts at a 1440 px window: Settings, River
+  & reserve, Hydrological units and Data from 80rem of page, Runs & results
+  from 62rem of results beside the runs list. It sticks
   under the header (`top: var(--header-h) + 0.75rem`) and is capped at the
   window's height less the save bar (`--dock-h`), scrolling inside itself
   only in a window shorter than its tallest state. Narrower it is the bar,
@@ -4631,16 +4642,33 @@ to its own redesign.
   list, a live line says how many match. In the rail Escape clears the box;
   in the popover it closes it, focus back on Find.
 - **Other pages.** A section may link to another page (`href` on it): it is
-  listed like the rest and never marked as the one being read. Runs &
-  results, River & reserve, Hydrological units and Data keep the bar for
-  now; adopting the rail is wrapping the page's content in SectionNav,
+  listed like the rest, never marked as the one being read, and in the rail
+  ends in a muted ↗; its `page` ("River & reserve") follows its name for
+  screen readers (", on River & reserve"), as its group's heading says it to
+  the eye. Runs & results' rail lists the main panels that moved to River &
+  reserve and Hydrological units under *On River & reserve* and *On
+  Hydrological units* (`runs/sections.ts` `otherPageGroups`), for the run
+  shown.
+- **Adopting the rail** is wrapping the page's content in SectionNav,
   choosing a `railFrom` where its widest content (River's EWR grid, Data's
-  table) still fits beside a 13rem column, and moving any sticky panel's
-  offset off the bar's height (`--nav-h` on Hydrological units).
-- `e2e/tests/section-nav.spec.ts` pins the rows at 1280, the rail at 1440,
-  More's keyboard use and axe scan at 1024, the phone strip, and each new
-  page's menu, jumps and loaded links; `settings-index.spec.ts` the find
-  box, the rail's keys and the problem marks.
+  table) still fits beside a 13rem column, reading the page's own widths from
+  a container inside it (`river-body`, `supply-page`, `data-page`; a
+  window-width media query would see the column as 13rem wider than it is),
+  and taking any sticky panel's offset from SectionNav's `barHeight` (0
+  beside the rail; `--nav-h` on Hydrological units). A page whose sections
+  arrive late passes no sections until then: with none the menu draws only
+  the content, so the page isn't drawn again when they come (Runs & results'
+  results, Hydrological units' run).
+- **Not yet:** Compare runs (ten-plus panels, no menu) and the Network's
+  node-sheet jump row (its own sideways strip) are the issue's last two
+  items.
+- `e2e/tests/section-nav.spec.ts` pins the rows at 1280, the rail at 1440
+  on every page (its groups, the headings, beside the panels, never
+  scrolling inside itself; Runs' on the right, with the other pages' links,
+  its keys and an axe scan), More's keyboard use and axe scan at 1024, the
+  phone strip, and each page's jumps and loaded links;
+  `settings-index.spec.ts` the find box, the rail's keys and the problem
+  marks.
 
 ## Data
 
@@ -4723,13 +4751,18 @@ with the table the data needs).
   what each kind of series is for** (a `<details>`, closed by default, issue
   #174), and its closing note, at a reading measure, shows either way.
 - **On this page.** Once there is a series, a **Data sections** menu
-  ([§ On this page menu](#on-this-page-menu)) sits under the header, above the
-  table, and sticks down the whole page as it scrolls: **Series** (`#data-series`), **Chart**
-  (`#data-chart`, with a series picked), **Gauge vs logger**
-  (`#data-agreement`), **Double mass** (`#data-double-mass`), **Data checks**
-  (`#data-checks`) and **What the model uses** (`#data-uses`), each only when
-  the page draws it (`series/sections.ts`, `dataNavGroups`), in three groups
-  named for screen readers (Series, Checks, Reference). A loaded
+  ([§ On this page menu](#on-this-page-menu)): from 80rem of page (a 1440 px
+  window) a side index on the left of the panels, narrower a bar under the
+  header, above the table, that sticks down the whole page as it scrolls:
+  **Input time series** (`#data-series`; **Series** on the bar), **Series
+  chart** (`#data-chart`, with a series picked; **Chart**), **Gauge vs logger
+  agreement** (`#data-agreement`; **Gauge vs logger**), **Double mass:
+  catchment rain vs CHIRPS** (`#data-double-mass`; **Double mass**), **Data
+  checks** (`#data-checks`) and **What the model uses** (`#data-uses`), each
+  only when the page draws it (`series/sections.ts`, `dataNavGroups`; the
+  panels' headings, issue #462), in three groups (Series, Checks,
+  Reference), named on the bar too. The table's widths (`data-page`) are
+  the column beside the index. A loaded
   `?tab=series#data-…` link lands on its panel once it is drawn, held there
   (`holdAnchor`) with focus on its heading. The retired `#upload-csv` (the
   Upload CSV panel's id, `retiredDataAnchor`) opens Add data for an editor,
@@ -5299,7 +5332,20 @@ two.
     the default, is stored as none). A period under five years, or starting
     before 1981, gets a note but saves; a gauge MAP out of range, one without
     its source, or a first year after the last blocks Save, the message under
-    its field (named by `aria-describedby`) and in the save bar. The Settings
+    its field (named by `aria-describedby`) and in the save bar. Then
+    **Reference gauge for the units' CHIRPS** (engine ≥ 1.80.0, issue #500,
+    [model.md §2.4h *Reference gauge*](./model.md#reference-gauge-engine--1800-issue-500)):
+    a **Reference gauge** select (None, the default: each unit's CHIRPS
+    scaled to its MAP; the catchment rain gauge; or a unit with land's own
+    gauge, `rain_catchment_mm@<unit>`) and, once one is set, a **Reference
+    unit** select of the units with land (the unit the gauge stands in: the
+    CHIRPS cell at its centre is compared with the gauge, and every unit's
+    MAP is divided by its MAP). Picking a unit's own gauge picks that unit;
+    picking the catchment gauge keeps the unit already chosen, else asks for
+    one, and Save is blocked under the field ("Pick the reference unit")
+    until it is (`withReferenceGauge`, `withReferenceUnit`). A stored
+    reference unit the model no longer has with land says so under the
+    field (runs ignore the reference until another is picked). The Settings
     tab checks it itself (`unitRainFormError`), so Save is blocked before the
     chunk has loaded. The group's summary line adds "rain for each unit"
     while it is on.
@@ -5842,7 +5888,9 @@ two.
   the line (“line 13: the Jan row of the total Reserve block needs 10
   numbers…”). A DRM source missing its tables or its divisor blocks Save
   (the save bar links to `#set-ewr`); the pragmatic choice keeps tables half
-  entered. Run results say which EWR a run used: the *EWR not met* stat on
+  entered. A scenario switches the source with **Change a setting → Daily
+  EWR at the outlet**, in this same editor, refused in the same words
+  (issue #460, [scenarios.md](./scenarios.md)). Run results say which EWR a run used: the *EWR not met* stat on
   Runs & results and in the printed report (the same `RunSummaryView`)
   carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)" or "EWR:
   the pragmatic EWR", and the run's warnings repeat it. Wherever a screen
@@ -6420,17 +6468,26 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   result (or one loading, failing or running) shows in full. Each is
   described under [§ Runs & results](#runs--results), where it used to be.
 - **On this page.** A **River sections** menu ([§ On this page
-  menu](#on-this-page-menu)) sits under the header, above the tiles (one row
-  from 1280 px), and sticks down the
-  panels: **Flow vs reserve** (**Flow vs pragmatic EWR**, or **Flow vs
-  daily EWR** from the DRM tables, when its heading is), **Days below, by year**, **Reserve
-  rules met** (always, as its stub says what it needs without a table), **Days below, by month**,
-  **Water account**, **Uncertainty**, **Outcome matrix** and **Seasonal
-  outlook**, by the ids above in page order (`river/river.ts`,
-  `riverNavGroups`; `links.ts` `RIVER_ANCHORS`), in three groups: The
-  reserve; Water balance; How sure, and what if, named for screen readers, its links
-  evenly spaced (issue #162: the wider gaps between unnamed groups read as
-  spacing bugs, and the names on the bar take it to a second row at 1440 px).
+  menu](#on-this-page-menu)): from 80rem of page (a 1440 px window,
+  `RIVER_RAIL_FROM_REM`) a side index on the left of the panels, every group
+  named over its links; narrower a bar under the header, above the tiles (two
+  rows at 1280 px), that sticks down the panels. Its links, by the ids above
+  in page order (`river/river.ts`, `riverNavGroups`; `links.ts`
+  `RIVER_ANCHORS`), say the panels' headings (issue #462), the bar a shorter
+  name: **Flow vs reserve** (**Flow vs pragmatic EWR**, or **Flow vs daily
+  EWR** from the DRM tables, when its heading is), **Days below the reserve,
+  each water year** (the test the results are judged by, as the chart's
+  heading; **Days below, by year** on the bar), **Reserve rules met, by
+  month** (always, as its stub says what it needs without a table; **Reserve
+  rules met**), **Days below the EWR, by month** (**Days below, by month**),
+  **Water account**, **Uncertainty bands** (**Uncertainty**), **Outcome
+  matrix** and **Seasonal outlook**, in three groups: The reserve; Water
+  balance; How sure, and what if. On the bar the groups are named for screen
+  readers only, its links evenly spaced (issue #162: the wider gaps between
+  unnamed groups read as spacing bugs, and the names on the bar take it to
+  another row). The page's widths are read from its column beside the index
+  (`river-body`): the flow chart and the years bars sit side by side from
+  56rem of it.
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
   and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
   for a lazy panel's heading to arrive. An old link to one of these panels on
@@ -6571,13 +6628,21 @@ read it before.
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
-  menu](#on-this-page-menu)) sits under the header, above the tiles (one
-  row), and sticks down the page: **Unit detail** (`#res-farm`, a link with no group name; it read "Each
-  hydrological unit → Hydrological unit detail" until issue #467), then under *Tables for this run*
-  **Hydrological unit results**, **Curtailment**, **Assurance of supply**, **Drought restrictions** for a
-  run with the rule and **Other uses** when there are any (`supply/supply.ts`, `supplyNav`). Until it,
-  the three tables ran four screens under the cards with no way to them but
-  scrolling. Not shown with no run or no units.
+  menu](#on-this-page-menu)): from 80rem of page (a 1440 px window) a side
+  index on the left of the page, narrower a bar under the header, above the
+  tiles (one row), that sticks down the page: **Hydrological unit detail**
+  (`#res-farm`, a link with no group name; it read "Each hydrological unit →
+  Hydrological unit detail" until issue #467; **Unit detail** on the bar),
+  then under *Tables for this run* **Hydrological unit results**,
+  **Curtailment targets** (**Curtailment** on the bar), **Assurance of
+  supply**, **Drought restrictions** for a run with the rule and **Other uses
+  of water** (**Other uses**) when there are any (`supply/supply.ts`,
+  `supplyNav`; the panels' headings, issue #462). The unit detail and the
+  results table's header row stick under the bar (its height,
+  SectionNav's `barHeight`, as `--nav-h`), or under the header beside the
+  index; the page's widths (`supply-page`) are the column beside it. Until
+  it, the three tables ran four screens under the cards with no way to them
+  but scrolling. Not shown with no run or no units.
 - **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment`,
   `#res-assurance` or `#res-other-uses` fragment scrolls to its panel once the run is in and holds
   it there (`holdAnchor`), focus on its heading. An old link to one of them on
@@ -6662,22 +6727,38 @@ read it before.
   forecast days, and fails on a new one that doesn't say.
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
-- **On this page.** Above the results, the same menu as Settings &
+- **On this page.** The same menu as Settings &
   calibration (`common/SectionNav.svelte`; the "Result sections"
   navigation) links to each panel (`#res-summary` … `#res-explore`, listed by
-  `runs/sections.ts` in groups: Summary, Model quality, Record, Dig deeper). Each group's name leads its pills, and each
-  group is a list labelled by that name. It sticks at the top (under the
-  phone bar on a phone) down the long results page, marks the section being read, takes at most two
-  rows on a laptop (three at 1280 px until its groups could break across rows; [§ On this page
-  menu](#on-this-page-menu)), and on phones is one sideways strip.
-  Runoff model only for a GR4J run, Unit rain only for a run with rain for
-  each unit (`summary.unitRain`), WR2012 check only with a reference, and
-  Plausibility only on a run made by engine 0.25.0 or later. Plausibility
-  and Outputs are one word in the menu (the panels' headings say
-  *Plausibility checks* and *Explore outputs*) so it still fits two rows at
-  1280 px beside the runs rail with the Water balance entry (issue #137). The
-  page's `scroll-padding-top` includes the menu's height, so a jumped-to
-  section, or a focused control, clears both the phone bar and the menu.
+  `runs/sections.ts` in groups: Summary, Model quality, Record, Dig deeper),
+  each group a list labelled by its name. From 62rem of results (a 1440 px
+  window; `RESULTS_RAIL_FROM_REM`) it is a **side index on the right** of the
+  results (`railSide="right"`: the runs list is the page's left column),
+  every group named over its links, each link named as its panel's heading
+  (**Flow-duration curve**, **Calibration against observed flow**, **Water
+  balance by water year**, **Runoff model: GR4J**, **WR2012 check:
+  <quaternary>**, **EWR test: model against observed flow**, **Plausibility
+  checks**, **Run notes & evidence**, **Validation statement**, **Explore any
+  output**), and two last groups for the panels that moved to their own pages
+  (issue #17), linked with the run shown: *On River & reserve* (**Reserve
+  rules met, by month**, **Days below the EWR, by month**, **Water
+  account**) and *On Hydrological units* (**Curtailment targets**,
+  **Assurance of supply**; `otherPageGroups`, issue #462). The results keep
+  about the width they have at 1280 px without it. Narrower it is the bar:
+  it sticks at the top (under the phone bar on a phone) down the long results
+  page, marks the section being read, takes at most two rows on a laptop
+  (three at 1280 px until its groups could break across rows; [§ On this page
+  menu](#on-this-page-menu)), and on phones is one sideways strip, without the
+  other pages' groups (the run header links to both pages). The bar keeps
+  shorter names (`bar`: Flow duration, Calibration, Water balance, Runoff
+  model, Unit rain, WR2012 check, EWR vs observed, Plausibility, Notes &
+  evidence, Validation, Outputs) so it still fits two rows at 1280 px beside
+  the runs rail (issue #137). Runoff model only for a GR4J run, Rain for each
+  unit only for a run with rain for each unit (`summary.unitRain`), WR2012
+  check only with a reference, and Plausibility checks only on a run made by
+  engine 0.25.0 or later. The page's `scroll-padding-top` includes the bar's
+  height, so a jumped-to section, or a focused control, clears both the phone
+  bar and the menu.
 - **Page order.** The results are grouped by the question they answer
   (`resultGroups` in `runs/sections.ts`; the page repeats each group's name
   as a quiet heading, `RunCharts.svelte`), so the panels that are read
@@ -7240,7 +7321,10 @@ read it before.
   rain gauge's MAP with its source, a warning list of what to check (the
   units that fell back to the catchment rain, by name; a factor held at the
   0.25–4 bound; a CHIRPS mean taken outside the MAP period; CHIRPS used
-  raw; the first four, the rest behind **Show all N things to check**), a
+  raw; with a reference gauge, engine ≥ 1.80.0, the months whose factor is
+  1 for too little shared record and those held at the bound; the first
+  four, the rest behind **Show all N things to check**), with a reference
+  gauge a line naming it, its unit and the 12 factors (Jan–Dec), a
   table per unit, the units that fell back and then held factors first,
   each group in the run's farm order (upstream first, as the farm tables),
   eight shown and the rest behind **Show all N units** (rain from: its own
@@ -8269,6 +8353,30 @@ how a part year compares; under every unit's table until issue #175). The table
 turns into cards below 48rem of its own width (the picked unit's column at
 1280 px), so it never scrolls sideways there. Picking a unit far down an
 opened list scrolls the page back to its detail.
+
+**On the map** (issue #510, `AllocationUseMap.svelte`, under the first
+block; [allocations.md § The map](./allocations.md#the-map)): folded until
+**Show the map** (`map=1`, a link, so Back folds it; **Hide the map** drops
+it in place). Only then are the Map tab's features fetched and the map's code
+loaded (`AllocationMap.svelte`, a chunk of its own, MapLibre after it). Each
+hydrological unit's area (its linked parcel on the Map tab) is shaded by the
+band of its modelled use ÷ registered volume (`useMap.ts`): green under
+100 %, orange 100–110 %, light red 110–150 %, bright red over 150 %, grey
+hatched for use with nothing registered, no fill for neither, a dashed
+outline for a unit with no whole water year or one the run doesn't have.
+Each unit carries a button over its area with its % ("132 %", or *None
+registered* / *No use*), named with its figures for a screen reader; a click
+opens its comparison above (`unit=`) and scrolls to it. Above the map a
+**Water source** choice (Surface water, the default; Groundwater; Both
+together, total use ÷ total registered) and a **Water year** picker (the
+mean of the whole water years, or one; part years are never offered). Under
+it the **Key** names every band in words with a swatch and how many units
+are in it, and says the bands are fixed for the map, apart from the
+comparison's ±10 % band; then **Hydrological units with no area on the
+map**, each with its band, so none is missing silently. With no area on the
+Map tab at all it says so and links to the Hydrological units layer. Not
+offered to a viewer who sees totals only. Tests: `allocations/useMap.test.ts`,
+`e2e/tests/allocations-map.spec.ts`.
 
 **Registered volumes** (below the first screen): the list, stacked so it
 fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)

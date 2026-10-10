@@ -909,7 +909,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. **River & reserve**, **Hydrological units**, **Data** and **Settings & calibration** have the same menu; on a wide screen Settings & calibration’s is a column down the left of the page instead.'
+						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. On a wide screen it is a column down the right of the results instead, each link named as its panel’s heading, with the main panels of **River & reserve** and **Hydrological units** listed under their pages at its foot. **River & reserve**, **Hydrological units**, **Data** and **Settings & calibration** have the same menu, a column down the left of the page on a wide screen.'
 					},
 					{
 						type: 'p',

@@ -512,6 +512,22 @@ section it belongs to, with the example that taught it.
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
   to 13rem; at 1280 it would scroll, so the bar stays there).
+- **An index names each panel as the page does, and a page beside a rail
+  reads its width from its own column.** Runs & results, River & reserve,
+  Hydrological units and Data kept the two-row bar after Settings got its
+  index, so their group names were dropped to fit, about 14 links sat in a
+  flat row, menu names drifted from the headings ("Days below, by year" for
+  *Days below the pragmatic EWR, each water year*), and the panels that had
+  moved to other pages had no entry at all (issue #462). The fix was the
+  same rail on each from a 1440 px window, every link its panel's heading
+  (a shorter `bar` name only where the bar must stay two rows), and on Runs
+  the moved panels under their pages' names. Two traps on the way: River's
+  chart-beside-bars switch was a window media query (1100 px), which beside
+  a 13rem rail sees a column 13rem wider than it is, so it became a
+  container query on the page's own column; and a page that only had a
+  menu once its results loaded would have drawn its whole content again on
+  that load if the wrapper were added conditionally, so SectionNav with no
+  sections draws only its content.
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve
@@ -751,7 +767,7 @@ section it belongs to, with the example that taught it.
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
 | A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
-| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `SUPPLY_NAV`, `series/sections.ts`); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width, and `find` for a find-a-setting box (Settings, issue #468; ui.md § On this page menu) |
+| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `supplyNav`, `series/sections.ts`), each link named as its panel's heading (`label`, a shorter `bar` name on the bar); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width (`railSide="right"` beside a page's own left column), `href` + `page` for a link to another page, `barHeight` for a sticky panel under the bar, and `find` for a find-a-setting box (Settings, issue #468; every long page from 1440 px, issue #462; ui.md § On this page menu) |
 
 Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
 fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run

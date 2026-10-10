@@ -258,18 +258,12 @@
 	// A fixed plot height: taller beside the cards, where the panel sits level with the first three.
 	const chartH = $derived(side ? 420 : 260);
 
-	// The "On this page" menu sticks at the top; the chart sticks just under it, so it needs the menu's height.
-	let pageEl: HTMLDivElement | undefined = $state();
+	// The "On this page" menu: with the cards, once the run is in. As a bar it sticks at the top and the
+	// chart and the results table's header stick just under it, so they need its height (0 beside the side
+	// index, from 80rem of page, issue #462).
 	let navH = $state(0);
-	// The menu renders with the cards, after the run loads: rerun then (effects run after the DOM updates).
-	const hasNav = $derived(cards.length > 0);
-	$effect(() => {
-		const nav = hasNav ? pageEl?.querySelector<HTMLElement>('nav.sections') : null;
-		if (!nav) return;
-		const ro = new ResizeObserver(() => (navH = nav.offsetHeight));
-		ro.observe(nav);
-		return () => ro.disconnect();
-	});
+	const SUPPLY_RAIL_FROM_REM = 80;
+	const navGroups = $derived(meta && run && summary && totals && cards.length > 0 ? supplyNav(otherUses, restrictions) : []);
 
 	// A link to a panel here (`#res-curtailment`, the portfolio's "units short this week", or an old
 	// Runs & results link sent on): the panels render once the run is in, after the browser's own
@@ -314,7 +308,11 @@
 	{#if meta}<a class="btn" href={runHref(meta.id)}>Open in Runs &amp; results</a>{/if}
 {/snippet}
 
-<div class="supply-page" bind:clientWidth={pageW} bind:this={pageEl} style:--nav-h="{navH}px">
+<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run several screens under the cards
+     and the unit detail. A side index from 80rem of page; narrower a bar, its one group's name on it. The page's
+     container (supply-page) is the column beside the index. -->
+<SectionNav groups={navGroups} label="Hydrological units sections" groupNames railFrom={SUPPLY_RAIL_FROM_REM} bind:barHeight={navH}>
+<div class="supply-page" bind:clientWidth={pageW} style:--nav-h="{navH}px">
 	{#if gone}
 		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
 	{/if}
@@ -351,9 +349,6 @@
 						</div>
 					</section>
 				{:else}
-					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
-					     several screens under the cards and the unit detail. -->
-					<SectionNav groups={supplyNav(otherUses, restrictions)} label="Hydrological units sections" groupNames />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">
@@ -484,6 +479,7 @@
 		</LoadState>
 	{/if}
 </div>
+</SectionNav>
 
 <style>
 	.supply-page {

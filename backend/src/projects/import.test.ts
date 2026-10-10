@@ -82,6 +82,22 @@ describe('freshIds', () => {
 		expect(model.transfers[1]!.lossReturnNodeId).toBeNull();
 	});
 
+	it('moves the unit a crop supply table pipes from with the nodes (engine 1.73.0), so a copy never points into the original', () => {
+		const [a, b] = [u(), u()];
+		const { model, ids } = freshIds({
+			nodes: [
+				{ id: a, downstreamNodeId: null, cropRemoteNodeId: null },
+				{ id: b, downstreamNodeId: a, cropRemoteNodeId: a }
+			] as never,
+			crops: [],
+			cropAreas: [],
+			transfers: []
+		});
+		expect(model.nodes[1]!.cropRemoteNodeId).toBe(ids.get(a));
+		expect(model.nodes[1]!.cropRemoteNodeId).not.toBe(a);
+		expect(model.nodes[0]!.cropRemoteNodeId).toBeNull();
+	});
+
 	it('keeps the ids’ order, which the engine sums and breaks ties in', () => {
 		// Python importer ids and a UI-made id, deliberately not in list order.
 		const olds = ['c3f1', '0aa2', 'ffff-last', '7b00', '00-first', 'b2', 'x-crop', 'a-transfer'];

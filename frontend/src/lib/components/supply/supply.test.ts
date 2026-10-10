@@ -1,6 +1,7 @@
 import type { CurtailmentFarm, FarmSummary, RunSummary, SupplyReliability } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunMeta } from '$lib/api/types';
+import { navText } from '$lib/components/common/sectionNav';
 import { supplyBars } from '$lib/components/overview/supplyBars';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { fmtPct } from '$lib/format/number';
@@ -36,12 +37,24 @@ describe('links', () => {
 	it('the On this page menu links every panel, in page order, and nothing else', () => {
 		expect(supplyNav(true, true).flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
 		expect(supplyNav(true).map((g) => g.label)).toEqual([null, 'Tables for this run']);
-		expect(supplyNav(true)[0]!.sections).toEqual([{ id: 'res-farm', label: 'Unit detail' }]);
+		expect(supplyNav(true)[0]!.sections).toEqual([{ id: 'res-farm', label: 'Hydrological unit detail', bar: 'Unit detail' }]);
 	});
 
 	it('lists Other uses last, and only for a run that has any (issue #137)', () => {
-		expect(supplyNav(true).at(-1)!.sections.at(-1)).toEqual({ id: 'res-other-uses', label: 'Other uses' });
+		expect(supplyNav(true).at(-1)!.sections.at(-1)).toEqual({ id: 'res-other-uses', label: 'Other uses of water', bar: 'Other uses' });
 		expect(supplyNav(false).flatMap((g) => g.sections.map((s) => s.id))).toEqual(SUPPLY_ANCHORS.filter((a) => a !== 'res-other-uses' && a !== 'res-restrictions'));
+	});
+
+	it('names each link as its panel’s heading, the long ones shorter on the bar (issue #462)', () => {
+		const names = supplyNav(true, true).flatMap((g) => g.sections.map((s) => [s.label, navText(s, 'bar')]));
+		expect(names).toEqual([
+			['Hydrological unit detail', 'Unit detail'],
+			['Hydrological unit results', 'Hydrological unit results'],
+			['Curtailment targets', 'Curtailment'],
+			['Assurance of supply', 'Assurance of supply'],
+			['Drought restrictions', 'Drought restrictions'],
+			['Other uses of water', 'Other uses']
+		]);
 	});
 
 	it('lists Drought restrictions before Other uses, only for a run with the rule (engine 1.54.0)', () => {

@@ -937,8 +937,11 @@ const UNIT_RAIN_FACTOR_TEXT: Record<UnitRainUnit['factorSource'], string> = {
 	chirpsMap: 'unit MAP ÷ its CHIRPS mean annual rain',
 	chirpsBias: "the catchment's monthly CHIRPS factors",
 	chirpsRaw: 'raw',
+	chirpsReference: "the reference gauge's monthly factors × unit MAP ÷ the reference unit's MAP",
 	catchment: 'as the catchment forcing'
 };
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** The per-unit rain block (engine ≥ 1.78.0): the setting, then one row per land unit. */
 function* unitRainLines(u: UnitRainSummary): Generator<string> {
@@ -971,7 +974,8 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 	]);
 	for (const x of u.units) {
 		const map = x.chirps?.source === 'map' ? x.chirps : null;
-		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : x.rule === 'unitChirps' ? (map?.clamped ?? false) : false;
+		const ref = x.chirps?.source === 'reference' ? x.chirps : null;
+		const clamped = x.rule === 'gaugeMap' ? x.gaugeMapClamped : x.rule === 'unitChirps' ? (map?.clamped ?? ref?.mapClamped ?? false) : false;
 		yield csvRow([
 			x.name,
 			x.areaKm2,
@@ -979,7 +983,8 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.mapSource ?? '',
 			UNIT_RAIN_RULE_TEXT[x.rule],
 			x.rainKey ?? '',
-			x.factor,
+			// On the reference factors the factor varies by month: the column holds the MAP ratio on top of them.
+			x.factor ?? (x.rule === 'unitChirps' && ref ? ref.mapRatio : null),
 			UNIT_RAIN_FACTOR_TEXT[x.factorSource],
 			clamped ? 'yes' : 'no',
 			map ? map.meanAnnualMm : null,
@@ -996,6 +1001,15 @@ function* unitRainLines(u: UnitRainSummary): Generator<string> {
 			x.runoffM3,
 			x.runoffCoefficient
 		]);
+	}
+	// The reference gauge's monthly factors (engine ≥ 1.80.0, issue #500), one row per calendar month.
+	const r = u.reference;
+	if (r) {
+		yield csvRow(['Reference gauge', r.gauge]);
+		yield csvRow(['Reference unit', r.unitName ?? r.unitId, r.mapMm === null ? 'no MAP' : `MAP ${r.mapMm} mm`]);
+		yield csvRow(['Reference CHIRPS cell', r.cellKey, r.pinned ? 'factors pinned, not fitted' : '']);
+		yield csvRow(['Month', 'Shared days', 'Gauge (mm)', 'CHIRPS (mm)', 'Own factor', 'Factor applied', 'Clamped', 'Fitted']);
+		for (const m of r.months) yield csvRow([MONTHS[m.month - 1]!, m.sharedDays, m.gaugeMm, m.chirpsMm, m.ownFactor, m.factor, m.clamped ? 'yes' : 'no', m.fitted ? 'yes' : 'no (factor 1)']);
 	}
 }
 

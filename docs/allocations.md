@@ -340,6 +340,70 @@ existing lawful use beside the application's numbers.
   farm's own dam as abstraction (the WP says so; a hydrologist may want dam
   filling, s21b, compared with storage instead, issue #90).
 
+### The map
+
+The Allocations tab's **On the map** (issue #510, from the #507 Q&A) draws
+the comparison: each hydrological unit's area shaded by how its modelled use
+in the compared run (the baseline the user picks) stands against its
+registered volume. It is the separate output the operator's rule asks for:
+registered and licensed volumes never drive the baseline, they are only
+compared with it (#507 § Principle). The map only reads the run and the
+volumes; no engine behaviour changes.
+
+- **The figures** are the comparison's own (`compareAllocations`, above), so
+  the map can't disagree with the table: a unit's surface use is what the
+  comparison counts for it (for a dam beside the river, the take at the
+  intake once #509's intake series lands; the map reads whatever the
+  comparison computes and repeats no rule of its own).
+- **Period**: the mean over the run's whole water years by default (the
+  comparison's means), or one whole water year picked. Part years are
+  never offered, as in the comparison's summary.
+- **Water source**: surface water (the default: licences are per source),
+  groundwater, or both together (the unit's total use ÷ its total
+  registered volume).
+- **Bands**, r = modelled use ÷ registered volume (engine
+  `allocations/useBand.ts`, shared with the example seed so both hold the
+  same edges; r is rounded to 10⁻⁶ first, so a volume equal to the use reads
+  as 1.00):
+
+  | Band | Rule | Drawn |
+  | --- | --- | --- |
+  | Using less than registered | r < 1.00 | green |
+  | The same, up to 10 % more | 1.00 ≤ r ≤ 1.10 | orange |
+  | 10–50 % more | 1.10 < r ≤ 1.50 | light red |
+  | More than 50 % more | r > 1.50 | bright red |
+  | Use, but no registered volume | registered 0, use > 0 | grey, hatched |
+  | No use, nothing registered | | no fill, outline only |
+
+  They are fixed for the map and apart from the comparison's ±10 % status
+  (`settings.allocationTolerance`), which also calls 0.90–1.00 *within
+  band*; the key says so.
+- **Not colour alone** (WCAG 1.4.1): each unit carries its % of registered
+  ("132 %") as a button over its area, named with its figures, and the key
+  lists the bands in words with how many units are in each. Each label's
+  text is at least 4.5:1 on its band's colour in light and dark
+  (`useMap.test.ts`).
+- **Unit shapes** are the Map tab's: a `farm_parcel` linked to the unit
+  ([maps.md § Hydrological units layer](./maps.md#hydrological-units-layer)),
+  a unit with several drawn as all of them, its label in the largest. A unit
+  with no area is listed under the map with its band, so none goes missing;
+  an area linked to a unit the run doesn't have is a dashed outline, named
+  under the map.
+- **Clicking a unit** opens its comparison row above (`unit=`): use,
+  registered, % and every water year.
+- **Who sees it**: whoever sees the per-unit comparison ([Who sees
+  what](#who-sees-what)): owners and editors, and viewers only while **What
+  viewers see** is on; a viewer who sees totals isn't offered it. Farmers,
+  share links and packs don't get it. No holder's name is on it.
+- **No new route**: the page reads the comparison it already has
+  (`GET …/runs/:runId/allocations`) and the Map tab's features (`GET
+  …/map/features`, viewer and up).
+- **The example**: `pnpm seed:examples` seeds *Example · Licence comparison
+  map* (`backend/scripts/examples/licenceMap.ts`), eight invented units whose
+  volumes are set from the baseline's own use ÷ a target ratio, so every
+  band is on screen whatever the engine's numbers ([run-locally.md §
+  Example catchments](./run-locally.md#example-catchments)).
+
 ## Who sees what
 
 Decision D3, provisional position (pre-counsel research, 2026-10-01; the

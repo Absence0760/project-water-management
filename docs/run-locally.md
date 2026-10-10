@@ -120,7 +120,7 @@ user starts with no projects.
 pnpm seed:examples          # needs dev:db:up; about a minute with the showcase
 ```
 
-This loads four invented catchments and the **showcase** (below), each with one run (published by its
+This loads four invented catchments, the **showcase** and the **licence comparison map** (both below), each with one run (published by its
 owner, WP-2.3; Sandspruit's with an advisory notice in English and
 Afrikaans), for two local demo
 users: `demo@example.com` and `analyst@example.com`, password `demo-password`
@@ -169,6 +169,28 @@ short of the invented weir record's volume (model.md §2.10d). `backend/scripts/
 warning appears, if a self-check fails, or if an example stops parsing as a
 project document. So an engine or schema change that leaves the examples
 behind shows up in `pnpm test`.
+
+### The licence comparison map
+
+**Example · Licence comparison map**, owned by `demo@example.com`, with
+`analyst@example.com` a viewer and **What viewers see** on, so both see the
+Allocations tab's map (issue #510, [allocations.md § The
+map](./allocations.md#the-map)). Open **Allocations**, press **Show the
+map**. Eight invented units on one river (`backend/scripts/examples/licenceMap.ts`,
+seeded by `licenceMapSeed.ts`): Groenkloof uses about 80 % of its volume
+(green) and holds a groundwater registration too (it has no borehole, so the
+**Groundwater** choice shows it using none of it); Oranjedraai 105 % and
+Randhoek exactly 100 % (orange, the band's lower edge); Rooiheuwel 130 %
+(light red); Brandvlei 200 % (bright red); Grysvlakte uses water with nothing
+registered (grey, hatched); Stilwater has no demand and nothing registered
+(outline only); Sonderkaart has no area on the map, so it is listed under
+it. The volumes aren't fixed numbers: after the baseline run the seed reads
+each unit's modelled mean surface use per whole water year from the
+comparison and registers that use ÷ its target ratio, so the bands hold
+whatever the engine's numbers do. `licenceMap.test.ts` asserts each unit's
+band. Seeded after the showcase and skipped with it (`SEED_SHOWCASE=0`);
+built under a working name and renamed when complete, so an interrupted seed
+is replaced by the next one.
 
 ### The showcase
 

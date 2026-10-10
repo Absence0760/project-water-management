@@ -1,0 +1,4 @@
+{
+	"addKb": 8,
+	"why": "Issue #510: the Allocations tab's map of units shaded by modelled use vs registered volume (AllocationUseMap and useMap in the tab chunk, AllocationMap a lazy chunk of its own; MapLibre unchanged, already lazy); measured 1888 -> 1896 KB against 07c8842b7 built alone"
+}

@@ -487,7 +487,9 @@
 	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.
 	$effect(() => fillHeader({ actions: headerActions }));
 
-	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below.
+	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below. A side index
+	// from 80rem of page (a 1440 px window), as Settings: the series table keeps its columns beside it.
+	const DATA_RAIL_FROM_REM = 80;
 	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
 	let usesOpen = $state(false);
 	const navGroups = $derived(
@@ -563,8 +565,9 @@
 	</div>
 {/if}
 
-<!-- In-page menu: at the tab's top level, not in .data-page, so it sticks down the panels below the chart. -->
-{#if list.length}<SectionNav groups={navGroups} label="Data sections" groupNames />{/if}
+<!-- In-page menu: around every panel, so it sticks down them all (as a bar) or stands beside them (the side index,
+     from 80rem of page, issue #462). Its group names show on the bar too. -->
+<SectionNav groups={list.length ? navGroups : []} label="Data sections" groupNames railFrom={DATA_RAIL_FROM_REM}>
 
 <div class="data-page" bind:clientWidth={pageW}>
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
@@ -867,6 +870,7 @@
 		With several series of one kind, the first by name is used.
 	</p>
 </section>
+</SectionNav>
 
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>

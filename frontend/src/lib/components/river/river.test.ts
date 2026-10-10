@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
+import { navText } from '$lib/components/common/sectionNav';
 import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
 import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
@@ -67,8 +68,23 @@ describe('riverNavGroups', () => {
 	});
 	it('puts the findings first, the water account straight after them, and the run-it-yourself tools last (issue #465)', () => {
 		expect(riverNavGroups(false, false).map((g) => g.label)).toEqual(['The reserve', 'Water balance', 'How sure, and what if']);
-		const labels = riverNavGroups(false, false).flatMap((g) => g.sections.map((s) => s.label));
-		expect(labels).toEqual(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+		const bar = riverNavGroups(false, false).flatMap((g) => g.sections.map((s) => navText(s, 'bar')));
+		expect(bar).toEqual(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+	});
+	it('names each link as its panel’s heading, shorter on the bar only (issue #462)', () => {
+		const labels = (ruleTable: boolean) => riverNavGroups(false, ruleTable).flatMap((g) => g.sections.map((s) => s.label));
+		expect(labels(false)).toEqual([
+			'Flow vs reserve',
+			reserveYearsWords(false).heading,
+			RESERVE_MONTHS_HEADING,
+			EWR_MONTHS_HEADING,
+			'Water account',
+			'Uncertainty bands',
+			'Outcome matrix',
+			'Seasonal outlook'
+		]);
+		// The years chart's heading follows the test the results are judged by.
+		expect(labels(true)[1]).toBe('Days below the pragmatic EWR, each water year');
 	});
 	it('names the flow chart as its heading does: "Flow vs reserve" unless a rule table elsewhere leaves it only the pragmatic EWR (issue #177)', () => {
 		expect(flowLabel(false, false)).toBe('Flow vs reserve');

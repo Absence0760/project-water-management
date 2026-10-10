@@ -261,7 +261,10 @@ bottom:
    engine ≥ 1.78.0, [model.md §2.4h](./model.md)) is a settings line
    labelled **Runoff from each unit's own rain**: "off → on (gauge MAP 600
    mm (source); MAP period 1991-01-01 to 2020-12-31)" (a run saved before
-   1.78.0 is off). A unit's MAP and its source are node lines ("MAP none →
+   1.78.0 is off), with "; reference gauge rain_catchment_mm at the unit …"
+   inside the brackets when it has a reference gauge (engine ≥ 1.80.0), and
+   only that line: from 1.80.0 a change of the setting no longer also adds
+   a bare `Setting "unitRain" changed`. A unit's MAP and its source are node lines ("MAP none →
    700 mm"), and a unit's own rain record is named by its unit
    ("Rainfall (CHIRPS) of the unit …").
    A change of the drought restriction rule (`settings.droughtRestriction`,
