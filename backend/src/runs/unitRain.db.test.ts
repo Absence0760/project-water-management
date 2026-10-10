@@ -213,9 +213,10 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 		const input = (await call('GET', `/projects/${pid}/model-input`)).input as ModelInput;
 		const cell = (input.series as Record<string, { startDate: string; values: (number | null)[] } | undefined>)[`rain_chirps_cell_mm@${north!.id}`];
 		expect(cell).toBeDefined();
-		// The fetched days of the unit's own feed: the cell under its centre is one of its cells.
-		expect(cell!.startDate >= FEED_START).toBe(true);
-		expect(cell!.values.filter((v) => v !== null).length).toBeGreaterThan(60);
+		// The fetched days of the unit's own feed: the cell under its centre is one of its cells. The cell cache is shared
+		// across projects, so another test's fetch of the same synthetic cell may reach back further: read from FEED_START.
+		const from = Math.max(0, toEpochDay(FEED_START) - toEpochDay(cell!.startDate));
+		expect(cell!.values.slice(from).filter((v) => v !== null).length).toBeGreaterThan(60);
 		expect(cell!.values.every((v) => v === null || (v >= 0 && Math.round(v * 100) === v * 100))).toBe(true);
 
 		const runId = (await call('POST', `/projects/${pid}/runs`, { label: 'per unit, reference gauge' }, 201)).run.id as string;
