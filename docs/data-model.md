@@ -3566,7 +3566,7 @@ One scheduled feed per row ([architecture.md § Data feeds](./architecture.md#da
 | `acting_user_id` | The owner who last saved it (stamped by the trigger). Fetches run as this user under RLS and need editor at run time. `ON DELETE SET NULL`: a deleted account leaves the feed, skipped until an owner saves it |
 | `created_by`, `created_at`, `updated_at` | `updated_at` is the feed's version: a fetch result for an older version is dropped |
 | `last_scheduled_at` | When the scheduler last claimed it (the schedule's clock) |
-| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69) |
+| `last_attempt_at`, `last_success_at`, `consecutive_failures`, `last_error` (≤ 500, sanitised), `last_data_date`, `last_value`, `last_meta` (≤ 4 KB) | Health, written only by the functions below. `last_meta.through` is the last day the latest successful fetch asked for, the fetch window's progress through days with no data (#29); `last_meta.merged` the days it wrote and `last_meta.kept` the days it left holding a value it didn't write (#30); `last_meta.finalThrough` (CHIRPS) the last day through which the series holds final values, checked by the ingest and not re-read by the next window (#69); `last_meta.filesChecked` / `recheckDaysRead` / `revisionXmin` (CHIRPS) the re-check of cached finals, § Re-checking cached finals (210) |
 | `replace_series_from` | An owner's confirmation that the feed may replace its target series, which holds another product or version (032): what it held then, `CHIRPS/2.0`, or `''` for an unrecorded one. The ingest stages the new record (`feed_stage`, below) and swaps it in whole only while the series still holds exactly that, then clears it (`app_feed_replace_done`). The swapped-in record is all the feed's days (`feed_id` / `feed_days` cover it), so its later re-reads still revise them. Setting it restarts the feed's history like a re-target; re-targeting without a new one clears it; any change to it, the target or the config discards the stage |
 | `fetch_job_id`, `fetch_start`, `fetch_end` | The newest fetch sent to the fetcher Lambda whose answer isn't applied yet, and the days it asked for (029, #31). All three or none; no foreign key (finished jobs are purged). Written only by `app_begin_feed_fetch` / `app_take_feed_fetch` |
 
@@ -3668,7 +3668,6 @@ Reference data: no `project_id`, nothing about anyone.
 | `vals` | `real[366]` from 1 January: `NULL` not fetched (or not published), `NaN` no data (the sea). The 366th stays `NULL` in a common year |
 | `final` | `boolean[366]`, never `NULL`: whether each day's value came from the final file. Per day, so a preliminary value filling a gap in the archive never makes the finals after it look preliminary |
 | `final_through` | A summary of `final`: the day before the row's first preliminary value (31 December when it holds none; `CHECK` inside the year, or the previous year's 31 December) |
-| `source_etag` | Reserved for re-checking finals CHC rewrites in place; not written yet |
 | `fetched_at` | When a merge last changed the row |
 
 - **Primary key** `(origin, product, row_idx, col_idx, year)`: the reads
@@ -3688,15 +3687,72 @@ Reference data: no `project_id`, nothing about anyone.
   (from the product's first day, never after today UTC; no preliminary
   `rnl`), the cells (on the grid, at most 100, strictly in (row, column)
   order: the lock order, so two merges never deadlock) and refuses the
-  whole fetch otherwise (`23514`). A final value always lands; a
-  preliminary one only on a day whose value isn't final. It locks each
-  row it touches (creating it empty first), recomputes `final_through`,
-  and returns the cell-days changed.
+  whole fetch otherwise (`23514`). A final value lands on a day not final;
+  a preliminary one only on a day whose value isn't final; a final over a
+  different final doesn't land (since 210: the re-check, below, is the one
+  path that replaces a final), and puts that day's file first in the
+  re-check. It locks each row it touches (creating it empty first),
+  recomputes `final_through`, records each final file's tag in
+  `chirps_file` (210's optional ninth argument, per day), and returns the
+  cell-days changed.
 - Size: about 1.5 KB a row, so a 100-cell feed over 1981–2026 is about 7 MB
   ([deployment.md § Costs](./deployment.md#costs-rough-idle-to-light-use)).
 - `feeds/cellCache.db.test.ts` checks the access (positive controls), the
   function's refusals and its final-over-preliminary rule, and the feeds end
   to end through it.
+- 208's reserved `source_etag` column was dropped by 210 (never written; a
+  tag belongs to a file, not a cell row).
+
+### Re-checking cached finals (210_chirps_final_recheck.sql)
+
+CHC rewrites published CHIRPS finals in place with no version bump; these
+three tables let the cache notice and re-read them
+([architecture.md § Data feeds → Re-checking finals](./architecture.md#data-feeds)).
+Reference data like `chirps_cell_year`: no `project_id`, SELECT for any
+signed-in session, no write grant to `water_app` (`catalogue.db.test.ts`
+`READ_ONLY`), written only by the functions below.
+
+| Table | Holds |
+| --- | --- |
+| `chirps_file` | One row per `origin`, `product` and `day` (one final file): `tag` (ETag, else `lm:` + Last-Modified; NULL not known, for rows cached before 210, read again once), `checked_at` (last read or HEAD; NULL: check first), `claim_job` and `claim_until` (the fetch job asked to check it, leased for 30 minutes; a plain uuid, no foreign key), `revised_at` and `revisions`. Index `(origin, product, checked_at NULLS FIRST, day)`, the claim's order. 210 made a row with no tag for every final already cached |
+| `chirps_cell_stale` | A cached final whose file changed since it was read: `(origin, product, row_idx, col_idx, day)`, `marked_at`. Read again by the next fetch of a feed over the cell |
+| `chirps_revision` | A day whose cached finals changed (`seq`, `origin`, `product`, `day`, `cells_changed`, `tag_before`, `tag_after`, `detected_at`, and `xid`, the writing transaction, `xid8`; index `(origin, product, xid)`): the record of the revision, and what each feed refreshes its series from |
+
+- **`chirps_recheck_claim(feed, origin, product, rows, cols, heads, reads,
+  interval_days)`** (`SECURITY DEFINER`, from a running `feed_fetch` job of
+  that CHIRPS feed only): up to `reads` (≤ 10) days to read again for the
+  cells (their stale days, kind `reread`; then untagged files they hold
+  final, not checked in a day, `verify`) and up to `heads` (≤ 40) tagged
+  files not checked within `interval_days` (1–3650), oldest checked first
+  (`head`), none still leased. A claimed file gets `claim_job` and
+  `claim_until = now() + 30 minutes`, `FOR UPDATE SKIP LOCKED`; its
+  `checked_at` moves only when the answer is applied, so a fetch that never
+  answers defers nothing for long.
+- **`chirps_recheck_apply(feed, fetch_job, origin, product, head_days,
+  head_tags, read_days, read_tags, rows, cols, vals)`** (`SECURITY
+  DEFINER`, from a running `feed_fetch` or `feed_ingest` job of that feed,
+  `fetch_job` being that feed's own `feed_fetch` job, queued as the caller,
+  else `42501`): a HEADed file counts only when `fetch_job` claimed it; a
+  changed tag marks every cached final of its day stale and takes the new
+  tag. A day read is taken only when `fetch_job` claimed it or it is stale
+  for one of the cells (any other, a late answer whose lease lapsed, is left
+  alone); bad values, tags and shapes refuse the whole answer (`23514`);
+  its values land as final, replacing a different final, and clear the
+  cells' stale rows; when its tag wasn't known and the values differ, or
+  the tag changed since recorded, the other cells' finals of the day become
+  stale too. A day whose values changed is logged in `chirps_revision`.
+  Lock order as the merge's (cell rows, then file rows by day).
+- `chirps_feed_job`, `chirps_tag_ok` and `chirps_final_through` are the
+  shared checks (invoker rights, called from the functions above).
+- `data_feed.last_meta.revisionXmin` (a CHIRPS feed's, kept by the ingest):
+  the transaction id its next refresh of revised days reads `chirps_revision`
+  from; cleared with the rest of `last_meta` when the feed is saved, so a
+  saved feed starts from now. A marker past every transaction id there is
+  (a database restored from a dump numbers them afresh) starts from now too
+  (`cellCacheStore.ts revisedDays`).
+- `feeds/recheck.db.test.ts` checks the access (positive controls), the
+  claim's order and bounds, the apply's rules and refusals, and the loop end
+  to end on the rewrite fixture.
 
 ### Feed days (031_feed_days.sql)
 

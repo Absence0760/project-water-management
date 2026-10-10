@@ -1312,6 +1312,21 @@ on the job queue, with the fetching done outside the VPC (infra/feeds.tf):
   cents: a caught-up daily CHIRPS feed reads a handful of range requests
   (#69), and none for cell-days the shared cell cache already holds (208).
   No NAT, no new endpoint.
+- **Re-checking finals (210).** Each caught-up CHIRPS fetch HEADs at most
+  40 cached final files (no body) and reads at most 10 days again (a header
+  read and one strip per grid row, ≤ 25), so a feed adds at most about
+  40 + 10 × 27 ≈ 310 requests a day, ~9 300 a month, and only while there is
+  re-check work. The files are shared, so the HEADs don't grow with feeds:
+  each final file is HEADed at most once per 90 days (`RECHECK_INTERVAL_DAYS`),
+  ≤ ~3 500 a month for a `sat` record from 1998 and ~5 600 for `rnl` from
+  1981 however many feeds there are; a single daily feed covers ~1 200 a
+  month, a full cycle in under a year. The reads happen only after a
+  rewrite: a rewritten year re-reads ~365 days per cell set once, 10 a fetch
+  a minute apart. Lambda time: a HEAD takes about 200 ms, six at a time, a few
+  seconds a fetch. Cents a month; the answers stay under ~75% of SQS's
+  256 KB (`fetch.test.ts`). The tables add ~100 bytes per cached final
+  file (~3 MB for both products' whole archives) plus the stale rows of a
+  rewrite until they are read.
 
 ## Alert emails
 

@@ -3,7 +3,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FeedFormatError, FeedUnavailableError } from '../errors.js';
 import { fixtureHttp, fixtureValue } from '../fixtures.js';
 import type { FeedHttp } from '../http.js';
-import { chirpsFinalUrl, chirpsPrelimUrl, chirpsRnlUrl, fetchChirps, fetchChirpsCells, fetchGefs, gefsUrl, gridMean, mapLimit } from './chirps.js';
+import { chirpsFinalUrl, chirpsPrelimUrl, chirpsRnlUrl, fetchChirps, fetchChirpsCells, fetchGefs, gefsUrl, gridMean, gridValuesTagged, mapLimit, recheckChirpsFinals } from './chirps.js';
 import { writeGrid } from './tiff-write.js';
 
 /** An http that serves given grids by URL, 404 otherwise. */
@@ -300,7 +300,9 @@ describe('fetchChirpsCells (the cell cache’s fetch, issue #482)', () => {
 				[1, null, 3, 4],
 				[1.5, null, 3.5, 4.5],
 				[Number.NaN, null, Number.NaN, Number.NaN]
-			]
+			],
+			// This client gives no tags (no rangeTagged).
+			tags: [null, null, null, null]
 		});
 		expect(http.urls.some((u) => u.includes('2026.01.02'))).toBe(false);
 	});
@@ -347,6 +349,94 @@ describe('fetchChirpsCells (the cell cache’s fetch, issue #482)', () => {
 		expect(http.urls.some((u) => u.includes('/prelim/') || u.includes('/sat/'))).toBe(false);
 		const bad = served({ [chirpsRnlUrl('2026-01-01')]: grid([2500, 1, 1, 1, 1, 1, 1, 1]) });
 		await expect(fetchChirpsCells(bad, pts, '2026-01-01', '0', 'rnl')).rejects.toThrow(FeedFormatError);
+	});
+});
+
+/** served, with a tag per file (`tagOf`, which may change between calls: a file rewritten while it is read), and HEAD. */
+function servedTagged(files: Record<string, Uint8Array>, tagOf: (url: string) => string | null): FeedHttp & { urls: string[]; heads: string[] } {
+	const base = served(files);
+	const heads: string[] = [];
+	return {
+		...base,
+		heads,
+		async rangeTagged(url, start, end) {
+			const bytes = await base.range(url, start, end);
+			return bytes && { bytes, tag: tagOf(url) };
+		},
+		async head(url) {
+			heads.push(url);
+			return files[url] ? { tag: tagOf(url) } : null;
+		}
+	};
+}
+
+describe('file tags and the re-check of cached finals (210_chirps_final_recheck)', () => {
+	const g = (v: number) => grid([v, v + 0.5, -9999, v, v, v, v, v]);
+	const pts = [cell(0, 0), cell(0, 1), cell(0, 2)];
+
+	it('fetchChirpsCells records each final day’s file tag, and none on a preliminary or unread day', async () => {
+		const http = servedTagged({ [chirpsFinalUrl('2026-01-01')]: g(1), [chirpsPrelimUrl('2026-01-02')]: g(2) }, (u) => `"t-${u.slice(-14, -4)}"`);
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '001', 'sat', { today: '2026-01-05' });
+		expect(r.read).toBe('fp-');
+		expect(r.tags).toEqual(['"t-2026.01.01"', null, null]);
+	});
+
+	it('a file whose tag changes between its range reads (rewritten while read) fails as unavailable, so it is read again later', async () => {
+		const url = chirpsFinalUrl('2026-01-01');
+		let n = 0;
+		const http = servedTagged({ [url]: g(1) }, () => `"v${n++}"`);
+		await expect(gridValuesTagged(http, url, pts)).rejects.toThrow(FeedUnavailableError);
+		// Positive control: a steady tag reads, and comes back with the values.
+		const steady = servedTagged({ [url]: g(1) }, () => '"v1"');
+		expect(await gridValuesTagged(steady, url, pts)).toEqual({ values: [1, 1.5, null], tag: '"v1"' });
+	});
+
+	it('recheckChirpsFinals HEADs the head days (no body read) and reads the read days at the points; a gone file has no values', async () => {
+		const files = { [chirpsFinalUrl('2026-01-01')]: g(1), [chirpsFinalUrl('2026-01-03')]: g(3) };
+		const http = servedTagged(files, (u) => `"${u.slice(-14, -4)}"`);
+		const r = await recheckChirpsFinals(http, pts, 'sat', ['2026-01-01', '2026-01-02'], ['2026-01-03', '2026-01-04']);
+		expect(r).toEqual({
+			head: [
+				{ day: '2026-01-01', tag: '"2026.01.01"' },
+				{ day: '2026-01-02', tag: null }
+			],
+			read: [
+				{ day: '2026-01-03', tag: '"2026.01.03"', values: [3, 3.5, Number.NaN] },
+				{ day: '2026-01-04', tag: null, values: null }
+			],
+			failed: 0
+		});
+		expect(http.heads).toEqual([chirpsFinalUrl('2026-01-01'), chirpsFinalUrl('2026-01-02')]);
+		// The HEADed files' bodies were never read; only the read days' were.
+		expect(http.urls.some((u) => u.includes('2026.01.01'))).toBe(false);
+		// rnl's own final files.
+		const rnl = servedTagged({ [chirpsRnlUrl('1990-05-01')]: g(2) }, () => '"r"');
+		expect((await recheckChirpsFinals(rnl, pts, 'rnl', ['1990-05-01'], [])).head).toEqual([{ day: '1990-05-01', tag: '"r"' }]);
+	});
+
+	it('the fixtures tag each file by its bytes, and the rewrite fixture serves other values and another tag at the same URL', async () => {
+		const today = '2026-09-01';
+		const plain = fixtureHttp(() => today);
+		const rewritten = fixtureHttp(() => today, { rewrite: true });
+		const p = [{ lat: -20.12, lon: 25.17 }];
+		// A rewritten day with rain (a dry day's file is the same bytes, scaled or not): chirps-rewrite.json is 100–120 days back.
+		let url = '';
+		for (let back = 100; back <= 120 && !url; back++) {
+			const u = chirpsFinalUrl(fromEpochDay(toEpochDay(today) - back));
+			if ((await gridValuesTagged(plain, u, p))!.values[0]! > 0) url = u;
+		}
+		expect(url).not.toBe('');
+		const a = (await plain.head!(url))!.tag;
+		const b = (await rewritten.head!(url))!.tag;
+		expect(a).toMatch(/^"fx-[0-9a-f]{16}"$/);
+		expect(b).not.toBe(a);
+		expect((await plain.rangeTagged!(url, 0, 7))!.tag).toBe(a);
+		const [va] = (await gridValuesTagged(plain, url, p))!.values;
+		const [vb] = (await gridValuesTagged(rewritten, url, p))!.values;
+		expect(vb).toBeCloseTo(va! * 1.25, 4);
+		// A day outside the rewrite is the same file either way.
+		const other = chirpsFinalUrl(fromEpochDay(toEpochDay(today) - 200));
+		expect((await rewritten.head!(other))!.tag).toBe((await plain.head!(other))!.tag);
 	});
 });
 

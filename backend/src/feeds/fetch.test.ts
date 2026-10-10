@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { toEpochDay } from '@water-management/engine/calendar';
+import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { FIXTURE_DIR, fixtureHttp, fixtureValue } from './fixtures.js';
 import { writeGrid } from './sources/tiff-write.js';
 import { chirpsFinalUrl, gridMean } from './sources/chirps.js';
 import { bboxCells } from './config.js';
 import { DWS_MAX_YEARS } from './sources/dws.js';
-import type { FeedHttp } from './http.js';
+import { FILE_TAG_MAX, type FeedHttp } from './http.js';
 import {
 	CHIRPS_FIRST_DAYS,
 	CHIRPS_MAX_DAYS,
@@ -21,7 +21,7 @@ import {
 	runFetch as runAny,
 	utcToday
 } from './fetch.js';
-import { CELL_VALUE_MAX_BITS, planFetch, seriesFromCache, uniqueCells } from './cellCache.js';
+import { CELL_VALUE_MAX_BITS, planFetch, RECHECK_HEAD_DAYS, RECHECK_READ_DAYS, seriesFromCache, uniqueCells } from './cellCache.js';
 import { gridCells } from './config.js';
 import { MAX_MESSAGE_BYTES } from '../jobs/transport.js';
 import { viewFromAnswers } from '../__tests__/cellCacheView.js';
@@ -633,5 +633,96 @@ describe('the cell cache path (issue #482): each cell’s values, merged, then t
 		const message = { v: 1, type: 'ingest', fetchJobId: '00000000-0000-4000-8000-000000000000', feedId: '00000000-0000-4000-8000-000000000000', feedVersion: 'x'.repeat(40), result };
 		const bytes = Buffer.byteLength(JSON.stringify(message));
 		expect(bytes).toBeLessThan(MAX_MESSAGE_BYTES * 0.6);
+	});
+
+	it('with every tag and the largest re-check (40 files HEADed, 10 days read again at 100 cells), it still fits', () => {
+		const meta = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`${String(i).padStart(2, '0')}${'k'.repeat(38)}`, 'k'.repeat(100)]));
+		const tag = `"${'t'.repeat(FILE_TAG_MAX - 2)}"`;
+		const day = (i: number) => fromEpochDay(toEpochDay('2020-01-01') + i);
+		const result = {
+			ok: true as const,
+			cells: {
+				product: 'sat' as const,
+				startDate: '2026-01-01',
+				read: 'f'.repeat(CHIRPS_MAX_DAYS),
+				cells: Array.from({ length: 100 }, (_, i): [number, number] => [1600 + (i % 25), 4100 + Math.floor(i / 25)]),
+				values: Array.from({ length: 100 }, () => new Array(CHIRPS_MAX_DAYS).fill(CELL_VALUE_MAX_BITS)),
+				tags: new Array(CHIRPS_MAX_DAYS).fill(tag)
+			},
+			recheck: {
+				head: Array.from({ length: RECHECK_HEAD_DAYS }, (_, i) => ({ day: day(i), tag })),
+				read: Array.from({ length: RECHECK_READ_DAYS }, (_, i) => ({ day: day(100 + i), tag, values: new Array(100).fill(CELL_VALUE_MAX_BITS) }))
+			},
+			meta
+		};
+		expect(CellsResultSchema.safeParse(result).success).toBe(true);
+		const message = { v: 1, type: 'ingest', fetchJobId: '00000000-0000-4000-8000-000000000000', feedId: '00000000-0000-4000-8000-000000000000', feedVersion: 'x'.repeat(40), result };
+		expect(Buffer.byteLength(JSON.stringify(message))).toBeLessThan(MAX_MESSAGE_BYTES * 0.75);
+	});
+});
+
+describe('the re-check of cached finals (210_chirps_final_recheck)', () => {
+	const today = '2026-03-10';
+	const base = { source: 'chirps', config: grid, start: '2026-03-09', end: '2026-03-09', today, cells: { cells: [[1600, 4100]], plan: '1' } };
+	const req = (recheck: unknown, over: Record<string, unknown> = {}) => FetchRequestSchema.safeParse({ ...base, ...over, recheck }).success;
+
+	it('the request: with a cell-cache plan only, final files the product has by today, each day once in order, within the bounds', () => {
+		const rc = { cells: [[1600, 4100]], head: ['2024-01-01', '2024-01-02'], read: ['2024-02-01'] };
+		expect(req(rc)).toBe(true);
+		expect(req(rc, { cells: undefined })).toBe(false);
+		expect(req({ ...rc, head: ['2024-01-02', '2024-01-01'] })).toBe(false);
+		expect(req({ ...rc, read: ['2024-01-01'] })).toBe(false);
+		// sat begins in 1998, rnl in 1981; nothing after today.
+		expect(req({ ...rc, head: ['1997-12-31'] })).toBe(false);
+		expect(req({ ...rc, head: ['1990-01-01'] }, { config: { ...grid, product: 'rnl' } })).toBe(true);
+		expect(req({ ...rc, read: ['2026-03-11'] })).toBe(false);
+		expect(req({ ...rc, head: Array.from({ length: RECHECK_HEAD_DAYS + 1 }, (_, i) => fromEpochDay(toEpochDay('2020-01-01') + i)) })).toBe(false);
+		expect(req({ ...rc, read: Array.from({ length: RECHECK_READ_DAYS + 1 }, (_, i) => fromEpochDay(toEpochDay('2020-01-01') + i)) })).toBe(false);
+		expect(req({ ...rc, cells: [] })).toBe(false);
+		expect(req({ ...rc, extra: 1 })).toBe(false);
+	});
+
+	it('the answer: tags only on final days, a re-check read with a value per cell or none, never a tag for a gone file', () => {
+		const answer = (cells: Record<string, unknown>, recheck?: unknown) => ({
+			ok: true,
+			cells: { product: 'sat', startDate: '2026-01-01', read: 'fp-', cells: [[1600, 4100]], values: [[0, 1, null]], ...cells },
+			...(recheck === undefined ? {} : { recheck }),
+			meta: {}
+		});
+		const ok = (cells: Record<string, unknown>, recheck?: unknown) => CellsResultSchema.safeParse(answer(cells, recheck)).success;
+		expect(ok({ tags: ['"a"', null, null] })).toBe(true);
+		expect(ok({ tags: ['"a"', '"b"', null] })).toBe(false);
+		expect(ok({ tags: ['"a"', null] })).toBe(false);
+		expect(ok({ tags: ['bad\ttag', null, null] })).toBe(false);
+		const rc = { head: [{ day: '2024-01-01', tag: '"x"' }], read: [{ day: '2024-01-02', tag: '"y"', values: [0, -1] }] };
+		expect(ok({}, rc)).toBe(true);
+		expect(ok({}, { ...rc, read: [{ day: '2024-01-02', tag: null, values: null }] })).toBe(true);
+		expect(ok({}, { ...rc, read: [{ day: '2024-01-02', tag: '"y"', values: null }] })).toBe(false);
+		expect(ok({}, { ...rc, read: [{ day: '2024-01-02', tag: '"y"', values: [null] }] })).toBe(false);
+		expect(ok({}, { ...rc, read: [{ day: '2024-01-02', tag: '"y"', values: [CELL_VALUE_MAX_BITS + 1] }] })).toBe(false);
+		expect(ok({}, { ...rc, head: [rc.head[0], rc.head[0]] })).toBe(false);
+	});
+
+	it('runFetch answers it from the files: HEADs give the tags, reads give each cell’s value and the tag, with the window read as before', async () => {
+		const http = fixtureHttp(() => today);
+		const day = '2025-06-01';
+		const r = await runCells({ ...base, recheck: { cells: [[1600, 4100]], head: ['2025-05-01'], read: [day] } } as never, http);
+		expect(r.cells.read).toBe('-');
+		const tagOf = async (d: string) => (await http.head!(chirpsFinalUrl(d)))!.tag;
+		expect(r.recheck!.head).toEqual([{ day: '2025-05-01', tag: await tagOf('2025-05-01') }]);
+		expect(r.recheck!.read).toHaveLength(1);
+		expect(r.recheck!.read[0]).toMatchObject({ day, tag: await tagOf(day) });
+		expect(r.meta).toMatchObject({ filesChecked: 1, recheckDaysRead: 1 });
+		// A HEAD or a read that fails is left out and counted; the feed's own fetch still answers.
+		const broken = { ...http, head: async () => Promise.reject(new Error('HTTP 405')) };
+		const f = await runCells({ ...base, recheck: { cells: [[1600, 4100]], head: ['2025-05-01'], read: [day] } } as never, broken);
+		expect(f.ok).toBe(true);
+		expect(f.recheck!.head).toEqual([]);
+		expect(f.recheck!.read).toHaveLength(1);
+		expect(f.meta).toMatchObject({ filesChecked: 0, recheckDaysRead: 1, recheckFailed: 1 });
+		// A window's final days carry their files' tags, its preliminary days none.
+		const w = await runCells({ ...base, start: '2026-01-29', end: '2026-01-30', cells: { cells: [[1600, 4100]], plan: '00' } } as never, http);
+		expect(w.cells.read).toBe('fp');
+		expect(w.cells.tags).toEqual([await tagOf('2026-01-29'), null]);
 	});
 });

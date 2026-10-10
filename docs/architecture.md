@@ -1131,8 +1131,9 @@ merges into:
      values**, never the mean (`CellsResult`: per day `f` final, `p`
      preliminary or `-` not read; a value is the float32's bit pattern, so
      the worker gets back the exact number the file held, and -1 is no
-     data). The largest answer, 100 cells × 120 days, is about 135 KB,
-     inside SQS's 256 KB;
+     data; `tags`, since 210, the final file's tag per final day). The
+     largest answer, 100 cells × 120 days, is about 135 KB, inside SQS's
+     256 KB;
   4. the ingest checks the answer (its days inside the window, its cells the
      feed's own, its product the feed's) and merges it through
      `chirps_cache_merge`, which takes it only from a running job of that
@@ -1165,9 +1166,68 @@ merges into:
   request with `cells` reaching a fetcher from before 208 is refused as
   invalid and the feed retries 15 minutes later. A window the cache held whole
   asked CHC for nothing, so a backfill's next window follows in 5 s
-  (`CACHED_NEXT_SECONDS`) rather than a minute. **Not yet:** the rows'
-  `source_etag` is reserved for re-checking finals CHC rewrites in place
-  ([followups.md](./followups.md)).
+  (`CACHED_NEXT_SECONDS`) rather than a minute.
+- **Re-checking finals** (`210_chirps_final_recheck.sql`; `feeds/cellCache.ts`
+  `RECHECK_*`, `cellCacheStore.ts`, `ingest.ts refreshRevisedDays`). CHC
+  rewrites published final files in place with no version bump (the 2024
+  dailies in 2025-12, the COGs in 2026-04, the annual NetCDFs in 2026-08),
+  so a cached final can go stale. Each final file the cache reads has a row
+  in `chirps_file` with its **tag**: the response's ETag (CHC's nginx sends
+  `"<mtime>-<size>"`), else `lm:` + Last-Modified (`http.ts fileTag`; every
+  range read of one file must carry the same tag, or it was rewritten while
+  being read and the fetch fails as unavailable). Per file, not per cell
+  row: one file covers every cell. The re-check rides on CHIRPS feed fetches,
+  since in production only the fetcher Lambda reaches CHC and only a running
+  feed job may write the cache:
+  1. the `feed_fetch` job claims its share (`chirps_recheck_claim`): up to
+     10 days to read again at its cells (their stale days first, then
+     untagged files they hold final: rows cached before 210) and, when the
+     feed is caught up, up to 40 tagged files to HEAD, any cells', not
+     checked in 90 days, oldest checked first. A claimed file is leased to
+     the job for 30 minutes (`claim_until`), so two fetches never take the
+     same one and a fetch that never answers frees it soon; its
+     `checked_at` moves when the answer is applied. With such work the
+     request goes out even when the window needs nothing (its plan all
+     skips);
+  2. the fetcher HEADs (a request with no body) and reads those final files
+     (`recheckChirpsFinals`), only on the CHC host (`FEED_HOSTS`, every
+     redirect checked), and answers `CellsResult.recheck`. A HEAD or read
+     that fails is left out and counted (`meta.recheckFailed`), never
+     failing the feed's own fetch: its claim simply comes due again;
+  3. the ingest applies it after the merge (`chirps_recheck_apply`): a
+     claimed file whose tag changed marks **every** cached final of that day
+     stale (`chirps_cell_stale`, whichever feed's cells), a preliminary value
+     never; a day read again replaces its cells' finals (the **only** path
+     that replaces a final, and only for days this feed's own fetch claimed
+     or its cells hold stale: `chirps_cache_merge` now keeps a cached final
+     over a different one and puts its file first in the re-check, so a
+     rewrite seen by an ordinary read is handled the same way), and is no
+     longer stale for those cells. Every day whose values changed is logged
+     in `chirps_revision` (cells changed, the tags before and after);
+  4. every CHIRPS ingest recomputes, from the cache, the logged days its
+     feed hasn't seen (by the writing transaction's id from
+     `last_meta.revisionXmin` to the oldest transaction still running, so a
+     row committed late is never skipped; at most 400 days an ingest) and
+     merges them into its series: only days the series holds, on or after
+     the start date, and only the feed's own (`feedId`), with a
+     `series.merged` History event carrying `chirpsRevision` (days, first,
+     last). So every feed over a rewritten cell is refreshed, also one whose
+     cells another feed read again; a run's inputs change with the series
+     (its hash), and the run comparison's input diff shows the days. A
+     staged replacement waits for its swap;
+  5. a feed whose cells still hold stale days, or whose refresh stopped at
+     400 days, fetches again in a minute (`BACKFILL_NEXT_SECONDS`); otherwise
+     the cycle goes at the feeds' daily pace.
+
+  Locally the fixtures tag each file by its bytes, and
+  `FEED_FIXTURE_REWRITE=1` serves the finals `chirps-rewrite.json` names
+  (100–120 days back, ×1.25) rewritten at the same URL, so the whole loop
+  runs offline ([run-locally.md § Data feeds](./run-locally.md#data-feeds);
+  `feeds/recheck.db.test.ts`). In a release, a request with `recheck` that
+  reaches a fetcher from before 210 (or an answer with `tags` a worker from
+  before 210 receives) is refused as invalid, and the feed retries 15
+  minutes later, as with 208. Requests and cost:
+  [deployment.md § Data feeds](./deployment.md#data-feeds).
 - **Merging** goes through `series/merge.ts mergeSeries`, the same path as
   `POST /projects/:id/series/merge`, with `keepOnNull`: a day the source has no
   value for never erases one already there. **A feed replaces only the days

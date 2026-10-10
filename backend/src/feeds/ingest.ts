@@ -55,6 +55,18 @@
 // computed from the cache (cellCache.ts seriesFromCache) into the answer the
 // rest of the ingest has always taken: from there on nothing differs.
 //
+// CHC rewrites published finals in place, with no version bump. A
+// cell-cache answer may carry a re-check (210_chirps_final_recheck, claimed
+// by the fetch job, feed-fetch.ts): the tags of final files HEADed, and days
+// read again at the feed's cells. It is applied with the merge
+// (chirps_recheck_apply), the one path that replaces a cached final; each day
+// whose cached finals changed is logged in chirps_revision. Every CHIRPS
+// ingest then recomputes, from the cache, the logged days its feed hasn't
+// seen yet (refreshRevisedDays, last_meta.revisionXmin) and merges them into
+// its series with a series.merged event naming the revision, so a run's
+// inputs (the series hash) and the project's History show it. A feed whose
+// cells still hold stale finals fetches again in a minute.
+//
 // Days that changed in the live series (a merge, or the swap) go through the
 // new-data hook (series/newData.ts onSeriesDaysChanged), which queues the project's
 // debounced automatic re-run when it has them on (WP-2.11). Staged days don't:
@@ -68,8 +80,8 @@ import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowP
 import { onSeriesDaysChanged } from '../series/newData.js';
 import { replaceSeries } from '../series/replace.js';
 import { unitFeedProblem } from './unitFeed.js';
-import { seriesFromCache, uniqueCells } from './cellCache.js';
-import { type CacheOrigin, cacheOrigin, mergeCellCache, readCellCache } from './cellCacheStore.js';
+import { REVISION_REFRESH_DAYS, seriesFromCache, uniqueCells } from './cellCache.js';
+import { applyRecheck, type CacheOrigin, cacheOrigin, mergeCellCache, readCellCache, revisedDays, revisionMarkNow, staleLeft } from './cellCacheStore.js';
 import { bboxCellCount, chirpsProduct, type FeedSource, feedProvenance, feedSourceText, type GridConfig, gridCells, SOURCES } from './config.js';
 import { CellsResult, fetchFailure, FetchResult, type FetchWindow, gridRead, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
@@ -100,8 +112,9 @@ export const CACHED_NEXT_SECONDS = 5;
 const caughtUp = (feed: FeedRow, window: FetchWindow) =>
 	window.end >= (feed.source === 'chirps' ? fromEpochDay(toEpochDay(utcToday()) - 1) : utcToday());
 
-async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number): Promise<void> {
-	if (feed.source === 'chirps_gefs' || caughtUp(feed, window)) return;
+async function continueBackfill(db: Db, feed: FeedRow, window: FetchWindow, delaySeconds: number, more = false): Promise<void> {
+	// `more`: a caught-up CHIRPS feed with re-check work left (stale finals to read, revised days to refresh).
+	if (feed.source === 'chirps_gefs' || (caughtUp(feed, window) && !more)) return;
 	await enqueueJob(db, {
 		projectId: feed.projectId,
 		kind: 'feed_fetch',
@@ -175,8 +188,66 @@ export function finalThroughAfter(feed: FeedRow, result: OkResult, window: Fetch
 
 /** The fetcher's meta without the keys only we write (a fetcher's `finalThrough` is a claim, checked above, never stored as is). */
 function fetcherMeta(result: OkResult): Record<string, string | number> {
-	const { finalThrough: _claim, ...rest } = result.meta;
+	const { finalThrough: _claim, revisionXmin: _ours, ...rest } = result.meta;
 	return rest;
+}
+
+/** Our `revisionXmin` (refreshRevisedDays) added to the meta, when there is one. */
+const withRevision = (meta: Record<string, string | number>, xmin: string | null) => (xmin ? { ...meta, revisionXmin: xmin } : meta);
+
+/**
+ * Recompute, from the cell cache, the days whose cached finals were revised
+ * since this CHIRPS feed last looked (chirps_revision, from
+ * feed.revisionXmin; cellCacheStore.ts revisedDays), and merge them into its
+ * series: only days the series already holds, on or after the config's start
+ * date, and only the feed's own days (feedId), so an upload is kept and no
+ * empty day is filled. A change goes in the History as series.merged with
+ * `chirpsRevision` (how many days, first and last), and through the new-data
+ * hook. Returns where to look from next (last_meta.revisionXmin) and whether
+ * days were left for the next fetch (at most REVISION_REFRESH_DAYS a time);
+ * or the reason to fail the fetch.
+ */
+async function refreshRevisedDays(db: Db, feed: FeedRow, origin: CacheOrigin, writes: SeriesProvenance | null): Promise<{ next: string; more: boolean } | { error: string }> {
+	const config = feed.config as GridConfig;
+	const product = chirpsProduct(config);
+	const { days, next, more } = await revisedDays(db, origin, product, feed.revisionXmin ?? null, REVISION_REFRESH_DAYS);
+	if (!days.length) return { next, more };
+	const cur = await lockSeries(db, feed.projectId, feed.targetKind, feed.targetName);
+	if (!cur) return { next, more };
+	const s0 = toEpochDay(cur.startDate);
+	const held = days.filter((d) => (!config.startDate || d >= config.startDate) && (cur.values[toEpochDay(d) - s0] ?? null) !== null);
+	if (!held.length) return { next, more };
+	const first = held[0]!;
+	const last = held.at(-1)!;
+	const cells = gridCells(config);
+	const view = await readCellCache(db, origin, product, uniqueCells(cells), { start: first, end: last });
+	const f0 = toEpochDay(first);
+	const values: (number | null)[] = new Array(toEpochDay(last) - f0 + 1).fill(null);
+	const { noData } = gridRead(config);
+	try {
+		for (const d of held) values[toEpochDay(d) - f0] = seriesFromCache(cells, view, { start: d, end: d }, noData).values[0] ?? null;
+	} catch (err) {
+		return fetchFailure(err, config) as { error: string };
+	}
+	const unit = SOURCES[feed.source].unit;
+	const body = SeriesBody.parse({ kind: feed.targetKind, name: feed.targetName, unit, startDate: first, values });
+	try {
+		const r = await mergeSeries(db, feed.projectId, body, {
+			keepOnNull: true,
+			feedId: feed.id,
+			origin: bodyOrigin({ ...body, source: feedSourceText(feed.source, feed.config) }),
+			...(writes ? { provenance: writes } : {})
+		});
+		const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source, chirpsRevision: { days: held.length, first, last } });
+		if (subject.daysChanged) {
+			await recordAudit(db, feed.projectId, 'series.merged', subject);
+			await onSeriesDaysChanged(db, feed.projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged: subject.daysChanged as number, via: 'feed' });
+		}
+	} catch (err) {
+		if (!(err instanceof ApiError)) throw err;
+		return { error: `the series could not take the revised days: ${err.message}` };
+	}
+	return { next, more };
 }
 
 /** Our keys added to the meta: `finalThrough` only when there is one. */
@@ -281,7 +352,9 @@ async function stageReplacement(
 	} else {
 		meta = { ...fetcherMeta(result), merged, staged: stage?.values.length ?? 0, through: window.end };
 	}
-	meta = withFinal(meta, finalThroughAfter(feed, result, window));
+	// The revised days wait for the swap: the marker carries on, set now if there was none, so a revision between two
+	// staged windows still reaches the series after it.
+	meta = withRevision(withFinal(meta, finalThroughAfter(feed, result, window)), feed.revisionXmin ?? (await revisionMarkNow(db)));
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
 	await continueBackfill(db, feed, window, nextSeconds);
 	return { merged, lastDate };
@@ -295,7 +368,7 @@ async function stageReplacement(
  * (a value it won't store) is rolled back to before the merge and refused
  * whole, as an invalid answer is, so the job never dies retrying it.
  */
-async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow, origin: CacheOrigin): Promise<FetchResult> {
+async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindow, origin: CacheOrigin, fetchJobId: string | null): Promise<FetchResult> {
 	const parsed = CellsResult.safeParse(raw);
 	const config = feed.config as GridConfig;
 	const product = chirpsProduct(config);
@@ -317,9 +390,14 @@ async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindo
 	// rows (cell, then year), then the series (lockSeries, below). Nothing
 	// takes them the other way round, so two ingests over shared cells wait
 	// for each other rather than deadlock; the cache rows stay locked to commit.
+	// The re-check's days read again are for all the feed's cells, in this order (feed-fetch.ts sends them so).
+	const recheck = parsed.data.recheck;
+	if (recheck && recheck.read.some((r) => r.values !== null && r.values.length !== own.length)) return { ok: false, error: INVALID };
 	await db.query('SAVEPOINT chirps_cache_merge');
 	try {
 		await mergeCellCache(db, feed.id, origin, answer);
+		// The re-check after the merge: the same lock order (cell rows, then file rows), and its reads are the newer.
+		if (recheck && fetchJobId) await applyRecheck(db, feed.id, fetchJobId, origin, product, own, recheck);
 		await db.query('RELEASE SAVEPOINT chirps_cache_merge');
 	} catch (err) {
 		await db.query('ROLLBACK TO SAVEPOINT chirps_cache_merge');
@@ -335,8 +413,14 @@ async function fromCells(db: Db, feed: FeedRow, raw: unknown, window: FetchWindo
 		return fetchFailure(err, config);
 	}
 	const read = [...answer.read].filter((d) => d !== '-').length;
-	// What the source read this time (the rest came from the cache), for the status panel.
-	const reads = { daysRead: read, cellDaysRead: read * answer.cells.length };
+	// What the source read this time (the rest came from the cache), and what the re-check looked at, for the status panel.
+	const reads = {
+		daysRead: read,
+		cellDaysRead: read * answer.cells.length,
+		...(recheck ? { filesChecked: recheck.head.length, recheckDaysRead: recheck.read.filter((r) => r.values !== null).length } : {}),
+		// The fetcher's count of re-check requests that failed (left out of its answer): shown, never fatal.
+		...(typeof parsed.data.meta.recheckFailed === 'number' ? { recheckFailed: parsed.data.meta.recheckFailed } : {})
+	};
 	if (!days.values.length) return { ok: true, startDate: null, values: [], meta: days.prelimDays ? { days: 0, prelimDays: days.prelimDays, product, ...reads } : { days: 0, product, ...reads } };
 	const meta: Record<string, string | number> = { days: days.values.length, prelimDays: days.prelimDays, product, ...used(), ...reads };
 	if (days.finalThrough) meta.finalThrough = days.finalThrough;
@@ -357,10 +441,11 @@ export async function ingestResult(
 	feed: FeedRow,
 	raw: unknown,
 	window: FetchWindow,
-	opts: { origin?: CacheOrigin; cacheOnly?: boolean } = {}
+	opts: { origin?: CacheOrigin; cacheOnly?: boolean; fetchJobId?: string } = {}
 ): Promise<IngestOutcome> {
 	const nextSeconds = opts.cacheOnly ? CACHED_NEXT_SECONDS : BACKFILL_NEXT_SECONDS;
-	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) raw = await fromCells(db, feed, raw, window, opts.origin ?? cacheOrigin());
+	const origin = opts.origin ?? cacheOrigin();
+	if (feed.source === 'chirps' && typeof raw === 'object' && raw !== null && 'cells' in raw) raw = await fromCells(db, feed, raw, window, origin, opts.fetchJobId ?? null);
 	const parsed = FetchResult.safeParse(raw);
 	if (!parsed.success || (feed.source === 'chirps_gefs' && parsed.data.ok && !isKeyedIssue(parsed.data))) {
 		return failed(db, feed, INVALID);
@@ -416,6 +501,7 @@ export async function ingestResult(
 					`the series holds ${provenanceLabel(held)} rainfall and this feed writes ${provenanceLabel(writes)}, so nothing was written: an owner must confirm replacing the series, or point the feed at another one`
 				);
 			}
+			// The revised days wait for the swap (the marker carries on): the stage was computed from the cache as it is.
 			return stageReplacement(db, feed, checked, window, writes, held, nextSeconds);
 		}
 	}
@@ -463,14 +549,27 @@ export async function ingestResult(
 			lastValue = checked.values[lastIdx]!;
 		}
 	}
+	// CHIRPS: the days CHC rewrote since this feed last looked, recomputed from the cache (refreshRevisedDays).
+	let revision: string | null = null;
+	let more = false;
+	if (feed.source === 'chirps') {
+		const r = await refreshRevisedDays(db, feed, origin, writes);
+		if ('error' in r) return failed(db, feed, r.error);
+		revision = r.next;
+		// Stale days left come back in a minute, but only after a re-check that did something (a file HEADed or a day
+		// read): one whose every read failed waits for the feed's next scheduled fetch, so a broken file never spins.
+		const worked = Number(checked.meta.filesChecked ?? 0) > 0 || Number(checked.meta.recheckDaysRead ?? 0) > 0;
+		more = r.more || (worked && (await staleLeft(db, origin, chirpsProduct(feed.config as GridConfig), uniqueCells(gridCells(feed.config as GridConfig)))));
+	}
 	// Ours last, so a key of the same name in the fetcher's meta never stands.
 	// kept: days holding a value the feed didn't write (the panel's "kept your own values").
 	// finalThrough: how far the series is final (CHIRPS; finalThroughAfter).
+	// revisionXmin: where the next refresh of revised days looks from (CHIRPS; refreshRevisedDays).
 	const meta =
 		feed.source === 'chirps_gefs'
 			? { ...fetcherMeta(checked), merged, kept }
-			: withFinal({ ...fetcherMeta(checked), merged, kept, through: window.end }, finalThroughAfter(feed, checked, window));
+			: withRevision(withFinal({ ...fetcherMeta(checked), merged, kept, through: window.end }, finalThroughAfter(feed, checked, window)), revision);
 	await recordFeedResult(db, feed.id, { ok: true, lastDate, lastValue, meta });
-	await continueBackfill(db, feed, window, nextSeconds);
+	await continueBackfill(db, feed, window, nextSeconds, more);
 	return { merged, lastDate };
 }

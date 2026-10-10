@@ -23,7 +23,9 @@ sides share.
   through SQS (`@aws-sdk/client-sqs`) and a 5-minute schedule. Data feeds
   (`src/feeds/`: CHIRPS, CHIRPS-GEFS, DWS) run on that queue, reading
   synthetic fixtures (`fixtures/feeds/`, `FEED_SOURCE=fixtures`, the
-  default) everywhere but the production fetcher Lambda. Server-side report
+  default; `FEED_FIXTURE_REWRITE=1` serves some finals rewritten in place, to
+  watch the re-check of cached CHIRPS finals, architecture.md § Data feeds)
+  everywhere but the production fetcher Lambda. Server-side report
   PDFs (`src/reports/`) print the report route in headless Chromium
   (`playwright-core`, the browser e2e installs) and store the PDF through
   `@aws-sdk/client-s3` (MinIO locally, `STORAGE=local`; a private S3 bucket in

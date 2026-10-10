@@ -43,6 +43,7 @@
 	} from './mapLayers';
 	import { chirpsColour, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { MapGridLayer } from './mapGridLayer.svelte';
+	import { AREA_FILL_STEP, type AreaFill } from './areaFill.svelte';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
 
@@ -57,7 +58,8 @@
 		units = null,
 		mapGrid = null,
 		chirps = null,
-		labels = true
+		labels = true,
+		areaFill = null
 	}: {
 		quaternaries: QuaternaryLayer;
 		rivers: RiverLayer;
@@ -78,6 +80,8 @@
 		chirps?: { on: boolean; cells: readonly ChirpsCell[] | null } | null;
 		/** The map writes labels (glyphs are configured); without, the lists here are the only place to read them. */
 		labels?: boolean;
+		/** The Area fill slider's state (areaFill.svelte.ts): how strongly the polygons are filled. Null: no slider. */
+		areaFill?: AreaFill | null;
 	} = $props();
 	const uid = $props.id();
 
@@ -148,6 +152,26 @@
 <section class="layers" aria-labelledby="{uid}-h" data-testid="map-layers">
 	<h2 class="layers-h" id="{uid}-h">Layers</h2>
 	<p class="visually-hidden" role="status" data-testid="map-layers-status">{status}</p>
+	{#if areaFill}
+		<div class="fill-row" data-testid="map-area-fill">
+			<label for="{uid}-fill">Area fill</label>
+			<input
+				id="{uid}-fill"
+				type="range"
+				min="0"
+				max="100"
+				step={AREA_FILL_STEP}
+				value={areaFill.percent}
+				aria-valuetext={`${areaFill.percent} %`}
+				aria-describedby="{uid}-fill-note"
+				oninput={(e) => areaFill.set(e.currentTarget.value)}
+				data-testid="map-area-fill-slider"
+			/>
+			<!-- Not an <output>: that is a live region, and the box keeps one (WCAG 4.1.3); the slider says its value itself (aria-valuetext). -->
+			<span class="fill-value" aria-hidden="true" data-testid="map-area-fill-value">{areaFill.percent} %</span>
+			<p class="muted small" id="{uid}-fill-note">How strongly units, dams and results colours are filled; outlines stay. Lower it to see the map, relief and grids through them.</p>
+		</div>
+	{/if}
 	<div class="tip-row">
 		<label class="toggle">
 			<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
@@ -388,6 +412,27 @@
 	.order,
 	.on-map {
 		color: var(--text-muted);
+	}
+	.fill-row {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: 0.25rem 0.5rem;
+		padding-bottom: 0.35rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.fill-row input {
+		min-height: 24px;
+		width: 100%;
+	}
+	.fill-row .fill-value {
+		min-width: 3.2em;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	.fill-row p {
+		grid-column: 1 / -1;
+		margin: 0;
 	}
 	/* A unit's outline as the layer draws it: a solid line in the parcels' green. */
 	.units-swatch {

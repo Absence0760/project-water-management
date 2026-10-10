@@ -74,6 +74,7 @@
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
+	import { AreaFill } from './areaFill.svelte';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import { RiverLayer } from './riverLayer.svelte';
@@ -806,6 +807,8 @@
 	});
 	const chirpsOn = $derived(layersOn(params).has('chirps'));
 	const chirpsInView = $derived(chirpsOn ? chirpsCells(mapView) : null);
+	/** The Area fill slider (kept in this browser): the polygons' fill strength. */
+	const areaFill = new AreaFill();
 
 	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
 	/**
@@ -1288,6 +1291,7 @@
 		{mapGrid}
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
+		{areaFill}
 	/>
 {/snippet}
 {#snippet keyBody()}
@@ -1451,6 +1455,7 @@
 									units={unitsLabelled}
 									mapGrid={mapGrid.points}
 									chirps={chirpsInView}
+									fillScale={areaFill.scale}
 								/>
 							{/snippet}
 						</Lazy>
