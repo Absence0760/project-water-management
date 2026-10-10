@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText } from './sectionNav';
+import { activeSectionId, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText, pageLinkName } from './sectionNav';
 
 describe('navFitCount', () => {
 	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
@@ -115,6 +115,14 @@ describe('navText and navEmpty (issue #462)', () => {
 		expect(navText(sec, 'rail')).toBe('Calibration against observed flow');
 		expect(navText(sec, 'bar')).toBe('Calibration');
 		expect(navText({ label: 'Publication' }, 'bar')).toBe('Publication');
+	});
+
+	it('names a link to another page with that page, the problem after it; a link on this page has no name of its own', () => {
+		const sec = { label: 'Reserve rules met, by month', bar: 'Reserve rules', page: 'River & reserve' };
+		expect(pageLinkName(sec, 'rail')).toBe('Reserve rules met, by month, on River & reserve');
+		expect(pageLinkName(sec, 'bar')).toBe('Reserve rules, on River & reserve');
+		expect(pageLinkName({ ...sec, problem: true }, 'rail')).toBe('Reserve rules met, by month, on River & reserve (has a problem)');
+		expect(pageLinkName({ label: 'Summary' }, 'rail')).toBeNull();
 	});
 
 	it('is empty only when no group lists a section', () => {

@@ -7,7 +7,7 @@
 // unit picker converts.
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { MONTH_COLS } from '$lib/components/crops/areaPaste';
-import { mapPaste, sameValue, toCsv, type GridRow, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { mapPaste, sameValue, toCsv, type GridFormat, type GridRow, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 import type { DemandRow } from './demands';
 
 /** Headings the first column goes by. */
@@ -62,6 +62,22 @@ export function planDemandPaste(text: string, rows: readonly DemandRow[], anchor
 /** Write a plan's months through `set` (the row's key, the water-year month index, m³/day). */
 export function applyDemandPaste(plan: PastePlan, set: (rowKey: string, month: number, m3Day: number) => void, scale = 1): void {
 	for (const c of plan.changes) set(c.rowId, Number(c.key), c.to / scale);
+}
+
+/** The Demands grid's Expected format (issue #477), in the unit the table shows. */
+export function demandsFormat(unit = 'm³/day'): GridFormat {
+	return {
+		rules: [
+			`A heading row: ${NAME_HEADINGS[0]}, then the months Oct to Sep (or October to September), in any order; the CSV's other columns (Unit, Kind, Mean, Annual) are read past.`,
+			'A row per demand, its name first; a name two rows share takes its unit in brackets, as the CSV writes it. A demand the table doesn’t have is left out: add it on its unit first.',
+			`Values in ${unit}, the unit the table shows. Only a monthly demand object's and another water user's months take a paste. A blank or a dash leaves a month as it is.`
+		],
+		example: toCsv([
+			[NAME_HEADINGS[0]!, ...WATER_YEAR_MONTHS],
+			['Town supply', 120, 120, 130, 140, 140, 130, 110, 100, 95, 95, 100, 110]
+		]),
+		exampleName: 'demands-example.csv'
+	};
 }
 
 /** The Demands grid as a CSV: every row as shown, months in the display unit, to fill in and paste back. */

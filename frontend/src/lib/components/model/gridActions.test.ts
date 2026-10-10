@@ -12,6 +12,7 @@ import CropGrids from '$lib/components/crops/CropGrids.svelte';
 import NetworkTab from '$lib/components/network/NetworkTab.svelte';
 import DemandsTable from '$lib/components/network/DemandsTable.svelte';
 import TransfersTab from '$lib/components/transfers/TransfersTab.svelte';
+import IrrigationSystemsPanel from '$lib/components/crops/IrrigationSystemsPanel.svelte';
 
 // Nothing here fetches: the network's map links and farmers load after mount, which the server renderer never runs.
 vi.mock('$lib/api', () => ({ api: { map: { linkedNodes: () => Promise.resolve([]) } } }));
@@ -79,13 +80,26 @@ describe('grid actions sit above each grid (issue #463)', () => {
 		expect(row).toBeLessThan(html.indexOf('1 Mm³ = 1 million m³'));
 	});
 
-	it('the Transfers grid: + Add transfer above the rules', () => {
+	it('the Transfers grid: + Add transfer and the paste above the rules', () => {
 		const ed = editor();
 		ed.addTransfer();
 		const html = render(TransfersTab, { props: { editor: ed, readonly: false, inModal: true } }).body;
-		const row = html.indexOf('data-testid="grid-actions"');
-		expect(row).toBeGreaterThan(-1);
-		expect(row).toBeLessThan(html.indexOf('data-testid="transfer-rules"'));
+		actionsBeforeGrid(html, 'data-testid="transfer-rules"', ['+ Add transfer', 'Paste from a spreadsheet…']);
+	});
+
+	it('the irrigation systems: add and paste above the systems (issue #477)', () => {
+		const html = render(IrrigationSystemsPanel, { props: { editor: editor(), readonly: false } }).body;
+		actionsBeforeGrid(html, '<tbody', ['+ Add system', 'Paste from a spreadsheet…']);
+		expect(render(IrrigationSystemsPanel, { props: { editor: editor(), readonly: true } }).body).not.toContain('data-testid="grid-actions"');
+	});
+
+	it('the crop factors with no crops yet: a paste beside Add crop, to bring a list of crop types in (issue #477)', () => {
+		const ed = editor();
+		ed.model.crops = [];
+		ed.model.cropAreas = [];
+		const html = render(CropGrids, { props: { editor: ed, settings, readonly: false, sections: ['factors'] as const, inModal: true } }).body;
+		const empty = html.slice(html.indexOf('class="empty'), html.indexOf('</div>', html.indexOf('class="empty')));
+		expect([...empty.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1]!.trim())).toEqual(['Add crop', 'Paste from a spreadsheet…']);
 	});
 
 	it('a viewer gets no actions row on the editable grids', () => {

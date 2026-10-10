@@ -107,6 +107,40 @@ describe('mapPaste', () => {
 	it('refuses an empty paste', () => {
 		expect(mapPaste(' \n', rows, cols)).toEqual({ error: 'Paste the block of cells first.' });
 	});
+
+	it('matches a row by an alias as by its name; an alias two rows share is left out (issue #477)', () => {
+		const aliased = [
+			{ id: 't1', name: 'Transfer 1', aliases: ['Upper → Lower'] },
+			{ id: 't2', name: 'Transfer 2', aliases: ['Lower → Upper', 'Shared'] },
+			{ id: 't3', name: 'Transfer 3', aliases: ['Shared', 'transfer 3'] }
+		];
+		const r = ok(mapPaste('Name\tArea\nupper → lower\t1\nTransfer 2\t2\nShared\t3\nTransfer 3\t4', aliased, cols));
+		expect(r.values).toEqual([
+			{ rowId: 't1', key: 'a', value: 1 },
+			{ rowId: 't2', key: 'a', value: 2 },
+			{ rowId: 't3', key: 'a', value: 4 }
+		]);
+		expect(r.notes).toContain('Left out Shared: two rows of the table have that name.');
+		expect(mapPaste('Upper → Lower\t1\nTransfer 1\t2', aliased, cols)).toEqual({ error: 'Transfer 1 appears twice in the paste.' });
+	});
+
+	it('with addRows, a name the grid lacks is a new row its values carry, not one left out (issue #477)', () => {
+		const r = ok(mapPaste('Name\tArea\nNew farm\t2\nUpper farm\t1\nOther\t', rows, cols, { addRows: true }));
+		expect(r.added).toEqual([
+			{ id: 'new:0', name: 'New farm' },
+			{ id: 'new:1', name: 'Other' }
+		]);
+		expect(r.values).toEqual([
+			{ rowId: 'new:0', key: 'a', value: 2 },
+			{ rowId: 'u', key: 'a', value: 1 }
+		]);
+		expect(r.notes).toEqual(['Matched 1 row by name.']);
+		// Every name new is no error; a new name twice is.
+		expect(ok(mapPaste('Name\tArea\nA\t1', rows, cols, { addRows: true })).notes).toEqual([]);
+		expect(mapPaste('Name\tArea\nA\t1\na\t2', rows, cols, { addRows: true })).toEqual({ error: 'a appears twice in the paste.' });
+		// Without it, as before.
+		expect(ok(mapPaste('Name\tArea\nNew farm\t2\nUpper farm\t1', rows, cols)).added).toEqual([]);
+	});
 });
 
 describe('normalName and headingKeys', () => {

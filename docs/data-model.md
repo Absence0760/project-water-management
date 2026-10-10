@@ -260,6 +260,38 @@ Issue #66. For any series, what 032's product and version can't say:
 - RLS and grants: columns on `time_series` and `series_revision`, covered by
   their existing policies and `water_app`'s table grants; no foreign key.
 
+### Days edited by hand (212_series_hand_days.sql)
+
+Issue #477 (a). A person can set or clear one day of a series (`PUT
+/projects/:id/series/:seriesId/days/:date`, [api.md § Time
+series](./api.md#time-series)), and an edited record must never pass as the
+raw one, so each series remembers which days were typed in:
+
+- **`time_series.hand_days`**: a `datemultirange` like `feed_days` (031), on
+  the row every write already locks and rewrites, so it changes in the same
+  statement under the same RLS. `NULL` = no day.
+- **Set by** a hand edit (`series/merge.ts` `mergeSeries` with `byHand`): the
+  day it changes, a cleared day included. A value equal to the stored one
+  changes nothing and marks nothing.
+- **Released by** a person's upload or paste that writes the day (a merge's
+  blank day leaves it), and all at once by a replace (`replaceSeries`).
+- **Never written over** by a data feed or an API key's ingest: `mergeSeries`
+  gives each hand day of their incoming days the stored value (or blank)
+  back (`keepHandDays`), so the next fetch or push can't undo a correction.
+  Hand edits are therefore allowed on a feed-filled series; the edit also
+  takes the day from the feed (`feed_days`), as any write of a person's does.
+- **Kept by a series revision** (`series_revision.hand_days`), so a restore
+  puts the marks back with the values; a copy and the project document
+  (`handDays`, inclusive `[from, to]` pairs) carry them too.
+- **Shown** as `SeriesMeta.handDays` (inclusive `[from, to]` pairs): the Data
+  tab's row mark, Series details and the chart's points
+  ([ui.md § Data](./ui.md)). The history logs each edit as `series.merged`
+  with `entry: 'hand'` and the `date`, with a revision to restore. A run's
+  input snapshot doesn't record the marks yet (its values and hash do record
+  the edited values).
+- RLS and grants: columns on `time_series` and `series_revision`, covered by
+  their existing policies and `water_app`'s table grants; no foreign key.
+
 ### Series day boundary (033_series_day_boundary.sql)
 
 `time_series.day_boundary` says how a series' days were built from

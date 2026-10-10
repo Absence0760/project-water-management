@@ -161,7 +161,7 @@ test('the map shades each unit by its band, labels its %, keys every band in wor
 	await section(page).getByRole('radio', { name: 'Surface water' }).check();
 
 	// One whole water year at a time; never a part year.
-	const year = section(page).getByLabel('Water year');
+	const year = section(page).getByRole('combobox', { name: 'Water year' });
 	await expect(year.locator('option')).toHaveText(['Mean of the whole water years', '2019/20', '2020/21', '2021/22']);
 	await year.selectOption('2020/21');
 	await expect(key.getByRole('heading')).toHaveText('Key: modelled use ÷ registered volume, water year 2020/21');

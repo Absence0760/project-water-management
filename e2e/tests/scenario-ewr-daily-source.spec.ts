@@ -49,7 +49,9 @@ test('a scenario switches the daily EWR at the outlet to the TAB file the base k
 	// The area ratio without the table's area: refused, not left for the run to drop back to the pragmatic EWR.
 	await daily.getByLabel('Scale the tables by').selectOption('area');
 	await form.getByRole('button', { name: 'Add change' }).click();
+	// One alert, the form's: the editor still says it under its fields, without announcing it a second time.
 	await expect(form.getByRole('alert')).toHaveText('Daily EWR at the outlet: scaling by area needs the table’s catchment area (km²)');
+	await expect(daily.getByTestId('ewr-daily-error')).toHaveText('Daily EWR at the outlet: Scaling by area needs the table’s catchment area (km²).');
 	await daily.getByLabel('Scale the tables by').selectOption('mar');
 	await expectNoViolations(page);
 	await form.getByRole('button', { name: 'Add change' }).click();

@@ -43,6 +43,8 @@ export async function replaceSeries(
 	// Where the values came from and the unit they were given in (107): a replace records exactly what it was, or clears it.
 	const origin = body.origin ?? null;
 	const { rows } = await db.query<SeriesMetaRow>(
+		// A replace is new values throughout, so no day of it is one edited by hand (212_series_hand_days; a
+		// restore puts its revision's marks back afterwards, history/routes.ts).
 		// A person's replace (or restore) makes the whole series the user's: a
 		// data feed writing it keeps every day from here on (feed_id NULL clears
 		// feed_days, 031_feed_days). A data feed's confirmed replacement
@@ -56,7 +58,8 @@ export async function replaceSeries(
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", product = EXCLUDED.product,
 			product_version = EXCLUDED.product_version, updated_at = now(), feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
-			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor
+			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor,
+			hand_days = NULL
 		 RETURNING ${META}`,
 		[
 			projectId,

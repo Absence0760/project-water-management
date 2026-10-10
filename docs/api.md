@@ -1781,9 +1781,10 @@ naming `startDate`, not a server error).
 | PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary?, source? }` | `SeriesMeta & { rerunQueuedFor }` (upsert on kind+name) | editor |
 | POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary?, source? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing; a `null` day keeps its stored value, so a file never erases: clear days with a PUT) | editor |
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }`, and/or `{ source }` (a string, or `null` to clear; 107) | `SeriesMeta`: says what an existing series holds, where its values came from (`source`), or which node it belongs to (`siteNodeId`): where a flow record was measured (a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)), or the land unit whose own rain a `rain_catchment_mm` / `rain_chirps_mm` series is (a farm with an area above 0, or `null` for the catchment's rain; 209, issue #482, [data-model.md](./data-model.md#unit-rain-series-209_unit_rain_seriessql)); the values and `updatedAt` are untouched. `400` for a site on an evaporation or forecast series, a node that isn't in the project (save the model first), a flow record at a farm, a user or the outlet gauge, or rain at a gauge, a user or a farm with no area. Logged as `series.labelled` / `series.site_changed` when it changes (`site.from` / `to`: the node's name, `the outlet` or `the catchment`) | editor |
+| PUT | `/projects/:id/series/:seriesId/days/:date` | `{ value, unit? }`: `value` a number ≥ 0, or `null` to clear the day; `unit` defaults to the series' own | `SeriesMeta & { rerunQueuedFor }`: one day set or cleared by hand, marked in `handDays` (below, "Days edited by hand") | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding, feed }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding, feed, handDays }` —
 `source` is where the values came from (a station id, agency, file or data feed; `null` = not recorded) and `sourceUnit` /
 `sourceUnitFactor` the unit the upload gave and the factor that converted it to `unit` (both `null` = not recorded; 107,
 [data-model.md § Series source and unit](./data-model.md#series-source-and-unit-107_series_sourcesql)). A PUT records exactly what it
@@ -1797,6 +1798,7 @@ series (its values stay as they are until the swap);
 `feed` is the data feed that wrote days of the series, `{ source, days }` (`source` the feed's `chirps`, `chirps_gefs` or `dws`;
 `days` how many of the series' days are still the feed's, `time_series.feed_days`, 031, [data-model.md § Feed days](./data-model.md#feed-days-031_feed_dayssql)),
 or `null` when no day is a feed's, and always `null` to an API key (below viewer, it can't read `data_feed`; the Data tab's mark);
+`handDays` is the days a person typed in by hand, `[from, to][]` inclusive dates in date order (`time_series.hand_days`, 212), or `null` for none;
 `updatedAt` is when the values last changed (upload or merge), so the UI can
 tell there is new data since the last run.
 
@@ -1806,6 +1808,30 @@ re-run (or pushed the pending one back), and this is when it is due, ISO.
 `null` when automatic runs are off or no day changed (re-sending the same
 values queues nothing). A data feed's merges and an API key's ingest queue it
 the same way ([architecture.md § Automatic runs](./architecture.md#automatic-runs)).
+
+**Days edited by hand** (issue #477, [data-model.md § Days edited by
+hand](./data-model.md#days-edited-by-hand-212_series_hand_dayssql)): `PUT
+…/series/:seriesId/days/:date` sets one day of an existing series (a
+correction or a filled gap), or clears it with `value: null`. It is a merge
+of that one day (`series/merge.ts` `mergeInto`): the value is converted from
+`unit` like an upload's (a unit the kind doesn't take is a `400`), the
+previous values are kept as a series revision, and the history logs
+`series.merged` with `entry: "hand"` and the `date`; a value equal to the
+stored one changes and records nothing. `400` for a date that isn't a
+calendar `YYYY-MM-DD`, a day outside the series (`startDate` to its last
+day: add days outside it with an upload or a paste, i.e. `POST
+…/series/merge`), a negative value or any other field; `409` while a data
+feed is replacing the series (`rebuilding`: the swap would drop the edit).
+The day goes into `handDays`; it stays there when cleared. A person's upload
+or paste (`PUT`, `POST …/series/merge`) that writes the day takes it out (a
+merge's blank day leaves it), and a `PUT` takes them all out; a series
+revision keeps them, so a restore puts them back, and a copy and the project
+document (`handDays` per series, only when it has any; an import refuses a
+range that ends before it starts) carry them. A data feed and an API
+key's ingest never write a day in `handDays`: they leave its value (or its
+blank) as the person set it. So hand edits are allowed on a series a feed
+fills, and the next fetch doesn't undo them (the edit also takes the day
+from the feed, as any write of a person's does, 031).
 
 **Product and version** (issue #40 part c, [data-model.md § Series
 provenance](./data-model.md#series-provenance-032_series_provenancesql)):

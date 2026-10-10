@@ -195,6 +195,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'series.replaced':
 			return `${s.feedId ? `The ${feedName(s.source)} feed replaced` : 'Replaced'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed${range(s)}${versionChange(s)}`;
 		case 'series.merged':
+			// A day set or cleared by hand (PUT …/series/:seriesId/days/:date, issue #477).
+			if (s.entry === 'hand') return `Edited ${str(s.date) || 'a day'} of ${seriesName(s)} by hand`;
 			return `${s.feedId ? `The ${feedName(s.source)} feed added days to` : 'Merged days into'} ${seriesName(s)}: ${plural(num(s.daysChanged) ?? 0, 'day')} changed`;
 		case 'series.deleted':
 			return `Deleted ${seriesName(s)}${range(s)}`;

@@ -19,6 +19,8 @@ export interface UploadSubmit {
 	confirming: boolean;
 	/** The upload is on its way: the dialog can't be closed (the request would finish anyway). */
 	uploading: boolean;
+	/** Where the days come from: a file, or rows pasted into the form (issue #477). */
+	input: 'file' | 'paste';
 }
 
 /**

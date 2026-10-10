@@ -292,6 +292,8 @@ export interface ProjectFileSeries {
 	source?: string;
 	sourceUnit?: string;
 	sourceUnitFactor?: number;
+	/** The days edited by hand (212_series_hand_days.sql), inclusive [from, to] pairs; absent = none. */
+	handDays?: [string, string][];
 }
 
 /** POST /projects/import. `runId` / `runError` only when a run was asked for. */

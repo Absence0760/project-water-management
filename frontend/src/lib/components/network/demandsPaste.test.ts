@@ -2,7 +2,7 @@ import type { DemandObject, NetworkNode, ProjectModel } from '@water-management/
 import { describe, expect, it } from 'vitest';
 import type { PastePlan } from '$lib/spreadsheet/paste/grid';
 import { demandRows } from './demands';
-import { applyDemandPaste, demandsCsv, pasteNames, planDemandPaste } from './demandsPaste';
+import { applyDemandPaste, demandsCsv, demandsFormat, pasteNames, planDemandPaste } from './demandsPaste';
 
 const apan = new Array(12).fill(100);
 const node = (id: string, kind: NetworkNode['kind'], extra: Partial<NetworkNode> = {}) => ({ id, name: id, kind, irrigationEfficiency: 1, ...extra }) as unknown as NetworkNode;
@@ -112,5 +112,17 @@ describe('demandsCsv', () => {
 	it('defuses a name a spreadsheet would read as a formula', () => {
 		const evil = demandRows({ ...model, demandObjects: [object('=HYPERLINK("x")', 'Upper')] }, apan);
 		expect(demandsCsv(evil)).toContain(`"'=HYPERLINK(""x"")"`);
+	});
+});
+
+describe('demandsFormat (issue #477)', () => {
+	it('names the table’s unit, and its example fills a monthly demand by name', () => {
+		const f = demandsFormat('m³/day');
+		expect(f.rules.join(' ')).toContain('m³/day');
+		const r = planDemandPaste(f.example.replace('Town supply', 'Town'), rows, null, 1, 'm³/day');
+		if ('error' in r) throw new Error(r.error);
+		// Town holds 100 m³/day every month; the example's two months of 100 are no change.
+		expect(r.changes.filter((c) => c.rowName === 'Town')).toHaveLength(10);
+		expect(r.unchanged).toBe(2);
 	});
 });

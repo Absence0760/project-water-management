@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '@water-management/engine';
-import { feedDays, mergeDaily, releaseDays, sameDaily, subtractRuns, unionRuns } from './merge.js';
+import { changedDays, feedDays, keepHandDays, mergeDaily, releaseDays, sameDaily, subtractRuns, unionRuns } from './merge.js';
 
 describe('mergeDaily', () => {
 	it('appends the next days', () => {
@@ -107,5 +107,34 @@ describe('feedDays: a data feed replaces only its own days (#30)', () => {
 			[d('2026-01-01'), d('2026-01-03')],
 			[d('2026-01-04'), d('2026-01-11')]
 		]);
+	});
+});
+
+// Days edited by hand (212_series_hand_days): an automated writer's days there take the stored value.
+describe('keepHandDays', () => {
+	const d = (s: string) => toEpochDay(s);
+	const existing = { startDate: '2026-01-01', values: [1, null, 3, 4] };
+	it('puts the stored value (or blank) back on each hand day, and leaves the others', () => {
+		const hand: [number, number][] = [[d('2026-01-02'), d('2026-01-04')]];
+		expect(keepHandDays(existing, hand, { startDate: '2026-01-01', values: [9, 9, 9, 9, 9] })).toEqual({ startDate: '2026-01-01', values: [9, null, 3, 9, 9] });
+	});
+	it('reads only the incoming days a hand run overlaps', () => {
+		const hand: [number, number][] = [[d('2025-12-30'), d('2026-01-02')]];
+		expect(keepHandDays(existing, hand, { startDate: '2026-01-04', values: [7] })).toEqual({ startDate: '2026-01-04', values: [7] });
+		expect(keepHandDays(existing, hand, { startDate: '2025-12-31', values: [7, 7, 7] })).toEqual({ startDate: '2025-12-31', values: [null, 1, 7] });
+	});
+	it('returns the days as they are when none is a hand day', () => {
+		const incoming = { startDate: '2026-01-01', values: [5] };
+		expect(keepHandDays(existing, [], incoming)).toBe(incoming);
+	});
+});
+
+describe('changedDays', () => {
+	const d = (s: string) => toEpochDay(s);
+	it('the days whose value differs from the stored one, a cleared day included', () => {
+		const existing = { startDate: '2026-01-01', values: [1, 2, 3] };
+		expect(changedDays(existing, { startDate: '2026-01-02', values: [2, null, 5] })).toEqual([[d('2026-01-03'), d('2026-01-05')]]);
+		expect(changedDays(existing, { startDate: '2026-01-01', values: [1] })).toEqual([]);
+		expect(changedDays(null, { startDate: '2026-01-01', values: [null, 1] })).toEqual([[d('2026-01-02'), d('2026-01-03')]]);
 	});
 });

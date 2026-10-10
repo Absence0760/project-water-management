@@ -26,7 +26,7 @@
 	import DemandsRunCaption from './DemandsRunCaption.svelte';
 	import { latestRunFigures } from './demandsRunLoad.svelte';
 	import type { RunMeta } from '$lib/api';
-	import { applyDemandPaste, demandsCsv, pasteNames, planDemandPaste } from './demandsPaste';
+	import { applyDemandPaste, demandsCsv, demandsFormat, pasteNames, planDemandPaste } from './demandsPaste';
 
 	let {
 		editor,
@@ -274,6 +274,7 @@
 				onapply={applyPaste}
 				csv={() => demandsCsv(rows, PASTE_SCALE, PASTE_UNIT)}
 				csvName="demands.csv"
+				format={demandsFormat(PASTE_UNIT)}
 			/>
 		{/if}
 		{#if cells && regTotal}

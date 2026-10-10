@@ -970,7 +970,10 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   the scaling, typed or pasted tables, or a DRM .tab / .rul file), starting
   from the source the scenario meets, tables and all (or the pragmatic EWR).
   The engine's first issue blocks Add ("Daily EWR at the outlet: enter the
-  TAB file’s 12 monthly total flows, or pick another source"). Described as
+  TAB file’s 12 monthly total flows, or pick another source"): the form's
+  alert says it on Add, while the editor shows the same problem under its
+  fields without a second alert (`announce={false}`), so a screen reader
+  hears it once. Described as
   "Daily EWR at the outlet: the pragmatic EWR → the DRM TAB file, scaled by
   MAR (table 12.5 Mm³/a)" (the engine's `describeEwrDailySource`); the
   compare page's Inputs that differ lists the method, scaling and table

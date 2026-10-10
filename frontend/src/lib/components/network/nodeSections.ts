@@ -4,9 +4,10 @@
 // how it irrigates, its other demands, its groundwater (the combined
 // boreholes, then the individual ones), its land cover, and last the bed
 // losses in the reach below it, where its water leaves it. The node sheet's
-// jump row (NetworkTab.svelte) lists the same sections, so the two never
-// disagree.
+// section menu (NetworkTab.svelte, the shared common/SectionNav, issue #462)
+// lists the same sections, so the two never disagree.
 import type { NetworkNode } from '@water-management/engine';
+import type { NavGroup } from '$lib/components/common/sectionNav';
 import { GROUPS, hasDam, hasDamDevelopment, NODE_FIELDS, type NodeField } from './fields';
 import { hasSupplySettings } from './supply';
 
@@ -25,7 +26,7 @@ export const SECTION_TITLE: Record<NodeSection, string> = {
 	cover: 'Land cover'
 };
 
-/** Each section's name on the jump row, where room is short. */
+/** Each section's name on the section menu's bar, where room is short (its More menu says the legend). */
 export const SECTION_SHORT: Record<NodeSection, string> = {
 	...SECTION_TITLE,
 	groundwater: 'Combined boreholes',
@@ -62,5 +63,23 @@ export function nodeSections(node: NetworkNode, demandObjects: number): NodeSect
 	return SECTION_ORDER.filter((s) => (s in own ? own[s as keyof typeof own] : groups.has(s as NodeField['group'])));
 }
 
-/** The id of a section's fieldset in a node's form (the jump row scrolls to it). */
+/** The id of a section's fieldset in a node's form (the section menu scrolls to it). */
 export const sectionId = (nodeId: string, s: NodeSection) => `nd-sec-${s}-${nodeId}`;
+
+/**
+ * The node sheet's section menu (common/SectionNav, issue #462): one group,
+ * each link named by its fieldset's legend, with the short name on the bar
+ * where the legend is longer.
+ */
+export function nodeNavGroups(nodeId: string, sections: readonly NodeSection[]): NavGroup[] {
+	return [
+		{
+			label: null,
+			sections: sections.map((s) => ({
+				id: sectionId(nodeId, s),
+				label: SECTION_TITLE[s],
+				...(SECTION_SHORT[s] !== SECTION_TITLE[s] ? { bar: SECTION_SHORT[s] } : {})
+			}))
+		}
+	];
+}

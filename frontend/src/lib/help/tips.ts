@@ -1904,6 +1904,12 @@ export const TIPS: HelpTipText[] = [
 		category: 'data'
 	},
 	{
+		id: 'series-edit-day',
+		term: 'Edit a day, or paste rows',
+		short: 'Set or clear one day of a series by hand, or paste date and value rows from a spreadsheet. Days typed in are marked as edited by hand.',
+		category: 'data'
+	},
+	{
 		id: 'workbook-import',
 		term: 'b023 workbook import',
 		short: 'Turns a b023 workbook into a new project, read in your browser: network, units, crops, transfers, settings and Flow data series.',

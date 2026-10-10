@@ -1,14 +1,20 @@
 // Pasting a block from a spreadsheet into the node table and the
-// planted-areas and crop-factor grids (issue #285): a block pasted into a cell opens the
-// preview with every value it would change, Apply writes them into the grid
-// (unsaved, as if typed), and Save keeps them. The mapping itself is unit
-// tested (frontend/src/lib/spreadsheet/paste, network/nodePaste.ts,
-// crops/areaPaste.ts); this pins the paste event, the preview and the save.
+// planted-areas and crop-factor grids (issue #285), and the transfers' rates,
+// the irrigation systems, new crop types and Settings' monthly A-pan and pan
+// coefficients (issue #477, each with its Expected format note): a block
+// pasted into a cell opens the preview with every value it would change,
+// Apply writes them into the grid (unsaved, as if typed), and Save keeps them.
+// The mapping itself is unit tested (frontend/src/lib/spreadsheet/paste,
+// network/nodePaste.ts, crops/areaPaste.ts, crops/systemsPaste.ts,
+// transfers/transfersPaste.ts, settings/monthlyPaste.ts); this pins the paste
+// event, the preview and the save.
 import type { Locator, Page } from '@playwright/test';
-import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
+import { addMember, createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectAbove } from '../support/reflow.ts';
+import { saveModelChanges } from '../support/network.ts';
+import { openSettings, saveSettings } from '../support/settings.ts';
 
 /** Paste `text` into a cell's input as Excel's clipboard would hand it over. */
 async function pasteInto(input: Locator, text: string) {
@@ -24,6 +30,14 @@ async function pasteInto(input: Locator, text: string) {
 async function templateCsv(dialog: Locator): Promise<string> {
 	const href = (await dialog.getByRole('link', { name: 'Download the table as CSV' }).getAttribute('href'))!;
 	return decodeURIComponent(href.slice(href.indexOf(',') + 1));
+}
+
+/** The Expected format note in a paste dialog: opened, its example file's name and text. */
+async function exampleFile(dialog: Locator): Promise<{ name: string | null; text: string }> {
+	await dialog.getByTestId('format-help').locator('summary').click();
+	const link = dialog.getByTestId('format-example-file');
+	const href = (await link.getAttribute('href'))!;
+	return { name: await link.getAttribute('download'), text: decodeURIComponent(href.slice(href.indexOf(',') + 1)) };
 }
 
 async function save(page: Page, projectId: string, grid: Locator) {
@@ -210,4 +224,133 @@ test.describe('phone', () => {
 		await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
 		await expect(grid.getByLabel('Orchard on Lower farm, ha')).toHaveValue('13');
 	});
+});
+
+test('transfers: the monthly rates take a paste by rule or route, in the shown unit, and save (issue #477)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Grid paste transfers');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=transfers`);
+	await page.getByTestId('section-header').getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
+	const dlg = page.getByRole('dialog', { name: 'Paste transfer rates' });
+	// The sample's rule: 0.01 m³/s Nov to Feb.
+	expect(await templateCsv(dlg)).toBe(
+		'\ufeffTransfer,From,To,Oct (m³/s),Nov (m³/s),Dec (m³/s),Jan (m³/s),Feb (m³/s),Mar (m³/s),Apr (m³/s),May (m³/s),Jun (m³/s),Jul (m³/s),Aug (m³/s),Sep (m³/s)\r\nTransfer 1,Upper farm,Lower farm,0,0.01,0.01,0.01,0.01,0,0,0,0,0,0,0\r\n'
+	);
+	const example = await exampleFile(dlg);
+	expect(example.name).toBe('transfers-example.csv');
+	expect(example.text).toMatch(/^\ufeffTransfer,From,To,Oct,/);
+	await expectNoViolations(page);
+
+	const box = dlg.getByLabel('Cells copied from a spreadsheet');
+	await box.fill('Transfer\tOct\nTransfer 1\t-1\n');
+	await expect(dlg.getByText('Transfer 1, Oct: -1 m³/s is below 0 m³/s.')).toBeVisible();
+	// By its route, an SA-locale decimal comma; 0 in March is already off.
+	await box.fill('Transfer\tOct\tMar\nUpper farm -> Lower farm\t0,02\t0\n');
+	await expect(dlg.getByTestId('paste-summary')).toHaveText('1 value changes; 1 already has the pasted value.');
+	await dlg.getByRole('button', { name: 'Apply 1 change' }).click();
+	await expect(dlg).toBeHidden();
+	await expect(page.getByLabel('Max rate of transfer 1 in Oct, m³/s')).toHaveValue('0.02');
+
+	// A bare row pasted into a month fills from there.
+	await pasteInto(page.getByLabel('Max rate of transfer 1 in Mar, m³/s'), '0.03\t0.03\n');
+	await expect(dlg.getByTestId('paste-where')).toContainText('Transfer 1, Mar');
+	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(page.getByLabel('Max rate of transfer 1 in Apr, m³/s')).toHaveValue('0.03');
+
+	expect((await saveModelChanges(page)).status()).toBe(200);
+	await page.reload();
+	await expect(page.getByLabel('Max rate of transfer 1 in Oct, m³/s')).toHaveValue('0.02');
+	await expect(page.getByLabel('Max rate of transfer 1 in Apr, m³/s')).toHaveValue('0.03');
+	await expect(page.getByLabel('Max rate of transfer 1 in Nov, m³/s')).toHaveValue('0.01');
+});
+
+test('irrigation systems: a paste updates an efficiency and adds a system, and saves (issue #477)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Grid paste systems');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=crops&grid=systems`);
+	const panel = page.getByTestId('irrigation-systems');
+	await expectAbove(panel.getByTestId('grid-actions'), panel.locator('tbody tr').first());
+	await panel.getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
+	const dlg = page.getByRole('dialog', { name: 'Paste irrigation systems' });
+	expect(await templateCsv(dlg)).toMatch(/^\ufeffSystem,Efficiency \(%\),SABI range\r\nDrip,90,SABI 90–95 %\r\n/);
+	expect((await exampleFile(dlg)).name).toBe('irrigation-systems-example.csv');
+
+	const box = dlg.getByLabel('Cells copied from a spreadsheet');
+	await box.fill('System\tEfficiency (%)\nDrip\t0.9\n');
+	await expect(dlg.getByText('Drip: is 0.9 a fraction? Write the efficiency as a percentage (90, not 0.9).')).toBeVisible();
+	await box.fill('System\tEfficiency (%)\nDrip\t93%\nOld furrows\t60\n');
+	await expect(dlg.getByTestId('paste-summary')).toHaveText('Adds 1 system; 2 values change.');
+	await expect(dlg.getByRole('row', { name: /Old furrows \(new system\) Efficiency % – 60/ })).toBeVisible();
+	await expectNoViolations(page);
+	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(dlg).toBeHidden();
+	await expect(panel.getByLabel('Efficiency of Drip, %')).toHaveValue('93');
+	await expect(panel.getByLabel('Efficiency of Old furrows, %')).toHaveValue('60');
+
+	expect((await saveModelChanges(page)).status()).toBe(200);
+	await page.reload();
+	await expect(page.getByTestId('irrigation-systems').getByLabel('Efficiency of Old furrows, %')).toHaveValue('60');
+	await expect(page.getByTestId('irrigation-systems').getByLabel('Efficiency of Drip, %')).toHaveValue('93');
+});
+
+test('crop types: a name the project lacks adds that crop with its factors, and saves (issue #477)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Grid paste crop types');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=crops&grid=crop-factors`);
+	const grid = page.getByRole('dialog', { name: 'Crop factors' });
+	await grid.getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
+	const dlg = page.getByRole('dialog', { name: 'Paste crop factors' });
+	expect((await exampleFile(dlg)).name).toBe('crop-factors-example.csv');
+	await dlg.getByLabel('Cells copied from a spreadsheet').fill('Crop\tOct\tNov\nMaize\t0.3\t0.5\nOrchard\t0.6\t0.7\n');
+	await expect(dlg.getByTestId('paste-summary')).toHaveText('Adds 1 crop; 2 values change; 2 already have the pasted value.');
+	await expect(dlg.getByText("Adds a crop the project doesn't have: Maize. It starts on drip irrigation, as + Add crop does; a blank month is 0.")).toBeVisible();
+	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(dlg).toBeHidden();
+	await expect(grid.getByLabel('Maize crop factor, Nov')).toHaveValue('0.5');
+	await expect(grid.getByLabel('Maize crop factor, Dec')).toHaveValue('0');
+
+	await save(page, project.id, grid);
+	await page.reload();
+	await expect(page.getByRole('dialog', { name: 'Crop factors' }).getByLabel('Maize crop factor, Oct')).toHaveValue('0.3');
+});
+
+test('settings: the monthly A-pan and pan coefficients take a paste, from the button or into a month, and save (issue #477)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Grid paste settings');
+	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(100), panCoefficient: new Array(12).fill(0.7) });
+	await openSettings(page, project.id);
+	await page.locator('#set-demand').getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
+	const dlg = page.getByRole('dialog', { name: 'Paste monthly evaporation' });
+	expect(await templateCsv(dlg)).toBe(
+		'\ufeffParameter,Unit,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep\r\nA-pan evaporation,mm,100,100,100,100,100,100,100,100,100,100,100,100\r\nPan coefficient,× A-pan,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7\r\n'
+	);
+	expect((await exampleFile(dlg)).name).toBe('monthly-evaporation-example.csv');
+	const box = dlg.getByLabel('Cells copied from a spreadsheet');
+	await box.fill('Parameter\tOct\nPan coefficient\t2.5\n');
+	await expect(dlg.getByText('Pan coefficient, Oct: 2.5 is above 2.')).toBeVisible();
+	await box.fill('Parameter\tOct\tNov\nA-pan\t150\t160\nKp\t0.75\t0.7\n');
+	await expect(dlg.getByTestId('paste-summary')).toHaveText('3 values change; 1 already has the pasted value.');
+	await expectNoViolations(page);
+	await dlg.getByRole('button', { name: 'Apply 3 changes' }).click();
+	await expect(dlg).toBeHidden();
+	await expect(page.getByLabel('A-pan evaporation, Nov, mm')).toHaveValue('160');
+	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.75');
+
+	// A bare row pasted into a month of the pan coefficient row fills from there.
+	await pasteInto(page.getByLabel('Pan coefficient, Aug'), '0.8\t0.8\n');
+	await expect(dlg.getByTestId('paste-where')).toContainText('Pan coefficient, Aug');
+	await dlg.getByRole('button', { name: 'Apply 2 changes' }).click();
+	await expect(page.getByLabel('Pan coefficient, Sep')).toHaveValue('0.8');
+
+	await saveSettings(page);
+	await page.reload();
+	await expect(page.getByLabel('A-pan evaporation, Oct, mm')).toHaveValue('150');
+	await expect(page.getByLabel('Pan coefficient, Sep')).toHaveValue('0.8');
 });

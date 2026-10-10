@@ -18,7 +18,7 @@ import { projectName } from '../http/visibleName.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
-import { checkProvenance, ProvenanceFields, SERIES_PER_PROJECT_MAX, SourceField, toCanonicalUnit } from '../series/merge.js';
+import { checkProvenance, handDaysSql, ProvenanceFields, SERIES_PER_PROJECT_MAX, SourceField, toCanonicalUnit } from '../series/merge.js';
 import { targetOf } from '../notes/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 import { DEFAULT_TIME_ZONE, TimeZone } from './timeZone.js';
@@ -59,7 +59,12 @@ export const ProjectFile = z.object({
 				// Where the values came from, and the unit they were first given in (107_series_source.sql); absent = not recorded.
 				source: SourceField,
 				sourceUnit: z.string().trim().min(1).max(20).optional(),
-				sourceUnitFactor: z.number().finite().positive().optional()
+				sourceUnitFactor: z.number().finite().positive().optional(),
+				// The days a person typed in by hand (212_series_hand_days.sql), inclusive [from, to] pairs; absent = none.
+				handDays: z
+					.array(z.tuple([SeriesStartDate, SeriesStartDate]).refine(([from, to]) => from <= to, 'a range ends on or after it starts'))
+					.max(MAX_SERIES_VALUES)
+					.optional()
 			})
 			.superRefine(checkProvenance)
 			.refine((s) => (s.sourceUnit === undefined) === (s.sourceUnitFactor === undefined), {
@@ -102,6 +107,8 @@ export interface ProjectDocument {
 		source?: string;
 		sourceUnit?: string;
 		sourceUnitFactor?: number;
+		/** Only on a series with days edited by hand (212_series_hand_days.sql): inclusive [from, to] pairs. */
+		handDays?: [string, string][];
 	}[];
 	/** The notes the exporter can see, oldest first; informational, the importer ignores them. */
 	notes: ProjectDocumentNote[];
@@ -184,7 +191,7 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	if (!p) return null;
 	const model = await loadModel(db, projectId);
 	const { rows: stored } = await db.query<
-		Omit<ProjectDocument['series'][number], 'dayBoundary' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor'> & {
+		Omit<ProjectDocument['series'][number], 'dayBoundary' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor' | 'handDays'> & {
 			product: string | null;
 			productVersion: string | null;
 			dayBoundary: DayBoundary | null;
@@ -192,10 +199,12 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 			source: string | null;
 			sourceUnit: string | null;
 			sourceUnitFactor: number | null;
+			handDays: [string, string][] | null;
 		}
 	>(
 		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary",
-			site_node_id AS "siteNodeId", source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor"
+			site_node_id AS "siteNodeId", source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
+			${handDaysSql('time_series')} AS "handDays"
 		 FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
 		[projectId]
 	);
@@ -203,13 +212,14 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	// A gauge's record then goes as the outlet's, as before; a land unit's own rain (209) is left out, since without its
 	// unit it would come back as the catchment's rain, which no run of this project reads it as.
 	const nodeIds = new Set(model.nodes.map((n) => n.id));
-	const series = stored.filter((s) => !(s.siteNodeId !== null && !nodeIds.has(s.siteNodeId) && isUnitRainKind(s.kind))).map(({ product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, ...s }) => ({
+	const series = stored.filter((s) => !(s.siteNodeId !== null && !nodeIds.has(s.siteNodeId) && isUnitRainKind(s.kind))).map(({ product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, handDays, ...s }) => ({
 		...s,
 		...(product !== null && productVersion !== null ? { product, productVersion } : {}),
 		...(dayBoundary !== null ? { dayBoundary } : {}),
 		...(siteNodeId !== null && nodeIds.has(siteNodeId) ? { siteNodeId } : {}),
 		...(source !== null ? { source } : {}),
-		...(sourceUnit !== null && sourceUnitFactor !== null ? { sourceUnit, sourceUnitFactor } : {})
+		...(sourceUnit !== null && sourceUnitFactor !== null ? { sourceUnit, sourceUnitFactor } : {}),
+		...(handDays !== null ? { handDays } : {})
 	}));
 	return {
 		format: PROJECT_DOCUMENT_FORMAT,

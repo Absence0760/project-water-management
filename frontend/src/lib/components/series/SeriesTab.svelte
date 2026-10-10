@@ -65,6 +65,8 @@
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
+	import EditDay from './EditDay.svelte';
+	import { handDayCount, handPoints, handRangesText } from '$lib/series/editDay';
 	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
@@ -347,6 +349,9 @@
 			onSeriesChange?.(list);
 		});
 	}
+
+	// The charted series' days edited by hand (212_series_hand_days) that hold a value, drawn as points.
+	const viewingHand = $derived(viewing && values[viewing.id] ? handPoints(values[viewing.id]!, viewing.handDays) : null);
 
 	// Gauge vs logger, when both records exist.
 	const agreement = $derived.by(() => {
@@ -633,6 +638,11 @@
 								{#if fed}
 									<span class="prov" data-testid="series-feed">{fed}</span>
 								{/if}
+								<!-- Days a person typed in (212_series_hand_days, issue #477): an edited record never passes as the raw one. -->
+								{#if s.handDays?.length}
+									{@const n = handDayCount(s.handDays)}
+									<span class="prov" data-testid="series-hand">{fmtNum(n)} {n === 1 ? 'day' : 'days'} edited by hand</span>
+								{/if}
 								<!-- A flow record placed at a gauge says which; the product, where measured, source and upload unit are
 								     the Series details under the chart (issue #464), so the row stays short. -->
 								{#if rowSiteMark(s, gauges)}
@@ -711,7 +721,8 @@
 				height={CHART_H}
 				series={[
 					{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values },
-					...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : [])
+					...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : []),
+					...(viewingHand ? [{ label: 'Edited by hand', style: 'points' as const, startDate: viewingHand.startDate, values: viewingHand.values }] : [])
 				]}
 				logToggle={!isRain(viewing.kind)}
 				bind:log={flowLog}
@@ -809,7 +820,16 @@
 						<dt>Upload unit</dt>
 						<dd data-testid="series-given-unit">{uploadUnitText(viewing)}</dd>
 					</div>
+					{#if viewing.handDays?.length}
+						<div class="detail">
+							<dt>Edited by hand</dt>
+							<dd data-testid="series-hand-days">{handRangesText(viewing.handDays)}</dd>
+						</div>
+					{/if}
 				</dl>
+				{#if !readonly}
+					<EditDay {projectId} series={viewing} values={values[viewing.id] ?? null} onsaved={() => load()} />
+				{/if}
 			{/key}
 		</div>
 	</section>

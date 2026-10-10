@@ -28,7 +28,7 @@
 	import DemandTable from './DemandTable.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { applyAreaPaste, applyFactorPaste, cropFactorsCsv, planFactorPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
+	import { applyAreaPaste, applyFactorPaste, CROP_FACTORS_FORMAT, cropFactorsCsv, planFactorPaste, PLANTED_AREAS_FORMAT, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 	let {
 		editor,
@@ -182,12 +182,22 @@
 		factorPasteText = '';
 		factorPasteOpen = true;
 	}
+	// A name the project doesn't have adds that crop (issue #477): a list of crop types comes in from a spreadsheet.
 	function applyFactors(plan: PastePlan) {
-		applyFactorPaste(plan, (cropId, m, f) => {
-			const c = editor.model.crops.find((x) => x.id === cropId);
-			if (c) c.cropFactor[m] = f;
-		});
-		announce = `Pasted ${plan.changes.length} crop ${plan.changes.length === 1 ? 'factor' : 'factors'}. Save the model to keep them.`;
+		applyFactorPaste(
+			plan,
+			(cropId, m, f) => {
+				const c = editor.model.crops.find((x) => x.id === cropId);
+				if (c) c.cropFactor[m] = f;
+			},
+			(name) => {
+				const c = editor.addCrop();
+				c.name = name.slice(0, 100);
+				return c.id;
+			}
+		);
+		const n = plan.added?.length ?? 0;
+		announce = `Pasted ${plan.changes.length} crop ${plan.changes.length === 1 ? 'factor' : 'factors'}${n ? `, adding ${n} ${n === 1 ? 'crop' : 'crops'}` : ''}. Save the model to keep them.`;
 	}
 
 	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
@@ -229,7 +239,10 @@
 	{#if crops.length === 0}
 		<div class="empty">
 			<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
-			{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
+			{#if !readonly}
+				<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>
+				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
+			{/if}
 		</div>
 	{:else}
 		<!-- The grid's actions above it, not under up to 30 crop rows (issue #463, as #461 did for the EWR settings). -->
@@ -291,19 +304,21 @@
 				{#each highFactors as h, i (h.id)}{i ? '; ' : ' '}<strong>{h.name || 'unnamed crop'}</strong> ({h.months.join(', ')}){/each}.
 			</p>
 		{/if}
-		{#if !readonly}
-			<GridPasteDialog
-				bind:open={factorPasteOpen}
-				bind:text={factorPasteText}
-				title="Paste crop factors"
-				layout="Crop factors (× A-pan): a row per crop with its name first, under a heading row of months, Oct to Sep (as the CSV below has them); without names or headings the values fill the grid from the cell you pasted into, so one copied row of 12 months fills a crop. 0 is a month the crop isn't irrigated."
-				where={factorWhere}
-				plan={(t) => planFactorPaste(t, crops, factorAnchor)}
-				onapply={applyFactors}
-				csv={() => cropFactorsCsv(crops)}
-				csvName="crop-factors.csv"
-			/>
-		{/if}
+	{/if}
+	{#if !readonly}
+		<GridPasteDialog
+			bind:open={factorPasteOpen}
+			bind:text={factorPasteText}
+			title="Paste crop factors"
+			layout="Crop factors (× A-pan): a row per crop with its name first, under a heading row of months, Oct to Sep (as the CSV below has them); a name the project doesn't have adds that crop. Without names or headings the values fill the grid from the cell you pasted into, so one copied row of 12 months fills a crop. 0 is a month the crop isn't irrigated."
+			where={factorWhere}
+			plan={(t) => planFactorPaste(t, crops, factorAnchor, { addCrops: true })}
+			onapply={applyFactors}
+			csv={() => cropFactorsCsv(crops)}
+			csvName="crop-factors.csv"
+			format={CROP_FACTORS_FORMAT}
+			rowNoun={['crop', 'crops']}
+		/>
 	{/if}
 </section>
 {#if loadMounted}
@@ -414,6 +429,7 @@
 				onapply={applyPaste}
 				csv={() => plantedAreasCsv(farms, crops, editor.model.cropAreas)}
 				csvName="planted-areas.csv"
+				format={PLANTED_AREAS_FORMAT}
 			/>
 		{/if}
 	{/if}

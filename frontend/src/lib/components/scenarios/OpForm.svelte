@@ -192,7 +192,7 @@
 			<legend>{label}</legend>
 			<Lazy load={loadEwrDailyEditor}>
 				{#snippet children(EwrDailySourceFields)}
-					<EwrDailySourceFields bind:value={d.ewrDaily} modelAreaKm2={farmAreaKm2} {projectId} />
+					<EwrDailySourceFields bind:value={d.ewrDaily} announce={false} modelAreaKm2={farmAreaKm2} {projectId} />
 				{/snippet}
 			</Lazy>
 			<!-- Unset is the pragmatic EWR, as the engine runs it, so there is always a "now". -->

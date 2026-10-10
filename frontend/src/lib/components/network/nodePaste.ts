@@ -5,7 +5,7 @@
 // stored 0–1, River to dam in m³/s and stored in m³/day, and a field a node
 // doesn't use is left out.
 import type { NetworkNode } from '@water-management/engine';
-import { mapPaste, sameValue, toCsv, type GridColumn, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+import { mapPaste, sameValue, toCsv, type GridColumn, type GridFormat, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 import { cardLabel, fieldScale, fieldUnused, isPct, setNodeField, TABLE_FIELDS, type NodeField, type NodeNumberKey } from './fields';
 import { divertMonthsCell } from './supply';
 
@@ -123,3 +123,21 @@ export function nodeTableCsv(nodes: readonly NetworkNode[]): string {
 		...nodes.map((n) => [n.name, ...PASTE_FIELDS.map((f) => (notUsed(n, f) ? null : shown(n, f)))])
 	]);
 }
+
+/** The hydrological unit table's Expected format (issue #477): its headings, with an example of a few columns. */
+export const NODE_TABLE_FORMAT: GridFormat = (() => {
+	const h = (key: string) => heading(PASTE_FIELDS.find((f) => f.key === key)!);
+	return {
+		rules: [
+			`A heading row: ${NAME_HEADINGS[0]}, then any of the table's columns as the CSV below names them, in any order; a column you leave out keeps its values.`,
+			'A row per hydrological unit, its name first: a name the table doesn’t have is left out (add a unit with + Add hydrological unit first).',
+			'A % is 0–100. A blank or a dash leaves a cell as it is.'
+		],
+		example: toCsv([
+			[NAME_HEADINGS[0]!, h('areaKm2'), h('damCapacityM3'), h('pctRunoffToDam')],
+			['Upper farm', 12.5, 150000, 80],
+			['Lower farm', 8, 60000, 50]
+		]),
+		exampleName: 'hydrological-unit-table-example.csv'
+	};
+})();

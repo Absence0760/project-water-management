@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
 import { newNode } from '$lib/model/editor.svelte';
 import { readPastedBlock } from '$lib/spreadsheet/paste/read';
-import { applyNodePaste, nodeTableCsv, planNodePaste } from './nodePaste';
+import { applyNodePaste, NODE_TABLE_FORMAT, nodeTableCsv, planNodePaste } from './nodePaste';
 import { TABLE_FIELDS } from './fields';
 
 function sample(): NetworkNode[] {
@@ -17,6 +17,13 @@ const plan = (r: ReturnType<typeof planNodePaste>) => {
 };
 
 describe('planNodePaste', () => {
+	it('the Expected format example reads its headings (issue #477)', () => {
+		const p = plan(planNodePaste(NODE_TABLE_FORMAT.example, sample()));
+		expect(p.changes.find((c) => c.rowId === 'u' && c.key === 'areaKm2')).toMatchObject({ from: 12, to: 12.5 });
+		expect(p.changes.find((c) => c.rowId === 'l' && c.key === 'damCapacityM3')).toMatchObject({ to: 60_000 });
+		expect(p.notes.join(' ')).not.toMatch(/doesn't have/);
+	});
+
 	it('reads a % as 0–100 and stores it 0–1; only real changes are listed, with what they replace', () => {
 		const nodes = sample();
 		const p = plan(planNodePaste('Name\tArea (km²)\tReturn flow (% of supply)\tDam capacity (m³)\nUpper farm\t12\t5\t150 000\nLower farm\t9,5\t10\t', nodes));

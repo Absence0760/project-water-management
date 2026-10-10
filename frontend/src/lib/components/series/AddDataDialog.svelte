@@ -32,16 +32,12 @@
 	let form: { back: () => void } | undefined = $state();
 	const uploading = $derived(!!submit?.uploading);
 
-	const mayClose = async () =>
-		!uploading &&
-		(!pending ||
-			(await confirmDialog({
-				title: 'Discard the file?',
-				message: "You haven't uploaded it yet.",
-				confirmLabel: 'Discard file',
-				cancelLabel: 'Keep it',
-				danger: true
-			})));
+	// A paste (issue #477) is asked about in its own words.
+	const discard = () =>
+		submit?.input === 'paste'
+			? { title: 'Discard the pasted rows?', message: "You haven't saved them yet.", confirmLabel: 'Discard rows', cancelLabel: 'Keep them', danger: true }
+			: { title: 'Discard the file?', message: "You haven't uploaded it yet.", confirmLabel: 'Discard file', cancelLabel: 'Keep it', danger: true };
+	const mayClose = async () => !uploading && (!pending || (await confirmDialog(discard())));
 
 	// The file the form reads. A file dropped while another is read but not uploaded asks first, as
 	// closing does; one dropped while uploading is ignored (the upload is the file's answer).
@@ -72,7 +68,7 @@
 <Dialog bind:open title="Add data" wide beforeclose={mayClose}>
 	<p class="muted lead">
 		Upload a CSV (or a DWS export) of daily rainfall, flow or evaporation. New days are appended to the matching series; days already stored are
-		corrected where the file differs.
+		corrected where the file differs. Rows copied from a spreadsheet can be pasted instead.
 	</p>
 	{#if open}
 		<UploadForm

@@ -10,7 +10,9 @@
 	converted flows are shown before they are used, and a file never changes
 	the method on its own. Bind `value`
 	(settings.ewrDailySource; null = the pragmatic EWR); `error` is set while it
-	can't be saved. Its own chunk: the Settings tab chunk sits at its size
+	can't be saved, and shown under the fields as an alert unless `announce` is
+	false (a scenario's change form, whose own alert says it on Add change, so a
+	screen reader hears it once). Its own chunk: the Settings tab chunk sits at its size
 	ceiling. Helpers in ./ewrDailySource.ts and ./drmFiles.ts.
 -->
 <script lang="ts">
@@ -33,12 +35,15 @@
 		value = $bindable(),
 		error = $bindable(null),
 		readonly = false,
+		announce = true,
 		modelAreaKm2,
 		projectId = null
 	}: {
 		value: EwrDailySource | null | undefined;
 		error?: string | null;
 		readonly?: boolean;
+		/** Show the problem as an alert (false: the parent's own alert announces it, so it isn't heard twice). */
+		announce?: boolean;
 		/** The units' areas summed, km² (the area ratio's numerator). */
 		modelAreaKm2: number;
 		/** The project, to read its last run's natural MAR for the MAR ratio's factor (none: the factor waits for a run). */
@@ -349,7 +354,7 @@
 			</div>
 		{/if}
 	{/if}
-	{#if error}<p class="err" role="alert">{error}</p>{/if}
+	{#if error}<p class="err" role={announce ? 'alert' : undefined} data-testid="ewr-daily-error">{error}</p>{/if}
 </fieldset>
 
 <style>

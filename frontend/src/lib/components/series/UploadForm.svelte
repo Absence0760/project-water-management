@@ -6,6 +6,8 @@
 	// never erases a stored value the file leaves blank (the server keeps it).
 	// An upload that would overwrite stored days (a merge that changes some,
 	// or a replace) asks first, with the days and what they change.
+	// Rows can be pasted instead of a file (issue #477 (b), "Paste rows"): the
+	// same reader ($lib/series/paste.ts), note, preview and requests.
 	import { tick, untrack } from 'svelte';
 	import { fromEpochDay, toEpochDay, unitOptions, type DayBoundary, type SeriesMeta } from '@water-management/engine';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
@@ -14,6 +16,7 @@
 	import { fmtNum, fmtReading } from '$lib/format/number';
 	import { CsvError, type ParsedSeries } from '$lib/series/csv';
 	import { parseSeriesFile } from '$lib/series/file';
+	import { parsePastedSeries } from '$lib/series/paste';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { holeBefore, mergePreview, type Daily } from './coverage';
 	import { dataEnd, guessSeries, headerLine, seriesEnd } from './freshness';
@@ -62,6 +65,10 @@
 	let error = $state<string | null>(null);
 	let guessed = $state<string | null>(null);
 	let fileInput: HTMLInputElement | undefined = $state();
+	// Where the days come from: a file, or rows pasted from a spreadsheet (issue #477).
+	let input = $state<'file' | 'paste'>('file');
+	let pasteText = $state('');
+	const what = $derived(input === 'paste' ? 'the pasted rows' : 'the file');
 	let mode = $state<'merge' | 'replace'>('merge');
 	// A kind picked by hand is never overridden by the file-name guess.
 	let kindTouched = $state(false);
@@ -155,15 +162,16 @@
 	const confirming = $derived(confirmSig !== null && confirmSig === overwriteSig);
 	const asking = $derived(confirming && !!overwrite && !!target);
 	const submitLabel = $derived.by(() => {
-		if (uploading) return 'Uploading…';
+		const verb = input === 'paste' ? 'Save' : 'Upload';
+		if (uploading) return input === 'paste' ? 'Saving…' : 'Uploading…';
 		if (asking && overwrite) return overwrite.changes ? `Overwrite ${plural(overwrite.days, 'day')}` : `Replace ${plural(overwrite.days, 'day')}`;
-		return target && mode === 'merge' ? 'Upload and merge' : target ? 'Upload and replace' : 'Upload';
+		return target && mode === 'merge' ? `${verb} and merge` : target ? `${verb} and replace` : verb;
 	});
 	const submitDisabled = $derived(
 		asking ? uploading : !parsed || uploading || !unit.trim() || halfLabel || (!!target && mode === 'merge' && !preview)
 	);
 	$effect(() => {
-		submit = { label: submitLabel, disabled: submitDisabled, confirming: asking, uploading };
+		submit = { label: submitLabel, disabled: submitDisabled, confirming: asking, uploading, input };
 	});
 	/** Back out of the overwrite question (the dialog's Back). */
 	export function back() {
@@ -222,7 +230,7 @@
 
 	const fileText = latestFileText();
 
-	async function read(f: File | null | undefined) {
+	function reset(name: string) {
 		parsed = null;
 		parseError = null;
 		uploadDone = null;
@@ -230,22 +238,21 @@
 		guessed = null;
 		subDailyText = null;
 		parseSeq++;
-		fileName = f?.name ?? '';
-		// Started before the early return, so clearing the file also drops a read still in flight.
-		const pending = fileText(f ?? null);
-		if (!f) return;
+		fileName = name;
+	}
+
+	/** Read a file's or a paste's text: parsed (added up into days if sub-daily) and, unless the kind was picked, the series guessed. */
+	function readText(text: string, label: string, parse: typeof parseSeriesFile) {
 		try {
-			const text = await pending;
-			if (text === null) return; // another file was picked while this one was read
 			try {
-				parsed = parseSeriesFile(text);
+				parsed = parse(text);
 			} catch (err) {
 				// Several timed readings a day: add them up into days, in the window picked below.
 				if (!(err instanceof CsvError) || !err.subDaily) throw err;
 				subDailyText = text;
-				parsed = parseSeriesFile(text, { dayBoundary });
+				parsed = parse(text, { dayBoundary });
 			}
-			const g = guessSeries(f.name, headerLine(text), list);
+			const g = guessSeries(label, headerLine(text), list);
 			if (g && !kindTouched) {
 				onKind(g.kind);
 				name = g.name;
@@ -253,13 +260,49 @@
 				guessed = g.name ? `${kindLabel(g.kind)} · ${g.name}` : kindLabel(g.kind);
 			}
 		} catch (err) {
-			parseError = err instanceof CsvError ? err.message : `Could not read the file: ${msg(err)}`;
+			parseError = err instanceof CsvError ? err.message : `Could not read ${what}: ${msg(err)}`;
 		}
+	}
+
+	async function read(f: File | null | undefined) {
+		reset(f?.name ?? '');
+		// Started before the early return, so clearing the file also drops a read still in flight.
+		const pending = fileText(f ?? null);
+		if (!f) return;
+		try {
+			const text = await pending;
+			if (text === null) return; // another file was picked while this one was read
+			readText(text, f.name, parseSeriesFile);
+		} catch (err) {
+			parseError = `Could not read the file: ${msg(err)}`;
+		}
+	}
+
+	/** The paste box's rows, read as they change (an empty box clears the summary rather than calling it an error). */
+	function readPaste(text: string) {
+		pasteText = text;
+		reset('');
+		if (text.trim()) readText(text, '', parsePastedSeries);
+	}
+
+	/** File or paste: switching drops what the other one read, so a save is always of what is shown. */
+	function pickInput(next: 'file' | 'paste') {
+		if (next === input) return;
+		input = next;
+		reset('');
+		pasteText = '';
+		if (fileInput) fileInput.value = '';
 	}
 
 	$effect(() => {
 		const f = file;
-		if (f) untrack(() => read(f));
+		if (f)
+			untrack(() => {
+				// A file dropped on the page is a file, whichever way the form was set.
+				input = 'file';
+				pasteText = '';
+				void read(f);
+			});
 	});
 
 	function onBoundary(b: DayBoundary) {
@@ -267,11 +310,11 @@
 		if (subDailyText === null) return;
 		parseSeq++;
 		try {
-			parsed = parseSeriesFile(subDailyText, { dayBoundary: b });
+			parsed = (input === 'paste' ? parsePastedSeries : parseSeriesFile)(subDailyText, { dayBoundary: b });
 			parseError = null;
 		} catch (err) {
 			parsed = null;
-			parseError = err instanceof CsvError ? err.message : `Could not read the file: ${msg(err)}`;
+			parseError = err instanceof CsvError ? err.message : `Could not read ${what}: ${msg(err)}`;
 		}
 	}
 
@@ -331,6 +374,7 @@
 			confirmSig = null;
 			parsed = null;
 			fileName = '';
+			pasteText = '';
 			guessed = null;
 			if (fileInput) fileInput.value = '';
 			await onuploaded?.(result);
@@ -346,8 +390,17 @@
 </script>
 
 <form id={id('form')} onsubmit={upload}>
+	<fieldset class="mode input-pick" data-testid="series-input">
+		<legend>Add the days from</legend>
+		<label><input type="radio" name="{idPrefix}-input" value="file" checked={input === 'file'} onchange={() => pickInput('file')} /> A file</label>
+		<label
+			><input type="radio" name="{idPrefix}-input" value="paste" checked={input === 'paste'} onchange={() => pickInput('paste')} /> Rows pasted from a spreadsheet</label
+		>
+	</fieldset>
 	<FormatHelp
-		accepts="A .csv, .tsv or .txt file, or a DWS daily export saved as text or as the web page (.htm, .html). At most 60 000 days from the first date to the last."
+		accepts={input === 'paste'
+			? 'Rows copied from a spreadsheet (Excel and LibreOffice copy them tab-separated) or typed as date,value. At most 60 000 days from the first date to the last; a longer record goes in as a file.'
+			: 'A .csv, .tsv or .txt file, or a DWS daily export saved as text or as the web page (.htm, .html). At most 60 000 days from the first date to the last.'}
 		example={SERIES_EXAMPLE}
 		exampleFile={SERIES_EXAMPLE_FILE}
 	>
@@ -370,15 +423,36 @@
 				or negative values such as -999, are stored as gaps; the summary counts them.
 			</li>
 			<li>Units: pick the file's unit below and the values are converted; flow is stored as the daily mean in m³/s, rain and evaporation in mm per day.</li>
+			{#if input === 'paste'}
+			<li>Copy the date column and the value column together, with or without their headings. A heading that names the series (e.g. <span class="mono">Weir flow</span>) picks it for you.</li>
+			<li>A blank cell is no reading: merged into a stored series, it leaves that day as it is. To clear a stored day, use Edit a day under the chart.</li>
+		{:else}
 			<li>Name the file after the series (e.g. <span class="mono">Weir flow.csv</span>) and it is picked for you.</li>
+		{/if}
 			<li>A row that can't be read stops the upload, and the message names its line (“Line 12: …”).</li>
 		</ul>
 	</FormatHelp>
-	<div class="field">
-		<label for={id('file')}>CSV file or DWS export</label>
-		<input id={id('file')} type="file" accept=".csv,.tsv,.txt,.htm,.html,text/csv,text/plain" bind:this={fileInput} onchange={(e) => read(e.currentTarget.files?.[0])} />
-		{#if fileName && !fileInput?.files?.length}<span class="hint">{fileName}</span>{/if}
-	</div>
+	{#if input === 'paste'}
+		<div class="field">
+			<label for={id('paste')}>Dates and values</label>
+			<textarea
+				id={id('paste')}
+				class="mono paste"
+				rows="8"
+				spellcheck="false"
+				autocomplete="off"
+				placeholder={'2025-04-01\t0.0\n2025-04-02\t12.4'}
+				value={pasteText}
+				oninput={(e) => readPaste(e.currentTarget.value)}
+			></textarea>
+		</div>
+	{:else}
+		<div class="field">
+			<label for={id('file')}>CSV file or DWS export</label>
+			<input id={id('file')} type="file" accept=".csv,.tsv,.txt,.htm,.html,text/csv,text/plain" bind:this={fileInput} onchange={(e) => read(e.currentTarget.files?.[0])} />
+			{#if fileName && !fileInput?.files?.length}<span class="hint">{fileName}</span>{/if}
+		</div>
+	{/if}
 	{#if guessed}<p class="hint muted guess">Looks like <strong>{guessed}</strong> — change below if not.</p>{/if}
 	<div class="field">
 		<span class="label-row"><label for={id('kind')}>Kind</label><HelpTip key={`series.${kind}`} /></span>
@@ -474,7 +548,7 @@
 		<fieldset class="mode">
 			<legend>“{target.name || kindLabel(target.kind)}” already exists ({target.startDate} → {seriesEnd(target)}) <HelpTip key="series-update-mode" /></legend>
 			<label><input type="radio" name="{idPrefix}-mode" value="merge" bind:group={mode} /> Append / update: add new days, correct overlapping ones</label>
-			<label><input type="radio" name="{idPrefix}-mode" value="replace" bind:group={mode} /> Replace the whole series with this file</label>
+			<label><input type="radio" name="{idPrefix}-mode" value="replace" bind:group={mode} /> Replace the whole series with {input === 'paste' ? 'these rows' : 'this file'}</label>
 		</fieldset>
 	{:else if newEffect}
 		{@const what = kindLabel(kind)}
@@ -502,9 +576,9 @@
 		<p class="hint muted" data-testid="unit-converted">Values in {unit} are converted to {converted} when saved.</p>
 	{/if}
 	{#if parseError}
-		<div class="alert alert-error" role="alert">{fileName}: {parseError}</div>
+		<div class="alert alert-error" role="alert">{input === 'paste' ? 'Pasted rows' : fileName}: {parseError}</div>
 	{:else if parsed}
-		<dl class="preview" aria-label="File summary">
+		<dl class="preview" aria-label={input === 'paste' ? 'Pasted rows summary' : 'File summary'}>
 			<div><dt>Period</dt><dd>{parsed.startDate} → {parsed.endDate}</dd></div>
 			<div><dt>Days</dt><dd>{fmtNum(parsed.values.length)}</dd></div>
 			<div><dt>With values</dt><dd>{fmtNum(parsed.rowCount)}</dd></div>
@@ -568,7 +642,7 @@
 					<div class="wide">
 						<dt>Blank days</dt>
 						<dd class="warn-text" data-testid="upload-hole">
-							The series has values to {dataEnd(target!)} and this file starts {parsed.startDate}: {fmtNum(hole.days)} day{hole.days === 1 ? '' : 's'} between ({hole.from}{hole.days > 1
+							The series has values to {dataEnd(target!)} and {input === 'paste' ? 'the pasted rows start' : 'this file starts'} {parsed.startDate}: {fmtNum(hole.days)} day{hole.days === 1 ? '' : 's'} between ({hole.from}{hole.days > 1
 								? ` to ${hole.to}`
 								: ''}) will be blank{target!.kind.startsWith('rain_') ? ', and a run treats a blank rain day as dry (0 mm)' : ''}.
 						</dd>
@@ -588,7 +662,12 @@
 				<div class="wide"><dt>Replaces</dt><dd class="warn-text">all {fmtNum(target.length)} stored days</dd></div>
 			{/if}
 		</dl>
-		<LineChart title="File preview" height={140} {unit} series={[{ label: fileName || 'file', startDate: parsed.startDate, values: parsed.values }]} />
+		<LineChart
+			title={input === 'paste' ? 'Pasted rows preview' : 'File preview'}
+			height={140}
+			{unit}
+			series={[{ label: input === 'paste' ? 'pasted rows' : fileName || 'file', startDate: parsed.startDate, values: parsed.values }]}
+		/>
 	{/if}
 	{#if uploadDone}<p class="ok" role="status">{uploadDone}</p>{/if}
 	{#if asking && overwrite && target}
@@ -598,14 +677,14 @@
 				{#if overwrite.changes}
 					This changes {n} already stored in “{target.name || kindLabel(target.kind)}”, between {overwrite.from} and {overwrite.to}.
 				{:else}
-					This replaces all {n} stored in “{target.name || kindLabel(target.kind)}” ({overwrite.from} → {overwrite.to}) with the file.
+					This replaces all {n} stored in “{target.name || kindLabel(target.kind)}” ({overwrite.from} → {overwrite.to}) with {what}.
 				{/if}
 			</p>
 			{#if overwrite.changes}
 				<details class="changes">
 					<summary>Show the changes</summary>
 					<table>
-						<thead><tr><th scope="col">Date</th><th scope="col">Stored ({target.unit})</th><th scope="col">From the file ({target.unit})</th></tr></thead>
+						<thead><tr><th scope="col">Date</th><th scope="col">Stored ({target.unit})</th><th scope="col">{input === 'paste' ? 'Pasted' : 'From the file'} ({target.unit})</th></tr></thead>
 						<tbody>
 							{#each overwrite.changes.slice(0, CHANGES_SHOWN) as c (c.date)}
 								<tr><td>{c.date}</td><td>{fmtReading(c.from)}</td><td>{fmtReading(c.to)}</td></tr>
@@ -669,6 +748,15 @@
 	}
 	.unit {
 		width: 90px;
+	}
+	.paste {
+		width: 100%;
+		min-height: 8rem;
+		resize: vertical;
+		font-size: 0.85rem;
+	}
+	.input-pick {
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 	}
 	.field input,
 	.field select {

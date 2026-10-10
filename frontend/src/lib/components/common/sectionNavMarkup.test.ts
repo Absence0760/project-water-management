@@ -49,7 +49,9 @@ describe('SectionNav', () => {
 		expect(html).toMatch(/<a class="pill[^"]*" href="#cal"[^>]*>Calibration</);
 		// The bar's hidden measuring copy says the bar's name too, never the heading.
 		expect(html).not.toContain('Calibration against observed flow');
-		expect(html).toMatch(/href="\?tab=river#res-water-account"[^>]*>Water account<span class="visually-hidden">, on River &amp; reserve<\/span>/);
+		// The page it goes to is in the link's name, not a hidden span Chromium would space off ("Water account , on …").
+		expect(html).toMatch(/href="\?tab=river#res-water-account"[^>]*aria-label="Water account, on River &amp; reserve"[^>]*>Water account</);
+		expect(html).not.toContain(', on River &amp; reserve</span>');
 	});
 
 	it('with no sections draws no menu, only the content', () => {
@@ -58,4 +60,16 @@ describe('SectionNav', () => {
 		expect(html).not.toContain('<nav');
 		expect(html).toContain('id="body"');
 	});
+
+	it('in a box of its own (`onjump`, the node sheet): a bar that does not stick, with no heading when given none (issue #462)', () => {
+		const html = bare(render(SectionNav, { props: { groups, label: 'Sections of the form', heading: null, onjump: () => {} } }).body);
+		expect(html).toMatch(/<nav class="sections[^"]*embedded[^"]*" aria-label="Sections of the form"/);
+		expect(html).not.toContain('On this page');
+		// Still links to the sections, so it reads as a menu of links.
+		expect(html).toMatch(/href="#a"[^>]*>Demand/);
+		const page = bare(render(SectionNav, { props: { groups, label: 'Test sections' } }).body);
+		expect(page).toContain('On this page');
+		expect(page).not.toContain('embedded');
+	});
 });
+

@@ -226,6 +226,9 @@ test.describe('desktop', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });
 
 	test('the header controls stay one row, beside the title where they fit, Add data then Run model last', async ({ page, owner }) => {
+		// The same budget as the phone tests on this seed: two runs of 30 units and 44 volumes added one by one
+		// take most of the default 30 s on a busy machine before the page is opened.
+		test.setTimeout(60_000);
 		void owner;
 		const p = await seedBig(page, 'Desktop header row');
 		// Whether a tab's controls fit beside its title depends on its words (the seeded

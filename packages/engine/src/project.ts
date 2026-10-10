@@ -2695,6 +2695,13 @@ export interface SeriesMeta {
 	 */
 	feed?: { source: string; days: number } | null;
 	/**
+	 * The days a person typed in by hand (time_series.hand_days,
+	 * 212_series_hand_days.sql), as inclusive [from, to] date pairs in date
+	 * order; null = none, absent = not known here. A data feed or API key never
+	 * writes over them; an upload or paste that writes a day releases it.
+	 */
+	handDays?: [string, string][] | null;
+	/**
 	 * A flow record's site (084_gauge_records, engine ≥ 1.4.0): the gauge node
 	 * it was measured at; null / absent = the outlet. Only the plausibility
 	 * checks read a gauge's record.

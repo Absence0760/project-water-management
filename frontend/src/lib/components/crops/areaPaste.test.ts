@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyAreaPaste, applyFactorPaste, cropFactorsCsv, planFactorPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
+import { applyAreaPaste, applyFactorPaste, CROP_FACTORS_FORMAT, cropFactorsCsv, planFactorPaste, PLANTED_AREAS_FORMAT, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 const farms = [
 	{ id: 'u', name: 'Upper farm' },
@@ -19,6 +19,16 @@ const plan = (r: ReturnType<typeof planAreaPaste>) => {
 };
 
 describe('planAreaPaste', () => {
+	it('the Expected format example fills the areas it names (issue #477)', () => {
+		const withMaize = [crops[0]!, { id: 'm', name: 'Maize' }];
+		const p = plan(planAreaPaste(PLANTED_AREAS_FORMAT.example, farms, withMaize, areas()));
+		expect(p.changes.map((c) => [c.rowId, c.key, c.to])).toEqual([
+			['u', 'c', 30],
+			['u', 'm', 12.5],
+			['l', 'm', 40]
+		]);
+	});
+
 	it('reads hectares by farm name and crop heading, and writes m²', () => {
 		const p = plan(planAreaPaste('Farm\tVines (ha)\tCitrus (ha)\tTotal\nLower farm\t5\t2,5\t7,5\nUpper farm\t0\t20', farms, crops, areas()));
 		expect(p.changes).toEqual([
@@ -104,6 +114,35 @@ describe('planFactorPaste', () => {
 			['v', '0', 0, 0.2]
 		]);
 		expect(p.notes).toContain('Matched 1 row by name.');
+	});
+
+	it('with addCrops, a name the project lacks is a new crop type with its factors (issue #477)', () => {
+		const p = plan(planFactorPaste('Crop\tIrrigation system\tOct\tNov\nMaize\tPivot\t0.3\t\nCitrus\tDrip\t0.6\t0.7', factors(), null, { addCrops: true }));
+		expect(p.added).toEqual([{ id: 'new:0', name: 'Maize' }]);
+		expect(p.changes.map((c) => [c.rowId, c.rowName, c.from, c.to])).toEqual([['new:0', 'Maize (new crop)', null, 0.3]]);
+		expect(p.unchanged).toBe(2);
+		expect(p.notes.at(-1)).toBe("Adds a crop the project doesn't have: Maize. It starts on drip irrigation, as + Add crop does; a blank month is 0.");
+		const set: [string, number, number][] = [];
+		applyFactorPaste(
+			p,
+			(id, m, f) => set.push([id, m, f]),
+			(n) => `id-${n}`
+		);
+		expect(set).toEqual([['id-Maize', 0, 0.3]]);
+		// A new crop with every month blank is still added (add runs for each added row).
+		const blank = plan(planFactorPaste('Crop\tOct\nSorghum\t', factors(), null, { addCrops: true }));
+		const made: string[] = [];
+		applyFactorPaste(blank, () => {}, (n) => (made.push(n), n));
+		expect(made).toEqual(['Sorghum']);
+		// Without it (one crop's sheet), the name is left out as before.
+		expect(plan(planFactorPaste('Crop\tOct\nMaize\t0.3\nCitrus\t0.1', factors())).notes).toContain("Left out a row the table doesn't have: Maize.");
+	});
+
+	it('the Expected format example adds its crops (issue #477)', () => {
+		const p = plan(planFactorPaste(CROP_FACTORS_FORMAT.example, factors(), null, { addCrops: true }));
+		expect(p.added?.map((a) => a.name)).toEqual(['Maize']);
+		expect(p.notes[0]).toBe('Matched 1 row by name.');
+		expect(p.changes.filter((c) => c.rowId === 'new:0')).toHaveLength(12);
 	});
 
 	it('stops on a negative factor and on a row longer than the months left', () => {

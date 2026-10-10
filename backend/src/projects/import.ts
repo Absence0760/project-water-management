@@ -110,8 +110,9 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	for (const s of data.series) {
 		await db.query(
 			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
-				source, source_unit, source_unit_factor)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+				source, source_unit, source_unit_factor, hand_days)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+				(SELECT range_agg(daterange(d0::date, d1::date, '[]')) FROM unnest($14::text[], $15::text[]) AS t(d0, d1)))`,
 			[
 				id,
 				s.kind,
@@ -129,7 +130,10 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 				// recorded). The file's own `unit` is not the upload's: a document holds values already converted.
 				s.source ?? null,
 				s.sourceUnit ?? null,
-				s.sourceUnitFactor ?? null
+				s.sourceUnitFactor ?? null,
+				// The days edited by hand (212): marked in the import as in the file, so an edited record stays marked.
+				(s.handDays ?? []).map((r) => r[0]),
+				(s.handDays ?? []).map((r) => r[1])
 			]
 		);
 	}

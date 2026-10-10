@@ -7,6 +7,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { seedWhatIfs } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { layoutSettled } from '../support/reflow.ts';
 import { openRiver, seedRiverProject } from '../support/river.ts';
@@ -78,14 +79,23 @@ async function expectEvenGaps(menu: Locator): Promise<void> {
 }
 
 /**
+ * The links, in order, by their names: a link to another page is named with that page (", on River &
+ * reserve", its aria-label) and shows a ↗ the name leaves out, so its text isn't its name.
+ */
+async function expectLinkNames(links: Locator, names: string[]): Promise<void> {
+	await expect(links).toHaveCount(names.length);
+	for (const [i, name] of names.entries()) await expect(links.nth(i)).toHaveAccessibleName(name);
+}
+
+/**
  * The side index (issue #462): every group named over its links, beside `panel` on the given side, and its
  * tallest state fitting the window, so it never scrolls inside itself (playbook § 2).
  */
 async function expectRail(menu: Locator, groups: [string | null, string[]][], panel: Locator, side: 'left' | 'right' = 'left'): Promise<void> {
-	await expect(menu.getByRole('link')).toHaveText(groups.flatMap(([, links]) => links));
+	await expectLinkNames(menu.getByRole('link'), groups.flatMap(([, links]) => links));
 	for (const [name, links] of groups) {
 		if (!name) continue;
-		await expect(menu.getByRole('list', { name, exact: true }).getByRole('link')).toHaveText(links);
+		await expectLinkNames(menu.getByRole('list', { name, exact: true }).getByRole('link'), links);
 		await expect(menu.getByText(name, { exact: true })).toBeVisible();
 	}
 	await expect(menu.locator('.groups')).toHaveCount(0);
@@ -136,8 +146,8 @@ const RUNS_RAIL: [string | null, string[]][] = [
 	],
 	['Record', ['Run notes & evidence', 'Validation statement', 'Publication']],
 	['Dig deeper', ['Self-checks', 'Explore any output']],
-	['On River & reserve', ['Reserve rules met, by month', 'Days below the EWR, by month', 'Water account']],
-	['On Hydrological units', ['Curtailment targets', 'Assurance of supply']]
+	['On River & reserve', ['Reserve rules met, by month, on River & reserve', 'Days below the EWR, by month, on River & reserve', 'Water account, on River & reserve']],
+	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]
 ];
 
 test('Runs & results: at 1280 px every link is on the bar, in at most two rows; at 1440 px a side index on the right, with the moved panels under their pages', async ({ page, owner }) => {
@@ -385,4 +395,65 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 		page.locator('#data-series')
 	);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('Compare runs has the menu: every panel drawn, by its heading, a side index from 1440 px and a jump that lands', async ({ page, owner }) => {
+	void owner;
+	const p = await seedWhatIfs(page.request, 'Menu compare');
+	await page.setViewportSize({ width: 1280, height: 960 });
+	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}`);
+	const menu = page.getByRole('navigation', { name: 'Comparison sections' });
+	await expect(page.getByRole('heading', { level: 2, name: 'Daily series' })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Daily series' })).toBeVisible();
+	/** The comparison's panels in page order, each with its heading's words (its ⓘ left out). */
+	const panels = () =>
+		page.locator('[id^="cmp-"]').evaluateAll((els) =>
+			els.map((el) => {
+				const h = el.querySelector('h2')!.cloneNode(true) as HTMLElement;
+				h.querySelectorAll('.helptip, button, .visually-hidden').forEach((n) => n.remove());
+				return { href: `#${el.id}`, heading: (h.textContent ?? '').replace(/\s+/g, ' ').trim() };
+			})
+		);
+	const drawn = await panels();
+	// The panels every pair has, in page order; the rest are listed only when drawn (compare/sections.ts).
+	expect(drawn.map((x) => x.href)).toEqual(expect.arrayContaining(['#cmp-outcomes', '#cmp-years', '#cmp-changes', '#cmp-headline', '#cmp-uncertainty', '#cmp-ewr-agreement', '#cmp-units', '#cmp-series']));
+
+	// On the bar: a link to every panel drawn, in page order, in at most two rows; no group names (as Runs & results).
+	const onBar = menu.locator('.groups').getByRole('link');
+	const kept = await onBar.count();
+	expect((await onBar.evaluateAll((els) => els.map((el) => el.getAttribute('href'))))).toEqual(drawn.slice(0, kept).map((x) => x.href));
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+	await expectEvenGaps(menu);
+
+	// From 1440 px a column on the left of the comparison, the full comparison's panels under its heading, each link
+	// named as its panel's heading (issue #462). The run cards stay above it, the whole width.
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.evaluate(() => window.scrollTo(0, 0));
+	const full = drawn.filter((x) => !['#cmp-outcomes', '#cmp-years'].includes(x.href)).map((x) => x.heading);
+	await expectRail(
+		menu,
+		[
+			[null, drawn.slice(0, 2).map((x) => x.heading)],
+			['Full comparison', full]
+		],
+		page.locator('#cmp-changes')
+	);
+	await expect(page.getByRole('heading', { level: 2, name: 'Full comparison' })).toBeVisible();
+	const cards = (await page.getByRole('region', { name: 'Runs being compared' }).boundingBox())!;
+	expect(cards.y + cards.height).toBeLessThanOrEqual((await menu.boundingBox())!.y);
+	// The outcomes and the yearly chart still sit side by side in the column beside it.
+	const outcomes = (await page.locator('#cmp-outcomes').boundingBox())!;
+	expect((await page.locator('#cmp-years').boundingBox())!.x).toBeGreaterThan(outcomes.x + outcomes.width);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await expectNoViolations(page, { include: 'nav[aria-label="Comparison sections"]' });
+
+	await menu.getByRole('link', { name: 'Hydrological units' }).click();
+	await expect(page).toHaveURL(/#cmp-units$/);
+	await expect(page.locator('#cmp-units')).toBeInViewport();
+	await expect(menu).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Hydrological units' })).toHaveAttribute('aria-current', 'location');
+	// The arrow keys move between its links.
+	await menu.getByRole('link', { name: 'Hydrological units' }).focus();
+	await page.keyboard.press('ArrowUp');
+	await expect(menu.getByRole('link').nth(drawn.findIndex((x) => x.href === '#cmp-units') - 1)).toBeFocused();
 });

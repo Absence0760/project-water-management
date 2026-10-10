@@ -18,7 +18,7 @@ import { saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
-import { rowOrigin, rowProvenance } from '../series/merge.js';
+import { rowOrigin, rowProvenance, SERIES_META, type SeriesMetaRow } from '../series/merge.js';
 import { replaceSeries } from '../series/replace.js';
 import { setDayBoundary } from '../series/routes.js';
 import { fieldHistory } from './fields.js';
@@ -435,6 +435,13 @@ export const historyRoutes = new Hono<AuthEnv>()
 				{ ...body, provenance: rowProvenance(body), origin: rowOrigin({ source, sourceUnit, sourceUnitFactor }) },
 				{ restoredFrom: rev }
 			);
+			// And the days edited by hand (212_series_hand_days): they mark the values that come back (a replace clears them).
+			const { rows: marked } = await db.query<SeriesMetaRow>(
+				`UPDATE time_series SET hand_days = (SELECT hand_days FROM series_revision WHERE project_id = $1 AND id = $3)
+				 WHERE project_id = $1 AND id = $2 RETURNING ${SERIES_META}`,
+				[id, meta.id, rev]
+			);
+			meta.handDays = marked[0]!.handDays;
 			// And its site (085): a gauge record comes back at its gauge, never quietly at the outlet, and a land
 			// unit's own rain (209) at its unit, never quietly as the catchment's.
 			if (meta.siteNodeId !== siteNodeId) {
