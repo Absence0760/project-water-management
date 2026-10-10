@@ -101,7 +101,7 @@ async function getPack(request: APIRequestContext, projectId: string, packId: st
 	return ((await (await request.get(`${API_URL}/projects/${projectId}/packs/${packId}`)).json()) as { pack: ApiPack }).pack;
 }
 
-test('a baseline pack is created, signed, issued and verified signed out; a copy is checked in the browser; withdrawn, it says why', async ({ page, owner, browser, signIn }) => {
+test('a baseline pack is created, signed, issued and verified signed out; a copy is checked in the browser; withdrawn, it says why', async ({ page, owner, browser, signIn, fetchRoute }) => {
 	void owner;
 	const { project, baseline, upper } = await seed(page, 'Pack catchment');
 	// § 1's locality map (evidence-12): a boundary and a parcel, read when the pack is drafted.
@@ -213,7 +213,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	// Errata found since issue show in the bar, never in the printed pack: none for this engine (the live answer) ...
 	await expect(page.getByTestId('pack-errata-since')).toHaveCount(0);
 	// ... and one the API names (132; the live answer with one added, as on the verify page below).
-	await page.route(packUrl, async (route) => {
+	const packErrata = await fetchRoute(page, packUrl, async (route) => {
 		if (route.request().method() !== 'GET') return route.fallback();
 		const res = await route.fetch();
 		const body = await res.json();
@@ -226,7 +226,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await expect(errataSince).toContainText('Errata found since issue:');
 	await expect(errataSince.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
 	await expectNoViolations(page);
-	await page.unroute(packUrl);
+	await packErrata.unroute();
 	await page.reload();
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 
@@ -272,7 +272,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await expect(since).toContainText('None: no erratum has been found since issue for the engines this pack’s runs used.');
 	// ... and one listed when the API names one (132): no real erratum can be added to docs/engine-errata.md from a test,
 	// so the answer is the live one with an entry added to errataFoundSince, which is all the page reads for it.
-	await pub.route(`${API_URL}/verify/**`, async (route) => {
+	const verifyErrata = await fetchRoute(pub, `${API_URL}/verify/**`, async (route) => {
 		const res = await route.fetch();
 		const body = await res.json();
 		body.pack.errataFoundSince = [{ id: 'ER-999', summary: 'A bug found after this pack was issued' }];
@@ -283,7 +283,7 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await expect(since.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
 	await expect(since).toContainText('its manifest and hash are fixed');
 	await expectNoViolations(pub);
-	await pub.unroute(`${API_URL}/verify/**`);
+	await verifyErrata.unroute();
 
 	// A copy checked in the browser: the manifest as downloaded, pretty-printed, and with one byte changed.
 	const check = pub.getByTestId('verify-check');

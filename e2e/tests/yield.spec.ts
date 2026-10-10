@@ -91,7 +91,7 @@ test('the panel follows a yield job it did not queue: running after a reload, th
 	await expect(panel.getByRole('button', { name: 'Work out the yield' })).toBeEnabled();
 });
 
-test('the in-browser preview shows the firm yield at once, follows the pattern, and matches the stored job', async ({ page, owner, signIn }) => {
+test('the in-browser preview shows the firm yield at once, follows the pattern, and matches the stored job', async ({ page, owner, signIn, fetchRoute }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Yield preview');
 	await createRun(page.request, project.id, 'Base');
@@ -129,7 +129,8 @@ test('the in-browser preview shows the firm yield at once, follows the pattern, 
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	// As if the backend were released on another engine than this web build:
 	// the stored result says so, and the preview notes the difference.
-	await viewer.page.route(
+	await fetchRoute(
+		viewer.page,
 		(url) => url.pathname === `/projects/${project.id}/yield`,
 		async (route) => {
 			if (route.request().method() !== 'GET') return route.fallback();

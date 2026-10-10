@@ -107,18 +107,17 @@ test('with unsaved model edits the failure warns, and the reload asks before dis
 // ready. Blocked by its content (its file name is only a hash): if it fails,
 // the report says so and offers a reload rather than a "Try again" that
 // would fail the same way.
-test('a report whose tables fail to download offers a reload, and the reload recovers', async ({ page, owner }) => {
+test('a report whose tables fail to download offers a reload, and the reload recovers', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Chunk failure, report');
 	const runId = await createRun(page.request, project.id, 'Baseline');
-	const blockTables = blockChunkWith('Groundwater by water year');
-	await page.route(BLOCKED, blockTables);
+	const blockTables = await fetchRoute(page, BLOCKED, blockChunkWith('Groundwater by water year'));
 	await page.goto(`/projects/${project.id}/report?run=${runId}`);
 	const alert = page.getByRole('alert');
 	await expect(alert).toHaveText('The report could not be loaded. Check your connection, then reload the page. Reload page');
 	await expect(page.locator('main[data-report-ready="true"]')).toHaveCount(0);
 
-	await page.unroute(BLOCKED, blockTables);
+	await blockTables.unroute();
 	await alert.getByRole('button', { name: 'Reload page' }).click();
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 	await expect(page.getByRole('alert')).toHaveCount(0);
@@ -225,11 +224,10 @@ test('the account’s data download failing to load says so, and a reload recove
 
 // The verify-email banner is its own chunk. It used to vanish when that
 // failed, hiding that an unconfirmed address holds back pending invitations.
-test('a verify-email banner that fails to download says so in its place, and a reload recovers', async ({ page }) => {
+test('a verify-email banner that fails to download says so in its place, and a reload recovers', async ({ page, fetchRoute }) => {
 	const user = await register(page.context().request, 'Unconfirmed chunk', { verified: false });
 	await signInUnconfirmed(page.context(), user);
-	const blockBanner = blockChunkWith('Please confirm your email address');
-	await page.route(BLOCKED, blockBanner);
+	const blockBanner = await fetchRoute(page, BLOCKED, blockChunkWith('Please confirm your email address'));
 	await page.goto('/');
 	const alert = page.getByRole('alert');
 	await expect(alert).toHaveText(
@@ -237,7 +235,7 @@ test('a verify-email banner that fails to download says so in its place, and a r
 	);
 	await expect(page.getByRole('region', { name: 'Email confirmation' })).toHaveCount(0);
 
-	await page.unroute(BLOCKED, blockBanner);
+	await blockBanner.unroute();
 	await alert.getByRole('button', { name: 'Reload page' }).click();
 	await expect(page.getByRole('region', { name: 'Email confirmation' })).toContainText(`We sent a link to ${user.email}`);
 	await expect(page.getByRole('alert')).toHaveCount(0);
