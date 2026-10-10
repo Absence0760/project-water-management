@@ -7,6 +7,7 @@ import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { diffInputs } from '../compare';
 import { buildTopology } from '../network/topology';
 import { blankEwrRuleTable, type EwrRuleTable } from '../reserve/rules';
+import { blankEwrDailySource } from '../reserve/dailySource';
 import { runModel } from '../run';
 import type { DemandObject, ModelInput, NetworkNode, RunSeries } from '../project';
 import type { AllocationEntry } from '../allocations/compare';
@@ -556,6 +557,71 @@ describe('applyScenario: each op', () => {
 		expect(v.ops).toEqual([{ op: 'settings.set', path: 'pe', value: monthly }]);
 		expect(v.errors).toEqual(['ops[1].value: source must say where the monthly PE came from']);
 		expect(classifyOp({ op: 'settings.set', path: 'pe', value: monthly as never }, ['A'])).toBe('baseline');
+	});
+
+	describe('settings.set ewrDailySource (engine ≥ 1.80.0, issue #460): judge a scenario by the DRM tables', () => {
+		const tab = { ...blankEwrDailySource(), method: 'tab' as const, tabM3s: [0.02, 0.02, 0.03, 0.04, 0.04, 0.03, 0.02, 0.01, 0.01, 0.01, 0.01, 0.02], tableMarMm3: 5 };
+		const pctRow = [0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1, 0.08, 0.06, 0.04];
+		const resRow = pctRow.map((v) => v / 2);
+		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+		const pct = { ...tab, method: 'percentile' as const, naturalPctM3s: Array.from({ length: 12 }, () => [...pctRow]), reservePctM3s: Array.from({ length: 12 }, () => [...resRow]) };
+
+		it('switches the method on a base with none: the tables travel in the op, and the run uses them', () => {
+			const r = one({ op: 'settings.set', path: 'ewrDailySource', value: tab });
+			expect(r.problems).toEqual([]);
+			expect(r.input.settings.ewrDailySource).toEqual(tab);
+			expect(r.input.settings.ewrDailySource).not.toBe(tab);
+			const before = runModel(base()).summary;
+			const after = runModel(r.input).summary;
+			expect(before.catchment.outletEwr).toBeUndefined();
+			expect(after.catchment.outletEwr).toMatchObject({ method: 'tab', scaling: 'mar', tableMarMm3: 5 });
+			expect(after.warnings.join(' ')).toMatch(/daily EWR at the outlet comes from the DRM TAB file/);
+			// Positive control for the input diff the compare page shows.
+			expect(diffInputs(snap(base()), snap(r.input)).map((c) => c.text)).toContain('Daily EWR at the outlet: the pragmatic EWR → the DRM TAB file');
+		});
+
+		it('changes only the scaling of the base’s source', () => {
+			const b = base();
+			b.settings.ewrDailySource = pct;
+			const area = { ...pct, scaling: 'area' as const, tableAreaKm2: 40 };
+			const r = one({ op: 'settings.set', path: 'ewrDailySource', value: area }, b);
+			expect(r.problems).toEqual([]);
+			expect(runModel(r.input).summary.catchment.outletEwr).toMatchObject({ method: 'percentile', scaling: 'area', tableAreaKm2: 40 });
+			expect(diffInputs(snap(b), snap(r.input)).map((c) => c.text)).toEqual(['Daily EWR at the outlet: scaled by MAR → by area', 'Daily EWR at the outlet: table area not entered → 40 km²']);
+		});
+
+		it('back to the pragmatic EWR with null; null on a base without a source changes nothing', () => {
+			const b = base();
+			b.settings.ewrDailySource = tab;
+			expect(one({ op: 'settings.set', path: 'ewrDailySource', value: null }, b).input.settings.ewrDailySource).toBeNull();
+			const none = one({ op: 'settings.set', path: 'ewrDailySource', value: null });
+			expect(none.problems).toEqual([]);
+			expect('ewrDailySource' in none.input.settings).toBe(false);
+		});
+
+		it('refuses a source the run would drop back to the pragmatic EWR, rather than running it', () => {
+			const err = (value: unknown) => one({ op: 'settings.set', path: 'ewrDailySource', value } as unknown as ScenarioOp).problems[0];
+			// The TAB method on a base that has no TAB flows, and an op that didn't bring them.
+			expect(err({ ...tab, tabM3s: null })).toMatch(/ewrDailySource is not a source the run can use: Enter the TAB file’s 12 monthly total flows/);
+			expect(err({ ...pct, reservePctM3s: null })).toMatch(/Enter the total Reserve flow percentile table/);
+			expect(err({ ...tab, tableMarMm3: null })).toMatch(/Scaling by MAR needs the table’s MAR/);
+			expect(err({ ...tab, scaling: 'area' })).toMatch(/Scaling by area needs the table’s catchment area/);
+			expect(err({ ...tab, method: 'manual' })).toMatch(/Pick the daily EWR source/);
+			expect(err({ ...tab, note: 'x' })).toMatch(/Unknown field: note/);
+			expect(err('tab')).toMatch(/must be an object/);
+			// Positive controls: a usable source, and the pragmatic method with tables half entered (as Settings saves it).
+			expect(err(tab)).toBeUndefined();
+			expect(err({ ...blankEwrDailySource(), tabM3s: tab.tabM3s })).toBeUndefined();
+			// Refused at the API boundary too.
+			const v = validateScenarioOps([{ op: 'settings.set', path: 'ewrDailySource', value: tab }, { op: 'settings.set', path: 'ewrDailySource', value: { ...tab, tabM3s: null } }]);
+			expect(v.ops).toEqual([{ op: 'settings.set', path: 'ewrDailySource', value: tab }]);
+			expect(v.errors[0]).toMatch(/^ops\[1\]\.value: is not a source the run can use: Enter the TAB file’s/);
+		});
+
+		it('is a baseline assumption, never the applicant’s proposal', () => {
+			expect(classifyOp({ op: 'settings.set', path: 'ewrDailySource', value: tab }, ['A', 'B', 'C', 'G'])).toBe('baseline');
+			expect(classifyOp({ op: 'settings.set', path: 'ewrDailySource', value: null }, ['A'])).toBe('baseline');
+		});
 	});
 
 	it('series.scale scales the days in range, keeps missing days, and copies only that series', () => {

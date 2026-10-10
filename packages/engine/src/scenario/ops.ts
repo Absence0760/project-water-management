@@ -62,6 +62,7 @@ import {
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
 import { droughtRestrictionIssues } from '../network/restriction';
+import { ewrDailySourceIssues, type EwrDailySource } from '../reserve/dailySource';
 import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS } from '../network/demandSchedule';
 import {
 	EWR_CHARGE_SOURCES,
@@ -453,6 +454,17 @@ export interface SettingsPathValues {
 	 * assumption (classifyOp), never an applicant's proposal.
 	 */
 	droughtRestriction: DroughtRestrictionRule | null;
+	/**
+	 * The daily outlet EWR's source (the setting engine ≥ 1.77.0; a scenario path
+	 * engine ≥ 1.80.0, issue #460), whole: the
+	 * method, its scaling and the DRM tables it reads, or null (the pragmatic
+	 * EWR). The tables travel in the value, so a base without them can still
+	 * be judged by them; a source the run couldn't use (a TAB method without
+	 * its flows, a MAR scaling without the table MAR) is refused, never left
+	 * for the run to drop back to the pragmatic EWR. Always a baseline
+	 * assumption (classifyOp): the Reserve isn't the applicant's to propose.
+	 */
+	ewrDailySource: EwrDailySource | null;
 }
 export type SettingsPath = keyof SettingsPathValues;
 
@@ -521,6 +533,11 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	droughtRestriction: nullable((v) => {
 		const i = droughtRestrictionIssues(v)[0];
 		return i ? `${i.field ? `${i.field} ` : ''}${i.message}` : null;
+	}),
+	// The Settings save's own checks (../reserve/dailySource.ts): what makes the run drop a source is refused here instead.
+	ewrDailySource: nullable((v) => {
+		const i = ewrDailySourceIssues(v);
+		return i.length ? `is not a source the run can use: ${i.map((x) => x.message).join(' ')}` : null;
 	})
 };
 

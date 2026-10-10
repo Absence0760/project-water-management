@@ -338,3 +338,18 @@ export function ewrDailySourceChanges(a: unknown, b: unknown): string[] {
 	}
 	return out;
 }
+
+/**
+ * A stored source in a few words, for a scenario's change list (issue #460):
+ * "the pragmatic EWR" (absent, null or method 'pragmatic', whatever tables it
+ * keeps), else the method and its scaling with the table MAR or area it
+ * divides by. One the run couldn't use says so.
+ */
+export function describeEwrDailySource(raw: unknown): string {
+	if (raw === undefined || raw === null) return METHOD_SHORT.pragmatic;
+	if (ewrDailySourceIssues(raw).length) return 'an unusable source (the run uses the pragmatic EWR)';
+	const s = raw as EwrDailySource;
+	if (s.method === 'pragmatic') return METHOD_SHORT.pragmatic;
+	const by = s.scaling === 'mar' ? `scaled by MAR (table ${fmt(s.tableMarMm3!, 6)} Mm³/a)` : `scaled by area (table ${fmt(s.tableAreaKm2!, 6)} km²)`;
+	return `${METHOD_SHORT[s.method]}, ${by}`;
+}

@@ -799,6 +799,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			const s = d.settings as Record<string, unknown>;
 			// No drought restriction rule and null run the same (engine ≥ 1.54.0): turning off a rule that isn't there leaves it as it is.
 			if (path === 'droughtRestriction' && value === null && (s.droughtRestriction === null || s.droughtRestriction === undefined)) break;
+			// Likewise no daily EWR source and null (the pragmatic EWR; a scenario path engine ≥ 1.80.0).
+			if (path === 'ewrDailySource' && value === null && (s.ewrDailySource === null || s.ewrDailySource === undefined)) break;
 			if (leaf === undefined) s[head] = value;
 			else {
 				const cur = s[head];

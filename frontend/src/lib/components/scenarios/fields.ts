@@ -44,7 +44,7 @@ import {
 	type SettingsPath,
 	type TransferSetField
 } from '@water-management/engine';
-import { describeDroughtRestriction, type DroughtRestrictionRule } from '@water-management/engine';
+import { describeDroughtRestriction, describeEwrDailySource, ewrDailySourceIssues, type DroughtRestrictionRule, type EwrDailySource } from '@water-management/engine';
 import { restrictionFormError } from '$lib/components/settings/droughtRestriction';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, parseNum } from '$lib/format/number';
@@ -99,7 +99,14 @@ export type ValueSpec =
 	 * 1.54.0, WP-3.8), whole, edited with the Settings form's editor
 	 * (settings/DroughtRestrictionFields.svelte); null is off.
 	 */
-	| { t: 'restriction' };
+	| { t: 'restriction' }
+	/**
+	 * The daily outlet EWR's source (settings.ewrDailySource, engine ≥
+	 * 1.77.0, issue #460), whole with its DRM tables, edited with the Settings
+	 * form's editor (settings/EwrDailySourceFields.svelte); null is the
+	 * pragmatic EWR.
+	 */
+	| { t: 'ewrDaily' };
 
 /** The "Add a change" form's copy of a PE input: the monthly row stays text until it is parsed. */
 export interface PeDraft {
@@ -354,7 +361,9 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	// Registered volumes (engine ≥ 1.18.0, issue #72): a full-allocation scenario is the cumulative-impact background.
 	allocationMode: { label: 'Allocation mode', spec: { t: 'enum', options: plain(ALLOCATION_MODES, ALLOCATION_MODE_LABEL) } },
 	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a WUA compares restriction policies with it.
-	droughtRestriction: { label: 'Drought restriction rule', spec: { t: 'restriction' } }
+	droughtRestriction: { label: 'Drought restriction rule', spec: { t: 'restriction' } },
+	// The daily outlet EWR's source (engine ≥ 1.77.0, issue #460): judge a scenario by the DRM TAB file or percentile tables.
+	ewrDailySource: { label: 'Daily EWR at the outlet', spec: { t: 'ewrDaily' } }
 };
 
 export const SETTINGS_FIELDS = SETTINGS_PATHS.map((path) => ({ path, label: SETTINGS_SPECS[path].label }));
@@ -394,8 +403,15 @@ const round = (n: number) => Math.round(n * 1e9) / 1e9;
  * is null where the field allows it. Percentages are divided by 100. The
  * range checks are the engine's, run on the op afterwards.
  */
-export function parseValue(spec: ValueSpec, input: string | readonly number[] | PeDraft | DroughtRestrictionRule | null): Parsed {
+export function parseValue(spec: ValueSpec, input: string | readonly number[] | PeDraft | DroughtRestrictionRule | EwrDailySource | null): Parsed {
 	if (spec.t === 'pe') return parsePe(input);
+	if (spec.t === 'ewrDaily') {
+		// The source as the editor holds it, checked as a save checks it (a TAB method needs its flows, a scaling its
+		// divisor), so the run never drops it back to the pragmatic EWR; null is the pragmatic EWR.
+		if (input === null) return { ok: true, value: null };
+		const e = ewrDailySourceIssues(input)[0]?.message;
+		return e ? { ok: false, error: e.charAt(0).toLowerCase() + e.slice(1).replace(/\.$/, '') } : { ok: true, value: input };
+	}
 	if (spec.t === 'restriction') {
 		// The rule as the editor holds it, checked as a save checks it; null turns restrictions off.
 		if (input === null) return { ok: true, value: null };
@@ -525,6 +541,8 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 		}
 		case 'restriction':
 			return describeDroughtRestriction(v as DroughtRestrictionRule);
+		case 'ewrDaily':
+			return describeEwrDailySource(v);
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
@@ -575,6 +593,8 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 		}
 		case 'restriction':
 			return describeDroughtRestriction((v ?? null) as DroughtRestrictionRule | null);
+		case 'ewrDaily':
+			return describeEwrDailySource(v);
 	}
 }
 

@@ -327,8 +327,7 @@ runs and accumulations are real) can't be decided without the client.
       natural bed losses; a rising natural percentile row read as its
       running minimum; below the driest point the Reserve flow scaled with
       q ÷ N₁₀ (as A1). Trigger: the hydrologist's answer, or the client's
-      first run judged by the DRM tables. Also left: scenarios can't switch
-      the source (`settings.set` doesn't list `ewrDailySource`).
+      first run judged by the DRM tables.
 - [ ] **Network, supply, crops and dams: provisional decisions 2026-10-01**
       (issue #90, the hydrologist list from *Supply order at a dam* to
       *WP-1.35 Land-cover split*). Each item was researched against published

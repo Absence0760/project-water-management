@@ -253,6 +253,20 @@ a % cut per part of demand), or `null` for off, checked by the engine's
 a `null` over no rule changes nothing. So a WUA compares restriction
 policies: the same base run with the rule off, with the outlook's triggers,
 and with a harsher table.
+And from engine 1.80.0 (issue #460) `ewrDailySource`: the daily outlet
+EWR's source, whole (`method` `pragmatic` | `tab` | `percentile`, `scaling`
+`mar` | `area`, the table MAR or area, and the DRM tables it reads), or
+`null` for the pragmatic EWR ([model.md §2.9f](./model.md)); a `null` over
+no source changes nothing. So "judge this application by the TAB file
+instead of the pragmatic EWR" is a scenario, not a copy of the project. The
+tables travel in the op's value, so a base that never had them can still be
+judged by them; the value is checked by the engine's `ewrDailySourceIssues`,
+as a settings save is, and a source the run couldn't use (a TAB method with
+no TAB flows, the percentile method missing a table, a MAR scaling without
+the table MAR, an area scaling without the table area) is refused as the
+op's problem rather than left for the run to drop back to the pragmatic EWR
+with a warning. The pragmatic method with tables half entered is accepted,
+as Settings saves it. A baseline assumption, like every `settings.set`.
 Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or
@@ -950,6 +964,18 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   blocks Add, in the same words as Settings. Described as "Drought
   restriction rule: off → reviewed 5 Oct; Level 1 (below 70 %): crops 50 %".
   A baseline assumption, like every `settings.set`.
+- **The daily EWR at the outlet** (`settings.set ewrDailySource`, engine ≥
+  1.80.0, issue #460) is edited whole in the Settings tab's own editor
+  (`settings/EwrDailySourceFields.svelte`, loaded when picked: the method,
+  the scaling, typed or pasted tables, or a DRM .tab / .rul file), starting
+  from the source the scenario meets, tables and all (or the pragmatic EWR).
+  The engine's first issue blocks Add ("Daily EWR at the outlet: enter the
+  TAB file’s 12 monthly total flows, or pick another source"). Described as
+  "Daily EWR at the outlet: the pragmatic EWR → the DRM TAB file, scaled by
+  MAR (table 12.5 Mm³/a)" (the engine's `describeEwrDailySource`); the
+  compare page's Inputs that differ lists the method, scaling and table
+  changes (`ewrDailySourceChanges`). A baseline assumption, like every
+  `settings.set`.
 - **Scale demand** (`demand.scale`): whose demand (farms' irrigation or
   other water users'), the new demand as a % of what they'd take (0–200 %),
   a checkbox per node of that category and per month, Oct first (none ticked
@@ -1131,6 +1157,12 @@ no source refused in the Settings form's words, a desktop estimate added,
 described with its confidence line and a baseline assumption even with every
 node the proposer's, run, and the compare page's overrides and Inputs that differ
 showing it; the catchment's settings untouched; axe) and
+`e2e/tests/scenario-ewr-daily-source.spec.ts` (issue #460: the daily EWR at
+the outlet switched to the TAB file the base keeps under the pragmatic EWR,
+the Settings editor starting from the base's source, an area scaling with no
+table area refused in the engine's words, a baseline assumption kept over a
+reload, run, Inputs that differ naming the switch; the catchment's settings
+still pragmatic; axe) and
 `e2e/tests/scenario-later-ops.spec.ts` (engine ≥ 1.35.0: Lower farm moved
 to drain into Upper farm, a weir dam inserted above the gauge taking Upper
 farm, a crop's irrigation efficiency, and a new registered volume on Upper
