@@ -3,7 +3,7 @@
 //
 // The workbook rounds crop mm to 2 dp, farm demand to 0.1 m³/day and net demand
 // to whole m³; the engine keeps full precision (docs/engine-audit.md R1).
-import { daysPerMonth, toEpochDay, type Monthly } from './calendar';
+import { daysPerMonth, isIsoDate, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
 import { DEFAULT_IRRIGATION_SYSTEMS, RETURN_FLOW_SLACK, returnFlowFromLossReturn, upgradeLegacyModel, type DemandPart, type IrrigationSystemDef, type ModelInput, type NetworkNode } from './project';
 
 export interface Crop {
@@ -426,6 +426,64 @@ export function unitPartFactor(n: NetworkNode, part: DemandPart, warnings: strin
 	const b = partDemandFactorOf(n, part, warnings);
 	if (!a || !b) return a ?? b;
 	return a.map((v, m) => v * b[m]!);
+}
+
+/**
+ * A node's dated demand factors (engine ≥ 1.82.0, issue #514, the
+ * demand.scale scenario op with from/to) on one part of its demand, day by
+ * day over the run (`day0` = its first epoch day): the product of every
+ * window that covers the day and reaches `part`, at the day's water-year
+ * month; null when no window reaches any day (1 every day). A window without
+ * a part scales the whole demand (every part of a unit's, an other water
+ * user's); one with a part only that part of a unit's (`part` undefined: an
+ * other water user's demand, which has none). A window that isn't usable (a
+ * date that isn't ISO, from after to) runs as none, and a factor that isn't
+ * a number ≥ 0 or a missing month as 1, each with a warning, as
+ * demandFactorOf's. A gauge has no demand.
+ */
+export function datedDemandFactorOf(n: NetworkNode, part: DemandPart | undefined, day0: number, days: number, warnings: string[]): Float64Array | null {
+	const list = n.demandFactorWindows;
+	if (list === null || list === undefined || n.kind === 'gauge') return null;
+	if (!Array.isArray(list)) {
+		warnings.push(`${n.kind} "${n.name}": dated demand factors should be a list; none apply`);
+		return null;
+	}
+	let out: Float64Array | null = null;
+	for (const w of list) {
+		if (!w || typeof w !== 'object') {
+			warnings.push(`${n.kind} "${n.name}": a dated demand factor isn't usable; it doesn't apply`);
+			continue;
+		}
+		if (w.part !== undefined && (n.kind !== 'farm' || w.part !== part)) continue;
+		if ((w.from !== undefined && !isIsoDate(w.from)) || (w.to !== undefined && !isIsoDate(w.to)) || (w.from !== undefined && w.to !== undefined && w.from > w.to)) {
+			warnings.push(`${n.kind} "${n.name}": a dated demand factor's dates (${String(w.from ?? '…')} – ${String(w.to ?? '…')}) aren't usable; it doesn't apply`);
+			continue;
+		}
+		const a = w.from === undefined ? 0 : Math.max(0, toEpochDay(w.from) - day0);
+		const b = w.to === undefined ? days - 1 : Math.min(days - 1, toEpochDay(w.to) - day0);
+		if (a > b) continue;
+		const f = new Float64Array(12).fill(1);
+		const raw: unknown = w.factor;
+		if (!Array.isArray(raw) || raw.length !== 12) warnings.push(`${n.kind} "${n.name}": a dated demand factor should have 12 monthly values, has ${Array.isArray(raw) ? raw.length : 0}; missing months are 1`);
+		if (Array.isArray(raw)) {
+			let bad = false;
+			for (let m = 0; m < 12; m++) {
+				const v: unknown = raw[m];
+				if (v === undefined) continue;
+				if (typeof v === 'number' && Number.isFinite(v) && v >= 0) f[m] = v;
+				else bad = true;
+			}
+			if (bad) warnings.push(`${n.kind} "${n.name}": a dated demand factor that isn't a number ≥ 0 runs as 1`);
+		}
+		out ??= new Float64Array(days).fill(1);
+		for (let t = a; t <= b; t++) out[t]! *= f[(monthOfEpochDay(day0 + t) + 2) % 12]!;
+	}
+	return out;
+}
+
+/** Whether a node carries any dated demand factor (engine ≥ 1.82.0), usable or not. */
+export function hasDatedDemandFactor(n: NetworkNode): boolean {
+	return Array.isArray(n.demandFactorWindows) && n.demandFactorWindows.length > 0;
 }
 
 /**

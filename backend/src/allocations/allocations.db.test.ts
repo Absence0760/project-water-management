@@ -378,31 +378,55 @@ describe('the run comparison', () => {
 		expect(x.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!) - sum(s.groundwater_used!) - Math.min(toDam, damDraw), 3);
 	});
 
-	it('counts diverted river water an off-river dam lost as surface use, beside the draws (engine 1.79.0, issue #507)', async () => {
-		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: off-river dam' })).body.project.id;
+	it('measures a dam beside the river at the intake: River to dam less the same day\'s spill, draws reported not counted; an older run reads by the draws (engine 1.82.0, issue #513)', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: dam beside the river' })).body.project.id;
 		const out = node('Weir', null);
-		// Beside the river: neither the upstream inflow nor its own runoff reaches the dam; River to dam fills it.
-		const f = node('Off-river farm', out.id, { damCapacityM3: 20_000, damInitialPct: 0.5, pctUpstreamToDam: 0, pctRunoffToDam: 0, divertCapacityM3Day: 300, damSeepagePerDay: 0.002, damSeepageReturnPct: 0.25 });
+		// Beside the river: none of the upstream inflow reaches the dam, River to dam fills it; small, so it spills.
+		const f = node('Off-river farm', out.id, { damCapacityM3: 3_000, damInitialPct: 0.5, pctUpstreamToDam: 0, pctRunoffToDam: 0.3, divertCapacityM3Day: 400 });
+		// On the river (all the upstream inflow into it): the draws rule, the control.
+		const g = node('On-river farm', out.id, { damCapacityM3: 20_000, damInitialPct: 0.5, pctUpstreamToDam: 1, pctRunoffToDam: 0.3 });
 		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
-		const m = { nodes: [out, f], crops: [crop], cropAreas: [{ nodeId: f.id, cropId: crop.id, areaM2: 30_000 }], transfers: [] };
+		const m = { nodes: [out, f, g], crops: [crop], cropAreas: [{ nodeId: f.id, cropId: crop.id, areaM2: 30_000 }, { nodeId: g.id, cropId: crop.id, areaM2: 30_000 }], transfers: [] };
 		expect((await owner.call('PUT', `/projects/${pid}/model`, m)).status).toBe(200);
 		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(0) } })).status).toBe(200);
 		const rain = Array.from({ length: 365 }, (_, i) => (i % 9 === 0 ? 25 : 0));
 		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
 		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'off-river' });
 		expect(run.status, JSON.stringify(run.body)).toBe(201);
-		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/allocations`);
-		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		const x = res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === f.id);
+		const compare = async () => {
+			const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/allocations`);
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			return (id: string) => res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === id);
+		};
+		const x = (await compare())(f.id);
 
-		const rows = await asOwner(`SELECT key, "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key IN ('supplied', 'diverted_loss')`, [run.body.run.id, f.id]);
+		const rows = await asOwner(`SELECT key, "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key IN ('supplied', 'diverted_to_dam', 'spill', 'intake_take')`, [run.body.run.id, f.id]);
 		const s = Object.fromEntries(rows.map((r) => [r.key as string, r.values as number[]]));
 		const sum = (a: number[]) => a.reduce((t, v) => t + v, 0);
-		// The fixture loses diverted water and draws on the dam, so both parts are there.
-		expect(sum(s.diverted_loss!)).toBeGreaterThan(0);
+		const O = s.diverted_to_dam!;
+		const R = s.spill!;
+		// The fixture diverts, spills on days it diverts, and draws on the dam.
+		expect(sum(O)).toBeGreaterThan(0);
+		expect(R.some((v, i) => v > 0 && O[i]! > 0)).toBe(true);
 		expect(sum(s.supplied!)).toBeGreaterThan(0);
+		const take = sum(O.map((o, i) => o - Math.min(R[i]!, o)));
+		expect(sum(s.intake_take!)).toBeCloseTo(take, 3);
+		expect(x.surface.measuredAt).toBe('intake');
 		expect(x.surface.years).toHaveLength(1);
-		expect(x.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!) + sum(s.diverted_loss!), 3);
+		expect(x.surface.years[0].modelledM3).toBeCloseTo(take, 3);
+		// Draws (no river pump here: all of supplied) are reported, not added.
+		expect(x.surface.years[0].damDrawM3).toBeCloseTo(sum(s.supplied!), 3);
+		// The dam on the river keeps the draws rule (positive control: it has use to count).
+		const y = (await compare())(g.id);
+		expect(y.surface.measuredAt).toBeUndefined();
+		expect(y.surface.years[0].modelledM3).toBeGreaterThan(0);
+
+		// An older run: no intake_take (a 1.79.0–1.81.0 run stored diverted_loss instead, which isn't read): the draws.
+		await asOwner(`UPDATE run_series SET key = 'diverted_loss' WHERE run_id = $1 AND node_id = $2 AND key = 'intake_take'`, [run.body.run.id, f.id]);
+		const old = (await compare())(f.id);
+		expect(old.surface.measuredAt).toBeUndefined();
+		expect(old.surface.years[0].damDrawM3).toBeUndefined();
+		expect(old.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!), 3);
 	});
 
 	it("leaves a forecast run's forecast days out (issue #51); an ordinary run of the same record is the control", async () => {

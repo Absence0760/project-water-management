@@ -53,8 +53,20 @@ describe('comparisonRows', () => {
 			'Farm B:groundwater:2001:within',
 			'Farm B:groundwater:2002:within'
 		]);
+		expect(rows.every((r) => !r.atIntake)).toBe(true);
 	});
 
+	it('marks a dam beside the river’s surface rows and unit as taken at the intake, with the draws reported (engine 1.82.0)', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [{ nodeId: 'C', name: 'Farm C', kind: 'farm', supplied: new Array(365).fill(80), intakeTake: new Array(365).fill(100) }],
+			allocations: [{ id: 'c', nodeId: 'C', waterSource: 'surface', volumeM3PerYear: 36_500 }]
+		});
+		const [row] = comparisonRows(c);
+		expect(row).toMatchObject({ atIntake: true, year: { modelledM3: 36_500, damDrawM3: 29_200 } });
+		expect(unitRows(c)[0]).toMatchObject({ atIntake: true, modelledM3: 36_500 });
+		expect(unitRows(comparison()).every((u) => !u.atIntake)).toBe(true);
+	});
 });
 
 describe('unitRows', () => {

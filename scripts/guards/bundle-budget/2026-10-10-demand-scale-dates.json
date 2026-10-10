@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "demand.scale from/to (issue #514): the engine's dated demand factors (datedDemandFactorOf, the run and object hooks, the input diff text) and Scale demand's From/To fields; measured 1938 KB against 1937 KB"
+}

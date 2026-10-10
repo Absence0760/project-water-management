@@ -301,7 +301,7 @@ function memberSeason(input: ModelInput, baseRun: OutlookBaseRun, season: Outloo
 	if (s.from <= r0) throw new RangeError(`the decision date ${s.decisionDate} is not after the base run's first day (${baseRun.startDate}): there is no history to start from`);
 	if (s.from - 1 > r1) throw new RangeError(`the base run ends on ${fromEpochDay(r1)}, before ${fromEpochDay(s.from - 1)}, the day before the decision date: the state there isn't known`);
 	// A part's factor too (engine ≥ 1.45.0, demand.scale with a part).
-	if (input.model.nodes.some((n) => n.demandFactor != null || n.partDemandFactor != null)) throw new Error('the base input carries a demand factor (a scenario run): run the outlook on an ordinary run');
+	if (input.model.nodes.some((n) => n.demandFactor != null || n.partDemandFactor != null || n.demandFactorWindows != null)) throw new Error('the base input carries a demand factor (a scenario run): run the outlook on an ordinary run');
 	if (input.settings.damStorageReset != null) throw new Error('the base input carries a dam storage reset: run the outlook on an ordinary run');
 	const a = toEpochDay(analogue.from);
 	if (toEpochDay(analogue.to) - a + 1 !== s.days) throw new RangeError(`analogue ${analogue.label} is not as long as the season`);

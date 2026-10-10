@@ -36,7 +36,8 @@ are empty and nothing below changes.
   `runModel` is unchanged, and so is `ENGINE_VERSION`: a scenario is new
   input, not new model behaviour. The one exception is `demand.scale`
   (engine 0.41.0), whose node field `demandFactor` the engine had to learn
-  to read (§ Demand scaling below); applying ops still never runs the model.
+  to read (§ Demand scaling below), and its dates (engine 1.82.0, the node
+  field `demandFactorWindows`); applying ops still never runs the model.
 - **In order.** Each op sees the input the earlier ops left. An op on an
   element an earlier op removed is a problem.
 - **Problems, not exceptions.** An op is skipped, and one line added to
@@ -125,7 +126,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `ewrRule.remove` | `siteNodeId` | Removes the Reserve rule table of one EWR site (engine ≥ 1.35.0): null (or the outlet node's id) is the outlet. Always a baseline assumption. § Reserve rule tables. |
 | `allocation.set` | `allocation` | Sets or replaces one registered volume by id (engine ≥ 1.35.0, [allocations.md](./allocations.md)): a new id adds one. § Registered volumes. |
 | `allocation.remove` | `allocationId` | Removes one registered volume (engine ≥ 1.35.0). |
-| `demand.scale` | `factor, nodeIds?, months?, category?, part?` | Multiplies demand by `factor` (0–2): the farms' irrigation demand (`category: 'farm'`, the default) or the other water users' (`'user'`). `nodeIds` limits it to those nodes (default: every node of the category), `months` to those calendar months (default: every month). It multiplies each target's `demandFactor`, so ops stack (0.9 twice is 0.81). `part` (engine ≥ 1.45.0, farms only) scales one part of a unit's demand: `crops` or the demand objects of one category, on top of the whole. Engine ≥ 0.41.0, issue #53 R1; § Demand scaling. |
+| `demand.scale` | `factor, nodeIds?, months?, category?, part?, from?, to?` | Multiplies demand by `factor` (0–2): the farms' irrigation demand (`category: 'farm'`, the default) or the other water users' (`'user'`). `nodeIds` limits it to those nodes (default: every node of the category), `months` to those calendar months (default: every month), `from`/`to` (engine ≥ 1.82.0, inclusive ISO dates, each open when absent, as `series.scale`'s) to those days; with both, the days in both. It multiplies each target's `demandFactor` (a dated op adds a window to its `demandFactorWindows`), so ops stack (0.9 twice is 0.81). `part` (engine ≥ 1.45.0, farms only) scales one part of a unit's demand: `crops` or the demand objects of one category, on top of the whole. Engine ≥ 0.41.0, issue #53 R1; § Demand scaling. |
 
 **`node.set` fields, per node kind.** Never `id`, `kind`,
 `downstreamNodeId` (the network's shape: use `node.add`, `node.insert`,
@@ -322,6 +323,23 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of
   every month *list* in the engine (`transfer.months`); the 12-value *rows* (`demandFactor`,
   `userDemandM3Day`) run Oct–Sep. Left out, every month.
+- **Dates** (engine ≥ 1.82.0, issue #514): `from` and `to`, inclusive ISO
+  dates (`YYYY-MM-DD`), each open when left out, checked as `series.scale`'s
+  are (a date that doesn't exist, or `from` after `to`, is refused). A
+  dated op doesn't touch `demandFactor`: it adds a window `{ from?, to?,
+  factor, part? }` to each target's `demandFactorWindows`, `factor` the 12
+  water-year multipliers its months give (1 where they don't reach), which
+  the run multiplies in on the window's days only, after the monthly
+  factors and from `settings.demandFactorFrom` on, through the same
+  basic-needs floor. So with `months` it scales the days in both (December
+  and January of 2021 only), and dated ops stack with each other and with
+  undated ones. Without dates the op sets `demandFactor` exactly as before,
+  and a run without a dated op is the one before 1.82.0, to the bit. A
+  window that lies outside the run scales nothing. The input diff reports it
+  (`dated demand factors none → 2021-10-01 – 2022-09-30 × 1.3`), the
+  self-check replays it, a warm start counts a window starting before the
+  snapshot day as history, and the drought restriction rule built from the
+  review triggers doesn't carry a dated level (a level's cut is all year).
 - **Categories:** `farm` (default) and `user`. One op scales one category;
   both is two ops. A gauge has no demand.
 - **Parts** (engine ≥ 1.45.0, issue #123: DWS's % restrictions per
@@ -344,13 +362,14 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   base that carries one, as it does a `demandFactor`.
 - **Problems** (the op is skipped): a factor outside 0–2; an empty or
   repeating `nodeIds` or `months` (leave the field out for all of them); a
-  month outside 1–12; a category other than the two; a node id the input
+  month outside 1–12; a category other than the two; a `from` or `to` that
+  isn't an ISO date, or `from` after `to`; a node id the input
   doesn't have (`node … not found`); a node of another kind (`"Town" is an
   other water user, not a farm`); no node of the category at all when
   `nodeIds` is left out (`the model has no other water user to scale`). The
   first four are the validator's too. Without `nodeIds` the note says how
   many nodes were scaled.
-- `demandFactor` and `partDemandFactor` are set only by this op: the model editor, the model save and
+- `demandFactor`, `partDemandFactor` and `demandFactorWindows` are set only by this op: the model editor, the model save and
   `node.set` don't carry them, and override mode keeps a scaled node's factor
   as it is. The input diff reports it (`demand factor none → 0.85, … (Oct–Sep)`).
 
@@ -517,33 +536,27 @@ unit's own records), so the whole forcing moves as the rain sensitivity
 moves it (§ Which series scale). Scaling only the station leaves the days
 CHIRPS fills at their full rain.
 
-**In named drought years** the rain ops carry dates: one `series.scale`
-per rain series per drought year, `from` and `to` the water year (1 October
-to 30 September). For drought years 2015/16 and 2018/19:
+**In named drought years** every op carries dates (`demand.scale` takes
+them from engine 1.82.0, issue #514): one `series.scale` per rain series
+and one `demand.scale` per category, per drought year, `from` and `to` the
+water year (1 October to 30 September). For drought years 2015/16 and
+2018/19:
 
 | # | Op | Fields |
 | --- | --- | --- |
 | 1 | `series.scale` | `kind: 'rain_catchment_mm', factor: 0.9, from: '2015-10-01', to: '2016-09-30'` |
 | 2 | `series.scale` | `kind: 'rain_catchment_mm', factor: 0.9, from: '2018-10-01', to: '2019-09-30'` |
-| 3 | `demand.scale` | `factor: 1.3` |
-| 4 | `demand.scale` | `factor: 1.3, category: 'user'` |
+| 3 | `demand.scale` | `factor: 1.3, from: '2015-10-01', to: '2016-09-30'` |
+| 4 | `demand.scale` | `factor: 1.3, from: '2018-10-01', to: '2019-09-30'` |
+| 5 | `demand.scale` | `factor: 1.3, category: 'user', from: '2015-10-01', to: '2016-09-30'` |
+| 6 | `demand.scale` | `factor: 1.3, category: 'user', from: '2018-10-01', to: '2019-09-30'` |
 
-**`demand.scale` has no dates.** It takes calendar `months`, which repeat
-every year, not `from`/`to` (§ Demand scaling), so the demand half can't
-be limited to the drought years today: ops 3 and 4 above raise demand in
-every year. Two ways to read such a scenario until it can:
-
-- judge only the drought years, by setting the report window
-  (`settings.set reportStart` / `reportEnd`, model.md §2.11) to one drought
-  year per scenario. The dams then enter that year as the extra demand of
-  the years before left them, so the result leans pessimistic;
-- or run the whole-record stress above and read the drought years off its
-  results.
-
-A `from`/`to` on `demand.scale` would close this; it is an engine change
-(the op's `demandFactor` is per month, not per day) and bumps
-`ENGINE_VERSION`. A one-click "Dry-year stress" preset, reading a project
-list of drought years, is an optional later convenience (#507 item 5).
+In the form, *Scale demand*'s **From** and **To** take the dates (§ The
+editor). The other years run as the base, so the dams enter each drought
+year as the base left them and leave it as the drought left them: the
+years after show the recovery too. A one-click "Dry-year stress" preset,
+reading a project list of drought years, is an optional later convenience
+(#507 item 5).
 
 Like any op without `nodeIds`, the demand ops classify the scenario as a
 baseline assumption (§ Classification below), which is what a stress test
@@ -635,7 +648,13 @@ window's eight known fields.
   `overrides.test.ts` has `demand.scale`'s own cases: what it sets (default
   every farm, some nodes and months, stacking), the run (crop requirement and
   demand scaled, gross demand, rain and store not), `category: 'user'`, the
-  problems, the input diff, its classification and its validation; and
+  problems, the input diff, its classification and its validation; with
+  dates (engine ≥ 1.82.0): no window without them, the days from–to scaled
+  and the days either side the base's to the bit, months and dates
+  intersecting, a whole-run window equal to the undated op to the bit, the
+  dry-year stress's per-year ops stacking on an undated one, a user's and a
+  part's (an object's floor too), the validator's date errors and the input
+  diff; and
   `ewrRule.set`'s (engine ≥ 1.6.0): the outlet's table replaced however it
   is keyed, a gauge's added then replaced, the run assessing the scenario's
   table, the problems, always baseline (masked too), the input diff, and the
@@ -1057,8 +1076,11 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   other water users'), the new demand as a % of what they'd take (0–200 %),
   a checkbox per node of that category and per month, Oct first (none ticked
   is all of them, and the op then leaves `nodeIds` / `months` out; every
-  month ticked is the same as none). It reads "Irrigation demand of Upper
-  farm: 85 % of what they'd take (× 0.85), in Jan, Feb, Dec". For
+  month ticked is the same as none), and **From** / **To** (engine ≥
+  1.82.0, `YYYY-MM-DD`, empty for the start or the end, the same fields as
+  *Scale rainfall*'s). It reads "Irrigation demand of Upper
+  farm: 85 % of what they'd take (× 0.85), in Jan, Feb, Dec", and with dates
+  "…, 2015-10-01 to 2016-09-30". For
   hydrological units, **Part of their demand** (engine ≥ 1.45.0): all of it,
   the crops, or the demand objects of one category; "Domestic demand objects
   demand of Upper farm: 90 % of what they'd take (× 0.9)".
@@ -1228,7 +1250,10 @@ demand through the form: one farm at 50 % in December and January, the
 proposer's, kept over a reload, run; the scenario run's daily demand is the
 base's × 0.5 on exactly those days and the base's on the rest, and the
 compare section's farm table shows that farm's demand down to the run's mean
-and the other farm's unchanged) and `e2e/tests/scenario-ewr-rule.spec.ts`
+and the other farm's unchanged; and, engine ≥ 1.82.0, a dated one: a date
+that doesn't exist refused, then 150 % from 2021-12-20 to 2022-01-10 in
+December and January, the run's demand the base's × 1.5 on exactly those 22
+days) and `e2e/tests/scenario-ewr-rule.spec.ts`
 (Set an EWR site's rule table through the form: the outlet, a table with
 no source refused in the Settings form's words, a desktop estimate added,
 described with its confidence line and a baseline assumption even with every

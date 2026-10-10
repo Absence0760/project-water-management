@@ -5,11 +5,12 @@
 // The page flows in the window's one scroll (it fitted the window until 2026-09-29): every long list shows its first
 // few with a "Show all" that opens the rest in place, and nothing scrolls inside a card. A viewer sees totals per
 // water source until the owner lets viewers see each farm (162, D3), then volumes without names and nothing to change.
-// On a phone it stacks. Synthetic data only.
+// On a phone it stacks. A dam beside the river's surface use is the take at the river intake, its draws shown
+// beside it, not added (engine 1.82.0, issue #513). Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { compareCard, openAllocations, seedManyAllocations, volumesCard } from '../support/allocations.ts';
-import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { addAllocation, compareCard, openAllocations, seedManyAllocations, volumesCard } from '../support/allocations.ts';
+import { addMember, createProject, createRun, node, putModel, putSeries, seedRunnableProject, syntheticRain, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
@@ -444,4 +445,40 @@ test('in the sidebar by default, it also opens from the Summary and from Hydrolo
 	await card.click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Allocations' })).toBeVisible();
 	await expect(compareCard(page).getByRole('link', { name: unit.name, exact: true })).toHaveAttribute('aria-current', 'true');
+});
+
+test('a dam beside the river: its surface use reads taken at the intake, with the draws beside it, not added; a dam on the river doesn’t (engine 1.82.0)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Allocations: dam beside the river');
+	const gauge = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
+	// Beside the river: none of the upstream inflow into the dam, River to dam fills it. On the river: all of it.
+	const beside = node('Beside farm', 'farm', gauge.id, 2, { damCapacityM3: 20_000, pctUpstreamToDam: 0, pctRunoffToDam: 0.3, divertCapacityM3Day: 500 });
+	const onRiver = node('Weir farm', 'farm', gauge.id, 3, { damCapacityM3: 60_000, pctUpstreamToDam: 1 });
+	const crop = { id: crypto.randomUUID(), name: 'Orchard', cropFactor: [0.6, 0.7, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.4, 0.4, 0.5, 0.6] };
+	await putModel(page.request, project.id, {
+		nodes: [gauge, beside, onRiver],
+		crops: [crop],
+		cropAreas: [beside, onRiver].map((f) => ({ nodeId: f.id, cropId: crop.id, areaM2: 150_000 })),
+		transfers: []
+	});
+	await updateSettings(page.request, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: new Array(12).fill(0) });
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-10-01', values: syntheticRain(365) });
+	for (const f of [beside, onRiver]) await addAllocation(page.request, project.id, { nodeId: f.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 40_000, holder: 'Invented Holder' });
+	await createRun(page.request, project.id, 'Baseline');
+
+	await openAllocations(page, project.id, `&unit=${beside.id}`);
+	const besideRow = units(page).filter({ has: page.getByRole('link', { name: 'Beside farm', exact: true }) });
+	await expect(besideRow).toContainText(/modelled [\d\s ]+ m³ a year, taken at the intake/);
+	const cell = detail(page).getByTestId('allocation-unit-years').getByTestId('allocation-at-intake');
+	await expect(cell).toHaveCount(1);
+	await expect(cell).toHaveText(/^taken at the intake; drawn from the dam [\d\s ]+, not added$/);
+	// The dam on the river: the draws rule, no such words.
+	const weirRow = units(page).filter({ has: page.getByRole('link', { name: 'Weir farm', exact: true }) });
+	await expect(weirRow).toContainText(/modelled [\d\s ]+ m³ a year/);
+	await expect(weirRow).not.toContainText('taken at the intake');
+	await weirRow.getByRole('link', { name: 'Weir farm', exact: true }).click();
+	await expect(page).toHaveURL(new RegExp(`unit=${onRiver.id}`));
+	await expect(detail(page).getByRole('heading', { name: 'Weir farm' })).toBeVisible();
+	await expect(detail(page).getByTestId('allocation-at-intake')).toHaveCount(0);
+	await expectNoViolations(page);
 });

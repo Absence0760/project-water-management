@@ -8585,7 +8585,9 @@ source, a status in words ("Above registered in 3 of 3 whole years", *No
 registered volume*, *Below registered*, *Within band*), modelled ÷
 registered, and the mean water year's registered volume and modelled use
 ("Nothing registered" when there is none; the part year's own figures when
-the run covers no whole water year). The left edge is amber for above
+the run covers no whole water year), with ", taken at the intake" after it
+for a dam beside the river's surface water (engine ≥ 1.82.0,
+[model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). The left edge is amber for above
 registered or unregistered use, green within the band, grey otherwise; the
 words say the same. Beside the picked unit it shows five rows (six on a
 phone), then **Show all N hydrological units and sources** / **Show the 5
@@ -8600,12 +8602,14 @@ water year and source under the caption "Modelled use per water year
 the band, with the registered volume as a line across it, and its modelled
 m³ written beside it; hidden from screen readers, the table under it
 carries the numbers); the same years as a table (registered
-m³, modelled use m³ "modelled, not metered", modelled ÷ registered, the
+m³, modelled use m³ "modelled, not metered", under it for a dam beside the
+river "taken at the intake; drawn from the dam N, not added", modelled ÷ registered, the
 status badge with its full sentence in the title, "part (N d)" for a part
 year); its registered storage beside the dam capacity in the run, with the
 difference and the band in words ("the dam is 50 000 m³ larger than the
 storage registered for it (outside the ±10 % band)", `storageSentence`,
-issue #72; arithmetic only, whether filling counts as a take is #90); and its
+issue #72; arithmetic only: filling a dam beside the river is the take at
+the intake above); and its
 registered volumes (volume, source, authorisation, registration number, the
 holder for editors only, validity), each with **Change** and **Delete** for
 editors. The bars and the table show the latest six water years (both

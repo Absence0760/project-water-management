@@ -36,7 +36,7 @@ const NODE: Record<keyof NetworkNode, true> = {
 	userDemandM3Day: true, userReturnPct: true, userPriority: true,
 	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
 	damCurve: true, damReleaseRule: true, damReleaseM3Day: true, damOutletCapacityM3Day: true, damSeepageReturnPct: true,
-	demandFactor: true, partDemandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
+	demandFactor: true, partDemandFactor: true, demandFactorWindows: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
 	gaPropertyAreaHa: true, gaRateM3HaYear: true,
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
 	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true, reachLossFrac: true, reachLossMaxM3Day: true,
@@ -86,6 +86,8 @@ const RUN_KEYS = [
 	'ewr_binding_site',
 	// A crop supply table's share from another unit's dam (engine 1.73.0, issue #408): into the crops, out of the dam
 	'remote_dam_in', 'remote_dam_out',
+	// A dam beside the river measured at its intake, and water from one (engine 1.82.0, issue #513): the allocation comparison's input
+	'intake_take', 'received_at_intake',
 	// The Reserve rule table's monthly requirement (engine 0.21.0)
 	'ewr_rule',
 	// The shortfall a rule-table site's charge follows (engine 1.3.0, settings.ewrChargeSource)

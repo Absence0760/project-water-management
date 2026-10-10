@@ -133,6 +133,11 @@ describe('use against allocation', () => {
 		expect(m.get('d')).toMatchObject({ band: 'none', label: 'No registered volume' });
 	});
 
+	it('says a dam beside the river’s surface use is taken at the intake (engine 1.82.0)', () => {
+		const s = summary({ allocations: allocations([{ nodeId: 'a', name: 'a', sources: [{ ...src('surface', 3, 0, 100, 100), measuredAt: 'intake' as const }] }]) });
+		expect(by(unitStatuses('allocation', { nodes, summary: s })).get('a')).toMatchObject({ band: 'ok', label: 'Within band, 100% of registered (surface water, taken at the intake)' });
+	});
+
 	it('shows the worse of two sources', () => {
 		const s = summary({ allocations: allocations([{ nodeId: 'a', name: 'a', sources: [src('surface', 2, 0, 100, 100), src('groundwater', 2, 0, 200, 100)] }]) });
 		expect(by(unitStatuses('allocation', { nodes, summary: s })).get('a')).toMatchObject({ band: 'short', value: 2, label: 'Above registered, 200% of registered (groundwater)' });

@@ -1,9 +1,12 @@
 // A stored run's modelled use per farm and water user, as compareAllocations
 // reads it (WP-3.10, docs/allocations.md): the run's daily `supplied`,
 // `groundwater_used`, `groundwater_to_dam` and `river_abstraction` series, the
-// river water it took (`offtake_used`, `river_take@…`) and its diverted river
-// water the dam lost (`diverted_loss`, engine ≥ 1.79.0),
-// record days only (a forecast run's forecast days are left out, issue #51).
+// river water it took (`offtake_used`, `river_take@…`) and, on a dam beside the
+// river, its take at the intake (`intake_take`, engine ≥ 1.82.0) or water it got
+// from one (`received_at_intake`). A run from engine 1.79.0–1.81.0 also stored
+// `diverted_loss` (the superseded rule, issue #513); it isn't read, so such a run,
+// like any run before 1.82.0, is compared by the draws rule (docs/allocations.md).
+// Record days only (a forecast run's forecast days are left out, issue #51).
 // The Allocations tab compares it with the project's allocations now; the
 // evidence report with the run's own (runAllocationComparison).
 import {
@@ -30,7 +33,7 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 	const users = (nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
 	const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 		`SELECT node_id AS "nodeId", key, "values" FROM run_series
-		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'diverted_loss') OR key LIKE 'river\\_take@%') AND node_id = ANY($2::uuid[])`,
+		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'intake_take', 'received_at_intake') OR key LIKE 'river\\_take@%') AND node_id = ANY($2::uuid[])`,
 		[runId, users.map((n) => n.id)]
 	);
 	const get = (nodeId: string, key: string) => {
@@ -49,8 +52,9 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 			riverAbstraction: get(n.id, 'river_abstraction') ?? null,
 			// The rest of the river water in supplied (engine ≥ 1.69.0): never netted as a dam draw (§2.12).
 			riverTakes: series.filter((s) => s.nodeId === n.id && (s.key === 'offtake_used' || s.key.startsWith('river_take@'))).map((s) => get(n.id, s.key) ?? null),
-			// Diverted river water the dam lost to evaporation and seepage (engine ≥ 1.79.0): surface use (§2.12); absent before.
-			divertedLoss: get(n.id, 'diverted_loss') ?? null,
+			// A dam beside the river measured at its intake, and water from one (engine ≥ 1.82.0, §2.12); absent before.
+			intakeTake: get(n.id, 'intake_take') ?? null,
+			receivedAtIntake: get(n.id, 'received_at_intake') ?? null,
 			damCapacityM3: n.damCapacityM3 ?? null
 		}));
 }

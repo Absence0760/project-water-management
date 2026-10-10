@@ -629,13 +629,15 @@ const demandMonths: Check = (v) => {
 };
 
 /** Check a demand.scale op's fields (applyScenario checks the node ids exist and are of the category). */
-export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; months?: unknown; category?: unknown; part?: unknown }): string | null {
+export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; months?: unknown; category?: unknown; part?: unknown; from?: unknown; to?: unknown }): string | null {
 	const checks: [string, Check][] = [
 		['factor', range(0, DEMAND_SCALE_MAX)],
 		['nodeIds', nodeIdList],
 		['months', demandMonths],
 		['category', oneOf(DEMAND_CATEGORIES)],
-		['part', oneOf(DEMAND_PARTS)]
+		['part', oneOf(DEMAND_PARTS)],
+		['from', isoDate],
+		['to', isoDate]
 	];
 	for (const [k, c] of checks) {
 		const v = (op as Record<string, unknown>)[k];
@@ -645,6 +647,7 @@ export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; mont
 	}
 	// A part is one part of a unit's demand (engine ≥ 1.45.0): an other water user's demand has none.
 	if (op.part !== undefined && op.category === 'user') return "part is a part of a hydrological unit's demand; an other water user's demand is scaled whole";
+	if (typeof op.from === 'string' && typeof op.to === 'string' && op.from > op.to) return `from ${op.from} is after to ${op.to}`;
 	return null;
 }
 
@@ -1057,7 +1060,10 @@ export interface EwrRuleSetOp {
  * only) scales one part of a unit's demand: its crop water requirement
  * (`crops`) or its demand objects of one category (`domestic`, …), on top
  * of the unit's own factor; a domestic or municipal object's cut stops at
- * its basic-needs floor as any cut does.
+ * its basic-needs floor as any cut does. `from`/`to` (engine ≥ 1.82.0,
+ * issue #514, as series.scale's) limit it to the days from–to (inclusive
+ * ISO dates; each open when absent), with `months` the days in both; without
+ * them it scales every day, as before.
  */
 export interface DemandScaleOp {
 	op: 'demand.scale';
@@ -1066,6 +1072,8 @@ export interface DemandScaleOp {
 	months?: number[];
 	category?: DemandCategory;
 	part?: DemandPart;
+	from?: string;
+	to?: string;
 }
 
 export type ScenarioOpName = ScenarioOp['op'];
@@ -1377,6 +1385,13 @@ function validateOne(input: unknown, where: string, errors: string[]): ScenarioO
 			opt('category', oneOf(DEMAND_CATEGORIES));
 			opt('part', oneOf(DEMAND_PARTS));
 			if (s.part !== undefined && s.category === 'user') errors.push(`${where}.part: is a part of a hydrological unit's demand; an other water user's demand is scaled whole`);
+			// Dates (engine ≥ 1.82.0), as series.scale's.
+			for (const k of ['from', 'to'] as const) {
+				if (raw[k] === undefined) continue;
+				if (isIsoDate(raw[k])) s[k] = raw[k];
+				else errors.push(`${where}.${k}: must be an ISO date (YYYY-MM-DD)`);
+			}
+			if (s.from && s.to && s.from > s.to) errors.push(`${where}: from ${s.from} is after to ${s.to}`);
 			op = s;
 			break;
 		}

@@ -605,8 +605,8 @@ export function restrictionRuleFromTriggers(
 				notes.push(`${lv!.label}: a ${op.op} change isn't a demand level, so the rule doesn't carry it`);
 				continue;
 			}
-			if (op.category === 'user' || (op.nodeIds && op.nodeIds.length) || (op.months && op.months.length)) {
-				notes.push(`${lv!.label}: a demand change ${op.category === 'user' ? 'on the other water users' : 'limited to some hydrological units or months'} isn't carried; the rule cuts every unit's demand whatever the month`);
+			if (op.category === 'user' || (op.nodeIds && op.nodeIds.length) || (op.months && op.months.length) || op.from !== undefined || op.to !== undefined) {
+				notes.push(`${lv!.label}: a demand change ${op.category === 'user' ? 'on the other water users' : 'limited to some hydrological units, months or dates'} isn't carried; the rule cuts every unit's demand whatever the month`);
 				continue;
 			}
 			for (const p of op.part ? [op.part] : DEMAND_PARTS) factor.set(p, factor.get(p)! * op.factor);

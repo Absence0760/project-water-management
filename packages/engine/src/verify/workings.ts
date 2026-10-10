@@ -5,7 +5,7 @@
 // through these, so the numbers the workbook's formulas start from are the
 // ones the checks hold the run to.
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import { demandFactorOf, demandFactorStart, modelFarmEfficiency, unitPartFactor } from '../demand';
+import { datedDemandFactorOf, demandFactorOf, demandFactorStart, modelFarmEfficiency, unitPartFactor } from '../demand';
 import { seepageReturnOf } from '../network/dam';
 import { abstractionStartDay } from '../network/development';
 import { ON_RIVER_DAM_SINCE, onRiverDam } from '../network/supply';
@@ -63,10 +63,12 @@ export function dailyDemandFactor(
 	const dff = settings?.demandFactorFrom;
 	const from = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, days) : 0;
 	const abstractFrom = abstractionStartDay(n, day0, days, []);
+	// × the dated factors on their days (engine ≥ 1.82.0, demand.scale with from/to): the whole demand's, and `part`'s.
+	const dated = datedDemandFactorOf(n, part, day0, days, []);
 	const perDay = Float64Array.from({ length: days }, (_, t) =>
-		t < abstractFrom ? 0 : (factor && t >= from ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (allocation ? Number(allocation[t]) : 1)
+		t < abstractFrom ? 0 : (factor && t >= from ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (dated && t >= from ? dated[t]! : 1) * (allocation ? Number(allocation[t]) : 1)
 	);
-	return { perDay, scaled: !!factor || !!allocation || abstractFrom > 0 };
+	return { perDay, scaled: !!factor || !!dated || !!allocation || abstractFrom > 0 };
 }
 
 /** A farm dam's power-law area and its seepage, as runModel resolves them. */
