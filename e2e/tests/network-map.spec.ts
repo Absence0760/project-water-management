@@ -504,7 +504,9 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 		await expect(more).toBeFocused();
 	} else await expect(more).toHaveCount(0);
 	// At most two rows: the bar's links and More, by their distinct tops.
-	const tops = await menu.locator('.groups a.pill, .more-btn').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+	// By role, as section-nav.spec.ts's barRows: the fit's hidden copies of More (tabindex -1, laid out apart) aren't the bar.
+	const boxes = await Promise.all([...(await onBar.all()), ...(await more.all())].map((l) => l.boundingBox()));
+	const tops = boxes.map((b) => Math.round(b!.y));
 	expect(new Set(tops).size).toBeLessThanOrEqual(2);
 	await expect(menu.getByText('On this page')).toHaveCount(0);
 

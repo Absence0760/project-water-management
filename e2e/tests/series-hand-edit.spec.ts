@@ -47,7 +47,7 @@ test('a day set by hand is saved through the API, marked on the row and in the d
 
 	// History names the edit.
 	await page.goto(`/projects/${project.id}?tab=history`);
-	await expect(page.getByText('Edited 2021-10-02 of the Rainfall — catchment series by hand')).toBeVisible();
+	await expect(page.getByTestId('history-detail').getByText('Edited 2021-10-02 of the Rainfall — catchment series by hand')).toBeVisible();
 });
 
 test('a blank value clears the day; a negative or text is refused before it is sent', async ({ page, owner }) => {
