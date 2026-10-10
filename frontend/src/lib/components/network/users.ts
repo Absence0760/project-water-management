@@ -34,3 +34,13 @@ export function userPumpNote(n: Pick<NetworkNode, 'pumpCapacityM3Day' | 'userPri
 	const calc = readonly ? '' : ' Or enter the pumps and their rate to work it out.';
 	return `It takes at most ${fmtNum(pump, 0)} m³/day from the river${senior ? '; units upstream pass no more than that for it' : ''}.${calc}`;
 }
+
+/**
+ * The line under an other water user's priority (docs/model.md §2.7c, issue
+ * #507): a senior user, the default, is a claim on every hydrological unit
+ * upstream, so adding one changes what those farms get.
+ */
+export function userPriorityNote(priority: NetworkNode['userPriority']): string {
+	if (priority === 'junior') return 'It takes only what reaches it; the hydrological units upstream are not held back for it.';
+	return 'Senior is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a senior user changes what the farms upstream get.';
+}

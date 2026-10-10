@@ -24,6 +24,10 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await expect(users.getByLabel('Demand of Town in Jul, m³/day')).toHaveValue('800');
 	await users.getByLabel('Share returned (%)').fill('40');
 	await expect(users.getByLabel('Priority', { exact: true })).toHaveValue('senior');
+	// A new user is senior, a claim on every unit upstream: the form says so (issue #507).
+	await expect(users.getByTestId('user-priority-note')).toHaveText(
+		'Senior is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a senior user changes what the farms upstream get.'
+	);
 	// In the node table a user has none of the farm fields.
 	await expect(page.getByLabel('Kind of Town')).toHaveValue('user');
 	const tableRow = page.getByRole('row').filter({ has: page.getByLabel('Kind of Town') });

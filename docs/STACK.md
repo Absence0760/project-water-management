@@ -177,6 +177,10 @@ pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>
 pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file.json>] [--seed <n>] [--starts <n>] [--budget <n>] [--max-cells <n>]
                              # one GR4J fit per cell of a grid (pan preset × bounds × objective × exclusion set × WR2012 band), with
                              # validation, MAR and EWR days, in one Markdown table; ranks nothing (no DB; ≤ 24 cells unless raised; model.md §2.10b)
+pnpm list:ewr-rules <project.json> [--json]
+                             # the rules that keep water for the EWR a project has switched on (dam pass inflow, unit or off-take
+                             # hands-off flow, drought restriction EWR trigger; all off by default), from a Download project (JSON)
+                             # export or the importer's project.json (no DB; run-locally.md § Which rules keep water for the EWR)
 pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
                              # check an evidence pack's reproduction bundle and re-run its runs offline; exit 0 when it reproduces
                              # (no DB, no network; scripts/reproduce-pack/, evidence-pack.md § Reproduction)

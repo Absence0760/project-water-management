@@ -773,6 +773,15 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     - **Afrikaans:** the client's native-speaker translator reviews the
       farmer text before farmers are invited in Afrikaans (followups.md
       § Afrikaans).
+21. **Which priority should a new other water user start with ([#507](https://github.com/Absence0760/project-water-management/issues/507))?**
+    #90 settled that senior/junior is enough, not which is the default. A new
+    other water user starts **senior** (engine `USER_DEFAULTS`, model.md
+    §2.7c): every hydrological unit upstream passes its demand before filling
+    its dam or irrigating, so adding one changes what the farms upstream get
+    in the baseline, much as a dam release rule would. Should a new user start
+    junior (it takes only what reaches it) unless its licence or allocation
+    ranks it above the farms upstream? *The default stays senior until the
+    hydrologist answers; the Priority field's note says what senior does.*
 
 ### Product
 

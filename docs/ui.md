@@ -2695,8 +2695,11 @@ itself.
   every farm column ("not used for an other water user"), and below the
   network panel an **Other water users** panel lists each user (name, a
   one-line summary: priority, mean demand, share returned, what it drains
-  into) with its **Priority** (senior: farms upstream pass its demand first;
-  junior: takes what reaches it), **Share returned** (%) and **demand per
+  into) with its **Priority** (senior, the default: farms upstream pass its
+  demand first; junior: takes what reaches it; a note under it says that the
+  hydrological units upstream pass a senior user's demand before filling their
+  dams or irrigating, so adding one changes what the farms upstream get, issue
+  #507), **Share returned** (%) and **demand per
   month** (m³/day, Oct–Sep) with *Use October's demand for every month*
   (`UserFields.svelte`, `users.ts`). **Pump capacity** (m³/day, engine ≥
   1.58.0, [model.md §2.7c](./model.md)): blank is no limit, 0 no river pump;
@@ -2731,7 +2734,12 @@ itself.
   **Edit the survey rows** and **Remove the curve**. Below: **Release rule**
   (none / pass inflow / fixed) with its monthly amounts (m³/day, Oct–Sep,
   *Use October's amount for every month*); under pass inflow a checkbox
-  keeps the EWR required at the node as the target. The Dam group gains
+  keeps the EWR required at the node as the target. The hint under the rule
+  says what pass inflow costs (`damRelease.ts`, issue #507): with the box
+  ticked it releases water for the EWR, the unit's river pump, river
+  abstractions and river off-takes leave that flow too, and a baseline of
+  the river as used today normally leaves the rule at None (off by default;
+  no import sets one). The Dam group gains
   **Seepage returning** (%) and **Outlet capacity** (m³/day, empty = no
   limit), one-node form only. **Paste survey rows** moves the focus into the
   box, and **Use these rows** / **Cancel** (which remove themselves) hand it

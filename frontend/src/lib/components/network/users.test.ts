@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeUser, userDemandOf, userPumpNote } from './users';
+import { describeUser, userDemandOf, userPriorityNote, userPumpNote } from './users';
 
 describe('other water users in the Network tab (WP-1.33)', () => {
 	it('reads a missing or short demand as zeros', () => {
@@ -11,6 +11,15 @@ describe('other water users in the Network tab (WP-1.33)', () => {
 		expect(describeUser({ userDemandM3Day: new Array(12).fill(1200), userReturnPct: 0.4, userPriority: 'senior' })).toBe('senior · 1\u202f200 m³/day on average · 40 % returned');
 		expect(describeUser({ userDemandM3Day: null, userReturnPct: 0, userPriority: 'junior' })).toBe('junior · no demand yet: enter it by month');
 		expect(describeUser({ userDemandM3Day: new Array(12).fill(10) })).toBe('senior · 10 m³/day on average');
+	});
+});
+
+describe('an other water user’s priority note (issue #507)', () => {
+	it('says a senior user, the default, holds back every unit upstream', () => {
+		const senior = 'Senior is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a senior user changes what the farms upstream get.';
+		expect(userPriorityNote('senior')).toBe(senior);
+		expect(userPriorityNote(undefined)).toBe(senior);
+		expect(userPriorityNote('junior')).toBe('It takes only what reaches it; the hydrological units upstream are not held back for it.');
 	});
 });
 

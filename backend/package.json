@@ -27,6 +27,7 @@
 		"gen:example": "tsx scripts/example-file.ts",
 		"pan-sensitivity": "tsx scripts/pan-sensitivity.ts",
 		"fit-sweep": "tsx scripts/fit-sweep.ts",
+		"list:ewr-rules": "tsx scripts/ewr-rules.ts",
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
 		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
 		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",

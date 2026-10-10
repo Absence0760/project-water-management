@@ -147,7 +147,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	divertCapacityM3Day: { label: 'River to dam', spec: num('m³/s', { scale: 1 / 86_400 }) },
 	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct() },
 	returnFlowFraction: { label: 'Return flow (% of water supplied)', spec: pct() },
-	damReleaseRule: { label: 'Dam release rule', spec: { t: 'enum', options: plain(DAM_RELEASE_RULES, { none: 'none', passInflow: 'pass inflow', fixed: 'fixed release' }) } },
+	damReleaseRule: { label: 'Dam release rule', spec: { t: 'enum', options: plain(DAM_RELEASE_RULES, { none: 'none', passInflow: 'pass inflow (releases for the EWR unless amounts are set)', fixed: 'fixed release' }) } },
 	damReleaseM3Day: { label: 'Dam release by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	damOutletCapacityM3Day: { label: 'Dam outlet capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	damSeepageReturnPct: { label: 'Share of dam seepage returning', spec: pct() },

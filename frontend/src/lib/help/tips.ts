@@ -538,7 +538,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'user-priority',
 		term: 'User priority (senior / junior)',
-		short: 'Senior: hydrological units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		short: 'Senior (the default): hydrological units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
 		category: 'network',
 		fields: ['node.userPriority', 'run.passed_for_senior']
 	},

@@ -32,6 +32,7 @@ export * from './reserve/dailySource';
 export * from './reserve/assurance';
 export * from './reserve/riverMeasures';
 export * from './reserve/trafficLight';
+export * from './reserve/ewrReleaseRules';
 export * from './calibrate/provenance';
 export * from './calibrate/rulesSettings';
 export * from './calibrate/rules';

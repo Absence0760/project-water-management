@@ -3416,7 +3416,12 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
   the upstream shares' water too. The WP text said "up to that node's EWR
   share"; Z is the reading an environmental reviewer would expect (the flow
   judged at this node is judged against Z), decided here and pending the
-  hydrologist.
+  hydrologist. The target also holds against the unit's river pump (§2.7e),
+  river abstractions (§2.7j) and river off-takes (§2.6a), so pass inflow
+  with no amounts is a release for the EWR that cuts what the unit takes
+  from the river. Release rules default to none and no importer sets one: a
+  baseline of the river as used today normally leaves the rule off, and the
+  node form's hint says so (issue #507).
 - *Fixed* releases a set amount from storage above dead storage.
 - The outlet cap (null = none) applies to both. No rule, or fixed with no
   amounts, is no release; nor is a day the dam has no capacity (§2.7g: not
@@ -3757,7 +3762,7 @@ kind `user` runs exactly as before (no new series or summary fields).
 | --- | --- |
 | `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
 | `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
-| `userPriority` | `senior` (default: a municipal allocation is usually senior) or `junior` |
+| `userPriority` | `senior` (default: a municipal allocation is usually senior; whether a new user should start junior is open, plan.md question 21, issue #507) or `junior` |
 | `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
 
 It has no area, flow share, dam, crops, transfers, EWR share or supply
