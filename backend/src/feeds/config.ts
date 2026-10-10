@@ -64,7 +64,8 @@ export const CHIRPS_FIRST_DAY = '1981-01-01';
 /**
  * CHIRPS v3's two daily products (sources/chirps.ts): `sat` (IMERG
  * disaggregation, from 1998, final + preliminary; the default) and `rnl`
- * (ERA5 disaggregation, from 1981, final only, 5–6 days behind). They share
+ * (ERA5 disaggregation, from 1981, final only: a month at a time, with the
+ * `sat` finals, 11–26 days after it ends in 2026). They share
  * the pentad totals but not the daily timing, so a feed reads one product end
  * to end, and the series records which (issue #40 part c): a feed never
  * splices `rnl` before 1998 onto `sat` after it. A record that must start
@@ -274,6 +275,28 @@ export type GridConfig = z.output<typeof GridConfig>;
 
 /** The CHIRPS daily product a feed reads (absent = `sat`, what every feed read before `rnl` was offered). */
 export const chirpsProduct = (config: FeedConfig): ChirpsDailyProduct => ('product' in config && config.product) || 'sat';
+
+/**
+ * An `rnl` feed's usual delay: `rnl` has no preliminary product, so its
+ * newest day is the end of the last month CHC finalised. Just before the
+ * next month comes out it is that month's length (31 at most) plus the
+ * release delay (CHC's daily/final/rnl/ listing, 2026: 11–26 days after the
+ * month ends) old, 57 days at worst; 62 leaves five days' slack.
+ */
+export const CHIRPS_RNL_STALE_AFTER_DAYS = 62;
+
+/**
+ * How old a feed's newest day may be before it is stale (health.ts) and the
+ * data_stale alert counts from (alerts/evaluate.ts): the feed's own
+ * staleAfterDays; else, for a CHIRPS `rnl` feed,
+ * CHIRPS_RNL_STALE_AFTER_DAYS (the source's 12 days fits `sat`'s
+ * preliminary files); else its source's.
+ */
+export function feedStaleAfterDays(source: FeedSource, config: FeedConfig): number {
+	if (config.staleAfterDays !== undefined) return config.staleAfterDays;
+	if (source === 'chirps' && chirpsProduct(config) === 'rnl') return CHIRPS_RNL_STALE_AFTER_DAYS;
+	return SOURCES[source].staleAfterDays;
+}
 export type DwsConfig = z.output<typeof DwsConfig>;
 export type FeedConfig = GridConfig | DwsConfig;
 

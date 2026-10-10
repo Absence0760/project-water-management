@@ -11,8 +11,8 @@
 //   disabled  switched off by an owner
 //   failing   the last fetch failed (consecutive_failures > 0)
 //   stale     no failure, but the newest day is older than the source's usual
-//             lag allows (config.ts SOURCES staleAfterDays, or the feed's own
-//             staleAfterDays): the source stopped publishing, or the fetch
+//             lag allows (config.ts feedStaleAfterDays: the feed's own
+//             staleAfterDays, else its source's or product's): the source stopped publishing, or the fetch
 //             keeps finding nothing new
 //   pending   not fetched yet, or not since a new place or series was saved
 //             (018_feeds.sql clears the data, success and failures then), or
@@ -23,7 +23,7 @@
 // says both.
 import { toEpochDay } from '@water-management/engine/calendar';
 import { localDate } from '../projects/timeZone.js';
-import { type FeedConfig, type FeedSource, SOURCES } from './config.js';
+import { type FeedConfig, type FeedSource, feedStaleAfterDays } from './config.js';
 
 export const FEED_STATES = ['ok', 'stale', 'failing', 'pending', 'disabled'] as const;
 export type FeedState = (typeof FEED_STATES)[number];
@@ -96,7 +96,7 @@ const FIRST_DATA_GRACE_DAYS = 2;
  */
 export function feedHealth(f: HealthInput, today: string, timeZone: string): FeedHealth {
 	const iso = (d: Date | string) => localDate(typeof d === 'string' ? new Date(d) : d, timeZone);
-	const staleAfterDays = f.config.staleAfterDays ?? SOURCES[f.source].staleAfterDays;
+	const staleAfterDays = feedStaleAfterDays(f.source, f.config);
 	const t = toEpochDay(today);
 	const since = f.updatedAt ?? f.createdAt;
 	// No outcome recorded for the current place and series (a re-target keeps only last_attempt_at).

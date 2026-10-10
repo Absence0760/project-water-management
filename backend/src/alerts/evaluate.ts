@@ -48,7 +48,7 @@ import { createHash } from 'node:crypto';
 import { seriesDisplayName, type FarmProjection } from '@water-management/engine';
 import { toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
-import { SOURCES, type FeedConfig, type FeedSource } from '../feeds/config.js';
+import { SOURCES, feedStaleAfterDays, type FeedConfig, type FeedSource } from '../feeds/config.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { heldSinceLastRun } from '../series/hold.js';
 import { lastValueDaySql } from '../series/lastDay.js';
@@ -325,7 +325,7 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 				// This rule's feed only, past its own usual delay (the feed's config, else its source's).
 				const f = (await feeds()).find((x) => x.id === r.feed_id);
 				if (!f?.last_data_date) return { value: null, detail: {}, runId: null };
-				const allow = f.config.staleAfterDays ?? SOURCES[f.source].staleAfterDays;
+				const allow = feedStaleAfterDays(f.source, f.config);
 				const overdue = toEpochDay(today) - toEpochDay(f.last_data_date) - allow;
 				const late = { label: feedLabel(f.source, f.target_name), newest: f.last_data_date, overdue };
 				return { value: overdue, detail: { feedId: f.id, feeds: overdue > 0 ? [late] : [] }, runId: null };

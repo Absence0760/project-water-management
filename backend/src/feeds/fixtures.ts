@@ -116,7 +116,7 @@ export function fixtureHttp(today: () => string = () => utcToday()): FeedHttp {
 		let m = url.match(/^.*\/CHIRPS\/v3\.0\/daily\/final\/rnl\/\d{4}\/chirps-v3\.0\.rnl\.(\d{4})\.(\d{2})\.(\d{2})\.tif$/);
 		if (m && url.startsWith(CHC_BASE)) {
 			const day = toEpochDay(`${m[1]}-${m[2]}-${m[3]}`);
-			if (day < RNL_FIRST || day > t - (chirps.rnlLagDays ?? 6)) return null;
+			if (day < RNL_FIRST || day > t - (chirps.rnlLagDays ?? 40)) return null;
 			// The same pentads, other daily timing: the pattern a day later.
 			return cached(`crnl${day}`, () => gridFile(chirps, day - 1));
 		}

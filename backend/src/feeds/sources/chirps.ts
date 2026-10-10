@@ -138,6 +138,31 @@ function finalExpected(day: string, today: number): boolean {
 	return today - monthEnd > CHIRPS_FINAL_EXPECTED_DAYS;
 }
 
+/**
+ * Read the final files of `items` (in day order) with `read`, the first alone
+ * and then `concurrency` at a time, and stop after a batch whose last day has
+ * none in a month whose finals may still be on their way (finalExpected): CHC
+ * publishes a month's finals (`sat`'s and `rnl`'s) together, so no later day
+ * can have one. A final missing from an older month is a gap in the archive,
+ * so the probing goes on past it. Unread items are null.
+ */
+async function probeFinals<T, V>(
+	items: readonly T[],
+	concurrency: number,
+	today: number,
+	dayOf: (item: T) => string,
+	read: (item: T) => Promise<V | null>
+): Promise<(V | null)[]> {
+	const out = new Array<V | null>(items.length).fill(null);
+	for (let probed = 0, size = 1; probed < items.length; size = concurrency) {
+		const batch = await mapLimit(items.slice(probed, probed + size), concurrency, read);
+		batch.forEach((v, k) => (out[probed + k] = v));
+		probed += batch.length;
+		if (batch.at(-1) === null && !finalExpected(dayOf(items[probed - 1]!), today)) break;
+	}
+	return out;
+}
+
 export interface GridDays {
 	startDate: string;
 	values: (number | null)[];
@@ -162,15 +187,16 @@ export interface GridDays {
  * neither are dropped (not published yet); a day missing between published
  * ones stays null. `finalThrough` marks the leading run of final days.
  *
- * `sat` reads as little as the publishing allows (issue #69). CHC publishes
- * a month's final files together, about three weeks after it ends, so the
- * finals are probed from the first day, that day alone and then
- * `concurrency` at a time, until a batch's last day has none in a month
- * whose finals may still be on their way (it ended less than
- * CHIRPS_FINAL_EXPECTED_DAYS before `today`): no later day can have one, and
- * each is read from the preliminary product directly. A final missing from
- * an older month is a gap in the archive, not the publishing lag, so the
- * probing goes on past it and the later finals are read as finals. A day
+ * Both read as little as the publishing allows (issue #69). CHC publishes
+ * a month's final files together (`rnl`'s with `sat`'s), about three weeks
+ * after it ends, so the finals are probed from the first day, that day alone
+ * and then `concurrency` at a time, until a batch's last day has none in a
+ * month whose finals may still be on their way (it ended less than
+ * CHIRPS_FINAL_EXPECTED_DAYS before `today`): no later day can have one, so
+ * `rnl` stops there and `sat` reads each from the preliminary product
+ * directly. A final missing from an older month is a gap in the archive, not
+ * the publishing lag, so the probing goes on past it and the later finals are
+ * read as finals (probeFinals). A `sat` day
  * with no final that the feed already holds (`heldThrough`: every day from
  * the window's first through it holds a value in the series the answer
  * merges into, jobs/handlers/feed-fetch.ts) is not read again: a
@@ -196,15 +222,10 @@ export async function fetchChirps(
 	let got: { v: number | null; prelim: boolean }[];
 	let held = 0;
 	if (product === 'rnl') {
-		got = await mapLimit(days, concurrency, async (day) => ({ v: await gridMean(http, chirpsRnlUrl(day), cells, noData), prelim: false }));
+		const finals = await probeFinals(days, concurrency, today, (day) => day, (day) => gridMean(http, chirpsRnlUrl(day), cells, noData));
+		got = finals.map((v) => ({ v, prelim: false }));
 	} else {
-		const finals = new Array<number | null>(days.length).fill(null);
-		for (let probed = 0, size = 1; probed < days.length; size = concurrency) {
-			const batch = await mapLimit(days.slice(probed, probed + size), concurrency, (day) => gridMean(http, chirpsFinalUrl(day), cells, noData));
-			batch.forEach((v, i) => (finals[probed + i] = v));
-			probed += batch.length;
-			if (batch.at(-1) === null && !finalExpected(days[probed - 1]!, today)) break;
-		}
+		const finals = await probeFinals(days, concurrency, today, (day) => day, (day) => gridMean(http, chirpsFinalUrl(day), cells, noData));
 		got = await mapLimit(days, concurrency, async (day, i) => {
 			const f = finals[i]!;
 			if (f !== null) return { v: f, prelim: false };
@@ -265,10 +286,10 @@ export interface CellDays {
 /**
  * fetchChirps for the cell cache: each point's own value per day, never their
  * mean, and only the days `plan` asks for (one DAY_* character per day from
- * `start`). The same reading as fetchChirps otherwise: `rnl` reads its final
- * files; `sat` probes finals in date order (the first day alone, then
+ * `start`). The same reading as fetchChirps otherwise: both products probe
+ * their finals in date order (probeFinals: the first day alone, then
  * `concurrency` at a time, stopping after a batch whose last day has none in
- * a month whose finals may still be on their way), then reads the
+ * a month whose finals may still be on their way); `sat` then reads the
  * preliminary file of each DAY_READ day that had no final. A DAY_FINAL_ONLY
  * day without a final is left unread: the cache's preliminary value stands.
  * Every point is the centre of one grid cell (feeds/cellCache.ts cellCentre).
@@ -287,21 +308,12 @@ export async function fetchChirpsCells(
 	const today = toEpochDay(opts.today ?? fromEpochDay(s + plan.length));
 	const reads: ({ kind: 'f' | 'p'; v: (number | null)[] } | null)[] = new Array(plan.length).fill(null);
 	const want = days.map((_, i) => i).filter((i) => plan[i] !== DAY_SKIP);
-	if (product === 'rnl') {
-		await mapLimit(want, concurrency, async (i) => {
-			const v = await gridValues(http, chirpsRnlUrl(days[i]!), points);
-			if (v) reads[i] = { kind: 'f', v };
-		});
-	} else {
-		for (let probed = 0, size = 1; probed < want.length; size = concurrency) {
-			const idx = want.slice(probed, probed + size);
-			const batch = await mapLimit(idx, concurrency, (i) => gridValues(http, chirpsFinalUrl(days[i]!), points));
-			batch.forEach((v, k) => {
-				if (v) reads[idx[k]!] = { kind: 'f', v };
-			});
-			probed += idx.length;
-			if (batch.at(-1) === null && !finalExpected(days[idx.at(-1)!]!, today)) break;
-		}
+	const finalUrl = product === 'rnl' ? chirpsRnlUrl : chirpsFinalUrl;
+	const finals = await probeFinals(want, concurrency, today, (i) => days[i]!, (i) => gridValues(http, finalUrl(days[i]!), points));
+	finals.forEach((v, k) => {
+		if (v) reads[want[k]!] = { kind: 'f', v };
+	});
+	if (product === 'sat') {
 		const prelim = want.filter((i) => reads[i] === null && plan[i] === DAY_READ);
 		await mapLimit(prelim, concurrency, async (i) => {
 			const v = await gridValues(http, chirpsPrelimUrl(days[i]!), points);

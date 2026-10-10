@@ -993,7 +993,7 @@ merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
-| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Settings → Data feeds → Use the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Settings → Data feeds → Use the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, no preliminary product, published a month at a time with the `sat` finals (11–26 days after the month ends in 2026), so its newest day is 2–8 weeks old. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
@@ -1084,21 +1084,23 @@ merges into:
   before the window), and the next window starts the day after it (one day
   at least, the cap counted from there). Changing the feed's place,
   product or series clears `last_meta`, so the marker starts again.
-  A `sat` fetch also reads only what can have changed (`fetchChirpsCells`,
+  A fetch also reads only what can have changed (`fetchChirpsCells`,
   the cell cache's fetch below; `fetchChirps` for a request without cells): CHC
-  publishes a month's finals together, about three weeks after it ends, so
-  it probes the finals from the window's first day (that day alone, then
+  publishes a month's finals together (`rnl`'s with `sat`'s), about three
+  weeks after it ends, so it probes the finals from the window's first day (that day alone, then
   six at a time) and stops after a batch whose last day has none in a month
   whose finals may still be coming (ended less than 45 days ago,
   `CHIRPS_FINAL_EXPECTED_DAYS`); every later day goes straight to the
-  preliminary product. A final missing from an older month is a gap in the
+  preliminary product (`sat`) or isn't asked for (`rnl`, `probeFinals`). A final missing from an older month is a gap in the
   archive, so the probing goes on past it and the later finals are read as
   finals; the marker stops before the gap, so that day is probed again each
   fetch. A preliminary value is published once and only replaced by the
   final, so a day the cell cache (below) already holds as preliminary for
   every cell reads only its final file, and still counts in `prelimDays`.
   On the fixtures a caught-up feed's daily fetch goes from 194 range
-  requests to 3 (`sat`) and from 158 to 5 (`rnl`) (`fetch.test.ts`).
+  requests to 3 (`sat`) and from 158 to 1 (`rnl`: the day after the
+  marker, not out yet; reading every day to yesterday asked for a month of
+  files that can't be out) (`fetch.test.ts`).
   **What this gives up:** a day before the final marker is never read
   again, so a feed day deleted or overwritten there (an upload over it, a
   restore) is not refilled by the feed; before #69 any day in the last 50
@@ -1290,8 +1292,10 @@ merges into:
   claim), and it shows failing until an owner saves it.
 - **Health** (`feeds/health.ts`), shown in Settings → Data feeds: `ok`,
   `failing` (the last fetch failed), `stale` (the newest day is older than the
-  source normally lags: 12 days for CHIRPS, under 12 days ahead for the
-  forecast, 240 days for DWS; a feed's `staleAfterDays` overrides), `pending`
+  source normally lags: 12 days for CHIRPS `sat`, 62 for CHIRPS `rnl`
+  (`CHIRPS_RNL_STALE_AFTER_DAYS`: a month plus the release delay, as it has
+  no preliminary files), under 12 days ahead for the forecast, 240 days for
+  DWS; a feed's `staleAfterDays` overrides; `feedStaleAfterDays`), `pending`
   (not fetched yet, or not since a new place or series was saved),
   `disabled`. A feed not fetched two days after it was attached or changed is
   stale ("the background worker may not be running"). A project with the
