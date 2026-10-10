@@ -145,7 +145,7 @@ describe('a catchment too large for the request', () => {
 		expect((await asOwner('SELECT count(*)::int AS n FROM delineation_proposal WHERE project_id = $1', [projectId]))[0].n).toBe(proposalsBefore);
 	});
 
-	it('words its refusal from the mapped river near the click, and never asks about a confluence, even for an older request carrying a pick (issue #472)', async () => {
+	it('words its refusal from the mapped river near the click, and never asks about a confluence (issue #472)', async () => {
 		// A main stem mapped through the outlet: far larger than the worker's cap, so the refusal points at Sub-catchments.
 		const line = [fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 40), fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5)];
 		await asOwner(
@@ -158,8 +158,6 @@ describe('a catchment too large for the request', () => {
 			delineationLimits.jobWindows = [192, 224];
 			const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 			expect(res.status, JSON.stringify(res.body)).toBe(202);
-			// A request queued before issue #472 kept the river picked at a confluence: the worker no longer reads it.
-			await asOwner(`UPDATE delineation_request SET reach = $2 WHERE id = $1`, [res.body.request.id, JSON.stringify({ dataset: 'requests-test', reachId: 99 })]);
 			await tick();
 			const done = (await viewer.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request;
 			expect(done).toMatchObject({ status: 'refused', refusal: { reason: 'too_large', message: expect.stringMatching(/^The river here drains about 340\s724 km² \(its mapped reach\)/) } });
@@ -286,6 +284,11 @@ describe('who reads and queues', () => {
 		// A finished request stays as it finished.
 		await withUser(editor.id, (db) => db.query(`UPDATE delineation_request SET status = 'refused', refusal_code = 'off', refusal = 'x', finished_at = now() WHERE id = $1`, [rows[0]!.id]));
 		await expect(withUser(editor.id, (db) => db.query(`UPDATE delineation_request SET refusal = 'y' WHERE id = $1`, [rows[0]!.id]))).rejects.toThrow(/finished once/);
+		// The guard as 211 redefined it, without the dropped columns: the request's own options stay too.
+		await expect(withUser(editor.id, (db) => db.query(`UPDATE delineation_request SET keep_point = true WHERE id = $1`, [rows[0]!.id]))).rejects.toThrow(/finished once/);
+		// reach and check_note, unused since issue #472, are gone (211, issue #476).
+		const cols = await asOwner(`SELECT column_name FROM information_schema.columns WHERE table_name = 'delineation_request' AND column_name IN ('reach', 'check_note')`);
+		expect(cols).toEqual([]);
 	});
 });
 

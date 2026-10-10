@@ -1738,24 +1738,22 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (cascade), `job_id` (→ `job`, `SET NULL` when the 30-day purge takes it),
   `status` (`queued` until the job writes the outcome, `proposed`,
   `refused`, or `superseded` by the same editor's next click),
-  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `reach` (the reach
-  picked at a confluence, jsonb; no longer written since issue #472, which
-  took the confluence question away: always null on new rows, kept for
-  older ones), `from_window` (the smallest window the
+  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `from_window` (the smallest window the
   job tries), `aim` (jsonb ≤ 300 bytes: where the request's last window
   cut the catchment, `{ zoom, box, cut }`, so the job's first window is
   placed over it; null when the request asked for the background at once),
   `proposal_id` (composite key → `delineation_proposal (id,
   project_id)`, `ON DELETE SET NULL (proposal_id)`; that table gained the
   `UNIQUE (id, project_id)` for it), `refusal_code`, `refusal`, `larger`
-  (the channel a `larger_channel` refusal offers), `check_note` (the
-  river-network check sentence; no longer written since issue #472, kept
-  for older rows),
+  (the channel a `larger_channel` refusal offers),
   `created_by` (→ `app_user`, `SET NULL`), `created_at`, `finished_at`
   (set exactly when it leaves `queued`). RLS: viewers read, editors
   insert (as themselves), update and delete; the job writes the outcome as
   the editor who queued it. A finished request never changes but for its
-  two links clearing (`delineation_request_final`). The route keeps the
+  two links clearing (`delineation_request_final`, latest 211). Migration
+  211 (issue #476) dropped `reach` (the river picked at a confluence) and
+  `check_note` (the river-network check sentence), unused since issue
+  #472 took the confluence question and `checkNote` away. The route keeps the
   newest 20 finished a project. `job.kind` accepts `delineate`, and
   `app_cancel_job` (latest 191) cancels a waiting one as well as `yield`.
   `app_release_job` (191, the worker's own call) puts a claimed job back to
