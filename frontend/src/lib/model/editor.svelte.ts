@@ -129,6 +129,21 @@ export class ModelEditor {
 		return node;
 	}
 
+	/**
+	 * A hydrological unit named `name` (Import plantings, issue #477), draining into the outlet with
+	 * no catchment area, dam or connections, as + Add hydrological unit makes one, to be placed on the
+	 * Network page. Needs an outlet (a node with nothing downstream); null without one.
+	 */
+	addUnit(name: string): NetworkNode | null {
+		const nodes = this.model.nodes;
+		const outlet = nodes.find((n) => n.downstreamNodeId === null);
+		if (!outlet) return null;
+		const node = newNode(nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1, outlet.id);
+		node.name = name;
+		nodes.push(node);
+		return nodes.at(-1)!;
+	}
+
 	/** An other water user (WP-1.33) draining into the outlet: no land, dam or crops, no demand until it is entered. */
 	addUser() {
 		const nodes = this.model.nodes;
@@ -249,15 +264,20 @@ export class ModelEditor {
 	}
 
 	// --- crops ----------------------------------------------------------
-	addCrop() {
+	/**
+	 * A new crop at the end of the list, its factors 0: named `name` (an import's, issue #477) or
+	 * "Crop <n>", on `systemId` or else drip. Named before it joins the list, so the name is tracked.
+	 */
+	addCrop(name?: string, systemId?: string | null) {
 		const c = newCrop();
-		c.name = `Crop ${this.model.crops.length + 1}`;
+		c.name = name ?? `Crop ${this.model.crops.length + 1}`;
 		c.sortOrder = this.model.crops.reduce((m, x, i) => Math.max(m, (x.sortOrder ?? i) + 1), 0);
 		// A new crop starts on drip (the new-unit default, issue #90), the project's row for it if it still has one.
 		const drip = systemsOf(this.model).find((x) => x.preset === NEW_FARM_IRRIGATION_SYSTEM) ?? systemsOf(this.model)[0];
-		if (drip) c.irrigationSystemId = drip.id;
+		const sys = systemId ?? drip?.id;
+		if (sys) c.irrigationSystemId = sys;
 		this.model.crops.push(c);
-		return c;
+		return this.model.crops.at(-1)!;
 	}
 
 	// --- irrigation systems (engine ≥ 1.72.0) -----------------------------

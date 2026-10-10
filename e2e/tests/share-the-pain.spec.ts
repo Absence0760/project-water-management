@@ -1,6 +1,6 @@
 // The share-the-pain board (issue #53 R3, docs/ui.md § Share the pain) on a
 // synthetic catchment: two farms whose orchards are too big for the water, a
-// farm with a dam but no crops, a senior town and a junior mill, and a
+// farm with a dam but no crops, a priority town and a non-priority mill, and a
 // Reserve that is short every day. The board leads the curtailment panel with
 // two stages per group (today, EWR met) and states the equitable share once,
 // in its intro (issue #177: it is today's total %), shows the same
@@ -86,8 +86,8 @@ test('the curtailment panel leads with the share-the-pain board: two stages, the
 		'Dam only',
 		'All hydrological units',
 		'Other water users (outside the equitable share)',
-		'Town senior, not curtailed',
-		'Mill junior, curtailed',
+		'Town priority, not curtailed',
+		'Mill non-priority, curtailed',
 		'All other users'
 	]);
 	expect(rows[0]).toEqual([
@@ -116,7 +116,7 @@ test('the curtailment panel leads with the share-the-pain board: two stages, the
 	expect(dry.slice(1, 3)).toEqual(['0', 'no demand 0 m³/day']);
 	expect(dry[3]).toMatch(/^no demand 0 m³\/day store less \/ pass inflow [\d\u202f.]+ m³\/day$/);
 
-	// Senior town: not curtailed, all it takes is left and its charge stands. Junior mill: cut for its charge.
+	// Priority town: not curtailed, all it takes is left and its charge stands. Non-priority mill: cut for its charge.
 	const townRow = rows.find((r) => r[0]!.startsWith('Town'))!;
 	expect(townRow).toHaveLength(4);
 	expect(stage(townRow[3]!)).toEqual(stage(townRow[2]!));
@@ -139,8 +139,8 @@ test('the curtailment panel leads with the share-the-pain board: two stages, the
 	const users = panel.getByRole('table', { name: 'Other water users' });
 	expect(stage(townRow[2]!)[1]).toBe((await rowOf(users, 'Town'))[3]);
 	expect(stage(millRow[2]!)[1]).toBe((await rowOf(users, 'Mill'))[3]);
-	await expect(users.getByRole('row', { name: /^Town/ })).toContainText('senior (not curtailed)');
-	await expect(users.getByRole('row', { name: /^Mill/ })).toContainText('junior (curtailed)');
+	await expect(users.getByRole('row', { name: /^Town/ })).toContainText('Priority (not curtailed)');
+	await expect(users.getByRole('row', { name: /^Mill/ })).toContainText('Non-priority (curtailed)');
 
 	// The footnote: the fairness benchmark, never an allocation.
 	await expect(board.locator('#share-board-footnote')).toContainText('Fairness benchmark only:');

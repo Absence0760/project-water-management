@@ -24,9 +24,11 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await expect(users.getByLabel('Demand of Town in Jul, m³/day')).toHaveValue('800');
 	await users.getByLabel('Share returned (%)').fill('40');
 	await expect(users.getByLabel('Priority', { exact: true })).toHaveValue('senior');
-	// A new user is senior, a claim on every unit upstream: the form says so (issue #507).
+	// Stored as senior, shown as Priority (issue #507 item 4).
+	await expect(users.getByLabel('Priority', { exact: true }).locator('option:checked')).toHaveText('Priority (default): hydrological units upstream pass its demand first');
+	// A new user is a priority user, a claim on every unit upstream: the form says so (issue #507).
 	await expect(users.getByTestId('user-priority-note')).toHaveText(
-		'Senior is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a senior user changes what the farms upstream get.'
+		'Priority is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a priority user changes what the farms upstream get.'
 	);
 	// In the node table a user has none of the farm fields.
 	await expect(page.getByLabel('Kind of Town')).toHaveValue('user');
@@ -54,11 +56,11 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await expect(toUsers).toHaveText('Other water users: the curtailment targets on Hydrological units.');
 	await toUsers.getByRole('link').click();
 	await expect(page).toHaveURL(/[?&]tab=supply\b.*#res-curtailment$/);
-	// Apart from the units, not curtailed (senior), with its demand and the share of it supplied.
+	// Apart from the units, not curtailed (priority), with its demand and the share of it supplied.
 	const other = page.getByRole('table', { name: 'Other water users' });
 	await expect(other).toHaveCount(1);
 	const row = other.getByRole('row', { name: /^Town/ });
-	await expect(row).toContainText('senior (not curtailed)');
+	await expect(row).toContainText('Priority (not curtailed)');
 	await expect(row.getByRole('cell').nth(1)).toHaveText('800');
 	await expect(row.getByRole('cell').nth(3)).toHaveText(/^\d+(\.\d)?%$/);
 	// No Other uses section: the curtailment table is the page's one copy.

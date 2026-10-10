@@ -97,7 +97,7 @@ test('a hands-off flow by month with the EWR, and River to dam by month, save an
 
 	// Off by default: no set flow, the EWR not kept, River to dam one value all year.
 	const note = supply.getByTestId('hands-off-note');
-	await expect(note).toHaveText('No hands-off flow: the river pump and River to dam leave in the river only what senior water users downstream need, not the EWR.');
+	await expect(note).toHaveText('No hands-off flow: the river pump and River to dam leave in the river only what priority water users downstream need, not the EWR.');
 	await expect(supply.getByLabel('Hands-off flow of Upper farm in Oct, m³/day')).toHaveCount(0);
 
 	await supply.getByLabel('Leave a set flow in the river, by month').check();

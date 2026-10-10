@@ -6,6 +6,7 @@
 // the authority (docs/allocations.md § What the comparison is not).
 import { allocationStatus, type AllocationComparison, type AllocationMode, type AllocationStatus, type AllocationYear } from '@water-management/engine';
 import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationTotal, AllocationPurpose, AllocationWaterSourceKind, AllocationWaterUse } from '$lib/api/types';
+import type { FileFormat } from '$lib/components/common/formatHelp';
 import { fmtNum } from '$lib/format/number';
 
 export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
@@ -330,6 +331,30 @@ export const ALLOCATIONS_EXAMPLE =
 	'registration_no,farm,authorisation,water_source,volume_m3_year,water_use\n' +
 	'EXAMPLE-001,Farm A,licence,surface,120000,21a\n' +
 	'EXAMPLE-002,Farm A,licence,surface,150000,21b';
+
+
+/** The import sheet's Expected format (issue #456; the File formats help page, issue #477). */
+export const ALLOCATIONS_FORMAT: FileFormat = {
+	id: 'registered-volumes',
+	title: 'Registered water-use volumes (WARMS, licences)',
+	where: 'Allocations → Import',
+	accepts: 'A CSV file (.csv), comma- or semicolon-separated, in UTF-8: at most 2 MB, 5 000 rows and 200 columns. An Excel workbook isn’t read: save the sheet as CSV first.',
+	rules: [
+		'The first row holds the headings, in any order: the template’s (`registration_no`, `farm`, `volume_m3_year` …) or a WARMS extract’s (“Registration Number”, “Registered Volume (m3/a)”, “Water Use Sector” …). A column it doesn’t know is listed as not read.',
+		'Every file needs a volume column. A WARMS extract also needs a water-use column (21(a) taking, 21(b) storing); in the template a blank is a take.',
+		'Each row needs a registration number, property or farm to match it by; its volume in m³ a year (a 21(b) row: the dam’s storage in m³); and its water source, surface or groundwater (a 21(b) row is surface). The template’s rows need their authorisation too (registration, licence, general authorisation, Schedule 1, existing lawful use); a WARMS extract without that column is read as registrations.',
+		'Units: m³ a year, unless a Unit column says otherwise (m3/a, Ml/a, kl/a; a megalitre is 1 000 m³). A volume per month or day is refused.',
+		'Numbers: in a comma-separated file a point is the decimal mark (1500.5, 1,500); in a semicolon-separated file a comma (1500,5, 1.500).',
+		'Dates as YYYY-MM-DD (or YYYY/MM/DD); months as `Oct-Mar` or `10 11 12 1 2 3`; licence conditions separated by |.',
+		'A column headed ID number, passport, phone, cell, fax or email refuses the whole file: delete it first.',
+		'The preview lists every row with its line number; a row with a problem says what it is and isn’t imported.'
+	],
+	example: ALLOCATIONS_EXAMPLE,
+	files: [
+		{ name: 'allocations-example.csv', text: `${ALLOCATIONS_EXAMPLE}\r\n`, label: 'Download an example file' },
+		{ name: 'allocations-full-template.csv', text: TEMPLATE_CSV, label: 'Download the full template, every column' }
+	]
+};
 
 /** The first 12 hex digits of a SHA-256, for display beside the full hash in a title. */
 export const shortHash = (sha: string) => sha.slice(0, 12);

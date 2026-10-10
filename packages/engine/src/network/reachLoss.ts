@@ -31,13 +31,13 @@ export const REACH_LOSS_SERIES = {
 } as const;
 
 /**
- * On the same node, when senior users' claims cross the reach: what their
+ * On the same node, when priority users' claims cross the reach: what their
  * gross-up added for its losses (engine ≥ 1.75.0), so the node below receives
- * the senior requirement less this (docs/model.md §2.6b).
+ * the priority requirement less this (docs/model.md §2.6b).
  */
 export const SENIOR_REACH_LOSS_SERIES = {
 	key: 'senior_reach_loss',
-	label: 'Senior users’ demand lost in the reach below (their claims were grossed up for it)',
+	label: 'Priority users’ demand lost in the reach below (their claims were grossed up for it)',
 	unit: 'm³/day'
 } as const;
 

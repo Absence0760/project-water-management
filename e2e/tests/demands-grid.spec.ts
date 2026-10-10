@@ -88,7 +88,7 @@ test('every demand in one table: the supply order, a monthly demand typed in pla
 	const town = grid(page).locator('tr', { has: page.getByRole('rowheader', { name: /^Town/ }) });
 	await expect(town).toContainText('1 of 3');
 	await expect(grid(page).locator('tr', { has: page.getByRole('rowheader', { name: /^Cattle/ }) })).toContainText('200 × 50 l a day');
-	await expect(grid(page).locator('tr', { has: page.getByRole('rowheader', { name: /^Quarry/ }) })).toContainText('junior');
+	await expect(grid(page).locator('tr', { has: page.getByRole('rowheader', { name: /^Quarry/ }) })).toContainText('Non-priority');
 	await expectNoViolations(page, { include: '[data-testid="demands-grid"]' });
 
 	// A monthly object's Oct, typed here, counts in the catchment row and survives a save and a reload.

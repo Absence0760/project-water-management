@@ -560,7 +560,7 @@ describe('applyScenario: each op', () => {
 	});
 
 	describe('settings.set ewrDailySource (engine ≥ 1.80.0, issue #460): judge a scenario by the DRM tables', () => {
-		const tab = { ...blankEwrDailySource(), method: 'tab' as const, tabM3s: [0.02, 0.02, 0.03, 0.04, 0.04, 0.03, 0.02, 0.01, 0.01, 0.01, 0.01, 0.02], tableMarMm3: 5 };
+		const tab = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab' as const, tabM3s: [0.02, 0.02, 0.03, 0.04, 0.04, 0.03, 0.02, 0.01, 0.01, 0.01, 0.01, 0.02], tableMarMm3: 5 };
 		const pctRow = [0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.1, 0.08, 0.06, 0.04];
 		const resRow = pctRow.map((v) => v / 2);
 		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });

@@ -384,13 +384,13 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const L = get.get(`${n.id}|${REACH_LOSS_SERIES.key}`);
 		const reach = reachLossOf(n, []).reachLoss;
 		if (!!L !== !!reach) return `${n.id}: ${L ? 'a bed-loss series without bed losses' : 'bed losses without a bed-loss series'}`;
-		// The senior claims' share of them: only on a node with bed losses, never negative nor more than the requirement passing it.
+		// The priority claims' share of them: only on a node with bed losses, never negative nor more than the requirement passing it.
 		const SL = get.get(`${n.id}|${SENIOR_REACH_LOSS_SERIES.key}`);
-		if (SL && !reach) return `${n.id}: a senior claims' bed-loss series without bed losses`;
+		if (SL && !reach) return `${n.id}: a priority claims' bed-loss series without bed losses`;
 		if (SL) {
 			const zs = get.get(`${n.id}|senior_requirement`);
-			if (!zs) return `${n.id}: a senior claims' bed-loss series without a senior requirement`;
-			for (let t = 0; t < out.days; t++) if (SL[t]! < 0 || SL[t]! > zs[t]! + tol(zs[t]!)) return `${n.id} day ${t}: senior claims' bed losses ${SL[t]} outside [0, the requirement ${zs[t]}]`;
+			if (!zs) return `${n.id}: a priority claims' bed-loss series without a priority requirement`;
+			for (let t = 0; t < out.days; t++) if (SL[t]! < 0 || SL[t]! > zs[t]! + tol(zs[t]!)) return `${n.id} day ${t}: priority claims' bed losses ${SL[t]} outside [0, the requirement ${zs[t]}]`;
 		}
 		if (L && reach) {
 			for (let t = 0; t < out.days; t++) {
@@ -605,7 +605,7 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 }
 
 /**
- * The senior users' requirement a node passes, less the claims' share of the bed losses in the reach below it
+ * The priority users' requirement a node passes, less the claims' share of the bed losses in the reach below it
  * (`senior_reach_loss`, engine ≥ 1.75.0, docs/model.md §2.6b), what they need below the reach.
  */
 const arrivingSenior = (zs: number, claimsLost: ArrayLike<number> | undefined, t: number): number => (claimsLost ? zs - Math.min(zs, claimsLost[t]!) : zs);
@@ -613,10 +613,10 @@ const arrivingSenior = (zs: number, claimsLost: ArrayLike<number> | undefined, t
 /**
  * One other water user's day (WP-1.33, docs/model.md §2.7c): it takes
  * 0 ≤ G ≤ D from what reaches it, G = MIN(D, H) when senior and
- * MIN(D, MAX(0, H − Zs)) when junior (Zs = the senior requirement passing it);
+ * MIN(D, MAX(0, H − Zs)) when junior (Zs = the priority requirement passing it);
  * it returns T = r × G; U = H − G + T; deficit = D − G; its EWR shortfall is
  * MIN(U − Z, 0) with Z the upstream requirement (it has no share of its own);
- * a senior user takes its demand out of the senior requirement below it.
+ * a priority user takes its demand out of the priority requirement below it.
  */
 function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<ModelInput['model']['boreholes']>, day0: number, get: SeriesMap, ups: readonly NetworkNode[], days: number): string | null {
 	const g = (k: string) => get.get(`${n.id}|${k}`);
@@ -654,21 +654,21 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const rp = replay(t, d, 0, river, 0, 0, 0, 1, capRoomOn(RS, t), capRoomOn(RG, t));
 		const wantGw = rp.direct;
 		const want = rp.surface + wantGw;
-		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − senior requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
+		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − priority requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
 		if (Math.abs(gw - wantGw) > tol(d)) return `${where}: user pumped ${gw} ≠ ${wantGw} (borehole rule)`;
 		if (Math.abs(W[t]! - (d - G[t]!)) > tol(d)) return `${where}: user deficit ≠ demand − taken`;
 		if (Math.abs(T[t]! - r * G[t]!) > tol(G[t]!)) return `${where}: user return ${T[t]} ≠ ${r} × taken ${G[t]}`;
 		if (Math.abs(U[t]! - (h - (G[t]! - gw) + T[t]! - dep)) > tol(Math.max(h, gw))) return `${where}: user balance: outflow ${U[t]} ≠ inflow ${h} − taken from the river ${G[t]! - gw} + returned ${T[t]} − depletion ${dep}`;
 		const noise = 1e-12 * Math.max(Math.abs(U[t]!), Math.abs(Z[t]!));
 		if (AA[t]! > 0 || Math.abs(AA[t]! - Math.min(U[t]! - Z[t]!, 0)) > tol(U[t]!) + noise) return `${where}: EWR shortfall ${AA[t]}`;
-		if (Zs && (Zs[t]! < 0 || Zs[t]! > zIn + tol(zIn))) return `${where}: senior requirement ${Zs[t]} below the user outside [0, ${zIn}]`;
+		if (Zs && (Zs[t]! < 0 || Zs[t]! > zIn + tol(zIn))) return `${where}: priority requirement ${Zs[t]} below the user outside [0, ${zIn}]`;
 		if (pump !== null) {
 			const take = G[t]! - gw;
 			if (take > pump + tol(pump)) return `${where}: user took ${take} from the river, above its pump capacity ${pump}`;
 			const wantPl = Math.max(0, Math.min(avail, capRoomOn(RS, t), d - gw) - take);
 			if (Math.abs(PL![t]! - wantPl) > tol(Math.max(h, d)) || PL![t]! > W[t]! + tol(d)) return `${where}: user pump_limited ${PL![t]} ≠ ${wantPl} (or above the deficit ${W[t]})`;
-			// A senior user's claim was MIN(demand, capacity): what passes below it drops by at most that.
-			if (Zs && senior && Zs[t]! < zIn - Math.min(d, pump) - tol(zIn)) return `${where}: senior requirement ${Zs[t]} below the user dropped by more than MIN(demand, pump capacity)`;
+			// A priority user's claim was MIN(demand, capacity): what passes below it drops by at most that.
+			if (Zs && senior && Zs[t]! < zIn - Math.min(d, pump) - tol(zIn)) return `${where}: priority requirement ${Zs[t]} below the user dropped by more than MIN(demand, pump capacity)`;
 		}
 	}
 	return null;
@@ -922,7 +922,7 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
  *   daily cap; 0 in a month it is off), so never more than capacity;
  * - at the source, Σ v = offtake_out, and the flow there before the off-takes
  *   (outflow + Σ v) gave each rule at most what lay above what it must leave
- *   (the senior users' requirement passing, a pass-inflow release's target
+ *   (the priority users' requirement passing, a pass-inflow release's target
  *   there on a day its dam has capacity (engine ≥ 1.70.0), its hands-off
  *   flow, the EWR here when asked), so never more than the river there; the outflow is what was
  *   left, reduced by exactly Σ v;
@@ -1219,8 +1219,8 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 /**
  * Other water users' summaries and curtailment rows (WP-1.33): present exactly
  * when the network has users; whole-run and window means of the daily series;
- * 0 ≤ supplied ≤ demand; a senior user is never cut and keeps its whole
- * charge; a junior user's cut −ΔG = MAX(charge ÷ k, −supplied) ≤ 0 with
+ * 0 ≤ supplied ≤ demand; a priority user is never cut and keeps its whole
+ * charge; a non-priority user's cut −ΔG = MAX(charge ÷ k, −supplied) ≤ 0 with
  * k = 1 − return share, and the charge left standing = MIN(0, charge − k·cut).
  */
 function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, from: number, to: number): string | null {
@@ -1420,7 +1420,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const missing = keys.find((_, i) => !cols[i]);
 		if (missing) return `${n.id}: working column ${missing} missing`;
 		const [gross, eff, F, D, G, H, I, J, K, L, M, N, O, AREA, PD, EV, SP, P, Q, R, S, T, U, V] = cols as number[][];
-		// The senior users' requirement (WP-1.33): present only when a senior user's demand is passed down.
+		// The priority users' requirement (WP-1.33): present only when a priority user's demand is passed down.
 		const ZS = g('senior_requirement');
 		const PASSED = g('passed_for_senior');
 		if (ZS && !PASSED) return `${n.id}: working column passed_for_senior missing`;
@@ -1623,7 +1623,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					const o0 = ror ? 0 : Math.min(divCap, l + nn);
 					const wantO = Math.max(0, Math.min(o0, l + nn - Math.max(Math.min(zs, h + i), Math.min(l + nn, hk))));
 					if (!near(o, wantO, Math.max(l, nn, zs, hk)))
-						return `${where}: diverted ${o} ≠ ${wantO} (MIN(capacity ${divCap}, L + N) less what passes for ${zs > 0 ? `the senior requirement ${zs}${hk > 0 ? ' and ' : ''}` : ''}${hk > 0 ? `the hands-off flow ${hk}` : ''})`;
+						return `${where}: diverted ${o} ≠ ${wantO} (MIN(capacity ${divCap}, L + N) less what passes for ${zs > 0 ? `the priority requirement ${zs}${hk > 0 ? ' and ' : ''}` : ''}${hk > 0 ? `the hands-off flow ${hk}` : ''})`;
 				} else if (o !== 0) return `${where}: took less of K or M into the dam (${k} of ${K0}, ${m} of ${M0}) while still diverting ${o}`;
 			}
 			const area = AREA![t]!, pd = PD![t]!, ev = EV![t]!, sp = SP![t]!;
@@ -1736,14 +1736,14 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
 			if (ZS) {
-				// Senior users below (WP-1.33): the farm passes MIN(Zs, H + I) below the dam, and keeps nothing back without them.
+				// Priority users below (WP-1.33): the farm passes MIN(Zs, H + I) below the dam, and keeps nothing back without them.
 				let zIn = 0;
 				for (let k = 0; k < upZS.length; k++) zIn += arrivingSenior(upZS[k]![t]!, upLost[k], t);
 				const zs = ZS[t]!;
 				const pass = PASSED![t]!;
-				if (zs < zIn - tol(zIn)) return `${where}: senior requirement ${zs} below the ${zIn} arriving from upstream`;
-				if (ss < Math.min(zs, h + i) - tol(Math.max(h + i, zs))) return `${where}: below-dam flow S ${ss} does not pass the senior requirement MIN(${zs}, H + I)`;
-				if (pass < -tol(0) || (zs === 0 && pass !== 0)) return `${where}: kept back ${pass} for a senior requirement of ${zs}`;
+				if (zs < zIn - tol(zIn)) return `${where}: priority requirement ${zs} below the ${zIn} arriving from upstream`;
+				if (ss < Math.min(zs, h + i) - tol(Math.max(h + i, zs))) return `${where}: below-dam flow S ${ss} does not pass the priority requirement MIN(${zs}, H + I)`;
+				if (pass < -tol(0) || (zs === 0 && pass !== 0)) return `${where}: kept back ${pass} for a priority requirement of ${zs}`;
 			}
 			if (!near(tt, unitReturn(gg, returnPerSupplied, objs, t), gg))
 				return objs ? `${where}: return flow ${tt} ≠ β·(1 − e) × the crops' part of G + Σ each demand object's return share × its part` : `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;

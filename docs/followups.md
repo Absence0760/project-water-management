@@ -350,7 +350,7 @@ runs and accumulations are real) can't be decided without the client.
       which dams keep a reserve (form hint), Q18 pools (import warning), Q19
       upstream-to-dam % per farm (run warning on a dam-less farm), which
       units are run of river and their pump capacities (import flag, run
-      warning, evidence-pack gate), each senior user's population (for the
+      warning, evidence-pack gate), each priority user's population (for the
       NWA basic-needs exemption), each property's GN 538 rate (run warning),
       municipal return shares (treatment works records), soils and root
       depths (the 25 mm store), the A-pan row's pan type (before a WR90
@@ -489,7 +489,7 @@ runs and accumulations are real) can't be decided without the client.
       1.58.0, [model.md §2.7c](./model.md); to put to the hydrologist through
       #90 / #46). Built off by default (null = no limit) on these choices;
       confirm or change each: the capacity caps only the **river take**, not
-      the user's boreholes; a **senior user's claim** on the farms upstream
+      the user's boreholes; a **priority user's claim** on the farms upstream
       is MIN(demand, capacity), so they pass no more than its pump can lift
       (the alternative, passing the whole demand, leaves water flowing past
       a pump that can't take it); **no capacity is silent** (a farm's
@@ -525,13 +525,13 @@ runs and accumulations are real) can't be decided without the client.
       not client sign-off. Put each to the hydrologist as "confirm or change":
       - WP-1.33 other water users (engine 0.22.0): are there towns, industry
         or unlisted irrigators upstream of the logger, and what do they take
-        (monthly m³/day) and return? Priority: a senior user's demand is
+        (monthly m³/day) and return? Priority: a priority user's demand is
         passed down by the farms upstream (fragmented by flow share like the
         EWR; farms divert less, then pass inflow below the dam), and it is
         **not curtailed** for the EWR (its charge stands, not moved onto
-        farms); a junior user takes what reaches it and is curtailed like a
+        farms); a non-priority user takes what reaches it and is curtailed like a
         farm. Confirm both rules and which priority each user has. Known
-        limit: a farm never releases stored water for a senior user, and
+        limit: a farm never releases stored water for a priority user, and
         development (users, their demand) can't vary within a run.
       - WP-1.34 boreholes (engine 0.23.0): do boreholes matter in the client
         catchment, and is there any data on pumping volumes, distances from
@@ -670,7 +670,7 @@ runs and accumulations are real) can't be decided without the client.
       `ruleTable` and `lowFlowMeasure` → `baseflow`; the base-flow filter's
       three passes (the Desktop Reserve method used one, Hughes et al. 2003);
       τ 0.2; outcome cut-offs 0.95 / 0.85 and the 5 % / 20 % days; the 0.9
-      annual assurance threshold; senior users exempt only for basic human
+      annual assurance threshold; priority users exempt only for basic human
       needs, with an optional restriction % (provisionally 2026-10-01: the
       NWA basic-needs reading adopted as the target, applied once each senior
       user's population is known); the dam area exponent 0.6
@@ -2154,7 +2154,7 @@ the suggested order (the IDs carry the detail):
       (outflow 7988 vs 8469 m³/day, a dam's area 73.6 vs 0, a user's EWR days
       not met 209 vs 210). One mechanism throughout: sums over lists in
       display order (the farms' flow shares and the catchment area Σ farm
-      area, a farm's crops and crop areas, the senior users' claims and
+      area, a farm's crops and crop areas, the priority users' claims and
       upstream share totals, land-cover patches, transfer rules, the EWR
       attribution's impacts) differed in their last bit when the lists were
       reordered, and a threshold turned the ulp into a result: a dam sitting
@@ -2226,7 +2226,7 @@ the suggested order (the IDs carry the detail):
       wanted.
 - [ ] **Audit workbook: the farms it refuses today** (from issue #68). The
       workbook names and refuses a farm with boreholes, a release rule, a
-      river pump, river off-takes, demand objects, senior users downstream,
+      river pump, river off-takes, demand objects, priority users downstream,
       an allocation cap, a storage reset, a survey curve, a daily A-pan
       series on a dam, or a dam capacity that changes over the run (sediment,
       an in-service date), since its formulas carry the b023 core only. It also
@@ -4296,7 +4296,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       (scripts/wbt-import/README.md). No project's numbers change.
 - [x] **A pump capacity on other water users** (2026-09-30, engine 1.58.0,
       no migration). The farm's `pumpCapacityM3Day` on a user node, no supply
-      rule; a senior user's claim capped to it; the `pump_limited` series and
+      rule; a priority user's claim capped to it; the `pump_limited` series and
       summary means; the Other water users panel's
       Pump capacity with the pumps × m³/h calculator, a scenario `node.set`,
       the run comparison and the summary CSV ([model.md §2.7c](./model.md)).

@@ -207,7 +207,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `River to dam at ${n}, ${riverToDamUnit.label}`,
-		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in the unit picked beside it (0.2 m³/s = 200 l/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
+		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in the unit picked beside it (0.2 m³/s = 200 l/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what priority water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
 	},
 	{
 		key: 'irrigationEfficiency',

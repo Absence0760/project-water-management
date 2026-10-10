@@ -1124,10 +1124,11 @@ def read_ewr_options(wb: Workbook) -> dict[str, Any] | None:
         wb.notes.append(f"WARNING: [EWR options] the EWR method \"{raw}\" is not Pragmatic, TAB file or Percentile tables: imported as the pragmatic EWR")
         method = "pragmatic"
     raw_scaling = clean(wb.cell("zEwrOpt_Scaling")) if "zEwrOpt_Scaling" in names else ""
-    scaling = EWR_OPT_SCALINGS.get(raw_scaling.lower() or "mar ratio")
+    # No scaling given: the area ratio, the default since 2026-10-10 (issue #90 B2; engine blankEwrDailySource).
+    scaling = EWR_OPT_SCALINGS.get(raw_scaling.lower() or "area ratio")
     if scaling is None:
-        wb.notes.append(f"WARNING: [EWR options] the scaling \"{raw_scaling}\" is not MAR ratio or Area ratio: imported as MAR ratio")
-        scaling = "mar"
+        wb.notes.append(f"WARNING: [EWR options] the scaling \"{raw_scaling}\" is not MAR ratio or Area ratio: imported as Area ratio")
+        scaling = "area"
     table_mar = _ewr_opt_number(wb.cell("zEwrOpt_TableMar")) if "zEwrOpt_TableMar" in names else None
     table_area = _ewr_opt_number(wb.cell("zEwrOpt_TableArea")) if "zEwrOpt_TableArea" in names else None
     tab = None

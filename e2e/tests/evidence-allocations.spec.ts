@@ -14,10 +14,10 @@ import { createRun, nominateRun, putSeries, seedRunnableProject, syntheticFlow, 
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-/** An application owning Upper farm on the nominated baseline (a slightly smaller dam), run: its run id. */
-async function application(page: Page, projectId: string, baseRunId: string, upper: string): Promise<string> {
+/** An application owning Upper farm on the nominated baseline (a slightly smaller dam, and any `extra` ops), run: its run id. */
+async function application(page: Page, projectId: string, baseRunId: string, upper: string, extra: unknown[] = []): Promise<string> {
 	const res = await page.request.post(`${API_URL}/projects/${projectId}/scenarios`, {
-		data: { name: 'Upper farm application', baseRunId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 90_000 }], ownedNodeIds: [upper] }
+		data: { name: 'Upper farm application', baseRunId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 90_000 }, ...extra], ownedNodeIds: [upper] }
 	});
 	expect(res.status()).toBe(201);
 	const { scenario } = (await res.json()) as { scenario: { id: string } };
@@ -90,30 +90,32 @@ test('the evidence report compares modelled use with the registered volumes, lis
 	await expectNoViolations(page);
 });
 
+// Licence data never drives the baseline (issue #507): the nominated baseline compares only, so a cap is the application's
+// what-if (a settings.set op); the baseline column says it wasn't capped.
 test('the evidence report cites a capped run’s cap: the years it used its volume up and the days each limit held use back (evidence-6)', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Evidence allocation cap');
 	const days = 731;
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2019-10-01', values: syntheticRain(days) });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2019-10-01', values: syntheticFlow(days) });
-	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', allocationMode: 'cap' });
+	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	const nodes = project.model.nodes as { id: string; name: string }[];
 	// Upper farm: a volume far above its use, taken only October to March, so the months are what hold it back.
 	const res = await page.request.post(`${API_URL}/projects/${project.id}/allocations`, {
 		data: { nodeId: nodes.find((n) => n.name === 'Upper farm')!.id, waterSource: 'surface', authorisation: 'licence', volumeM3PerYear: 1e9, months: [10, 11, 12, 1, 2, 3] }
 	});
 	expect(res.status()).toBe(201);
-	const run = await createRun(page.request, project.id, 'Capped baseline');
-	await nominateRun(page.request, project.id, run, 'Capped baseline');
-	// The applicant's own unit is cited one by one (evidence-15); the baseline column is the capped baseline's.
-	const app = await application(page, project.id, run, nodes.find((n) => n.name === 'Upper farm')!.id);
+	const run = await createRun(page.request, project.id, 'Baseline');
+	await nominateRun(page.request, project.id, run, 'Baseline');
+	// The applicant's own unit is cited one by one (evidence-15); the application is the capped run.
+	const app = await application(page, project.id, run, nodes.find((n) => n.name === 'Upper farm')!.id, [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }]);
 
 	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 	const cap = page.locator('#ev-allocations').getByTestId('evidence-allocation-cap');
 	const row = cap.getByRole('row', { name: /^Upper farm \(the applicant’s\), surface water/ });
-	await expect(row.getByRole('cell').first()).toHaveText('The cap held use back on 18 days in 2 water years: 18 outside the months of use. The registered volume was never used up.');
-	await expect(row.getByRole('cell').nth(1)).toHaveText(/^The cap held use back on \d+ days in 2 water years: \d+ outside the months of use\./);
+	await expect(row.getByRole('cell').first()).toHaveText('Not capped');
+	await expect(row.getByRole('cell').nth(1)).toHaveText(/^The cap held use back on \d+ days in 2 water years: \d+ outside the months of use\. The registered volume was never used up\.$/);
 	// Lower farm has no volume: not capped, not listed.
 	await expect(cap.getByRole('row', { name: /^Lower farm/ })).toHaveCount(0);
 	await expectNoViolations(page);

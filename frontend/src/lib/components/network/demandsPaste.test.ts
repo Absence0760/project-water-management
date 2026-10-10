@@ -106,7 +106,7 @@ describe('demandsCsv', () => {
 		expect(lines[0]).toBe('Demand,Unit,Kind,Water from,Supply order,Oct (m³/day),Nov (m³/day),Dec (m³/day),Jan (m³/day),Feb (m³/day),Mar (m³/day),Apr (m³/day),May (m³/day),Jun (m³/day),Jul (m³/day),Aug (m³/day),Sep (m³/day),Mean (m³/day),Annual (Mm³/a)');
 		expect(lines).toHaveLength(rows.length + 1);
 		expect(lines[1]!.startsWith('Town,Upper,Municipal (town),dam side,1 of 3,100,100,')).toBe(true);
-		expect(lines[5]!.startsWith('Mine,,Other water user,river,senior,50,')).toBe(true);
+		expect(lines[5]!.startsWith('Mine,,Other water user,river,Priority,50,')).toBe(true);
 	});
 
 	it('defuses a name a spreadsheet would read as a formula', () => {

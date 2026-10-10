@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
-import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { DEFAULT_UNIT_MAP_PERIOD, defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveUnitRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import { unitRainFingerprintChanged, type UnitRainFingerprint } from '../runoff/unitRainFingerprint';
@@ -660,6 +660,24 @@ const zeroRainOf = (s: Partial<ProjectSettings>) => {
 	return { mode: z.mode, keepDry: z.keepDry, missing: z.missing };
 };
 /**
+ * The zero-run fill threshold a 'missing'-mode fill ran with (engine ≥ 1.81.0,
+ * issue #507 item 3), or null where none applied: 'asRecorded' fills
+ * nothing, settings without zeroRainRuns at all ran as recorded (zeroRainOf),
+ * and a fit recorded by an engine before 1.81.0 filled every flagged day.
+ * Otherwise an absent field ran the default (settings saved before 1.81.0
+ * keep running without it).
+ */
+const ZERO_RAIN_FILL_SINCE = [1, 81, 0];
+const engineBefore = (v: string | undefined, since: readonly number[]): boolean => {
+	const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v ?? '');
+	if (!m) return false;
+	for (let i = 0; i < 3; i++) if (Number(m[i + 1]) !== since[i]) return Number(m[i + 1]) < since[i]!;
+	return false;
+};
+const fillThresholdOf = (z: Partial<ZeroRainSettings> | undefined, oldEngine = false): number | null =>
+	z && (z.mode ?? 'missing') === 'missing' ? (z.fillAboveChirpsMm ?? (oldEngine ? null : ZERO_RAIN_FILL_ABOVE_CHIRPS_MM)) : null;
+
+/**
  * The accumulation fields (engine ≥ 0.20.0), absent ones as the engine runs
  * them today ('spread', no periods). Compared only when the fit recorded them:
  * a forcing made before them has nothing to compare against.
@@ -734,7 +752,8 @@ function forcingDiff(
 			record.forcing.zeroRainRuns !== undefined &&
 			(!sameJson(zeroRainOf(settings), zeroRainOf({ zeroRainRuns: record.forcing.zeroRainRuns })) ||
 				(record.forcing.zeroRainRuns.accumulationMode !== undefined &&
-					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns)))),
+					!sameJson(accumulationOf(settings.zeroRainRuns), accumulationOf(record.forcing.zeroRainRuns))) ||
+				fillThresholdOf(settings.zeroRainRuns) !== fillThresholdOf(record.forcing.zeroRainRuns, engineBefore(record.engineVersion, ZERO_RAIN_FILL_SINCE))),
 		// Engine ≥ 0.29.0; absent on an older forcing, so never flagged there.
 		chirpsFitPeriod: record.forcing.chirpsFitPeriod !== undefined && !sameJson(settings.chirpsFitPeriod ?? 'all', record.forcing.chirpsFitPeriod),
 		// Engine ≥ 1.53.0. A forcing without it ran without the gap map, so one turned on since is a change.

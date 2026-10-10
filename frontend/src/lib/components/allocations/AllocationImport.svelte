@@ -9,7 +9,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { ALLOCATIONS_EXAMPLE, AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV, volumeCell } from './allocations';
+	import { ALLOCATIONS_FORMAT, AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV, volumeCell } from './allocations';
 
 	let { projectId, open = $bindable(false), onimported }: { projectId: string; open?: boolean; onimported: (message: string) => void } = $props();
 
@@ -130,29 +130,7 @@
 				are refused: delete those columns first.
 			</p>
 			<p><a class="btn btn-sm" href={templateHref} download="allocations-template.csv">Download the CSV template</a></p>
-			<FormatHelp
-				accepts="A CSV file (.csv), comma- or semicolon-separated, in UTF-8: at most 2 MB, 5 000 rows and 200 columns. An Excel workbook isn’t read: save the sheet as CSV first."
-				example={ALLOCATIONS_EXAMPLE}
-			>
-				<ul>
-					<li>
-						The first row holds the headings, in any order: the template’s (<span class="mono">registration_no</span>, <span class="mono">farm</span>,
-						<span class="mono">volume_m3_year</span> …) or a WARMS extract’s (“Registration Number”, “Registered Volume (m3/a)”, “Water Use Sector” …). A column it
-						doesn’t know is listed as not read.
-					</li>
-					<li>Every file needs a volume column. A WARMS extract also needs a water-use column (21(a) taking, 21(b) storing); in the template a blank is a take.</li>
-					<li>
-						Each row needs a registration number, property or farm to match it by; its volume in m³ a year (a 21(b) row: the dam’s storage in m³); and its water source,
-						surface or groundwater (a 21(b) row is surface). The template’s rows need their authorisation too (registration, licence, general authorisation, Schedule 1,
-						existing lawful use); a WARMS extract without that column is read as registrations.
-					</li>
-					<li>Units: m³ a year, unless a Unit column says otherwise (m3/a, Ml/a, kl/a; a megalitre is 1 000 m³). A volume per month or day is refused.</li>
-					<li>Numbers: in a comma-separated file a point is the decimal mark (1500.5, 1,500); in a semicolon-separated file a comma (1500,5, 1.500).</li>
-					<li>Dates as YYYY-MM-DD (or YYYY/MM/DD); months as <span class="mono">Oct-Mar</span> or <span class="mono">10 11 12 1 2 3</span>; licence conditions separated by |.</li>
-					<li>A column headed ID number, passport, phone, cell, fax or email refuses the whole file: delete it first.</li>
-					<li>The preview lists every row with its line number; a row with a problem says what it is and isn’t imported.</li>
-				</ul>
-			</FormatHelp>
+			<FormatHelp format={ALLOCATIONS_FORMAT} />
 			<div class="field">
 				<label for="alloc-kind">What the file is</label>
 				<select id="alloc-kind" bind:value={kind}>

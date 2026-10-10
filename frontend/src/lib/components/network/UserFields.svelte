@@ -17,8 +17,8 @@
 	const id = (k: string) => `usr-${k}-${node.id}`;
 	const label = $derived(node.name || 'this user');
 	const PRIORITY_LABEL: Record<UserPriority, string> = {
-		senior: 'Senior (default): hydrological units upstream pass its demand first',
-		junior: 'Junior: takes what reaches it'
+		senior: 'Priority (default): hydrological units upstream pass its demand first',
+		junior: 'Non-priority: takes what reaches it'
 	};
 	const demand = $derived(userDemandOf(node));
 	const pump = $derived(node.pumpCapacityM3Day ?? null);

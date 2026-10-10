@@ -61,13 +61,17 @@ describe('readEwrOptions', () => {
 	it('reads the names case-insensitively; blank is the default', () => {
 		expect(readIt(sheet({ method: 'percentile TABLES', scaling: 'Area Ratio', area: 40 })).out).toMatchObject({ method: 'percentile', scaling: 'area', tableAreaKm2: 40 });
 		expect(readIt(sheet({ method: null, scaling: null })).out!.method).toBe('pragmatic');
+		// A blank scaling is the area ratio (issue #90 B2), so a TAB file needs the table area.
+		const blank = readIt(sheet({ method: 'TAB file', scaling: null, mar: null, area: 40, tab: new Array(12).fill(0.5) }));
+		expect(blank.out).toMatchObject({ method: 'tab', scaling: 'area', tableAreaKm2: 40 });
+		expect(blank.notes.map((n) => n.message)).toEqual(['[EWR options] the daily EWR at the outlet: the DRM TAB file, scaled by the area ratio (docs/model.md 2.9f)']);
 	});
 
 	it('an unknown method or scaling warns and falls back', () => {
 		const { out, notes } = readIt(sheet({ method: 'Monthly', scaling: 'Volume' }));
-		expect([out!.method, out!.scaling]).toEqual(['pragmatic', 'mar']);
+		expect([out!.method, out!.scaling]).toEqual(['pragmatic', 'area']);
 		expect(notes[0]!.message).toMatch(/^WARNING: \[EWR options\] the EWR method "Monthly"/);
-		expect(notes[1]!.message).toMatch(/^WARNING: \[EWR options\] the scaling "Volume"/);
+		expect(notes[1]!.message).toBe('WARNING: [EWR options] the scaling "Volume" is not MAR ratio or Area ratio: imported as Area ratio');
 		expect(notes[0]!.severity).toBe('warning');
 	});
 

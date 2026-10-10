@@ -91,7 +91,7 @@ const OPTIONAL_CATCHMENT: ReadonlySet<string> = new Set(['landcover_reduction'])
  * between the runs). Only the engine's feature columns qualify, the ones the
  * column registry marks `optional` (packages/engine/src/verify/columns.ts):
  * the run simply had no river pump, borehole, release rule, land cover or
- * senior user there, so nothing was pumped, released or removed. Anything
+ * priority user there, so nothing was pumped, released or removed. Anything
  * else missing (observed flow, calibration series, a column an older engine
  * didn't compute) is unknown, never 0.
  */

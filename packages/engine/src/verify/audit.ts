@@ -17,7 +17,7 @@
 // demand factor, upstream inflow H, runoff I, the net transfer J and the
 // cumulative EWR Z. A farm with a feature whose rules the formulas don't
 // carry yet (boreholes, a release rule, a river pump, off-takes, demand
-// objects, senior users downstream, an allocation cap, a storage reset, a
+// objects, priority users downstream, an allocation cap, a storage reset, a
 // survey curve, a hands-off flow, River to dam by month, a daily A-pan
 // series on a dam, a dam capacity that changes over the run, a drought restriction rule) gets `unsupported` instead, naming each, rather than a
 // workbook whose numbers would disagree.
@@ -190,7 +190,7 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	[ALLOCATION_SERIES.groundwaterRoom.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.surfaceLeft.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.groundwaterLeft.key, 'an allocation cap'],
-	['senior_requirement', 'senior water users downstream'],
+	['senior_requirement', 'priority water users downstream'],
 	['dam_capacity', 'a dam capacity that changes over the run (sediment or an in-service date)'],
 	// Engine ≥ 1.54.0: the day's level cuts what the sources are asked for.
 	['restricted_demand', 'a drought restriction rule'],

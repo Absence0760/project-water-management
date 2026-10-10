@@ -7,15 +7,19 @@
 // - missing: no reading (blank, NaN or negative, as alignFlow reads it);
 // - infilled: a gap-filled value, not a reading (observedInfillMask, from
 //   settings.flowGapFill's fill, engine ≥ 1.23.0, docs/model.md §2.10i);
-// - suspect: an outlier or a flat stretch by the Data checks (quality.ts
-//   seriesRowFlags, under the project's settings.dataQuality limits, the
-//   same the run warnings use), except a stretch of zero flow (engine ≥
-//   1.62.0, QF-3, provisional decision 2026-10-01): a river that stops is a
-//   reading, not a fault, so a long zero stretch stays a scored day, as GSIM
-//   Part 2 flags only runs of one value *above zero* (Gudmundsson et al.
-//   2018, ESSD 10, 787). The Data checks still list the stretch, and the
-//   data-quality panel names it, so a logger that died reading zero is seen;
-//   leave its dates out with an exclusion period;
+// - suspect: an outlier or a non-zero flat stretch by the Data checks
+//   (quality.ts seriesRowFlags, under the project's settings.dataQuality
+//   limits, the same the run warnings use), or a zero-flow stretch the
+//   river-stops rule doesn't trust (engine ≥ 1.81.0, issue #507 item 2,
+//   audit C3, zeroFlowSuspect): one that runs outside the months the river
+//   is known to stop (settings.qualityFlags.zeroFlowMonths), when any are
+//   listed, or one longer than ZERO_FLOW_TRUST_MAX_DAYS not wholly inside
+//   them. A stretch wholly inside the months is trusted as the river
+//   stopping and scored, as GSIM Part 2 flags only runs of one value above
+//   zero (Gudmundsson et al. 2018, ESSD 10, 787); a logger that fails also
+//   reads zero, which is why the rest are "check with the client". Engine
+//   1.62.0 – 1.80.0 trusted every zero stretch (QF-3). An exclusion period
+//   stays the manual override;
 // - aboveRating: above the highest field gauging (settings.qualityFlags
 //   .ratings), so the flow comes from an extrapolated rating curve;
 // - belowRating: above zero but below the lowest gauging;
@@ -33,12 +37,12 @@
 // The flags never change a stored series. They decide which days the fit's
 // objective scores (scoringDays) and what the data-quality panel (CR-22)
 // shows.
-import { toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
 import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../project';
-import { FLATLINE_FLOW_MAX_DAYS, seriesRowFlags } from '../quality';
+import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
 import type { CalibrationExclusion } from './provenance';
-import { ratingOf, type AboveRatingUse, type GaugeRating, type QualityFlagSettings } from './qualityFlagSettings';
+import { ratingOf, ZERO_FLOW_TRUST_MAX_DAYS, zeroFlowMonthsText, type AboveRatingUse, type GaugeRating, type QualityFlagSettings } from './qualityFlagSettings';
 
 export * from './qualityFlagSettings';
 
@@ -91,9 +95,45 @@ export interface FlowFlagInput {
 	dataQuality?: DataQualitySettings;
 	/**
 	 * false: leave the suspect class out (no day is suspect). A resumed run whose input lacks the record's history
-	 * (../run.ts) can't judge it: outliers and flat stretches are read over the whole stored record. Default true.
+	 * (../run.ts) can't judge it: outliers, flat stretches and zero stretches are read over the whole stored record. Default true.
 	 */
 	suspect?: boolean;
+	/** settings.qualityFlags.zeroFlowMonths: the months the river is known to stop (engine ≥ 1.81.0). Absent = none. */
+	zeroFlowMonths?: readonly number[];
+}
+
+/**
+ * 1 on each stored value of `s` that is in a zero-flow stretch the
+ * river-stops rule doesn't trust (engine ≥ 1.81.0, issue #507 item 2,
+ * docs/model.md §2.10h). A stretch is a maximal run of consecutive readings
+ * of exactly 0 (a blank, NaN or negative day ends it). It is trusted, as the
+ * river stopping, when every one of its days falls in a month of `months`.
+ * Otherwise it is suspect when `months` lists any month (it runs outside
+ * them), or when it is longer than ZERO_FLOW_TRUST_MAX_DAYS; so with no
+ * months only the length rule applies. Read over the whole stored record,
+ * so a stretch's length doesn't depend on the run window.
+ */
+export function zeroFlowSuspect(s: DailySeries, months: readonly number[] = []): Uint8Array {
+	const out = new Uint8Array(s.values.length);
+	const inMonths = new Uint8Array(13);
+	for (const m of months) if (m >= 1 && m <= 12) inMonths[m] = 1;
+	const d0 = toEpochDay(s.startDate);
+	const v = s.values;
+	for (let i = 0; i < v.length; ) {
+		if (v[i] !== 0) {
+			i++;
+			continue;
+		}
+		let j = i;
+		let inside = months.length > 0;
+		while (j < v.length && v[j] === 0) {
+			if (inside && !inMonths[monthOfEpochDay(d0 + j)]) inside = false;
+			j++;
+		}
+		if (!inside && (months.length > 0 || j - i > ZERO_FLOW_TRUST_MAX_DAYS)) out.fill(1, i, j);
+		i = j;
+	}
+	return out;
 }
 
 /** Each run day's flow class code (FLOW_FLAG_CODE). */
@@ -103,6 +143,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	if (!s) return out;
 	const offset = toEpochDay(s.startDate) - x.start;
 	const rows = x.suspect === false ? null : x.dataQuality ? seriesRowFlags(x.kind, s, x.dataQuality) : seriesRowFlags(x.kind, s);
+	const zeroSuspect = x.suspect === false ? null : zeroFlowSuspect(s, x.zeroFlowMonths);
 	const hi = x.rating?.gaugedMaxM3s ?? null;
 	const lo = x.rating?.gaugedMinM3s ?? null;
 	const from = Math.max(0, -offset);
@@ -113,7 +154,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 		if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) continue;
 		out[t] = x.infilled?.[t]
 			? FLOW_FLAG_CODE.infilled
-			: rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))
+			: (rows && (rows.outlier[i] || (rows.flatline[i] && v !== 0))) || zeroSuspect?.[i]
 				? FLOW_FLAG_CODE.suspect
 				: hi !== null && v > hi
 					? FLOW_FLAG_CODE.aboveRating
@@ -165,6 +206,7 @@ export function recordFlowFlags(x: RecordFlowFlagInput): Uint8Array {
 		days: x.days,
 		rating: ratingOf(q, x.kind),
 		infilled: x.siteNodeId === null ? observedInfillMask(x.flowFill?.[x.kind]) : null,
+		zeroFlowMonths: q.zeroFlowMonths ?? [],
 		...(x.settings.dataQuality ? { dataQuality: x.settings.dataQuality } : {}),
 		...(x.suspect === false ? { suspect: false } : {})
 	});
@@ -272,7 +314,9 @@ export interface DayQuality {
 	/** Its gauged range, when one is recorded. */
 	rating: GaugeRating | null;
 	/** How each class was treated. */
-	use: Omit<QualityFlagSettings, 'ratings'>;
+	use: Omit<QualityFlagSettings, 'ratings' | 'zeroFlowMonths'>;
+	/** The months the river is known to stop, as the flags read them (settings.qualityFlags.zeroFlowMonths, engine ≥ 1.81.0). Absent on an older report. */
+	zeroFlowMonths?: number[];
 	/** Days in the calibration window outside the exclusion periods. */
 	windowDays: number;
 	/** Those days by flow class. */
@@ -283,11 +327,15 @@ export interface DayQuality {
 	censoredDays: number;
 	/** Days with a reading that the flags left out. */
 	leftOutDays: number;
-	/** Suspect days whose flow is zero: 0 from engine 1.62.0, which never calls a zero stretch suspect (QF-3); kept for older reports. */
+	/**
+	 * Suspect days whose flow is zero: from engine 1.81.0 the zero-flow stretches the river-stops rule doesn't trust
+	 * (zeroFlowSuspect); 0 in engine 1.62.0 – 1.80.0, which never called a zero stretch suspect (QF-3).
+	 */
 	suspectZeroDays: number;
 	/**
-	 * Days in the window that are zero flow held for at least `zeroFlatMinDays` (the flow flat-line cap, 90 by
-	 * default), and so scored as a river that stopped (engine ≥ 1.62.0, QF-3). Absent on an older report.
+	 * Days in the window that are zero flow in a stretch longer than ZERO_FLOW_TRUST_MAX_DAYS that is trusted, and
+	 * so scored as a river that stopped (engine ≥ 1.81.0: only inside settings.qualityFlags.zeroFlowMonths; engine
+	 * 1.62.0 – 1.80.0: any zero stretch of the flow flat-line cap or longer). Absent on an older report.
 	 */
 	longZeroDays?: number;
 	/** The scored days' rain by class, and how many fall in a zero-rain run set aside as missing (CR-20); null without rain. */
@@ -315,8 +363,6 @@ export interface DayQualityInput {
 	rainFlags: Uint8Array | null;
 	/** 1 on run days in a zero-rain run set aside as missing, null without one. */
 	zeroRunMask: ArrayLike<number> | null;
-	/** A zero-flow stretch this long or longer is named (settings.dataQuality.flatlineFlowMaxDays; FLATLINE_FLOW_MAX_DAYS by default). */
-	zeroFlatMinDays?: number;
 }
 
 /** Counts and notes for the data-quality panel. */
@@ -330,17 +376,21 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 		flow[f]++;
 		if (f === 'suspect' && x.observed[t] === 0) suspectZeroDays++;
 	}
-	// Zero flow held for a long stretch (QF-3): run days in a run of consecutive zero readings at least zeroFlatMinDays long.
-	const zeroMin = x.zeroFlatMinDays ?? FLATLINE_FLOW_MAX_DAYS;
+	// Zero flow held for a long stretch and trusted (engine ≥ 1.81.0: inside the river-stops months): run days in a
+	// run of consecutive zero readings longer than ZERO_FLOW_TRUST_MAX_DAYS whose class is a reading's.
 	const inLongZero = new Uint8Array(x.observed.length);
 	for (let t = 0; t < x.observed.length; ) {
 		let j = t;
 		while (j < x.observed.length && x.observed[j] === 0) j++;
-		if (j - t >= zeroMin) inLongZero.fill(1, t, j);
+		if (j - t > ZERO_FLOW_TRUST_MAX_DAYS) inLongZero.fill(1, t, j);
 		t = j > t ? j : t + 1;
 	}
 	let longZeroDays = 0;
-	for (let i = 0; i < x.windowIdx.length; i++) if (inLongZero[x.windowIdx[i]!]) longZeroDays++;
+	for (let i = 0; i < x.windowIdx.length; i++) {
+		const t = x.windowIdx[i]!;
+		const f = FLOW_DAY_FLAGS[x.flags[t]!];
+		if (inLongZero[t] && f !== 'suspect' && f !== 'missing' && f !== 'infilled') longZeroDays++;
+	}
 	const scoredDays = x.scoring.idx.length;
 	let censoredDays = 0;
 	if (x.scoring.censor) for (const t of x.scoring.idx) if (!Number.isNaN(x.scoring.censor[t]!)) censoredDays++;
@@ -354,7 +404,7 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 			if (x.zeroRunMask?.[t]) rain.zeroRunDays++;
 		}
 	}
-	const { ratings: _r, ...use } = x.settings;
+	const { ratings: _r, zeroFlowMonths: _z, ...use } = x.settings;
 	const notes: string[] = [];
 	const rec = RECORD[x.flowKind];
 	if (!rating?.gaugedMaxM3s) {
@@ -386,16 +436,21 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 				? `${days(flow.suspect)} flagged suspect by the Data checks (outliers or flat stretches) are left out.`
 				: `${days(flow.suspect)} flagged suspect by the Data checks (outliers or flat stretches) are scored as recorded.`
 		);
-		// An older report's zero stretches were suspect.
+		// Zero-flow stretches the river-stops rule doesn't trust (engine ≥ 1.81.0): check with the client.
 		if (suspectZeroDays && use.suspect === 'exclude') {
+			const months = x.settings.zeroFlowMonths ?? [];
+			const why = months.length
+				? `in stretches that run outside the months the river is known to stop (${zeroFlowMonthsText(months)})`
+				: `held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days, with no months listed in which the river is known to stop`;
 			notes.push(
-				`${n(suspectZeroDays)} of the suspect days ${suspectZeroDays === 1 ? 'is' : 'are'} zero flow held for a long stretch. If the river really stops, set suspect days to "Score as recorded" (Settings → Calibration record), or the fit never sees it dry.`
+				`${n(suspectZeroDays)} of the suspect days ${suspectZeroDays === 1 ? 'is' : 'are'} zero flow ${why}, so the fit leaves them out: check with the client whether the river stopped or the logger failed. ` +
+					`If the river stops in those months, list them under Settings → Calibration record → Months the river stops; if the logger failed, an exclusion period records it.`
 			);
 		}
 	}
 	if (longZeroDays) {
 		notes.push(
-			`${days(longZeroDays)} ${longZeroDays === 1 ? 'is' : 'are'} zero flow held for ${n(zeroMin)} days or more. They are scored as a river that stopped flowing, not left out as suspect. If the logger or gauge failed instead, leave those dates out with an exclusion period.`
+			`${days(longZeroDays)} ${longZeroDays === 1 ? 'is' : 'are'} zero flow held for more than ${ZERO_FLOW_TRUST_MAX_DAYS} days inside the months the river is known to stop (${zeroFlowMonthsText(x.settings.zeroFlowMonths)}). They are scored as a river that stopped flowing. If the logger or gauge failed instead, leave those dates out with an exclusion period.`
 		);
 	}
 	if (flow.infilled) {
@@ -416,7 +471,21 @@ export function dayQuality(x: DayQualityInput): DayQuality {
 	if (rain?.zeroRunDays) {
 		notes.push(`Of the scored days, ${days(rain.zeroRunDays)} ${rain.zeroRunDays === 1 ? 'falls' : 'fall'} in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled.`);
 	}
-	return { flowKind: x.flowKind, rating, use, windowDays: x.windowIdx.length, flow, scoredDays, censoredDays, leftOutDays, suspectZeroDays, longZeroDays, rain, notes };
+	return {
+		flowKind: x.flowKind,
+		rating,
+		use,
+		zeroFlowMonths: [...(x.settings.zeroFlowMonths ?? [])],
+		windowDays: x.windowIdx.length,
+		flow,
+		scoredDays,
+		censoredDays,
+		leftOutDays,
+		suspectZeroDays,
+		longZeroDays,
+		rain,
+		notes
+	};
 }
 
 /**

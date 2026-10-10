@@ -319,9 +319,18 @@ describe('a run with an accumulation that ends a flagged zero run', () => {
 		const w = run.accumulation!.info.windows[0]!;
 		const from = toEpochDay(w.start) - r0;
 		expect(r - from).toBe(ACC_MAX_RUN_DAYS);
-		for (let i = runFrom; i < from; i++) expect(run.zeroRain!.mask[i]).toBe(1);
+		// Before the window the zero-run fill takes the days CHIRPS reads more than 2 mm on (engine ≥ 1.81.0); the rest stay dry.
+		const h = input.series.rain_chirps_mm!.values;
+		let filled = 0;
+		for (let i = runFrom; i < from; i++) {
+			const want = h[i]! > 2 ? 1 : 0;
+			expect(run.zeroRain!.mask[i]).toBe(want);
+			filled += want;
+		}
+		expect(filled).toBeGreaterThan(0);
 		for (let i = from; i <= r; i++) expect(run.zeroRain!.mask[i]).toBe(0);
-		expect(run.zeroRain!.infill.days).toBe(from - runFrom);
+		expect(run.zeroRain!.infill.days).toBe(filled);
+		expect(run.zeroRain!.infill.chirpsDryDays).toBe(from - runFrom - filled);
 	});
 
 	it('the stored series is never changed', () => {

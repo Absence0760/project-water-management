@@ -1778,9 +1778,9 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 ### WP-1.33 Other water users (towns, unlisted users)
 
 > **Built 2026-09-25 (engine 0.22.0, migration 011), off by default.** As
-> specified, with two decisions made pending WP-1.1: a senior user's demand is
+> specified, with two decisions made pending WP-1.1: a priority user's demand is
 > passed down by the farms upstream (fragmented by flow share, like the EWR),
-> and senior users are not curtailed for the EWR while junior ones are.
+> and priority users are not curtailed for the EWR while non-priority ones are.
 > [model.md §2.7c](../model.md).
 
 - **Goal:** water taken from the river by users that aren't modelled farms
@@ -1791,7 +1791,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - **engine:** a new node kind `user`: a monthly demand (m³/day per month),
     an optional share returned downstream (treated wastewater), and a
     priority against the farms (before farms by default: a municipal
-    allocation is usually senior). It draws from the river at its position in
+    allocation is usually a priority user). It draws from the river at its position in
     the network only, with no dam, crops or rain. New outputs `supplied`,
     `deficit` and `returned` per user node; the gauge and EWR see the flow
     after it.

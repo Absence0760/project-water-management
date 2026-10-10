@@ -37,6 +37,9 @@ export function monthlySettingsCsv(rows: readonly MonthlyRow[]): string {
 
 /** The Expected format of the monthly evaporation paste (issue #477). */
 export const MONTHLY_SETTINGS_FORMAT: GridFormat = {
+	id: 'monthly-settings-grid',
+	title: 'Monthly A-pan and pan coefficients',
+	where: 'Settings & calibration → Demand → Paste from a spreadsheet',
 	rules: [
 		'A heading row: Parameter, then the months Oct to Sep (or October to September). A Unit column may stay; the paste leaves it out.',
 		'A row per setting, its name first: A-pan evaporation (or A-pan), in mm a month, 0 to 10 000; Pan coefficient (or Kp), × A-pan, 0 to 2, only while GR4J runs on pan coefficient × A-pan.',
