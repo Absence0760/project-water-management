@@ -212,7 +212,9 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		ewr_charge_irrigation: 'attribution of a shortfall downstream',
 		ewr_shortfall_incremental: 'attribution of a shortfall downstream',
 		'transfer_rule@': "one transfer rule's part of J, an input",
-		reach_loss: 'lost in the reach below the farm, after its outflow U; the next unit’s H has it off already'
+		reach_loss: 'lost in the reach below the farm, after its outflow U; the next unit’s H has it off already',
+		// Engine ≥ 1.79.0: it changes supply only through an allocation cap's room, whose columns refuse the farm.
+		diverted_loss: 'accounting only: the diverted share of the dam’s evaporation and lost seepage, counted as use'
 	};
 	// Written only beside a series or model feature that already refuses the farm.
 	const WITH_REFUSED: Record<string, string> = {

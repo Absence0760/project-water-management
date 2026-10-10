@@ -8848,10 +8848,59 @@ the days *D(y)* of *y* inside the run:
   for *s* = surface
 
   ```
-  M(n,surface,y) = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam, Σ dam draw)
+  M(n,surface,y) = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam, Σ dam draw) + Σ diverted_loss
   dam draw       = MAX(supplied − groundwater_used − river side, 0)   (per day)
   river side     = river_abstraction + offtake_used + Σ river_take@<key>
   ```
+
+  **Diverted river water lost from the dam** (`diverted_loss`, engine ≥
+  1.79.0, issue #507; a provisional answer, pending the client's
+  hydrologist). A dam beside the river fills from river water diverted into
+  it (River to dam *O*, §2.7b, or a river off-take that tops it up, §2.6a).
+  Filling the dam isn't counted (draws from it are, as above), but diverted
+  water the dam then loses to evaporation, or to seepage that doesn't return
+  to the river, left the river and was never used or given back, so it is
+  surface use. Only a unit that can divert into a dam carries the series: a
+  farm with a dam (capacity > 0), a supply rule other than run of river, and
+  River to dam above 0 (its capacity, or any month of River to dam by month)
+  or a river off-take that tops up its dam. Every other unit has no
+  `diverted_loss` series and runs exactly as before 1.79.0.
+
+  The dam is taken as fully mixed. It keeps *f*, the share of its storage
+  that is diverted river water, from day to day:
+
+  ```
+  f at the start   = 1 if the dam takes none of the upstream inflow and none of its own runoff
+                     (pctUpstreamToDam = 0 and pctRunoffToDam = 0), else 0;
+                     a resumed run carries the snapshot's f; a storage reset (§2.7g) keeps f
+  each day t, with Q' yesterday's storage (the reset's storage on its day), Pd the rain on the dam,
+  J the day's net dam-rule transfer (§2.6, < 0 out), E and Sp the day's evaporation and seepage
+  as the dam's own step takes them (§2.7a: E ≤ Q' + Pd + J, Sp ≤ that − E):
+    there = MAX(Q' + Pd + J, 0)
+    held  = f × Q' × MAX(0, Q' + Pd + J) ÷ (Q' + Pd)   when J < 0 and Q' + Pd > 0   (a transfer out takes its share)
+          = f × Q'                                     otherwise                   (rain and water a transfer brings aren't diverted)
+    s     = MIN(held ÷ there, 1)                       (0 when there or held is 0)
+    diverted_loss(t) = s × (E + Sp × (1 − seepage returning))   (seepage returning unset: all of it returns, so only E)
+    held' = MAX(0, held − s × (E + Sp))
+  at the end of day t:
+    f = CLAMP((held' + O + offtake top-up into the dam) ÷ (Q' + Pd − E − Sp + M + O + K + J + offtake top-up + groundwater_to_dam), 0, 1)
+        (unchanged when the denominator is 0)
+  ```
+
+  with *K* and *M* the upstream inflow and runoff into the dam (§2.7b).
+  Everything the dam then lets go (irrigation draws, a release, spill, a
+  transfer out the next day) carries the share *f* of the water it held, so
+  only the losses are added: a draw of diverted water is already counted as
+  a draw, and spill, releases and returning seepage go back to the river.
+  The loss is added to the surface side outside the groundwater netting
+  above. Why (NWA s21(a): the take happens at the diversion; water lost from
+  storage was taken and not used): before 1.79.0 such a farm's surface use
+  was its draws alone, so a farm could read inside its licence while
+  diverting more from the river than the licence allows. Counting the
+  diversion itself as the take (licences measured at the intake) is the
+  alternative, pending the hydrologist; it would stop counting draws of
+  diverted water and apply a licence's months and rate to *O* ([engine-audit.md §
+  Provisional decisions 2026-10-10](./engine-audit.md#provisional-decisions-2026-10-10-diverted-water-lost-from-a-dam-issue-507)).
 
   with every Σ over *D(y)*. `supplied` includes what the farm draws from its
   own dam (§2.7d: G = Gs + GW + Gr, so the dam draw Gs is `supplied` less
@@ -9036,6 +9085,17 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   (`capReached`: use within 10⁻⁹ of the budget) and, per water year, the
   days the limit held use back (`limitBound`, engine ≥ 1.40.0; see the
   licence conditions below).
+
+  **Diverted losses under the cap** (engine ≥ 1.79.0, §2.12): on a capped
+  day a unit's `diverted_loss` counts against the surface volume first,
+  before the day's room is taken and before anything the unit draws or
+  asks for that day (a remote share's ask, §2.7k, and a demand-sized
+  off-take's sizing, §2.6a, included). It takes from the water year's volume
+  only, never from a licence's daily rate or months of use (evaporation
+  isn't pumping), and the cap can't stop it: a year's surface use can pass
+  its budget by losses alone, never by draws. `allocation_room_surface` is
+  the room after that day's loss, and `capReached` and `limitBound` count
+  the losses in the year's use.
 
   The cap counts every draw from the dam as surface use, groundwater pumped
   into it included: §2.12's netting (a pumped m³ drawn back out isn't a

@@ -8,7 +8,7 @@
 // algorithms change. See docs/model.md §6 "Verification".
 import { fromEpochDay, isIsoDate, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import { demandFactorStart } from '../demand';
-import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations/compare';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, DIVERTED_LOSS_SERIES } from '../allocations/compare';
 import { ALLOCATION_SERIES, dailyLimits, inForceOver, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
@@ -2868,6 +2868,9 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 				const GD = g('groundwater_to_dam');
 				if (!G) return `${n.id}: supplied series missing`;
 				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
+				// Diverted river water the dam lost (engine ≥ 1.79.0): surface use counted before the day's draws, so the
+				// room the column shows is what the volume left after it; it never counts against the licence's daily rate.
+				const DL = source === 'surface' ? g(DIVERTED_LOSS_SERIES.key) : undefined;
 				// The licence conditions (engine ≥ 1.37.0): the room is at most the day's limit, which the
 				// input gives (0 outside the months of use, else the maximum rates × 86 400).
 				const limit = dailyLimits(allocs, source, day0, out.days);
@@ -2916,6 +2919,12 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 						left = b;
 						leftWant = b;
 						fresh = false;
+					}
+					const loss = DL ? DL[t]! : 0;
+					if (loss > 0) {
+						usedInRun += loss;
+						if (left !== null) left = Math.max(0, left - loss);
+						if (leftWant !== null) leftWant = Math.max(0, leftWant - loss);
 					}
 					const eps = tol(Math.max(b, Math.abs(use)));
 					if (room[t]! < 0 || room[t]! > Math.min(b, lim) + eps) return `${where}: ${source} allocation room ${room[t]} outside [0, the year's registered ${b}${lim < b ? ` and the licence's ${lim} today` : ''}]`;
@@ -3029,7 +3038,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					groundwater: get.get(`${n.id}|groundwater_used`) ?? null,
 					groundwaterToDam: get.get(`${n.id}|groundwater_to_dam`) ?? null,
 					riverAbstraction: get.get(`${n.id}|river_abstraction`) ?? null,
-					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v)
+					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v),
+					divertedLoss: get.get(`${n.id}|${DIVERTED_LOSS_SERIES.key}`) ?? null
 				}
 			];
 		})

@@ -185,6 +185,18 @@ For a run, per farm or water user, per water source and per **water year**
   not netted. The rule and its reasoning are in
   [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310);
   pending the hydrologist's confirmation.
+- **Diverted river water lost from the dam** (engine ≥ 1.79.0, issue #507):
+  a dam beside the river that fills from River to dam or a top-up off-take
+  loses some of that river water to evaporation and to seepage that doesn't
+  return. That water left the river and was never used, so it is added to
+  the surface side (`diverted_loss`), beside the draws. Filling the dam isn't
+  counted, and spill and releases go back to the river. Under a cap
+  (Settings › Registered volumes) the loss counts against the year's volume
+  before the day's draws, never against a licence's daily rate or months, and
+  the cap can't stop it, so a year can read over its volume by losses alone.
+  Runs from an older engine have no such series and read as before. Pending
+  the hydrologist: the alternative is counting the diversion itself as the
+  take ([model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)).
 - **Registered volume**: each allocation's volume × the days it is valid in
   that part of the year ÷ the days in the water year (365 or 366). A run that
   covers only part of a water year compares that part with the prorated

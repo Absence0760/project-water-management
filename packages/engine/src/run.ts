@@ -47,7 +47,7 @@ import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatura
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
-import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, DIVERTED_LOSS_SERIES, type AllocationEntry } from './allocations/compare';
 import { ALLOCATION_SERIES, inForceOver, limitBoundKind, matchAllocations, outsideMonths, planAllocations, registeredOver, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
@@ -369,6 +369,7 @@ function runNetwork(
 			if (r.poolStorageM3 && p.river) p.initialPoolM3 = r.poolStorageM3;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
 			if (r.allocationUsedM3 && p.allocationCap) p.initialAllocationUsedM3 = r.allocationUsedM3;
+			if (r.divertedShare !== undefined) p.initialDivertedShare = r.divertedShare;
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
@@ -635,7 +636,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'divertedLoss' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -732,6 +733,8 @@ function runNetwork(
 		// A crop supply table's remote share (engine ≥ 1.73.0): what the crops got from another unit's dam, and what a dam gave.
 		if (r.remoteIn) push(node.id, REMOTE_SERIES.in.key, REMOTE_SERIES.in.label, REMOTE_SERIES.in.unit, r.remoteIn);
 		if (r.remoteOut) push(node.id, REMOTE_SERIES.out.key, REMOTE_SERIES.out.label, REMOTE_SERIES.out.unit, r.remoteOut);
+		// Diverted river water lost from the dam (engine ≥ 1.79.0): surface use, on a unit that can divert into a dam.
+		if (r.divertedLoss) push(node.id, DIVERTED_LOSS_SERIES.key, DIVERTED_LOSS_SERIES.label, DIVERTED_LOSS_SERIES.unit, r.divertedLoss);
 		// Canal seepage back to the river (engine ≥ 1.42.0): only on a farm an off-take returns seepage below.
 		if (r.offtakeReturn) push(node.id, OFFTAKE_SERIES.returned.key, OFFTAKE_SERIES.returned.label, 'm³/day', r.offtakeReturn);
 		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
@@ -1138,6 +1141,7 @@ function runNetwork(
 				...(plan.nodes[i]!.river?.takes.some((x) => x.pool) ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
+				...(net.divertedShare[i] != null ? { divertedShare: net.divertedShare[i]! } : {}),
 				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {}),
 				...(built.allocation.scaled.get(i)?.before !== undefined ? { allocationFactorBefore: built.allocation.scaled.get(i)!.before! } : {})
 			})),
@@ -2268,7 +2272,8 @@ function runAllocations(
 				groundwater: b ? (r.groundwater) : null,
 				groundwaterToDam: b?.units.some((u) => u.toDam) ? (r.groundwaterToDam) : null,
 				riverAbstraction: (r.riverAbstraction ?? null),
-				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])]
+				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])],
+				divertedLoss: r.divertedLoss ?? null
 			};
 		})
 	});
@@ -2352,6 +2357,8 @@ function capYears(
 		}
 		if (!(budget[t]! < Infinity)) continue;
 		b = budget[t]!;
+		// Diverted river water the dam lost (engine ≥ 1.79.0, docs/model.md §2.12a) counts before the day's draws, as the cap counted it.
+		if (source === 'surface' && r.divertedLoss) used += r.divertedLoss[t]!;
 		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
 		const kind = limitBoundKind(Math.max(0, b - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, b);
 		if (kind) {

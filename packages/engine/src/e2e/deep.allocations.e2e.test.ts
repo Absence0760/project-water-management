@@ -132,6 +132,8 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 				if (!sup) continue;
 				const gw = series(out, n.id, 'groundwater_used') ?? zeros(out.days);
 				const gd = series(out, n.id, 'groundwater_to_dam') ?? zeros(out.days);
+				// Diverted river water the dam lost (engine ≥ 1.79.0, §2.12a): surface use, counted before the day's draws.
+				const dl = series(out, n.id, 'diverted_loss') ?? zeros(out.days);
 				for (const source of ['surface', 'groundwater'] as const) {
 					const own = takes(input, n.id, source);
 					const room = series(out, n.id, `allocation_room_${source}`);
@@ -146,11 +148,18 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 					for (const s of spans(out)) {
 						const b = budget(own, s.wy);
 						let used = 0;
+						// The part of the dam's diverted losses that took the year past its budget: the cap holds the draws
+						// to the room, but it can't stop evaporation, so only losses may take the year over (engine ≥ 1.79.0).
+						let lossOver = 0;
 						for (let t = s.from; t <= s.to; t++) {
 							if (!inForceOn(own, d0 + t)) {
 								uncapped++;
 								if (!Number.isNaN(room[t]!)) bad.push(`seed ${seed} ${n.id} ${source} ${fromEpochDay(d0 + t)}: room ${room[t]} on an uncapped day, not blank`);
 								continue;
+							}
+							if (source === 'surface') {
+								lossOver += Math.max(0, used + dl[t]! - Math.max(used, b));
+								used += dl[t]!;
 							}
 							const use = source === 'surface' ? sup[t]! - gw[t]! : gw[t]! + gd[t]!;
 							const want = Math.min(Math.max(0, b - used), limit(own, d0 + t));
@@ -159,7 +168,7 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 							if (use > room[t]! + tol) bad.push(`seed ${seed} ${n.id} ${source} ${fromEpochDay(d0 + t)}: used ${use} > room ${room[t]}`);
 							used += use;
 						}
-						if (used > b + 1e-9 * Math.max(1, b)) bad.push(`seed ${seed} ${n.id} ${source} ${s.wy}: ${used} m³ > budget ${b}`);
+						if (used - lossOver > b + 1e-9 * Math.max(1, b)) bad.push(`seed ${seed} ${n.id} ${source} ${s.wy}: ${used} m³ (${lossOver} of it losses past the budget) > budget ${b}`);
 						if (b > 0 && used >= b * (1 - 1e-9)) bound++;
 					}
 					// RunSummary: capReached (use within 10⁻⁹ of the budget) and limitBound (days the room was all taken
@@ -178,6 +187,7 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 						for (let t = s.from; t <= s.to; t++) {
 							if (!inForceOn(own, d0 + t)) continue;
 							capped = true;
+							if (source === 'surface') used += dl[t]!;
 							const use = source === 'surface' ? sup[t]! - gw[t]! : gw[t]! + gd[t]!;
 							const left = Math.max(0, b - used);
 							const lim = limit(own, d0 + t);
@@ -301,14 +311,15 @@ function useNodesLikeBackend(input: ModelInput, out: ModelOutput): AllocationUse
 			groundwater: get(n.id, 'groundwater_used'),
 			groundwaterToDam: get(n.id, 'groundwater_to_dam'),
 			riverAbstraction: get(n.id, 'river_abstraction'),
-			riverTakes: picked.filter((s) => s.nodeId === n.id && (s.key === 'offtake_used' || s.key.startsWith('river_take@'))).map((s) => s.values)
+			riverTakes: picked.filter((s) => s.nodeId === n.id && (s.key === 'offtake_used' || s.key.startsWith('river_take@'))).map((s) => s.values),
+			divertedLoss: get(n.id, 'diverted_loss')
 		}));
 }
 
 describe('deep: RunSummary.allocations is compareAllocations on the run’s own series (§2.12)', () => {
 	it('the backend reads exactly the keys the engine’s summary passes', () => {
 		const { exact, prefixes } = backendKeys();
-		expect([...exact].sort()).toEqual(['groundwater_to_dam', 'groundwater_used', 'offtake_used', 'river_abstraction', 'supplied']);
+		expect([...exact].sort()).toEqual(['diverted_loss', 'groundwater_to_dam', 'groundwater_used', 'offtake_used', 'river_abstraction', 'supplied']);
 		expect(prefixes).toEqual(['river_take@']);
 	});
 
