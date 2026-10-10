@@ -135,27 +135,51 @@ export function reserveYearsWords(ruleTable: boolean, daily?: DailyEwrSource): {
 }
 
 /**
+ * The two monthly panels' headings on this page, which tell them apart
+ * (issue #465): Reserve compliance (`#res-reserve`) counts the months a
+ * Reserve rule table's requirement was met; the EWR grid (`#res-ewr-grid`)
+ * counts the days below the daily EWR. Both were "… compliance by month".
+ * The printable report and Compare runs keep the panels' own names.
+ */
+export const RESERVE_MONTHS_HEADING = 'Reserve rules met, by month';
+export const EWR_MONTHS_HEADING = 'Days below the EWR, by month';
+
+/**
+ * What `#res-reserve` says without a Reserve rule table in the run (issue
+ * #465): before, the panel was simply absent and nothing said why. With
+ * none in the project, it needs one (set in Settings → Reserve rule tables,
+ * by an editor); with one the run lacks (made before the table, or by an engine before
+ * 0.21.0), a new run shows it.
+ */
+export function reserveStubText(projectHasTable: boolean, canEdit: boolean): { lead: string; link: string | null } {
+	if (projectHasTable) return { lead: 'This run was made without the project’s Reserve rule table. Run the model again to see it.', link: null };
+	return { lead: 'Needs a Reserve rule table:', link: canEdit ? 'set one in Settings → Reserve rule tables' : 'an editor sets one in Settings → Reserve rule tables' };
+}
+
+/**
  * The page's "On this page" menu (common/SectionNav): every panel in page
  * order, by its `#res-…` id (links.ts RIVER_ANCHORS), grouped by the question
- * it answers. Reserve compliance only when the run has it, as the page shows
- * the panel only then; that is also when the project has a rule table.
+ * it answers: the findings first (the reserve, then the water account), then
+ * the run-it-yourself tools (issue #465). Reserve rules met is always listed:
+ * without a rule table its panel says what it needs.
  * `ruleLine`: the run stored the outlet's rule requirement, so the flow chart
  * draws it and keeps its "Flow vs reserve" name (summaryChart.ts flowHeading).
  * `headlineRuleTable`: the headline judges by a rule table (the project's
  * settings.ewrHeadline, issue #444), which names the flow chart as it does
- * the chart's own heading; by default, whenever the run has a table.
+ * the chart's own heading.
  */
-export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean, headlineRuleTable = hasReserveCompliance, daily?: DailyEwrSource): NavGroup[] {
+export function riverNavGroups(ruleLine: boolean, headlineRuleTable: boolean, daily?: DailyEwrSource): NavGroup[] {
 	return [
 		{
 			label: 'The reserve',
 			sections: [
 				{ id: 'res-ewr', label: flowHeading(headlineRuleTable, ruleLine, daily) },
 				{ id: 'res-reserve-years', label: 'Days below, by year' },
-				...(hasReserveCompliance ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
-				{ id: 'res-ewr-grid', label: 'EWR by month' }
+				{ id: 'res-reserve', label: 'Reserve rules met' },
+				{ id: 'res-ewr-grid', label: 'Days below, by month' }
 			]
 		},
+		{ label: 'Water balance', sections: [{ id: 'res-water-account', label: 'Water account' }] },
 		{
 			label: 'How sure, and what if',
 			sections: [
@@ -163,7 +187,6 @@ export function riverNavGroups(hasReserveCompliance: boolean, ruleLine: boolean,
 				{ id: 'res-outcomes', label: 'Outcome matrix' },
 				{ id: 'res-outlook', label: 'Seasonal outlook' }
 			]
-		},
-		{ label: 'Water balance', sections: [{ id: 'res-water-account', label: 'Water account' }] }
+		}
 	];
 }

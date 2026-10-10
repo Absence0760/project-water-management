@@ -48,8 +48,8 @@ export const runCard = (page: Page, slot: CompareSlot) => page.getByRole('group'
 export const runSelect = (page: Page, slot: CompareSlot) => runCard(page, slot).getByRole('combobox', { name: 'Run' });
 
 /**
- * The full comparison's What changed list. A what-if's card also leads with
+ * The full comparison's Inputs that differ list. A what-if's card also leads with
  * one of its changes, so a change's text appears twice on the page: look for
  * it here.
  */
-export const whatChanged = (page: Page) => page.getByRole('region', { name: 'What changed', exact: true });
+export const whatChanged = (page: Page) => page.getByRole('region', { name: 'Inputs that differ', exact: true });

@@ -143,7 +143,7 @@ test('Runs tab: the flow-unit switch and a small link; Hydrological units: units
 		expect(await styleOf(compare, ['font-size', 'color']), at).toEqual({ 'font-size': SMALL, color: await token(page, '--accent') });
 	});
 
-	// The unit results table (and its "% of demand" head) moved from Runs & results to Units & supply.
+	// The unit results table (and its "% of demand" head) moved from Runs & results to Hydrological units.
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await page.goto(`/projects/${project.id}?tab=supply&run=${runId}`);
 	const unit = page.locator('th .u').filter({ hasText: /^% of demand$/ }).first();

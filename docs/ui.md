@@ -1064,8 +1064,8 @@ role, freshness, Add data) and each tab's own header:
   Crops' **Tables** and **+ Add crop**, Transfers' **Show on the Network** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
-  River & reserve's **Run** menu and **Open in Runs & results**, Units &
-  supply's run menu and **Open in Runs**, Dams' **Open in Runs**, Scenarios'
+  River & reserve's **Run** menu and **Open in Runs & results**, Hydrological
+  units' run menu and **Open in Runs & results**, Dams' **Open in Runs & results**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
   longest waiting**), then for editors **Add data** and **Run model**, the
@@ -1518,7 +1518,7 @@ for every workspace tab. Its own chunk.
 - **Header**: the section header titled "Dams", with the context line
   "8 dams · 2.73 million m³ capacity · latest run “Baseline”, ran today"
   (`damsSummary`, `fmtVolume`), **Hydrological unit table** (the grid modal over this
-  page, `grid=nodes`) once there is a dam, and **Open in Runs** once there
+  page, `grid=nodes`) once there is a dam, and **Open in Runs & results** once there
   is a run, all filled through `fillHeader` like Crops & demand. The cards'
   and the chart's headings are h2 under its h1.
 - **Which dams**: a farm with a capacity of at least 1 m³ (`modelDams`). Only
@@ -2314,8 +2314,10 @@ itself.
   - **Header** (with no nodes yet too): "Network" and one line on what it is
     ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
     "No hydrological units yet"); on the right a **Tables** menu (a disclosure named "Open
-    as a table": *Hydrological unit table*, *Crop factors*, *Planted areas*, *Transfers*,
-    *Demands*,
+    as a table": *Hydrological unit table*, *Crop factors*, *Planted areas*,
+    *Irrigation systems*, *Transfers*, *Demands*, every grid in the order
+    Crops & demand's menu names them, `TABLES_MENU` in
+    `lib/workspace/overlays.ts`, issue #463;
     each in the [grid modal](#grid-modal); Escape or a click outside closes
     it) and, for editors, **+ Add hydrological unit** and (once there is one outlet)
     **+ Add other user**, each opening the new node's form in the sheet with
@@ -2689,7 +2691,7 @@ itself.
   engine ≥ 1.63.0). The area exponent's field takes 0 < b ≤ 1.
 - **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
   **+ Add other user** (next to + Add hydrological unit, in the page header and the node
-  table's toolbar, once there is one outlet) adds a node of
+  table's actions row above the table, once there is one outlet) adds a node of
   kind *Other user* draining into the outlet, with no demand yet; any node's
   Kind can also be switched to it. In the table a user's row shows "–" in
   every farm column ("not used for an other water user"), and below the
@@ -3790,9 +3792,10 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   hydrological units · water year October to September", `cropsSummary`; the
   workspace says unit, not farm), and on the right
-  a **Tables** menu (Crop factors, Planted areas, Irrigation systems,
-  Demands → the [grid modal](#grid-modal),
-  `grid=crop-factors|planted-areas|systems|demands`; Escape
+  a **Tables** menu (Hydrological unit table, Crop factors, Planted areas,
+  Irrigation systems, Transfers, Demands → the [grid modal](#grid-modal),
+  `grid=nodes|crop-factors|planted-areas|systems|transfers|demands`: every
+  grid, named and ordered as the Network's menu, `TABLES_MENU`, issue #463; Escape
   or a click outside closes it), then for editors **Load crop factors…**
   (once there is a crop; the [same dialog](#load-crop-factors), its own
   chunk) and **+ Add crop**. The header shows with no crops too, over an
@@ -3988,14 +3991,15 @@ values read-only and Close. `Dialog` `side`, full width on a phone.
 
 The old tab body is `crops/CropGrids.svelte`: crop factors (no mean column
 since issue #174: an unweighted 12-month average the b023 workbook doesn't
-have, which read as a figure it isn't; reorderable, the × A-pan intro, the warning naming every crop and month
+have, which read as a figure it isn't; reorderable, a one-line × A-pan intro, "Gross irrigation need (mm) = A-pan ×
+crop factor: × A-pan, not an FAO Kc", with the Kc conversion in its ⓘ and the glossary (issue #463), the warning naming every crop and month
 above 1.0: `highCropFactors`, a hint, never a block on saving), planted areas
 in **ha** (stored as m²; hydrological-unit rows in network order, reorderable; the
 no-planted-area note) and the demand preview (chart and `DemandTable`).
 A cleared area is 0 (nothing planted; the editor drops the row) and a
 cleared factor is 0, so a field never shows empty over a value the model
 still holds. Both tables take a block pasted from a spreadsheet, into any
-cell or from **Paste from a spreadsheet…** under them (the
+cell or from **Paste from a spreadsheet…** in the actions row above each (the
 [node table](#grid-modal)'s preview, `model/GridPasteDialog.svelte`, with a
 CSV of the table to fill in): planted areas in hectares, a row per unit
 under crop names (`planAreaPaste`), and crop factors, a row per crop under
@@ -4013,7 +4017,7 @@ overlays ever edit the catchment from there.
 ### Load crop factors
 
 **Load crop factors…** (editors only: in the Crops & demand header, in a
-crop's sheet, and under the crop-factor table of the [crop
+crop's sheet, and in the actions row above the crop-factor table of the [crop
 grids](#crop-grids): **Tables › Crop factors**, the grid modal from any
 tab, and scenario override mode, where it fills the scenario's crops) opens a dialog
 that fills the project's crop factors from a source, shows what changes and
@@ -4257,7 +4261,8 @@ user's demand could only be read one node form at a time.
   reader as objects were added.
 - **Paste from a spreadsheet and CSV** (`network/demandsPaste.ts`, the
   [grid modal's paste](#grid-modal)): a block pasted into a month cell, or
-  **Paste from a spreadsheet…** under the table (editors), opens **Paste
+  **Paste from a spreadsheet…** in the actions row above the table (editors,
+  beside **Show demands in**, issue #463), opens **Paste
   demands**: rows matched by name (the demand's own name, or "Name (Unit)"
   where two rows share it, "Crops (Upper farm)", `pasteNames`), months by
   heading ("Oct", "October", "Oct (m³/day)") or by position from the cell,
@@ -4345,6 +4350,20 @@ modal: the page leaves the parameter to the tab, and over any other tab
 the link goes to that tab with it open (`movedGridHref`;
 [§ Map](#map-tabmap)).
 
+- **Actions above the grid** (issue #463, the pattern #461 set for the EWR
+  settings): each grid's own actions are one row (`toolbar grid-actions`)
+  between its intro and its first row, never under the table, its totals or
+  the field guide, where the operator didn't find a file load under a
+  12-row grid. Node table: **+ Add hydrological unit**, **+ Add other
+  user**, **Sort by flow path**, **Paste from a spreadsheet…**; crop factors:
+  **+ Add crop**, **Load crop factors…**, **Paste from a spreadsheet…**;
+  planted areas: **Paste from a spreadsheet…**; Demands: **Show demands
+  in**, **Paste from a spreadsheet…**, **Download the table as CSV**;
+  Transfers: **+ Add transfer** (off the Transfers page, whose header has
+  it). The focus reaches them before the rows. Viewers get no row (Demands
+  keeps its unit and download). Pinned by
+  `model/gridActions.test.ts` and each grid's spec (`expectAbove`,
+  `e2e/support/reflow.ts`).
 - **One heading:** the modal's title (the dialog's name, beside its ✕) is
   the only heading over the grid. The grid inside draws none of its own
   (`inModal` on `CropsTab`/`CropGrids` and `TransfersTab`; the node table
@@ -4368,7 +4387,7 @@ the link goes to that tab with it open (`movedGridHref`;
   cell into any of their inputs (a tab or a line break in it; one value stays
   the input's own paste) opens **Paste into the hydrological unit table** / **Paste
   planted areas** (`model/GridPasteDialog.svelte`) with the block in its box;
-  **Paste from a spreadsheet…** under the grid opens it empty, to paste,
+  **Paste from a spreadsheet…** in the grid's actions row opens it empty, to paste,
   type or **Load a CSV file**. **Download the table as CSV** is the grid as
   it is now (names, then each column with its unit in brackets; a % as
   0–100, areas in ha; formula-like names defused, `docs/security.md`), the
@@ -4732,22 +4751,35 @@ their kind by name) are marked. The role badge carries its reason in its own
 words, and the kind's role is an ⓘ `HelpTip` beside it (`series.<kind>`); a
 gauge record adds a line saying where it is checked and scored
 (`roles.ts` `roleBadge`). None of it is a hover title any more, which
-keyboard, touch and screen-reader users never got. The CHIRPS label, where a
-flow record was measured and the charted series' source **save on change**:
-each says *Saving…*, then *Saved* or *Not saved: &lt;reason&gt;* beside itself
-(a polite live region the control is described by), and a failed save puts
-the control back to the stored value. Editors can **Delete** a series (after a
-confirm; runs already stored are not affected). A CHIRPS series shows which
+keyboard, touch and screen-reader users never got. **Series details**
+(issue #464, `series/details.ts`): under the chart, one labelled row for the
+charted series (a group named *Series details*, a `<dl>` whose terms are the
+fields' visible labels): **Product**, **Measured at**, **Source** and
+**Upload unit**, each only where it applies, wrapping to one column on a
+phone. Until 2026-10-10 the product and where a record was measured were
+small unlabelled selects stacked in the row's name cell (with the source line
+under them, and the source itself apart under the chart), which made rows
+tall and the place-at-a-gauge select hard to find; the rows now carry only
+the kind, name, feed, day boundary, role and, for a record placed at a gauge,
+a read-only *At gauge &lt;name&gt;*. Editors set the product, where measured
+and the source there; they **save on change**: each says *Saving…*, then
+*Saved* or *Not saved: &lt;reason&gt;* beside itself (a polite live region the
+control is described by), and a failed save puts the control back to the
+stored value. The row is keyed on the series, so a half-typed source never
+carries over to the next one picked. Viewers read the same labels with the
+values as words. Editors can **Delete** a series (after a confirm; runs
+already stored are not affected). A CHIRPS series' **Product** says which
 product and version it holds (issue #40 part c): editors get a select
 (*Version not recorded*, CHIRPS v2.0, CHIRPS sat v3.0, CHIRPS rnl v3.0) that
 relabels it without touching its values (`PATCH …/series/:id`), viewers the
-words. The **Add data** form asks the same for a CHIRPS file (*Not known*
+words; an alternative-gauge or reanalysis series with a product recorded at
+upload shows it as words. The **Add data** form asks the same for a CHIRPS file (*Not known*
 by default, or the existing series' own label when appending to it); a
 merge of another version into a filled series is refused by the server with
-its reason. An observed or logger **flow** record also shows **where it was
-measured** when the model has a gauge above the outlet (issue #64, engine ≥
+its reason. An observed or logger **flow** record also has **Measured at**
+when the model has a gauge above the outlet (issue #64, engine ≥
 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)):
-editors get a select (*At the outlet*, or *At gauge &lt;name&gt;* for each such
+editors get a select (*The outlet*, or *Gauge &lt;name&gt;* for each such
 gauge, `PATCH …/series/:id { siteNodeId }`), viewers the words. A record at a
 gauge is badged *Gauge record (checks only)*: the run checks it against the
 simulated flow there (Runs & results → Plausibility checks), and it is never
@@ -4759,10 +4791,12 @@ instead: Fit automatically and a run's calibration statistics score it ([model.m
 §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410)). A record whose gauge has left the model says
 so, until it is moved. **Source and unit** (issue #66, 107,
 [data-model.md](./data-model.md#series-source-and-unit-107_series_sourcesql)):
-a row whose series records a source, or was converted at upload (uploaded in
-l/s, ML/day …), says so under its name ("DWS X1H001 · given in l/s (× 0.001
-to m³/s)"); a series uploaded in the stored unit with no source adds nothing,
-so the table stays one line a row. **Fed series**: a row a data feed wrote
+Series details' **Source** (editors edit it, *Source*, saved on change,
+`PATCH …/series/:id { source }`; viewers read it, or *Not recorded*) and
+**Upload unit** (the unit a file was given in and its conversion, "l/s,
+converted to m³/s (× 0.001)", or *Not recorded*); until 2026-10-10 the row
+repeated them under its name ("DWS X1H001 · given in l/s (× 0.001 to
+m³/s)"). **Fed series**: a row a data feed wrote
 days of (`SeriesMeta.feed`, `time_series.feed_id`, 031) says so under its
 name, *Written by the CHIRPS daily rainfall feed* (the source's label), or
 how many days when the feed wrote only some of the days with a value (*312
@@ -4770,10 +4804,7 @@ days written by the CHIRPS daily rainfall feed*: the rest were uploaded or
 imported, and the feed keeps them). Unlike the source, which records where a
 new series first came from, the mark is live: it goes once a user's upload
 has written over every day the feed wrote, or the feed is removed or
-re-targeted (`frontend/src/lib/series/provenance.ts` `feedMark`). Under the chart, the charted series shows
-its source and the unit it was uploaded in; editors edit the source there
-(*Source*, saved on change, `PATCH …/series/:id { source }`), viewers read
-it. The **Add data** form has an optional **Source** field (up to 200
+re-targeted (`frontend/src/lib/series/provenance.ts` `feedMark`). The **Add data** form has an optional **Source** field (up to 200
 characters; the existing series' own source when appending or replacing,
 until typed over); the unit chosen is recorded with it. **Flow gaps**: when
 Settings → Calibration record → *Flow gaps* fills the charted gauge or logger
@@ -4859,6 +4890,8 @@ badge for water years far below the usual catchment / CHIRPS share (engine
 `rainVsChirps`, on the first catchment and first CHIRPS series by name, as a
 run reads them). These are the same checks a run reports as warnings; rules in
 [model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree).
+What the checks look for is the heading's ⓘ (`data-quality-limits`), not a
+line under it (issue #464).
 Charting that catchment rain series tints the days a run will treat as
 missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
@@ -5455,11 +5488,12 @@ two.
   filling are the outlet records', and that a run's statistics are scored
   there too while the outlet's EWR test stays the outlet's, and links to the
   project's first flow record on the Data tab
-  (`?tab=series&series=<id>#data-chart`), whose row says where it was
-  measured. With no gauge record yet (and a flow record to place), an editor
-  sees that line in its stead: "Scored at the outlet. To score at a gauge
-  inside the network, set where its flow record was measured on the Data
-  tab", so the choice is findable before it exists. A stored site
+  (`?tab=series&series=<id>#data-chart`), whose Series details' **Measured
+  at** places it (issue #464). With no gauge record yet (and a flow record to
+  place), an editor sees that line in its stead: "Scored at the outlet. To
+  score at a gauge inside the network, set its flow record's Measured at in
+  Series details on the Data tab (the gauge has to be in the network, above
+  the outlet)", so the choice is findable before it exists. A stored site
   whose gauge has left the model or has no record attached any more gets a
   warning under the select (runs score the outlet's record and warn, and Fit
   automatically refuses the site). The site's records decide *Compare with*'s choices, Fit
@@ -6329,9 +6363,23 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   the first 24 months, then **Show all N months** (`aria-expanded`, opens
   the rest in place; **Show the first 24 months** folds them again); the
   printable report shows every month.
-- **Below it**, full width, the moved panels, with their ids:
-  **Reserve compliance by month** (`#res-reserve`, with a rule table),
-  **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`, with the
+- **Below it**, full width, the moved panels, with their ids, the findings
+  first and the run-it-yourself tools after them (issue #465; until then the
+  three tools sat between the findings and pushed the water account to the
+  page's foot):
+  **Reserve rules met, by month** (`#res-reserve`, `EwrAssurancePanel` with
+  a rule table; the panel's own name, *Reserve compliance by month*, stays
+  on the printable report and Compare runs). Without a rule table in the
+  run it is a one-line stub (`data-testid="reserve-stub"`, `river.ts`
+  `reserveStubText`) where the panel was simply absent and nothing said
+  why: "Needs a Reserve rule table: set one in Settings → Reserve rule
+  tables." linked to `?tab=settings#set-reserve` (a viewer reads "an editor
+  sets one …"), or, when the project has a table the run lacks, "This run
+  was made without the project’s Reserve rule table. Run the model again to
+  see it."; then
+  **Days below the EWR, by month** (`#res-ewr-grid`, `EwrHeatmap`'s
+  *EWR compliance by month* renamed here so the two monthly panels read
+  apart, `river.ts` `RESERVE_MONTHS_HEADING` / `EWR_MONTHS_HEADING`; with the
   **EWR required vs met, each water year** table under the grid, engine ≥
   0.32.0, `ewr/EwrRequiredMet.svelte`; its cells by **% of days not met**
   are in the EWR traffic light's three bands since issue #444, green under
@@ -6354,22 +6402,33 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   count days below the pragmatic EWR; the results are judged by the Reserve
   rule table at … instead." (`ewr/headline.ts` `heatmapHeadlineNote`, which
   RiverTab and the printable report pass as `headlineNote`); a unit's note,
-  which counts its charged shortfall, doesn't), the
+  which counts its charged shortfall, doesn't), and the **Water account**
+  (`#res-water-account`). Then, under an `h2` **How sure, and what if** (a
+  region, named as the menu's group), the run-it-yourself tools: the
   **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
   under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
-  (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
-  outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)) and the
-  **Water account** (`#res-water-account`). Each is described under
-  [§ Runs & results](#runs--results), where it used to be.
+  (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)) and the **Seasonal
+  outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)). A
+  tool that hasn't run is **one row** (`common/ToolRow.svelte`,
+  `data-testid="tool-row"`): its name and ⓘ, one line saying what it
+  answers, and at the row's end **Run…** (editors; it opens the tool's form
+  with focus on its first field), **Run sensitivity** (anyone; it runs at
+  once, having no settings), or why it can't run ("Not run yet: an editor
+  can run one.", "Needs an ordinary run, not a scenario or forecast.",
+  "Needs the catchment natural flow: run the model again."). The row keeps
+  the panel's heading ids, so a `#res-…` link focuses it. A tool with a
+  result (or one loading, failing or running) shows in full. Each is
+  described under [§ Runs & results](#runs--results), where it used to be.
 - **On this page.** A **River sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one row
   from 1280 px), and sticks down the
   panels: **Flow vs reserve** (**Flow vs pragmatic EWR**, or **Flow vs
   daily EWR** from the DRM tables, when its heading is), **Days below, by year**, **Reserve
-  compliance** (with a rule table), **EWR by month**, **Uncertainty**,
-  **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
-  above (`river/river.ts`, `riverNavGroups`), in three groups: The reserve;
-  How sure, and what if; Water balance, named for screen readers, its links
+  rules met** (always, as its stub says what it needs without a table), **Days below, by month**,
+  **Water account**, **Uncertainty**, **Outcome matrix** and **Seasonal
+  outlook**, by the ids above in page order (`river/river.ts`,
+  `riverNavGroups`; `links.ts` `RIVER_ANCHORS`), in three groups: The
+  reserve; Water balance; How sure, and what if, named for screen readers, its links
   evenly spaced (issue #162: the wider gaps between unnamed groups read as
   spacing bugs, and the names on the bar take it to a second row at 1440 px).
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
@@ -6403,8 +6462,8 @@ read it before.
   `createdAt`, as the Summary shows (`pickRuns`). A `run=` naming a run that
   is gone shows the newest with a note. The run before it (by `createdAt`,
   `previousRunOf`) is what the change is against. The header's **Run shown**
-  menu lists every run; picking one is a history entry. **Open in Runs**
-  goes to `?tab=runs&run=<id>`.
+  menu lists every run; picking one is a history entry. **Open in Runs &
+  results** goes to `?tab=runs&run=<id>`, named as on River & reserve (issue #466).
 - **Header.** The shared section header; the context line (`supplySummary`)
   is "8 units · 3 short this week · run “Baseline”, ran today", with the
   unit count alone before a run. Once that week's last day is more than a
@@ -6446,7 +6505,14 @@ read it before.
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
 - **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
-  panel of Runs & results, moved. Its demand, supply, share and dam size (the
+  panel of Runs & results, moved. With two or more units its head is a
+  picker, as the Network's node sheet (issue #467): **‹** (Previous
+  hydrological unit), a **Hydrological unit shown** select of every unit in
+  the cards' order, least supplied first ("2. Unit A · 61% supplied"), and
+  **›** (Next hydrological unit). A pick writes `unit=` as a card does (a
+  history entry), and focus returns to the control used (to the select when
+  ‹ or › has just become disabled), so a unit is found without unfolding
+  the cards; the heading, its name, is then for screen readers only. Its demand, supply, share and dam size (the
   capacity the run had, `runDamCapacity`) in a line, then **Supply vs demand**
   (the days the unit was short shaded, from its `deficit` series), with the
   **30 days / 1 year / All** switch (opening on a year), Earlier / Later, and
@@ -6506,8 +6572,10 @@ read it before.
   Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one
-  row), and sticks down the page: **Hydrological unit detail** (`#res-farm`), **Hydrological unit results**, **Curtailment**,
-  **Assurance of supply** and **Other uses** when there are any (`supply/supply.ts`, `supplyNav`). Until it,
+  row), and sticks down the page: **Unit detail** (`#res-farm`, a link with no group name; it read "Each
+  hydrological unit → Hydrological unit detail" until issue #467), then under *Tables for this run*
+  **Hydrological unit results**, **Curtailment**, **Assurance of supply**, **Drought restrictions** for a
+  run with the rule and **Other uses** when there are any (`supply/supply.ts`, `supplyNav`). Until it,
   the three tables ran four screens under the cards with no way to them but
   scrolling. Not shown with no run or no units.
 - **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment`,
@@ -6699,7 +6767,7 @@ read it before.
 
   The run summary no longer draws the land-cover, groundwater,
   demand-object and other-user tables, which had no menu entry: they are
-  **Other uses** on Units & supply (issue #137), and a line at the foot of
+  **Other uses** on Hydrological units (issue #137), and a line at the foot of
   the Summary names what the run has and links there (`other-uses-link`,
   `runs/humanImpacts.ts` `otherUsesLink`; to the curtailment targets when
   the run's only ones are other users, listed there). The printable report
@@ -6950,7 +7018,7 @@ read it before.
   Not yet: an Excel audit workbook. (The Data tab's series downloads carry
   the model's columns since engine 1.27.0: docs/api.md § Export.)
 - **Other uses** (`runs/HumanImpactTables.svelte`, its own chunk): the
-  tables below are on Units & supply (`#res-other-uses`, issue #137), in the
+  tables below are on Hydrological units (`#res-other-uses`, issue #137), in the
   printable report under the summary.
 - **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
   flow invasive plants and forestry took, its share of natural flow, the
@@ -6985,7 +7053,7 @@ read it before.
 - **Other water users’ pumps** (engine ≥ 1.58.0, only when a user has a pump
   capacity): each such user's demand, what it pumped from the river, the
   demand its pump left unmet although the river had it (`pump_limited`) and
-  the days it did, whole-run means. Drawn on Units & supply too, beside the
+  the days it did, whole-run means. Drawn on Hydrological units too, beside the
   curtailment table (which has no pump columns); the run Summary's Other uses
   line names it.
 - **River abstractions** (engine ≥ 1.65.0, only when a unit has a demand on
@@ -7214,7 +7282,9 @@ read it before.
   the first differences. Below, **Every ensemble of this run** lists each one
   ever started, newest first (who, when, stored or "started, never stored",
   seed, sets, kept), each with how its rule differs from the shown one, and a
-  line counts the starts never stored. Editors get **Run an ensemble**: sets
+  line counts the starts never stored. With no ensemble yet the panel is
+  one row until an editor presses **Run…** ([§ River &
+  reserve](#river--reserve), issue #465). Editors get **Run an ensemble**: sets
   (30–1 000, default 300), bounds (the fit's, typical or wide), lowest skill
   kept, worst WR2012 flag kept, the low-flow bias limit (or off) and the pan
   coefficient shift (on a GR4J run with a monthly PE row, engine ≥ 0.31.0,
@@ -7508,8 +7578,10 @@ link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
 with its chart `uncertainty/TornadoChart.svelte` and helpers
 `uncertainty/sensitivity.ts`.
 
-- **Anyone who can see the run** can press **Run sensitivity** (a secondary button, the ensemble's size,
-  in the same action row position): the page
+- **Anyone who can see the run** can press **Run sensitivity**: until it
+  has run, the panel is one row (name, purpose, ⓘ, the button at its end,
+  lined up with the uncertainty bands' **Run…**; [§ River & reserve](#river--reserve),
+  issue #465); after, the button sits in the panel's action row: the page
   fetches the run's own inputs (`…/model-input`) and the calibration worker
   runs the central case and each factor's low and high (at most 11 model
   runs, under a second on the examples), with a count ("5 of 11 runs") and
@@ -7548,7 +7620,9 @@ A panel on [River & reserve](#river--reserve) (`#res-outcomes`; until
 issue #17 under *River & Reserve* on the Runs tab; `outcomes/OutcomeMatrixPanel.svelte`, in River &
 reserve's chunk, view model `outcomes/matrix.ts`).
 
-- **Starting a sweep** (editors): **Demand levels** (% of today's farm
+- **Starting a sweep** (editors; with no sweep yet the panel is one row
+  until **Run…** opens this form, [§ River & reserve](#river--reserve),
+  issue #465): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
   with its hint under the box, then **Run demand sweep** in the action
   row under them, queue a [sweep](./scenarios.md#sweeps) of the
@@ -7625,7 +7699,9 @@ The level the WUA sets reaches farmers through **Publish to farmers**
 (below) and the farm page's *This season* card (§ Farmer view; the client
 confirmed farmers see the outlook, O5, issue #90).
 
-- **Starting an outlook** (editors): **Demand levels** (% of today's farm
+- **Starting an outlook** (editors; with no outlook yet the panel is one
+  row until **Run…** opens this form, [§ River & reserve](#river--reserve),
+  issue #465): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 6, 0–200 %, separated by commas),
   each one `demand.scale` op on every farm from the decision date. On a
   full-allocation project a level is that % of each unit's registered
@@ -7763,7 +7839,7 @@ see (WP-2.3); every place it shows says so.
   site: the outlet or a gauge that is an EWR site, and the level: at least
   which). An id the
   model hasn't got blocks Save with its name.
-- **Units & supply → Drought restrictions** (`#res-restrictions`, its own
+- **Hydrological units → Drought restrictions** (`#res-restrictions`, its own
   panel and menu entry, before Other uses, for a run with the rule;
   `runs/RestrictionTables.svelte`, its own chunk, view model
   `runs/restrictions.ts`; also in the printable report beside the other
@@ -7803,7 +7879,7 @@ blocked save, edits saved whole, a viewer, off saves null, axe and the
 cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
 (the scenario's "Change a setting", a rule from the published notice on
 each unit's own dam with an EWR trigger, the outlook's triggers replacing
-it after the question, a run's tables on Units & supply with axe and no
+it after the question, a run's tables on Hydrological units with axe and no
 sideways scroll).
 
 ## Compare runs (`?tab=compare`)
@@ -7838,7 +7914,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   With no second what-if the third column is a dashed **+ Add a second
   what-if** card; What-if 2 has **Remove**. Focus moves to the new card's run
   select on add, and back to the add button on remove.
-- **What changes** (left, ~55 %): the outcomes table (*EWR not met*, the
+- **What the change does** (left, ~55 %; "What changes" until issue #466): the outcomes table (*EWR not met*, the
   share of days, worded as the Summary's card and River & reserve's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
   #162; irrigation supplied, farms below 95 %,
@@ -8076,7 +8152,7 @@ closing, and **Discard edits** puts it back. **Edits to record**
   delete or unpin, `RunMeta.citedBy`). The runs list reloads after a
   scenario is created, rebased or deleted, so the tag follows.
 - **Compare page.** When either side is a scenario run, a **Scenario
-  overrides** section above "What changed" lists that run's ops as it
+  overrides** section above "Inputs that differ" lists that run's ops as it
   recorded them, with their classes and the callout (`ScenarioOverrides.svelte`,
   its own chunk).
 
@@ -8595,7 +8671,7 @@ the viewer's day, with a request's change set folded into one entry.
   this change", kept with the revision.
 - **Runs**: a collapsible "Changes since this run" and **Restore these
   inputs** (not for a scenario run).
-- **Elsewhere** (issue #42): the compare page's *What changed* says who
+- **Elsewhere** (issue #42): the compare page's *Inputs that differ* says who
   changed each model or settings line between two runs and when
   ([run-comparison.md](./run-comparison.md)). The Project page's **Recent
   changes** panel (the three newest) was removed in 2026-09 (issue #177):

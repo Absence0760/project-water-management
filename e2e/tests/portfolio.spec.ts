@@ -161,7 +161,7 @@ test('the team filter states which thresholds apply, and judges by the team’s 
 	await expect(row(page, 'Pf published T').locator('td.c-ewr')).toContainText(statusText(now)!);
 });
 
-// The link lands on the table, not the top of Units & supply (docs/followups.md;
+// The link lands on the table, not the top of Hydrological units (docs/followups.md;
 // the Runs tab before issue #17): the panels render after the run's details
 // load, past the browser's own jump, so the page scrolls there itself and moves
 // focus to the table's heading.

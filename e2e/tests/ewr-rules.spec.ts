@@ -128,8 +128,8 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	// "by month of the year" opens the panel, on River & reserve for this run (issue #17).
 	await summary.getByRole('link', { name: 'by month of the year' }).click();
 	await expect(page).toHaveURL(/[?&]tab=river&run=[^#]+#res-reserve$/);
-	const panel = page.getByRole('region', { name: /^Reserve compliance by month/ });
-	await expect(panel.getByRole('heading', { name: /^Reserve compliance by month/ })).toBeFocused();
+	const panel = page.getByRole('region', { name: /^Reserve rules met, by month/ });
+	await expect(panel.getByRole('heading', { name: /^Reserve rules met, by month/ })).toBeFocused();
 	await expect(panel.getByRole('status').filter({ hasText: 'Met in' })).toHaveText('Outlet (Outflow gauge): Met in 33 of 36 months (91.7%); not met in 3.');
 	await expect(panel.getByText('Source: Synthetic rule table for tests')).toBeVisible();
 	// Three years of each month: the run says the percentiles rest on few years.
@@ -216,7 +216,7 @@ test('two EWR sites each get a Reserve heat map, low flows and high flows (engin
 	});
 	await createRun(page.request, project.id, 'Two sites');
 	await page.goto(`/projects/${project.id}?tab=river`);
-	const panel = page.getByRole('region', { name: /^Reserve compliance by month/ });
+	const panel = page.getByRole('region', { name: /^Reserve rules met, by month/ });
 	const site = panel.getByLabel('EWR site');
 	await expect(site.locator('option')).toHaveText(['Outlet (Outflow gauge)', 'Upper gauge']);
 
@@ -360,7 +360,7 @@ test('the EWR results are judged by is chosen first thing in Settings, and the h
 	await expect(printed).toHaveText('Results are judged by the pragmatic EWR at the outflow gauge, the project’s setting when this report was printed.');
 	await page.goto(`/projects/${id}?tab=river`);
 	// Reserve compliance keeps its panel: the table is still assessed, it just doesn't head the results.
-	await expect(page.getByRole('region', { name: /^Reserve compliance by month/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Reserve rules met, by month/ })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Days below the reserve, each water year' })).toBeVisible();
 
 	// The outlet's table chosen, then the table removed: Settings says the choice can't be

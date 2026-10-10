@@ -56,7 +56,7 @@ test('record where a demand comes from: the source sets the sizing, is saved, an
 	await page.getByLabel(/^Run label/).fill('With a village');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With a village' })).toBeVisible();
-	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Hydrological units' }).click();
 	const uses = page.getByRole('region', { name: 'Other uses of water' });
 	const table = uses.getByTestId('demand-objects-table');
 	await expect(table.getByRole('columnheader', { name: 'Source' })).toBeVisible();

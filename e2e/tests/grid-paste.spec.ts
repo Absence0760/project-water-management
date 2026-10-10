@@ -8,6 +8,7 @@ import type { Locator, Page } from '@playwright/test';
 import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectAbove } from '../support/reflow.ts';
 
 /** Paste `text` into a cell's input as Excel's clipboard would hand it over. */
 async function pasteInto(input: Locator, text: string) {
@@ -85,6 +86,8 @@ test('planted areas: the toolbar paste reads hectares by farm and crop, refuses 
 	await putModel(page.request, project.id, sampleModel());
 	await page.goto(`/projects/${project.id}?tab=crops&grid=planted-areas`);
 	const grid = page.getByRole('dialog', { name: 'Planted areas' });
+	// The paste sits above the unit rows, not under the table (issue #463).
+	await expectAbove(grid.getByTestId('grid-actions'), grid.locator('table.areas tbody tr').first());
 	await grid.getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
 	const dlg = page.getByRole('dialog', { name: 'Paste planted areas' });
 	expect(await templateCsv(dlg)).toBe('﻿Farm,Orchard (ha)\r\nUpper farm,20\r\nLower farm,12\r\n');
@@ -123,7 +126,8 @@ test('crop factors: a pasted 12-month row is previewed, applied and saved; the s
 	await expect(grid.getByLabel('Orchard crop factor, Oct')).toHaveValue('0.4');
 	await expect(grid.getByLabel('Orchard crop factor, Jan')).toHaveValue('0.7');
 
-	// A negative factor stops the paste with where it is.
+	// A negative factor stops the paste with where it is. The toolbar's paste is above the crop rows (issue #463).
+	await expectAbove(grid.getByRole('button', { name: 'Paste from a spreadsheet…' }), grid.locator('table.factors tbody tr').first());
 	await grid.getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
 	await dlg.getByLabel('Cells copied from a spreadsheet').fill('Crop\tJan\nOrchard\t-1\n');
 	await expect(dlg.getByText('Orchard, Jan: a crop factor of -1 is below 0.')).toBeVisible();

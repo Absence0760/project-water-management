@@ -2,7 +2,7 @@
 	The drought restriction rule's results (engine ≥ 1.54.0, WP-3.8, docs/ui.md
 	§ Drought restrictions): the days at each level per water year and over the
 	run, and per hydrological unit its demand before and after the cut. Its own
-	panel on Units & supply (#res-restrictions) and in the printable report;
+	panel on Hydrological units (#res-restrictions) and in the printable report;
 	its own chunk (restrictions.ts loadRestrictionTables). A model rule, not the
 	restriction notice farmers see.
 -->
@@ -19,7 +19,7 @@
 	}: {
 		summary: RunSummary;
 		headingId?: string;
-		/** The heading's level: 2 as a Units & supply panel, 3 among the printable report's tables. */
+		/** The heading's level: 2 as a Hydrological units panel, 3 among the printable report's tables. */
 		level?: 2 | 3;
 	} = $props();
 

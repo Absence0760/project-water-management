@@ -133,9 +133,13 @@ test('the Scored at choice says where a gauge’s record is placed, with a link 
 	const series = list.series.find((x) => x.kind === 'flow_observed_m3s')!;
 	await openSettings(page, project.id);
 	const how = page.getByTestId('calibration-site-how');
-	await expect(how).toContainText('To score at a gauge inside the network, set where its flow record was measured on the Data tab.');
+	await expect(how).toContainText(
+		"To score at a gauge inside the network, set its flow record's Measured at in Series details on the Data tab (the gauge has to be in the network, above the outlet)."
+	);
 	await how.getByRole('link', { name: 'Data tab' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=series&series=${series.id}#data-chart$`));
+	// The link lands on the chart, whose Series details the hint names (issue #464).
+	await expect(page.getByRole('group', { name: 'Series details' })).toBeVisible();
 });
 
 test('below the rail’s width the bar’s Find opens the same box; on a phone it opens under the strip', async ({ page, owner }) => {

@@ -10,6 +10,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeForm, openNodeTable } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { expectAbove } from '../support/reflow.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All hydrological units' });
 const card = (page: Page) => page.getByTestId('node-card');
@@ -102,6 +103,10 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page).toHaveURL(/[?&]grid=nodes/);
 	await expect(table.locator('table.net').getByRole('textbox', { name: 'Name' })).toHaveCount(3);
 	await expect(table.getByRole('button', { name: 'Sort by flow path' })).toBeVisible();
+	// The table's actions sit above its first row, not under the table and the field guide (issue #463).
+	const actions = table.getByTestId('grid-actions');
+	await expect(actions.getByRole('button')).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Sort by flow path', 'Paste from a spreadsheet…']);
+	await expectAbove(actions, table.locator('table.net tbody tr').first());
 	await table.getByRole('button', { name: 'Done' }).click();
 
 	// There are no layouts to switch any more; old links still land somewhere sensible.
@@ -318,10 +323,17 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await expect(factors).toHaveCount(0);
 	await expect(page).toHaveURL(/\?tab=network$/);
 
-	// The menu closes on Escape.
+	// The menu names every grid in the order Crops & demand's does (issue #463); it closes on Escape.
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText([
+		'Hydrological unit table',
+		'Crop factors',
+		'Planted areas',
+		'Irrigation systems',
+		'Transfers',
+		'Demands'
+	]);
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();

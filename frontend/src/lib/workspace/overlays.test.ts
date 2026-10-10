@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEMAND_TABLE_ID, GRID_TAB, GRIDS, gridHref, isGridId, isTabGridId, movedGridHref, TAB_GRIDS, overlayHref, withoutParam, withParam } from './overlays';
+import { DEMAND_TABLE_ID, GRID_TAB, GRIDS, gridHref, isGridId, isTabGridId, movedGridHref, TABLES_MENU, TAB_GRIDS, overlayHref, withoutParam, withParam } from './overlays';
 
 describe('overlays', () => {
 	it('knows its grids and the tab each lives on', () => {
@@ -18,6 +18,17 @@ describe('overlays', () => {
 		expect(isGridId('network')).toBe(false);
 		expect(isGridId(null)).toBe(false);
 		expect(isGridId('toString')).toBe(false);
+	});
+
+	it('lists every grid in the Tables menu, in one order for the Network and Crops & demand (issue #463)', () => {
+		expect(TABLES_MENU).toEqual([
+			['nodes', 'Hydrological unit table'],
+			['crop-factors', 'Crop factors'],
+			['planted-areas', 'Planted areas'],
+			['systems', 'Irrigation systems'],
+			['transfers', 'Transfers'],
+			['demands', 'Demands']
+		]);
 	});
 
 	it('sends an old grid=demand link to the Crops & demand page with its table shown', () => {

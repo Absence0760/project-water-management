@@ -15,6 +15,13 @@ export const GRIDS = {
 
 export type GridId = keyof typeof GRIDS;
 
+/**
+ * The Tables menu: every grid, in GRIDS' order, with its title. The Network's
+ * and Crops & demand's menus both list it, so the two name the same grids in
+ * the same order (issue #463).
+ */
+export const TABLES_MENU = Object.entries(GRIDS) as [GridId, string][];
+
 export function isGridId(v: string | null): v is GridId {
 	return v !== null && Object.hasOwn(GRIDS, v);
 }

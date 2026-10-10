@@ -35,7 +35,8 @@ describe('links', () => {
 
 	it('the On this page menu links every panel, in page order, and nothing else', () => {
 		expect(supplyNav(true, true).flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
-		expect(supplyNav(true).map((g) => g.label)).toEqual(['Each hydrological unit', 'Tables for this run']);
+		expect(supplyNav(true).map((g) => g.label)).toEqual([null, 'Tables for this run']);
+		expect(supplyNav(true)[0]!.sections).toEqual([{ id: 'res-farm', label: 'Unit detail' }]);
 	});
 
 	it('lists Other uses last, and only for a run that has any (issue #137)', () => {

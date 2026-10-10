@@ -9,10 +9,12 @@
 	the page stays responsive. Nothing is stored: it is a live diagnostic
 	anyone who can see the run can repeat. The verdict per EWR site is
 	re-judged at once when the threshold changes; the tornado and its table
-	show the swing of each factor.
+	show the swing of each factor. Until it has run it is one row
+	(common/ToolRow, issue #465) whose button runs it.
 -->
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import ToolRow from '$lib/components/common/ToolRow.svelte';
 	import { onDestroy } from 'svelte';
 	import { SENSITIVITY_THRESHOLDS, type SensitivityResult } from '@water-management/engine';
 	import { api } from '$lib/api';
@@ -72,6 +74,11 @@
 </script>
 
 <section aria-labelledby="{uid}-h-t" data-testid="sensitivity-panel">
+	{#if !result && !running && !error}
+		<ToolRow headingId="{uid}-h" titleId="{uid}-h-t" title="Sensitivity runs" help="sensitivity-runs" purpose="How far EWR compliance moves when one input the record can’t settle is changed at a time. Nothing is stored.">
+			{#snippet action()}<button type="button" class="btn" onclick={run}>Run sensitivity</button>{/snippet}
+		</ToolRow>
+	{:else}
 	<h3 id="{uid}-h"><span id="{uid}-h-t">Sensitivity runs</span> <HelpTip key="sensitivity-runs" /></h3>
 	<p class="muted small">
 		How far EWR compliance moves when one input the record can't settle is changed at a time: rain ±10 %, the pan coefficient and the dam
@@ -177,6 +184,7 @@
 				Not run: {result.skipped.map((s) => `${s.label} (${s.reason})`).join('; ')}.
 			</p>
 		{/if}
+	{/if}
 	{/if}
 </section>
 

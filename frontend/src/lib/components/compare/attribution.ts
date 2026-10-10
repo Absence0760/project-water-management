@@ -1,5 +1,5 @@
 // Who changed the compared runs' inputs (issue #42, GET /compare/runs
-// `attribution`): the revision behind each "What changed" line, and a line
+// `attribution`): the revision behind each "Inputs that differ" line, and a line
 // naming who changed things between the runs. Pure, no DOM.
 import type { InputChange } from '@water-management/engine';
 import type { CompareAttribution, HistoryRevision } from '$lib/api/types';

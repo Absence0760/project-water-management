@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Headline numbers for both runs with the change B − A, in two optional
-	// halves. `water={false}`: Compare runs, whose What changes table carries
+	// halves. `water={false}`: Compare runs, whose What the change does table carries
 	// the water balance rows (compare/summary.ts outcomeRows, issue #175).
 	// `fit={false}`: a scenario against its base, whose run is scored against
 	// the *real* gauge, so its NSE is not an outcome of the what-if

@@ -81,7 +81,7 @@ Above the detail, for the baseline and every what-if at once
   a what-if than an edit to the model) and a link to **all N changes**,
   which switches the full comparison to that what-if and scrolls to *What
   changed*. A what-if with no input changes says so (or names its scenario).
-- **What changes** (`outcomeRows`): EWR not met (the share of days the
+- **What the change does** (`outcomeRows`): EWR not met (the share of days the
   EWR wasn't met, so runs of different lengths compare), irrigation supplied (share
   of demand), the irrigation deficit (m³/day), farms below 95 % supplied, a row for each of the (at most two)
   farms whose supply moves by at least 1 point in some what-if (matched on
@@ -196,7 +196,7 @@ bottom:
    from before engine 1.0.0, which removed it; audit H1): it doesn't conserve
    water at the event scale, so the comparison is a workbook comparison
    only, not evidence.
-2. **What changed.** Every difference in the inputs, grouped by network, crops,
+2. **Inputs that differ** ("What changed" until issue #466). Every difference in the inputs, grouped by network, crops,
    transfers, settings and time series. **Who changed it and when** (issue
    #42): for two runs of one project, the earlier as the baseline, and
    neither a scenario run, a line over the list counts the saved model and
@@ -281,9 +281,9 @@ bottom:
    flow** table (KGE, NSE, percent bias, RMSE and the overlapping days) for A
    and B side by side, with the change. Its **Water balance** table
    (`HeadlineDeltas`, supply, deficit, EWR days, outflow, natural flow,
-   runoff coefficient) is left out here (`water={false}`) since What changes
+   runoff coefficient) is left out here (`water={false}`) since What the change does
    carries those rows (issue #175); the scenario comparison, which has no
-   What changes table, still shows it. The calibration table says whether
+   What the change does table, still shows it. The calibration table says whether
    the scores are in-sample (issue #45, `comparison.calibration.fitStatus`):
    **calibration period (in-sample)** when both runs' parameters were fitted
    on the days scored, the shared reason when neither was ("parameters not
@@ -310,7 +310,7 @@ bottom:
    the overlapping years and over the whole run, the dry-season ratio and the
    monthly pattern correlation for A and B. For the ratios, closer to 1 is
    better; for the correlation, higher is. A run without the check shows "–".
-   Every WR2012 input is in *What changed*: the reference being added or
+   Every WR2012 input is in *Inputs that differ*: the reference being added or
    removed (*"WR2012 reference added (A21B, MAR 12 Mm³/a over 100 km²,
    1990/91 – 2009/10)"*), each of its fields (quaternary, area, MAR, MAP,
    period, source), the monthly means by month, the scaling rule, the
@@ -334,7 +334,7 @@ bottom:
    curve. Run B's curve is left out, with a note, when its table has other %
    points. A site with a table in one run only says so, and when the two
    runs' tables differ (values, points, unit, scale or natural source) a note
-   says the rates measure against different rules. *What changed* lists each
+   says the rates measure against different rules. *Inputs that differ* lists each
    table added or removed (*"EWR rule table at the outlet added ("Reserve
    determination, table 4", 10 % points, natural percentile from the run)"*),
    each field changed (source, the kind of source, engine ≥ 1.5.0: *"kind
@@ -525,7 +525,7 @@ check is left out; the panel is absent when neither run has checks. The
 typical use is before and after a refit or new data: which years stopped
 failing, whether the low flows moved inside the factor of 2, and whether a
 recession rate or a BFI moved. A gauge's
-own record also shows in *What changed* by its gauge ("Observed flow at gauge
+own record also shows in *Inputs that differ* by its gauge ("Observed flow at gauge
 Middle weir series added …").
 
 ## How runs are matched
@@ -597,7 +597,7 @@ rule on the farm summary's optional fields (`FarmSummary` in the engine's
 A [scenario](./scenarios.md) run is an ordinary run with `scenarioId` set, so
 comparing it with its base (`?a=<p>:<baseRun>&b=<p>:<scenarioRun>`) needs
 nothing new. A scenario keeps its base's ids, so every change lines up **by
-id**: a 20 % dam raise on Rooikloof is one "What changed" line, *Rooikloof:
+id**: a 20 % dam raise on Rooikloof is one "Inputs that differ" line, *Rooikloof:
 dam capacity 100,000 m³ → 120,000 m³*, and Rooikloof's farm row pairs with
 itself. A node the scenario added shows under "Only in run B", one it removed
 under "Only in run A".
@@ -610,7 +610,7 @@ They come from the run's own snapshot (`inputs.scenario`), not from the
 scenario as it is now, so a scenario edited, rebased or deleted since still
 shows the ops that produced the run. The compare page's **Scenario overrides**
 section (`scenarios/ScenarioOverrides.svelte`, its own chunk, shown only when
-a side is a scenario run) lists them above "What changed", each in words and
+a side is a scenario run) lists them above "Inputs that differ", each in words and
 with its class, and the red "Baseline assumptions changed" callout when any
 op is `baseline`. When the other side is the scenario's own base, each op is
 described against it (the value it replaced). The Scenarios tab's own

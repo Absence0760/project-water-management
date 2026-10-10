@@ -1,5 +1,5 @@
 // Land cover, groundwater, demand objects and other users' tables: a separate chunk
-// (HumanImpactTables.svelte), drawn on Units & supply (issue #137) and in the printable
+// (HumanImpactTables.svelte), drawn on Hydrological units (issue #137) and in the printable
 // report. A plain module rather than a `<script module>`, so the printable report can
 // load it before it says it is ready: Vite's dependency scan can't see a .svelte file's
 // named exports, and failed on the import.
@@ -34,14 +34,14 @@ export function hasHumanImpacts(summary: Pick<RunSummary, 'landCover' | 'users' 
 }
 
 /**
- * Whether Units & supply draws the Other water users table with the others:
+ * Whether Hydrological units draws the Other water users table with the others:
  * only when the curtailment table doesn't list them already (a run without
  * curtailment targets, engine < 0.22.0), so the page has one copy (issue #137).
  */
 export const usersTableOnSupply = (summary: Pick<RunSummary, 'curtailment'>): boolean => !summary.curtailment?.otherUsers?.length;
 
 /**
- * The run Summary's line pointing at these tables on Units & supply (issue
+ * The run Summary's line pointing at these tables on Hydrological units (issue
  * #137): what the run has, and the panel it is in there. Other uses when it
  * draws any of them; the curtailment targets when the run's only ones are
  * other users and the curtailment table lists them. null with none.
@@ -54,8 +54,8 @@ export function otherUsesLink(summary: Pick<RunSummary, 'landCover' | 'users' | 
 	);
 	if (names.length) {
 		const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-		return { hash: 'res-other-uses', what: list[0]!.toUpperCase() + list.slice(1), where: 'Other uses on Units & supply' };
+		return { hash: 'res-other-uses', what: list[0]!.toUpperCase() + list.slice(1), where: 'Other uses on Hydrological units' };
 	}
-	if (p.users) return { hash: 'res-curtailment', what: 'Other water users', where: 'the curtailment targets on Units & supply' };
+	if (p.users) return { hash: 'res-curtailment', what: 'Other water users', where: 'the curtailment targets on Hydrological units' };
 	return null;
 }

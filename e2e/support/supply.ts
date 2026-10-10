@@ -1,4 +1,4 @@
-// Units & supply (issue #17, docs/ui.md § Units & supply): a synthetic
+// Hydrological units (issue #17, docs/ui.md § Hydrological units): a synthetic
 // catchment where some units get all their demand and others fall short, and
 // opening the page with its tiles and chart drawn. Names and numbers are
 // invented.
@@ -35,7 +35,7 @@ export async function seedSupplyProject(request: APIRequestContext, name: string
 	return { id: project.id, model };
 }
 
-/** Opens Units & supply (with `query`, e.g. `&run=…&unit=…`) and waits for the tiles and the drawn chart. */
+/** Opens Hydrological units (with `query`, e.g. `&run=…&unit=…`) and waits for the tiles and the drawn chart. */
 export async function openSupply(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=supply${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Hydrological units' })).toBeVisible();

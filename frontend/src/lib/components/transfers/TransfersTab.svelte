@@ -179,6 +179,8 @@
 				<!-- One unit for every rule's rates (display only, so a viewer has it too); each rule's title names it. -->
 				<span class="rate-unit"><span aria-hidden="true">Rates in</span> <FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" /></span>
 			</div>
+			<!-- Off the page (the grid modal, override mode) the add sits above the rules, not under them (issue #463); the page's is in its header. -->
+			{#if !page && !readonly}<div class="toolbar grid-actions" data-testid="grid-actions"><button type="button" class="btn" onclick={add}>+ Add transfer</button></div>{/if}
 			<ol class="rule-list" data-testid="transfer-rules">
 				{#each transfers as t, i (t.id)}
 					{@const label = `transfer ${i + 1}`}
@@ -326,7 +328,6 @@
 					</li>
 				{/each}
 			</ol>
-			{#if !page && !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add transfer</button></div>{/if}
 		</section>
 	{/if}
 </div>
@@ -782,9 +783,6 @@
 		}
 	}
 
-	.after {
-		margin: 0.75rem 0 0;
-	}
 	.empty {
 		padding: 1.5rem;
 		text-align: center;

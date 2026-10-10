@@ -24,7 +24,7 @@ test('running the model shows the run with a farm summary and a chart', async ({
 
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
-	// The per-unit table moved to Units & supply (issue #17, supply-page.spec.ts): the run header links there for this run.
+	// The per-unit table moved to Hydrological units (issue #17, supply-page.spec.ts): the run header links there for this run.
 	await expect(summary.getByRole('heading', { name: 'Hydrological units', exact: true })).toHaveCount(0);
 	const runId = new URL(page.url()).searchParams.get('run')!;
 	await expect(page.getByRole('link', { name: 'Hydrological units for this run' })).toHaveAttribute('href', `?tab=supply&run=${runId}`);
@@ -194,7 +194,7 @@ test('the hydrograph view moves through the record by Shift+drag and by Earlier 
 });
 
 test('every daily results chart moves through the record like the hydrograph, and the flow charts share the m³/s ↔ m³/day switch', async ({ page, owner }) => {
-	// EWR vs outflow moved to River & reserve (river-page.spec.ts), and a unit's supply vs demand to Units & supply
+	// EWR vs outflow moved to River & reserve (river-page.spec.ts), and a unit's supply vs demand to Hydrological units
 	// (supply-page.spec.ts), both with the Summary's time windows.
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Chart parity');

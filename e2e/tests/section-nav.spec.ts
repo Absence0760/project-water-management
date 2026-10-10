@@ -1,7 +1,7 @@
 // The shared "On this page" menu (common/SectionNav.svelte, docs/ui.md § On this page): on a laptop or
 // wider its links flow across at most two rows (groups may break across them; as whole blocks, Runs &
 // results took three rows at 1280 px), and what doesn't fit goes into a More menu at the end of the bar.
-// It is on Settings & calibration, Runs & results, River & reserve, Units & supply and Data. Synthetic data.
+// It is on Settings & calibration, Runs & results, River & reserve, Hydrological units and Data. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
@@ -213,7 +213,9 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await openRiver(page, id);
 	const menu = page.getByRole('navigation', { name: 'River sections' });
-	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'EWR by month', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
+	// Findings first, the water account straight after them, the run-it-yourself tools last; Reserve rules met is
+	// listed without a rule table too, as its panel then says what it needs (issue #465).
+	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
 	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
 	// Its group names would take it to a second row at 1440, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
@@ -237,16 +239,17 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	await expect(menu.getByRole('link', { name: 'Seasonal outlook' })).toHaveAttribute('aria-current', 'location');
 });
 
-test('Hydrological units has the menu: the hydrological unit detail and each table, with a jump below it', async ({ page, owner }) => {
+test('Hydrological units has the menu: the unit detail and each table, with a jump below it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedSupplyProject(page.request, 'Menu supply', 6);
 	await createRun(page.request, project.id, 'Baseline');
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await openSupply(page, project.id);
 	const menu = page.getByRole('navigation', { name: 'Hydrological units sections' });
-	await expect(menu.getByRole('link')).toHaveText(['Hydrological unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
+	await expect(menu.getByRole('link')).toHaveText(['Unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
 	expect(await barRows(menu)).toBe(1);
-	await expectNamedGroups(menu, ['Each hydrological unit', 'Tables for this run']);
+	// The unit detail's one link needs no group name (issue #467).
+	await expectNamedGroups(menu, ['Tables for this run']);
 
 	await menu.getByRole('link', { name: 'Assurance of supply' }).click();
 	await expect(page).toHaveURL(/#res-assurance$/);

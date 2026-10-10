@@ -30,11 +30,9 @@
 		fromEpochDay,
 		isGapFillKind,
 		observedAgreement,
-		originLabel,
 		recordFlowFlags,
 		resolveFlowGapFill,
 		resolveQualityFlags,
-		seriesOrigin,
 		rainVsChirps,
 		rainVsChirpsCheck,
 		resolveDataQuality,
@@ -60,7 +58,8 @@
 	import { projectToday } from '$lib/components/projects/freshness';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
-	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
+	import { CHIRPS_CHOICES, describeProvenance, feedMark, provenanceFields, rebuildingNote } from '$lib/series/provenance';
+	import { asksSite, productField, rowSiteMark, siteText, uploadUnitText } from './details';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
 	import { agoText } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
@@ -145,6 +144,8 @@
 		seriesParam && list.some((s) => s.id === seriesParam) ? seriesParam : list.length ? pickDefault(list) : null
 	);
 	const viewing = $derived(list.find((s) => s.id === selectedId) ?? null);
+	// How the Series details show its product (series/details.ts): a CHIRPS select, the words, or no field.
+	const viewingProduct = $derived(viewing ? productField(viewing) : null);
 
 	let previewOpen = $state(false);
 	// The preview dialog is its own chunk (preview.ts pulls in the engine's
@@ -202,7 +203,8 @@
 	const gaugeInUse = $derived(gaugeRecordsInUse(list, gauges));
 	// The gauge calibration scores at (settings.calibrationSiteNodeId, engine ≥ 1.41.0); null = the outlet.
 	const calibrationSite = $derived(settings?.calibrationSiteNodeId ?? null);
-	const siteName = (id: string) => gauges.find((g) => g.id === id)?.name ?? 'a hydrological unit no longer in the model';
+	/** "version not recorded" as a value of its own. */
+	const sentence = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 	const gaugeIds = $derived(new Set(gauges.map((g) => g.id)));
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
@@ -624,56 +626,14 @@
 								{#if s.rebuilding}
 									<span class="rebuilding" data-testid="series-rebuilding" title="A data feed is backfilling a replacement; this series stays as it is until it completes">Being replaced</span>
 								{/if}
-								{#if asksProvenance(s.kind)}
-									{#if readonly}
-										<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
-									{:else}
-										<select
-											class="prov"
-											data-testid="series-provenance"
-											aria-label="Product and version of {s.name || kindLabel(s.kind)}"
-											aria-describedby={saveId(s, 'label')}
-											aria-invalid={saveFailed(saveId(s, 'label')) ? 'true' : undefined}
-											value={labelKey(s)}
-											onchange={(e) => relabel(s, e.currentTarget)}
-										>
-											<option value="">Version not recorded</option>
-											{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
-										</select>
-										{@render saveStatus(saveId(s, 'label'))}
-									{/if}
-								{:else if asksFreeProvenance(s.kind) && seriesProvenance(s)}
-									<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
-								{/if}
 								<!-- The data feed that wrote days of it (031_feed_days), with how many when it wrote only some. -->
 								{#if fed}
 									<span class="prov" data-testid="series-feed">{fed}</span>
 								{/if}
-								<!-- Where the values came from, and a unit conversion at upload (107): only when there is something to say. -->
-								{#if s.source || (s.sourceUnit && s.sourceUnitFactor !== 1)}
-									<span class="prov" data-testid="series-source">{originLabel(seriesOrigin(s), s.unit)}</span>
-								{/if}
-								{#if SITED_KINDS.has(s.kind) && (gauges.length || s.siteNodeId)}
-									{#if readonly}
-										<span class="prov" data-testid="series-site">{s.siteNodeId ? `At gauge ${siteName(s.siteNodeId)}` : 'At the outlet'}</span>
-									{:else}
-										<select
-											class="prov"
-											data-testid="series-site"
-											aria-label="Where {s.name || kindLabel(s.kind)} was measured"
-											aria-describedby={saveId(s, 'site')}
-											aria-invalid={saveFailed(saveId(s, 'site')) ? 'true' : undefined}
-											value={s.siteNodeId ?? ''}
-											onchange={(e) => moveSite(s, e.currentTarget)}
-										>
-											<option value="">At the outlet</option>
-											{#each gauges as g (g.id)}<option value={g.id}>At gauge {g.name}</option>{/each}
-											{#if s.siteNodeId && !gauges.some((g) => g.id === s.siteNodeId)}
-												<option value={s.siteNodeId} disabled>At a hydrological unit no longer in the model</option>
-											{/if}
-										</select>
-										{@render saveStatus(saveId(s, 'site'))}
-									{/if}
+								<!-- A flow record placed at a gauge says which; the product, where measured, source and upload unit are
+								     the Series details under the chart (issue #464), so the row stays short. -->
+								{#if rowSiteMark(s, gauges)}
+									<span class="prov" data-testid="series-site">{rowSiteMark(s, gauges)}</span>
 								{/if}
 								{#if s.dayBoundary}
 									<!-- In words, not a hover title: a day added up from sub-daily readings in these windows. -->
@@ -762,29 +722,92 @@
 		{:else}
 			<div class="chart-ph" role="status">Loading series…</div>
 		{/if}
-		<!-- The charted series' source and given unit (107_series_source.sql); an editor records the source here. -->
-		<div class="origin" data-testid="series-origin">
-			{#if readonly}
-				<span>Source: {viewing.source ?? 'not recorded'}</span>
-			{:else}
-				<label for="series-source-input">Source</label>
-				{#key viewing.id}
-					<input
-						id="series-source-input"
-						maxlength="200"
-						placeholder="Not recorded: e.g. DWS X1H001, farm logger file"
-						aria-describedby={saveId(viewing, 'source')}
-						aria-invalid={saveFailed(saveId(viewing, 'source')) ? 'true' : undefined}
-						value={viewing.source ?? ''}
-						onchange={(e) => resource(viewing, e.currentTarget)}
-					/>
-					{@render saveStatus(saveId(viewing, 'source'))}
-				{/key}
-			{/if}
-			<span class="muted" data-testid="series-given-unit">
-				{viewing.sourceUnit ? `Uploaded in ${viewing.sourceUnit}${viewing.sourceUnitFactor !== 1 ? `, converted to ${viewing.unit} (× ${viewing.sourceUnitFactor})` : ''}` : 'Upload unit not recorded'}
-			</span>
-			<HelpTip key="series-source" />
+		<!-- Series details (issue #464): the charted series' product, where it was measured, source and upload unit,
+		     each under a visible label; the ones an editor sets save on change. Keyed, so a failed save's
+		     reverted value or a half-typed source never carries over to the next series picked. -->
+		<div class="details" role="group" aria-labelledby="details-h" data-testid="series-details">
+			<!-- The tip beside the heading, not in it, so the group is named "Series details" alone. -->
+			<div class="details-h"><h3 id="details-h">Series details</h3><HelpTip key="series-source" /></div>
+			{#key viewing.id}
+				<dl class="details-list">
+					{#if viewingProduct}
+						<div class="detail">
+							{#if viewingProduct === 'chirps' && !readonly}
+								<dt><label for="series-product-input">Product</label></dt>
+								<dd>
+									<select
+										id="series-product-input"
+										data-testid="series-provenance"
+										aria-describedby={saveId(viewing, 'label')}
+										aria-invalid={saveFailed(saveId(viewing, 'label')) ? 'true' : undefined}
+										value={labelKey(viewing)}
+										onchange={(e) => relabel(viewing, e.currentTarget)}
+									>
+										<option value="">Version not recorded</option>
+										{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+									</select>
+									{@render saveStatus(saveId(viewing, 'label'))}
+								</dd>
+							{:else}
+								<dt>Product</dt>
+								<dd data-testid="series-provenance">{sentence(describeProvenance(viewing))}</dd>
+							{/if}
+						</div>
+					{/if}
+					{#if asksSite(viewing, gauges)}
+						<div class="detail">
+							{#if readonly}
+								<dt>Measured at</dt>
+								<dd data-testid="series-measured-at">{siteText(viewing.siteNodeId, gauges)}</dd>
+							{:else}
+								<dt><label for="series-site-input">Measured at</label></dt>
+								<dd>
+									<select
+										id="series-site-input"
+										data-testid="series-measured-at"
+										aria-describedby={saveId(viewing, 'site')}
+										aria-invalid={saveFailed(saveId(viewing, 'site')) ? 'true' : undefined}
+										value={viewing.siteNodeId ?? ''}
+										onchange={(e) => moveSite(viewing, e.currentTarget)}
+									>
+										<option value="">{siteText(null, gauges)}</option>
+										{#each gauges as g (g.id)}<option value={g.id}>{siteText(g.id, gauges)}</option>{/each}
+										{#if viewing.siteNodeId && !gauges.some((g) => g.id === viewing.siteNodeId)}
+											<option value={viewing.siteNodeId} disabled>{siteText(viewing.siteNodeId, gauges)}</option>
+										{/if}
+									</select>
+									{@render saveStatus(saveId(viewing, 'site'))}
+								</dd>
+							{/if}
+						</div>
+					{/if}
+					<div class="detail detail-source">
+						{#if readonly}
+							<dt>Source</dt>
+							<dd data-testid="series-source">{viewing.source ?? 'Not recorded'}</dd>
+						{:else}
+							<dt><label for="series-source-input">Source</label></dt>
+							<dd>
+								<input
+									id="series-source-input"
+									data-testid="series-source"
+									maxlength="200"
+									placeholder="Not recorded: e.g. DWS X1H001, farm logger file"
+									aria-describedby={saveId(viewing, 'source')}
+									aria-invalid={saveFailed(saveId(viewing, 'source')) ? 'true' : undefined}
+									value={viewing.source ?? ''}
+									onchange={(e) => resource(viewing, e.currentTarget)}
+								/>
+								{@render saveStatus(saveId(viewing, 'source'))}
+							</dd>
+						{/if}
+					</div>
+					<div class="detail">
+						<dt>Upload unit</dt>
+						<dd data-testid="series-given-unit">{uploadUnitText(viewing)}</dd>
+					</div>
+				</dl>
+			{/key}
 		</div>
 	</section>
 {/if}
@@ -803,8 +826,8 @@
 {#if hasChecks}
 	<section class="panel" id="data-checks" aria-labelledby="chk-h" data-testid="series-checks">
 		<div class="panel-head">
+			<!-- What the checks look for is the ⓘ's (issue #464), not a line under the heading. -->
 			<h2 id="chk-h">Data checks <HelpTip key="data-quality-limits" label="About the data checks" /></h2>
-			<span class="muted small">Negative values, outliers, flat stretches, catchment rain that looks missing but reads 0, and changes in its ratio to CHIRPS. Runs list the same checks as warnings.</span>
 		</div>
 		{#if checks.length}
 			<ul class="checks">
@@ -889,17 +912,50 @@
 		font-size: 0.75rem;
 		max-width: 100%;
 	}
-	/* The charted series' source (107_series_source.sql): saved on change, like the product select. */
-	.origin {
+	/* Series details (issue #464): the charted series' product, where measured, source and upload unit, one labelled
+	   field each across the chart's foot, wrapping to a column in a narrow page. */
+	.details {
+		margin-top: 0.75rem;
+		padding-top: 0.6rem;
+		border-top: 1px solid var(--border);
+	}
+	.details-h {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.25rem 0.6rem;
-		margin-top: 0.5rem;
+		gap: 0.25rem;
+		margin: 0 0 0.4rem;
+	}
+	.details-h h3 {
+		margin: 0;
+		font-size: 0.9rem;
+	}
+	.details-list {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+		gap: 0.5rem 1rem;
+		margin: 0;
 		font-size: 0.85rem;
 	}
-	.origin input {
-		flex: 1 1 16rem;
+	.detail-source {
+		grid-column: span 2;
+	}
+	@container data-page (max-width: 640px) {
+		.detail-source {
+			grid-column: auto;
+		}
+	}
+	.detail dt {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text-2);
+	}
+	.detail dd {
+		margin: 0.15rem 0 0;
+		overflow-wrap: anywhere;
+	}
+	.detail select,
+	.detail input {
+		width: 100%;
 		max-width: 28rem;
 	}
 	.role-line {
@@ -938,9 +994,6 @@
 	.save-st.err {
 		color: var(--danger);
 		font-weight: 600;
-	}
-	.origin .save-st {
-		flex-basis: 100%;
 	}
 	.role.unused {
 		background: var(--surface-2);

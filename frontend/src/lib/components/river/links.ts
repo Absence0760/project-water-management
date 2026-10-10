@@ -2,16 +2,16 @@
 // Summary and Runs & results can link here without pulling the page's
 // helpers into their chunks.
 
-/** The panels' ids, in page order: they were Runs & results' River & Reserve group (runs/sections.ts). */
+/** The panels' ids, in page order (findings, then the tools, issue #465): they were Runs & results' River & Reserve group (runs/sections.ts). */
 export const RIVER_ANCHORS = [
 	'res-ewr',
 	'res-reserve-years',
 	'res-reserve',
 	'res-ewr-grid',
+	'res-water-account',
 	'res-uncertainty',
 	'res-outcomes',
-	'res-outlook',
-	'res-water-account'
+	'res-outlook'
 ] as const;
 
 /** True for a `#res-…` fragment that now lives on River & reserve (without the `#`). */

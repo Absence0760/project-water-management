@@ -35,7 +35,8 @@
 		site: initialSite = 'outlet',
 		print = false,
 		headlineNote = '',
-		daily = 'the pragmatic EWR'
+		daily = 'the pragmatic EWR',
+		title = 'EWR compliance by month'
 	}: {
 		compliance: EwrCompliance | undefined | null;
 		/** The site shown first: 'outlet' or a farm's node id. */
@@ -46,6 +47,8 @@
 		headlineNote?: string;
 		/** The outlet's daily test by name (ewr/notMet.ts dailyEwrName; engine ≥ 1.77.0 it can be a DRM table). */
 		daily?: string;
+		/** The heading. River & reserve calls it "Days below the EWR, by month", apart from Reserve compliance (issue #465). */
+		title?: string;
 	} = $props();
 
 	const uid = $props.id();
@@ -128,7 +131,7 @@
 
 <section class="ewr-heatmap" aria-labelledby="{uid}-h">
 	<div class="head">
-		<h3 id="{uid}-h">EWR compliance by month{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''} <HelpTip key="ewr-days-not-met" /></h3>
+		<h3 id="{uid}-h">{title}{print && grid ? `: ${site === 'outlet' ? `outlet (${grid.name})` : `${grid.name} (EWR charge)`}` : ''} <HelpTip key="ewr-days-not-met" /></h3>
 		{#if compliance && grids.length && !print}
 			<div class="controls">
 				<div class="field inline">

@@ -1,4 +1,4 @@
-// Units & supply (issue #17, option A · Outcomes): how much of each unit's
+// Hydrological units (issue #17, option A · Outcomes): how much of each unit's
 // irrigation demand one run supplied. A card per unit, worst supplied first,
 // banded as the Summary's Supply by unit and the Network's supply colours
 // (network/supplyColour.ts), four headline tiles, and the links into the
@@ -241,7 +241,8 @@ export function cardFacts(c: UnitCard, weekDays: number, weekEnd: DataEnd | null
  */
 export function supplyNav(otherUses: boolean, restrictions = false): NavGroup[] {
 	return [
-		{ label: 'Each hydrological unit', sections: [{ id: 'res-farm', label: 'Hydrological unit detail' }] },
+		// One link needs no group name (issue #467: "Each hydrological unit → Hydrological unit detail" was wordy).
+		{ label: null, sections: [{ id: 'res-farm', label: 'Unit detail' }] },
 		{
 			label: 'Tables for this run',
 			sections: [

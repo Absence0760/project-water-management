@@ -3,7 +3,7 @@
 // setting"; Settings starts a rule from the WUA's published notice, reads each
 // unit's own dam and adds an EWR trigger; an editor replaces it with an
 // outlook's review triggers (asked first; the panel then says it is the
-// rule); a run under it shows the Units & supply tables (axe, and no sideways
+// rule); a run under it shows the Hydrological units tables (axe, and no sideways
 // scroll at phone width), and the printable report shows them too.
 //
 // Synthetic catchment (support/api.ts sampleModel): twelve water years of
@@ -100,7 +100,7 @@ test('a scenario sets a restriction rule; the outlook’s triggers become the pr
 	expect(rule.liftDates).toEqual(['05-01']);
 	expect(rule.levels.length).toBeGreaterThan(0);
 
-	// A run under the rule: its tables on Units & supply.
+	// A run under the rule: its tables on Hydrological units.
 	const restrictedRun = await createRun(page.request, project.id, 'Restricted');
 	await page.goto(`/projects/${project.id}?tab=supply&run=${restrictedRun}#res-restrictions`);
 	const section = page.locator('#res-restrictions');

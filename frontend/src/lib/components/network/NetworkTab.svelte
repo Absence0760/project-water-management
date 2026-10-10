@@ -31,7 +31,7 @@
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
 	import NodeCard from './NodeCard.svelte';
 	import NodeDetail from './NodeDetail.svelte';
-	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
+	import { TABLES_MENU, withParam, withoutParam } from '$lib/workspace/overlays';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
@@ -414,13 +414,6 @@
 	});
 	const latestSupply = $derived(latestRun && supplyRun?.id === latestRun.id ? supplyByNode(nodes, supplyRun.summary) : null);
 	const latestName = $derived(latestRun ? latestRun.label || fmtDate(latestRun.createdAt, true) : null);
-	const GRID_LINKS: [GridId, string][] = [
-		['crop-factors', 'Crop factors'],
-		['planted-areas', 'Planted areas'],
-		['transfers', 'Transfers'],
-		['demands', 'Demands']
-	];
-	const GRID_ALL: [GridId, string][] = [['nodes', 'Hydrological unit table'], ...GRID_LINKS];
 	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
 	// The Tables menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
@@ -549,7 +542,7 @@
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
 		<div class="grids-pop" role="group" aria-label="Open as a table">
-			{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>
 	{#if !readonly}
@@ -632,6 +625,18 @@
 				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Settings &amp; calibration</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
 				<span class="wide-only">The help buttons beside each heading and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
+			<!-- The grid's actions above it, not under a long table and field guide where they went unseen (issue #463, as #461 did for the EWR settings). -->
+			{#if !readonly}
+				<div class="toolbar grid-actions" data-testid="grid-actions">
+					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add hydrological unit</button>
+					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
+					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
+						Sort by flow path
+					</button>
+					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
+					{#if outletCount === 1}<span class="muted small">New hydrological units drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
+				</div>
+			{/if}
 			<div class="table-wrap net-wrap">
 				<table class="data compact net">
 					<thead>
@@ -782,17 +787,6 @@
 					</tfoot>
 				</table>
 			</div>
-			{#if !readonly}
-				<div class="toolbar after">
-					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add hydrological unit</button>
-					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
-					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
-						Sort by flow path
-					</button>
-					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
-					{#if outletCount === 1}<span class="muted small">New hydrological units drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
-				</div>
-			{/if}
 			<details class="guide">
 				<summary>Field guide</summary>
 				<dl>
@@ -1194,9 +1188,6 @@
 	}
 	.warn {
 		color: var(--warning);
-	}
-	.after {
-		margin: 0.75rem 0 0;
 	}
 	.guide {
 		margin-top: 0.75rem;

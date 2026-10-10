@@ -10,10 +10,12 @@
 	run is listed with what differs in its rule. An editor starts a new one
 	(the server resolves the options and the database draws the seed, then the
 	calibration worker runs it and the server checks it before storing);
-	anyone can re-run a stored one in their browser to reproduce it.
+	anyone can re-run a stored one in their browser to reproduce it. A run
+	with no ensemble shows one row (common/ToolRow, issue #465) until an
+	editor presses Run…, which opens the form with focus on its first field.
 -->
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import {
 		ENSEMBLE_DEFAULTS,
 		ENSEMBLE_MEMBERS_MAX,
@@ -29,6 +31,7 @@
 	import { api, type Ensemble, type EnsembleDetail } from '$lib/api';
 	import { FitCancelled, startEnsemble, type EnsembleHandle } from '$lib/calibration/runner';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import ToolRow from '$lib/components/common/ToolRow.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
 	import BandFdcChart from './BandFdcChart.svelte';
@@ -152,6 +155,15 @@
 	}
 
 	const busy = $derived(phase !== 'idle');
+
+	// Never run on this run (nothing started, nothing loading wrong): one row until the editor opens the form (issue #465).
+	let opened = $state(false);
+	const collapsed = $derived(!opened && !loadError && (loading || list.length === 0) && phase === 'idle' && !actionError);
+	async function open() {
+		opened = true;
+		await tick();
+		document.getElementById(`${uid}-n`)?.focus();
+	}
 	const engineNote = $derived(
 		shown && shown.engineVersion !== runEngineVersion
 			? `This run was made by engine ${runEngineVersion}; the ensemble ran on engine ${shown.engineVersion}, so member 0 may differ slightly from the run's own figures.`
@@ -169,6 +181,13 @@
 </script>
 
 <section aria-labelledby="{uid}-h" data-testid="uncertainty-panel">
+	{#if collapsed}
+		<ToolRow headingId="{uid}-h" title="Uncertainty bands" help="uncertainty-bands" purpose="How far this run’s results move across every parameter set, rain source and record the data can’t rule out.">
+			{#snippet action()}
+				{#if canEdit}<button type="button" class="btn" aria-describedby="{uid}-h" onclick={open}>Run…</button>{:else}<span>{loading ? 'Loading…' : 'Not run yet: an editor can run one.'}</span>{/if}
+			{/snippet}
+		</ToolRow>
+	{:else}
 	<h3 id="{uid}-h">Uncertainty bands <HelpTip key="uncertainty-bands" /></h3>
 	<p class="muted small">
 		How far this run's results move across every parameter set, pan coefficient, rain source and observed record the data can't rule out: a behavioural
@@ -427,6 +446,7 @@
 	{/if}
 	{#each startNotes as n (n)}<p class="muted small">{n}</p>{/each}
 	{#if actionError}<div class="alert alert-error" role="alert">{actionError}</div>{/if}
+	{/if}
 </section>
 
 <style>

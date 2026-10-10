@@ -193,6 +193,7 @@ test('3. signing an evidence pack with a code over 10 minutes old: “Email me a
 	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the fresh-code test');
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const ensemble = page.getByTestId('uncertainty-panel');
+	await ensemble.getByRole('button', { name: 'Run…' }).click();
 	await ensemble.getByLabel('Parameter sets').fill('30');
 	await ensemble.getByLabel(/^Lowest skill kept/).fill('-10');
 	await ensemble.getByLabel('Worst WR2012 flag kept').selectOption('unusable');

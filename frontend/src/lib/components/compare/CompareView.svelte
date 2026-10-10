@@ -528,7 +528,7 @@
 		{#if loaded.length}
 			<div class="summary-grid">
 				<section class="panel outcomes" aria-labelledby="outcomes-h-t" aria-busy={cmp.b.loading || cmp.c.loading}>
-					<h2 id="outcomes-h"><span id="outcomes-h-t">What changes</span> <HelpTip key="run-comparison" label="About comparing runs" /></h2>
+					<h2 id="outcomes-h"><span id="outcomes-h-t">What the change does</span> <HelpTip key="run-comparison" label="About comparing runs" /></h2>
 					<div class="table-wrap">
 						<table class="data outcomes-table">
 							<caption class="visually-hidden">Headline outcomes of the baseline and each what-if, with each what-if's change from the baseline</caption>
@@ -671,7 +671,7 @@
 
 				<section class="panel" aria-labelledby="changes-h-t">
 					<div class="panel-head">
-						<h2 id="changes-h"><span id="changes-h-t">What changed</span> <HelpTip key="input-diff" label="About the input differences" /></h2>
+						<h2 id="changes-h"><span id="changes-h-t">Inputs that differ</span> <HelpTip key="input-diff" label="About the input differences" /></h2>
 						<span class="muted small">{data.changes.length} difference{data.changes.length === 1 ? '' : 's'} in the inputs</span>
 					</div>
 					{#if data.attribution}
@@ -685,7 +685,7 @@
 
 				<section class="panel" aria-labelledby="headline-h">
 					<div class="panel-head"><h2 id="headline-h">Headline results</h2></div>
-					<!-- The water balance rows are What changes' (issue #175): here only the calibration and WR2012 checks. -->
+					<!-- The water balance rows are What the change does' (issue #175): here only the calibration and WR2012 checks. -->
 					<HeadlineDeltas comparison={data.comparison} water={false} />
 					<FitValidationCompare
 						a={asFitRecord(data.a.run.inputs.settings?.fitRecord)}

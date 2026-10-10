@@ -47,7 +47,7 @@
 	import { hasForecastRain, runBlockers } from './runReady';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
-	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Units & supply
+	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
 	// with the other unit panels (issue #17).
 	// The plausibility checks (engine ≥ 0.25.0) render for every run that has them, which is every
 	// run since, so they are in this chunk too (tab chunks have their own ceiling,
@@ -186,7 +186,7 @@
 		}
 	}
 	onMount(() => {
-		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …) or Units & supply
+		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …) or Hydrological units
 		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
 		// groups left here for a while (#res-river, #res-units), issue #17: there instead, for the same
 		// run (and reporting window), replacing this entry so Back skips it.

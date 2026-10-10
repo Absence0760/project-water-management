@@ -47,11 +47,11 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await page.getByLabel(/^Run label/).fill('With town');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With town' })).toBeVisible();
-	// Other water users are listed once (issue #137), in the curtailment report on Units & supply (since
+	// Other water users are listed once (issue #137), in the curtailment report on Hydrological units (since
 	// issue #17): the Summary no longer draws its own table, and links there.
 	await expect(page.locator('table.users')).toHaveCount(0);
 	const toUsers = page.getByTestId('other-uses-link');
-	await expect(toUsers).toHaveText('Other water users: the curtailment targets on Units & supply.');
+	await expect(toUsers).toHaveText('Other water users: the curtailment targets on Hydrological units.');
 	await toUsers.getByRole('link').click();
 	await expect(page).toHaveURL(/[?&]tab=supply\b.*#res-curtailment$/);
 	// Apart from the units, not curtailed (senior), with its demand and the share of it supplied.

@@ -446,6 +446,15 @@ section it belongs to, with the example that taught it.
   panels' buttons') and below the fields (`uncertainty.spec.ts`,
   `outcome-matrix.spec.ts`, `seasonal-outlook.spec.ts`). A one-field lookup
   inside a table toolbar (Self-checks' Trace) is not this shape.
+- **Findings first; a tool nobody has run is one row.** River & reserve
+  split its findings with three run-it-yourself tools, each a paragraph and
+  a form, so the water account ended up last (issue #465). Put what the
+  page found first, group the tools after it under their own heading, and
+  show an unrun tool as one row (`common/ToolRow.svelte`: name, ⓘ, one
+  line of purpose, **Run…** at the end, which opens the form with focus on
+  its first field). A panel that only exists with some setting gets a
+  one-line stub saying what it needs and where to set it, rather than
+  vanishing.
 - **A map's tools go on the map; the header keeps the page's actions.**
   The Map's header carried Measure, Draw a shape, Place a point, Delineate,
   Trace a dam, Upload GeoJSON and Add data as seven identical buttons that
@@ -725,6 +734,7 @@ section it belongs to, with the example that taught it.
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
+| A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
@@ -942,6 +952,14 @@ Interaction details that bit:
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
   under it and Close pinned (`notes/NotesDrawer.svelte`).
+- **A grid's actions go above it, in one row.** The node table, the crop
+  grids and the Demands grid put add, sort, paste, load and download after
+  the rows, the totals and a field guide, so the operator didn't find a file
+  load under a 12-row grid (issue #463, after #461 moved the EWR settings'
+  file load first). Each grid now has one `toolbar grid-actions` row between
+  its one-line intro and its first row; pin it with `expectAbove`
+  (`e2e/support/reflow.ts`: above on screen and first in the focus order).
+  Notes about what's in the table (totals, a CSV's unit) stay under it.
 - **Don't disable a control while its own change saves.** The alert emails
   page disabled each catchment's fieldset during a save, so an arrow key on
   a radio moved the choice and then threw the keyboard's focus to the page.

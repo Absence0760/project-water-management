@@ -44,8 +44,8 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	await expect(page.getByRole('heading', { level: 2, name: 'Pumping' })).toBeVisible();
 	// The run warns about the calibration record measured while they pumped.
 	await expect(page.getByText(/boreholes that deplete the river/).first()).toBeAttached();
-	// The table is on Units & supply's Other uses (issue #137), linked from the Summary.
-	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	// The table is in Other uses on Hydrological units (issue #137), linked from the Summary.
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Hydrological units' }).click();
 	const uses = page.getByRole('region', { name: 'Other uses of water' });
 	await expect(uses.getByRole('heading', { level: 3, name: 'Groundwater' })).toBeVisible();
 	// One table (issue #175): the daily-mean one's share of supplied and stream depletion are columns of the annual table.
@@ -106,7 +106,7 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	await page.getByLabel(/^Run label/).fill('Capped');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Capped' })).toBeVisible();
-	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Hydrological units' }).click();
 	const uses = page.getByRole('region', { name: 'Other uses of water' });
 	await expect(uses.getByRole('heading', { level: 4, name: 'Groundwater by water year' })).toBeVisible();
 	await expect(uses.getByTestId('gw-annual-note')).toContainText('never decides whether a use is lawful');

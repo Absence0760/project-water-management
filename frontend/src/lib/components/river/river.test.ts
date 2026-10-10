@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
-import { ewrRuleText, perYear, pickRiverRun, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
+import { EWR_MONTHS_HEADING, ewrRuleText, perYear, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
 	id,
@@ -56,14 +56,19 @@ describe('riverHref and riverAnchor', () => {
 });
 
 describe('riverNavGroups', () => {
-	const ids = (hasReserve: boolean) => riverNavGroups(hasReserve, hasReserve).flatMap((g) => g.sections.map((s) => s.id));
-	const flowLabel = (hasReserve: boolean, ruleLine: boolean) => riverNavGroups(hasReserve, ruleLine)[0]!.sections.find((s) => s.id === 'res-ewr')!.label;
+	const ids = (ruleTable: boolean) => riverNavGroups(ruleTable, ruleTable).flatMap((g) => g.sections.map((s) => s.id));
+	const flowLabel = (ruleTable: boolean, ruleLine: boolean) => riverNavGroups(ruleLine, ruleTable)[0]!.sections.find((s) => s.id === 'res-ewr')!.label;
 	it('links every panel in page order, and only panels the page anchors', () => {
 		expect(ids(true)).toEqual([...RIVER_ANCHORS]);
 		for (const id of ids(true)) expect(riverAnchor(id)).toBe(true);
 	});
-	it('leaves out Reserve compliance when the run has none (the page has no such panel then)', () => {
-		expect(ids(false)).toEqual(RIVER_ANCHORS.filter((id) => id !== 'res-reserve'));
+	it('keeps Reserve rules met without a rule table: its panel then says what it needs (issue #465)', () => {
+		expect(ids(false)).toEqual([...RIVER_ANCHORS]);
+	});
+	it('puts the findings first, the water account straight after them, and the run-it-yourself tools last (issue #465)', () => {
+		expect(riverNavGroups(false, false).map((g) => g.label)).toEqual(['The reserve', 'Water balance', 'How sure, and what if']);
+		const labels = riverNavGroups(false, false).flatMap((g) => g.sections.map((s) => s.label));
+		expect(labels).toEqual(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
 	});
 	it('names the flow chart as its heading does: "Flow vs reserve" unless a rule table elsewhere leaves it only the pragmatic EWR (issue #177)', () => {
 		expect(flowLabel(false, false)).toBe('Flow vs reserve');
@@ -71,9 +76,23 @@ describe('riverNavGroups', () => {
 		expect(flowLabel(true, false)).toBe('Flow vs pragmatic EWR');
 	});
 	it('names the flow chart by the headline’s test, and keeps Reserve compliance, when the project judges by the pragmatic EWR (issue #444)', () => {
-		const groups = riverNavGroups(true, false, false);
+		const groups = riverNavGroups(false, false);
 		expect(groups[0]!.sections.find((s) => s.id === 'res-ewr')!.label).toBe('Flow vs reserve');
 		expect(groups.flatMap((g) => g.sections.map((s) => s.id))).toContain('res-reserve');
+	});
+});
+
+describe('the monthly panels and the Reserve stub (issue #465)', () => {
+	it('names the two monthly panels apart', () => {
+		expect(RESERVE_MONTHS_HEADING).toBe('Reserve rules met, by month');
+		expect(EWR_MONTHS_HEADING).toBe('Days below the EWR, by month');
+	});
+	it('without a rule table in the project, says one is needed and links to where it is set', () => {
+		expect(reserveStubText(false, true)).toEqual({ lead: 'Needs a Reserve rule table:', link: 'set one in Settings → Reserve rule tables' });
+		expect(reserveStubText(false, false).link).toBe('an editor sets one in Settings → Reserve rule tables');
+	});
+	it('with one the run lacks, says a new run shows it (nothing to set)', () => {
+		expect(reserveStubText(true, true)).toEqual({ lead: 'This run was made without the project’s Reserve rule table. Run the model again to see it.', link: null });
 	});
 });
 

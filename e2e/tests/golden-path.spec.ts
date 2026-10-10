@@ -237,7 +237,7 @@ test('crops and a transfer, entered through the UI, feed a run and each unit’s
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(runsList(page).getByRole('button', { name: /^Catchment D with crops/ })).toHaveAttribute('aria-current', 'true');
 
-	// --- each unit's results, on Units & supply for the same run (issue #17) ----------
+	// --- each unit's results, on Hydrological units for the same run (issue #17) ----------
 	await page.getByRole('link', { name: 'Hydrological units for this run' }).click();
 	const farms = page.getByRole('region', { name: 'Hydrological unit results' }).getByRole('table');
 	for (const f of ['Ridge farm', 'Middle farm', 'River farm']) {

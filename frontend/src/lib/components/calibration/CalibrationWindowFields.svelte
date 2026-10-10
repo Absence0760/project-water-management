@@ -94,13 +94,13 @@
 			<p class="hint muted" id="{uid}-site-hint">
 				At a gauge inside the network, a fit scores the simulated flow there against that gauge's record. The gauged ranges and gap
 				filling below are the outlet records', so they don't apply to it. A run scores its calibration statistics here too; the
-				outlet's EWR test stays the outlet's.{#if dataHref}{' '}A record is placed at a gauge on the <a href={dataHref}>Data tab</a>, where it was measured.{/if}
+				outlet's EWR test stays the outlet's.{#if dataHref}{' '}A record is placed at a gauge by its <strong>Measured at</strong>, in Series details on the <a href={dataHref}>Data tab</a>.{/if}
 			</p>
 		</div>
 	{:else if dataHref && !readonly}
 		<!-- No gauge has a record of its own yet: say where one is placed, or the choice never appears. -->
 		<p class="hint muted" data-testid="calibration-site-how">
-			Scored at the outlet. To score at a gauge inside the network, set where its flow record was measured on the <a href={dataHref}>Data tab</a>.
+			Scored at the outlet. To score at a gauge inside the network, set its flow record's <strong>Measured at</strong> in Series details on the <a href={dataHref}>Data tab</a> (the gauge has to be in the network, above the outlet).
 		</p>
 	{/if}
 	<div class="field">

@@ -21,18 +21,19 @@ test('a flow record uploaded in l/s says so, and an editor records where it came
 	await expect(uploadedNote(page)).toContainText('Uploaded 10 days');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Flow — observed gauge' });
-	await expect(row.getByTestId('series-source')).toHaveText('DWS X1H001 · given in l/s (× 0.001 to m³/s)');
-	// The charted series: its given unit, and the source an editor records on change.
+	// The charted series' Series details (issue #464): its upload unit, and the source an editor records on change.
+	// The row itself stays short: source and unit are only under the chart.
+	await expect(row.getByTestId('series-source')).toHaveCount(0);
 	await row.getByRole('button', { name: 'View', exact: true }).click();
-	const origin = page.getByTestId('series-origin');
-	await expect(origin.getByTestId('series-given-unit')).toHaveText('Uploaded in l/s, converted to m³/s (× 0.001)');
-	const source = origin.getByRole('textbox', { name: 'Source' });
+	const details = page.getByRole('group', { name: 'Series details' });
+	await expect(details.getByTestId('series-given-unit')).toHaveText('l/s, converted to m³/s (× 0.001)');
+	const source = details.getByRole('textbox', { name: 'Source' });
 	await expect(source).toHaveValue('DWS X1H001');
 	await source.fill('DWS X1H001 (daily means)');
 	await source.press('Enter');
-	await expect(row.getByTestId('series-source')).toHaveText('DWS X1H001 (daily means) · given in l/s (× 0.001 to m³/s)');
+	await expect(details.getByTestId('save-status')).toHaveText('Saved');
 	await page.reload();
-	await expect(page.getByTestId('series-origin').getByRole('textbox', { name: 'Source' })).toHaveValue('DWS X1H001 (daily means)');
+	await expect(page.getByRole('group', { name: 'Series details' }).getByRole('textbox', { name: 'Source' })).toHaveValue('DWS X1H001 (daily means)');
 });
 
 test('the Data tab shades the gap days a run fills, and Settings turns the filling on', async ({ page, owner }) => {

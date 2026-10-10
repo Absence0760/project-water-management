@@ -1129,7 +1129,7 @@ and the other farm's unchanged) and `e2e/tests/scenario-ewr-rule.spec.ts`
 (Set an EWR site's rule table through the form: the outlet, a table with
 no source refused in the Settings form's words, a desktop estimate added,
 described with its confidence line and a baseline assumption even with every
-node the proposer's, run, and the compare page's overrides and What changed
+node the proposer's, run, and the compare page's overrides and Inputs that differ
 showing it; the catchment's settings untouched; axe) and
 `e2e/tests/scenario-later-ops.spec.ts` (engine ≥ 1.35.0: Lower farm moved
 to drain into Upper farm, a weir dam inserted above the gauge taking Upper

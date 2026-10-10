@@ -1,5 +1,5 @@
 // The "On this page" menu shared by the long workspace pages (SectionNav.svelte):
-// Settings & calibration, Runs & results, River & reserve, Units & supply and Data.
+// Settings & calibration, Runs & results, River & reserve, Hydrological units and Data.
 
 export interface NavSection {
 	id: string;

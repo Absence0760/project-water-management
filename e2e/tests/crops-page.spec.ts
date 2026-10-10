@@ -176,10 +176,17 @@ test('the Tables menu and Edit areas open the full grids over the page; a farm o
 	await expectNoViolations(page);
 	await closeModal(page);
 
-	// The menu holds the two crop grids and the irrigation systems: the demand table is on the page, behind Show table (issue #174).
+	// The menu names every grid, in the order the Network's does (issue #463).
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas', 'Irrigation systems', 'Demands']);
+	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText([
+		'Hydrological unit table',
+		'Crop factors',
+		'Planted areas',
+		'Irrigation systems',
+		'Transfers',
+		'Demands'
+	]);
 	// The menu closes on Escape, focus back on its button.
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();

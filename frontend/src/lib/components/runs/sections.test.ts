@@ -70,7 +70,7 @@ describe('resultGroups', () => {
 });
 
 describe('movedHref', () => {
-	it('sends a moved panel to its page with the run, and the reporting window to Units & supply', () => {
+	it('sends a moved panel to its page with the run, and the reporting window to Hydrological units', () => {
 		expect(movedHref('res-ewr-grid', 'r1')).toBe('?tab=river&run=r1#res-ewr-grid');
 		expect(movedHref('res-curtailment', 'r1', 'last7')).toBe('?tab=supply&run=r1&window=last7#res-curtailment');
 		expect(movedHref('res-assurance', null)).toBe('?tab=supply#res-assurance');

@@ -81,7 +81,7 @@ export const resultSections = (summary: SectionInput): ResultSection[] => result
 
 /**
  * Where a `#res-…` fragment on Runs & results now lives, when it moved: a panel
- * of River & reserve or Units & supply (the same panel there, keeping the run
+ * of River & reserve or Hydrological units (the same panel there, keeping the run
  * and the curtailment's reporting window), or the link rows those groups left
  * here for a while (`#res-river`, `#res-units`: the page itself). null for a
  * panel that is still on this page.

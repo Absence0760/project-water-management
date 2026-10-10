@@ -221,11 +221,10 @@
 			<span class="muted small">Water year, October → September</span>
 		</div>
 	{/if}
-	<p class="muted small intro">
+	<!-- One line: what a factor is and isn't; the FAO Kc conversion is in the ⓘ and the glossary (issue #463). -->
+	<p class="muted small intro" data-testid="crop-factors-intro">
 		{#if inModal}Water year, October → September. <HelpTip key="crop.cropFactor" />{/if}
-		A crop factor scales monthly A-pan evaporation to the crop's water use: gross irrigation need (mm) = A-pan × crop
-		factor. It is <strong>× A-pan, not an FAO Kc</strong>: FAO-56 Kc values multiply reference ET₀, about 0.6–0.85 × pan (0.35–0.85 in FAO-56 Table 5), so
-		multiply a published Kc by the pan coefficient before entering it. Use 0 for months the crop isn't irrigated.
+		Gross irrigation need (mm) = A-pan × crop factor: <strong>× A-pan, not an FAO Kc</strong>. 0 is a month the crop isn't irrigated.
 	</p>
 	{#if crops.length === 0}
 		<div class="empty">
@@ -233,6 +232,14 @@
 			{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
 		</div>
 	{:else}
+		<!-- The grid's actions above it, not under up to 30 crop rows (issue #463, as #461 did for the EWR settings). -->
+		{#if !readonly}
+			<div class="toolbar grid-actions" data-testid="grid-actions">
+				<button type="button" class="btn" onclick={add}>+ Add crop</button>
+				<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
+				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
+			</div>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact factors" class:editable={!readonly}>
 				<thead>
@@ -285,11 +292,6 @@
 			</p>
 		{/if}
 		{#if !readonly}
-			<div class="toolbar after">
-				<button type="button" class="btn" onclick={add}>+ Add crop</button>
-				<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
-				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
-			</div>
 			<GridPasteDialog
 				bind:open={factorPasteOpen}
 				bind:text={factorPasteText}
@@ -328,6 +330,11 @@
 			Add at least one hydrological unit (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
 		</p>
 	{:else}
+		{#if !readonly}
+			<div class="toolbar grid-actions" data-testid="grid-actions">
+				<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
+			</div>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact areas">
 				<thead>
@@ -397,9 +404,6 @@
 		</div>
 		{#if unplantedNote}<p class="muted small after">{unplantedNote}</p>{/if}
 		{#if !readonly}
-			<div class="toolbar after">
-				<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
-			</div>
 			<GridPasteDialog
 				bind:open={pasteOpen}
 				bind:text={pasteText}
