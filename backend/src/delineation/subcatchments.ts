@@ -34,7 +34,7 @@ import {
 	type LargerChannel
 } from './delineate.js';
 import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, place } from './place.js';
-import { accumulate, d8, DX, DY, edgeMask, fill, OUT, openFlags, touchesEdge, upstream } from './flow.js';
+import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport } from './pans.js';
 
@@ -626,8 +626,6 @@ export async function delineateUnits(
 		fill(grid, edge);
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
-		/** Whether each cell's catchment runs past the window or the data's edge (flow.ts openFlags). */
-		const cutFlags = openFlags(nCells, nCells, dir, edge);
 		const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
 		// Each window row's cell area (m²): a Web Mercator cell is a longitude × latitude rectangle, so its area on the ellipsoid
 		// is exact in (λ, sin β), as geo/area.ts measures every polygon: the area of an unsimplified outline is its cells' sum.
