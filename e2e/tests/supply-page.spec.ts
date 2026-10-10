@@ -251,7 +251,7 @@ test('picking a hydrological unit charts its supply against demand, the link rou
 	await expect(page.getByRole('region', { name: /^Storage/ }).getByRole('heading', { level: 2 })).toHaveText('Storage: Upper farm');
 });
 
-test('the unit detail picks a unit itself: every unit least supplied first, with ‹ ›, writing unit= (issue #467)', async ({ page, owner }) => {
+test('the unit detail picks a unit itself: every unit least supplied first, with previous and next buttons, writing unit= (issue #467)', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedSupplyProject(page.request, 'Supply select');
