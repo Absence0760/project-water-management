@@ -35,6 +35,8 @@ afterEach(async () => {
 	await asOwner('DELETE FROM data_feed');
 	await asOwner(`DELETE FROM job WHERE kind IN ('feed_fetch', 'feed_ingest')`);
 	await asOwner('DELETE FROM chirps_cell_year');
+	await asOwner('DELETE FROM chirps_file');
+	await asOwner('DELETE FROM chirps_cell_stale');
 });
 
 const tick = () => runTick({ feeds: false, reports: false, alerts: false });
@@ -196,7 +198,7 @@ describe('chirps_cache_merge', () => {
 		expect(r!.vals.slice(doy('2024-03-01'), doy('2024-03-01') + 3)).toEqual([0, 2000, Number.NaN]);
 	});
 
-	it('a final value always lands, a preliminary one never over a final; final_through is the day before the first preliminary value', async () => {
+	it('a final value lands on any day not final, never a preliminary one over a final nor a final over a different final; final_through is the day before the first preliminary value', async () => {
 		const owner = await signUp('MergeFinals');
 		await runningJob(owner, await project(owner));
 		const one = at([[1600, 4100]]);
@@ -216,8 +218,11 @@ describe('chirps_cache_merge', () => {
 		// Their finals: none preliminary is left, so final_through is the year's end.
 		await merge(owner, ['chc', 'sat', '2024-03-04', 'ff', ...one, [4, 5]]);
 		expect((await cached())[0]!.ft).toBe('2024-12-31');
-		// A final rewritten in place (CHC does) lands too.
-		expect((await merge(owner, ['chc', 'sat', '2024-03-02', 'f', ...one, [2.5]])).rows[0]!.n).toBe(1);
+		// A final rewritten in place (CHC does) doesn't land here: the cached final stays, and its file goes first in the
+		// re-check (checked_at NULL), the one path that replaces a final (210, chirps_recheck_apply; recheck.db.test.ts).
+		await asOwner(`UPDATE chirps_file SET checked_at = now() WHERE origin = 'chc' AND product = 'sat' AND day = '2024-03-02'`);
+		expect((await merge(owner, ['chc', 'sat', '2024-03-02', 'f', ...one, [2.5]])).rows[0]!.n).toBe(0);
+		expect((await asOwner(`SELECT checked_at FROM chirps_file WHERE origin = 'chc' AND product = 'sat' AND day = '2024-03-02'`))[0].checked_at).toBeNull();
 		// A preliminary value for an empty day before final_through (a gap in the archive) lands, and final_through steps back before it.
 		await merge(owner, ['chc', 'sat', '2024-01-10', 'p', ...one, [6]]);
 		expect((await cached())[0]!.ft).toBe('2024-01-09');
@@ -226,7 +231,7 @@ describe('chirps_cache_merge', () => {
 		// Finality is per day: the March finals after that preliminary gap are still final, and a preliminary answer leaves them.
 		expect((await merge(owner, ['chc', 'sat', '2024-03-01', 'ppppp', ...one, [9, 9, 9, 9, 9]])).rows[0]!.n).toBe(0);
 		r = (await cached())[0]!;
-		expect(r.vals.slice(doy('2024-03-01'), doy('2024-03-01') + 5)).toEqual([1, 2.5, 3, 4, 5]);
+		expect(r.vals.slice(doy('2024-03-01'), doy('2024-03-01') + 5)).toEqual([1, 2, 3, 4, 5]);
 		// A final for the gap day ends it: final through the year's end again.
 		await merge(owner, ['chc', 'sat', '2024-01-10', 'f', ...one, [5]]);
 		expect((await cached())[0]!.ft).toBe('2024-12-31');
@@ -264,9 +269,9 @@ describe('chirps_cache_merge', () => {
 		await runningJob(owner, await project(owner));
 		await merge(owner, ['chc', 'sat', '2023-12-30', 'ff--', ...at([[1600, 4100]]), [1, 2, null, null]]);
 		expect((await asOwner('SELECT year FROM chirps_cell_year ORDER BY year')).map((r) => r.year)).toEqual([2023]);
-		await merge(owner, ['chc', 'sat', '2023-12-31', 'ff', ...at([[1600, 4100]]), [3, 4]]);
+		await merge(owner, ['chc', 'sat', '2023-12-31', 'ff', ...at([[1600, 4100]]), [2, 4]]);
 		expect((await asOwner('SELECT year, vals[1] AS jan1, vals[365] AS dec31 FROM chirps_cell_year ORDER BY year'))).toEqual([
-			{ year: 2023, jan1: null, dec31: 3 },
+			{ year: 2023, jan1: null, dec31: 2 },
 			{ year: 2024, jan1: 4, dec31: null }
 		]);
 	});

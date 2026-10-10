@@ -34,6 +34,6 @@ export const feedIngestHandler = defineHandler({
 		const window = await takeFeedFetch(db, feed.id, payload.fetchJobId);
 		if (!window) return;
 		// Off ingest-results: the fetcher Lambda's answer, read from the real files (it refuses to run on the fixtures).
-		await ingestResult(db, feed, payload.result, window, { origin: 'chc' });
+		await ingestResult(db, feed, payload.result, window, { origin: 'chc', fetchJobId: payload.fetchJobId });
 	}
 });

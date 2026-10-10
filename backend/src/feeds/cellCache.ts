@@ -175,3 +175,18 @@ export function decodeCellValue(v: number | null): number | null {
 	u32[0] = v;
 	return f32[0]!;
 }
+
+/**
+ * The re-check of cached finals CHC rewrites in place (210_chirps_final_recheck,
+ * docs/architecture.md § Data feeds → Re-checking finals), per CHIRPS feed
+ * fetch: at most RECHECK_HEAD_DAYS final files HEADed (only when the feed is
+ * caught up, so a backfill's windows don't carry them), each not within
+ * RECHECK_INTERVAL_DAYS of its last check, oldest checked first; and at most
+ * RECHECK_READ_DAYS days read again for the feed's cells (its stale days, then
+ * files whose tag isn't known). chirps_recheck_claim holds the same bounds.
+ */
+export const RECHECK_HEAD_DAYS = 40;
+export const RECHECK_READ_DAYS = 10;
+export const RECHECK_INTERVAL_DAYS = 90;
+/** The most revised days one ingest recomputes into the feed's series (feeds/ingest.ts refreshRevisedDays); the rest go next fetch. */
+export const REVISION_REFRESH_DAYS = 400;

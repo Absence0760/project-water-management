@@ -18,6 +18,34 @@ export interface FeedHttp {
 	range(url: string, start: number, end: number): Promise<Uint8Array | null>;
 	/** A whole text resource; null for HTTP 404. */
 	text(url: string): Promise<string | null>;
+	/**
+	 * range, with the file's tag (fileTag): which version of the file the bytes
+	 * are. The CHIRPS cell cache records it per final file, so a rewrite in
+	 * place shows (docs/architecture.md § Data feeds → Re-checking finals).
+	 * Optional: a source that has no versions needs none.
+	 */
+	rangeTagged?(url: string, start: number, end: number): Promise<{ bytes: Uint8Array; tag: string | null } | null>;
+	/** The file's tag from a HEAD request, without its body; null for HTTP 404. */
+	head?(url: string): Promise<{ tag: string | null } | null>;
+}
+
+/** The longest file tag kept (chirps_file.tag, 210). */
+export const FILE_TAG_MAX = 200;
+/** A tag we keep: printable ASCII, no edge spaces (210_chirps_final_recheck.sql chirps_tag_ok). */
+export const FILE_TAG_RE = /^[!-~](?:[ -~]*[!-~])?$/;
+
+/**
+ * Which version of a file a response is: its ETag (CHC's nginx sends
+ * `"<mtime>-<size>"` in hex), else `lm:` and its Last-Modified, else null.
+ * A header that isn't printable ASCII, or is longer than FILE_TAG_MAX, is no
+ * tag: an upstream value is never stored unchecked.
+ */
+export function fileTag(headers: Headers): string | null {
+	const ok = (t: string) => (t.length <= FILE_TAG_MAX && FILE_TAG_RE.test(t) ? t : null);
+	const etag = headers.get('etag')?.trim();
+	if (etag) return ok(etag);
+	const lm = headers.get('last-modified')?.trim();
+	return lm ? ok(`lm:${lm}`) : null;
 }
 
 export const FEED_SOURCE_MODES = ['fixtures', 'live'] as const;
@@ -35,7 +63,8 @@ export function feedSourceMode(value: string | undefined = process.env.FEED_SOUR
 export async function feedHttp(mode: FeedSourceMode = feedSourceMode()): Promise<FeedHttp> {
 	if (mode === 'live') return liveHttp();
 	const { fixtureHttp } = await import('./fixtures.js');
-	return fixtureHttp();
+	// FEED_FIXTURE_REWRITE=1: serve chirps-rewrite.json's finals rewritten in place, to watch the re-check locally (run-locally.md).
+	return fixtureHttp(undefined, { rewrite: process.env.FEED_FIXTURE_REWRITE === '1' });
 }
 
 const TIMEOUT_MS = 20_000;
@@ -62,7 +91,7 @@ const transportError = (err: unknown) =>
 type Fetch = typeof fetch;
 
 export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
-	const get = async (url: string, headers: Record<string, string>): Promise<{ bytes: Uint8Array; whole: boolean } | null> => {
+	const get = async (url: string, headers: Record<string, string>, method: 'GET' | 'HEAD' = 'GET'): Promise<{ bytes: Uint8Array; whole: boolean; tag: string | null } | null> => {
 		let target = new URL(url);
 		if (!allowed(target)) throw new FeedUnavailableError('the request was refused (not a known source host)');
 		// One deadline for the whole exchange: every hop and the body.
@@ -71,7 +100,7 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 		for (let hop = 0; ; hop++) {
 			try {
 				// Redirects are followed here, not by fetch, so each target is checked.
-				res = await fetchFn(target.href, { headers: { 'user-agent': USER_AGENT, ...headers }, signal, redirect: 'manual' });
+				res = await fetchFn(target.href, { method, headers: { 'user-agent': USER_AGENT, ...headers }, signal, redirect: 'manual' });
 			} catch (err) {
 				throw transportError(err);
 			}
@@ -91,6 +120,12 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 			await res.body?.cancel();
 			throw new FeedUnavailableError(`HTTP ${res.status}`);
 		}
+		const tag = fileTag(res.headers);
+		// A HEAD has no body: its content-length is the file's, not a response to read.
+		if (method === 'HEAD') {
+			await res.body?.cancel();
+			return { bytes: new Uint8Array(0), whole: true, tag };
+		}
 		const declared = Number(res.headers.get('content-length'));
 		if (declared > MAX_BYTES) {
 			await res.body?.cancel();
@@ -98,7 +133,7 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 		}
 		// Read with a cap: a server that ignores Range would otherwise send a whole grid.
 		const reader = res.body?.getReader();
-		if (!reader) return { bytes: new Uint8Array(0), whole: res.status === 200 };
+		if (!reader) return { bytes: new Uint8Array(0), whole: res.status === 200, tag };
 		const parts: Uint8Array[] = [];
 		let total = 0;
 		for (;;) {
@@ -124,13 +159,19 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 			out.set(p, o);
 			o += p.length;
 		}
-		return { bytes: out, whole: res.status === 200 };
+		return { bytes: out, whole: res.status === 200, tag };
+	};
+	const rangeTagged = async (url: string, start: number, end: number) => {
+		const got = await get(url, { range: `bytes=${start}-${end}` });
+		// A 200 is the whole resource (a server that ignores Range, under the cap): cut the range out.
+		return got && { bytes: got.whole ? got.bytes.subarray(start, end + 1) : got.bytes, tag: got.tag };
 	};
 	return {
-		range: async (url, start, end) => {
-			const got = await get(url, { range: `bytes=${start}-${end}` });
-			// A 200 is the whole resource (a server that ignores Range, under the cap): cut the range out.
-			return got && (got.whole ? got.bytes.subarray(start, end + 1) : got.bytes);
+		range: async (url, start, end) => (await rangeTagged(url, start, end))?.bytes ?? null,
+		rangeTagged,
+		head: async (url) => {
+			const got = await get(url, {}, 'HEAD');
+			return got && { tag: got.tag };
 		},
 		text: async (url) => {
 			const got = await get(url, { accept: 'text/html, text/plain;q=0.9' });

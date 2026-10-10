@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FeedUnavailableError } from './errors.js';
-import { feedHttp, feedSourceMode, liveHttp } from './http.js';
+import { feedHttp, feedSourceMode, fileTag, liveHttp } from './http.js';
 
 describe('feedSourceMode', () => {
 	it('defaults to fixtures (local-first: no network in dev or CI)', () => {
@@ -50,6 +50,41 @@ describe('liveHttp', () => {
 		);
 		const timeout = Object.assign(new Error('t'), { name: 'TimeoutError' });
 		await expect(liveHttp(vi.fn(async () => { throw timeout; })).text('https://data.chc.ucsb.edu/p')).rejects.toThrow('the request timed out');
+	});
+
+	it('gives a range read the file’s tag: its ETag, else lm: and its Last-Modified, else none', async () => {
+		const etag = await liveHttp(respond(206, 'ab', { etag: '"677dc35c-c30e00"', 'last-modified': 'Wed, 08 Jan 2025 00:14:20 GMT' })).rangeTagged!('https://data.chc.ucsb.edu/a.tif', 0, 1);
+		expect(etag).toMatchObject({ tag: '"677dc35c-c30e00"' });
+		expect(new TextDecoder().decode(etag!.bytes)).toBe('ab');
+		expect(await liveHttp(respond(206, 'ab', { 'last-modified': 'Wed, 08 Jan 2025 00:14:20 GMT' })).rangeTagged!('https://data.chc.ucsb.edu/a.tif', 0, 1)).toMatchObject({
+			tag: 'lm:Wed, 08 Jan 2025 00:14:20 GMT'
+		});
+		expect(await liveHttp(respond(206, 'ab')).rangeTagged!('https://data.chc.ucsb.edu/a.tif', 0, 1)).toMatchObject({ tag: null });
+		expect(await liveHttp(respond(404)).rangeTagged!('https://data.chc.ucsb.edu/a.tif', 0, 1)).toBeNull();
+	});
+
+	it('keeps no tag that isn’t short printable ASCII: an upstream header is never stored unchecked', () => {
+		expect(fileTag(new Headers({ etag: `"${'x'.repeat(250)}"` }))).toBeNull();
+		expect(fileTag(new Headers({ etag: '"a\tb"' }))).toBeNull();
+		expect(fileTag(new Headers({ etag: 'W/"abc"' }))).toBe('W/"abc"');
+	});
+
+	it('HEAD asks with method HEAD and no Range, reads no body (a 12 MB file’s content-length is no refusal), and gives the tag', async () => {
+		const f = respond(200, '', { etag: '"t1"', 'content-length': String(12 * 1024 * 1024) });
+		expect(await liveHttp(f).head!('https://data.chc.ucsb.edu/a.tif')).toEqual({ tag: '"t1"' });
+		const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+		expect(init.method).toBe('HEAD');
+		expect(init.headers).not.toHaveProperty('range');
+		expect(await liveHttp(respond(404)).head!('https://data.chc.ucsb.edu/a.tif')).toBeNull();
+		await expect(liveHttp(respond(503)).head!('https://data.chc.ucsb.edu/a.tif')).rejects.toThrow(new FeedUnavailableError('HTTP 503'));
+	});
+
+	it('HEAD keeps to the known hosts too (the re-check is no way around the SSRF rule)', async () => {
+		const f = vi.fn(async () => new Response(null, { status: 200 }));
+		await expect(liveHttp(f).head!('https://169.254.169.254/latest/meta-data/')).rejects.toThrow(/not a known source host/);
+		expect(f).not.toHaveBeenCalled();
+		const hop = vi.fn<(url: string, init: RequestInit) => Promise<Response>>().mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://example.com/a.tif' } }));
+		await expect(liveHttp(hop as never).head!('https://data.chc.ucsb.edu/a.tif')).rejects.toThrow(/redirected somewhere it may not/);
 	});
 
 	it('refuses a response over 4 MB, declared or streamed', async () => {

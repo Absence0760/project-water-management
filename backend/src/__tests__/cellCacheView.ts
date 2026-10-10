@@ -1,9 +1,10 @@
 // Unit tests' stand-in for the cell cache: the CacheView a run of
 // chirps_cache_merge (208_chirps_cell_cache.sql) would leave after merging
 // these answers in turn, built in memory, so the fetch → cache → feed's days
-// path runs without a database. The real function's rules (a final always
-// lands, a preliminary value never replaces a final) are tested against Postgres in
-// feeds/cellCache.db.test.ts.
+// path runs without a database. The real function's rules (a final lands on
+// a day not final, neither a preliminary value nor a different final replaces
+// a final: only the re-check does, 210) are tested against Postgres in
+// feeds/cellCache.db.test.ts and feeds/recheck.db.test.ts.
 import { toEpochDay } from '@water-management/engine/calendar';
 import { type CacheView, decodeCellValue, viewKey } from '../feeds/cellCache.js';
 import type { CellsResult } from '../feeds/fetch.js';
@@ -23,7 +24,10 @@ export function viewFromAnswers(answers: readonly CellsResult['cells'][], view: 
 				const doy = s + d - toEpochDay(`${year}-01-01`);
 				// A preliminary value never lands on a final one.
 				if (kind === 'p' && y.final[doy]) continue;
-				y.vals[doy] = decodeCellValue(a.values[c]![d]!);
+				const v = decodeCellValue(a.values[c]![d]!);
+				// Nor a final on a different final (Object.is: NaN, the sea, is the same as NaN).
+				if (y.final[doy] && !Object.is(y.vals[doy], v)) continue;
+				y.vals[doy] = v;
 				y.final[doy] = kind === 'f';
 			}
 		});
