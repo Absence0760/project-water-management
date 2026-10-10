@@ -837,8 +837,9 @@ describe('the production hand-off (FEED_FETCHER=sqs: fetch-requests → fetcher 
 			await owner.call('POST', `/projects/${pid}/feeds/${feedId}/run-now`);
 			const next = await runFetchJob();
 			expect(next.request).not.toHaveProperty('heldThrough');
-			// rnl: final to 6 days back, so the window after the marker is the five days not out yet. sat: as on the fixtures above.
-			expect(next.request).toMatchObject(product === 'rnl' ? { start: addDays(-5), cells: { plan: '00000' } } : { start: addDays(-39), cells: { plan: `${'2'.repeat(37)}00` } });
+			// rnl: final to 40 days back (with the sat finals), so the window after the marker is the 39 days not out yet,
+			// every one to read (none held preliminary). sat: as on the fixtures above.
+			expect(next.request).toMatchObject(product === 'rnl' ? { start: addDays(-39), cells: { plan: '0'.repeat(39) } } : { start: addDays(-39), cells: { plan: `${'2'.repeat(37)}00` } });
 		}
 	});
 

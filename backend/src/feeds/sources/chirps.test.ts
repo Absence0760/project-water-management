@@ -129,6 +129,24 @@ describe('fetchChirps', () => {
 		expect([...new Set(http.urls.filter((u) => u.includes('/prelim/') && u.includes('.2026.01.0')))]).toEqual([chirpsPrelimUrl('2026-01-03')]);
 	});
 
+	// rnl is published a month at a time with the sat finals (CHC's daily/final/rnl/ listing, 2026), so its
+	// newest day is weeks old: reading every day to yesterday asked for a month of files that can't be out yet.
+	it('rnl probes its finals the same way: it stops after a batch that ends without one, and goes on past a gap in an older month', async () => {
+		const files: Record<string, Uint8Array> = {};
+		for (let d = 1; d <= 9; d++) files[chirpsRnlUrl(`2026-01-0${d}`)] = g(d);
+		delete files[chirpsRnlUrl('2026-01-03')]; // missing inside a batch whose last day has one: probing goes on
+		const http = served(files);
+		const r = await fetchChirps(http, [cell(0, 0)], '2026-01-01', '2026-01-20', 'rnl', { concurrency: 4, today: '2026-01-21' });
+		expect(r).toEqual({ startDate: '2026-01-01', values: [1, 2, null, 4, 5, 6, 7, 8, 9], prelimDays: 0, finalThrough: '2026-01-02' });
+		// Batches [01], [02–05], [06–09], [10–13]: the last ends without a final, so 14–20 aren't asked for.
+		expect(new Set(http.urls).size).toBe(13);
+		expect(http.urls).not.toContain(chirpsRnlUrl('2026-01-14'));
+		// Positive control: once January's finals are due (45 days after it ends), a missing day is a gap and every later day is read.
+		const old = served(files);
+		expect((await fetchChirps(old, [cell(0, 0)], '2026-01-01', '2026-01-20', 'rnl', { concurrency: 4, today: '2026-03-20' })).values).toEqual([1, 2, null, 4, 5, 6, 7, 8, 9]);
+		expect(new Set(old.urls).size).toBe(20);
+	});
+
 	it('a final missing from a month whose finals are out is a gap: probing goes on and the later finals are read as finals', async () => {
 		const files: Record<string, Uint8Array> = { [chirpsPrelimUrl('2025-06-01')]: g(50) };
 		for (let d = 2; d <= 9; d++) files[chirpsFinalUrl(`2025-06-0${d}`)] = g(d);
@@ -184,8 +202,9 @@ describe('fetchChirps', () => {
 		const sat = await fetchChirps(http, at, '2025-06-01', '2025-06-20', 'sat');
 		const rnl = await fetchChirps(http, at, '2025-06-02', '2025-06-21', 'rnl');
 		expect(rnl.values).toEqual(sat.values);
-		// rnl has no preliminary product: nothing within its 6-day lag.
-		expect((await fetchChirps(http, at, '2026-03-05', '2026-03-09', 'rnl')).values).toEqual([]);
+		// rnl has no preliminary product: nothing within its 40-day lag (published with the sat finals).
+		expect((await fetchChirps(http, at, '2026-01-30', '2026-03-09', 'rnl')).values).toEqual([]);
+		expect((await fetchChirps(http, at, '2026-01-28', '2026-01-29', 'rnl')).values).toHaveLength(2);
 	});
 
 	describe('the day → file mapping, under a skewed TZ (the calendar is UTC, never local)', () => {
@@ -308,6 +327,20 @@ describe('fetchChirpsCells (the cell cache’s fetch, issue #482)', () => {
 		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'sat', { concurrency: 4 });
 		expect(r.read).toBe(`${'f'.repeat(9)}${'p'.repeat(11)}`);
 		expect(new Set(http.urls.filter((u) => u.includes('/final/'))).size).toBe(13);
+	});
+
+	it('rnl probes its finals as fetchChirps does: none asked for past a batch that ends without one in a month still due', async () => {
+		const files: Record<string, Uint8Array> = {};
+		for (let d = 1; d <= 9; d++) files[chirpsRnlUrl(`2026-01-0${d}`)] = g(d);
+		delete files[chirpsRnlUrl('2026-01-03')];
+		const http = served(files);
+		const r = await fetchChirpsCells(http, pts, '2026-01-01', '0'.repeat(20), 'rnl', { concurrency: 4, today: '2026-01-21' });
+		expect(r.read).toBe(`ff-${'f'.repeat(6)}${'-'.repeat(11)}`);
+		expect(new Set(http.urls).size).toBe(13);
+		// Positive control: once January is due, every day is asked for.
+		const old = served(files);
+		expect((await fetchChirpsCells(old, pts, '2026-01-01', '0'.repeat(20), 'rnl', { concurrency: 4, today: '2026-03-20' })).read).toBe(`ff-${'f'.repeat(6)}${'-'.repeat(11)}`);
+		expect(new Set(old.urls).size).toBe(20);
 	});
 
 	it('rnl reads its final files only, and refuses an implausible value as gridMean does', async () => {

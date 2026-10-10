@@ -54,7 +54,7 @@ const today = toEpochDay(utcToday());
 const RECORD_START = fromEpochDay(today - 3 * 365);
 const RECORD_DAYS = 3 * 365 - 10 + 1;
 const GAP = { from: RECORD_DAYS - 60, days: 20 };
-/** The units' feeds start here: one fetch window (120 days) reaches the fixture's newest rnl day. */
+/** The units' feeds start here: one fetch window (120 days) reaches the fixture's newest rnl day (40 days back, published with the sat finals). */
 const FEED_START = fromEpochDay(today - 110);
 
 const unitRain = { mode: 'perUnit', gaugeMapMm: GAUGE_MAP, gaugeMapSource: 'the gauge’s synthetic record, 1991–2020', mapPeriod: { start: '1991-01-01', end: '2020-12-31' } };
@@ -116,7 +116,7 @@ describe('rain for each unit, from the feeds to the run and the fit', () => {
 			const s = input.series?.[unitRainSeriesKey('rain_chirps_mm', u.id)];
 			expect(s, u.name).toBeDefined();
 			expect(s!.startDate).toBe(FEED_START);
-			expect(s!.values.filter((v) => v !== null).length).toBeGreaterThan(90);
+			expect(s!.values.filter((v) => v !== null).length).toBeGreaterThan(60);
 		}
 		// The catchment's own CHIRPS stays empty: the units' rain never becomes the catchment's.
 		expect(input.series?.rain_chirps_mm).toBeUndefined();

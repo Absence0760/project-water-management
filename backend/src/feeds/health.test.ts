@@ -51,6 +51,21 @@ describe('feedHealth', () => {
 		expect(feedHealth(never, '2026-09-23', 'UTC').state).toBe('stale');
 	});
 
+	// rnl has no preliminary product: CHC publishes it a month at a time, 11–26 days after the month ends
+	// (2026), so its newest day is up to ~57 days old on a normal day. sat's 12 days made it stale most of the month.
+	it.each(['UTC', 'Pacific/Kiritimati'])('an rnl feed is stale only past CHIRPS_RNL_STALE_AFTER_DAYS (TZ %s)', (zone) => {
+		process.env.TZ = zone;
+		const rnl = { ...base, config: { ...base.config, product: 'rnl' as const }, lastDataDate: '2026-07-31' };
+		// 56 days: August not out yet, as on 2026-09-10.
+		expect(feedHealth(rnl, today, 'UTC')).toMatchObject({ state: 'ok', stale: false, staleAfterDays: 62 });
+		expect(feedHealth({ ...rnl, lastDataDate: '2026-07-25' }, today, 'UTC')).toMatchObject({ state: 'ok', staleAfterDays: 62 });
+		expect(feedHealth({ ...rnl, lastDataDate: '2026-07-24' }, today, 'UTC')).toMatchObject({ state: 'stale', reason: { code: 'old-data', newest: '2026-07-24' } });
+		// Positive control: sat at the same age is stale (its preliminary files are days old).
+		expect(feedHealth({ ...base, lastDataDate: '2026-07-31' }, today, 'UTC')).toMatchObject({ state: 'stale', staleAfterDays: 12 });
+		// The feed's own staleAfterDays still wins.
+		expect(feedHealth({ ...rnl, config: { ...rnl.config, staleAfterDays: 30 } }, today, 'UTC')).toMatchObject({ state: 'stale', staleAfterDays: 30 });
+	});
+
 	// Issue #40c: a staged replacement reads old days, so "old data" would mislead.
 	it.each(['UTC', 'Pacific/Kiritimati'])('rebuilding: a staged replacement says how far it has got, and stalls after a day without growing (TZ %s)', (zone) => {
 		process.env.TZ = zone;

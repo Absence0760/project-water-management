@@ -189,15 +189,18 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 	});
 
 	// What the marker and the cell cache save, on the fixtures (sat final up
-	// to 40 days back, preliminary to 3; rnl final to 6): the range requests
-	// of a caught-up feed's daily fetch without either, and with both (#69,
-	// #482). Before #69 the same fetch took 194 (sat) and 158 (rnl): every day
-	// probed its final file and re-read its preliminary one. The cache asks
-	// for no day it holds final, and only the final file of a day it holds
-	// preliminary, as the held days did before it.
+	// to 40 days back, preliminary to 3; rnl final to 40, published with sat's
+	// finals): the range requests of a caught-up feed's daily fetch without
+	// either, and with both (#69, #482). Before #69 the same fetch took 194
+	// (sat) and 158 (rnl, then 6 days behind): every day probed its final file
+	// and re-read its preliminary one. The cache asks for no day it holds
+	// final, and only the final file of a day it holds preliminary, as the
+	// held days did before it; rnl probes its finals as sat does, so the day
+	// after the marker, not out yet, is the one file it asks for (reading to
+	// yesterday asked for all 39).
 	it.each([
 		['sat', 160, 3],
-		['rnl', 158, 5]
+		['rnl', 157, 1]
 	] as const)('a caught-up %s feed’s daily fetch: %i range requests without them, %i with them', async (product, before, after) => {
 		const day = '2026-03-10';
 		const fixtures = fixtureHttp(() => day);
@@ -211,7 +214,7 @@ describe('fetchWindow with the final marker (CHIRPS)', () => {
 		const view = viewFromAnswers([answer.cells]);
 		const r = seriesFromCache(gridCells(config), view, first);
 		const newest = new Date(Date.parse(`${r.startDate}T00:00:00Z`) + (r.values.length - 1) * 86_400_000).toISOString().slice(0, 10);
-		expect(r.finalThrough).toBe(product === 'sat' ? '2026-01-29' : '2026-03-04');
+		expect(r.finalThrough).toBe('2026-01-29');
 		// Without the marker or the cache: the mean read from the files, every day of the re-read window.
 		n = 0;
 		const w0 = fetchWindow('chirps', config, newest, day, first.end, null);
@@ -347,8 +350,8 @@ describe('runFetch on the fixtures', () => {
 		expect(r).toMatchObject({ ok: true, meta: { finalThrough: '2026-01-29', prelimDays: 37 } });
 		const prelim = await runFetch({ source: 'chirps', config: grid, start: '2026-02-20', end: '2026-03-09', today: '2026-03-10' }, http);
 		expect(prelim.ok && prelim.meta).not.toHaveProperty('finalThrough');
-		const rnl = await runFetch({ source: 'chirps', config: { ...grid, product: 'rnl' }, start: '2026-02-20', end: '2026-03-09', today: '2026-03-10' }, http);
-		expect(rnl).toMatchObject({ ok: true, meta: { finalThrough: '2026-03-04', prelimDays: 0 } });
+		const rnl = await runFetch({ source: 'chirps', config: { ...grid, product: 'rnl' }, start: '2026-01-20', end: '2026-03-09', today: '2026-03-10' }, http);
+		expect(rnl).toMatchObject({ ok: true, meta: { days: 10, finalThrough: '2026-01-29', prelimDays: 0 } });
 	});
 
 	it('CHIRPS with nothing published yet: ok, no days', async () => {
