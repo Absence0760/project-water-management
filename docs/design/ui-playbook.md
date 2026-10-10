@@ -446,6 +446,15 @@ section it belongs to, with the example that taught it.
   panels' buttons') and below the fields (`uncertainty.spec.ts`,
   `outcome-matrix.spec.ts`, `seasonal-outlook.spec.ts`). A one-field lookup
   inside a table toolbar (Self-checks' Trace) is not this shape.
+- **Findings first; a tool nobody has run is one row.** River & reserve
+  split its findings with three run-it-yourself tools, each a paragraph and
+  a form, so the water account ended up last (issue #465). Put what the
+  page found first, group the tools after it under their own heading, and
+  show an unrun tool as one row (`common/ToolRow.svelte`: name, ⓘ, one
+  line of purpose, **Run…** at the end, which opens the form with focus on
+  its first field). A panel that only exists with some setting gets a
+  one-line stub saying what it needs and where to set it, rather than
+  vanishing.
 - **A map's tools go on the map; the header keeps the page's actions.**
   The Map's header carried Measure, Draw a shape, Place a point, Delineate,
   Trace a dam, Upload GeoJSON and Add data as seven identical buttons that
@@ -503,6 +512,28 @@ section it belongs to, with the example that taught it.
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
   to 13rem; at 1280 it would scroll, so the bar stays there).
+- **An index names each panel as the page does, and a page beside a rail
+  reads its width from its own column.** Runs & results, River & reserve,
+  Hydrological units and Data kept the two-row bar after Settings got its
+  index, so their group names were dropped to fit, about 14 links sat in a
+  flat row, menu names drifted from the headings ("Days below, by year" for
+  *Days below the pragmatic EWR, each water year*), and the panels that had
+  moved to other pages had no entry at all (issue #462). The fix was the
+  same rail on each from a 1440 px window, every link its panel's heading
+  (a shorter `bar` name only where the bar must stay two rows), and on Runs
+  the moved panels under their pages' names. Two traps on the way: River's
+  chart-beside-bars switch was a window media query (1100 px), which beside
+  a 13rem rail sees a column 13rem wider than it is, so it became a
+  container query on the page's own column; and a page that only had a
+  menu once its results loaded would have drawn its whole content again on
+  that load if the wrapper were added conditionally, so SectionNav with no
+  sections draws only its content. Compare runs and the Network's node
+  sheet followed: Compare's rail wraps only the comparison, so the run
+  cards above keep the whole width, and its summary's side-by-side switch
+  moved to a container query for the same reason as River's; the node
+  sheet's hand-made jump row became the same menu in a box of its own
+  (`onjump`), which also gave it the mark for the section being read and
+  names matching the legends.
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve
@@ -725,6 +756,7 @@ section it belongs to, with the example that taught it.
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
+| A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
@@ -741,7 +773,8 @@ section it belongs to, with the example that taught it.
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
 | A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
-| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `SUPPLY_NAV`, `series/sections.ts`); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width, and `find` for a find-a-setting box (Settings, issue #468; ui.md § On this page menu) |
+| "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `supplyNav`, `series/sections.ts`, `compare/sections.ts`), each link named as its panel's heading (`label`, a shorter `bar` name on the bar); at most two rows, the rest in More; with the page's content as `children` and `railFrom`, a sticky side column from that width (`railSide="right"` beside a page's own left column), `href` + `page` for a link to another page, `barHeight` for a sticky panel under the bar, and `find` for a find-a-setting box (Settings, issue #468; every long page from 1440 px, issue #462; ui.md § On this page menu) |
+| Section links in a box that scrolls on its own (a side sheet's long form) | The same `common/SectionNav.svelte` with `onjump` (each link scrolls the box to the section and focuses it, no fragment in the URL; the scroll spy follows the box) and `heading={null}`, in the dialog's fixed `subhead` (the Network's node sheet, `network/nodeSections.ts` `nodeNavGroups`; issue #462). Not a row of buttons of its own: that one drifted from the pages' (no mark for the section being read, no More, names unlike the legends) |
 
 Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window
 fit), `supply/SupplyTab.svelte` and `river/RiverTab.svelte` (tiles, run
@@ -942,6 +975,14 @@ Interaction details that bit:
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
   under it and Close pinned (`notes/NotesDrawer.svelte`).
+- **A grid's actions go above it, in one row.** The node table, the crop
+  grids and the Demands grid put add, sort, paste, load and download after
+  the rows, the totals and a field guide, so the operator didn't find a file
+  load under a 12-row grid (issue #463, after #461 moved the EWR settings'
+  file load first). Each grid now has one `toolbar grid-actions` row between
+  its one-line intro and its first row; pin it with `expectAbove`
+  (`e2e/support/reflow.ts`: above on screen and first in the focus order).
+  Notes about what's in the table (totals, a CSV's unit) stay under it.
 - **Don't disable a control while its own change saves.** The alert emails
   page disabled each catchment's fieldset during a save, so an arrow key on
   a radio moved the choice and then threw the keyboard's focus to the page.

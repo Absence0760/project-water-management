@@ -6,7 +6,7 @@
 	// never the only cue. It shows the emptiest few and a "Show all" that
 	// opens the rest in place: the card never scrolls inside itself, and a
 	// catchment's sixty units don't push the rest of the Summary a screen down. A farm's name opens its farm drawer; `more` links to
-	// Units & supply for the whole picture (issue #17).
+	// Hydrological units for the whole picture (issue #17).
 	import type { FarmSummary } from '@water-management/engine';
 	import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
 	import { BAND_LABEL } from '$lib/components/network/supplyColour';
@@ -20,7 +20,7 @@
 	}: {
 		farms: readonly FarmSummary[];
 		modelFarmIds: ReadonlySet<string>;
-		/** A link after the heading to the page with the whole picture (Units & supply). */
+		/** A link after the heading to the page with the whole picture (Hydrological units). */
 		more?: { href: string; label: string } | null;
 	} = $props();
 

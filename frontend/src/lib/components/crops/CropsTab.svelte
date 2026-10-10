@@ -31,7 +31,7 @@
 	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { DEMAND_TABLE_ID, withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
+	import { DEMAND_TABLE_ID, TABLES_MENU, withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		cropAreaTotals,
 		cropColouring,
@@ -207,13 +207,7 @@
 	const loaded = (names: string[]) =>
 		(announce = `Loaded crop factors into ${names.join(', ')}. Review them and save the model to keep them.`);
 
-	// --- the Tables menu (as the Network's): each full grid in the grid modal ---
-	const GRID_LINKS: [GridId, string][] = [
-		['crop-factors', 'Crop factors'],
-		['planted-areas', 'Planted areas'],
-		['systems', 'Irrigation systems'],
-		['demands', 'Demands']
-	];
+	// --- the Tables menu (the Network's too, TABLES_MENU): every grid in the grid modal ---
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();
 	// Close through the element: the toggle event that updates `gridsOpen` is async (issue #17 playbook).
@@ -244,7 +238,7 @@
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
 		<div class="grids-pop" role="group" aria-label="Open as a table">
-			{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>
 	{#if !readonly}

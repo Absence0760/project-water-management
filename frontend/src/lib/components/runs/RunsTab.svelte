@@ -35,7 +35,7 @@
 	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
-	import { movedHref, resultGroups } from './sections';
+	import { movedHref, otherPageGroups, resultGroups } from './sections';
 	import { supplyHref } from '$lib/components/supply/links';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
@@ -47,7 +47,7 @@
 	import { hasForecastRain, runBlockers } from './runReady';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
 	// publication) are in the Runs chunk: as chunks of their own they loaded on every visit anyway
-	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Units & supply
+	// and cost ~7 KB gzip of split overhead (issue #9). Assurance of supply moved to Hydrological units
 	// with the other unit panels (issue #17).
 	// The plausibility checks (engine ≥ 0.25.0) render for every run that has them, which is every
 	// run since, so they are in this chunk too (tab chunks have their own ceiling,
@@ -186,7 +186,7 @@
 		}
 	}
 	onMount(() => {
-		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …) or Units & supply
+		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …) or Hydrological units
 		// (#res-curtailment from a bookmarked "units short this week", …), or to the link rows those
 		// groups left here for a while (#res-river, #res-units), issue #17: there instead, for the same
 		// run (and reporting window), replacing this entry so Back skips it.
@@ -405,8 +405,14 @@
 	const missing = $derived(blockers.missing);
 	const overAllocated = $derived(blockers.overAllocated);
 	const viewingLatest = $derived(!!latest && detail?.run.id === latest.id);
-	// The in-page menu above the results (SectionNav).
-	const groups = $derived(detail ? resultGroups(detail.run.summary) : []);
+	// The in-page menu (SectionNav): above the results, or beside them from 62rem of results (a 1440 px
+	// window), where 13rem of index leaves the results about as wide as at 1280 px without it (issue #462). The index lists the
+	// main panels of the two pages the river and unit panels moved to; the bar leaves them to the run header.
+	const RESULTS_RAIL_FROM_REM = 62;
+	let navLayout = $state<'bar' | 'rail'>('bar');
+	const navGroups = $derived(
+		detail ? [...resultGroups(detail.run.summary), ...(navLayout === 'rail' ? otherPageGroups(detail.run.id) : [])] : []
+	);
 	const downloadItems = $derived(
 		detail
 			? runDownloadItems(
@@ -597,8 +603,10 @@
 	</aside>
 
 	<div class="detail">
-		<!-- In-page menu: sticks under the app header above the results, grouped by the question each panel answers. -->
-		{#if groups.length}<SectionNav {groups} label="Result sections" />{/if}
+		<!-- In-page menu, grouped by the question each panel answers: from 62rem of results a side index on the
+		     right (the runs list is the left column), with the main panels of River & reserve and Hydrological
+		     units under their pages; narrower a bar sticking under the app header above the results (issue #462). -->
+		<SectionNav groups={navGroups} label="Result sections" railFrom={RESULTS_RAIL_FROM_REM} railSide="right" bind:layout={navLayout}>
 		{#if detailError && !detail}
 			<div class="alert alert-error" role="alert">
 				{detailError}
@@ -837,6 +845,7 @@
 				hydrological unit's supply and dam storage.
 			</div>
 		{/if}
+		</SectionNav>
 	</div>
 </div>
 

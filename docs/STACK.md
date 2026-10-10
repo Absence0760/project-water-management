@@ -166,7 +166,7 @@ pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 G
 pnpm import:map-grid        # load the synthetic MAP grid the Map tab's MAP grid layer draws (pnpm setup runs it);
                              # <grid.asc> --dataset <label> --source "<product, author, year>" [--bbox w,s,e,n] loads your own ESRI ASCII grid
                              # in WGS84 degrees (licences unconfirmed: local only, production loads refused; maps.md § MAP grid)
-pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
+pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + the Showcase (every feature: runs, scenarios, map, allocations, evidence pack draft, notes, alerts; run-locally.md § The showcase; SEED_SHOWCASE=0 skips it) + the Licence comparison map (every band of the Allocations map, issue #510; skipped with the Showcase) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]
@@ -177,6 +177,10 @@ pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>
 pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file.json>] [--seed <n>] [--starts <n>] [--budget <n>] [--max-cells <n>]
                              # one GR4J fit per cell of a grid (pan preset × bounds × objective × exclusion set × WR2012 band), with
                              # validation, MAR and EWR days, in one Markdown table; ranks nothing (no DB; ≤ 24 cells unless raised; model.md §2.10b)
+pnpm list:ewr-rules <project.json> [--json]
+                             # the rules that keep water for the EWR a project has switched on (dam pass inflow, unit or off-take
+                             # hands-off flow, drought restriction EWR trigger; all off by default), from a Download project (JSON)
+                             # export or the importer's project.json (no DB; run-locally.md § Which rules keep water for the EWR)
 pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
                              # check an evidence pack's reproduction bundle and re-run its runs offline; exit 0 when it reproduces
                              # (no DB, no network; scripts/reproduce-pack/, evidence-pack.md § Reproduction)

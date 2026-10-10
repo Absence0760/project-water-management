@@ -44,6 +44,8 @@
 	import { compareDamStorage, leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
 	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import { COMPARE_HEADINGS as HEADING, compareNavGroups } from '$lib/components/compare/sections';
 	import { defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -363,6 +365,24 @@
 	);
 	const H = $derived(`h${level}`);
 
+	// The section menu (common/SectionNav, issue #462): above the comparison, or from 80rem of it (a 1440 px
+	// window) a side index on its left, as River & reserve's. Only what is drawn: the summary once a
+	// comparison is in, the full comparison's panels once its pair is.
+	const COMPARE_RAIL_FROM_REM = 80;
+	const navGroups = $derived(
+		compareNavGroups({
+			summary: loaded.length ? { yearsHeading: `Days below ${yearsBelow}, each year` } : null,
+			full: data
+				? {
+						overrides: !!(data.a.scenario || data.b.scenario),
+						reserve: !!data.comparison.ewrAssurance?.length,
+						plausibility: !!data.comparison.plausibility,
+						assurance: !!(data.a.run.summary.supplyAssurance || data.b.run.summary.supplyAssurance)
+					}
+				: null
+		})
+	);
+
 	// --- the action: Export impact report ------------------------------------------
 	/**
 	 * A what-if's impact report: the printable report of its run
@@ -525,10 +545,15 @@
 			</div>
 		{/if}
 	{:else}
+		<!-- Every panel's id and heading come from compare/sections.ts, which the menu reads too. -->
+		<SectionNav groups={navGroups} label="Comparison sections" railFrom={COMPARE_RAIL_FROM_REM}>
+		<!-- The comparison's own widths are read from cmp-body, the column beside the side index (a window
+		     query would see it 13rem wider than it is). -->
+		<div class="cmp-body">
 		{#if loaded.length}
 			<div class="summary-grid">
-				<section class="panel outcomes" aria-labelledby="outcomes-h-t" aria-busy={cmp.b.loading || cmp.c.loading}>
-					<h2 id="outcomes-h"><span id="outcomes-h-t">What changes</span> <HelpTip key="run-comparison" label="About comparing runs" /></h2>
+				<section class="panel outcomes" id="cmp-outcomes" aria-labelledby="outcomes-h-t" aria-busy={cmp.b.loading || cmp.c.loading}>
+					<h2 id="outcomes-h"><span id="outcomes-h-t">{HEADING.outcomes}</span> <HelpTip key="run-comparison" label="About comparing runs" /></h2>
 					<div class="table-wrap">
 						<table class="data outcomes-table">
 							<caption class="visually-hidden">Headline outcomes of the baseline and each what-if, with each what-if's change from the baseline</caption>
@@ -570,7 +595,7 @@
 						</div>
 					{/if}
 				</section>
-				<section class="panel years" aria-labelledby="years-h-t">
+				<section class="panel years" id="cmp-years" aria-labelledby="years-h-t">
 					<h2 id="years-h"><span id="years-h-t">Days below {yearsBelow}, each year</span> <HelpTip key="ewr-days-not-met" /></h2>
 					<ReserveYearsChart runs={chartRuns} below={yearsBelow} />
 				</section>
@@ -661,17 +686,17 @@
 				</section>
 
 				{#if data.a.scenario || data.b.scenario}
-					<section class="panel" aria-labelledby="overrides-h-t">
-						<div class="panel-head"><h2 id="overrides-h"><span id="overrides-h-t">Scenario overrides</span> <HelpTip key="change-class" label="About proposals and baseline assumptions" /></h2></div>
+					<section class="panel" id="cmp-overrides" aria-labelledby="overrides-h-t">
+						<div class="panel-head"><h2 id="overrides-h"><span id="overrides-h-t">{HEADING.overrides}</span> <HelpTip key="change-class" label="About proposals and baseline assumptions" /></h2></div>
 						<Lazy load={loadOverrides}>
 							{#snippet children(ScenarioOverrides)}<ScenarioOverrides data={data!} />{/snippet}
 						</Lazy>
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="changes-h-t">
+				<section class="panel" id="cmp-changes" aria-labelledby="changes-h-t">
 					<div class="panel-head">
-						<h2 id="changes-h"><span id="changes-h-t">What changed</span> <HelpTip key="input-diff" label="About the input differences" /></h2>
+						<h2 id="changes-h"><span id="changes-h-t">{HEADING.changes}</span> <HelpTip key="input-diff" label="About the input differences" /></h2>
 						<span class="muted small">{data.changes.length} difference{data.changes.length === 1 ? '' : 's'} in the inputs</span>
 					</div>
 					{#if data.attribution}
@@ -683,9 +708,9 @@
 					<ChangesList changes={data.changes} authors={lineAuthors(data.changes, data.attribution)} />
 				</section>
 
-				<section class="panel" aria-labelledby="headline-h">
-					<div class="panel-head"><h2 id="headline-h">Headline results</h2></div>
-					<!-- The water balance rows are What changes' (issue #175): here only the calibration and WR2012 checks. -->
+				<section class="panel" id="cmp-headline" aria-labelledby="headline-h">
+					<div class="panel-head"><h2 id="headline-h">{HEADING.headline}</h2></div>
+					<!-- The water balance rows are What the change does' (issue #175): here only the calibration and WR2012 checks. -->
 					<HeadlineDeltas comparison={data.comparison} water={false} />
 					<FitValidationCompare
 						a={asFitRecord(data.a.run.inputs.settings?.fitRecord)}
@@ -701,7 +726,8 @@
 					/>
 				</section>
 
-				<div class="panel">
+				<!-- Its heading is the panel's own ("Uncertainty", HEADING.uncertainty). -->
+				<div class="panel" id="cmp-uncertainty">
 					<PairedUncertaintyPanel
 						projectA={data.a.project.id}
 						runA={data.a.run.id}
@@ -714,43 +740,45 @@
 				</div>
 
 				{#if data.comparison.ewrAssurance?.length}
-					<section class="panel" aria-labelledby="reserve-h-t">
-						<div class="panel-head"><h2 id="reserve-h"><span id="reserve-h-t">Reserve compliance by month</span> <HelpTip key="reserve-compliance" /></h2></div>
+					<section class="panel" id="cmp-reserve" aria-labelledby="reserve-h-t">
+						<div class="panel-head"><h2 id="reserve-h"><span id="reserve-h-t">{HEADING.reserve}</span> <HelpTip key="reserve-compliance" /></h2></div>
 						<EwrAssuranceCompare sites={data.comparison.ewrAssurance} />
 						<EwrFdcCompare a={data.a.run.summary.ewrAssurance ?? []} b={data.b.run.summary.ewrAssurance ?? []} labelA="Run A" labelB={data.b.scenario ? `Run B: scenario “${data.b.scenario.name}”` : 'Run B'} />
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="ewr-agreement-h-t">
-					<div class="panel-head"><h2 id="ewr-agreement-h"><span id="ewr-agreement-h-t">EWR test against observed flow</span> <HelpTip key="ewr-agreement" /></h2></div>
+				<section class="panel" id="cmp-ewr-agreement" aria-labelledby="ewr-agreement-h-t">
+					<div class="panel-head"><h2 id="ewr-agreement-h"><span id="ewr-agreement-h-t">{HEADING.ewrAgreement}</span> <HelpTip key="ewr-agreement" /></h2></div>
 					<EwrAgreementCompare {data} />
 				</section>
 
 				{#if data.comparison.plausibility}
-					<section class="panel" aria-labelledby="plausibility-h-t">
-						<div class="panel-head"><h2 id="plausibility-h"><span id="plausibility-h-t">Plausibility checks</span> <HelpTip key="plausibility-checks" /></h2></div>
+					<section class="panel" id="cmp-plausibility" aria-labelledby="plausibility-h-t">
+						<div class="panel-head"><h2 id="plausibility-h"><span id="plausibility-h-t">{HEADING.plausibility}</span> <HelpTip key="plausibility-checks" /></h2></div>
 						<PlausibilityCompare comparison={data.comparison.plausibility} />
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="farms-h-t">
-					<div class="panel-head"><h2 id="farms-h"><span id="farms-h-t">Hydrological units</span> <HelpTip key="run-matching" label="About how runs are matched" /></h2></div>
+				<section class="panel" id="cmp-units" aria-labelledby="farms-h-t">
+					<div class="panel-head"><h2 id="farms-h"><span id="farms-h-t">{HEADING.units}</span> <HelpTip key="run-matching" label="About how runs are matched" /></h2></div>
 					<FarmDeltaTable comparison={data.comparison} farmsA={data.a.run.summary.farms ?? []} farmsB={data.b.run.summary.farms ?? []} />
 				</section>
 
 				{#if data.a.run.summary.supplyAssurance || data.b.run.summary.supplyAssurance}
-					<section class="panel" aria-labelledby="assurance-h-t">
-						<div class="panel-head"><h2 id="assurance-h"><span id="assurance-h-t">Assurance of supply</span> <HelpTip key="assurance-of-supply" /></h2></div>
+					<section class="panel" id="cmp-assurance" aria-labelledby="assurance-h-t">
+						<div class="panel-head"><h2 id="assurance-h"><span id="assurance-h-t">{HEADING.assurance}</span> <HelpTip key="assurance-of-supply" /></h2></div>
 						<AssuranceDeltaTable a={data.a.run.summary.supplyAssurance} b={data.b.run.summary.supplyAssurance} />
 					</section>
 				{/if}
 
-				<section class="panel" aria-labelledby="chart-h">
-					<div class="panel-head"><h2 id="chart-h">Daily series</h2></div>
+				<section class="panel" id="cmp-series" aria-labelledby="chart-h">
+					<div class="panel-head"><h2 id="chart-h">{HEADING.series}</h2></div>
 					<CompareOverlay {data} />
 				</section>
 			{/if}
 		</LoadState>
+		</div>
+		</SectionNav>
 	{/if}
 </LoadState>
 
@@ -883,7 +911,11 @@
 	.summary-grid .panel {
 		margin: 0;
 	}
-	@media (max-width: 1100px) {
+	.cmp-body {
+		container: cmp-body / inline-size;
+	}
+	/* Side by side from 60rem of comparison (a 1100 px window beside the sidebar, or beside the side index at 1440 px). */
+	@container cmp-body (max-width: 60rem) {
 		.summary-grid {
 			grid-template-columns: minmax(0, 1fr);
 		}

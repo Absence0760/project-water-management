@@ -19,7 +19,7 @@
 //
 // Pure and deterministic (no sampling): the same input and options give the
 // same result. Nothing here is stored; it is a live diagnostic.
-import { parseUnitRainSeriesKey, type DailySeries, type ModelInput, type ModelOutput, type UnitRainSeriesKey } from '../project';
+import { parseUnitRainSeriesKey, referenceCellSeriesKey, type DailySeries, type ModelInput, type ModelOutput, type UnitRainSeriesKey } from '../project';
 import { prepareRun } from '../prepare';
 import { runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario/overrides';
@@ -130,8 +130,15 @@ export function sensitivityPlan(
 	const rainKinds = [...RAIN_KINDS, ...unitKeys].filter((k) => (input.series as Record<string, DailySeries | undefined>)?.[k]?.values.some((v) => typeof v === 'number' && v > 0));
 	if (rainKinds.length) {
 		const maps = perUnit ? nodes.filter((n) => typeof n.mapMm === 'number').length : 0;
+		// The reference unit's CHIRPS cell (engine ≥ 1.80.0, §2.4h) scales with the gauge it is fitted against, so the reference factors stay put.
+		const cellKey = perUnit && s.unitRain?.reference ? referenceCellSeriesKey(s.unitRain.reference.unitId) : null;
+		const scaleCell = (k: number, series: ModelInput['series']): ModelInput['series'] => {
+			const c = cellKey ? (series as Record<string, DailySeries | undefined>)[cellKey] : undefined;
+			return c ? ({ ...series, [cellKey!]: { ...c, values: c.values.map((v) => (v === null || v === undefined ? v : v * k)) } } as ModelInput['series']) : series;
+		};
 		const scaleMaps = (k: number) => (x: ModelInput): ModelInput => ({
 			...x,
+			series: scaleCell(k, x.series),
 			settings: { ...x.settings, unitRain: { ...x.settings.unitRain!, ...(typeof x.settings.unitRain?.gaugeMapMm === 'number' ? { gaugeMapMm: x.settings.unitRain.gaugeMapMm * k } : {}) } },
 			model: { ...x.model, nodes: x.model.nodes.map((n) => (typeof n.mapMm === 'number' ? { ...n, mapMm: n.mapMm * k } : n)) }
 		});

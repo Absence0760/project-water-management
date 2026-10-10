@@ -51,7 +51,7 @@
 	</div>
 	<div class="cells">
 		{#each WATER_YEAR_MONTHS as m, i (m)}
-			<div class="cell" class:on={rates[i]! > 0}>
+			<div class="cell" class:on={rates[i]! > 0} data-paste-col={i}>
 				<span class="m" aria-hidden="true">{m}</span>
 				<NumberInput
 					label="Max rate of {label} in {m}, {transferUnit.label}"

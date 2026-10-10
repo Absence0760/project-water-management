@@ -12,6 +12,9 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { sabiRange, systemsOf, systemUse } from '$lib/model/systems';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { applySystemPaste, planSystemPaste, systemsCsv, SYSTEMS_FORMAT } from './systemsPaste';
 
 	let { editor, readonly }: { editor: ModelEditor; readonly: boolean } = $props();
 
@@ -31,6 +34,40 @@
 		const s = editor.addIrrigationSystem();
 		announce = `Added ${s.name}. Name it and set its efficiency.`;
 		queueMicrotask(() => document.getElementById(`sys-name-${s.id}`)?.focus());
+	}
+
+	// --- paste names and efficiencies from a spreadsheet (issue #477): into an efficiency, or from the button ---
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteAnchor = $state<PasteAnchor | null>(null);
+	const pasteWhere = $derived(pasteAnchor ? `${rows[pasteAnchor.row]?.name || '(unnamed)'}, Efficiency` : null);
+	function openPaste() {
+		pasteAnchor = null;
+		pasteText = '';
+		pasteOpen = true;
+	}
+	function onPaste(e: ClipboardEvent) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		pasteAnchor = t.anchor;
+		pasteText = t.text;
+		pasteOpen = true;
+	}
+	function applyPaste(plan: PastePlan) {
+		applySystemPaste(
+			plan,
+			(id, eff) => {
+				const row = table().find((x) => x.id === id);
+				if (row) row.efficiency = eff;
+			},
+			(name) => {
+				const s = editor.addIrrigationSystem();
+				s.name = name.slice(0, 100);
+				return s.id;
+			}
+		);
+		const n = plan.added?.length ?? 0;
+		announce = `Pasted ${plan.changes.length} ${plan.changes.length === 1 ? 'efficiency' : 'efficiencies'}${n ? `, adding ${n} ${n === 1 ? 'system' : 'systems'}` : ''}. Save the model to keep them.`;
 	}
 
 	async function remove(id: string, name: string) {
@@ -56,7 +93,12 @@
 			Each crop is on one of these, by default or on a unit that waters it differently; a unit's efficiency is its crops'
 			combined. Changing an efficiency changes every crop on the system. <HelpTip key="crop.irrigationSystemId" label="About irrigation systems" />
 		</p>
-		{#if !readonly}<button type="button" class="btn btn-sm" onclick={add}>+ Add system</button>{/if}
+		{#if !readonly}
+			<div class="toolbar grid-actions" data-testid="grid-actions">
+				<button type="button" class="btn btn-sm" onclick={add}>+ Add system</button>
+				<button type="button" class="btn btn-sm" onclick={openPaste}>Paste from a spreadsheet…</button>
+			</div>
+		{/if}
 	</div>
 	<div class="table-wrap">
 		<table class="data compact">
@@ -68,10 +110,10 @@
 					{#if !readonly}<th scope="col"><span class="visually-hidden">Remove</span></th>{/if}
 				</tr>
 			</thead>
-			<tbody>
+			<tbody onpaste={readonly ? undefined : onPaste}>
 				{#each rows as s, i (s.id)}
 					{@const range = sabiRange(s)}
-					<tr>
+					<tr data-idx={i}>
 						<th scope="row">
 							{#if readonly}
 								{s.name}
@@ -86,7 +128,7 @@
 								/>
 							{/if}
 						</th>
-						<td class="eff">
+						<td class="eff" data-paste-col="0">
 							<NumberInput
 								label="Efficiency of {s.name || 'the system'}, %"
 								min={1}
@@ -117,6 +159,21 @@
 		measurement is better.
 	</p>
 	<p class="visually-hidden" aria-live="polite">{announce}</p>
+	{#if !readonly}
+		<GridPasteDialog
+			bind:open={pasteOpen}
+			bind:text={pasteText}
+			title="Paste irrigation systems"
+			layout="Efficiency in %: a row per system with its name first, under a heading row (System, Efficiency (%), as the CSV below has them). A name the table doesn't have adds a system; without names the values fill the efficiencies from the row you pasted into."
+			where={pasteWhere}
+			plan={(t) => planSystemPaste(t, rows, pasteAnchor)}
+			onapply={applyPaste}
+			csv={() => systemsCsv(rows)}
+			csvName="irrigation-systems.csv"
+			format={SYSTEMS_FORMAT}
+			rowNoun={['system', 'systems']}
+		/>
+	{/if}
 </section>
 
 <style>

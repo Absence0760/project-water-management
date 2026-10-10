@@ -106,6 +106,12 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('POST', `${at(c)}/series/merge`, { kind: 'flow_observed_m3s', name: 'guard', unit: 'm3/s', startDate: '2022-01-02', values: [5, 6] })
 	},
 	{
+		// One day by hand (issue #477): a merge of that day, entry 'hand'.
+		route: `PUT ${P}/series/:seriesId/days/:date`,
+		records: ['series.merged'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/series/${c.seriesId}/days/2022-01-02`, { value: 7 })
+	},
+	{
 		route: `POST ${P}/series/:seriesId/revisions/:revId/restore`,
 		records: ['restore'],
 		call: async (c) => {

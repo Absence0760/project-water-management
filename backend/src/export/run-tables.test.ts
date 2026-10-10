@@ -137,6 +137,67 @@ describe('summary sheet', () => {
 		expect(lines.filter((l) => l === '').length).toBe(21);
 	});
 
+	it('writes the reference gauge’s monthly factors (engine ≥ 1.80.0) after the units, and a unit’s MAP ratio on them', () => {
+		const s = structuredClone(summary);
+		const unit = {
+			nodeId: 'u1',
+			name: 'Upper unit',
+			areaKm2: 10,
+			mapMm: 900,
+			mapSource: 'invented isohyet',
+			rule: 'unitChirps' as const,
+			rainKey: 'rain_chirps_mm@u1',
+			factor: null,
+			factorSource: 'chirpsReference' as const,
+			gaugeMapFactor: null,
+			gaugeMapOwnFactor: null,
+			gaugeMapClamped: false,
+			chirps: { source: 'reference' as const, factors: Array(12).fill(2), mapRatio: 1.5, mapOwnRatio: 1.5, mapClamped: false },
+			days: { unitGauge: 0, gaugeMap: 0, unitChirps: 366, catchment: 0, forecast: 0, none: 0 },
+			rainMm: 700,
+			petMm: 1500,
+			aetMm: 600,
+			flowMm: 70,
+			exchangeMm: 0,
+			storageStartMm: 200,
+			storageEndMm: 230,
+			runoffM3: 700_000,
+			runoffCoefficient: 0.1
+		};
+		const month = (m: number) => ({ month: m, sharedDays: 120, gaugeMm: 400, chirpsMm: 200, ownFactor: 2, factor: 2, clamped: false, fitted: true });
+		s.unitRain = {
+			mode: 'perUnit',
+			gaugeMapMm: null,
+			gaugeMapSource: null,
+			mapPeriod: { start: '1991-01-01', end: '2020-12-31' },
+			units: [unit],
+			reference: {
+				gauge: 'rain_catchment_mm',
+				unitId: 'u0',
+				unitName: 'Gauge unit',
+				mapMm: 600,
+				cellKey: 'rain_chirps_cell_mm@u0',
+				pinned: false,
+				months: [{ ...month(1), sharedDays: 60, ownFactor: null, factor: 1, fitted: false }, ...Array.from({ length: 11 }, (_, i) => month(i + 2))]
+			}
+		};
+		const lines = [...summaryCsvLines(meta, s)];
+		expect(lines.find((l) => l.startsWith('Upper unit,'))).toBe(
+			"Upper unit,10,900,invented isohyet,the unit's own CHIRPS,rain_chirps_mm@u1,1.5,the reference gauge's monthly factors × unit MAP ÷ the reference unit's MAP,no,,,0,0,366,0,0,0,700,600,70,700000,0.1"
+		);
+		const at = lines.indexOf('Reference gauge,rain_catchment_mm');
+		expect(at).toBeGreaterThan(0);
+		expect(lines.slice(at + 1, at + 6)).toEqual([
+			'Reference unit,Gauge unit,MAP 600 mm',
+			'Reference CHIRPS cell,rain_chirps_cell_mm@u0,',
+			'Month,Shared days,Gauge (mm),CHIRPS (mm),Own factor,Factor applied,Clamped,Fitted',
+			'Jan,60,400,200,,1,no,no (factor 1)',
+			'Feb,120,400,200,2,2,no,yes'
+		]);
+		delete s.unitRain.reference;
+		expect([...summaryCsvLines(meta, s)].some((l) => l.startsWith('Reference gauge'))).toBe(false);
+	});
+
 	it('writes fractions as percentages without binary noise', () => {
 		const s = structuredClone(summary);
 		s.farms[0]!.fractionSupplied = 0.07;

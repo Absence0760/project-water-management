@@ -17,6 +17,11 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 	// The bands sit on River & reserve with the findings they qualify (issue #17).
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
+	// Not run: one row (name, purpose, ⓘ, Run…) until the editor opens the form, which takes focus (issue #465).
+	await expect(panel.getByTestId('tool-row')).toContainText('How far this run’s results move');
+	await expect(panel.getByLabel('Parameter sets')).toHaveCount(0);
+	await panel.getByRole('button', { name: 'Run…' }).click();
+	await expect(panel.getByLabel('Parameter sets')).toBeFocused();
 	await expect(panel.getByText('No uncertainty ensemble has been stored for this run.')).toBeVisible();
 	// The ensemble's boxes line up: the low-flow checkbox under its box doesn't lift that field's label.
 	const tops = await Promise.all(['Parameter sets', /^Lowest skill kept/, /^Largest low-flow bias kept/].map(async (l) => (await panel.getByLabel(l).boundingBox())!.y));
@@ -79,10 +84,11 @@ test('sensitivity runs: a verdict per EWR site, the tornado with its table, and 
 
 	await page.goto(`/projects/${project.id}?tab=river&run=${run}`);
 	const panel = page.getByTestId('sensitivity-panel');
-	// Every analysis panel's action row starts at the same edge with the same button size, so the runs line up down the page.
-	const ens = (await page.getByTestId('uncertainty-panel').getByRole('button', { name: 'Run ensemble' }).boundingBox())!;
+	// Not run, both tools are one row each, their buttons at the same right edge and the same size, so the
+	// runs line up down the page (issue #465); Sensitivity's runs at once, as it has no settings to choose.
+	const ens = (await page.getByTestId('uncertainty-panel').getByRole('button', { name: 'Run…' }).boundingBox())!;
 	const sens = (await panel.getByRole('button', { name: 'Run sensitivity' }).boundingBox())!;
-	expect(Math.abs(sens.x - ens.x)).toBeLessThan(2);
+	expect(Math.abs(sens.x + sens.width - (ens.x + ens.width))).toBeLessThan(2);
 	expect(Math.abs(sens.height - ens.height)).toBeLessThan(2);
 	await panel.getByRole('button', { name: 'Run sensitivity' }).click();
 

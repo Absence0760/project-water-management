@@ -310,6 +310,13 @@ MUTANTS = [
     ("the gauge rain G includes the CHIRPS infill", "            return v if src == 0 else None", "            return v"),
     ("a negative catchment reading lets the unit's CHIRPS fill a gauge-MAP day", "            return v if src == 0 else None", "            return v if src == 0 and v >= 0 else None"),
     ("the catchment's rain fills a unit's gap × 1, not × its MAP ratio", "v = None if math.isnan(cr) else cr * ratio", "v = None if math.isnan(cr) else cr"),
+    # The reference gauge (§2.4h, engine 1.80.0, issue #500).
+    ("the reference factor isn't clamped", "out.append(_clamp(g[m] / c[m], diag))", "out.append(g[m] / c[m])"),
+    ("the reference fit takes 89 shared days", "if n[m] >= 90 and c[m] >= 50:", "if n[m] >= 89 and c[m] >= 50:"),
+    ("the reference fit takes a month under 50 mm of CHIRPS", "if n[m] >= 90 and c[m] >= 50:", "if n[m] >= 90:"),
+    ("a no-data code is a reading in the reference fit", "if valid(cv) and valid(gv):", "if cv is not None and gv is not None:"),
+    ("no MAP ratio on the reference factors (issue #500 item 1a)", "return v * ref[0][cal_month(o)] * ref_r", "return v * ref[0][cal_month(o)]"),
+    ("a reference unit without land still sets the factors (1)", '        diag["unit_ref_not_land"] += 1\n        return None', '        return [None] + [1.0] * 12, {}'),
 ]
 
 
@@ -359,6 +366,7 @@ class CrossCheck(unittest.TestCase):
             # Per-unit rain (§2.4h).
             "unit_rule_gauge", "unit_rule_gauge_map", "unit_rule_chirps", "unit_rule_catchment", "unit_clamped",
             "unit_map_all_years", "unit_chirps_bias", "unit_link_days", "unit_catchment_days",
+            "unit_chirps_reference", "unit_ref_months_fitted", "unit_ref_not_land",
         ):
             self.assertGreater(cov[k][0], 0, f"no case exercises {k}")
 
@@ -400,6 +408,9 @@ class Generator(unittest.TestCase):
         # The outlook's engine-only per-unit inputs stay out, with forecast mode.
         self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": []}}, "model": {}}), [])
         self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "pinned": [{"nodeId": "u"}]}}, "model": {}})), 1)
+        # So do the ensemble's pinned reference factors (§2.4h); a reference itself is in scope.
+        self.assertEqual(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "u"}}}, "model": {}}), [])
+        self.assertEqual(len(model.unsupported({"settings": {"unitRain": {"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "u", "pinnedFactors": [1] * 12}}}, "model": {}})), 1)
         self.assertEqual(len(model.unsupported({"settings": {}, "model": {}, "series": {"rain_forecast_mm@u": {"startDate": "2020-01-01", "values": [1]}}})), 1)
 
     def test_known_differences_name_their_followup(self):

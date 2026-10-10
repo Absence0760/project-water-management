@@ -307,6 +307,16 @@ describe('createApi', () => {
 		expect(JSON.parse((back.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ siteNodeId: null });
 	});
 
+	it('sets or clears one day of a series with a PUT of its value, the unit only when given (issue #477)', async () => {
+		const put = mockFetch(200, { id: 's1', handDays: [['2021-10-02', '2021-10-02']] });
+		await createApi('', put).series.setDay('p1', 's/1', '2021-10-02', 12.5);
+		const [url, init] = put.mock.calls[0] as unknown as [string, RequestInit];
+		expect([url, init.method, JSON.parse(init.body as string)]).toEqual(['/projects/p1/series/s%2F1/days/2021-10-02', 'PUT', { value: 12.5 }]);
+		const clear = mockFetch(200, { id: 's1' });
+		await createApi('', clear).series.setDay('p1', 's1', '2021-10-02', null, 'l/s');
+		expect(JSON.parse((clear.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ value: null, unit: 'l/s' });
+	});
+
 	it('lists, makes and withdraws share links, and reads a share by token in the body, never the URL', async () => {
 		const link = { id: 'l1', label: 'Forum', url: 'http://x/share#t=abc' };
 		const list = mockFetch(200, { links: [link] });

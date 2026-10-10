@@ -317,7 +317,12 @@ runs and accumulations are real) can't be decided without the client.
       settings land. `verify/` cross-checks §2.4h (part E of #482). Also
       left: the run window still follows the catchment rain series. (The
       seasonal outlook runs each unit's season on its own rain, engine
-      1.78.0.)
+      1.78.0.) Issue #500 item 1, the reference gauge's monthly factors on
+      every unit's CHIRPS, is built in engine 1.80.0 (opt-in,
+      `settings.unitRain.reference`), with item 1a (× unit MAP ÷ the
+      reference unit's MAP on top) a provisional decision
+      (engine-audit.md § Provisional decisions 2026-10-10); the other
+      items of #500 stay open there.
 - [ ] **The daily EWR at the outlet from the DRM tables (engine 1.77.0,
       [#455](https://github.com/Absence0760/project-water-management/issues/455),
       model.md §2.9f, engine-audit A8).** Built off by default (the pragmatic
@@ -327,8 +332,7 @@ runs and accumulations are real) can't be decided without the client.
       natural bed losses; a rising natural percentile row read as its
       running minimum; below the driest point the Reserve flow scaled with
       q ÷ N₁₀ (as A1). Trigger: the hydrologist's answer, or the client's
-      first run judged by the DRM tables. Also left: scenarios can't switch
-      the source (`settings.set` doesn't list `ewrDailySource`).
+      first run judged by the DRM tables.
 - [ ] **Network, supply, crops and dams: provisional decisions 2026-10-01**
       (issue #90, the hydrologist list from *Supply order at a dam* to
       *WP-1.35 Land-cover split*). Each item was researched against published

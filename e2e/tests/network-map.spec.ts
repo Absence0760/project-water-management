@@ -10,6 +10,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeForm, openNodeTable } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { expectAbove } from '../support/reflow.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All hydrological units' });
 const card = (page: Page) => page.getByTestId('node-card');
@@ -102,6 +103,10 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page).toHaveURL(/[?&]grid=nodes/);
 	await expect(table.locator('table.net').getByRole('textbox', { name: 'Name' })).toHaveCount(3);
 	await expect(table.getByRole('button', { name: 'Sort by flow path' })).toBeVisible();
+	// The table's actions sit above its first row, not under the table and the field guide (issue #463).
+	const actions = table.getByTestId('grid-actions');
+	await expect(actions.getByRole('button')).toHaveText(['+ Add hydrological unit', '+ Add other user', 'Sort by flow path', 'Paste from a spreadsheet…']);
+	await expectAbove(actions, table.locator('table.net tbody tr').first());
 	await table.getByRole('button', { name: 'Done' }).click();
 
 	// There are no layouts to switch any more; old links still land somewhere sensible.
@@ -318,10 +323,17 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 	await expect(factors).toHaveCount(0);
 	await expect(page).toHaveURL(/\?tab=network$/);
 
-	// The menu closes on Escape.
+	// The menu names every grid in the order Crops & demand's does (issue #463); it closes on Escape.
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Open as a table' }).getByRole('link')).toHaveText([
+		'Hydrological unit table',
+		'Crop factors',
+		'Planted areas',
+		'Irrigation systems',
+		'Transfers',
+		'Demands'
+	]);
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a table' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();
@@ -455,12 +467,12 @@ test('on a big network a picked node is brought into view, in the drawing and in
 	await expect.poll(() => inside(nodeList(page).getByRole('button', { name: /^Unit 30/ }), list)).toBe(true);
 });
 
-test('the node sheet runs in the order water moves, with a jump row that stays put', async ({ page, owner }) => {
+test('the node sheet runs in the order water moves, with the section menu fixed above it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network sheet order');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	const sheet = await openNodeForm(page, 'Upper farm');
-	await expect(sheet.locator('.detail > fieldset > legend')).toHaveText([
+	const legends = [
 		'Catchment area',
 		'Flow share',
 		'Dam',
@@ -474,29 +486,46 @@ test('the node sheet runs in the order water moves, with a jump row that stays p
 		'Land cover',
 		// Last, where the unit's water leaves it: the reach below (engine 1.75.0, issue #444).
 		'Bed losses in the reach below'
-	]);
-	const jump = sheet.getByRole('navigation', { name: 'Sections of the form' });
-	// The jump row lists the same sections in the same order, by their short names.
-	await expect(jump.getByRole('button')).toHaveText([
-		'Catchment area',
-		'Flow share',
-		'Dam',
-		'Dam survey',
-		'Routing',
-		'Supply',
-		'Irrigation',
-		'Demand objects',
-		'Combined boreholes',
-		'Individual boreholes',
-		'Land cover',
-		'Bed losses'
-	]);
-	await jump.getByRole('button', { name: 'Individual boreholes' }).click();
-	const target = sheet.getByRole('group', { name: 'Individual boreholes', exact: true });
+	];
+	await expect(sheet.locator('.detail > fieldset > legend')).toHaveText(legends);
+	// The pages' section menu (common/SectionNav, issue #462), as a bar in the sheet's fixed sub-header: the same
+	// sections in the same order, by their short names on the bar and their legends in More.
+	const menu = sheet.getByRole('navigation', { name: 'Sections of the form' });
+	const short = ['Catchment area', 'Flow share', 'Dam', 'Dam survey', 'Routing', 'Supply', 'Irrigation', 'Demand objects', 'Combined boreholes', 'Individual boreholes', 'Land cover', 'Bed losses'];
+	const onBar = menu.locator('.groups').getByRole('link');
+	await expect(onBar.first()).toBeVisible();
+	const kept = await onBar.count();
+	await expect(onBar).toHaveText(short.slice(0, kept));
+	const more = menu.getByRole('button', { name: /^More sections/ });
+	if (kept < short.length) {
+		await more.click();
+		await expect(menu.locator('.pop').getByRole('link')).toHaveText(legends.slice(kept));
+		await page.keyboard.press('Escape');
+		await expect(more).toBeFocused();
+	} else await expect(more).toHaveCount(0);
+	// At most two rows: the bar's links and More, by their distinct tops.
+	// By role, as section-nav.spec.ts's barRows: the fit's hidden copies of More (tabindex -1, laid out apart) aren't the bar.
+	const boxes = await Promise.all([...(await onBar.all()), ...(await more.all())].map((l) => l.boundingBox()));
+	const tops = boxes.map((b) => Math.round(b!.y));
+	expect(new Set(tops).size).toBeLessThanOrEqual(2);
+	await expect(menu.getByText('On this page')).toHaveCount(0);
+
+	const url = page.url();
+	await menu.getByRole('link', { name: 'Routing', exact: true }).click();
+	const target = sheet.getByRole('group', { name: 'Routing', exact: true });
 	await expect(target).toBeFocused();
 	await expect(target.locator('legend')).toBeInViewport();
-	// The row sits in the sheet's fixed sub-header, so it is still on screen after the jump.
-	await expect(jump).toBeInViewport();
+	// No fragment in the URL (the sheet's own `edit=` stays as it was), and the section is marked as the one being read.
+	expect(page.url()).toBe(url);
+	await expect(menu.getByRole('link', { name: 'Routing', exact: true })).toHaveAttribute('aria-current', 'location');
+	// The menu sits in the sheet's fixed sub-header, so it is still on screen after the jump, and the page under the
+	// sheet keeps its own scroll padding (the menu covers none of it).
+	await expect(menu).toBeInViewport();
+	expect(await page.evaluate(() => document.documentElement.style.scrollPaddingTop)).toBe('');
+	// Scrolling the form by hand moves the mark: the last section, once the form is at its end.
+	await sheet.locator('.body').evaluate((el) => el.scrollTo(0, el.scrollHeight));
+	if (kept === short.length) await expect(menu.getByRole('link', { name: 'Bed losses' })).toHaveAttribute('aria-current', 'location');
+	else await expect(more).toHaveAccessibleName(/including the one being read/);
 	await expectNoViolations(page);
 });
 

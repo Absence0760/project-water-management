@@ -4,11 +4,15 @@
 	// grid itself, typed here, or read from a CSV file), the preview lists every
 	// value it would change, and Apply writes them into the editor, unsaved, like
 	// typing them in. The grid's own file says what the columns mean
-	// (network/nodePaste.ts, crops/areaPaste.ts).
+	// (network/nodePaste.ts, crops/areaPaste.ts). A grid that takes new rows
+	// (crops, irrigation systems: `PastePlan.added`) says how many it adds, and
+	// a grid given a `format` shows the shared Expected format note with its
+	// example file (issue #477, common/FormatHelp.svelte).
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
 	import { latestFileText } from '$lib/files/latest';
 	import { fmtNum } from '$lib/format/number';
-	import type { PastePlan } from '$lib/spreadsheet/paste/grid';
+	import type { GridFormat, PastePlan } from '$lib/spreadsheet/paste/grid';
 
 	let {
 		open = $bindable(false),
@@ -19,7 +23,9 @@
 		plan,
 		onapply,
 		csv,
-		csvName
+		csvName,
+		format = null,
+		rowNoun = ['row', 'rows']
 	}: {
 		open?: boolean;
 		/** The pasted block (set by the grid when the paste was into a cell). */
@@ -34,12 +40,17 @@
 		/** The grid now, as a CSV to fill in. */
 		csv: () => string;
 		csvName: string;
+		/** The Expected format note: the layout, an example and its file. */
+		format?: GridFormat | null;
+		/** What a new row is, for "Adds 2 crops" (singular, plural). */
+		rowNoun?: readonly [string, string];
 	} = $props();
 
 	const uid = `gp-${Math.random().toString(36).slice(2, 8)}`;
 	const result = $derived(text.trim() ? plan(text) : null);
 	const ok = $derived(result && !('error' in result) ? result : null);
 	const count = $derived(ok?.changes.length ?? 0);
+	const adds = $derived(ok?.added?.length ?? 0);
 	// Built when the dialog opens, so it holds the grid as it is then (with a BOM, so Excel reads m³ and ² as UTF-8).
 	const csvHref = $derived(open ? `data:text/csv;charset=utf-8,${encodeURIComponent('﻿' + csv())}` : '');
 	let fileNote = $state('');
@@ -61,7 +72,7 @@
 	}
 
 	function apply() {
-		if (!ok || !ok.changes.length) return;
+		if (!ok || (!ok.changes.length && !ok.added?.length)) return;
 		onapply(ok);
 		text = '';
 		fileNote = '';
@@ -74,7 +85,13 @@
 			? 'Paste or load a block to see what it changes.'
 			: error
 				? error
-				: `${count ? `${count} ${count === 1 ? 'value changes' : 'values change'}` : 'Nothing changes'}${ok!.unchanged ? `; ${ok!.unchanged} already ${ok!.unchanged === 1 ? 'has' : 'have'} the pasted value` : ''}.`
+				: `${[
+						adds ? `Adds ${adds} ${rowNoun[adds === 1 ? 0 : 1]}` : '',
+						count ? `${count} ${count === 1 ? 'value changes' : 'values change'}` : adds ? '' : 'Nothing changes',
+						ok!.unchanged ? `${ok!.unchanged} already ${ok!.unchanged === 1 ? 'has' : 'have'} the pasted value` : ''
+					]
+						.filter(Boolean)
+						.join('; ')}.`
 	);
 
 	const val = (v: number | null) => (v === null ? '–' : fmtNum(v, 4, true));
@@ -83,6 +100,19 @@
 <Dialog bind:open {title} wide>
 	<div class="paste">
 		<p class="small muted">{layout} A blank cell or a dash leaves a value as it is. Commas in numbers are read as the block shows them: 12,5 as a decimal comma, 1,500,000 as thousands.</p>
+		{#if format}
+			<FormatHelp
+				accepts="Cells copied from a spreadsheet, or a file: CSV (.csv), tab-separated (.tsv) or text (.txt)."
+				example={format.example}
+				exampleFile={{ name: format.exampleName, text: format.example }}
+				context={title}
+			>
+				<ul>
+					{#each format.rules as r (r)}<li>{r}</li>{/each}
+					<li>Decimals with a point (12.5) or a comma (12,5); thousands separators (1,500,000) only in a block without decimal commas. A trailing % is allowed.</li>
+				</ul>
+			</FormatHelp>
+		{/if}
 		<p class="small" data-testid="paste-where">
 			{#if where}Pasted into <strong>{where}</strong>: a block without names or headings starts there.{:else}A block without names or headings starts at the table's first row and column.{/if}
 		</p>
@@ -134,8 +164,8 @@
 
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (open = false)}>Cancel</button>
-		<button type="button" class="btn btn-primary" disabled={!count} onclick={apply}>
-			Apply {count} {count === 1 ? 'change' : 'changes'}
+		<button type="button" class="btn btn-primary" disabled={!count && !adds} onclick={apply}>
+			{#if !count && adds}Add {adds} {rowNoun[adds === 1 ? 0 : 1]}{:else}Apply {count} {count === 1 ? 'change' : 'changes'}{/if}
 		</button>
 	{/snippet}
 </Dialog>

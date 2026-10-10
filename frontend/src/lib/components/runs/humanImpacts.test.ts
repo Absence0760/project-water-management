@@ -30,7 +30,7 @@ describe('hasHumanImpacts', () => {
 });
 
 describe('usersTableOnSupply', () => {
-	it('is false when the curtailment table lists the other users, so Units & supply has one copy', () => {
+	it('is false when the curtailment table lists the other users, so Hydrological units has one copy', () => {
 		const listed = { curtailment: { otherUsers: [{ nodeId: 'u' }] } } as Pick<RunSummary, 'curtailment'>;
 		expect(usersTableOnSupply(listed)).toBe(false);
 	});
@@ -49,7 +49,7 @@ describe('otherUsesLink', () => {
 		expect(otherUsesLink({ farms: [farm({ avgGroundwaterM3Day: 1 })], landCover: {} as RunSummary['landCover'] })).toEqual({
 			hash: 'res-other-uses',
 			what: 'Land cover and groundwater',
-			where: 'Other uses on Units & supply'
+			where: 'Other uses on Hydrological units'
 		});
 		expect(otherUsesLink({ farms: [farm({ demandObjects: [{}] as FarmSummary['demandObjects'] })], users: [user()] })!.what).toBe('Demand objects and other water users');
 		expect(
@@ -61,13 +61,13 @@ describe('otherUsesLink', () => {
 		expect(otherUsesLink({ farms: [], users: [user()], curtailment: listed })).toEqual({
 			hash: 'res-curtailment',
 			what: 'Other water users',
-			where: 'the curtailment targets on Units & supply'
+			where: 'the curtailment targets on Hydrological units'
 		});
 		// A user's pump (engine 1.58.0) has its own table in Other uses.
 		expect(otherUsesLink({ farms: [], users: [user({ avgPumpLimitedM3Day: 3 })], curtailment: listed })).toEqual({
 			hash: 'res-other-uses',
 			what: 'Other water users’ pumps',
-			where: 'Other uses on Units & supply'
+			where: 'Other uses on Hydrological units'
 		});
 	});
 });

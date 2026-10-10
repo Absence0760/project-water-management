@@ -673,6 +673,9 @@ def unsupported(doc: dict) -> list[str]:
     # The seasonal outlook's engine-only per-unit inputs (§2.4h, §2.15): with forecast mode, outside verify/.
     if any(k.startswith("rain_forecast_mm@") for k in (doc.get("series") or {})) or (s.get("unitRain") or {}).get("pinned"):
         out.append("per-unit outlook forcing (rain_forecast_mm@<unit>, unitRain.pinned)")
+    # The uncertainty ensemble's engine-only pinned reference factors (§2.4h): outside verify/ with the ensemble.
+    if ((s.get("unitRain") or {}).get("reference") or {}).get("pinnedFactors"):
+        out.append("pinned reference factors (unitRain.reference.pinnedFactors)")
     return sorted(set(out))
 
 
@@ -727,6 +730,46 @@ def chirps_map_factor(hu: Series, map_mm: float, period: tuple[int, int], diag: 
     return _clamp(map_mm / mean, diag)
 
 
+def reference_factors(ur: dict, series: dict, units: list[dict], diag: dict):
+    """§2.4h *Reference gauge*: the 12 calendar-month factors (index 1..12),
+    Σ gauge ÷ Σ CHIRPS cell over the days of the month both have a reading,
+    over the whole stored records; 1 without 90 shared days and 50 mm of
+    CHIRPS; clamped to 0.25–4. Pinned factors replace the fit. None when
+    there is no reference, or its unit is not a land unit."""
+    ref = ur.get("reference")
+    if not ref:
+        return None
+    ref_unit = next((u for u in units if u["id"] == ref["unitId"]), None)
+    if ref_unit is None:
+        diag["unit_ref_not_land"] += 1
+        return None
+    pinned = ref.get("pinnedFactors")
+    if pinned:
+        return [None] + [float(x) for x in pinned], ref_unit
+    gauge = Series(series.get(ref["gauge"]))
+    cell = Series(series.get("rain_chirps_cell_mm@" + ref["unitId"]))
+    n = [0] * 13
+    g = [0.0] * 13
+    c = [0.0] * 13
+    if gauge and cell:
+        for o in range(cell.start, cell.end + 1):
+            cv = cell.get(o)
+            gv = gauge.get(o)
+            if valid(cv) and valid(gv):
+                m = cal_month(o)
+                n[m] += 1
+                g[m] += gv
+                c[m] += cv
+    out = [None]
+    for m in range(1, 13):
+        if n[m] >= 90 and c[m] >= 50:
+            out.append(_clamp(g[m] / c[m], diag))
+            diag["unit_ref_months_fitted"] += 1
+        else:
+            out.append(1.0)
+    return out, ref_unit
+
+
 def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], finals: list[float], p_used: list[float], units: list[dict], diag: dict) -> dict[str, list[float]]:
     """Each land unit's daily rain (§2.4h): its rule, chosen from the records
     the input holds, then the rule's chain day by day; 0 mm where no link has
@@ -739,6 +782,7 @@ def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], final
     has_catchment = bool(c_raw) and any(v is not None and math.isfinite(v) for v in c_raw["values"])
     fac = rain["factors"]
     has_bias = any(f is not None for f in fac[1:])
+    ref = reference_factors(ur, series, units, diag)
     out: dict[str, list[float]] = {}
     for u in units:
         uid = u["id"]
@@ -749,15 +793,23 @@ def unit_rain_forcing(ur: dict, series: dict, rain: dict, days: list[int], final
         map_mm = u.get("mapMm")
         cond2 = gauge_map is not None and map_mm is not None and has_catchment
         ratio = _clamp(map_mm / gauge_map, diag) if cond2 else 1.0
-        # The unit's CHIRPS, levelled as in rule 3: its MAP factor, else the catchment's §2.4b factors, else raw.
-        lev_f = chirps_map_factor(own_c, map_mm, period, diag) if (has_c and map_mm is not None) else None
-        if has_c and lev_f is None and has_bias:
+        # The unit's CHIRPS, levelled as in rule 3: its MAP factor, else the catchment's §2.4b factors, else raw;
+        # with a reference gauge, the reference's monthly factors × clamp(unit MAP ÷ the reference unit's MAP) instead.
+        ref_r = None
+        if ref is not None and has_c:
+            ref_map = ref[1].get("mapMm")
+            ref_r = _clamp(map_mm / ref_map, diag) if (map_mm is not None and ref_map is not None) else 1.0
+            diag["unit_chirps_reference"] += 1
+        lev_f = chirps_map_factor(own_c, map_mm, period, diag) if (has_c and map_mm is not None and ref_r is None) else None
+        if has_c and lev_f is None and ref_r is None and has_bias:
             diag["unit_chirps_bias"] += 1
 
-        def lev(o, own_c=own_c, lev_f=lev_f):
+        def lev(o, own_c=own_c, lev_f=lev_f, ref_r=ref_r):
             v = own_c.get(o)
             if not valid(v):
                 return None
+            if ref_r is not None:
+                return v * ref[0][cal_month(o)] * ref_r
             if lev_f is not None:
                 return v * lev_f
             f = fac[cal_month(o)] if has_bias else None
@@ -835,7 +887,9 @@ def run(doc: dict) -> dict:
                 divert_by_month_days=0, reach_loss_days=0,
                 # Per-unit rain (§2.4h): units on each rule, clamped factors, CHIRPS MAP fallbacks, unit-days per link.
                 unit_rule_gauge=0, unit_rule_gauge_map=0, unit_rule_chirps=0, unit_rule_catchment=0, unit_clamped=0,
-                unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0)
+                unit_map_all_years=0, unit_chirps_bias=0, unit_link_days=0, unit_catchment_days=0,
+                # The reference gauge (§2.4h, engine >= 1.80.0): units levelled by it, months fitted, references not on a land unit.
+                unit_chirps_reference=0, unit_ref_months_fitted=0, unit_ref_not_land=0)
 
     def put(node_id, key, values):
         out.append({"nodeId": node_id, "key": key, "values": values})

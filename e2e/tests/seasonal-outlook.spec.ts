@@ -103,6 +103,10 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('seasonal-outlook');
 	await expect(panel).toHaveAttribute('data-state', 'empty');
+	// Not run: one row until the editor opens the form, focus on the levels (issue #465).
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveCount(0);
+	await panel.getByRole('button', { name: 'Run…' }).click();
+	await expect(panel.getByLabel(/^Demand levels/)).toBeFocused();
 	await expect(panel.getByTestId('outlook-empty')).toHaveText('No seasonal outlook on this run yet.');
 	await expect(panel.getByLabel(/^Demand levels/)).toHaveValue('100, 85, 70');
 	// The button is in an action row under the levels box and its hint, at the box's left edge (ui-playbook.md, action rows).

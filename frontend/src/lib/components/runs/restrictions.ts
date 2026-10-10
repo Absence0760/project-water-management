@@ -1,12 +1,12 @@
 // The drought restriction rule's results (engine ≥ 1.54.0, WP-3.8, docs/ui.md
 // § Drought restrictions, RunSummary.droughtRestriction): what the tables on
-// Units & supply show. The days at each level per water year (October to
+// Hydrological units show. The days at each level per water year (October to
 // September) and over the run, and per unit its mean demand before and after
 // the cut and what it was supplied. The rule is a model rule, not the
 // restriction notice farmers see.
 import { describeDroughtRestriction, waterYearLabel, type RunSummary } from '@water-management/engine';
 
-/** Its own chunk (RestrictionTables.svelte), drawn on Units & supply and in the printable report. */
+/** Its own chunk (RestrictionTables.svelte), drawn on Hydrological units and in the printable report. */
 export const loadRestrictionTables = () => import('./RestrictionTables.svelte');
 
 type Summary = NonNullable<RunSummary['droughtRestriction']>;

@@ -194,7 +194,8 @@ test('the validation statement sits in the Record group, folded shut; opened, it
 	await createRun(page.request, project.id, 'Validated');
 	await openRuns(page, project.id);
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	await expect(menu.getByRole('link', { name: 'Validation', exact: true })).toHaveAttribute('href', '#res-validation');
+	// At 1440 the menu is the side index, its links named as the panels' headings (issue #462).
+	await expect(menu.getByRole('link', { name: 'Validation statement', exact: true })).toHaveAttribute('href', '#res-validation');
 
 	const panel = page.locator('#res-validation').getByRole('region', { name: 'Validation statement' });
 	await expect(panel).toHaveCount(1);

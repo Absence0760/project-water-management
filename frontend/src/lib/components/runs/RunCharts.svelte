@@ -3,7 +3,7 @@
 	// The standard result views of one run: hydrograph, flow-duration curve,
 	// and an explorer for any stored series (EWR vs outflow moved to River &
 	// reserve with the rest of its group, river/RiverTab.svelte, and a unit's
-	// supply and dam storage to Units & supply, supply/UnitDetail.svelte, issue
+	// supply and dam storage to Hydrological units, supply/UnitDetail.svelte, issue
 	// #17). Each series is fetched once, on demand (see cache.ts).
 	// It also lays out the results below the summary in the groups of
 	// sections.ts (model quality, record, dig deeper), with a heading per

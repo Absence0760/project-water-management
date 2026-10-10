@@ -15,12 +15,15 @@
 
 	It reports what past years did at each level; it never picks one. The
 	pending state follows the sweep's own status and its job's (polled), and
-	the panel's data-state attribute says which, for the e2e spec.
+	the panel's data-state attribute says which, for the e2e spec. Without a
+	sweep it is one row (common/ToolRow, issue #465) until an editor presses
+	Run…, which opens the form with focus on the levels.
 -->
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import ToolRow from '$lib/components/common/ToolRow.svelte';
 	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import type { EwrRuleTable, NetworkNode, ProjectSettings } from '@water-management/engine';
 	import { api, type OutcomeSettings, type Project, type RunMeta, type Sweep } from '$lib/api';
 	import { cachedSeries } from '$lib/components/runs/cache';
@@ -193,10 +196,29 @@
 	});
 
 	const busy = $derived(submitting || shown?.kind === 'pending');
+	// No sweep on this run (or none can run on it): one row until the editor opens the form (issue #465).
+	let opened = $state(false);
+	const runnable = $derived(ordinary && hasNaturalFlow);
+	const collapsed = $derived(!opened && !submitting && !submitError && !loadError && (!runnable || loading || !sweep));
+	async function open() {
+		opened = true;
+		await tick();
+		document.getElementById('outcome-levels')?.focus();
+	}
 	const fmtBound = (c: { bounds: string; nYears: number }) => `${c.bounds} · ${c.nYears} ${c.nYears === 1 ? 'year' : 'years'}`;
 </script>
 
 <section aria-labelledby="outcome-h-t" data-testid="outcome-matrix" data-state={dataState}>
+	{#if collapsed}
+		<ToolRow headingId="outcome-h" titleId="outcome-h-t" title="Outcome matrix" help="outcome-matrix" purpose="How often the river’s requirement was met at a few demand levels, in each class of past water year.">
+			{#snippet action()}
+				{#if !ordinary}<span>Needs an ordinary run, not a scenario or forecast.</span>
+				{:else if !hasNaturalFlow}<span>Needs the catchment natural flow: run the model again.</span>
+				{:else if canEdit}<button type="button" class="btn" aria-describedby="outcome-h-t" onclick={open}>Run…</button>
+				{:else}<span>{loading ? 'Loading…' : 'Not run yet: an editor can run one.'}</span>{/if}
+			{/snippet}
+		</ToolRow>
+	{:else}
 	<h3 id="outcome-h"><span id="outcome-h-t">Outcome matrix</span> <HelpTip key="outcome-matrix" /></h3>
 	<p class="muted small lead">
 		This run’s inputs at a few demand levels, by class of water year: how often the river’s requirement was met in past years of each
@@ -321,6 +343,7 @@
 				</ul>
 			{/if}
 		{/if}
+	{/if}
 	{/if}
 </section>
 

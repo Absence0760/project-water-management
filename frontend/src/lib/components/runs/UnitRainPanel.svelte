@@ -11,7 +11,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { fmtNum } from '$lib/format/number';
-	import { factorClamped, factorText, periodText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
+	import { factorClamped, factorText, periodText, referenceFactorsText, RULE_LABEL, sortResultUnits, unitRainNotes, type UnitRainResult } from './unitRain';
 
 	/** order: node ids in the run's farm order (summary.farms), which the rows follow within each rank. */
 	let { result, order = [] }: { result: UnitRainResult; order?: string[] } = $props();
@@ -26,6 +26,7 @@
 	const fold = $derived(foldList(units, (u) => u.nodeId, null, allUnits, FOLD));
 	const noteFold = $derived(foldList(notes, (n) => n, null, allNotes, NOTES_FOLD));
 	const withDays = $derived(units.filter((u) => u.days));
+	const refFactors = $derived(referenceFactorsText(result));
 </script>
 
 <section class="unit-rain" aria-labelledby="{uid}-h" data-testid="run-unit-rain">
@@ -33,6 +34,12 @@
 	<p class="muted small">
 		GR4J ran once for each unit with land on its own rain. MAP period {periodText(result.mapPeriod)}{#if result.gaugeMapMm !== null}; rain gauge’s MAP {fmtNum(result.gaugeMapMm)} mm{result.gaugeMapSource ? ` (${result.gaugeMapSource})` : ''}{:else}; no rain gauge MAP{/if}.
 	</p>
+	{#if result.reference && refFactors}
+		<p class="muted small" data-testid="run-unit-rain-reference">
+			Every unit’s CHIRPS is levelled by the reference gauge ({result.reference.gauge === 'rain_catchment_mm' ? 'the catchment rain gauge' : 'a unit’s own gauge'}, compared with the CHIRPS
+			cell of {result.reference.unitName ?? result.reference.unitId}){result.reference.pinned ? ', its factors pinned' : ''}: {refFactors}.
+		</p>
+	{/if}
 	{#if notes.length}
 		<div class="alert alert-warning notes" data-testid="run-unit-rain-notes">
 			<ul>

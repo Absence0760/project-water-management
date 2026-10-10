@@ -1,7 +1,7 @@
 // Settings → Flow generation → Rain for each unit (settings.unitRain, issue
 // #482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch,
-// the catchment gauge's MAP and its source, the MAP period in whole years, and
-// the check that blocks Save. The engine's unitRainError is the API's rule;
+// the catchment gauge's MAP and its source, the MAP period in whole years, the
+// reference gauge and unit (issue #500), and the check that blocks Save. The engine's unitRainError is the API's rule;
 // this says the same problems in the form's words.
 import {
 	DEFAULT_UNIT_MAP_PERIOD,
@@ -10,8 +10,34 @@ import {
 	PE_SOURCE_MAX,
 	unitRainError,
 	type NetworkNode,
+	type UnitRainReference,
 	type UnitRainSettings
 } from '@water-management/engine';
+
+/** The catchment rain gauge, as a reference gauge's series key. */
+export const CATCHMENT_GAUGE = 'rain_catchment_mm';
+/** A unit's own gauge, as a reference gauge's series key. */
+export const unitGaugeKey = (unitId: string) => `rain_catchment_mm@${unitId}`;
+
+/**
+ * The setting with its reference gauge set (engine ≥ 1.80.0, docs/model.md
+ * §2.4h *Reference gauge*): '' clears the reference. Picking a unit's own
+ * gauge makes that unit the reference unit (the gauge stands in it);
+ * picking the catchment gauge keeps the unit already chosen, else leaves it
+ * to pick.
+ */
+export function withReferenceGauge(v: UnitRainSettings, gauge: string): UnitRainSettings {
+	const { reference: prev, ...rest } = v;
+	if (!gauge) return rest;
+	const unitId = gauge.startsWith(`${CATCHMENT_GAUGE}@`) ? gauge.slice(CATCHMENT_GAUGE.length + 1) : (prev?.unitId ?? '');
+	return { ...rest, reference: { gauge, unitId } };
+}
+
+/** The setting with its reference unit set (a reference gauge must be set already). */
+export function withReferenceUnit(v: UnitRainSettings, unitId: string): UnitRainSettings {
+	const ref: UnitRainReference = v.reference ?? { gauge: CATCHMENT_GAUGE, unitId: '' };
+	return { ...v, reference: { gauge: ref.gauge, unitId } };
+}
 
 /** The first year a unit's CHIRPS can cover (rnl, 1981) and the fewest complete years the MAP factor wants before it warns (§2.4h). */
 export const UNIT_MAP_FIRST_YEAR = 1981;
@@ -60,7 +86,7 @@ export function withGaugeMap(v: UnitRainSettings, mm: number | null): UnitRainSe
 }
 
 /** The first problem, as the form shows it (and blocks Save on), and the field it is in; null when it can be saved. */
-export function unitRainProblem(v: UnitRainSettings | null | undefined): { field: 'gaugeMap' | 'gaugeSource' | 'period'; message: string } | null {
+export function unitRainProblem(v: UnitRainSettings | null | undefined): { field: 'gaugeMap' | 'gaugeSource' | 'period' | 'reference'; message: string } | null {
 	if (!unitRainOn(v)) {
 		const e = unitRainError(v);
 		return e ? { field: 'period', message: `Rain for each unit can’t be saved: ${e}.` } : null;
@@ -72,6 +98,7 @@ export function unitRainProblem(v: UnitRainSettings | null | undefined): { field
 		if (!src.trim()) return { field: 'gaugeSource', message: 'Say where the rain gauge’s MAP comes from: the source is required (the record or study, and its years).' };
 		if (src.length > PE_SOURCE_MAX) return { field: 'gaugeSource', message: `The rain gauge’s MAP source is at most ${PE_SOURCE_MAX} characters; it has ${src.length}.` };
 	}
+	if (v.reference && !v.reference.unitId) return { field: 'reference', message: 'Pick the reference unit: the unit the reference gauge stands in.' };
 	const { from, to } = mapPeriodYears(v);
 	if (!(Number.isInteger(from) && Number.isInteger(to))) return { field: 'period', message: 'The MAP period needs a first and a last year.' };
 	if (from > to) return { field: 'period', message: 'The MAP period’s first year must not be after its last.' };

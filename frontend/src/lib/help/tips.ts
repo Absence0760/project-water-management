@@ -457,7 +457,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'data-quality-limits',
 		term: 'Data quality limits',
-		short: 'The limits of the input checks: gauge vs logger, outliers, flat stretches, and catchment rain recorded as zero or far below CHIRPS.',
+		short: 'The checks Data and runs report: negative values, outliers, flat stretches, rain read as 0 that looks missing, breaks against CHIRPS.',
 		category: 'fit',
 		fields: ['settings.dataQuality']
 	},
@@ -538,7 +538,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'user-priority',
 		term: 'User priority (senior / junior)',
-		short: 'Senior: hydrological units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		short: 'Senior (the default): hydrological units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
 		category: 'network',
 		fields: ['node.userPriority', 'run.passed_for_senior']
 	},
@@ -915,7 +915,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'crop-factor',
 		term: 'Crop factor (× A-pan)',
-		short: 'Monthly multiplier from A-pan evaporation to a crop’s water use. 12 values, Oct … Sep. Not an FAO Kc.',
+		short: 'Monthly multiplier from A-pan to a crop’s water use, Oct … Sep. Not an FAO Kc: multiply a Kc by the pan coefficient (0.6–0.85) first.',
 		units: 'dimensionless',
 		category: 'crops',
 		fields: ['crop.cropFactor', 'crop.name']
@@ -1904,6 +1904,12 @@ export const TIPS: HelpTipText[] = [
 		category: 'data'
 	},
 	{
+		id: 'series-edit-day',
+		term: 'Edit a day, or paste rows',
+		short: 'Set or clear one day of a series by hand, or paste date and value rows from a spreadsheet. Days typed in are marked as edited by hand.',
+		category: 'data'
+	},
+	{
 		id: 'workbook-import',
 		term: 'b023 workbook import',
 		short: 'Turns a b023 workbook into a new project, read in your browser: network, units, crops, transfers, settings and Flow data series.',
@@ -1941,7 +1947,7 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'input-diff',
-		term: 'What changed (input differences)',
+		term: 'Inputs that differ',
 		short: 'Every difference between two runs’ inputs, in words: network, crops, transfers, settings and series, with who saved each change.',
 		category: 'results'
 	},
@@ -1954,7 +1960,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'compare-takeaways',
 		term: 'Takeaways (material changes)',
-		short: 'Plain sentences under What changes, only for material changes: a day a year below the EWR, a point of demand supplied, 5 % of outflow.',
+		short: 'Plain sentences under What the change does, only for material changes: a day a year below the EWR, 1 pp of demand supplied, 5 % of outflow.',
 		category: 'results'
 	},
 	{

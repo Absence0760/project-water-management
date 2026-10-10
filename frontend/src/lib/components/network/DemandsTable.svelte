@@ -26,7 +26,7 @@
 	import DemandsRunCaption from './DemandsRunCaption.svelte';
 	import { latestRunFigures } from './demandsRunLoad.svelte';
 	import type { RunMeta } from '$lib/api';
-	import { applyDemandPaste, demandsCsv, pasteNames, planDemandPaste } from './demandsPaste';
+	import { applyDemandPaste, demandsCsv, demandsFormat, pasteNames, planDemandPaste } from './demandsPaste';
 
 	let {
 		editor,
@@ -152,12 +152,17 @@
 			of {fmtQty(total.annualMm3, 3)} Mm³/a.
 		</p>
 	{/if}
+	<!-- The grid's actions in one row above it, with the unit they paste and download in: not under the totals and a note (issue #463). -->
 	{#if rows.length}
-		<div class="unit-pick">
-			<label for="demands-unit">Show demands in</label>
-			<select id="demands-unit" value={unit ?? ''} onchange={(e) => pickUnit(e.currentTarget.value)} data-testid="demands-unit">
-				{#each DEMANDS_UNIT_CHOICES as c (c.label)}<option value={c.value ?? ''}>{c.label}</option>{/each}
-			</select>
+		<div class="toolbar grid-actions" data-testid="grid-actions">
+			<div class="unit-pick">
+				<label for="demands-unit">Show demands in</label>
+				<select id="demands-unit" value={unit ?? ''} onchange={(e) => pickUnit(e.currentTarget.value)} data-testid="demands-unit">
+					{#each DEMANDS_UNIT_CHOICES as c (c.label)}<option value={c.value ?? ''}>{c.label}</option>{/each}
+				</select>
+			</div>
+			{#if !readonly}<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>{/if}
+			<button type="button" class="btn" onclick={downloadCsv}>Download the table as CSV</button>
 		</div>
 	{/if}
 	<DemandsRunCaption {run} dirty={editor.dirty} />
@@ -258,10 +263,6 @@
 			{#if scheduled}A scheduled demand shows its months before its schedule windows.{/if}
 			A run's demand also follows rain, daily A-pan, demand factors and restrictions; its own figures are on its results.
 		</p>
-		<div class="toolbar after">
-			{#if !readonly}<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>{/if}
-			<button type="button" class="btn" onclick={downloadCsv}>Download the table as CSV</button>
-		</div>
 		{#if !readonly}
 			<GridPasteDialog
 				bind:open={pasteOpen}
@@ -273,6 +274,7 @@
 				onapply={applyPaste}
 				csv={() => demandsCsv(rows, PASTE_SCALE, PASTE_UNIT)}
 				csvName="demands.csv"
+				format={demandsFormat(PASTE_UNIT)}
 			/>
 		{/if}
 		{#if cells && regTotal}
@@ -302,7 +304,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin: 0 0 0.75rem;
 	}
 	.unit-pick select {
 		width: auto;

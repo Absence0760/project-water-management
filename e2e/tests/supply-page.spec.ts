@@ -1,5 +1,5 @@
-// Units & supply (?tab=supply, issue #17 option A · Outcomes; docs/ui.md §
-// Units & supply): three tiles, a card per unit worst supplied first in the
+// Hydrological units (?tab=supply, issue #17 option A · Outcomes; docs/ui.md §
+// Hydrological units): three tiles, a card per unit worst supplied first in the
 // Summary's and the Network's supply bands, the picked unit's supply against
 // its demand (unit=<nodeId>), and the panels moved here from Runs & results
 // (the unit results table, curtailment, assurance of supply). Synthetic data
@@ -31,7 +31,7 @@ test('three tiles, a card per hydrological unit worst supplied first in the Summ
 	await expect(strip(page).getByRole('link', { name: 'Hydrological units', exact: true })).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 	await expect(page.getByTestId('supply-summary')).toHaveText(/^4 hydrological units · \d short in the week to 28 Jan 2022 · run “Baseline”, ran today$/);
-	await expect(page.getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
+	await expect(page.getByRole('link', { name: 'Open in Runs & results' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
 
 	// The tiles: the Summary's irrigation supplied with the units below 95 % under it and its change (the same inputs,
 	// so no change; the units below were a tile of their own until issue #175), short in the run's last 7 days
@@ -149,10 +149,11 @@ test('many hydrological units: every unit below the target or short this week sh
 	// Open again: the chart sticks beside the long list…
 	await more.click();
 	await unitCards(page).nth(28).scrollIntoViewIfNeeded();
-	await expect(unitChart(page).getByRole('heading', { level: 2 })).toBeInViewport();
-	// …under the "On this page" menu, not behind it.
+	// Its head is the unit picker (issue #467; the heading is for screen readers then).
+	await expect(unitChart(page).getByRole('combobox', { name: 'Hydrological unit shown' })).toBeInViewport();
+	// …beside the "On this page" index, not behind it (at 1440 the menu is a column on the left, issue #462).
 	const menu = (await page.getByRole('navigation', { name: 'Hydrological units sections' }).boundingBox())!;
-	expect((await unitChart(page).boundingBox())!.y).toBeGreaterThanOrEqual(menu.y + menu.height);
+	expect((await unitChart(page).boundingBox())!.x).toBeGreaterThanOrEqual(menu.x + menu.width);
 
 	// Pick one far down, then fold: its card stays, after the ones to look into; a reload of its link keeps it.
 	const far = unitCards(page).nth(30);
@@ -167,13 +168,14 @@ test('many hydrological units: every unit below the target or short this week sh
 	await expect(unitCards(page).last().locator('a.name')).toHaveAttribute('aria-current', 'true');
 	await expect(page.getByRole('button', { name: 'Show all 32 hydrological units' })).toBeVisible();
 
-	// The unit results table grows with its rows (no 70vh box), its header row sticking under the menu as the window scrolls.
+	// The unit results table grows with its rows (no 70vh box), its header row sticking under the app header as the window
+	// scrolls (the menu is the index beside it: under a bar it sticks under the bar, section-nav.spec.ts).
 	const results = page.getByRole('region', { name: 'Hydrological unit results' });
 	await expect(results.locator('tbody tr')).toHaveCount(32);
 	await results.locator('tbody tr').nth(30).scrollIntoViewIfNeeded();
 	const head = (await results.locator('thead').boundingBox())!;
-	const bar = (await page.getByRole('navigation', { name: 'Hydrological units sections' }).boundingBox())!;
-	expect(Math.abs(head.y - (bar.y + bar.height))).toBeLessThanOrEqual(2);
+	const headerH = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 0);
+	expect(Math.abs(head.y - headerH)).toBeLessThanOrEqual(2);
 	expect(await innerScrollers(page)).toEqual([]);
 
 	// On a phone: the same cards and the fold before the chart, still nothing scrolling inside itself, no sideways scroll.
@@ -247,6 +249,54 @@ test('picking a hydrological unit charts its supply against demand, the link rou
 	await unitChart(page).getByRole('link', { name: 'Dam storage on the Dams page' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Storage/ }).getByRole('heading', { level: 2 })).toHaveText('Storage: Upper farm');
+});
+
+test('the unit detail picks a unit itself: every unit least supplied first, with previous and next buttons, writing unit= (issue #467)', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedSupplyProject(page.request, 'Supply select');
+	await createRun(page.request, project.id, 'Baseline');
+	await openSupply(page, project.id);
+	// Four units: the fold hides at most one, so every card shows, in the picker's order.
+	const names = (await unitCards(page).locator('a.name').allInnerTexts()).map((n) => n.trim());
+	expect(names).toHaveLength(4);
+	const detail = unitChart(page);
+	const pick = detail.getByRole('combobox', { name: 'Hydrological unit shown' });
+	const prev = detail.getByRole('button', { name: 'Previous hydrological unit' });
+	const next = detail.getByRole('button', { name: 'Next hydrological unit' });
+	const heading = detail.getByRole('heading', { level: 2 });
+	await expect(pick.locator('option')).toHaveText(names.map((n, i) => new RegExp(`^${i + 1}\\. ${n}( · \\d+% supplied)?$`)));
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[0]}`);
+	await expect(prev).toBeDisabled();
+
+	// › steps to the next unit: the URL names it, its card is marked, and focus stays on › to press again.
+	await next.click();
+	await expect(page).toHaveURL(/[?&]unit=[\w-]+$/);
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[1]}`);
+	await expect(unitCards(page).filter({ hasText: names[1]! }).locator('a.name')).toHaveAttribute('aria-current', 'true');
+	await expect(next).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[2]}`);
+
+	// The select jumps straight to a unit; at the last one › is disabled, and ‹ steps back.
+	await pick.selectOption({ index: 3 });
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[3]}`);
+	await expect(next).toBeDisabled();
+	await prev.click();
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[2]}`);
+
+	// Each pick is a history entry, and a reload of the link keeps the unit.
+	await page.goBack();
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[3]}`);
+	await page.reload();
+	await expect(heading).toHaveText(`Hydrological unit detail: ${names[3]}`);
+	await expect(pick).toHaveValue(new URL(page.url()).searchParams.get('unit')!);
+
+	// On a phone: the picker fits the panel, nothing scrolls sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(next).toBeVisible();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	await expectNoViolations(page);
 });
 
 test('the run follows run= and the header picker; Runs & results links here for its run; old Runs anchors land here', async ({ page, owner }) => {

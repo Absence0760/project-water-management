@@ -1,10 +1,13 @@
 // The shared "On this page" menu (common/SectionNav.svelte, docs/ui.md § On this page): on a laptop or
 // wider its links flow across at most two rows (groups may break across them; as whole blocks, Runs &
 // results took three rows at 1280 px), and what doesn't fit goes into a More menu at the end of the bar.
-// It is on Settings & calibration, Runs & results, River & reserve, Units & supply and Data. Synthetic data.
+// From a 1440 px window it is a side index instead, every group named and every link named as its panel's
+// heading (issue #462; the bar keeps shorter names). It is on Settings & calibration, Runs & results,
+// River & reserve, Hydrological units and Data. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { seedWhatIfs } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { layoutSettled } from '../support/reflow.ts';
 import { openRiver, seedRiverProject } from '../support/river.ts';
@@ -75,6 +78,34 @@ async function expectEvenGaps(menu: Locator): Promise<void> {
 	expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(1);
 }
 
+/**
+ * The links, in order, by their names: a link to another page is named with that page (", on River &
+ * reserve", its aria-label) and shows a ↗ the name leaves out, so its text isn't its name.
+ */
+async function expectLinkNames(links: Locator, names: string[]): Promise<void> {
+	await expect(links).toHaveCount(names.length);
+	for (const [i, name] of names.entries()) await expect(links.nth(i)).toHaveAccessibleName(name);
+}
+
+/**
+ * The side index (issue #462): every group named over its links, beside `panel` on the given side, and its
+ * tallest state fitting the window, so it never scrolls inside itself (playbook § 2).
+ */
+async function expectRail(menu: Locator, groups: [string | null, string[]][], panel: Locator, side: 'left' | 'right' = 'left'): Promise<void> {
+	await expectLinkNames(menu.getByRole('link'), groups.flatMap(([, links]) => links));
+	for (const [name, links] of groups) {
+		if (!name) continue;
+		await expectLinkNames(menu.getByRole('list', { name, exact: true }).getByRole('link'), links);
+		await expect(menu.getByText(name, { exact: true })).toBeVisible();
+	}
+	await expect(menu.locator('.groups')).toHaveCount(0);
+	const rail = (await menu.boundingBox())!;
+	const box = (await panel.boundingBox())!;
+	if (side === 'left') expect(rail.x + rail.width).toBeLessThanOrEqual(box.x);
+	else expect(box.x + box.width).toBeLessThanOrEqual(rail.x);
+	expect(await menu.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+}
+
 /** The menu's height: two rows of 30 px links and their gaps come to about 78 px; three to 112. */
 const TWO_ROWS = 90;
 
@@ -105,23 +136,58 @@ test('Settings: at 1280 px every link is on the bar, in at most two rows; at 144
 	expect(await menu.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
 });
 
-test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most two rows (three before)', async ({ page, owner }) => {
+/** Runs & results' bar names (the shorter ones), and the headings the side index says (issue #462). */
+const RUNS_BAR = ['Summary', 'Hydrograph', 'Flow duration', 'Calibration', 'Water balance', 'Runoff model', 'EWR vs observed', 'Plausibility', 'Notes & evidence', 'Validation', 'Publication', 'Self-checks', 'Outputs'];
+const RUNS_RAIL: [string | null, string[]][] = [
+	[null, ['Summary']],
+	[
+		'Model quality',
+		['Hydrograph', 'Flow-duration curve', 'Calibration against observed flow', 'Water balance by water year', 'Runoff model: GR4J', 'EWR test: model against observed flow', 'Plausibility checks']
+	],
+	['Record', ['Run notes & evidence', 'Validation statement', 'Publication']],
+	['Dig deeper', ['Self-checks', 'Explore any output']],
+	['On River & reserve', ['Reserve rules met, by month, on River & reserve', 'Days below the EWR, by month, on River & reserve', 'Water account, on River & reserve']],
+	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]
+];
+
+test('Runs & results: at 1280 px every link is on the bar, in at most two rows; at 1440 px a side index on the right, with the moved panels under their pages', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Menu rows runs');
-	await createRun(page.request, project.id, 'Baseline');
-	await page.setViewportSize({ width: 1440, height: 900 });
+	const run = await createRun(page.request, project.id, 'Baseline');
+	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	await expect(menu.getByRole('link', { name: 'Outputs', exact: true })).toBeVisible();
-	for (const width of [1440, 1280]) {
-		await page.setViewportSize({ width, height: 900 });
-		await expect(moreButton(menu)).toHaveCount(0);
-		await expect(menu.getByRole('link', { name: 'Outputs', exact: true })).toBeVisible();
-		expect(await barRows(menu)).toBeLessThanOrEqual(2);
-		expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
-		// Its group names would push links into More (they did in CI's fonts), so it has none and spaces its links evenly.
-		await expectEvenGaps(menu);
-	}
+	await expect(menu.getByRole('link')).toHaveText(RUNS_BAR);
+	await expect(moreButton(menu)).toHaveCount(0);
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+	expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
+	// Its group names would push links into More (they did in CI's fonts), so it has none and spaces its links evenly.
+	await expectEvenGaps(menu);
+
+	// Wider, a column on the right of the results (the runs list is the left one), each link its panel's heading,
+	// and the panels that moved to River & reserve and Hydrological units under their pages, for this run.
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await expectRail(menu, RUNS_RAIL, page.locator('#res-calibration'), 'right');
+	const reserve = menu.getByRole('link', { name: 'Reserve rules met, by month, on River & reserve' });
+	await expect(reserve).toHaveAttribute('href', `?tab=river&run=${run}#res-reserve`);
+	await expect(menu.getByRole('link', { name: 'Curtailment targets, on Hydrological units' })).toHaveAttribute('href', `?tab=supply&run=${run}#res-curtailment`);
+	// The rail marks the section read and jumps like the bar; a link to another page is never marked.
+	await menu.getByRole('link', { name: 'Validation statement' }).click();
+	await expect(page).toHaveURL(/#res-validation$/);
+	await expect(menu.getByRole('link', { name: 'Validation statement' })).toHaveAttribute('aria-current', 'location');
+	await expect(menu).toBeInViewport();
+	await expect(menu.locator('[aria-current]')).toHaveCount(1);
+	// Up and Down move between its links, Home and End to its ends.
+	await menu.getByRole('link', { name: 'Summary' }).focus();
+	await page.keyboard.press('ArrowDown');
+	await expect(menu.getByRole('link', { name: 'Hydrograph' })).toBeFocused();
+	await page.keyboard.press('End');
+	await expect(menu.getByRole('link', { name: 'Assurance of supply, on Hydrological units' })).toBeFocused();
+	await expectNoViolations(page, { include: 'nav[aria-label="Result sections"]' });
+
+	await reserve.click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=river&run=${run}#res-reserve$`));
+	await expect(page.locator('#res-reserve')).toBeInViewport();
 });
 
 /** Settings & calibration at 1024 px, where its sixteen links don't fit in two rows. */
@@ -206,20 +272,38 @@ test('the open More menu passes axe; wider, More goes; on a phone the strip has 
 	await expectNoViolations(page);
 });
 
-test('River & reserve has the menu: every panel, a jump that lands below it, and a loaded link that lands', async ({ page, owner }) => {
+test('River & reserve has the menu: every panel by its heading, a jump that lands, and a loaded link that lands', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'Menu river');
 	await createRun(page.request, id, 'Baseline');
-	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.setViewportSize({ width: 1280, height: 960 });
 	await openRiver(page, id);
 	const menu = page.getByRole('navigation', { name: 'River sections' });
-	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'EWR by month', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
+	// On the bar: findings first, the water account straight after them, the run-it-yourself tools last; Reserve rules
+	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Shorter names there.
+	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
 	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
-	// Its group names would take it to a second row at 1440, so it has none and spaces its links evenly (issue #162).
+	// Its group names would take it to another row, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
+	await expect(moreButton(menu)).toHaveCount(0);
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+
+	// From 1440 px a column on the left, each link named as its panel's heading (issue #462).
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await expectRail(
+		menu,
+		[
+			['The reserve', ['Flow vs reserve', 'Days below the reserve, each water year', 'Reserve rules met, by month', 'Days below the EWR, by month']],
+			['Water balance', ['Water account']],
+			['How sure, and what if', ['Uncertainty bands', 'Outcome matrix', 'Seasonal outlook']]
+		],
+		page.getByRole('region', { name: 'Flow vs reserve' })
+	);
 	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toHaveAttribute('aria-current', 'location');
-	// One row at 1440, so the first screen loses little.
-	expect(await barRows(menu)).toBe(1);
+	// The flow chart and the years bars still sit side by side in the column beside it.
+	const flow = (await page.locator('#res-ewr').boundingBox())!;
+	expect((await page.locator('#res-reserve-years').boundingBox())!.x).toBeGreaterThan(flow.x + flow.width);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
 	await menu.getByRole('link', { name: 'Water account' }).click();
 	await expect(page).toHaveURL(/#res-water-account$/);
@@ -227,8 +311,6 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	await expect(account).toBeInViewport();
 	await expect(menu).toBeInViewport();
 	await expect(menu.getByRole('link', { name: 'Water account' })).toHaveAttribute('aria-current', 'location');
-	const menuBox = (await menu.boundingBox())!;
-	expect((await account.boundingBox())!.y).toBeGreaterThanOrEqual(menuBox.y + menuBox.height - 1);
 
 	// A fresh load (a goto that only changes the fragment would stay on the page).
 	await page.goto(`/projects/${id}?tab=overview`);
@@ -237,17 +319,33 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	await expect(menu.getByRole('link', { name: 'Seasonal outlook' })).toHaveAttribute('aria-current', 'location');
 });
 
-test('Hydrological units has the menu: the hydrological unit detail and each table, with a jump below it', async ({ page, owner }) => {
+test('Hydrological units has the menu: the unit detail and each table, with a jump below it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedSupplyProject(page.request, 'Menu supply', 6);
 	await createRun(page.request, project.id, 'Baseline');
-	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.setViewportSize({ width: 1280, height: 960 });
 	await openSupply(page, project.id);
 	const menu = page.getByRole('navigation', { name: 'Hydrological units sections' });
-	await expect(menu.getByRole('link')).toHaveText(['Hydrological unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
+	await expect(menu.getByRole('link')).toHaveText(['Unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
 	expect(await barRows(menu)).toBe(1);
-	await expectNamedGroups(menu, ['Each hydrological unit', 'Tables for this run']);
+	// The unit detail's one link needs no group name (issue #467).
+	await expectNamedGroups(menu, ['Tables for this run']);
+	// The results table's header row sits under the bar, not behind it (its sticky offset is the bar's height).
+	await page.locator('#res-farms').scrollIntoViewIfNeeded();
+	const bar = (await menu.boundingBox())!;
+	expect((await page.locator('#res-farms thead').boundingBox())!.y).toBeGreaterThanOrEqual(bar.y + bar.height - 2);
 
+	// From 1440 px a column on the left, each link named as its panel's heading (issue #462).
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.evaluate(() => window.scrollTo(0, 0));
+	await expectRail(
+		menu,
+		[
+			[null, ['Hydrological unit detail']],
+			['Tables for this run', ['Hydrological unit results', 'Curtailment targets', 'Assurance of supply']]
+		],
+		page.locator('#res-farms')
+	);
 	await menu.getByRole('link', { name: 'Assurance of supply' }).click();
 	await expect(page).toHaveURL(/#res-assurance$/);
 	await expect(page.locator('#res-assurance')).toBeInViewport();
@@ -264,7 +362,7 @@ test('Hydrological units has the menu: the hydrological unit detail and each tab
 test('Data has the menu: only the panels drawn, a jump that lands below it, and a loaded #data- link that lands', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Menu data');
-	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.setViewportSize({ width: 1280, height: 960 });
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const menu = page.getByRole('navigation', { name: 'Data sections' });
 	// Rain and observed flow, no logger or CHIRPS: no agreement table and no double mass.
@@ -284,4 +382,78 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	await expect(checks).toBeFocused();
 	const menuBox = (await menu.boundingBox())!;
 	expect((await checks.boundingBox())!.y).toBeGreaterThanOrEqual(menuBox.y + menuBox.height);
+
+	// From 1440 px a column on the left, each link named as its panel's heading (issue #462).
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await expectRail(
+		menu,
+		[
+			['Series', ['Input time series', 'Series chart']],
+			['Checks', ['Data checks']],
+			['Reference', ['What the model uses']]
+		],
+		page.locator('#data-series')
+	);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('Compare runs has the menu: every panel drawn, by its heading, a side index from 1440 px and a jump that lands', async ({ page, owner }) => {
+	void owner;
+	const p = await seedWhatIfs(page.request, 'Menu compare');
+	await page.setViewportSize({ width: 1280, height: 960 });
+	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}`);
+	const menu = page.getByRole('navigation', { name: 'Comparison sections' });
+	await expect(page.getByRole('heading', { level: 2, name: 'Daily series' })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Daily series' })).toBeVisible();
+	/** The comparison's panels in page order, each with its heading's words (its ⓘ left out). */
+	const panels = () =>
+		page.locator('[id^="cmp-"]').evaluateAll((els) =>
+			els.map((el) => {
+				const h = el.querySelector('h2')!.cloneNode(true) as HTMLElement;
+				h.querySelectorAll('.helptip, button, .visually-hidden').forEach((n) => n.remove());
+				return { href: `#${el.id}`, heading: (h.textContent ?? '').replace(/\s+/g, ' ').trim() };
+			})
+		);
+	const drawn = await panels();
+	// The panels every pair has, in page order; the rest are listed only when drawn (compare/sections.ts).
+	expect(drawn.map((x) => x.href)).toEqual(expect.arrayContaining(['#cmp-outcomes', '#cmp-years', '#cmp-changes', '#cmp-headline', '#cmp-uncertainty', '#cmp-ewr-agreement', '#cmp-units', '#cmp-series']));
+
+	// On the bar: a link to every panel drawn, in page order, in at most two rows; no group names (as Runs & results).
+	const onBar = menu.locator('.groups').getByRole('link');
+	const kept = await onBar.count();
+	expect((await onBar.evaluateAll((els) => els.map((el) => el.getAttribute('href'))))).toEqual(drawn.slice(0, kept).map((x) => x.href));
+	expect(await barRows(menu)).toBeLessThanOrEqual(2);
+	await expectEvenGaps(menu);
+
+	// From 1440 px a column on the left of the comparison, the full comparison's panels under its heading, each link
+	// named as its panel's heading (issue #462). The run cards stay above it, the whole width.
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.evaluate(() => window.scrollTo(0, 0));
+	const full = drawn.filter((x) => !['#cmp-outcomes', '#cmp-years'].includes(x.href)).map((x) => x.heading);
+	await expectRail(
+		menu,
+		[
+			[null, drawn.slice(0, 2).map((x) => x.heading)],
+			['Full comparison', full]
+		],
+		page.locator('#cmp-changes')
+	);
+	await expect(page.getByRole('heading', { level: 2, name: 'Full comparison' })).toBeVisible();
+	const cards = (await page.getByRole('region', { name: 'Runs being compared' }).boundingBox())!;
+	expect(cards.y + cards.height).toBeLessThanOrEqual((await menu.boundingBox())!.y);
+	// The outcomes and the yearly chart still sit side by side in the column beside it.
+	const outcomes = (await page.locator('#cmp-outcomes').boundingBox())!;
+	expect((await page.locator('#cmp-years').boundingBox())!.x).toBeGreaterThan(outcomes.x + outcomes.width);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await expectNoViolations(page, { include: 'nav[aria-label="Comparison sections"]' });
+
+	await menu.getByRole('link', { name: 'Hydrological units' }).click();
+	await expect(page).toHaveURL(/#cmp-units$/);
+	await expect(page.locator('#cmp-units')).toBeInViewport();
+	await expect(menu).toBeInViewport();
+	await expect(menu.getByRole('link', { name: 'Hydrological units' })).toHaveAttribute('aria-current', 'location');
+	// The arrow keys move between its links.
+	await menu.getByRole('link', { name: 'Hydrological units' }).focus();
+	await page.keyboard.press('ArrowUp');
+	await expect(menu.getByRole('link').nth(drawn.findIndex((x) => x.href === '#cmp-units') - 1)).toBeFocused();
 });

@@ -11,7 +11,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
-import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
+import { expectAbove, expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Load crop factors' });
 // The seeded Orchard, Oct … Sep, and the library's citrus (ARC Table 4.13 in water-year order).
@@ -35,6 +35,9 @@ async function savedFactors(page: Page, projectId: string): Promise<number[]> {
 /** Opens the Crop factors grid (the grid modal) and, from it, the Load crop factors dialog. */
 async function openLoad(page: Page) {
 	const grid = await openCropGrid(page, 'crop-factors');
+	// Add, load and paste in one row above the crop rows, not under up to 30 of them (issue #463).
+	await expect(grid.getByTestId('grid-actions').getByRole('button')).toHaveText(['+ Add crop', 'Load crop factors…', 'Paste from a spreadsheet…']);
+	await expectAbove(grid.getByTestId('grid-actions'), grid.locator('table.factors tbody tr').first());
 	await grid.getByRole('button', { name: 'Load crop factors…' }).click();
 }
 

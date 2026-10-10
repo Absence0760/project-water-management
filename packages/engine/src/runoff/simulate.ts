@@ -330,7 +330,7 @@ function unitNaturalFlow(input: ModelInput, ctx: RunContext, p: Gr4jParams, warm
 		nodeSeries,
 		warnings,
 		unitRunoff,
-		unitRain: unitRainSummary(ctx.settings.unitRain!, units, traces, petMm),
+		unitRain: unitRainSummary(ctx.settings.unitRain!, units, traces, petMm, built.reference),
 		unitRecipes: recipes,
 		balance: {
 			model: 'gr4j',

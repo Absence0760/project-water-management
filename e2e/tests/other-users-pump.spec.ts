@@ -2,7 +2,7 @@
 // issue #54 item 2b, docs/model.md §2.7c): a town the lower farm drains into
 // gets a pump from 1 pump × 10 m³/h (240 m³/day) in the Other water users
 // panel; save, reload and read it back (blank is no limit); run, and see what
-// its pump took and left unmet in Other uses on Units & supply, the
+// its pump took and left unmet in Other uses on Hydrological units, the
 // curtailment table staying the users' one list.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -53,7 +53,7 @@ test('a town’s pump of 1 × 10 m³/h saves 240 m³/day, and the run shows what
 	await expect(page.getByRole('heading', { level: 2, name: 'Town pump' })).toBeVisible();
 	// The Summary links to Other uses, where the pumps table is.
 	const link = page.getByTestId('other-uses-link');
-	await expect(link).toHaveText('Other water users’ pumps: Other uses on Units & supply.');
+	await expect(link).toHaveText('Other water users’ pumps: Other uses on Hydrological units.');
 	await link.getByRole('link').click();
 	await expect(page).toHaveURL(/[?&]tab=supply\b.*#res-other-uses$/);
 	const pumps = page.getByRole('table', { name: 'Other water users’ pumps' });

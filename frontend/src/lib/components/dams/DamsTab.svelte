@@ -237,14 +237,14 @@
 			box?.querySelector<HTMLElement>('select')?.focus({ preventScroll: true });
 		});
 	}
-	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
+	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs & results.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
 {#snippet headerContext()}<span data-testid="dams-summary">{summary}</span>{/snippet}
 {#snippet headerActions()}
 	{#if cards.length}<a class="btn" href={withParam(page.url, 'grid', 'nodes')}>Hydrological unit table</a>{/if}
-	{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs</a>{/if}
+	{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs &amp; results</a>{/if}
 {/snippet}
 
 <div class="dams-page" bind:clientWidth={pageW}>

@@ -154,7 +154,8 @@ test.describe('phone node form', () => {
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=network`);
 		await openNodeForm(page, 'Upper farm');
-		const links = page.getByTestId('node-sheet-jump').getByRole('button');
+		// The section menu (common/SectionNav): on a phone one strip with every link, scrolling sideways.
+		const links = page.getByTestId('node-sheet-jump').getByRole('link');
 		expect(await links.count()).toBeGreaterThan(2);
 		const boxes = await links.evaluateAll((els) => els.map((el) => ({ left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right, clipped: el.scrollWidth > el.clientWidth + 0.5 })));
 		for (const [i, b] of boxes.entries()) {

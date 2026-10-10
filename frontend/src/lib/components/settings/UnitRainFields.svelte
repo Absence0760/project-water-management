@@ -2,8 +2,9 @@
 	Settings → Flow generation → Rain for each unit (settings.unitRain, issue
 	#482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch
 	that runs GR4J once per unit with land on its own rain, the catchment rain
-	gauge's MAP with its source, and the MAP period the CHIRPS factors compare
-	over. Bind the setting (null = off); `last` keeps the one switched off until
+	gauge's MAP with its source, the MAP period the CHIRPS factors compare
+	over, and the reference gauge and unit whose monthly factors level every
+	unit's CHIRPS (issue #500, docs/model.md §2.4h *Reference gauge*). Bind the setting (null = off); `last` keeps the one switched off until
 	the form is saved. The parent works out `error` (unitRainProblem), which
 	blocks Save; it shows under the field it is fixed in. Its own chunk: the
 	Settings tab chunk sits at its size ceiling.
@@ -13,7 +14,20 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { mapPeriodNote, mapPeriodYears, unitMapCoverage, unitRainOn, unitRainProblem, withGaugeMap, withMapPeriodYears, withUnitRain } from './unitRain';
+	import {
+		CATCHMENT_GAUGE,
+		mapPeriodNote,
+		mapPeriodYears,
+		unitGaugeKey,
+		unitMapCoverage,
+		unitRainOn,
+		unitRainProblem,
+		withGaugeMap,
+		withMapPeriodYears,
+		withReferenceGauge,
+		withReferenceUnit,
+		withUnitRain
+	} from './unitRain';
 
 	let {
 		value = $bindable(),
@@ -35,13 +49,18 @@
 	const years = $derived(mapPeriodYears(value));
 	const note = $derived(mapPeriodNote(value));
 	const coverage = $derived(unitMapCoverage(nodes));
+	/** The units with land, the reference unit's choices (and each one's own gauge, the reference gauge's). */
+	const land = $derived(nodes.filter((n) => n.kind === 'farm' && n.areaKm2 > 0));
+	const reference = $derived(on && value ? (value.reference ?? null) : null);
+	/** A stored reference unit the model no longer has as a unit with land: the run warns and ignores the reference. */
+	const refGone = $derived(!!reference?.unitId && !land.some((n) => n.id === reference.unitId));
 	const lastYear = new Date().getUTCFullYear();
 	/** The units without a MAP named, each a link to its form; the rest counted. */
 	const MISSING_SHOWN = 6;
 	/** Years the fields take; one before CHIRPS (1981) saves, with a note. */
 	const FIRST_YEAR = 1900;
 	const errId = `${uid}-err`;
-	const describe = (field: 'gaugeMap' | 'gaugeSource' | 'period', hint: string) => (problem?.field === field ? `${hint} ${errId}` : hint);
+	const describe = (field: 'gaugeMap' | 'gaugeSource' | 'period' | 'reference', hint: string) => (problem?.field === field ? `${hint} ${errId}` : hint);
 
 	function setOn(next: boolean) {
 		if (!next && value) last = $state.snapshot(value);
@@ -157,6 +176,53 @@
 			{#if note}<span class="hint note" role="note" data-testid="unit-rain-period-note">{note}</span>{/if}
 			{#if problem?.field === 'period'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
 		</fieldset>
+		<fieldset class="plain reference" data-testid="unit-rain-reference">
+			<legend>Reference gauge for the units’ CHIRPS</legend>
+			<div class="fields">
+				<div class="field">
+					<label for="{uid}-rgauge">Reference gauge</label>
+					<select
+						id="{uid}-rgauge"
+						disabled={readonly}
+						value={reference?.gauge ?? ''}
+						aria-describedby="{uid}-ref-h"
+						onchange={(e) => {
+							if (value) value = withReferenceGauge(value, e.currentTarget.value);
+						}}
+					>
+						<option value="">None: each unit’s CHIRPS scaled to its MAP</option>
+						<option value={CATCHMENT_GAUGE}>The catchment rain gauge</option>
+						{#each land as n (n.id)}<option value={unitGaugeKey(n.id)}>{n.name}’s own gauge</option>{/each}
+					</select>
+				</div>
+				{#if reference}
+					<div class="field">
+						<label for="{uid}-runit">Reference unit</label>
+						<select
+							id="{uid}-runit"
+							disabled={readonly}
+							value={reference.unitId}
+							aria-invalid={problem?.field === 'reference' || refGone || undefined}
+							aria-describedby={describe('reference', `${uid}-runit-h`)}
+							onchange={(e) => {
+								if (value) value = withReferenceUnit(value, e.currentTarget.value);
+							}}
+						>
+							<option value="" disabled>Pick the unit the gauge stands in</option>
+							{#each land as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
+						</select>
+						<span class="hint" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with, and every unit’s MAP is divided by this unit’s MAP.</span>
+						{#if problem?.field === 'reference'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
+						{#if refGone}<span class="err" data-testid="unit-rain-reference-gone">The reference unit is no longer a unit with land: runs ignore the reference until another is picked.</span>{/if}
+					</div>
+				{/if}
+			</div>
+			<span class="hint" id="{uid}-ref-h">
+				With a reference gauge, every unit’s CHIRPS is scaled by 12 monthly factors, the gauge’s rain ÷ the CHIRPS at the reference unit’s cell on the days
+				both have a reading, then by the unit’s MAP ÷ the reference unit’s MAP. A month with fewer than 90 shared days, or under 50 mm of CHIRPS, keeps a
+				factor of 1. The MAP period above then no longer applies.
+			</span>
+		</fieldset>
 	{/if}
 	<!-- A stored setting that is off but can't be saved (another client wrote it) has no field to show its problem under. -->
 	{#if problem && !on}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
@@ -234,8 +300,12 @@
 		width: 100%;
 		max-width: 60ch;
 	}
-	.period {
+	.period,
+	.reference {
 		margin-top: 0.5rem;
+	}
+	.field select {
+		width: 100%;
 	}
 	.note {
 		display: block;

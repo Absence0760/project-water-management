@@ -158,6 +158,10 @@ export type SeriesBody = z.output<typeof SeriesBody>;
  * release them), and for a reader below viewer, who can't see data_feed
  * (018_feeds.sql data_feed_select): RLS hides the row, so the subquery is null.
  */
+/** A table's hand_days (212) as inclusive [from, to] ISO date pairs in date order; NULL when it has none. */
+export const handDaysSql = (t: string) => `(SELECT json_agg(json_build_array(to_char(lower(r), 'YYYY-MM-DD'), to_char(upper(r) - 1, 'YYYY-MM-DD')) ORDER BY r)
+		FROM unnest(${t}.hand_days) r)`;
+
 const feedMarkSql = (t: string) => `(SELECT json_build_object('source', f.source, 'days', d.n)
 		FROM data_feed f, LATERAL (SELECT sum(upper(r) - lower(r))::int AS n FROM unnest(${t}.feed_days) r) d
 		WHERE f.project_id = ${t}.project_id AND f.id = ${t}.feed_id AND d.n > 0)`;
@@ -170,13 +174,15 @@ const feedMarkSql = (t: string) => `(SELECT json_build_object('source', f.source
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
 // feed: the data feed that wrote days of the series, and how many (feedMarkSql).
+// handDays: the days a person typed in by hand (212_series_hand_days.sql), as inclusive [from, to] date pairs; null: none.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
 	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
 	source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding,
-	${feedMarkSql('time_series')} AS feed`;
+	${feedMarkSql('time_series')} AS feed,
+	${handDaysSql('time_series')} AS "handDays"`;
 
 export interface MergeOptions {
 	/** A null in the incoming days leaves the existing value (default: it overwrites). */
@@ -324,6 +330,32 @@ export function releaseDays(owned: DayRuns, incoming: Daily, { keepOnNull = fals
 	return subtractRuns(owned, runsOf(i0, incoming.values.length, (k) => incoming.values[k] !== null || !keepOnNull));
 }
 
+/**
+ * What an automated writer (a data feed, an API key's ingest) may send onto
+ * days a person edited by hand (212_series_hand_days.sql): nothing. Each such
+ * day of `incoming` takes the stored value instead (null when the person
+ * cleared it), so the merge leaves it as it is whatever keepOnNull says;
+ * otherwise the next fetch or push would quietly undo the correction.
+ */
+export function keepHandDays(existing: Daily | null, hand: DayRuns, incoming: Daily): Daily {
+	if (hand.length === 0) return incoming;
+	const i0 = toEpochDay(incoming.startDate);
+	const e0 = existing ? toEpochDay(existing.startDate) : 0;
+	const values = incoming.values.slice();
+	for (const [s, e] of hand) {
+		for (let d = Math.max(s, i0); d < Math.min(e, i0 + values.length); d++) values[d - i0] = existing ? (existing.values[d - e0] ?? null) : null;
+	}
+	return { startDate: incoming.startDate, values };
+}
+
+/** The days of `incoming` whose value differs from what `existing` stores: what a hand edit marks (212). */
+export function changedDays(existing: Daily | null, incoming: Daily): DayRuns {
+	const i0 = toEpochDay(incoming.startDate);
+	const e0 = existing ? toEpochDay(existing.startDate) : 0;
+	const current = (d: number) => (existing ? (existing.values[d - e0] ?? null) : null);
+	return runsOf(i0, incoming.values.length, (k) => (incoming.values[k] ?? null) !== current(i0 + k));
+}
+
 /** The same days and values (a stored double round-trips exactly, so === is equality). */
 export function sameDaily(a: Daily, b: Daily): boolean {
 	return a.startDate === b.startDate && a.values.length === b.values.length && a.values.every((v, i) => v === b.values[i]);
@@ -351,6 +383,8 @@ export interface SeriesMetaRow {
 	rebuilding: boolean;
 	/** The data feed that wrote days of this series and how many are still its own (031_feed_days.sql); null: none, or not visible to the reader. */
 	feed: SeriesFeedMark | null;
+	/** The days a person typed in by hand (212_series_hand_days.sql), inclusive [from, to] date pairs; null: none. */
+	handDays: [string, string][] | null;
 }
 
 export interface SeriesFeedMark {
@@ -385,6 +419,8 @@ export interface MergeResult {
 		source: string | null;
 		sourceUnit: string | null;
 		sourceUnitFactor: number | null;
+		/** The days edited by hand before the merge (212), for its series revision. */
+		handDays: DayRuns;
 	} | null;
 	after: Daily;
 	written: number;
@@ -415,7 +451,7 @@ export async function mergeSeries(
 	db: Db,
 	projectId: string,
 	body: SeriesBody,
-	{ keepOnNull = false, feedId, provenance, origin, byKey = false }: MergeOptions & { feedId?: string; byKey?: boolean } = {}
+	{ keepOnNull = false, feedId, provenance, origin, byKey = false, byHand = false }: MergeOptions & { feedId?: string; byKey?: boolean; byHand?: boolean } = {}
 ): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
 	const { rows: cur } = await db.query<{
@@ -425,6 +461,7 @@ export async function mergeSeries(
 		values: (number | null)[];
 		feed_id: string | null;
 		feed_days: DayRuns;
+		hand_days: DayRuns;
 		product: string | null;
 		productVersion: string | null;
 		source: string | null;
@@ -434,7 +471,9 @@ export async function mergeSeries(
 		`SELECT id, start_date, unit, "values", feed_id, product, product_version AS "productVersion",
 			source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
 			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
-			 FROM unnest(feed_days) r) AS feed_days
+			 FROM unnest(feed_days) r) AS feed_days,
+			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
+			 FROM unnest(hand_days) r) AS hand_days
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, body.kind, body.name]
 	);
@@ -462,6 +501,13 @@ export async function mergeSeries(
 	const heldOrigin = row ? rowOrigin(row) : null;
 	const whence = origin !== undefined && !filled ? origin : heldOrigin;
 	let incoming: Daily = { startDate: body.startDate, values: body.values };
+	// Days edited by hand (212): a feed or an API key never writes one; a person's hand edit marks the days it
+	// changes; any other write of a person (an upload, a paste) releases the days it writes, whose value is the file's now.
+	const handBefore: DayRuns = row?.hand_days ?? [];
+	let hand = handBefore;
+	if (feedId || byKey) incoming = keepHandDays(existing, hand, incoming);
+	else if (byHand) hand = unionRuns(hand, changedDays(existing, incoming));
+	else hand = releaseDays(hand, incoming, { keepOnNull });
 	let owner = row?.feed_id ?? null;
 	let owned: DayRuns = row?.feed_days ?? [];
 	let kept = 0;
@@ -492,10 +538,12 @@ export async function mergeSeries(
 				productVersion: row.productVersion,
 				source: row.source,
 				sourceUnit: row.sourceUnit,
-				sourceUnitFactor: row.sourceUnitFactor
+				sourceUnitFactor: row.sourceUnitFactor,
+				handDays: handBefore
 			}
 		: null;
-	const sameOwner = !!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned);
+	const sameOwner =
+		!!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned) && JSON.stringify(handBefore) === JSON.stringify(hand);
 	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
 	// leave the values, so updated_at still says when the values last changed.
 	if (row && row.unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, label) && sameOrigin(heldOrigin, whence)) {
@@ -506,9 +554,9 @@ export async function mergeSeries(
 					body.name
 				])
 			: await db.query<SeriesMetaRow>(
-					`UPDATE time_series SET feed_id = $4, feed_days = ${feedDaysSql(5, 6)}
+					`UPDATE time_series SET feed_id = $4, feed_days = ${feedDaysSql(5, 6)}, hand_days = ${feedDaysSql(7, 8)}
 					 WHERE project_id = $1 AND kind = $2 AND name = $3 RETURNING ${SERIES_META}`,
-					[projectId, body.kind, body.name, owner, owned.map((r) => r[0]), owned.map((r) => r[1])]
+					[projectId, body.kind, body.name, owner, owned.map((r) => r[0]), owned.map((r) => r[1]), hand.map((r) => r[0]), hand.map((r) => r[1])]
 				);
 		// A person re-sending a key's values makes them theirs all the same (a key's re-send changes nothing, so records nothing).
 		await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
@@ -516,11 +564,11 @@ export async function mergeSeries(
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version,
-			source, source_unit, source_unit_factor)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11, $12, $13, $14)
+			source, source_unit, source_unit_factor, hand_days)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11, $12, $13, $14, ${feedDaysSql(15, 16)})
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(),
-			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
+			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days, hand_days = EXCLUDED.hand_days,
 			product = EXCLUDED.product, product_version = EXCLUDED.product_version,
 			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor
 		 RETURNING ${SERIES_META}`,
@@ -538,7 +586,9 @@ export async function mergeSeries(
 			label?.version ?? null,
 			whence?.source ?? null,
 			whence?.unit ?? null,
-			whence?.factor ?? null
+			whence?.factor ?? null,
+			hand.map((r) => r[0]),
+			hand.map((r) => r[1])
 		]
 	);
 	await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
@@ -622,6 +672,8 @@ export interface MergeIntoOptions {
 	keepOnNull?: boolean;
 	/** Extra fields for the audit subject (the ingest's `source` label). */
 	audit?: Record<string, unknown>;
+	/** A person typing days in by hand (PUT …/series/:seriesId/days/:date): the days it changes are marked as edited (212). */
+	byHand?: boolean;
 }
 
 export interface MergeIntoResult {
@@ -668,6 +720,7 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 		provenance: bodyProvenance(body),
 		origin: bodyOrigin(body),
 		byKey: opts.via === 'api_key',
+		byHand: opts.byHand,
 		keepOnNull: opts.keepOnNull
 	});
 	const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, projectId, r0.meta, body.dayBoundary) } : r0;

@@ -1,4 +1,4 @@
-// Links into Units & supply (issue #17), kept apart from supply.ts so the
+// Links into Hydrological units (issue #17), kept apart from supply.ts so the
 // Summary, Runs & results and the portfolio can link here without pulling the
 // page's helpers into their chunks. The same shape as river/links.ts.
 
@@ -19,7 +19,7 @@ export const UNIT_PARAM = 'unit';
  */
 export const SUPPLY_ANCHORS = ['res-farm', 'res-farms', 'res-curtailment', 'res-assurance', 'res-restrictions', 'res-other-uses'] as const;
 
-/** True for a `#res-…` fragment that now lives on Units & supply (without the `#`). */
+/** True for a `#res-…` fragment that now lives on Hydrological units (without the `#`). */
 export function supplyAnchor(hash: string): boolean {
 	return (SUPPLY_ANCHORS as readonly string[]).includes(hash);
 }

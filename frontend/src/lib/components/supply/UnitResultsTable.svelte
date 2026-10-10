@@ -2,7 +2,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	// The per-unit table of one run: whole-record demand, supply, deficit,
 	// share supplied (with its bar) and EWR charge, sortable, with the totals.
-	// Moved from the Runs tab's summary to Units & supply (issue #17); the
+	// Moved from the Runs tab's summary to Hydrological units (issue #17); the
 	// printable report still shows it under the run summary.
 	import type { FarmSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
@@ -26,7 +26,7 @@
 		/** The run's first and last day: the period the figures cover (issue #44). */
 		startDate?: string;
 		endDate?: string;
-		/** The heading's level: h3 in the report's run summary, h2 on Units & supply. */
+		/** The heading's level: h3 in the report's run summary, h2 on Hydrological units. */
 		heading?: 'h2' | 'h3';
 		title?: string;
 		/** For the panel around it to be named by the heading. */

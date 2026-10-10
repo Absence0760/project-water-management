@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "issue #462: SectionNav on Compare runs (compare/sections.ts, the rail/bar around the comparison) and in the Network node sheet (onjump, replacing its own jump row); measured 1899 -> 1900 KB on HEAD a3a3db668 with only this change applied"
+}

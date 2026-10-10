@@ -2138,7 +2138,8 @@ catchment's one run even with the same areal mean: expect the flow to shift
 and a refit.
 
 **The setting.** `{ mode: 'perUnit', gaugeMapMm?, gaugeMapSource?,
-mapPeriod? }`. `gaugeMapMm` is the catchment rain gauge's own MAP (mm, with
+mapPeriod?, reference? }` (`reference` from engine 1.80.0,
+[below](#reference-gauge-engine--1800-issue-500)). `gaugeMapMm` is the catchment rain gauge's own MAP (mm, with
 its source), `mapPeriod` the years a unit's CHIRPS MAP factor compares over
 (ISO dates; absent = `DEFAULT_UNIT_MAP_PERIOD`, 1991-01-01 to 2020-12-31).
 Each unit's MAP is `node.mapMm` with `node.mapSource` (`mapMmError`: 1–12 000
@@ -2176,6 +2177,10 @@ not the run window, so the rule doesn't depend on the window):
      factors for the day's month and fit range (`chirpsFactorOn`) when the
      catchment has any; else raw, with a warning. The quantile map (§2.4b)
      is not applied to a unit's CHIRPS.
+   - With a reference gauge (`settings.unitRain.reference`, engine ≥
+     1.80.0) both sub-rules above give way to the reference factors
+     ([below](#reference-gauge-engine--1800-issue-500)): every unit's
+     CHIRPS, wherever its chain reads it (rules 1–3), is levelled that way.
 4. **The catchment forcing as without per-unit rain**: catchment rain, else
    corrected CHIRPS, else forecast (§2.4a), × the areal correction (§2.4g),
    with a warning naming the unit.
@@ -2212,6 +2217,109 @@ on the catchment's rain warns how many.
 - **Rain level is not a calibration knob** (§2.10): one outlet gauge can't
   tell one unit's rain level from another's, so each unit's level comes from
   its own record or its MAP, never from the fit.
+
+#### Reference gauge (engine ≥ 1.80.0, issue #500)
+
+`settings.unitRain.reference`: absent or null (the default) = off, and a run
+is to the bit what it was without the field. On, it is `{ gauge, unitId }`:
+
+- `gauge`, the **reference gauge**: the series key `rain_catchment_mm` (the
+  catchment rain gauge) or `rain_catchment_mm@<unit id>` (a unit's own
+  gauge). Anything else is refused (`unitRainError`).
+- `unitId`, the **reference unit**: the hydrological unit the gauge stands
+  in. The CHIRPS cell nearest its centre is the one the gauge is compared
+  with, and its MAP is what the other units' MAPs are divided by.
+
+**Why.** Each unit's CHIRPS is the area-weighted mean of the 0.05° cells it
+covers (about 26 km² each). Scaling it by one flat factor (unit MAP ÷ its own
+CHIRPS mean, rule 3) puts its annual total right but leaves CHIRPS's
+seasonal bias, which §2.4b shows is large in the frontal-rain months. One
+gauge measures that bias month by month, so the operator decided
+(2026-10-09, issue #500 item 1) to correct every unit's CHIRPS with 12
+monthly factors fitted at one reference gauge.
+
+**The CHIRPS cell.** The input's series `rain_chirps_cell_mm@<unitId>`
+(`referenceCellSeriesKey`): CHIRPS at the **single** cell holding the
+reference unit's centre, not an area average. It isn't a stored series:
+the backend reads it from the CHIRPS cell cache when it builds a run's input
+(the centre of the unit's parcel, the product of the unit's own CHIRPS feed,
+`rnl` without one), and the run's input snapshot stores it like any other
+series (`runs/referenceCell.ts`). The cache holds a cell once some feed has
+fetched it, which the reference unit's own feed does when the centre lies
+inside its parcel (the usual case).
+
+**The fit** (`referenceFit` in `runoff/unitRain.ts`). Over the **whole
+stored records** of the gauge and the cell (not the run window), for each
+calendar month *m*:
+
+  factor(m) = Σ gauge ÷ Σ CHIRPS cell, over the days of month *m* where both
+  have a reading (a number, finite and not negative; −9999 and blanks are not
+  readings), added up in date order.
+
+- **Minimum sample**, §2.4b's: at least **90 shared days**
+  (`CHIRPS_FACTOR_MIN_DAYS`) and **50 mm** of CHIRPS on them
+  (`CHIRPS_FACTOR_MIN_MM`). A month short of either takes a factor of
+  **exactly 1** (no pooled factor, unlike §2.4b), and the run warns once,
+  naming the months; with no gauge series, or no cell series, every month is
+  1 and the warning says which is missing.
+- **Clamp**, as every unit factor: 0.25–4; a clamped month warns with its
+  unclamped factor and the two sums.
+- The gauge is read **as stored**: none of §2.4c–§2.4e's handling (zero
+  runs, accumulations, rain-source periods) touches it, as a unit's own
+  gauge isn't touched (rule 1), even when it is the catchment gauge.
+
+**Applying it.** A unit's CHIRPS reading *v* on a day of calendar month *m*
+becomes
+
+  v × factor(m) × r, with r = clamp(unit MAP ÷ the reference unit's MAP)
+
+computed in that order (`v × factor`, then `× r`). This replaces rule 3's
+MAP factor and its §2.4b fallback for **every** land unit with CHIRPS of its
+own, on every day its chain reads that CHIRPS (rule 3's record, rules 1 and
+2's gap fill). Without a MAP on the unit, r = 1 and the run warns for that
+unit; without a MAP on the reference unit, r = 1 for every unit, with one
+warning. The reference unit itself has r = 1. A clamped r warns. Nothing
+else changes: the rule each unit gets (1–4) is chosen as before, rule 2's
+gauge × unit MAP ÷ gauge MAP stays (the operator's call for now, issue #500),
+and the catchment's rain, the forecast and the areal correction are read as
+before. The MAP period and the 5-year minimum don't apply to a unit levelled
+this way.
+
+**The MAP ratio on top is a provisional decision** (issue #500 item 1a,
+[engine-audit.md § Provisional decisions 2026-10-10](./engine-audit.md#provisional-decisions-2026-10-10-unit-chirps-from-a-reference-gauge-issue-500)):
+the factors are fitted at one point, so they are the same for every unit,
+and neighbouring small units share CHIRPS cells; with the factors alone
+every unit would end up near the reference unit's MAP. The ratio keeps each
+unit's own level from its MAP and the factors the seasonal shape.
+
+**A reference unit that isn't a land unit** (no such node, a gauge or a
+farm without an area) can't have a cell: the run warns and levels each
+unit's CHIRPS as without a reference. Per-unit rain off (`mode:
+'catchment'`) ignores the reference.
+
+**Output.** `summary.unitRain.reference` (`UnitRainReferenceFit`, only when
+the setting has a usable reference): `{ gauge, unitId, unitName, mapMm (the
+reference unit's MAP or null), cellKey, pinned, months }`, each month `{
+month (1–12), sharedDays, gaugeMm, chirpsMm, ownFactor (null without the
+minimum), factor, clamped, fitted }`. A unit levelled this way has
+`factorSource: 'chirpsReference'` and `factor: null` on rule 3 (it varies by
+month), and `chirps: { source: 'reference', factors (12, Jan–Dec), mapRatio,
+mapOwnRatio, mapClamped }`. The summary CSV adds the reference and one row
+per month. Run comparison shows the reference in the setting's words ("…;
+reference gauge rain_catchment_mm at the unit …"). A fit's fingerprint records
+`reference` and each unit's 12 factors (`chirpsFactors`) and MAP ratio
+(`chirpsFactor`): another reference, or a factor moving by more than 2 %, is
+"Forcing changed since fit".
+
+**Copies of the input.** A model-state snapshot pins each unit's factors
+with its recipe, as before. The sensitivity runs' rain factor scales the
+cell series with the other rain records, so the factors stay put and every
+unit's rain moves by the factor. The uncertainty ensemble's CHIRPS-only
+member, which drops the gauges, pins the base input's 12 factors
+(`reference.pinnedFactors`, engine-only, never stored by the API: 12
+numbers within the clamp, applied instead of a fit, with
+`summary.unitRain.reference.pinned` true and no fit warnings), as its
+catchment CHIRPS carries the base's §2.4b factors.
 
 **Runoff.** GR4J runs once per land unit with the one parameter set
 (`settings.gr4j`), the catchment PE (§2.4a) and the unit's own warm-up, on
@@ -2347,6 +2455,9 @@ and 200 ms.
   project needs a catchment series or a set simulation period.
 - the EWR split and the land cover's low-flow threshold stay on the flow
   shares, while each unit's runoff is its own (engine-audit.md U1).
+- with a reference gauge (engine ≥ 1.80.0): a month short of the minimum
+  takes 1 rather than a pooled factor (as issue #500 states it), and the
+  reference gauge is read as stored, without §2.4c–§2.4e.
 
 ### 2.5 Fragmentation (`[Fragmented flow]`, `[Fragmented EWR]`)
 
@@ -3416,7 +3527,12 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
   the upstream shares' water too. The WP text said "up to that node's EWR
   share"; Z is the reading an environmental reviewer would expect (the flow
   judged at this node is judged against Z), decided here and pending the
-  hydrologist.
+  hydrologist. The target also holds against the unit's river pump (§2.7e),
+  river abstractions (§2.7j) and river off-takes (§2.6a), so pass inflow
+  with no amounts is a release for the EWR that cuts what the unit takes
+  from the river. Release rules default to none and no importer sets one: a
+  baseline of the river as used today normally leaves the rule off, and the
+  node form's hint says so (issue #507).
 - *Fixed* releases a set amount from storage above dead storage.
 - The outlet cap (null = none) applies to both. No rule, or fixed with no
   amounts, is no release; nor is a day the dam has no capacity (§2.7g: not
@@ -3757,7 +3873,7 @@ kind `user` runs exactly as before (no new series or summary fields).
 | --- | --- |
 | `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
 | `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
-| `userPriority` | `senior` (default: a municipal allocation is usually senior) or `junior` |
+| `userPriority` | `senior` (default: a municipal allocation is usually senior; whether a new user should start junior is open, plan.md question 21, issue #507) or `junior` |
 | `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
 
 It has no area, flow share, dam, crops, transfers, EWR share or supply

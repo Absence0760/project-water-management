@@ -51,6 +51,13 @@ describe('parseSeriesCsv', () => {
 		expect(parseSeriesCsv('"2020-01-01";"5"\n').values).toEqual([5]);
 	});
 
+	it('reads a tab file whose last cell is blank as a gap, and skips rows of only tabs (issue #477)', () => {
+		// A spreadsheet copies or saves a blank value as a trailing tab: trimming it away would leave one column.
+		const p = parseSeriesCsv('2025-04-01\t1\r\n2025-04-02\t\r\n\t\r\n2025-04-03\t3 \r\n');
+		expect(p.values).toEqual([1, null, 3]);
+		expect(p.missingCount).toBe(1);
+	});
+
 	it('reports the bad line', () => {
 		expect(() => parseSeriesCsv('date,value\n2020-01-01,1\nnope,2')).toThrow(/Line 3/);
 		expect(() => parseSeriesCsv('2020-01-01,abc')).toThrow(CsvError);

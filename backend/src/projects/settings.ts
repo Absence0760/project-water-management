@@ -170,6 +170,14 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 		if (isObj(r.ewrTrigger) && typeof r.ewrTrigger.siteNodeId === 'string' && ids.has(r.ewrTrigger.siteNodeId)) r.ewrTrigger = { ...r.ewrTrigger, siteNodeId: ids.get(r.ewrTrigger.siteNodeId) };
 		s.droughtRestriction = r;
 	}
+	// The unit-rain reference (engine ≥ 1.80.0, issue #500): its unit, and a unit's own gauge named by its key.
+	if (isObj(s.unitRain) && isObj(s.unitRain.reference)) {
+		const ref = { ...s.unitRain.reference };
+		if (typeof ref.unitId === 'string' && ids.has(ref.unitId)) ref.unitId = ids.get(ref.unitId);
+		const at = typeof ref.gauge === 'string' ? ref.gauge.indexOf('@') : -1;
+		if (at > 0 && ids.has((ref.gauge as string).slice(at + 1))) ref.gauge = `${(ref.gauge as string).slice(0, at)}@${ids.get((ref.gauge as string).slice(at + 1))}`;
+		s.unitRain = { ...s.unitRain, reference: ref };
+	}
 	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
 	if (isObj(s.fitRecord) && typeof s.fitRecord.siteNodeId === 'string' && ids.has(s.fitRecord.siteNodeId)) {
 		s.fitRecord = { ...s.fitRecord, siteNodeId: ids.get(s.fitRecord.siteNodeId) };
@@ -546,8 +554,10 @@ const ArealRain = z
 /**
  * settings.unitRain (issue #482, docs/model.md §2.4h): whether each land unit
  * runs GR4J on its own rain (`perUnit`) or the catchment's (`catchment`,
- * like absent or null), the catchment gauge's own MAP with its source, and the
- * period a unit's CHIRPS MAP factor is computed over (null/absent = 1991–2020).
+ * like absent or null), the catchment gauge's own MAP with its source, the
+ * period a unit's CHIRPS MAP factor is computed over (null/absent = 1991–2020),
+ * and the reference gauge and unit whose monthly factors level every unit's
+ * CHIRPS (engine ≥ 1.80.0, issue #500; null/absent = none).
  * Replaced whole on a patch. The engine's unitRainError applies the same rules
  * to a stored value, and here too, so the form, the save and the run agree.
  */
@@ -556,7 +566,10 @@ export const UnitRain = z
 		mode: z.enum(UNIT_RAIN_MODES),
 		gaugeMapMm: z.number().finite().min(MAP_MM_MIN).max(MAP_MM_MAX).nullable().optional(),
 		gaugeMapSource: z.string().trim().max(PE_SOURCE_MAX).nullable().optional(),
-		mapPeriod: z.object({ start: isoDate, end: isoDate }).strict().nullable().optional()
+		mapPeriod: z.object({ start: isoDate, end: isoDate }).strict().nullable().optional(),
+		// The reference gauge and unit (engine ≥ 1.80.0, issue #500): the gauge's series key and the unit whose centre picks the
+		// CHIRPS cell. pinnedFactors is engine-only, so strict() refuses it here.
+		reference: z.object({ gauge: z.string().max(250), unitId: z.string().min(1).max(200) }).strict().nullable().optional()
 	})
 	.strict()
 	.superRefine((v, ctx) => {

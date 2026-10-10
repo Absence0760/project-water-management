@@ -1,6 +1,6 @@
 // Reflow checks the layout specs share (WCAG 2.2 SC 1.4.10, issue #38; the
 // Afrikaans layouts, issue #49).
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * The page's scroll width, plus every element that pokes past the viewport's
@@ -80,4 +80,19 @@ export async function clippedText(page: Page): Promise<string[]> {
 			})
 			.map((el) => `${el.tagName.toLowerCase()} "${(el.textContent ?? '').trim().slice(0, 60)}" ${el.scrollWidth}>${el.clientWidth}`)
 	);
+}
+
+/**
+ * `upper` ends above where `lower` starts, on the page as drawn: a grid's
+ * actions above its first row (issue #463), not under a long table. Compared
+ * in DOM order too, so the keyboard reaches the actions before the rows.
+ */
+export async function expectAbove(upper: Locator, lower: Locator) {
+	await expect(upper).toBeVisible();
+	await expect(lower).toBeVisible();
+	const a = (await upper.boundingBox())!;
+	const b = (await lower.boundingBox())!;
+	expect(a.y + a.height, 'ends above the other starts').toBeLessThanOrEqual(b.y + 1);
+	const before = await upper.evaluate((el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING), await lower.elementHandle());
+	expect(before, 'comes first in the focus order').toBe(true);
 }

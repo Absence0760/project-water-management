@@ -260,6 +260,38 @@ Issue #66. For any series, what 032's product and version can't say:
 - RLS and grants: columns on `time_series` and `series_revision`, covered by
   their existing policies and `water_app`'s table grants; no foreign key.
 
+### Days edited by hand (212_series_hand_days.sql)
+
+Issue #477 (a). A person can set or clear one day of a series (`PUT
+/projects/:id/series/:seriesId/days/:date`, [api.md § Time
+series](./api.md#time-series)), and an edited record must never pass as the
+raw one, so each series remembers which days were typed in:
+
+- **`time_series.hand_days`**: a `datemultirange` like `feed_days` (031), on
+  the row every write already locks and rewrites, so it changes in the same
+  statement under the same RLS. `NULL` = no day.
+- **Set by** a hand edit (`series/merge.ts` `mergeSeries` with `byHand`): the
+  day it changes, a cleared day included. A value equal to the stored one
+  changes nothing and marks nothing.
+- **Released by** a person's upload or paste that writes the day (a merge's
+  blank day leaves it), and all at once by a replace (`replaceSeries`).
+- **Never written over** by a data feed or an API key's ingest: `mergeSeries`
+  gives each hand day of their incoming days the stored value (or blank)
+  back (`keepHandDays`), so the next fetch or push can't undo a correction.
+  Hand edits are therefore allowed on a feed-filled series; the edit also
+  takes the day from the feed (`feed_days`), as any write of a person's does.
+- **Kept by a series revision** (`series_revision.hand_days`), so a restore
+  puts the marks back with the values; a copy and the project document
+  (`handDays`, inclusive `[from, to]` pairs) carry them too.
+- **Shown** as `SeriesMeta.handDays` (inclusive `[from, to]` pairs): the Data
+  tab's row mark, Series details and the chart's points
+  ([ui.md § Data](./ui.md)). The history logs each edit as `series.merged`
+  with `entry: 'hand'` and the `date`, with a revision to restore. A run's
+  input snapshot doesn't record the marks yet (its values and hash do record
+  the edited values).
+- RLS and grants: columns on `time_series` and `series_revision`, covered by
+  their existing policies and `water_app`'s table grants; no foreign key.
+
 ### Series day boundary (033_series_day_boundary.sql)
 
 `time_series.day_boundary` says how a series' days were built from
@@ -1738,24 +1770,22 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (cascade), `job_id` (→ `job`, `SET NULL` when the 30-day purge takes it),
   `status` (`queued` until the job writes the outcome, `proposed`,
   `refused`, or `superseded` by the same editor's next click),
-  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `reach` (the reach
-  picked at a confluence, jsonb; no longer written since issue #472, which
-  took the confluence question away: always null on new rows, kept for
-  older ones), `from_window` (the smallest window the
+  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `from_window` (the smallest window the
   job tries), `aim` (jsonb ≤ 300 bytes: where the request's last window
   cut the catchment, `{ zoom, box, cut }`, so the job's first window is
   placed over it; null when the request asked for the background at once),
   `proposal_id` (composite key → `delineation_proposal (id,
   project_id)`, `ON DELETE SET NULL (proposal_id)`; that table gained the
   `UNIQUE (id, project_id)` for it), `refusal_code`, `refusal`, `larger`
-  (the channel a `larger_channel` refusal offers), `check_note` (the
-  river-network check sentence; no longer written since issue #472, kept
-  for older rows),
+  (the channel a `larger_channel` refusal offers),
   `created_by` (→ `app_user`, `SET NULL`), `created_at`, `finished_at`
   (set exactly when it leaves `queued`). RLS: viewers read, editors
   insert (as themselves), update and delete; the job writes the outcome as
   the editor who queued it. A finished request never changes but for its
-  two links clearing (`delineation_request_final`). The route keeps the
+  two links clearing (`delineation_request_final`, latest 211). Migration
+  211 (issue #476) dropped `reach` (the river picked at a confluence) and
+  `check_note` (the river-network check sentence), unused since issue
+  #472 took the confluence question and `checkNote` away. The route keeps the
   newest 20 finished a project. `job.kind` accepts `delineate`, and
   `app_cancel_job` (latest 191) cancels a waiting one as well as `yield`.
   `app_release_job` (191, the worker's own call) puts a claimed job back to

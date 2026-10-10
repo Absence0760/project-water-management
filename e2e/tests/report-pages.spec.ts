@@ -162,7 +162,7 @@ test.describe('the standalone /compare page', () => {
 		await page.setViewportSize(DESKTOP);
 		const w = await seedWhatIfs(page.request, 'Compare standalone');
 		await page.goto(`/compare?a=${w.id}:${w.baseline}&b=${w.id}:${w.whatIf1}`);
-		await expect(page.getByRole('heading', { name: 'What changes' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'What the change does' })).toBeVisible();
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(['Compare runs']);
 		await expect(page.getByRole('link', { name: 'Projects', exact: true })).toHaveAttribute('aria-current', 'page');
 		await expect(page.getByRole('link', { name: 'Back to runs' })).toHaveAttribute('href', `/projects/${w.id}?tab=runs`);
@@ -173,7 +173,7 @@ test.describe('the standalone /compare page', () => {
 		await page.setViewportSize(PHONE);
 		const w = await seedWhatIfs(page.request, 'Compare phone');
 		await page.goto(`/compare?a=${w.id}:${w.baseline}&b=${w.id}:${w.whatIf1}&c=${w.id}:${w.whatIf2}`);
-		await expect(page.getByRole('heading', { name: 'What changes' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'What the change does' })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
 		await expectNoSidewaysScroll(page);
 		await expectNoViolations(page);

@@ -317,6 +317,43 @@ def add_unit_rain(rng: random.Random, doc: dict, start: dt.date, days: int, dens
     if "rain_forecast_mm" not in series and rng.random() < 0.4:
         fstart = start + dt.timedelta(days=days - rng.randint(0, 5))
         series["rain_forecast_mm"] = {"startDate": fstart.isoformat(), "values": [round(rng.gammavariate(0.6, 5), 1) for _ in range(rng.randint(3, 16))]}
+    add_unit_rain_reference(rng, doc, start, days)
+
+
+def add_unit_rain_reference(rng: random.Random, doc: dict, start: dt.date, days: int) -> None:
+    """A reference gauge for the units' CHIRPS (§2.4h, engine >= 1.80.0), in
+    half the per-unit networks, drawn last from add_unit_rain's stream so the
+    rest is unchanged: the catchment gauge or a farm's own (which may not
+    exist), a reference farm (now and then one without area, which isn't a
+    land unit), and its CHIRPS cell: the gauge × a bias per calendar month,
+    some far enough out to be clamped, with gaps and no-data codes, or no
+    cell series at all."""
+    s = doc["settings"]
+    series = doc["series"]
+    ur = s.get("unitRain") or {}
+    farms = [x for x in doc["model"]["nodes"] if x["kind"] == "farm"]
+    if ur.get("mode") != "perUnit" or not farms or rng.random() >= 0.5:
+        return
+    ref_unit = rng.choice(farms)
+    gauge = "rain_catchment_mm" if rng.random() < 0.7 else f"rain_catchment_mm@{rng.choice(farms)['id']}"
+    ur["reference"] = {"gauge": gauge, "unitId": ref_unit["id"]}
+    if rng.random() < 0.1:
+        return
+    bias = [None] + [rng.choice([rng.uniform(0.3, 1.5), rng.uniform(0.3, 1.5), rng.uniform(0.1, 0.2), rng.uniform(5, 8)]) for _ in range(12)]
+    src = series.get(gauge)
+    if src:
+        s0 = dt.date.fromisoformat(src["startDate"])
+        vals = [None if (v is None or v < 0) else round(v * bias[(s0 + dt.timedelta(days=i)).month], 2) for i, v in enumerate(src["values"])]
+        cell = {"startDate": src["startDate"], "values": vals}
+    else:
+        cell = _unit_series(rng, start, days, rng.uniform(0.4, 1.5), True)
+    for _ in range(rng.randint(0, 3)):
+        a = rng.randrange(len(cell["values"])) if cell["values"] else 0
+        for j in range(a, min(len(cell["values"]), a + rng.randint(1, 90))):
+            cell["values"][j] = None
+    if cell["values"] and rng.random() < 0.2:
+        cell["values"][rng.randrange(len(cell["values"]))] = -9999.0
+    series[f"rain_chirps_cell_mm@{ref_unit['id']}"] = cell
 
 
 SABI_SYSTEMS = [("drip", "Drip", 0.9), ("micro", "Micro-sprinkler", 0.82), ("pivot", "Centre pivot / linear move", 0.85), ("sprinkler", "Sprinkler (permanent)", 0.8), ("movable", "Sprinkler (movable)", 0.75), ("surface", "Flood / furrow", 0.7)]

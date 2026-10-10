@@ -2,14 +2,14 @@
 // valid project document, every engine field present, every self-check
 // passing, and each feature it exists to show actually in the model and
 // doing something in a run.
-import { applyScenario, runModelChecked, upgradeLegacyModel, validateScenarioOps, type ModelOutput } from '@water-management/engine';
+import { applyScenario, classifyScenario, proposedRiverWorks, runModelChecked, unboundedRiverWorks, upgradeLegacyModel, validateScenarioOps, type ModelOutput, type ScenarioOp } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { modelProblems } from '../../src/model/validate.js';
 import { ProjectFile } from '../../src/projects/document.js';
 import { inputOf, type ExampleProject } from './catchments.js';
 import { buildShowcase, OWN_SYSTEM_ID, SHOWCASE_NAME, showcaseNodeId, UNITS } from './showcase.js';
 import { showcaseMap } from './showcaseMap.js';
-import { showcaseScenarios } from './showcaseSeed.js';
+import { showcaseApplication, showcaseScenarios } from './showcaseSeed.js';
 
 let ex: ExampleProject;
 let out: ModelOutput;
@@ -91,5 +91,53 @@ describe('the showcase example', () => {
 			expect(applied.problems, sc.name).toEqual([]);
 			expect(outflow(runModelChecked(applied.input)), sc.name).not.toBeCloseTo(base, 0);
 		}
+	});
+});
+
+describe('the showcase application (Raise the Vleiplaas dam)', () => {
+	const sum = (o: ModelOutput, key: string, nodeId: string | null) => (o.series.find((s) => s.key === key && s.nodeId === nodeId)?.values ?? []).reduce((a: number, v) => a + (v ?? 0), 0);
+	const run = (ops: ScenarioOp[]) => {
+		const applied = applyScenario(inputOf(ex), ops);
+		expect(applied.problems).toEqual([]);
+		return runModelChecked(applied.input);
+	};
+	const middle = () => showcaseNodeId(UNITS.middle);
+	const raiseOnly = () => showcaseApplication(ex.model).ops.filter((o) => o.op === 'node.set' && o.field === 'damCapacityM3');
+
+	it('raises the dam by half and releases the EWR (a pass-inflow release with no monthly amounts, no outlet limit)', () => {
+		const app = showcaseApplication(ex.model);
+		expect(validateScenarioOps(app.ops).errors).toEqual([]);
+		const after = applyScenario(inputOf(ex), app.ops).input.model.nodes.find((n) => n.id === middle())!;
+		expect(after).toMatchObject({ damCapacityM3: 450_000, damReleaseRule: 'passInflow', damReleaseM3Day: null, damOutletCapacityM3Day: null });
+	});
+
+	it('passes water through the dam, so the EWR sites are short less than with the raise alone', () => {
+		const withApp = run(showcaseApplication(ex.model).ops);
+		const raised = run(raiseOnly());
+		expect(sum(withApp, 'dam_release', middle())).toBeGreaterThan(0);
+		expect(sum(raised, 'dam_release', middle())).toBe(0);
+		// Shortfalls are negative: the release leaves the gauge below Vleiplaas and the outlet less short.
+		for (const site of [showcaseNodeId(UNITS.gauge), null]) {
+			expect(sum(withApp, 'ewr_shortfall', site), String(site)).toBeGreaterThan(sum(raised, 'ewr_shortfall', site));
+			expect(sum(withApp, 'ewr_shortfall', site), String(site)).toBeGreaterThan(sum(out, 'ewr_shortfall', site));
+		}
+	});
+
+	it('a hands-off flow would change nothing there: Vleiplaas has no river pump and no River to dam (negative control)', () => {
+		const handsOff = run([...raiseOnly(), { op: 'node.set', nodeId: middle(), field: 'handsOffEwr', value: true }]);
+		const raised = run(raiseOnly());
+		const at = (o: ModelOutput) => o.series.filter((s) => s.nodeId === middle()).map((s) => [s.key, s.values]);
+		expect(at(handsOff)).toEqual(at(raised));
+	});
+
+	it('passes the evidence report’s river checks: all proposals, no river take of its own to judge, none uncapped', () => {
+		const ops = showcaseApplication(ex.model).ops;
+		const base = inputOf(ex);
+		const after = applyScenario(base, ops).input.model;
+		const window = { startDate: '2010-01-01', endDate: '2024-12-31' };
+		const classified = classifyScenario(base, ops, [middle()]);
+		expect(classified).toEqual(ops.map(() => 'proposal'));
+		expect(proposedRiverWorks(ops, classified, base.model, after, window)).toEqual([]);
+		expect([...unboundedRiverWorks(base.model, window), ...unboundedRiverWorks(after, window)]).toEqual([]);
 	});
 });

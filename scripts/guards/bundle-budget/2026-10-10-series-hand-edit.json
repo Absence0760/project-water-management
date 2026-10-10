@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #477, daily series by hand: Edit a day under the Data tab's chart (EditDay.svelte, lib/series/editDay.ts), Paste rows in Add data (UploadForm's paste mode, lib/series/paste.ts), the hand-edit marks and the help article. Measured locally against the same tree without these files: 1906 -> 1910 KB (+4 KB, rounding); 1 KB headroom."
+}

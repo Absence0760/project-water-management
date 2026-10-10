@@ -73,7 +73,7 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	const svgBox = (await years.locator('svg').boundingBox())!;
 	const labelBox = (await lastLabel.boundingBox())!;
 	expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(svgBox.x + svgBox.width);
-	const heat = page.getByRole('region', { name: /^EWR compliance by month/ });
+	const heat = page.getByRole('region', { name: /^Days below the EWR, by month/ });
 	await expect(heat).toBeVisible();
 	// % of days not met in the EWR traffic light's three bands, as the portfolio's (stated in the key), each month's
 	// band in its words too; the number stays on every month that missed a day.
@@ -95,8 +95,32 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	await expect(page.getByTestId('uncertainty-panel')).toBeVisible();
 	await expect(page.getByTestId('outcome-matrix')).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Water account' })).toBeVisible();
-	// No rule table: no Reserve compliance panel.
-	await expect(page.locator('#res-reserve')).toHaveCount(0);
+	// No rule table: Reserve rules met is a one-line stub saying what it needs and where, not absent (issue #465).
+	const stub = page.getByTestId('reserve-stub');
+	await expect(stub).toHaveAttribute('id', 'res-reserve');
+	await expect(stub.getByRole('heading', { name: 'Reserve rules met, by month' })).toBeVisible();
+	await expect(stub).toContainText('Needs a Reserve rule table: set one in Settings → Reserve rule tables.');
+	await expect(stub.getByRole('link', { name: 'set one in Settings → Reserve rule tables' })).toHaveAttribute('href', '?tab=settings#set-reserve');
+	expect((await stub.boundingBox())!.height).toBeLessThan(80);
+	// Findings first: the two monthly panels, named apart, then the water account; the run-it-yourself tools after
+	// them, under their own heading, each one row (name, purpose, ⓘ, Run) until it has run.
+	expect(await page.locator('[id^="res-"]').evaluateAll((els) => els.map((e) => e.id))).toEqual([
+		'res-ewr',
+		'res-reserve-years',
+		'res-reserve',
+		'res-ewr-grid',
+		'res-water-account',
+		'res-uncertainty',
+		'res-outcomes',
+		'res-outlook'
+	]);
+	const tools = page.getByRole('region', { name: 'How sure, and what if' });
+	const rows = tools.getByTestId('tool-row');
+	await expect(rows.getByRole('heading', { level: 3 })).toHaveText([/^Uncertainty bands/, /^Sensitivity runs/, /^Outcome matrix/, /^Seasonal outlook/]);
+	await expect(rows.getByRole('button', { name: /^Run/ })).toHaveText(['Run…', 'Run sensitivity', 'Run…', 'Run…']);
+	await expect(rows.getByRole('button', { name: /^About / })).toHaveCount(4);
+	for (const row of await rows.all()) expect((await row.boundingBox())!.height).toBeLessThan(60);
+	await expect(tools.getByLabel(/^Demand levels/)).toHaveCount(0);
 
 	// The page flows in the window's one scroll (it was fitted to the window until 2026-09-29, and read as the
 	// whole page): the chart has a fixed, generous height with the bars beside it as tall, and the next panel's top
@@ -108,7 +132,8 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	expect(Math.abs(chart.y + chart.height - (bars.y + bars.height))).toBeLessThan(2);
 	expect(chart.height).toBeGreaterThan(500);
 	expect((await page.locator('#res-ewr figure.chart .u-over').boundingBox())!.height).toBeGreaterThan(300);
-	expect((await page.locator('#res-ewr-grid').boundingBox())!.y).toBeLessThan(vh);
+	// The next panel is Reserve rules met (or its stub; findings first, issue #465).
+	expect((await page.locator('#res-reserve').boundingBox())!.y).toBeLessThan(vh);
 	expect(await innerScrollers(page)).toEqual([]);
 });
 
@@ -262,7 +287,7 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	// A bookmark to EWR by month on Runs & results: here instead, same run, the panel scrolled to with focus on it.
 	await page.goto(`/projects/${id}?tab=runs&run=${baseline}#res-ewr-grid`);
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${baseline}#res-ewr-grid$`));
-	const heading = page.locator('#res-ewr-grid').getByRole('heading', { name: /^EWR compliance by month/ });
+	const heading = page.locator('#res-ewr-grid').getByRole('heading', { name: /^Days below the EWR, by month/ });
 	await expect(heading).toBeFocused();
 	await expect(heading).toBeInViewport();
 });
@@ -305,7 +330,7 @@ test('a viewer reads it too, with no run button', async ({ page, owner, signIn }
 	await viewer.page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'River & reserve', exact: true }).click();
 	await expect(riverTiles(viewer.page)).toHaveCount(2);
 	await expect(viewer.page.getByTestId('river-context')).toContainText('Baseline');
-	await expect(viewer.page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
+	await expect(viewer.page.getByRole('region', { name: /^Days below the EWR, by month/ })).toBeVisible();
 });
 
 test.describe('nothing scrolls inside a card, and no accessibility violations', () => {
@@ -348,9 +373,9 @@ test('twenty water years with a rule table: every table grows with the page, and
 	// A rule table: the bars count the pragmatic EWR, so they say so (issue #177).
 	const years = page.getByRole('region', { name: 'Days below the pragmatic EWR, each water year' });
 	await expect(years.getByRole('img', { name: /in 20 water years\.$/ })).toBeVisible();
-	const reserve = page.getByRole('region', { name: /^Reserve compliance by month/ });
+	const reserve = page.getByRole('region', { name: /^Reserve rules met, by month/ });
 	await expect(reserve.getByRole('table', { name: /^Each month at the outlet/ }).locator('tbody tr')).toHaveCount(20);
-	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Days below the EWR, by month/ })).toBeVisible();
 	expect(await innerScrollers(page)).toEqual([]);
 
 	// The water-year table under the bars: all twenty rows in the page, the chart keeping its height beside it.
@@ -384,7 +409,7 @@ test('twenty water years with a rule table: every table grows with the page, and
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openRiver(page, id);
 	await expect(years.getByRole('img')).toBeVisible();
-	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Days below the EWR, by month/ })).toBeVisible();
 	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

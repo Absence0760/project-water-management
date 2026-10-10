@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Headline numbers and calibration fit of one run. The per-unit table moved to
-	// Units & supply (supply/UnitResultsTable.svelte, issue #17), and so did the
+	// Hydrological units (supply/UnitResultsTable.svelte, issue #17), and so did the
 	// land-cover, groundwater, demand-object and other-user tables (issue #137,
 	// its Other uses section); the printable report passes them back in through
 	// `units`, in their old place.
@@ -32,7 +32,7 @@
 		units?: Snippet;
 		/** Where "by month of the year" goes: the Reserve compliance panel, on River & reserve in the workspace (issue #17). */
 		reserveHref?: string;
-		/** A link to a panel of Units & supply by its anchor: where the land-cover, groundwater, demand-object and other-user tables are in the workspace (issue #137). */
+		/** A link to a panel of Hydrological units by its anchor: where the land-cover, groundwater, demand-object and other-user tables are in the workspace (issue #137). */
 		otherUsesHref?: (hash: string) => string;
 		/** The project's settings.ewrHeadline (issue #444): which test the headline reports; null = automatic. */
 		headline?: EwrHeadline | null;

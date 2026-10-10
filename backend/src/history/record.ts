@@ -346,13 +346,21 @@ export interface SeriesRow {
 	source?: string | null;
 	sourceUnit?: string | null;
 	sourceUnitFactor?: number | null;
+	/**
+	 * The days edited by hand (212_series_hand_days.sql), as [start, end) epoch-day runs, when the caller read them
+	 * before the change (a merge records its revision after writing). Absent: read from the row as it stands.
+	 */
+	handDays?: [number, number][];
 }
 
 /** The series (kind, name) of a project, locked for the change about to be made; null when there is none. */
 export async function lockSeries(db: Db, projectId: string, kind: string, name: string): Promise<SeriesRow | null> {
 	const { rows } = await db.query<SeriesRow>(
 		`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary",
-			source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor"
+			source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
+			-- The days edited by hand (212), read now: a replace records its revision after it writes the row.
+			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
+			 FROM unnest(hand_days) r) AS "handDays"
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, kind, name]
 	);
@@ -370,12 +378,15 @@ export async function recordSeriesRevision(
 	reason: 'replace' | 'delete' | 'manual_merge' | 'feed_replace'
 ): Promise<string> {
 	// The product and version, and the day boundary, go with the values, so a restore puts them back too (032, 033),
-	// and so does a flow record's site (085), read from the row as it stands before the change.
+	// and so does a flow record's site (085), read from the row as it stands before the change, and the days edited by hand (212).
 	const { rows } = await db.query<{ id: string }>(
 		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version, day_boundary,
-			site_node_id, source, source_unit, source_unit_factor)
+			site_node_id, source, source_unit, source_unit_factor, hand_days)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11, $12,
-			(SELECT site_node_id FROM time_series WHERE project_id = $1 AND id = $2), $13, $14, $15) RETURNING id`,
+			(SELECT site_node_id FROM time_series WHERE project_id = $1 AND id = $2), $13, $14, $15,
+			CASE WHEN $16::boolean
+				THEN (SELECT range_agg(daterange(DATE '1970-01-01' + d0, DATE '1970-01-01' + d1)) FROM unnest($17::int[], $18::int[]) AS t(d0, d1))
+				ELSE (SELECT hand_days FROM time_series WHERE project_id = $1 AND id = $2) END) RETURNING id`,
 		[
 			projectId,
 			s.id,
@@ -392,7 +403,11 @@ export async function recordSeriesRevision(
 			// The source and unit too (107): they describe these values.
 			s.source ?? null,
 			s.sourceUnit ?? null,
-			s.sourceUnitFactor ?? null
+			s.sourceUnitFactor ?? null,
+			// And the days edited by hand (212): they mark these values.
+			s.handDays !== undefined,
+			(s.handDays ?? []).map((r) => r[0]),
+			(s.handDays ?? []).map((r) => r[1])
 		]
 	);
 	return String(rows[0]!.id);

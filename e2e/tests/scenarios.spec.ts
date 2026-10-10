@@ -155,7 +155,7 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await expect(row('Baseline').getByRole('button', { name: /^Delete run/ })).toHaveCount(0);
 	await page.goBack();
 
-	// The full comparison lists the scenario's overrides above "What changed".
+	// The full comparison lists the scenario's overrides above "Inputs that differ".
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
 	const overrides = page.getByRole('region', { name: 'Scenario overrides' });
 	await expect(overrides.getByTestId('scenario-overrides-b')).toContainText(`Run B is the scenario ${NAME}, on run A as its base: 1 change.`);
@@ -163,7 +163,7 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await expect(recorded).toHaveCount(1);
 	await expect(recorded).toContainText(RAISE);
 	await expect(recorded).toContainText('Proposal');
-	await expect(page.getByRole('region', { name: 'What changed' })).toContainText('Upper farm: dam capacity 150\u202f000 m³ → 180\u202f000 m³');
+	await expect(page.getByRole('region', { name: 'Inputs that differ' })).toContainText('Upper farm: dam capacity 150\u202f000 m³ → 180\u202f000 m³');
 	await expectNoViolations(page);
 });
 
@@ -271,7 +271,7 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
 	const recorded = page.getByRole('region', { name: 'Scenario overrides' }).getByRole('list', { name: `Changes in scenario ${name} (run B)` }).getByRole('listitem');
 	await expect(recorded).toHaveCount(2);
-	const changed = page.getByRole('region', { name: 'What changed' });
+	const changed = page.getByRole('region', { name: 'Inputs that differ' });
 	await expect(changed).toContainText('Upper farm: supply rule dam only → river first');
 	await expect(changed).toContainText('Upper farm: river pump capacity no limit → 1\u202f200 m³/day');
 });
@@ -312,7 +312,7 @@ test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Ne
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
 	// The form still holds the curve opened for axe: leaving the scenario asks first (the leave guard).
 	await answerConfirm(page, true, 'a change not yet added to the scenario');
-	await expect(page.getByRole('region', { name: 'What changed' })).toContainText('dam survey curve none (power law) → 3 rows');
+	await expect(page.getByRole('region', { name: 'Inputs that differ' })).toContainText('dam survey curve none (power law) → 3 rows');
 });
 
 test('the survey curve paste box fits a phone, with no sideways scroll, and passes axe', async ({ page, owner }) => {

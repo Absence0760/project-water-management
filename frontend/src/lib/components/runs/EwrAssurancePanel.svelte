@@ -35,11 +35,14 @@
 
 	let {
 		sites,
-		print = false
+		print = false,
+		title = 'Reserve compliance by month'
 	}: {
 		sites: EwrAssuranceSite[];
 		/** The printable report: Month by month opens (the report shows each site in its own panel). */
 		print?: boolean;
+		/** The heading. River & reserve calls it "Reserve rules met, by month", apart from its EWR grid (issue #465). */
+		title?: string;
 	} = $props();
 
 	const uid = $props.id();
@@ -68,7 +71,7 @@
 </script>
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Reserve compliance by month <HelpTip key="reserve-compliance" /></h3>
+	<h3 id="{uid}-h">{title} <HelpTip key="reserve-compliance" /></h3>
 	{#if sites.length > 1}
 		<div class="field site">
 			<label for="{uid}-site">EWR site</label>

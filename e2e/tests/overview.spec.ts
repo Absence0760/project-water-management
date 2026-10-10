@@ -309,7 +309,7 @@ test('needs attention cards and supply by hydrological unit: coloured by how muc
 	// Two units: nothing to show all.
 	await expect(supply.getByRole('button', { name: /^Show all/ })).toHaveCount(0);
 	await expect(supply).toContainText(/supplied/);
-	// The whole picture is on Units & supply, for the same run (issue #17).
+	// The whole picture is on Hydrological units, for the same run (issue #17).
 	await expect(supply.getByRole('link', { name: 'More on Hydrological units' })).toHaveAttribute('href', /^\?tab=supply&run=[0-9a-f-]{36}$/);
 
 	// A farm's name opens its planted areas over the Summary.

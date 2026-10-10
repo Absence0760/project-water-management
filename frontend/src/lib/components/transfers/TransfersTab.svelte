@@ -34,6 +34,10 @@
 	import { transferIsBlank, type ModelEditor } from '$lib/model/editor.svelte';
 	import { transferAnchor } from '$lib/model/validate';
 	import MonthRates from './MonthRates.svelte';
+	import { WATER_YEAR_MONTHS } from '$lib/format/months';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { applyTransferPaste, planTransferPaste, transferRows, transfersCsv, TRANSFERS_FORMAT } from './transfersPaste';
 	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
 
 	let {
@@ -118,6 +122,32 @@
 		else root?.querySelector<HTMLButtonElement>('.empty button')?.focus();
 	}
 
+	// --- paste the max rates from a spreadsheet (issue #477): into a rate field, or from the button ---
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteAnchor = $state<PasteAnchor | null>(null);
+	let announce = $state('');
+	const pasteRows = $derived(transferRows(transfers, name, transferUnit.scaleFromM3s, transferUnit.label));
+	const pasteWhere = $derived(pasteAnchor ? `Transfer ${pasteAnchor.row + 1}, ${WATER_YEAR_MONTHS[pasteAnchor.col] ?? 'Oct'}` : null);
+	function openPaste() {
+		pasteAnchor = null;
+		pasteText = '';
+		pasteOpen = true;
+	}
+	/** A block pasted into a rule's month field: its rule and month anchor a block without names. */
+	function onRatesPaste(e: ClipboardEvent, rule: number) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		const cell = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-paste-col]') : null;
+		pasteAnchor = { row: rule, col: cell ? Number(cell.dataset.pasteCol) : 0 };
+		pasteText = t.text;
+		pasteOpen = true;
+	}
+	function applyPaste(plan: PastePlan) {
+		applyTransferPaste(plan, transfers, transferUnit.scaleFromM3s);
+		announce = `Pasted ${plan.changes.length} monthly ${plan.changes.length === 1 ? 'rate' : 'rates'}. Save the model to keep them.`;
+	}
+
 	$effect(() => fillHeader({ actions: headerActions }, page));
 
 	// A link to one rule (the save bar's problems, `#tr-<id>-h`): its heading is focused and held in view
@@ -146,7 +176,10 @@
 {#snippet headerActions()}
 	{#if transfers.length && nodes.length >= 2}<a class="btn" href="?tab=network">Show on the Network</a>{/if}
 	{#if canAdd}<button type="button" class="btn" onclick={add}>+ Add transfer</button>{/if}
+	{#if transfers.length && !readonly}<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>{/if}
 {/snippet}
+
+<p class="visually-hidden" aria-live="polite">{announce}</p>
 
 <div class="transfers" bind:this={root} data-testid="transfers">
 	{#if units.length < 2 && transfers.length === 0}
@@ -179,6 +212,13 @@
 				<!-- One unit for every rule's rates (display only, so a viewer has it too); each rule's title names it. -->
 				<span class="rate-unit"><span aria-hidden="true">Rates in</span> <FlowUnitSelect unit={transferUnit} label="Unit of transfer rates" /></span>
 			</div>
+			<!-- Off the page (the grid modal, override mode) the add sits above the rules, not under them (issue #463); the page's is in its header. -->
+			{#if !page && !readonly}
+				<div class="toolbar grid-actions" data-testid="grid-actions">
+					<button type="button" class="btn" onclick={add}>+ Add transfer</button>
+					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
+				</div>
+			{/if}
 			<ol class="rule-list" data-testid="transfer-rules">
 				{#each transfers as t, i (t.id)}
 					{@const label = `transfer ${i + 1}`}
@@ -234,7 +274,8 @@
 						</div>
 
 						<div class="rule-body">
-							<div class="grp g-rates">
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="grp g-rates" onpaste={readonly ? undefined : (e) => onRatesPaste(e, i)}>
 								<MonthRates rule={t} {label} disabled={readonly}>
 									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">{transferUnit.label}</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
 								</MonthRates>
@@ -326,8 +367,21 @@
 					</li>
 				{/each}
 			</ol>
-			{#if !page && !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add transfer</button></div>{/if}
 		</section>
+		{#if !readonly}
+			<GridPasteDialog
+				bind:open={pasteOpen}
+				bind:text={pasteText}
+				title="Paste transfer rates"
+				layout="Max rates in {transferUnit.label}: a row per rule, named as its card is (Transfer 1) or by its route (Upper farm → Lower farm), under a heading row of months, Oct to Sep (as the CSV below has them); without names or headings the values fill from the month you pasted into. 0 turns a month off."
+				where={pasteWhere}
+				plan={(t) => planTransferPaste(t, pasteRows, pasteAnchor)}
+				onapply={applyPaste}
+				csv={() => transfersCsv(transfers, name, transferUnit.scaleFromM3s, transferUnit.label)}
+				csvName="transfers.csv"
+				format={TRANSFERS_FORMAT}
+			/>
+		{/if}
 	{/if}
 </div>
 
@@ -782,9 +836,6 @@
 		}
 	}
 
-	.after {
-		margin: 0.75rem 0 0;
-	}
 	.empty {
 		padding: 1.5rem;
 		text-align: center;

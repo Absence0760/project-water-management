@@ -10,7 +10,11 @@
 	// registered), beside the picked unit's water years and its registered
 	// volumes (`unit=`). The page flows in the window's one scroll: each long
 	// list shows its first few (the ones that matter most) with a "Show all"
-	// that opens the rest in place, and nothing scrolls inside a card. Below:
+	// that opens the rest in place, and nothing scrolls inside a card. Under
+	// them, "On the map" (issue #510, AllocationUseMap; `map=1`): each unit's
+	// area shaded by its use ÷ registered band, its code loaded when opened,
+	// and offered only where the per-unit comparison is (never to a viewer
+	// who sees totals). Below:
 	// every registered volume with its source file and the imported files;
 	// then the over/under-use chart (UsePlot, shared with the evidence
 	// report; its first ten rows until "Show all"), and every unit's water
@@ -36,6 +40,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import AllocationImport from './AllocationImport.svelte';
 	import AllocationTotals from './AllocationTotals.svelte';
+	import AllocationUseMap from './AllocationUseMap.svelte';
 	import type { AllocationComparisonTotals } from '$lib/api';
 	import UsePlot from './UsePlot.svelte';
 	import YearTable from './YearTable.svelte';
@@ -218,6 +223,12 @@
 			// Stacked, the detail is under the list; beside an opened list read far down, it has scrolled away above.
 			if (detailEl && (!side || detailEl.getBoundingClientRect().top < 0)) detailEl.scrollIntoView({ block: 'start' });
 		});
+	}
+
+	// --- the map of the units shaded by band (issue #510): `map=1`; a unit picked there opens its comparison above ---
+	const mapOpen = $derived(url.searchParams.get('map') === '1');
+	function pickFromMap(id: string) {
+		void goto(withParam(url, 'unit', id), { noScroll: true, keepFocus: true }).then(() => detailEl?.scrollIntoView({ block: 'start' }));
 	}
 
 	// --- the sheets: add or change a volume (`volume=new|<id>`), import (`import=1`); editors only ---
@@ -454,6 +465,13 @@
 								</div>
 							</section>
 						</div>
+						<AllocationUseMap
+							{projectId}
+							{comparison}
+							open={mapOpen}
+							picked={pickedId}
+							onpick={pickFromMap}
+						/>
 					{:else}
 						<section class="panel" aria-labelledby="alloc-compare-h">
 							<h2 id="alloc-compare-h">Modelled use vs registered volume <HelpTip key="registered-vs-modelled" /></h2>

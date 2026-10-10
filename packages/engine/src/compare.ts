@@ -696,7 +696,9 @@ export function unitRainText(raw: unknown): string {
 	if (u?.mode !== 'perUnit') return 'off';
 	const gauge = u.gaugeMapMm != null ? `gauge MAP ${fmtValue(u.gaugeMapMm, 0)} mm${u.gaugeMapSource ? ` (${u.gaugeMapSource})` : ''}` : 'no gauge MAP';
 	const p = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
-	return `on (${gauge}; MAP period ${p.start} to ${p.end})`;
+	// The reference gauge and unit (engine ≥ 1.80.0), only when set, so a setting without one reads as before.
+	const ref = u.reference ? `; reference gauge ${u.reference.gauge} at the unit ${u.reference.unitId}` : '';
+	return `on (${gauge}; MAP period ${p.start} to ${p.end}${ref})`;
 }
 
 /** The change of settings.unitRain between two runs, or null. A run saved without it (engine < 1.78.0) ran on the catchment rain. */
@@ -1026,7 +1028,9 @@ function diffSettings(
 		'lakeEvapFactorMonthly',
 		'effectiveRainFractionMonthly',
 		'droughtRestriction',
-		'ewrDailySource'
+		'ewrDailySource',
+		// Said in words above (unitRainText), so not again as a bare "Setting changed".
+		'unitRain'
 	]);
 	for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
 		if (!known.has(k) && !same(a[k], b[k])) push(k, `Setting "${k}" changed`);

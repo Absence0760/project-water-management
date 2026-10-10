@@ -13,6 +13,7 @@ import {
 	checkProvenance,
 	mergeInto,
 	ProvenanceFields,
+	SeriesStartDate,
 	rowOrigin,
 	rowProvenance,
 	SERIES_META as META,
@@ -31,6 +32,26 @@ import { originChange, provenanceChange, replaceSeries } from './replace.js';
 // ingest); re-exported for the project document (projects/document.ts) and
 // the history's restore (history/routes.ts).
 export { MAX_SERIES_VALUES, SeriesStartDate, setDayBoundary } from './merge.js';
+
+/**
+ * PUT …/series/:seriesId/days/:date: the day's value (null: clear it, no
+ * reading), and optionally the unit it is given in (default: the series'
+ * stored unit; converted like an upload's). Never negative: rain, flow and
+ * evaporation are never below zero, and a file's negative is read as a gap.
+ */
+const DayBody = z
+	.object({
+		value: z.number().finite().nonnegative().nullable(),
+		unit: z.string().trim().min(1).max(20).optional()
+	})
+	.strict();
+
+/** A day as a one-day series body: the unit conversion and its checks are SeriesBody's (toCanonicalUnit). */
+function parseDay(b: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[] }) {
+	const r = PutBody.safeParse(b);
+	if (!r.success) throw new ApiError(400, r.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; '));
+	return r.data;
+}
 
 /**
  * After the transaction that ran the new-data hook commits: a re-run due at
@@ -208,6 +229,44 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			// mergeInto runs the new-data hook (series/newData.ts): a re-send that changes nothing queues nothing.
 			const r = await mergeInto(db, id, body, { keepRevision: true, via: 'user', keepOnNull: true });
+			return { meta: r.meta, queued: r.rerun };
+		});
+		await wakeForRerun(queued);
+		return c.json({ ...meta, rerunQueuedFor: queued?.runAfter ?? null });
+	})
+	// Set or clear one day of a series by hand (issue #477): a correction or a
+	// filled gap. The same path as a merge (mergeInto: the unit conversion, the
+	// row lock, the series revision, series.merged, the new-data hook), with
+	// the day marked as edited by hand (212_series_hand_days) so the record
+	// never passes as the raw one, and so a data feed or API key never writes
+	// over it. Only a day inside the series: days outside it come from a file
+	// or a paste. docs/api.md § Series.
+	.put('/:id/series/:seriesId/days/:date', async (c) => {
+		const { id, seriesId, date } = c.req.param();
+		const body = DayBody.parse(await readJson(c));
+		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
+			const day = SeriesStartDate.safeParse(date);
+			if (!day.success) throw new ApiError(400, 'date: a day as YYYY-MM-DD');
+			const { rows } = await db.query<{ kind: string; name: string; unit: string; startDate: string; endDate: string; rebuilding: boolean }>(
+				`SELECT kind, name, unit, to_char(start_date, 'YYYY-MM-DD') AS "startDate",
+					to_char(start_date + cardinality("values") - 1, 'YYYY-MM-DD') AS "endDate",
+					EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
+						WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding
+				 FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+				[id, seriesId]
+			);
+			const s = rows[0];
+			if (!s) throw new ApiError(404, 'not found');
+			// A data feed's confirmed replacement swaps a whole new record in when its backfill finishes, which would drop the edit.
+			if (s.rebuilding) throw new ApiError(409, 'a data feed is replacing this series: edit its days once the replacement is in');
+			if (day.data < s.startDate || day.data > s.endDate) {
+				throw new ApiError(400, `date: a day of the series, ${s.startDate} to ${s.endDate}. Add days outside it from a file or by pasting them`);
+			}
+			const series = parseDay({ kind: s.kind, name: s.name, unit: body.unit ?? s.unit, startDate: day.data, values: [body.value] });
+			// keepOnNull false: a blank typed in clears the day.
+			const r = await mergeInto(db, id, series, { keepRevision: true, via: 'user', keepOnNull: false, byHand: true, audit: { entry: 'hand', date: day.data } });
 			return { meta: r.meta, queued: r.rerun };
 		});
 		await wakeForRerun(queued);

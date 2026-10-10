@@ -1,7 +1,7 @@
 // Fit provenance and calibration exclusions (issue #4, assessor review): an
 // applied fit is saved with a record of how it was made and validated, each
 // run shows the record it ran with, a hand edit after Apply marks the record,
-// and a stored exclusion leaves a trace in "What changed".
+// and a stored exclusion leaves a trace in "Inputs that differ".
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -106,7 +106,7 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	await expect(fits.getByRole('row', { name: /^Split-sample: other half/ })).toContainText('not run');
 });
 
-test('a calibration exclusion needs a reason, and shows in What changed and on the run', async ({ page, owner }) => {
+test('a calibration exclusion needs a reason, and shows in Inputs that differ and on the run', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Exclusions');
 	const before = await createRun(page.request, project.id, 'Before');

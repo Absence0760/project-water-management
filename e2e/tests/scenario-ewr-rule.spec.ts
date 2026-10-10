@@ -5,7 +5,7 @@
 // table Settings wouldn't save, in the same words; the list reads the table
 // with its confidence line and classes it a baseline assumption even with
 // every node the proposer's; after a run the full comparison's Scenario
-// overrides show it the same way, and What changed lists the table. The
+// overrides show it the same way, and Inputs that differ lists the table. The
 // catchment's own settings are never touched. Synthetic catchment
 // (support/api.ts).
 import { expectNoViolations } from '../support/a11y.ts';
@@ -69,7 +69,7 @@ test('an editor sets the outlet’s Reserve rule table in a scenario, always a b
 	await expect(recorded).toContainText(TABLE);
 	await expect(recorded).toContainText('Baseline assumption');
 	await expect(overrides.getByTestId('baseline-callout')).toBeVisible();
-	await expect(page.getByRole('region', { name: 'What changed' })).toContainText('EWR rule table at');
+	await expect(page.getByRole('region', { name: 'Inputs that differ' })).toContainText('EWR rule table at');
 
 	// The catchment's own settings keep no rule table.
 	const res = await page.request.get(`${API_URL}/projects/${project.id}`);

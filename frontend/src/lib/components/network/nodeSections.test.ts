@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newNetworkNode, type NetworkNode } from '@water-management/engine';
-import { nodeSections, SECTION_SHORT, SECTION_TITLE } from './nodeSections';
+import { navText } from '$lib/components/common/sectionNav';
+import { nodeNavGroups, nodeSections, sectionId, SECTION_SHORT, SECTION_TITLE } from './nodeSections';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({ ...newNetworkNode('n', 1, 'out'), ...over });
 
@@ -33,9 +34,22 @@ describe('nodeSections', () => {
 		expect(nodeSections(node({ kind: 'user' }), 0)).toEqual(['groundwater', 'boreholes', 'reach']);
 	});
 
-	it('has a short name for every section on the jump row', () => {
+	it("has a short name for every section on the section menu's bar", () => {
 		expect(SECTION_SHORT.groundwater).toBe('Combined boreholes');
 		expect(SECTION_SHORT.damSurvey).toBe('Dam survey');
 		expect(SECTION_SHORT.reach).toBe('Bed losses');
+	});
+
+	it("gives the sheet's section menu each fieldset's id and legend, the short name on the bar only where it differs (issue #462)", () => {
+		const n = node({ id: 'u1', kind: 'farm', damCapacityM3: 50_000 });
+		const [group, ...rest] = nodeNavGroups(n.id, nodeSections(n, 0));
+		expect(rest).toEqual([]);
+		expect(group!.label).toBeNull();
+		expect(group!.sections.map((s) => s.id)).toEqual(nodeSections(n, 0).map((s) => sectionId('u1', s)));
+		expect(group!.sections.map((s) => s.label)).toEqual(nodeSections(n, 0).map((s) => SECTION_TITLE[s]));
+		expect(group!.sections.map((s) => navText(s, 'bar'))).toEqual(nodeSections(n, 0).map((s) => SECTION_SHORT[s]));
+		const reach = group!.sections.find((s) => s.id === sectionId('u1', 'reach'))!;
+		expect(reach).toEqual({ id: 'nd-sec-reach-u1', label: 'Bed losses in the reach below', bar: 'Bed losses' });
+		expect(group!.sections.find((s) => s.id === sectionId('u1', 'dam'))).not.toHaveProperty('bar');
 	});
 });

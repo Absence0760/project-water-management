@@ -96,6 +96,10 @@
 	import { saveBlockers, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
+	import { applyMonthlyPaste } from '$lib/spreadsheet/paste/monthlyRows';
+	import { MONTHLY_SETTINGS_FORMAT, monthlySettingRows, monthlySettingsCsv, planSettingsPaste, type MonthlySettingId } from './monthlyPaste';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
@@ -195,6 +199,34 @@
 	function setGapMapOn(on: boolean) {
 		if (!on && s.chirpsQuantileMap) draft.lastGapMap = { ...s.chirpsQuantileMap };
 		s.chirpsQuantileMap = withChirpsQuantileMap(on, draft.lastGapMap);
+	}
+	// --- paste the monthly A-pan and pan coefficients from a spreadsheet (issue #477): into a month, or from a button ---
+	const monthlyRows = $derived(monthlySettingRows(s, pe.kind !== 'monthly'));
+	let monthlyPasteOpen = $state(false);
+	let monthlyPasteText = $state('');
+	let monthlyAnchor = $state<PasteAnchor | null>(null);
+	let monthlyAnnounce = $state('');
+	const monthlyWhere = $derived(monthlyAnchor ? `${monthlyRows[monthlyAnchor.row]?.name ?? 'A-pan evaporation'}, ${WATER_YEAR_MONTHS[monthlyAnchor.col] ?? 'Oct'}` : null);
+	function openMonthlyPaste() {
+		monthlyAnchor = null;
+		monthlyPasteText = '';
+		monthlyPasteOpen = true;
+	}
+	/** A block pasted into a month of the A-pan or pan coefficient row: that row and month anchor a block without names. */
+	function onMonthlyPaste(e: ClipboardEvent, row: MonthlySettingId) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		const cell = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-paste-col]') : null;
+		monthlyAnchor = { row: Math.max(0, monthlyRows.findIndex((r) => r.id === row)), col: cell ? Number(cell.dataset.pasteCol) : 0 };
+		monthlyPasteText = t.text;
+		monthlyPasteOpen = true;
+	}
+	function applyMonthly(plan: PastePlan) {
+		applyMonthlyPaste(plan, (id, m, v) => {
+			if (id === 'apanMm') s.apanMm[m] = v;
+			else if (id === 'panCoefficient') s.panCoefficient[m] = v;
+		});
+		monthlyAnnounce = `Pasted ${plan.changes.length} monthly ${plan.changes.length === 1 ? 'value' : 'values'}. Save the settings to keep them.`;
 	}
 	// Monthly lake factors (WP-3.5): the twelve switched off come back when it is ticked again, until saved.
 	function setLakeMonthlyOn(on: boolean) {
@@ -598,6 +630,11 @@
 		</div>
 		<p class="summary" data-testid="summary-demand">{summaries['set-demand']}</p>
 		<p class="hint explain">Gross irrigation need = A-pan × crop factor × area.</p>
+		{#if !readonly}
+			<div class="toolbar grid-actions" data-testid="grid-actions">
+				<button type="button" class="btn btn-sm" onclick={openMonthlyPaste}>Paste from a spreadsheet…</button>
+			</div>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact monthly">
 				<thead>
@@ -607,11 +644,11 @@
 						<th scope="col" class="num">Year</th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody onpaste={readonly ? undefined : (e) => onMonthlyPaste(e, 'apanMm')}>
 					<tr>
 						<th scope="row" class="sticky">A-pan evaporation <span class="u">mm</span> <HelpTip key="settings.apanMm" /></th>
 						{#each WATER_YEAR_MONTHS as m, i (m)}
-							<td><NumberInput label="A-pan evaporation, {m}, mm" min={0} disabled={readonly} bind:value={s.apanMm[i]} /></td>
+							<td data-paste-col={i}><NumberInput label="A-pan evaporation, {m}, mm" min={0} disabled={readonly} bind:value={s.apanMm[i]} /></td>
 						{/each}
 						<td class="num muted">{fmtNum(apanAnnual)}</td>
 					</tr>
@@ -623,6 +660,23 @@
 			loaded, <a href="#set-evaporation">Evaporation from the map</a> (under Flow calibration) proposes it from the catchment boundary.
 		</p>
 		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text}</p>{/if}
+		<p class="visually-hidden" aria-live="polite">{monthlyAnnounce}</p>
+		{#if !readonly}
+			<GridPasteDialog
+				bind:open={monthlyPasteOpen}
+				bind:text={monthlyPasteText}
+				title="Paste monthly evaporation"
+				layout={pe.kind === 'monthly'
+					? 'The monthly A-pan in mm: a row named A-pan evaporation under a heading row of months, Oct to Sep (as the CSV below has it); without a name or headings the values fill from the month you pasted into.'
+					: 'The monthly A-pan (mm) and pan coefficients (× A-pan): a row each, named A-pan evaporation and Pan coefficient, under a heading row of months, Oct to Sep (as the CSV below has them); one row is enough. Without names or headings the values fill from the month you pasted into.'}
+				where={monthlyWhere}
+				plan={(t) => planSettingsPaste(t, monthlyRows, monthlyAnchor)}
+				onapply={applyMonthly}
+				csv={() => monthlySettingsCsv(monthlyRows)}
+				csvName="monthly-evaporation.csv"
+				format={MONTHLY_SETTINGS_FORMAT}
+			/>
+		{/if}
 		{#if s.lakeEvapFactorMonthly}
 			<div class="table-wrap">
 				<table class="data compact monthly" data-testid="lake-factor-row">
@@ -1075,6 +1129,9 @@
 						/>
 					{/snippet}
 				</Lazy>
+				<div class="toolbar grid-actions" data-testid="grid-actions">
+					<button type="button" class="btn btn-sm" onclick={openMonthlyPaste}>Paste from a spreadsheet…</button>
+				</div>
 			{/if}
 			<div class="table-wrap">
 				<table class="data compact monthly">
@@ -1084,11 +1141,11 @@
 							{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
 						</tr>
 					</thead>
-					<tbody>
+					<tbody onpaste={readonly ? undefined : (e) => onMonthlyPaste(e, 'panCoefficient')}>
 						<tr>
 							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" label="About the monthly pan coefficients" /></th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
-								<td><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
+								<td data-paste-col={i}><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
 							{/each}
 						</tr>
 					</tbody>

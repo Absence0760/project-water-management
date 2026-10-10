@@ -66,6 +66,7 @@ test('an application on the nominated run gives the full evidence report, draft 
 	// The ensemble, run to the declared rule on River & reserve (the server draws the seed and checks it).
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
+	await panel.getByRole('button', { name: 'Run…' }).click();
 	await panel.getByLabel('Parameter sets').fill('30');
 	await panel.getByLabel(/^Lowest skill kept/).fill('-10');
 	await panel.getByLabel('Worst WR2012 flag kept').selectOption('unusable');

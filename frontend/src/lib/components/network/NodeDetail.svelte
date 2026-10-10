@@ -1,7 +1,7 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text: the node sheet's
 	// form (NetworkTab.svelte). Its sections run in the order water moves
-	// through a unit (nodeSections.ts), each a fieldset the sheet's jump row
+	// through a unit (nodeSections.ts), each a fieldset the sheet's section menu
 	// can scroll to.
 	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, MAP_MM_MAX, MAP_MM_MIN, onRiverDam, PE_SOURCE_MAX, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
@@ -460,7 +460,7 @@
 	.detail :global(input:read-only) {
 		text-align: left;
 	}
-	/* A section the sheet's jump row moved to: the focus ring on the whole card. */
+	/* A section the sheet's section menu moved to: the focus ring on the whole card. */
 	fieldset:focus-visible {
 		outline: 2px solid var(--focus);
 		outline-offset: 2px;

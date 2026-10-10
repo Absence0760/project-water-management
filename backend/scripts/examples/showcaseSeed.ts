@@ -116,6 +116,27 @@ export function showcaseScenarios(model: Pick<ProjectModel, 'nodes' | 'crops'>):
 	];
 }
 
+/**
+ * The demo applicant's application on Vleiplaas: raise its dam by half, and pass the EWR through it before
+ * storing. Vleiplaas's dam sits on the river (it takes its whole upstream inflow, with no River to dam) and
+ * the unit has no river pump, so a hands-off flow (`handsOffEwr`) would bind nothing there (docs/model.md
+ * §2.7h): an on-channel dam passes the EWR by a pass-inflow release with no monthly amounts, whose target is
+ * the EWR required at the unit (§2.7a). No outlet capacity, so nothing caps the release below its target.
+ */
+export function showcaseApplication(model: Pick<ProjectModel, 'nodes'>): { name: string; description: string; ops: ScenarioOp[] } {
+	const middle = model.nodes.find((n) => n.name === UNITS.middle)!;
+	return {
+		name: 'Raise the Vleiplaas dam',
+		description: 'Demo application: raise the farm dam by half, releasing the EWR through it before storing (invented).',
+		ops: [
+			{ op: 'node.set', nodeId: middle.id, field: 'damCapacityM3', value: middle.damCapacityM3 * 1.5 },
+			{ op: 'node.set', nodeId: middle.id, field: 'damReleaseRule', value: 'passInflow' },
+			// null: the release's target is the EWR required at the unit, not monthly amounts.
+			{ op: 'node.set', nodeId: middle.id, field: 'damReleaseM3Day', value: null }
+		]
+	};
+}
+
 /** Run the project's queued jobs (sweep, outlook, yield, alert checks) here, as the worker would. */
 async function runProjectJobs(projectId: string): Promise<number> {
 	let n = 0;
@@ -198,18 +219,13 @@ export async function seedShowcase(d: ShowcaseDeps): Promise<string | null> {
 	}
 	await api('POST', `${at}/assessments`, { name: 'Dam raise and feedlot together', scenarioIds: [sids[0], sids[1]] });
 
-	// The applicant's application: raise their own dam, keep the EWR in the river; run and submitted.
+	// The applicant's application: raise their own dam, releasing the EWR through it; run and submitted.
 	const asApplicant = await apiAs(applicant);
 	const middle = nodeId(UNITS.middle);
 	const app = (
 		await asApplicant('POST', `${at}/scenarios`, {
-			name: 'Raise the Vleiplaas dam',
-			description: 'Demo application: raise the farm dam by half, passing the EWR before storing (invented).',
+			...showcaseApplication(stored),
 			baseRunId: r2,
-			ops: [
-				{ op: 'node.set', nodeId: middle, field: 'damCapacityM3', value: 450_000 },
-				{ op: 'node.set', nodeId: middle, field: 'handsOffEwr', value: true }
-			],
 			purposeAndNeed: 'Invented: winter storage for the lucerne on the subsurface drip trial.',
 			monitoring: 'Invented: a gauge plate on the dam wall, read weekly.'
 		})

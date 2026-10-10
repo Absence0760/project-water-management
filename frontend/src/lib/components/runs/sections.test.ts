@@ -1,6 +1,9 @@
 import type { FarmSummary, RunSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { movedHref, resultGroups, resultSections } from './sections';
+import { navText } from '$lib/components/common/sectionNav';
+import { EWR_MONTHS_HEADING, RESERVE_MONTHS_HEADING, riverAnchor } from '$lib/components/river/links';
+import { supplyAnchor } from '$lib/components/supply/links';
+import { movedHref, otherPageGroups, resultGroups, resultSections } from './sections';
 
 describe('resultGroups', () => {
 	it('groups the panels by the question they answer, in page order', () => {
@@ -54,7 +57,7 @@ describe('resultGroups', () => {
 		const groups = resultGroups({ farms: [] });
 		const model = groups.find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
 		expect(model.slice(0, 2)).toEqual(['res-hydrograph', 'res-fdc']);
-		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Notes & evidence');
+		expect(resultSections({ farms: [] }).find((s) => s.id === 'res-notes')?.label).toBe('Run notes & evidence');
 	});
 
 	it('lists a forecast run’s forecast panel right after the summary, and only for a forecast run (WP-2.12)', () => {
@@ -63,14 +66,64 @@ describe('resultGroups', () => {
 		expect(opening({ farms: [], forecast: {} as RunSummary['forecast'] })).toEqual(['res-summary', 'res-forecast']);
 	});
 
+	it('names each link as its panel’s heading, the long ones shorter on the bar, as they were (issue #462)', () => {
+		const summary = {
+			farms: [],
+			runoff: { model: 'gr4j' } as RunSummary['runoff'],
+			wr2012: { quaternary: 'X11A' } as RunSummary['wr2012'],
+			plausibility: {} as RunSummary['plausibility']
+		};
+		const names = resultSections(summary).map((s) => [s.label, navText(s, 'bar')]);
+		expect(names).toEqual([
+			['Summary', 'Summary'],
+			['Hydrograph', 'Hydrograph'],
+			['Flow-duration curve', 'Flow duration'],
+			['Calibration against observed flow', 'Calibration'],
+			['Water balance by water year', 'Water balance'],
+			['Runoff model: GR4J', 'Runoff model'],
+			['WR2012 check: X11A', 'WR2012 check'],
+			['EWR test: model against observed flow', 'EWR vs observed'],
+			['Plausibility checks', 'Plausibility'],
+			['Run notes & evidence', 'Notes & evidence'],
+			['Validation statement', 'Validation'],
+			['Publication', 'Publication'],
+			['Self-checks', 'Self-checks'],
+			['Explore any output', 'Outputs']
+		]);
+	});
+
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);
 	});
 });
 
+describe('otherPageGroups', () => {
+	it('lists the main moved panels under their pages, by those pages’ headings, linked with the run (issue #462)', () => {
+		const groups = otherPageGroups('r 1');
+		expect(groups.map((g) => g.label)).toEqual(['On River & reserve', 'On Hydrological units']);
+		expect(groups.flatMap((g) => g.sections.map((s) => [s.label, s.href, s.page]))).toEqual([
+			[RESERVE_MONTHS_HEADING, '?tab=river&run=r%201#res-reserve', 'River & reserve'],
+			[EWR_MONTHS_HEADING, '?tab=river&run=r%201#res-ewr-grid', 'River & reserve'],
+			['Water account', '?tab=river&run=r%201#res-water-account', 'River & reserve'],
+			['Curtailment targets', '?tab=supply&run=r+1#res-curtailment', 'Hydrological units'],
+			['Assurance of supply', '?tab=supply&run=r+1#res-assurance', 'Hydrological units']
+		]);
+	});
+
+	it('links only panels those pages anchor, with ids apart from this page’s', () => {
+		const sections = otherPageGroups(null).flatMap((g) => g.sections);
+		for (const s of sections) {
+			const hash = s.href!.split('#')[1]!;
+			expect(riverAnchor(hash) || supplyAnchor(hash)).toBe(true);
+		}
+		const ids = [...resultSections({ farms: [] }), ...sections].map((s) => s.id);
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
+
 describe('movedHref', () => {
-	it('sends a moved panel to its page with the run, and the reporting window to Units & supply', () => {
+	it('sends a moved panel to its page with the run, and the reporting window to Hydrological units', () => {
 		expect(movedHref('res-ewr-grid', 'r1')).toBe('?tab=river&run=r1#res-ewr-grid');
 		expect(movedHref('res-curtailment', 'r1', 'last7')).toBe('?tab=supply&run=r1&window=last7#res-curtailment');
 		expect(movedHref('res-assurance', null)).toBe('?tab=supply#res-assurance');

@@ -14,17 +14,13 @@
 	import { curveNotes, curveText, parseDamCurve } from './damCurve';
 	import MonthFields from './MonthFields.svelte';
 	import { monthsOf } from './monthFields';
+	import { RULE_LABEL, releaseHint } from './damRelease';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `dam-${k}-${node.id}`;
 	const label = $derived(node.name || 'this hydrological unit');
 	const unit = $derived(node.kind === 'farm' ? node.id : null);
-	const RULE_LABEL: Record<DamReleaseRule, string> = {
-		none: 'None: the dam releases nothing',
-		passInflow: 'Pass inflow: up to what the river below still needs',
-		fixed: 'Fixed: a set release each month'
-	};
 
 	const rows = $derived([...(node.damCurve ?? [])].sort((a, b) => a.volumeM3 - b.volumeM3));
 	const check = $derived(curveNotes(node.damCurve, node.damCapacityM3));
@@ -148,18 +144,10 @@
 	<h3 class="sub">Releases <HelpTip key="node.damReleaseRule" /></h3>
 	<div class="field">
 		<label for={id('rule')}>Release rule</label>
-		<select id={id('rule')} disabled={readonly} value={rule} onchange={(e) => setRule(e.currentTarget.value as DamReleaseRule)}>
+		<select id={id('rule')} aria-describedby={id('rule-h')} disabled={readonly} value={rule} onchange={(e) => setRule(e.currentTarget.value as DamReleaseRule)}>
 			{#each DAM_RELEASE_RULES as r (r)}<option value={r}>{RULE_LABEL[r]}</option>{/each}
 		</select>
-		<span class="hint">
-			{#if rule === 'passInflow'}
-				Before irrigation the dam passes its inflow below the wall, up to what the river there still needs, capped by the outlet.
-			{:else if rule === 'fixed'}
-				Before irrigation the dam releases the amounts below from the water above its minimum operating level, capped by the outlet.
-			{:else}
-				A compensation or low-flow release is a common licence condition; pick a rule to model one.
-			{/if}
-		</span>
+		<span class="hint" id={id('rule-h')}>{releaseHint(rule, useEwr)}</span>
 		<FieldHistoryLine field="node:{node.id}:damReleaseRule" {unit} />
 	</div>
 	{#if rule === 'passInflow'}

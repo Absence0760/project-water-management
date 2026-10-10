@@ -1,9 +1,17 @@
 // The "On this page" menu shared by the long workspace pages (SectionNav.svelte):
-// Settings & calibration, Runs & results, River & reserve, Units & supply and Data.
+// Settings & calibration, Runs & results, River & reserve, Hydrological units, Data
+// and Compare runs, and the Network node sheet's form (in a box of its own, `onjump`).
 
 export interface NavSection {
 	id: string;
+	/** Its name: the panel's heading, as the page shows it (issue #462), in the rail, the More menu and the find box. */
 	label: string;
+	/**
+	 * A shorter name for the bar, where every link has to fit two rows (issue
+	 * #462): the heading's first words ("Calibration" for "Calibration against
+	 * observed flow"). The rail, with a line of its own for each link, shows `label`.
+	 */
+	bar?: string;
 	/** Marks the link with a dot and "(has a problem)" for screen readers. */
 	problem?: boolean;
 	/**
@@ -11,6 +19,11 @@ export interface NavSection {
 	 * listed like the rest but never marked as the section being read.
 	 */
 	href?: string;
+	/**
+	 * The page an `href` link goes to ("River & reserve"): screen readers hear
+	 * ", on River & reserve" after its name (`pageLinkName`), as its group's heading says it to the eye.
+	 */
+	page?: string;
 	/**
 	 * The ids of the panels after it that this one link stands for (Settings'
 	 * "Automation & access" on the bar): the link is marked while any of them is
@@ -23,6 +36,26 @@ export interface NavGroup {
 	/** The group's name before its links; null for a group that needs none. */
 	label: string | null;
 	sections: NavSection[];
+}
+
+/**
+ * A link to another page's name for screen readers, "<what it says>, on <page>" (issue #462), carried as its
+ * aria-label; null for a link on this page, which its text names. Not a hidden span after the text: the
+ * hidden class positions it, and Chromium then spaces it off ("by month , on River & reserve").
+ */
+export function pageLinkName(sec: Pick<NavSection, 'label' | 'bar' | 'page' | 'problem'>, where: 'bar' | 'rail'): string | null {
+	if (!sec.page) return null;
+	return `${navText(sec, where)}, on ${sec.page}${sec.problem ? ' (has a problem)' : ''}`;
+}
+
+/** What a link says: its short name on the bar, its whole name in the rail and the More menu (issue #462). */
+export function navText(sec: Pick<NavSection, 'label' | 'bar'>, where: 'bar' | 'rail'): string {
+	return where === 'bar' ? (sec.bar ?? sec.label) : sec.label;
+}
+
+/** True when the groups list no section at all: the menu then draws nothing, only the page's content. */
+export function navEmpty(groups: NavGroup[]): boolean {
+	return !groups.some((g) => g.sections.length > 0);
 }
 
 /**

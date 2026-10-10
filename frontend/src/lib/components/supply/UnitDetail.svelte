@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Units & supply → the picked unit (issue #17): its supply against its
+	// Hydrological units → the picked unit (issue #17): its supply against its
 	// abstraction demand, day by day, with the days it was short shaded. The
 	// unit detail panel of Runs & results, moved here: the same series
 	// (fetched once each, through the Runs cache) and the same words, with the
@@ -10,6 +10,9 @@
 	// the unit's assurance of supply (issue #444, reliability/NodeAssurance):
 	// its reliability and its stress classes by month, with a link to every
 	// year's grid in Assurance of supply below, which opens on this unit.
+	// With more than one unit, its head is a picker (issue #467, as the
+	// Network's node sheet): ‹ a select of every unit › in the cards' order,
+	// least supplied first, so a unit is found without unfolding the cards.
 	import type { DailySeries, FarmSummary, SupplyAssurance } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -32,7 +35,9 @@
 		forecastFrom = null,
 		height = 260,
 		assurance = null,
-		engineVersion = null
+		engineVersion = null,
+		units = [],
+		onpick
 	}: {
 		projectId: string;
 		runId: string;
@@ -52,7 +57,14 @@
 		assurance?: SupplyAssurance | null;
 		/** The run's engine version, for the "not computed" note on older runs. */
 		engineVersion?: string | null;
+		/** Every unit to pick from, in the cards' order (least supplied first); the picker shows with two or more. */
+		units?: readonly { nodeId: string; name: string; fraction: number | null }[];
+		/** Picks a unit (the page writes `unit=`). */
+		onpick?: (nodeId: string) => void;
 	} = $props();
+
+	const canPick = $derived(!!onpick && units.length > 1);
+	const at = $derived(units.findIndex((u) => u.nodeId === farm.nodeId));
 
 	const band = $derived(forecastBand(forecastFrom));
 	// The plot's height: the page's, less the assurance under it when the page gives a tall plot (beside the
@@ -102,7 +114,20 @@
 
 <section class="panel detail" id="res-farm" aria-labelledby="farm-h" aria-busy={loading}>
 	<div class="panel-head">
-		<h2 id="farm-h"><span class="visually-hidden">Hydrological unit detail:</span> {name}</h2>
+		<!-- With the picker, the select shows the name, so the heading is for screen readers only. -->
+		<h2 id="farm-h" class:visually-hidden={canPick}><span class="visually-hidden">Hydrological unit detail:</span> {name}</h2>
+		{#if canPick}
+			<div class="unit-pick">
+				<button type="button" class="btn" id="unit-prev" aria-label="Previous hydrological unit" disabled={at <= 0} onclick={() => onpick?.(units[at - 1]!.nodeId)}>‹</button>
+				<label for="unit-pick" class="visually-hidden">Hydrological unit shown</label>
+				<select id="unit-pick" value={farm.nodeId} onchange={(e) => onpick?.(e.currentTarget.value)}>
+					{#each units as u, i (u.nodeId)}
+						<option value={u.nodeId}>{i + 1}. {u.name}{u.fraction === null ? '' : ` · ${fmtPct(u.fraction, 0)} supplied`}</option>
+					{/each}
+				</select>
+				<button type="button" class="btn" id="unit-next" aria-label="Next hydrological unit" disabled={at < 0 || at >= units.length - 1} onclick={() => onpick?.(units[at + 1]!.nodeId)}>›</button>
+			</div>
+		{/if}
 		{#if hasDam}
 			<a class="dam-link" href="?tab=dams&dam={encodeURIComponent(farm.nodeId)}">Dam storage on the Dams page</a>
 		{/if}
@@ -149,6 +174,34 @@
 		font-size: 1.05rem;
 		margin: 0;
 		overflow-wrap: anywhere;
+	}
+	.panel-head:has(.unit-pick) {
+		align-items: center;
+	}
+	/* The picker (as the Network's node sheet): ‹ select ›, at least 40 px to press (44 on a phone). */
+	.unit-pick {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex: 1 1 16rem;
+		min-width: 0;
+	}
+	.unit-pick select {
+		flex: 1;
+		min-width: 0;
+		min-height: 40px;
+		font-weight: 600;
+	}
+	.unit-pick .btn {
+		min-height: 40px;
+		min-width: 40px;
+		justify-content: center;
+	}
+	@media (max-width: 640px) {
+		.unit-pick select,
+		.unit-pick .btn {
+			min-height: 44px;
+		}
 	}
 	.dam-link {
 		display: inline-flex;

@@ -39,13 +39,17 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 	const groups: NavGroup[] = [
 		{
 			label: 'Series',
-			sections: [{ id: 'data-series', label: 'Series' }, ...(p.chart ? [{ id: 'data-chart', label: 'Chart' }] : [])]
+			// Each link says its panel's heading; the bar the long ones shorter (issue #462).
+			sections: [
+				{ id: 'data-series', label: 'Input time series', bar: 'Series' },
+				...(p.chart ? [{ id: 'data-chart', label: 'Series chart', bar: 'Chart' }] : [])
+			]
 		},
 		{
 			label: 'Checks',
 			sections: [
-				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger' }] : []),
-				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass' }] : []),
+				...(p.agreement ? [{ id: 'data-agreement', label: 'Gauge vs logger agreement', bar: 'Gauge vs logger' }] : []),
+				...(p.doubleMass ? [{ id: 'data-double-mass', label: 'Double mass: catchment rain vs CHIRPS', bar: 'Double mass' }] : []),
 				...(p.checks ? [{ id: 'data-checks', label: 'Data checks' }] : [])
 			]
 		},

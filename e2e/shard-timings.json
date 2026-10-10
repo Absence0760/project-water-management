@@ -369,7 +369,7 @@
 	"farmer-invites.spec.ts › an owner invites a farmer by email, who signs up through the link and sees exactly that farm": 3600,
 	"farmer-invites.spec.ts › an owner invites a licence applicant with their farm, who joins as an applicant linked to it": 4300,
 	"farmer-invites.spec.ts › an owner previews a CSV of farmers, row by row, before sending it": 3000,
-	"fit-provenance.spec.ts › a calibration exclusion needs a reason, and shows in What changed and on the run": 4100,
+	"fit-provenance.spec.ts › a calibration exclusion needs a reason, and shows in Inputs that differ and on the run": 4100,
 	"fit-provenance.spec.ts › an applied fit is saved with its record, and the run shows which fit and validation produced its parameters": 5300,
 	"fit-provenance.spec.ts › editing a fitted parameter by hand marks the fit record as edited: in the form, once saved, on the run and in run comparison": 6300,
 	"flow-gap-fill.spec.ts › a flow record uploaded in l/s says so, and an editor records where it came from": 1800,

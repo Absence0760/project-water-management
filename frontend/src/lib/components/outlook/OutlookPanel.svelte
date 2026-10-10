@@ -20,8 +20,9 @@
 -->
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import ToolRow from '$lib/components/common/ToolRow.svelte';
 	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import { canonicalJson, describeDroughtRestriction, DISCLAIMER, DISCLAIMER_DRAFT_NOTE, type DroughtRestrictionRule } from '@water-management/engine';
 	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type Project, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -229,9 +230,26 @@
 	});
 
 	const busy = $derived(submitting || shown?.kind === 'pending');
+	// No outlook on this run (or none can run on it): one row until the editor opens the form (issue #465).
+	let opened = $state(false);
+	const collapsed = $derived(!opened && !submitting && !submitError && !loadError && (!ordinary || loading || !outlook));
+	async function open() {
+		opened = true;
+		await tick();
+		document.getElementById('outlook-levels')?.focus();
+	}
 </script>
 
 <section aria-labelledby="outlook-h-t" data-testid="seasonal-outlook" data-state={dataState}>
+	{#if collapsed}
+		<ToolRow headingId="outlook-h" titleId="outlook-h-t" title="Seasonal outlook" help="seasonal-outlook" purpose="How the season from its decision date fared at a few demand levels, in the weather of each past water year.">
+			{#snippet action()}
+				{#if !ordinary}<span>Needs an ordinary run, not a scenario or forecast.</span>
+				{:else if canEdit}<button type="button" class="btn" aria-describedby="outlook-h-t" onclick={open}>Run…</button>
+				{:else}<span>{loading ? 'Loading…' : 'Not run yet: an editor can run one.'}</span>{/if}
+			{/snippet}
+		</ToolRow>
+	{:else}
 	<h3 id="outlook-h"><span id="outlook-h-t">Seasonal outlook</span> <HelpTip key="seasonal-outlook" /></h3>
 	<p class="muted small lead">
 		From this run’s state on the season’s decision date, the season run with the weather of each past water year, at a few demand levels: how
@@ -515,6 +533,7 @@
 				{#if DISCLAIMER.status === 'draft'}<em>{DISCLAIMER_DRAFT_NOTE}</em>{/if}
 			</p>
 		{/if}
+	{/if}
 	{/if}
 </section>
 

@@ -49,6 +49,10 @@
 	const loadRuleEditor = () => import('$lib/components/settings/EwrRuleTablesEditor.svelte');
 	// settings.set droughtRestriction (engine ≥ 1.54.0, WP-3.8): the rule, in the Settings tab's own editor.
 	const loadRestrictionEditor = () => import('$lib/components/settings/DroughtRestrictionFields.svelte');
+	// settings.set ewrDailySource (engine ≥ 1.77.0, issue #460): the daily outlet EWR's source, in the Settings tab's own editor.
+	const loadEwrDailyEditor = () => import('$lib/components/settings/EwrDailySourceFields.svelte');
+	// The area ratio's numerator, as the Settings form shows it: the units' areas summed (after the ops listed).
+	const farmAreaKm2 = $derived(nodes.filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0));
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
 	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
@@ -112,6 +116,8 @@
 		if (s?.t === 'pe') d.pe = peDraftOf(current, input.settings);
 		// The rule as it is now (a copy, edited whole), or off.
 		if (s?.t === 'restriction') d.restriction = current ? (JSON.parse(JSON.stringify(current)) as OpDraft['restriction']) : null;
+		// The source as it is now, tables and all (a copy, edited whole), or the pragmatic EWR.
+		if (s?.t === 'ewrDaily') d.ewrDaily = current ? (JSON.parse(JSON.stringify(current)) as OpDraft['ewrDaily']) : null;
 	}
 	/** Switch the PE input's kind: a new monthly row starts from the PE GR4J runs on now (the Settings form's rule). */
 	function pickPeKind(kind: PeKind) {
@@ -179,6 +185,17 @@
 				{/snippet}
 			</Lazy>
 			<!-- Unset is off, as the engine runs it, so there is always a "now". -->
+			<span class="hint" data-testid="op-current">{nowText(s, current ?? null)}</span>
+		</fieldset>
+	{:else if s.t === 'ewrDaily'}
+		<fieldset class="restriction" data-testid="op-ewr-daily">
+			<legend>{label}</legend>
+			<Lazy load={loadEwrDailyEditor}>
+				{#snippet children(EwrDailySourceFields)}
+					<EwrDailySourceFields bind:value={d.ewrDaily} announce={false} modelAreaKm2={farmAreaKm2} {projectId} />
+				{/snippet}
+			</Lazy>
+			<!-- Unset is the pragmatic EWR, as the engine runs it, so there is always a "now". -->
 			<span class="hint" data-testid="op-current">{nowText(s, current ?? null)}</span>
 		</fieldset>
 	{:else if s.t === 'pe'}

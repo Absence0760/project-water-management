@@ -1,12 +1,13 @@
 <script lang="ts">
-	// Units & supply (issue #17, option A · Outcomes): how much of each unit's
+	// Hydrological units (issue #17, option A · Outcomes; once Units & supply): how much of each unit's
 	// irrigation demand one run supplied. Three tiles (irrigation supplied with
 	// the units below the target and its change from the previous run, as the
 	// Summary's card has it; units short this week; the total shortfall), a card per unit, worst supplied first
 	// (% supplied in the Summary's and the Network's supply bands, shortfall,
 	// days short, this week, the curtailment cut; links to its node on the
 	// Network and its planted areas), beside the picked unit's supply against
-	// its demand (`unit=<nodeId>`). Below them the panels that moved here from
+	// its demand (`unit=<nodeId>`, picked from a card or the detail's own
+	// ‹ select ›, issue #467). Below them the panels that moved here from
 	// Runs & results, unchanged: the unit results table, the curtailment
 	// targets with their reporting window and assurance of supply. The run is
 	// `run=` (a picker in the header), else the newest run, as on the Summary.
@@ -227,6 +228,19 @@
 			if (!side) chartEl?.scrollIntoView({ block: 'start' });
 		});
 	}
+	/** The unit detail's picker (issue #467): the same link as a card's name, from the select or ‹ ›. */
+	// The panel is keyed on the unit, so it is drawn anew: focus goes back to the control that was used
+	// (‹ at the first unit is disabled, so to the select), and ‹ › can be pressed again and again.
+	function pickUnitById(id: string) {
+		const from = document.activeElement?.id;
+		void goto(withParam(page.url, UNIT_PARAM, id), { noScroll: true, keepFocus: true })
+			.then(() => tick())
+			.then(() => {
+				if (!from?.startsWith('unit-')) return;
+				const el = document.getElementById(from) as HTMLButtonElement | HTMLSelectElement | null;
+				(el && !el.disabled ? el : document.getElementById('unit-pick'))?.focus();
+			});
+	}
 	function pickRun(id: string) {
 		const q = new URLSearchParams(page.url.search);
 		q.set('run', id);
@@ -244,18 +258,12 @@
 	// A fixed plot height: taller beside the cards, where the panel sits level with the first three.
 	const chartH = $derived(side ? 420 : 260);
 
-	// The "On this page" menu sticks at the top; the chart sticks just under it, so it needs the menu's height.
-	let pageEl: HTMLDivElement | undefined = $state();
+	// The "On this page" menu: with the cards, once the run is in. As a bar it sticks at the top and the
+	// chart and the results table's header stick just under it, so they need its height (0 beside the side
+	// index, from 80rem of page, issue #462).
 	let navH = $state(0);
-	// The menu renders with the cards, after the run loads: rerun then (effects run after the DOM updates).
-	const hasNav = $derived(cards.length > 0);
-	$effect(() => {
-		const nav = hasNav ? pageEl?.querySelector<HTMLElement>('nav.sections') : null;
-		if (!nav) return;
-		const ro = new ResizeObserver(() => (navH = nav.offsetHeight));
-		ro.observe(nav);
-		return () => ro.disconnect();
-	});
+	const SUPPLY_RAIL_FROM_REM = 80;
+	const navGroups = $derived(meta && run && summary && totals && cards.length > 0 ? supplyNav(otherUses, restrictions) : []);
 
 	// A link to a panel here (`#res-curtailment`, the portfolio's "units short this week", or an old
 	// Runs & results link sent on): the panels render once the run is in, after the browser's own
@@ -283,7 +291,7 @@
 		releaseFragment();
 	});
 
-	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line, the run picker and Open in Runs.
+	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line, the run picker and Open in Runs & results.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
@@ -297,10 +305,14 @@
 			</select>
 		</label>
 	{/if}
-	{#if meta}<a class="btn" href={runHref(meta.id)}>Open in Runs</a>{/if}
+	{#if meta}<a class="btn" href={runHref(meta.id)}>Open in Runs &amp; results</a>{/if}
 {/snippet}
 
-<div class="supply-page" bind:clientWidth={pageW} bind:this={pageEl} style:--nav-h="{navH}px">
+<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run several screens under the cards
+     and the unit detail. A side index from 80rem of page; narrower a bar, its one group's name on it. The page's
+     container (supply-page) is the column beside the index. -->
+<SectionNav groups={navGroups} label="Hydrological units sections" groupNames railFrom={SUPPLY_RAIL_FROM_REM} bind:barHeight={navH}>
+<div class="supply-page" bind:clientWidth={pageW} style:--nav-h="{navH}px">
 	{#if gone}
 		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
 	{/if}
@@ -337,9 +349,6 @@
 						</div>
 					</section>
 				{:else}
-					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
-					     several screens under the cards and the unit detail. -->
-					<SectionNav groups={supplyNav(otherUses, restrictions)} label="Hydrological units sections" groupNames />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">
@@ -424,6 +433,8 @@
 										height={chartH}
 										assurance={summary.supplyAssurance ?? null}
 										engineVersion={run.engineVersion}
+										units={cards}
+										onpick={pickUnitById}
 									/>
 								{/key}
 							{/if}
@@ -468,6 +479,7 @@
 		</LoadState>
 	{/if}
 </div>
+</SectionNav>
 
 <style>
 	.supply-page {

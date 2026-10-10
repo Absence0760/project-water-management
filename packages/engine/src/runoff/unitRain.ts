@@ -17,6 +17,11 @@
 //                  × settings.arealRain (which applies to rule 4 only).
 // Days after the record fall to the forecast through the catchment's rain,
 // so CHIRPS-GEFS stays catchment-wide × the MAP ratio (rule 2's) or × 1.
+//
+// With settings.unitRain.reference (engine ≥ 1.80.0, issue #500) every
+// unit's CHIRPS is levelled instead by 12 monthly factors fitted at one
+// reference gauge against the CHIRPS cell nearest the reference unit's
+// centre, then × clamp(unit MAP ÷ the reference unit's MAP) (referenceFit).
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from '../calendar';
 import {
 	AREAL_RAIN_FACTOR_MAX,
@@ -24,6 +29,7 @@ import {
 	arealRainFactors,
 	DEFAULT_UNIT_MAP_PERIOD,
 	MAP_MM_MAX,
+	referenceCellSeriesKey,
 	MAP_MM_MIN,
 	unitForecastSeriesKey,
 	unitRainSeriesKey,
@@ -33,12 +39,14 @@ import {
 	type ProjectSettings,
 	type SeriesKind,
 	type UnitChirpsLevel,
+	type UnitRainReferenceFit,
+	type UnitRainReferenceMonth,
 	type UnitRainRule,
 	type UnitRainSettings,
 	type UnitRainSummary,
 	type UnitRainUnit
 } from '../project';
-import { chirpsFactorOn, type ChirpsCorrection } from '../rain';
+import { CHIRPS_FACTOR_MIN_DAYS, CHIRPS_FACTOR_MIN_MM, chirpsFactorOn, type ChirpsCorrection } from '../rain';
 import { cmpStr } from '../order';
 import { gr4j } from './gr4j';
 import type { Gr4jParams } from './params';
@@ -141,6 +149,77 @@ export function chirpsMeanAnnual(s: DailySeries, period: { start: string; end: s
 	return { meanAnnualMm: use.reduce((a, [, t]) => a + t.mm, 0) / use.length, years: use.map(([y]) => y), inPeriod: use === inside };
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The reference gauge's 12 monthly factors (engine ≥ 1.80.0, issue #500,
+ * docs/model.md §2.4h *Reference gauge*), with the warnings a run gives about
+ * them; null when the setting has no reference, or its unit is not a land
+ * unit of the model (that warns, and the units' CHIRPS is levelled as without
+ * it). Each calendar month's factor is Σ gauge ÷ Σ CHIRPS over the days both
+ * the gauge (settings.unitRain.reference.gauge, as stored) and the cell
+ * (`rain_chirps_cell_mm@<unit>`) have a reading, over their whole stored
+ * records; it needs §2.4b's 90 shared days and 50 mm of CHIRPS, else it is 1
+ * (with a warning), and is clamped to 0.25–4. Pinned factors replace the fit's.
+ */
+export function referenceFit(u: UnitRainSettings | null | undefined, series: ModelInput['series'], nodes: readonly NetworkNode[], warnings: string[]): UnitRainReferenceFit | null {
+	const ref = u?.reference;
+	if (u?.mode !== 'perUnit' || !ref) return null;
+	const node = nodes.find((n) => n.id === ref.unitId);
+	if (!node || !isLandUnit(node)) {
+		warnings.push(
+			`unit rain: the reference unit (${node ? `"${node.name}"` : ref.unitId}) is not a unit with land, so it has no CHIRPS cell to fit the reference factors on: each unit's CHIRPS is levelled as without a reference (docs/model.md §2.4h)`
+		);
+		return null;
+	}
+	const all = series as Record<string, DailySeries | undefined>;
+	const cellKey = referenceCellSeriesKey(ref.unitId);
+	const gauge = all[ref.gauge];
+	const cell = all[cellKey];
+	const n = new Array<number>(12).fill(0);
+	const g = new Array<number>(12).fill(0);
+	const c = new Array<number>(12).fill(0);
+	if (gauge && cell) {
+		const g0 = toEpochDay(gauge.startDate);
+		const c0 = toEpochDay(cell.startDate);
+		// Day by day over the cell's record, in date order.
+		for (let i = 0; i < cell.values.length; i++) {
+			const cv = cell.values[i];
+			if (!reading(cv)) continue;
+			const day = c0 + i;
+			const gv = gauge.values[day - g0];
+			if (day - g0 < 0 || !reading(gv)) continue;
+			const m = monthOfEpochDay(day) - 1;
+			n[m]!++;
+			g[m]! += gv;
+			c[m]! += cv;
+		}
+	}
+	const pinned = Array.isArray(ref.pinnedFactors) && ref.pinnedFactors.length === 12 ? ref.pinnedFactors : null;
+	const months: UnitRainReferenceMonth[] = n.map((days, m) => {
+		const fitted = days >= CHIRPS_FACTOR_MIN_DAYS && c[m]! >= CHIRPS_FACTOR_MIN_MM;
+		const own = fitted ? g[m]! / c[m]! : null;
+		const factor = pinned ? pinned[m]! : own === null ? 1 : clampFactor(own);
+		return { month: m + 1, sharedDays: days, gaugeMm: g[m]!, chirpsMm: c[m]!, ownFactor: own, factor, clamped: !pinned && own !== null && factor !== own, fitted };
+	});
+	const unitName = node.name;
+	if (!pinned) {
+		const short = months.filter((x) => !x.fitted);
+		if (short.length) {
+			const none = !gauge ? `there is no ${ref.gauge} series` : !cell ? `there is no CHIRPS at the reference unit's cell (${cellKey})` : null;
+			warnings.push(
+				`unit rain: the reference gauge (${ref.gauge}) and the CHIRPS cell of "${unitName}" have too little in common in ${short.length === 12 ? 'every month' : short.map((x) => MONTH_NAMES[x.month - 1]).join(', ')} (fewer than ${CHIRPS_FACTOR_MIN_DAYS} shared days, or under ${CHIRPS_FACTOR_MIN_MM} mm of CHIRPS on them)${none ? `: ${none}` : ''}, so ${short.length === 1 ? 'that month’s factor is' : 'those months’ factors are'} 1`
+			);
+		}
+		for (const x of months)
+			if (x.clamped)
+				warnings.push(
+					`unit rain: the reference factor for ${MONTH_NAMES[x.month - 1]} is ${fmt(x.ownFactor!)} (${Math.round(x.gaugeMm)} ÷ ${Math.round(x.chirpsMm)} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(x.factor)} (clamped)`
+				);
+	}
+	return { gauge: ref.gauge, unitId: ref.unitId, unitName, mapMm: usableMap(node.mapMm), cellKey, pinned: !!pinned, months };
+}
+
 /** The catchment's §2.4b monthly factors exist: mode 'monthly' and some month has one. */
 const biasExists = (c: ChirpsCorrection | null): boolean => !!c && c.mode === 'monthly' && c.months.some((m) => m.factor !== null);
 
@@ -150,7 +229,12 @@ const biasExists = (c: ChirpsCorrection | null): boolean => !!c && c.mode === 'm
  * land unit (that warns). `pinned` (a resumed run) replaces a unit's recipe
  * computed from the input.
  */
-export function unitRainRecipes(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 'startDate'>, warnings: string[], pinned?: readonly UnitRainRecipe[]): UnitRainRecipe[] | null {
+export function unitRainRecipes(
+	ctx: Omit<UnitRainContext, 'aligned' | 'days' | 'startDate'>,
+	warnings: string[],
+	pinned?: readonly UnitRainRecipe[],
+	fit?: { reference: UnitRainReferenceFit | null }
+): UnitRainRecipe[] | null {
 	const u = ctx.settings.unitRain;
 	if (u?.mode !== 'perUnit') return null;
 	const units = ctx.nodes.filter(isLandUnit).sort((a, b) => cmpStr(a.id, b.id));
@@ -163,6 +247,11 @@ export function unitRainRecipes(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 
 	const gaugeRain = hasReading(series.rain_catchment_mm);
 	const period = u.mapPeriod ?? DEFAULT_UNIT_MAP_PERIOD;
 	const bias = biasExists(ctx.chirpsCorrection);
+	const reference = referenceFit(u, series, ctx.nodes, warnings);
+	if (fit) fit.reference = reference;
+	const refFactors = reference ? reference.months.map((x) => x.factor) : null;
+	if (reference && reference.mapMm === null && units.some((n) => hasReading(series[unitRainSeriesKey('rain_chirps_mm', n.id)])))
+		warnings.push(`unit rain: the reference unit "${reference.unitName}" has no MAP, so no unit's CHIRPS is scaled by its MAP ÷ the reference unit's MAP, only by the reference factors`);
 	return units.map((n) => {
 		const pin = pinned?.find((p) => p.nodeId === n.id);
 		if (pin) return structuredClone(pin);
@@ -183,7 +272,18 @@ export function unitRainRecipes(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 
 				warnings.push(`${unit}: its MAP ÷ the gauge's MAP is ${fmt(gaugeMapOwnFactor)} (${map} ÷ ${gaugeMap} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(gaugeMapFactor)} (clamped)`);
 		}
 		let chirps: UnitChirpsLevel | null = null;
-		if (hasChirps) {
+		if (hasChirps && reference && refFactors) {
+			// The reference factors, then × clamp(unit MAP ÷ the reference unit's MAP) (§2.4h, provisional decision 1a).
+			let mapRatio = 1;
+			let mapOwnRatio: number | null = null;
+			if (map !== null && reference.mapMm !== null) {
+				mapOwnRatio = map / reference.mapMm;
+				mapRatio = clampFactor(mapOwnRatio);
+				if (mapRatio !== mapOwnRatio)
+					warnings.push(`${unit}: its MAP ÷ the reference unit's MAP is ${fmt(mapOwnRatio)} (${map} ÷ ${reference.mapMm} mm), outside ${AREAL_RAIN_FACTOR_MIN}–${AREAL_RAIN_FACTOR_MAX}; using ${fmt(mapRatio)} (clamped)`);
+			} else if (map === null && reference.mapMm !== null) warnings.push(`${unit}: it has no MAP, so its CHIRPS takes the reference factors without a MAP ratio`);
+			chirps = { source: 'reference', factors: [...refFactors], mapRatio, mapOwnRatio, mapClamped: mapOwnRatio !== null && mapRatio !== mapOwnRatio };
+		} else if (hasChirps) {
 			const mean = map !== null ? chirpsMeanAnnual(chirpsSeries!, period) : null;
 			if (map !== null && mean && mean.meanAnnualMm > 0) {
 				const own = map / mean.meanAnnualMm;
@@ -216,8 +316,13 @@ export function unitRainRecipes(ctx: Omit<UnitRainContext, 'aligned' | 'days' | 
  * order), with the warnings about it; null when it is off (or there is no
  * land unit). Recipes come from unitRainRecipes unless `pinned`.
  */
-export function unitRainForcing(ctx: UnitRainContext, warnings: string[], pinned?: readonly UnitRainRecipe[]): { units: UnitForcing[]; recipes: UnitRainRecipe[] } | null {
-	const recipes = unitRainRecipes(ctx, warnings, pinned);
+export function unitRainForcing(
+	ctx: UnitRainContext,
+	warnings: string[],
+	pinned?: readonly UnitRainRecipe[]
+): { units: UnitForcing[]; recipes: UnitRainRecipe[]; reference: UnitRainReferenceFit | null } | null {
+	const fit: { reference: UnitRainReferenceFit | null } = { reference: null };
+	const recipes = unitRainRecipes(ctx, warnings, pinned, fit);
 	if (!recipes) return null;
 	const { days } = ctx;
 	const d0 = toEpochDay(ctx.startDate);
@@ -265,6 +370,7 @@ export function unitRainForcing(ctx: UnitRainContext, warnings: string[], pinned
 			if (v == null) return null;
 			if (level!.source === 'map') return v * level!.factor;
 			if (level!.source === 'bias') return v * (chirpsFactorOn(ctx.chirpsCorrection, d0 + t) ?? 1);
+			if (level!.source === 'reference') return v * level!.factors[monthOfEpochDay(d0 + t) - 1]! * level!.mapRatio;
 			return v;
 		};
 		const kFill = k2 ?? 1;
@@ -316,7 +422,7 @@ export function unitRainForcing(ctx: UnitRainContext, warnings: string[], pinned
 			);
 		return { ...base, rainMm, source };
 	});
-	return { units, recipes };
+	return { units, recipes, reference: fit.reference };
 }
 
 /** GR4J over each unit's forcing (one parameter set, the catchment PE); the per-unit simulateRunoff traces, in `units` order. */
@@ -346,7 +452,7 @@ export function simulateUnits(
  * in node-id order). `hist` is the run's historical days: the day counts are
  * of the whole run.
  */
-export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing[], traces: readonly RunoffTrace[], petMm: Float64Array): UnitRainSummary {
+export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing[], traces: readonly RunoffTrace[], petMm: Float64Array, reference?: UnitRainReferenceFit | null): UnitRainSummary {
 	const sum = (a: ArrayLike<number>) => {
 		let s = 0;
 		for (let t = 0; t < a.length; t++) s += a[t]!;
@@ -397,6 +503,8 @@ export function unitRainSummary(u: UnitRainSettings, units: readonly UnitForcing
 				runoffM3: flowMm * x.areaKm2 * MM_KM2_TO_M3,
 				runoffCoefficient: rainMm > 0 ? flowMm / rainMm : null
 			};
-		})
+		}),
+		// Only with a reference, so a summary without one is as before 1.80.0.
+		...(reference ? { reference: structuredClone(reference) } : {})
 	};
 }

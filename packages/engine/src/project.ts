@@ -955,6 +955,13 @@ export interface UnitRainSettings {
 	 */
 	mapPeriod?: { start: string; end: string } | null;
 	/**
+	 * The reference rain gauge and unit (engine ≥ 1.80.0, issue #500, docs/model.md
+	 * §2.4h *Reference gauge*): 12 monthly factors, gauge ÷ CHIRPS at the cell
+	 * nearest the reference unit's centre, scale every unit's CHIRPS (then ×
+	 * unit MAP ÷ the reference unit's MAP). Absent or null = off.
+	 */
+	reference?: UnitRainReference | null;
+	/**
 	 * Engine-only (never stored by the API): each unit's rule and factors to
 	 * use instead of fitting them on the input's records. A seasonal outlook's
 	 * re-run member sets it to the base input's, so a history cut at the
@@ -964,6 +971,36 @@ export interface UnitRainSettings {
 }
 
 export const DEFAULT_UNIT_MAP_PERIOD = { start: '1991-01-01', end: '2020-12-31' } as const;
+
+/** `settings.unitRain.reference` (engine ≥ 1.80.0, issue #500, docs/model.md §2.4h *Reference gauge*). */
+export interface UnitRainReference {
+	/**
+	 * The reference gauge's series: `rain_catchment_mm` (the catchment rain
+	 * gauge) or `rain_catchment_mm@<unit id>` (a unit's own gauge), read as
+	 * stored.
+	 */
+	gauge: string;
+	/** The reference unit: a land unit whose centre picks the CHIRPS cell (REFERENCE_CELL_KIND@unitId), and whose MAP the other units' MAPs are divided by. */
+	unitId: string;
+	/**
+	 * Engine-only (never stored by the API): the 12 factors (calendar months,
+	 * Jan–Dec) to apply instead of fitting them, as the uncertainty ensemble's
+	 * CHIRPS-only member pins the base input's (it has no gauge to fit on).
+	 */
+	pinnedFactors?: number[] | null;
+}
+
+/**
+ * The series kind of the CHIRPS at the single 0.05° cell nearest a unit's
+ * centre (engine ≥ 1.80.0, docs/model.md §2.4h *Reference gauge*), keyed
+ * `rain_chirps_cell_mm@<unit id>` in ModelInput.series. Not a stored kind:
+ * the backend reads it from the CHIRPS cell cache for the reference unit.
+ */
+export const REFERENCE_CELL_KIND = 'rain_chirps_cell_mm';
+export const referenceCellSeriesKey = (unitId: string): string => `${REFERENCE_CELL_KIND}@${unitId}`;
+/** The reference gauge keys a setting may name: the catchment gauge, or a unit's own. */
+export const unitRainReferenceGaugeOk = (v: unknown): v is string =>
+	typeof v === 'string' && (v === 'rain_catchment_mm' || (v.startsWith('rain_catchment_mm@') && v.length > 'rain_catchment_mm@'.length && v.length <= 250));
 
 /**
  * Bounds on one areal rainfall factor: the CHIRPS bias-correction clamp
@@ -1017,6 +1054,18 @@ export function unitRainError(raw: unknown): string | null {
 			return 'the MAP period needs a start and an end date (YYYY-MM-DD)';
 		if (Date.parse(p.end) - Date.parse(p.start) < 364 * 86_400_000) return 'the MAP period must cover at least a year';
 	}
+	const ref = (raw as { reference?: unknown }).reference;
+	if (ref !== null && ref !== undefined) {
+		if (typeof ref !== 'object' || Array.isArray(ref)) return 'the reference needs a gauge and a unit';
+		const x = ref as { gauge?: unknown; unitId?: unknown; pinnedFactors?: unknown };
+		if (!unitRainReferenceGaugeOk(x.gauge)) return 'the reference gauge must be the catchment rain gauge or a unit’s own gauge';
+		if (typeof x.unitId !== 'string' || !x.unitId || x.unitId.length > 200) return 'the reference needs its unit';
+		if (x.pinnedFactors !== null && x.pinnedFactors !== undefined) {
+			const f = x.pinnedFactors;
+			if (!Array.isArray(f) || f.length !== 12 || !f.every((k) => typeof k === 'number' && Number.isFinite(k) && k >= AREAL_RAIN_FACTOR_MIN && k <= AREAL_RAIN_FACTOR_MAX))
+				return `pinned reference factors must be 12 numbers from ${AREAL_RAIN_FACTOR_MIN} to ${AREAL_RAIN_FACTOR_MAX}`;
+		}
+	}
 	return null;
 }
 
@@ -1037,6 +1086,10 @@ export function resolveUnitRain(raw: unknown, warnings: string[]): UnitRainSetti
 		gaugeMapMm: r.gaugeMapMm ?? null,
 		gaugeMapSource: r.gaugeMapSource ?? null,
 		mapPeriod: r.mapPeriod ? { start: r.mapPeriod.start, end: r.mapPeriod.end } : null,
+		// Only when set, so a setting without it resolves as before 1.80.0.
+		...(r.reference
+			? { reference: { gauge: r.reference.gauge, unitId: r.reference.unitId, ...(Array.isArray(r.reference.pinnedFactors) ? { pinnedFactors: [...r.reference.pinnedFactors] } : {}) } }
+			: {}),
 		...(Array.isArray(r.pinned) ? { pinned: structuredClone(r.pinned) } : {})
 	};
 }
@@ -2642,6 +2695,13 @@ export interface SeriesMeta {
 	 */
 	feed?: { source: string; days: number } | null;
 	/**
+	 * The days a person typed in by hand (time_series.hand_days,
+	 * 212_series_hand_days.sql), as inclusive [from, to] date pairs in date
+	 * order; null = none, absent = not known here. A data feed or API key never
+	 * writes over them; an upload or paste that writes a day releases it.
+	 */
+	handDays?: [string, string][] | null;
+	/**
 	 * A flow record's site (084_gauge_records, engine ≥ 1.4.0): the gauge node
 	 * it was measured at; null / absent = the outlet. Only the plausibility
 	 * checks read a gauge's record.
@@ -3275,7 +3335,49 @@ export type UnitChirpsLevel =
 			inPeriod: boolean;
 	  }
 	| { source: 'bias' }
-	| { source: 'raw' };
+	| { source: 'raw' }
+	| {
+			/** The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h *Reference gauge*), then the MAP ratio. */
+			source: 'reference';
+			/** The 12 factors applied, calendar months Jan–Dec (1 where the fit had too little). */
+			factors: number[];
+			/** clamp(unit MAP ÷ the reference unit's MAP); 1 without both MAPs. */
+			mapRatio: number;
+			/** unit MAP ÷ the reference unit's MAP before the clamp; null without both MAPs. */
+			mapOwnRatio: number | null;
+			mapClamped: boolean;
+	  };
+
+/** One calendar month of the reference gauge's fit (engine ≥ 1.80.0, §2.4h *Reference gauge*). */
+export interface UnitRainReferenceMonth {
+	/** Calendar month, 1–12. */
+	month: number;
+	/** Days both the gauge and the cell have a reading. */
+	sharedDays: number;
+	gaugeMm: number;
+	chirpsMm: number;
+	/** gaugeMm ÷ chirpsMm when the month has the minimum sample; null otherwise. */
+	ownFactor: number | null;
+	/** The factor applied: ownFactor clamped, or 1 without the minimum sample. */
+	factor: number;
+	clamped: boolean;
+	/** Whether the month had the minimum sample (else factor 1). */
+	fitted: boolean;
+}
+
+/** settings.unitRain.reference as a run fitted it (summary.unitRain.reference). */
+export interface UnitRainReferenceFit {
+	gauge: string;
+	unitId: string;
+	/** The reference unit's name and MAP (null: no such land unit, or no MAP). */
+	unitName: string | null;
+	mapMm: number | null;
+	/** The cell series the fit read. */
+	cellKey: string;
+	/** Whether the factors were pinned (the uncertainty ensemble's CHIRPS-only member), not fitted. */
+	pinned: boolean;
+	months: UnitRainReferenceMonth[];
+}
 
 /**
  * One land unit's forcing as the run applied it (summary.unitRain.units).
@@ -3300,7 +3402,7 @@ export interface UnitRainUnit {
 	 */
 	factor: number | null;
 	/** Where `factor` comes from. */
-	factorSource: 'gauge' | 'gaugeMap' | 'chirpsMap' | 'chirpsBias' | 'chirpsRaw' | 'catchment';
+	factorSource: 'gauge' | 'gaugeMap' | 'chirpsMap' | 'chirpsBias' | 'chirpsRaw' | 'chirpsReference' | 'catchment';
 	/**
 	 * unit MAP ÷ gauge MAP (clamped) when rule 2's conditions hold (a gauge
 	 * MAP, a unit MAP and catchment gauge rain), whatever the rule: it also
@@ -3349,6 +3451,8 @@ export interface UnitRainSummary {
 	mapPeriod: { start: string; end: string };
 	/** Every land unit (a farm with an area), in node-id order. */
 	units: UnitRainUnit[];
+	/** The reference gauge's fit (engine ≥ 1.80.0); absent when the setting has no reference. */
+	reference?: UnitRainReferenceFit;
 }
 
 export interface ForecastRainDays {

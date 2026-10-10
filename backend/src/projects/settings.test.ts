@@ -432,6 +432,26 @@ describe('SettingsPatch.unitRain (issue #482)', () => {
 		expect(ok({ ...full, pinned: [{ nodeId: 'u1', rule: 'gaugeMap', gaugeMapFactor: 4 }] })).toBe(false);
 	});
 
+	it('takes a reference gauge and unit (engine ≥ 1.80.0, issue #500), never engine-only pinned factors', () => {
+		const reference = { gauge: 'rain_catchment_mm', unitId: '6f9b3c1e-7a51-4d1a-9a55-1d0d3f0b1e2a' };
+		for (const good of [{ ...full, reference }, { ...full, reference: { ...reference, gauge: `rain_catchment_mm@${reference.unitId}` } }, { ...full, reference: null }]) {
+			expect(ok(good), JSON.stringify(good)).toBe(true);
+			expect(unitRainError(good)).toBeNull();
+		}
+		for (const [name, bad] of [
+			['another kind of gauge', { ...full, reference: { ...reference, gauge: 'rain_chirps_mm' } }],
+			['a unit gauge with no unit', { ...full, reference: { ...reference, gauge: 'rain_catchment_mm@' } }],
+			['no unit', { ...full, reference: { gauge: 'rain_catchment_mm', unitId: '' } }],
+			['no gauge', { ...full, reference: { unitId: reference.unitId } }]
+		] as [string, unknown][]) {
+			expect(ok(bad), name).toBe(false);
+			expect(unitRainError(bad), name).not.toBeNull();
+		}
+		// The uncertainty ensemble's pinned factors (docs/model.md §2.4h) never come from a client: they would replace the fit.
+		expect(ok({ ...full, reference: { ...reference, pinnedFactors: Array(12).fill(1) } })).toBe(false);
+		expect(ok({ ...full, reference: { ...reference, extra: 1 } })).toBe(false);
+	});
+
 	it('is replaced whole by a patch, and kept by a patch of anything else', () => {
 		const stored = patchSettings({}, { unitRain: full });
 		expect(stored.unitRain).toEqual(full);
@@ -1269,6 +1289,18 @@ describe('remapSettingNodeIds (project copy)', () => {
 		expect(stored.ewrRules[1]!.siteNodeId).toBe('g1');
 		expect(remapSettingNodeIds({ apanMm: [1] }, ids)).toEqual({ apanMm: [1] });
 		expect(remapSettingNodeIds(null, ids)).toEqual({});
+	});
+
+	it('moves the unit-rain reference’s unit and a unit gauge’s key, leaving the catchment gauge alone (engine 1.80.0, issue #500)', () => {
+		const ids = new Map([
+			['f1', 'new-f1'],
+			['f2', 'new-f2']
+		]);
+		const at = (gauge: string, unitId: string) => ({ unitRain: { enabled: true, gaugeMapMm: 600, reference: { gauge, unitId } } });
+		expect(remapSettingNodeIds(at('rain_catchment_mm@f2', 'f1'), ids)).toEqual(at('rain_catchment_mm@new-f2', 'new-f1'));
+		expect(remapSettingNodeIds(at('rain_catchment_mm', 'f1'), ids)).toEqual(at('rain_catchment_mm', 'new-f1'));
+		expect(remapSettingNodeIds(at('rain_catchment_mm@gone', 'gone'), ids)).toEqual(at('rain_catchment_mm@gone', 'gone'));
+		expect(remapSettingNodeIds({ unitRain: { enabled: true } }, ids)).toEqual({ unitRain: { enabled: true } });
 	});
 
 	it('moves the outcome matrix’s site too, leaving the outlet (null) and an unknown site alone', () => {

@@ -33,12 +33,15 @@ test('a flow record attached to a gauge is checked there, and the comparison sho
 	// Data: the record starts at the outlet; move it to the weir.
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'A weir record' });
-	const site = row.getByLabel('Where A weir record was measured');
+	// Where it was measured is the Series details' Measured at, under the chart of the picked series (issue #464).
+	await row.getByRole('button', { name: 'View', exact: true }).click();
+	const site = page.getByRole('group', { name: 'Series details' }).getByLabel('Measured at');
 	await expect(site).toHaveValue('');
 	const moved = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/series\/[^/]+$/.test(r.url()));
-	await site.selectOption({ label: 'At gauge Middle weir' });
+	await site.selectOption({ label: 'Gauge Middle weir' });
 	expect((await moved).status()).toBe(200);
 	await expect(row).toContainText('Gauge record (checks only)');
+	await expect(row.getByTestId('series-site')).toHaveText('At gauge Middle weir');
 	// The outlet's own record is now the one calibration reads.
 	const outletRow = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasNotText: 'A weir record' }).filter({ hasText: 'Flow — observed gauge' });
 	await expect(outletRow).toContainText('Calibration target');

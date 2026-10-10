@@ -15,6 +15,7 @@ import { checkInvariants } from '../verify/checks';
 import { checkResume } from '../testing/warmstartInvariants';
 import {
 	blankEwrDailySource,
+	describeEwrDailySource,
 	ewrDailyScale,
 	ewrDailySourceChanges,
 	ewrDailySourceIssues,
@@ -209,6 +210,19 @@ describe('ewrDailySourceChanges (run comparison)', () => {
 		const pct = { ...tab, method: 'percentile' as const, naturalPctM3s: twelve(N), reservePctM3s: twelve(R) };
 		const pct2 = { ...pct, scaling: 'area' as const, tableAreaKm2: 40, reservePctM3s: twelve(R).map((row, m) => (m === 0 ? row.map((v) => v + 1) : row)) };
 		expect(ewrDailySourceChanges(pct, pct2)).toEqual(['scaled by MAR → by area', 'table area not entered → 40 km²', 'total Reserve flow percentile table: 10 values changed']);
+	});
+});
+
+describe('describeEwrDailySource (a scenario change, issue #460)', () => {
+	it('the pragmatic EWR in any form, the method with its scaling, and an unusable source as one', () => {
+		expect(describeEwrDailySource(undefined)).toBe('the pragmatic EWR');
+		expect(describeEwrDailySource(null)).toBe('the pragmatic EWR');
+		expect(describeEwrDailySource({ ...blankEwrDailySource(), naturalPctM3s: twelve(N) })).toBe('the pragmatic EWR');
+		const tab: EwrDailySource = { ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 12.5 };
+		expect(describeEwrDailySource(tab)).toBe('the DRM TAB file, scaled by MAR (table 12.5 Mm³/a)');
+		const pct: EwrDailySource = { ...tab, method: 'percentile', scaling: 'area', tableAreaKm2: 450, naturalPctM3s: twelve(N), reservePctM3s: twelve(R) };
+		expect(describeEwrDailySource(pct)).toBe('the DRM percentile tables, scaled by area (table 450 km²)');
+		expect(describeEwrDailySource({ ...tab, tabM3s: null })).toBe('an unusable source (the run uses the pragmatic EWR)');
 	});
 });
 

@@ -76,6 +76,16 @@ describe('describeOp', () => {
 		expect(d({ op: 'settings.set', path: 'droughtRestriction', value: null }, withRule)).toBe('Drought restriction rule: reviewed 5 Oct; Level 1 (below 70 %): crops 50 % → off');
 	});
 
+	it('says what a daily EWR source op changes: the pragmatic EWR when the base has none (issue #460)', () => {
+		const tab = { method: 'tab' as const, scaling: 'mar' as const, tableMarMm3: 12.5, tableAreaKm2: null, tabM3s: new Array<number>(12).fill(0.2), naturalPctM3s: null, reservePctM3s: null };
+		expect(d({ op: 'settings.set', path: 'ewrDailySource', value: tab })).toBe('Daily EWR at the outlet: the pragmatic EWR → the DRM TAB file, scaled by MAR (table 12.5 Mm³/a)');
+		const withTab = { ...b, settings: { ...b.settings, ewrDailySource: tab } } as ModelInput;
+		expect(d({ op: 'settings.set', path: 'ewrDailySource', value: { ...tab, scaling: 'area', tableAreaKm2: 40 } }, withTab)).toBe(
+			'Daily EWR at the outlet: the DRM TAB file, scaled by MAR (table 12.5 Mm³/a) → the DRM TAB file, scaled by area (table 40 km²)'
+		);
+		expect(d({ op: 'settings.set', path: 'ewrDailySource', value: null }, withTab)).toBe('Daily EWR at the outlet: the DRM TAB file, scaled by MAR (table 12.5 Mm³/a) → the pragmatic EWR');
+	});
+
 	it('says what each op changes, with the value it replaces', () => {
 		expect(d(raise)).toBe('Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³');
 		expect(d({ op: 'node.set', nodeId: LO, field: 'irrigationEfficiency', value: 0.75 })).toBe('Lower farm: Irrigation efficiency 90 % → 75 %');
@@ -218,6 +228,22 @@ describe('buildOp', () => {
 			error: 'Drought restriction rule: review dates: needs at least one review date'
 		});
 		expect(draftSpec({ kind: 'settings.set', field: 'droughtRestriction' })).toEqual({ t: 'restriction' });
+	});
+
+	it('builds the daily EWR source whole from the editor’s copy, the pragmatic EWR as null, and refuses one the run would drop (issue #460)', () => {
+		const tab = { method: 'tab' as const, scaling: 'mar' as const, tableMarMm3: 12.5, tableAreaKm2: null, tabM3s: new Array<number>(12).fill(0.2), naturalPctM3s: null, reservePctM3s: null };
+		expect(buildOp(draft({ kind: 'settings.set', field: 'ewrDailySource', ewrDaily: tab }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'ewrDailySource', value: tab } });
+		expect(buildOp(draft({ kind: 'settings.set', field: 'ewrDailySource', ewrDaily: null }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'ewrDailySource', value: null } });
+		// The TAB method with no TAB flows: the base had none and the editor brought none.
+		expect(buildOp(draft({ kind: 'settings.set', field: 'ewrDailySource', ewrDaily: { ...tab, tabM3s: null } }), m)).toEqual({
+			ok: false,
+			error: 'Daily EWR at the outlet: enter the TAB file’s 12 monthly total flows, or pick another source'
+		});
+		expect(buildOp(draft({ kind: 'settings.set', field: 'ewrDailySource', ewrDaily: { ...tab, scaling: 'area' } }), m)).toEqual({
+			ok: false,
+			error: 'Daily EWR at the outlet: scaling by area needs the table’s catchment area (km²)'
+		});
+		expect(draftSpec({ kind: 'settings.set', field: 'ewrDailySource' })).toEqual({ t: 'ewrDaily' });
 	});
 
 	it('says what is wrong with a PE input before anything is saved', () => {

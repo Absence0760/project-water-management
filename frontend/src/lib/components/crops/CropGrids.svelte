@@ -28,7 +28,7 @@
 	import DemandTable from './DemandTable.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { applyAreaPaste, applyFactorPaste, cropFactorsCsv, planFactorPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
+	import { applyAreaPaste, applyFactorPaste, CROP_FACTORS_FORMAT, cropFactorsCsv, planFactorPaste, PLANTED_AREAS_FORMAT, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 	let {
 		editor,
@@ -182,12 +182,22 @@
 		factorPasteText = '';
 		factorPasteOpen = true;
 	}
+	// A name the project doesn't have adds that crop (issue #477): a list of crop types comes in from a spreadsheet.
 	function applyFactors(plan: PastePlan) {
-		applyFactorPaste(plan, (cropId, m, f) => {
-			const c = editor.model.crops.find((x) => x.id === cropId);
-			if (c) c.cropFactor[m] = f;
-		});
-		announce = `Pasted ${plan.changes.length} crop ${plan.changes.length === 1 ? 'factor' : 'factors'}. Save the model to keep them.`;
+		applyFactorPaste(
+			plan,
+			(cropId, m, f) => {
+				const c = editor.model.crops.find((x) => x.id === cropId);
+				if (c) c.cropFactor[m] = f;
+			},
+			(name) => {
+				const c = editor.addCrop();
+				c.name = name.slice(0, 100);
+				return c.id;
+			}
+		);
+		const n = plan.added?.length ?? 0;
+		announce = `Pasted ${plan.changes.length} crop ${plan.changes.length === 1 ? 'factor' : 'factors'}${n ? `, adding ${n} ${n === 1 ? 'crop' : 'crops'}` : ''}. Save the model to keep them.`;
 	}
 
 	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
@@ -221,18 +231,28 @@
 			<span class="muted small">Water year, October → September</span>
 		</div>
 	{/if}
-	<p class="muted small intro">
+	<!-- One line: what a factor is and isn't; the FAO Kc conversion is in the ⓘ and the glossary (issue #463). -->
+	<p class="muted small intro" data-testid="crop-factors-intro">
 		{#if inModal}Water year, October → September. <HelpTip key="crop.cropFactor" />{/if}
-		A crop factor scales monthly A-pan evaporation to the crop's water use: gross irrigation need (mm) = A-pan × crop
-		factor. It is <strong>× A-pan, not an FAO Kc</strong>: FAO-56 Kc values multiply reference ET₀, about 0.6–0.85 × pan (0.35–0.85 in FAO-56 Table 5), so
-		multiply a published Kc by the pan coefficient before entering it. Use 0 for months the crop isn't irrigated.
+		Gross irrigation need (mm) = A-pan × crop factor: <strong>× A-pan, not an FAO Kc</strong>. 0 is a month the crop isn't irrigated.
 	</p>
 	{#if crops.length === 0}
 		<div class="empty">
 			<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
-			{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>{/if}
+			{#if !readonly}
+				<button type="button" class="btn btn-primary" onclick={add}>Add crop</button>
+				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
+			{/if}
 		</div>
 	{:else}
+		<!-- The grid's actions above it, not under up to 30 crop rows (issue #463, as #461 did for the EWR settings). -->
+		{#if !readonly}
+			<div class="toolbar grid-actions" data-testid="grid-actions">
+				<button type="button" class="btn" onclick={add}>+ Add crop</button>
+				<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
+				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
+			</div>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact factors" class:editable={!readonly}>
 				<thead>
@@ -284,24 +304,21 @@
 				{#each highFactors as h, i (h.id)}{i ? '; ' : ' '}<strong>{h.name || 'unnamed crop'}</strong> ({h.months.join(', ')}){/each}.
 			</p>
 		{/if}
-		{#if !readonly}
-			<div class="toolbar after">
-				<button type="button" class="btn" onclick={add}>+ Add crop</button>
-				<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
-				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
-			</div>
-			<GridPasteDialog
-				bind:open={factorPasteOpen}
-				bind:text={factorPasteText}
-				title="Paste crop factors"
-				layout="Crop factors (× A-pan): a row per crop with its name first, under a heading row of months, Oct to Sep (as the CSV below has them); without names or headings the values fill the grid from the cell you pasted into, so one copied row of 12 months fills a crop. 0 is a month the crop isn't irrigated."
-				where={factorWhere}
-				plan={(t) => planFactorPaste(t, crops, factorAnchor)}
-				onapply={applyFactors}
-				csv={() => cropFactorsCsv(crops)}
-				csvName="crop-factors.csv"
-			/>
-		{/if}
+	{/if}
+	{#if !readonly}
+		<GridPasteDialog
+			bind:open={factorPasteOpen}
+			bind:text={factorPasteText}
+			title="Paste crop factors"
+			layout="Crop factors (× A-pan): a row per crop with its name first, under a heading row of months, Oct to Sep (as the CSV below has them); a name the project doesn't have adds that crop. Without names or headings the values fill the grid from the cell you pasted into, so one copied row of 12 months fills a crop. 0 is a month the crop isn't irrigated."
+			where={factorWhere}
+			plan={(t) => planFactorPaste(t, crops, factorAnchor, { addCrops: true })}
+			onapply={applyFactors}
+			csv={() => cropFactorsCsv(crops)}
+			csvName="crop-factors.csv"
+			format={CROP_FACTORS_FORMAT}
+			rowNoun={['crop', 'crops']}
+		/>
 	{/if}
 </section>
 {#if loadMounted}
@@ -328,6 +345,11 @@
 			Add at least one hydrological unit (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
 		</p>
 	{:else}
+		{#if !readonly}
+			<div class="toolbar grid-actions" data-testid="grid-actions">
+				<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
+			</div>
+		{/if}
 		<div class="table-wrap">
 			<table class="data compact areas">
 				<thead>
@@ -397,9 +419,6 @@
 		</div>
 		{#if unplantedNote}<p class="muted small after">{unplantedNote}</p>{/if}
 		{#if !readonly}
-			<div class="toolbar after">
-				<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
-			</div>
 			<GridPasteDialog
 				bind:open={pasteOpen}
 				bind:text={pasteText}
@@ -410,6 +429,7 @@
 				onapply={applyPaste}
 				csv={() => plantedAreasCsv(farms, crops, editor.model.cropAreas)}
 				csvName="planted-areas.csv"
+				format={PLANTED_AREAS_FORMAT}
 			/>
 		{/if}
 	{/if}

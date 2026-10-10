@@ -14,24 +14,40 @@
 
 	The rail (issue #468): given the page's content as `children` and `railFrom`
 	(rem), from that content width the menu is a sticky column on the left
-	instead, every group's name shown as a heading over its links, and the
-	arrow keys move between its links; narrower it is the bar above. `find`
+	(`railSide="right"`: on the right, beside a page's own left column, Runs &
+	results' runs list) instead, every group's name shown as a heading over its
+	links, and the arrow keys move between its links; narrower it is the bar
+	above. Each link says its panel's heading (`label`); on the bar a section may
+	say a shorter `bar` name, to keep the bar to two rows (issue #462). A group
+	with no sections draws nothing, and with none at all the menu draws nothing
+	but the content (a page before its results load). `find`
 	adds a box that narrows the menu to the sections and the settings inside
 	them (labels, legends, sub-headings, table rows) whose names match, and
 	jumps to the setting itself: at the rail's top, or behind a Find button at
 	the bar's start.
+
+	Inside a box that scrolls on its own (`onjump`: the Network's node sheet,
+	whose form scrolls in the dialog, issue #462) the bar doesn't stick or touch
+	the page's scroll padding, each link calls `onjump` with its section's id
+	instead of following its fragment (no history entry, and the page can focus
+	the section), and the scroll spy follows the box the sections scroll in.
+	`heading` names the bar's start ("On this page"; null for none).
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { activeSectionId, findEntries, navFitCount, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
+	import { activeSectionId, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
 		groups,
 		label,
 		groupNames = false,
 		railFrom,
+		railSide = 'left',
 		layout = $bindable('bar'),
+		barHeight = $bindable(0),
 		find,
+		heading = 'On this page',
+		onjump,
 		children
 	}: {
 		groups: NavGroup[];
@@ -40,10 +56,18 @@
 		groupNames?: boolean;
 		/** From this content width (rem) the menu is a side rail; needs `children`. */
 		railFrom?: number;
+		/** Which side of the content the rail sits on. */
+		railSide?: 'left' | 'right';
 		/** The layout drawn now, for a page whose links differ between the two. */
 		layout?: 'bar' | 'rail';
+		/** The sticky bar's height (0 in the rail, or with no sections): for a page with a sticky panel of its own under it. */
+		barHeight?: number;
 		/** A find box: its label ("Find a setting"). */
 		find?: string;
+		/** The muted words at the bar's start; null for none (the node sheet, where the nav's label says it). */
+		heading?: string | null;
+		/** In a box that scrolls on its own: a link to a section on the page calls this instead of following its fragment. */
+		onjump?: (id: string) => void;
 		/** The page's content, laid out beside the rail (or under the bar). */
 		children?: Snippet;
 	} = $props();
@@ -56,6 +80,7 @@
 	const PHONE = '(max-width: 640px)';
 
 	const uid = $props.id();
+	const empty = $derived(navEmpty(groups));
 	const flat = $derived(
 		groups.flatMap((g, gi) =>
 			g.sections.map((s, si) => {
@@ -85,14 +110,25 @@
 	let query = $state('');
 	let railEl = $state<HTMLElement>();
 
-	const rail = $derived(!!railFrom && !!children && wrapWidth > 0 && wrapWidth >= railFrom * rootRem());
+	const rail = $derived(!empty && !!railFrom && !!children && wrapWidth > 0 && wrapWidth >= railFrom * rootRem());
 	$effect(() => {
 		layout = rail ? 'rail' : 'bar';
+	});
+	$effect(() => {
+		barHeight = rail || empty ? 0 : height;
 	});
 	function rootRem() {
 		return typeof document === 'undefined' ? 14 : parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
 	}
 	const hrefOf = (sec: NavSection) => sec.href ?? `#${sec.id}`;
+	const embedded = $derived(!!onjump);
+	/** A link followed: in a box of its own (`onjump`), the page goes to the section instead of the fragment. */
+	function follow(e: MouseEvent, sec: NavSection) {
+		moreOpen = false;
+		if (!onjump || sec.href || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		onjump(sec.id);
+	}
 
 	/** Each group's links on the bar and in More, in page order. */
 	const split = $derived.by(() => {
@@ -212,7 +248,7 @@
 			const marked = [...copy.querySelectorAll<HTMLElement>('[data-m]')];
 			const plain = [...copy.querySelectorAll<HTMLElement>('[data-p]')];
 			const width = (el: Element | null | undefined) => el?.getBoundingClientRect().width ?? 0;
-			const lead = width(copy.querySelector('.nav-h')) + (find ? width(copy.querySelector('[data-find]')) + GAP_REM * rem : 0);
+			const lead = (heading ? width(copy.querySelector('.nav-h')) : 0) + (find ? width(copy.querySelector('[data-find]')) + GAP_REM * rem : 0);
 			kept = navFitCount(
 				items.map((it, i) => ({ width: Math.max(width(marked[i]), width(plain[i])), groupStart: it.groupStart })),
 				{
@@ -285,10 +321,12 @@
 		}
 	});
 	// The bar sits over the content's top, so jumps and focus keep clear of it; the rail sits beside it.
+	// Not in a box of its own, which the bar doesn't cover.
 	$effect(() => {
+		if (embedded) return;
 		const root = document.documentElement;
 		const header = parseFloat(getComputedStyle(root).getPropertyValue('--header-h')) || 0;
-		root.style.scrollPaddingTop = `${header + (rail ? 0 : height) + 12}px`;
+		root.style.scrollPaddingTop = `${header + (rail || empty ? 0 : height) + 12}px`;
 		return () => {
 			root.style.scrollPaddingTop = '';
 		};
@@ -299,6 +337,7 @@
 		let frame = 0;
 		// The URL's fragment, the section a followed link named (a malformed one names none).
 		const fragment = () => {
+			if (embedded) return null;
 			try {
 				const id = decodeURIComponent(location.hash.slice(1)) || null;
 				return id ? (watched.find((w) => w.el === id)?.id ?? id) : null;
@@ -309,21 +348,26 @@
 		const update = () => {
 			frame = 0;
 			const root = document.documentElement;
-			// A section counts as reached once its top passes under the sticky menu.
-			const line = (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
+			// In a box of its own the sections scroll in their nearest scrolling ancestor, read from the first one.
+			const box = embedded ? scrollBox(watched[0] ? document.getElementById(watched[0].el) : null) : null;
+			const boxTop = box ? box.getBoundingClientRect().top : 0;
+			// A section counts as reached once its top passes under the sticky menu (the box's top in a box).
+			const line = box ? 8 : (parseFloat(getComputedStyle(root).scrollPaddingTop) || 0) + 8;
 			const tops = watched
 				.flatMap(({ el, id }) => {
 					const node = document.getElementById(el);
-					return node ? [{ id, top: node.getBoundingClientRect().top }] : [];
+					return node ? [{ id, top: node.getBoundingClientRect().top - boxTop }] : [];
 				})
 				.sort((a, b) => a.top - b.top);
-			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2, fragment(), window.innerHeight);
+			const atBottom = box ? box.scrollTop + box.clientHeight >= box.scrollHeight - 2 : window.innerHeight + window.scrollY >= root.scrollHeight - 2;
+			activeSection = activeSectionId(tops, line, atBottom, fragment(), box ? box.clientHeight : window.innerHeight);
 		};
 		const schedule = () => {
 			if (!frame) frame = requestAnimationFrame(update);
 		};
 		update();
-		window.addEventListener('scroll', schedule, { passive: true });
+		// Captured: a box's own scrolling doesn't bubble to the window.
+		window.addEventListener('scroll', schedule, { passive: true, capture: embedded });
 		window.addEventListener('resize', schedule);
 		window.addEventListener('hashchange', schedule);
 		// Panels open, close and load their charts late, which moves every later section.
@@ -331,20 +375,28 @@
 		grow.observe(document.body);
 		return () => {
 			cancelAnimationFrame(frame);
-			window.removeEventListener('scroll', schedule);
+			window.removeEventListener('scroll', schedule, { capture: embedded });
 			window.removeEventListener('resize', schedule);
 			window.removeEventListener('hashchange', schedule);
 			grow.disconnect();
 		};
 	});
+	/** The nearest ancestor that scrolls vertically (the node sheet's form), else the page. */
+	function scrollBox(el: HTMLElement | null): HTMLElement | null {
+		for (let n = el?.parentElement; n && n !== document.body; n = n.parentElement) {
+			const y = getComputedStyle(n).overflowY;
+			if ((y === 'auto' || y === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+		}
+		return null;
+	}
 </script>
 
 {#snippet moreText(current: boolean)}
 	More<span class="visually-hidden"> sections{current ? ', including the one being read' : ''}</span>
 	<span aria-hidden="true">▾</span>
 {/snippet}
-{#snippet linkText(sec: NavSection)}
-	{sec.label}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
+{#snippet linkText(sec: NavSection, where: 'bar' | 'rail' = 'rail')}
+	{navText(sec, where)}{#if sec.problem}<span class="dot" aria-hidden="true"></span><span class="visually-hidden"> (has a problem)</span>{/if}
 {/snippet}
 {#snippet findText()}
 	<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
@@ -387,8 +439,10 @@
 {/snippet}
 
 <!-- Without content of its own (the pages that keep the bar) the wrapper draws no box, so the bar sticks down the whole page. -->
-<div class="nav-layout" class:rail class:bare={!children} bind:clientWidth={wrapWidth}>
-	{#if rail}
+<div class="nav-layout" class:rail class:right={railSide === 'right'} class:bare={!children} bind:clientWidth={wrapWidth}>
+	{#if empty}
+		<!-- No sections yet (the page's results still loading): only the content. -->
+	{:else if rail}
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions (the arrow keys move between its links) -->
 		<nav class="rail-nav" aria-label={label} bind:this={railEl} onkeydown={listKeydown}>
 			{#if find}{@render findBox()}{/if}
@@ -402,6 +456,8 @@
 									<a
 										data-item
 										href={hrefOf(sec)}
+										onclick={(e) => follow(e, sec)}
+										aria-label={pageLinkName(sec, 'rail') ?? undefined}
 										aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
 									>{@render linkText(sec)}{#if sec.href}<span class="ext" aria-hidden="true">↗</span>{/if}</a>
 								</li>
@@ -412,7 +468,7 @@
 			{/if}
 		</nav>
 	{:else}
-		<nav class="sections" aria-label={label} bind:clientHeight={height} style:--bar-h="{height}px">
+		<nav class="sections" class:embedded aria-label={label} bind:clientHeight={height} style:--bar-h="{height}px">
 			<div class="flow" bind:this={flowEl}>
 				{#if find}
 					<div class="item find-wrap" bind:this={findWrap} onkeydown={findPopKeydown} onfocusout={findFocusOut} role="presentation">
@@ -431,7 +487,7 @@
 						{/if}
 					</div>
 				{/if}
-				<span class="nav-h" aria-hidden="true">On this page</span>
+				{#if heading}<span class="nav-h" aria-hidden="true">{heading}</span>{/if}
 				<ul class="groups">
 					{#each split as g, gi (gi)}
 						{#if g.bar.length}
@@ -441,7 +497,13 @@
 									{#each g.bar as sec, si (sec.id)}
 										<li class="item" class:group-start={gi > 0 && si === 0 && groupNames && !!g.label}>
 											{#if groupNames && g.label && si === 0}<span class="grp-h" aria-hidden="true">{g.label}</span>{/if}
-											<a class="pill" href={hrefOf(sec)} aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}>{@render linkText(sec)}</a>
+											<a
+												class="pill"
+												href={hrefOf(sec)}
+												aria-label={pageLinkName(sec, 'bar') ?? undefined}
+												aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
+												onclick={(e) => follow(e, sec)}>{@render linkText(sec, 'bar')}</a
+											>
 										</li>
 									{/each}
 								</ul>
@@ -470,7 +532,12 @@
 										<ul aria-labelledby={g.label ? `${uid}-m${gi}` : undefined}>
 											{#each g.more as sec (sec.id)}
 												<li>
-													<a href={hrefOf(sec)} aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined} onclick={() => (moreOpen = false)}>{@render linkText(sec)}</a>
+													<a
+														href={hrefOf(sec)}
+														aria-label={pageLinkName(sec, 'rail') ?? undefined}
+														aria-current={!sec.href && sec.id === activeSection ? 'location' : undefined}
+														onclick={(e) => follow(e, sec)}>{@render linkText(sec)}</a
+													>
 												</li>
 											{/each}
 										</ul>
@@ -488,15 +555,15 @@
 			     a few pixels wider than the semibold, and a fit from the bold widths alone kept a link too
 			     many there, so More wrapped to a third row. -->
 			<div class="measure" aria-hidden="true" inert bind:this={measureEl}>
-				<span class="nav-h">On this page</span>
+				{#if heading}<span class="nav-h">{heading}</span>{/if}
 				{#if find}<button type="button" class="pill find-btn" tabindex="-1" data-find>{@render findText()}</button>{/if}
 				{#each flat as sec (sec.id)}
 					{#if sec.groupName}
-						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec)}</span></span>
-						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec)}</span></span>
+						<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec, 'bar')}</span></span>
+						<span class="named" data-p><span class="grp-h">{sec.groupName}</span><span class="pill">{@render linkText(sec, 'bar')}</span></span>
 					{:else}
-						<span class="pill marked" data-m>{@render linkText(sec)}</span>
-						<span class="pill" data-p>{@render linkText(sec)}</span>
+						<span class="pill marked" data-m>{@render linkText(sec, 'bar')}</span>
+						<span class="pill" data-p>{@render linkText(sec, 'bar')}</span>
 					{/if}
 				{/each}
 				<button type="button" class="pill more-btn current" tabindex="-1" data-more>{@render moreText(true)}</button>
@@ -518,6 +585,15 @@
 		padding: 0.3rem 0;
 		background: var(--bg);
 		border-bottom: 1px solid var(--border);
+	}
+	/* In a box of its own (the node sheet's fixed sub-header): no sticking, no bar of its own. */
+	.sections.embedded {
+		position: static;
+		z-index: auto;
+		margin: 0;
+		padding: 0 0 0.4rem;
+		background: none;
+		border: 0;
 	}
 	/* The links flow like words (inline blocks), so a group breaks across rows where it must.
 	   No font size here: the white space between the blocks would add to the gaps. */
@@ -684,6 +760,19 @@
 		grid-template-columns: 13rem minmax(0, 1fr);
 		gap: 1.25rem;
 		align-items: start;
+	}
+	/* On the right (Runs & results, whose runs list is the page's left column): the menu stays first in the
+	   reading and tab order, set in the second column. */
+	.nav-layout.rail.right {
+		grid-template-columns: minmax(0, 1fr) 13rem;
+	}
+	.nav-layout.rail.right > .rail-nav {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.nav-layout.rail.right > .nav-body {
+		grid-column: 1;
+		grid-row: 1;
 	}
 	.nav-layout.bare {
 		display: contents;

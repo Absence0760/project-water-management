@@ -326,7 +326,10 @@ export function denseDays(byDay: Map<number, number | null>): Pick<ParsedSeries,
  */
 export function parseSeriesCsv(text: string, opts: { dayBoundary?: DayBoundary } = {}): ParsedSeries {
 	const lines = text.replace(/^﻿/, '').split(/\r\n?|\n/);
-	const rows = lines.map((raw, i) => ({ line: raw.trim(), n: i + 1 })).filter((r) => r.line && !r.line.startsWith('#'));
+	// Trimmed of spaces but not tabs: "2025-04-03<tab>" (a blank last cell, as a spreadsheet copies or saves it) is still two columns.
+	const rows = lines
+		.map((raw, i) => ({ line: raw.replace(/^[^\S\t]+|[^\S\t]+$/g, ''), n: i + 1 }))
+		.filter((r) => r.line.trim() && !r.line.startsWith('#'));
 	const delim = detectDelimiter(rows.map((r) => r.line));
 	const cellsOf = rows.map((r) => splitFields(r.line, delim));
 	const { order, assumed } = detectOrder(cellsOf.map((c) => c[0] ?? ''));

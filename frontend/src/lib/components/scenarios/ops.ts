@@ -39,7 +39,7 @@ import {
 	type LandCoverSetField,
 	type TransferSetField
 } from '@water-management/engine';
-import type { DroughtRestrictionRule } from '@water-management/engine';
+import type { DroughtRestrictionRule, EwrDailySource } from '@water-management/engine';
 import { newNode } from '$lib/model/editor.svelte';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
@@ -337,8 +337,8 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
 			// An unset date or PE input has a meaning (the first day with rain; pan × A-pan, as the engine runs it): show it as the "was".
-			// So has no drought restriction rule (engine ≥ 1.54.0): off.
-			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe' || f?.spec.t === 'restriction';
+			// So has no drought restriction rule (engine ≥ 1.54.0): off; and no daily EWR source (engine ≥ 1.77.0): the pragmatic EWR.
+			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe' || f?.spec.t === 'restriction' || f?.spec.t === 'ewrDaily';
 			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
 			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
@@ -461,6 +461,8 @@ export interface OpDraft {
 	pe: PeDraft;
 	/** settings.set droughtRestriction (engine ≥ 1.54.0): the rule being written, null = off. */
 	restriction: DroughtRestrictionRule | null;
+	/** settings.set ewrDailySource (engine ≥ 1.77.0, issue #460): the source being written, with its tables; null = the pragmatic EWR. */
+	ewrDaily: EwrDailySource | null;
 	cropId: string;
 	areaHa: string;
 	/** cropArea.set's system on the unit (engine ≥ 1.72.0): '' keeps its own, 'default' is the crop's, else a row id. */
@@ -542,6 +544,7 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		months: [],
 		pe: { kind: 'pan', mm: '', source: '' },
 		restriction: null,
+		ewrDaily: null,
 		cropId: '',
 		areaHa: '',
 		systemId: '',
@@ -674,7 +677,7 @@ function number(text: string, what: string, opts: { nullable?: boolean; scale?: 
 	if (opts.int && !Number.isInteger(n)) throw new DraftError(`${what} must be a whole number`);
 	return Math.round((n / (opts.scale ?? 1)) * 1e9) / 1e9;
 }
-function parsed(spec: ValueSpec, input: string | number[] | PeDraft | DroughtRestrictionRule | null, what: string): unknown {
+function parsed(spec: ValueSpec, input: string | number[] | PeDraft | DroughtRestrictionRule | EwrDailySource | null, what: string): unknown {
 	const p = parseValue(spec, input);
 	if (!p.ok) throw new DraftError(`${what}: ${p.error}`);
 	return p.value;
@@ -873,7 +876,11 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'settings.set': {
 				spec = draftSpec(d);
 				if (!spec) throw new DraftError('pick a setting');
-				const value = parsed(spec, spec.t === 'months' ? d.months : spec.t === 'pe' ? d.pe : spec.t === 'restriction' ? d.restriction : d.value, SETTINGS_SPECS[d.field as SettingsPath].label);
+				const value = parsed(
+					spec,
+					spec.t === 'months' ? d.months : spec.t === 'pe' ? d.pe : spec.t === 'restriction' ? d.restriction : spec.t === 'ewrDaily' ? d.ewrDaily : d.value,
+					SETTINGS_SPECS[d.field as SettingsPath].label
+				);
 				op = { op: 'settings.set', path: d.field, value } as ScenarioOp;
 				break;
 			}

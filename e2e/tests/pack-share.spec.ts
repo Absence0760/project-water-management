@@ -83,6 +83,7 @@ test('an editor shares an issued pack; an NGO reads it signed out and comments; 
 	// The ensemble the pack cites, run to the declared rule on River & reserve.
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
+	await panel.getByRole('button', { name: 'Run…' }).click();
 	await panel.getByLabel('Parameter sets').fill('30');
 	await panel.getByLabel(/^Lowest skill kept/).fill('-10');
 	await panel.getByLabel('Worst WR2012 flag kept').selectOption('unusable');

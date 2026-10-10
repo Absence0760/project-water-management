@@ -33,6 +33,7 @@ import type { Wr2012FlagLevel } from '../reference/wr2012';
 import { chirpsColumns, runModelWithoutChecks } from '../run';
 import { ENGINE_VERSION } from '../version';
 import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
+import { referenceFit } from '../runoff/unitRain';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { RUNOFF_MODELS, type RunoffModelId } from '../runoff/types';
 import { band, MIN_BAND_MEMBERS, quantileSorted, type Band } from './bands';
@@ -206,7 +207,14 @@ function chirpsOnly(input: ModelInput, run: PreparedRun): { input: ModelInput | 
 	// member's catchment CHIRPS is). A filtered copy, never a delete by an input's key.
 	const kept = Object.entries(input.series).filter(([k]) => k !== 'rain_catchment_mm' && parseUnitRainSeriesKey(k)?.kind !== 'rain_catchment_mm');
 	const series = { ...Object.fromEntries(kept), rain_chirps_mm: { startDate: run.startDate, values } } as ModelInput['series'];
-	return { input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null }, series }, reason: null };
+	// The reference gauge's monthly factors (engine ≥ 1.80.0, §2.4h): the member has no gauge to fit them on, so it pins the
+	// base input's, as its catchment CHIRPS carries the base's §2.4b factors.
+	const ref = referenceFit(run.settings.unitRain, input.series, input.model.nodes, []);
+	const unitRain = ref && run.settings.unitRain?.reference ? { ...run.settings.unitRain, reference: { ...run.settings.unitRain.reference, pinnedFactors: ref.months.map((m) => m.factor) } } : null;
+	return {
+		input: { ...input, settings: { ...input.settings, chirpsBiasCorrection: 'none', chirpsQuantileMap: null, ...(unitRain ? { unitRain } : {}) }, series },
+		reason: null
+	};
 }
 
 const isInt = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;

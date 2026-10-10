@@ -496,9 +496,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const [from, to] = [[...ids.keys()], [...ids.values()]];
 			await db.query(
 				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
-					source, source_unit, source_unit_factor)
+					source, source_unit, source_unit_factor, hand_days)
 				 SELECT $2, t.kind, t.name, t.unit, t.start_date, t."values", t.product, t.product_version, t.day_boundary, m.new_id,
-					t.source, t.source_unit, t.source_unit_factor
+					t.source, t.source_unit, t.source_unit_factor, t.hand_days
 				 FROM time_series t LEFT JOIN unnest($3::uuid[], $4::uuid[]) AS m(old_id, new_id) ON m.old_id = t.site_node_id
 				 WHERE t.project_id = $1 AND NOT (t.site_node_id IS NOT NULL AND m.new_id IS NULL AND t.kind = ANY($5::text[]))`,
 				[srcId, newId, from, to, [...UNIT_RAIN_KINDS]]

@@ -10,6 +10,7 @@ import { createProject, putModel, sampleModel } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveModelChanges } from '../support/network.ts';
+import { expectAbove } from '../support/reflow.ts';
 
 const grid = (page: Page) => page.getByTestId('demands-grid');
 
@@ -187,7 +188,10 @@ test('a block pasted from a spreadsheet: previewed, computed rows left out, appl
 	await expect(page.getByLabel('Town, Oct, m³/day')).toHaveValue('130');
 	await expect(page.getByLabel('Quarry, Nov, m³/day')).toHaveValue('7');
 
-	// The table as shown, as a CSV.
+	// The table as shown, as a CSV, from the actions row above the table, not under its totals and note (issue #463).
+	const actions = grid(page).getByTestId('grid-actions');
+	await expect(actions.getByRole('button')).toHaveText(['Paste from a spreadsheet…', 'Download the table as CSV']);
+	await expectAbove(actions, grid(page).locator('table tbody tr').first());
 	const [download] = await Promise.all([page.waitForEvent('download'), grid(page).getByRole('button', { name: 'Download the table as CSV' }).click()]);
 	expect(download.suggestedFilename()).toBe('demands.csv');
 	const csv = await readFile((await download.path())!, 'utf8');

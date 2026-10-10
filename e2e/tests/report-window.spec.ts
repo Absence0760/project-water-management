@@ -1,5 +1,5 @@
-// The reporting-window picker on Units & supply (issue #44, since issue #17; docs/ui.md §
-// Units & supply): a viewer looks at the last 7 days without re-running or
+// The reporting-window picker on Hydrological units (issue #44, since issue #17; docs/ui.md §
+// Hydrological units): a viewer looks at the last 7 days without re-running or
 // touching the project setting; the table worked out in the browser matches
 // the engine's own table for that window, the EWR site setting each farm's
 // charge included; the choice lives in the URL, so

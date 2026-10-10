@@ -21,7 +21,8 @@
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
 // (several seconds). Last comes the showcase (examples/showcaseSeed.ts), one
 // project of demo's with data behind every tab (about half a minute;
-// SEED_SHOWCASE=0 skips it). What each example shows: docs/run-locally.md
+// SEED_SHOWCASE=0 skips it), then the licence comparison map
+// (examples/licenceMapSeed.ts, issue #510; skipped with the showcase). What each example shows: docs/run-locally.md
 // § Example catchments; catchments.test.ts keeps them current.
 import { createHash } from 'node:crypto';
 import { closePool } from '../src/db/pool.js';
@@ -41,6 +42,7 @@ import { checkGeometry } from '../src/geo/geojson.js';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { loadDevEnv } from '../src/config/devEnv.js';
 import { seedShowcase } from './examples/showcaseSeed.js';
+import { seedLicenceMap } from './examples/licenceMapSeed.js';
 
 
 // DEV-ONLY demo credentials — these users exist only in local docker Postgres.
@@ -163,6 +165,7 @@ export async function seedExamples(): Promise<string[]> {
 		await seedRiverExample();
 		await acceptCurrentTerms(SEEDED());
 		await seedShowcaseExample();
+		await seedLicenceMapExample();
 		console.log('✓ the example catchments already exist: skipped');
 		return existing;
 	}
@@ -197,6 +200,7 @@ export async function seedExamples(): Promise<string[]> {
 	await seedRiverExample();
 	await acceptCurrentTerms(SEEDED());
 	await seedShowcaseExample();
+	await seedLicenceMapExample();
 	return ids;
 }
 
@@ -226,6 +230,25 @@ async function seedRiverExample() {
 async function seedShowcaseExample() {
 	if (process.env.SEED_SHOWCASE === '0') return;
 	await seedShowcase({ demo: DEMO, analyst: ANALYST, farmers: FARMERS, applicant: APPLICANT, userId, ensureUser, linkFarmer, seedMap });
+}
+
+/**
+ * The licence comparison map (examples/licenceMap.ts, issue #510): units in
+ * every band of the Allocations tab's map, owned by demo with the analyst as
+ * a viewer. Apart from the bundle, like the showcase, so an already seeded
+ * database gains it; skipped once it exists, and left out with the showcase
+ * (SEED_SHOWCASE=0: the e2e suite counts the bundle's projects).
+ */
+async function seedLicenceMapExample() {
+	if (process.env.SEED_SHOWCASE === '0') return;
+	await seedLicenceMap({
+		demo: DEMO,
+		viewer: ANALYST,
+		userId,
+		share,
+		publish: (email, projectId, runId) => publish(email, projectId, runId),
+		seedMap
+	});
 }
 
 /**

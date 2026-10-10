@@ -24,6 +24,10 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await expect(users.getByLabel('Demand of Town in Jul, m³/day')).toHaveValue('800');
 	await users.getByLabel('Share returned (%)').fill('40');
 	await expect(users.getByLabel('Priority', { exact: true })).toHaveValue('senior');
+	// A new user is senior, a claim on every unit upstream: the form says so (issue #507).
+	await expect(users.getByTestId('user-priority-note')).toHaveText(
+		'Senior is the default. Every hydrological unit upstream passes its demand before filling its dam or irrigating, so adding a senior user changes what the farms upstream get.'
+	);
 	// In the node table a user has none of the farm fields.
 	await expect(page.getByLabel('Kind of Town')).toHaveValue('user');
 	const tableRow = page.getByRole('row').filter({ has: page.getByLabel('Kind of Town') });
@@ -43,11 +47,11 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await page.getByLabel(/^Run label/).fill('With town');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With town' })).toBeVisible();
-	// Other water users are listed once (issue #137), in the curtailment report on Units & supply (since
+	// Other water users are listed once (issue #137), in the curtailment report on Hydrological units (since
 	// issue #17): the Summary no longer draws its own table, and links there.
 	await expect(page.locator('table.users')).toHaveCount(0);
 	const toUsers = page.getByTestId('other-uses-link');
-	await expect(toUsers).toHaveText('Other water users: the curtailment targets on Units & supply.');
+	await expect(toUsers).toHaveText('Other water users: the curtailment targets on Hydrological units.');
 	await toUsers.getByRole('link').click();
 	await expect(page).toHaveURL(/[?&]tab=supply\b.*#res-curtailment$/);
 	// Apart from the units, not curtailed (senior), with its demand and the share of it supplied.

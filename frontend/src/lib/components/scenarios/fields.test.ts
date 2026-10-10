@@ -106,6 +106,8 @@ describe('field specs cover the engine’s op catalogue', () => {
 					];
 				case 'restriction':
 					return { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3, domestic: 0.1 } }] };
+				case 'ewrDaily':
+					return { method: 'tab', scaling: 'mar', tableMarMm3: 12.5, tableAreaKm2: null, tabM3s: new Array(12).fill(0.2), naturalPctM3s: null, reservePctM3s: null };
 			}
 		};
 		const check = (table: Record<string, { spec: ValueSpec }>, err: (k: string, v: unknown) => string | null, skip: string[] = []) => {
@@ -113,7 +115,7 @@ describe('field specs cover the engine’s op catalogue', () => {
 				if (skip.includes(k)) continue;
 				const v = sample(spec);
 				// The rule is edited whole in its own editor (the draft holds the object), as a PE input is its draft.
-				const back = parseValue(spec, spec.t === 'months' ? (v as number[]) : spec.t === 'pe' ? peDraftOf(v, undefined) : spec.t === 'restriction' ? (v as never) : valueText(spec, v));
+				const back = parseValue(spec, spec.t === 'months' ? (v as number[]) : spec.t === 'pe' ? peDraftOf(v, undefined) : spec.t === 'restriction' || spec.t === 'ewrDaily' ? (v as never) : valueText(spec, v));
 				expect(back, k).toEqual({ ok: true, value: v });
 				expect(err(k, v), k).toBeNull();
 			}

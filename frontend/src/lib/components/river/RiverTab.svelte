@@ -9,10 +9,11 @@
 	// the days below the reserve per water year. The page flows in the window's
 	// one scroll (nothing is sized to the window, and no card or table scrolls
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
-	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month
-	// (with the EWR required vs met per site and water year under its grid),
-	// the uncertainty bands (with the sensitivity runs under them), the outcome
-	// matrix, the seasonal outlook and the water account.
+	// with their `#res-…` ids, findings first (issue #465): Reserve rules met by month (a one-line stub
+	// saying what it needs without a rule table), days below the EWR by month (with the EWR required vs
+	// met per site and water year under its grid) and the water account; then, under "How sure, and
+	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
+	// uncertainty bands (with the sensitivity runs under them), the outcome matrix and the seasonal outlook.
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { goto } from '$app/navigation';
@@ -40,7 +41,7 @@
 	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
 	import { riverAnchor } from './links';
-	import { ewrRuleText, pickRiverRun, reserveYearsWords, riverKpis, riverNavGroups } from './river';
+	import { EWR_MONTHS_HEADING, ewrRuleText, pickRiverRun, RESERVE_MONTHS_HEADING, reserveStubText, reserveYearsWords, riverKpis, riverNavGroups } from './river';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
@@ -146,9 +147,13 @@
 	// are named for it, not "the reserve" (issue #177); the flow chart keeps its name when it draws the outlet's rule
 	// requirement. Reserve compliance shows whenever the run has a table, whatever judges the headline.
 	const ruleTable = $derived(!!judged?.site);
+	/** The side index from this page width (rem), as Settings: a 1440 px window, where the EWR grid and the
+	 *  flow chart beside the years bars still fit the column beside it (issue #462). */
+	const RIVER_RAIL_FROM_REM = 80;
 	const hasAssurance = $derived(!!summary?.ewrAssurance?.length);
 	const ruleLine = $derived(!!shown && hasRuleLine(shown.series));
 	const yearsWords = $derived(reserveYearsWords(ruleTable, summary?.catchment.outletEwr));
+	const reserveStub = $derived(reserveStubText(!!project.settings.ewrRules?.length, canEdit));
 	const kpis = $derived(
 		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null, headline) : []
 	);
@@ -238,10 +243,12 @@
 		{#if canEdit}<a class="btn btn-primary" href="?tab=runs">Run the model</a>{:else}<p class="muted small">An editor can run the model.</p>{/if}
 	</section>
 {:else}
-	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
-	     under its first screen. Its group names show on the bar (issue #162), so the gaps between
-	     the groups read as groups. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(hasAssurance, ruleLine, ruleTable, summary.catchment.outletEwr)} label="River sections" />{/if}
+	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to eight panels
+	     under its first screen. From 80rem of page a side index on the left, every group named over
+	     its links; narrower a bar under the header, its links evenly spaced (issue #162, #462). The
+	     page's own widths are read from river-body, the column beside the index. -->
+	<SectionNav groups={shown && summary ? riverNavGroups(ruleLine, ruleTable, summary.catchment.outletEwr) : []} label="River sections" railFrom={RIVER_RAIL_FROM_REM}>
+	<div class="river-body">
 	<!-- Which EWR the results are judged by (issue #444), at the top: the project's choice, set first thing in Settings.
 	     Left out when there is nothing to choose (no rule table in the run, automatic). -->
 	{#if judged && (hasAssurance || (headline && headline.source !== 'auto'))}
@@ -310,54 +317,70 @@
 				<div class="panel" id="res-reserve">
 					<Lazy load={loadAssurancePanel}>
 						{#snippet children(EwrAssurancePanel)}
-							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} />
+							<EwrAssurancePanel sites={summary.ewrAssurance ?? []} title={RESERVE_MONTHS_HEADING} />
 						{/snippet}
 					</Lazy>
 				</div>
+			{:else}
+				<!-- Without a rule table this panel was simply absent and nothing said why (issue #465): one line saying what it needs. -->
+				<section class="panel stub" id="res-reserve" aria-labelledby="reserve-stub-h" data-testid="reserve-stub">
+					<h3 id="reserve-stub-h">{RESERVE_MONTHS_HEADING}</h3>
+					<p>{reserveStub.lead}{#if reserveStub.link}{' '}<a href="?tab=settings#set-reserve">{reserveStub.link}</a>.{/if}</p>
+				</section>
 			{/if}
 			<div class="panel" id="res-ewr-grid">
 				{#if summary.ewrCompliance}
-					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} />
+					<EwrHeatmap compliance={summary.ewrCompliance} headlineNote={heatmapHeadlineNote(judged?.site ?? null, headline, summary.catchment.outletEwr)} daily={dailyEwrName(summary.catchment.outletEwr)} title={EWR_MONTHS_HEADING} />
 				{:else}
-					<h3>EWR compliance by month</h3>
+					<h3>{EWR_MONTHS_HEADING}</h3>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 				{/if}
 				<!-- The volume side of compliance, per site and water year (the water account's tail until issue #175). -->
 				<EwrRequiredMet assurance={summary.supplyAssurance} />
 			</div>
-			<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify, and under
-			     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. -->
-			<div class="panel" id="res-uncertainty">
-				{#key shownRun.id}
-					<UncertaintyPanel {projectId} runId={shownRun.id} runEngineVersion={shownRun.engineVersion} canEdit={canEdit} />
-					<SensitivityPanel {projectId} runId={shownRun.id} />
-				{/key}
-			</div>
-			<div class="panel" id="res-outcomes">
-				{#key shownRun.id}
-					<OutcomeMatrixPanel
-						{projectId}
-						run={shownRun}
-						hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
-						outcomes={project.settings.outcomes}
-						nodes={editor.model.nodes}
-						ewrRules={project.settings.ewrRules}
-						daily={summary?.catchment.outletEwr}
-						{onProjectChange}
-						canEdit={canEdit}
-					/>
-				{/key}
-			</div>
-			<div class="panel" id="res-outlook">
-				{#key shownRun.id}
-					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} droughtRestriction={project.settings.droughtRestriction ?? null} daily={summary?.catchment.outletEwr} {onProjectChange} />
-				{/key}
-			</div>
+			<!-- The last finding, straight after the EWR by month: it sat below the three tools until issue #465. -->
 			<div class="panel" id="res-water-account">
 				<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} balanceHref="{runHref(shownRun.id)}#res-water-balance" />
 			</div>
 		</div>
+		<!-- The run-it-yourself tools, under the menu's name for them (issue #465). Each is one row (name, purpose, ⓘ,
+		     Run) until it has a result or an editor opens its form (common/ToolRow). -->
+		<section class="tools" aria-labelledby="river-tools-h">
+			<h2 id="river-tools-h">How sure, and what if</h2>
+			<div class="panels">
+				<!-- The uncertainty bands (issue #4 phase 9) qualify the EWR and Reserve findings above, and under
+				     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. -->
+				<div class="panel" id="res-uncertainty">
+					{#key shownRun.id}
+						<UncertaintyPanel {projectId} runId={shownRun.id} runEngineVersion={shownRun.engineVersion} canEdit={canEdit} />
+						<SensitivityPanel {projectId} runId={shownRun.id} />
+					{/key}
+				</div>
+				<div class="panel" id="res-outcomes">
+					{#key shownRun.id}
+						<OutcomeMatrixPanel
+							{projectId}
+							run={shownRun}
+							hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
+							outcomes={project.settings.outcomes}
+							nodes={editor.model.nodes}
+							ewrRules={project.settings.ewrRules}
+							daily={summary?.catchment.outletEwr}
+							{onProjectChange}
+							canEdit={canEdit}
+						/>
+					{/key}
+				</div>
+				<div class="panel" id="res-outlook">
+					{#key shownRun.id}
+						<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} droughtRestriction={project.settings.droughtRestriction ?? null} daily={summary?.catchment.outletEwr} {onProjectChange} />
+					{/key}
+				</div>
+			</div>
+		</section>
 	{/if}
+	</div>
+	</SectionNav>
 {/if}
 
 <style>
@@ -380,6 +403,9 @@
 	.judged .fell-back {
 		display: block;
 		color: var(--warning);
+	}
+	.river-body {
+		container: river-body / inline-size;
 	}
 	.first {
 		display: grid;
@@ -456,9 +482,11 @@
 	}
 	/* Wide: the bars beside the chart, as tall as it (the grid row stretches them; their plot takes what
 	   is left). Opening their table makes the row taller; the chart keeps its height at the row's top. */
-	@media (min-width: 1100px) {
+	/* From the column's width, not the window's: beside the side index the column is 13rem narrower (issue #462).
+	   56rem is the column a 1100 px window gave it before (240 px sidebar, gutters, scrollbar). */
+	@container river-body (min-width: 56rem) {
 		.cols {
-			grid-template-columns: minmax(0, 1fr) clamp(300px, 28vw, 400px);
+			grid-template-columns: minmax(0, 1fr) clamp(300px, 36cqi, 400px);
 			align-items: stretch;
 		}
 		.flow-cell {
@@ -474,6 +502,25 @@
 	   (Reserve compliance's month by month shows its first rows, then Show all). */
 	.panels :global(div.table-wrap) {
 		max-height: none;
+	}
+	/* Reserve rules met without a rule table: one line, the heading and what it needs. */
+	.stub {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.25rem 1rem;
+	}
+	.stub h3,
+	.stub p {
+		margin: 0;
+	}
+	.stub p {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+	.tools h2 {
+		margin: 1.5rem 0 0.75rem;
+		font-size: 1.05rem;
 	}
 	.run-pick {
 		max-width: min(34rem, 60vw);

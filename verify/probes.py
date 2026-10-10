@@ -640,6 +640,59 @@ def unit_rain_no_land_unit() -> dict:
     return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": _steady(30, 4.0)}
 
 
+def unit_rain_reference() -> dict:
+    """The reference gauge (§2.4h, engine >= 1.80.0) at its edges: the
+    catchment gauge against unit r's cell, the gauge × 0.5 (factor 2) except
+    January with exactly 90 shared days (fits), February with 89 (factor 1),
+    March under 50 mm of CHIRPS (factor 1) and July × 0.15 (clamped to 4),
+    and a no-data code. Unit a's MAP ratio clamps (3000 ÷ 500), b has no MAP
+    (ratio 1), g's own gauge has gaps its levelled CHIRPS fills."""
+    start = dt.date(2014, 1, 1)
+    n = (dt.date(2019, 12, 31) - start).days + 1
+    gauge = _wave(start, n, 0)
+    cell: list = []
+    jan = feb = 0
+    for i, g in enumerate(gauge):
+        d = start + dt.timedelta(days=i)
+        v = round(g * (0.15 if d.month == 7 else 0.05 if d.month == 3 else 0.5), 2)
+        if d.month == 1:
+            jan += 1
+            v = v if jan <= 90 else None
+        if d.month == 2:
+            feb += 1
+            v = v if feb <= 89 else None
+        cell.append(v)
+    cell[200] = -9999.0
+    own_g: list = _wave(start, n, 4, 1.2)
+    for j in range(30, 70):
+        own_g[j] = None
+    series: dict = {"rain_catchment_mm": {"startDate": start.isoformat(), "values": gauge}}
+    series["rain_chirps_cell_mm@r"] = {"startDate": start.isoformat(), "values": cell}
+    for k, uid in enumerate(["r", "a", "b", "g"]):
+        series[f"rain_chirps_mm@{uid}"] = {"startDate": start.isoformat(), "values": _wave(start, n, k + 1, 0.6 + 0.1 * k)}
+    series["rain_catchment_mm@g"] = {"startDate": start.isoformat(), "values": own_g}
+    src = {"mapSource": "invented"}
+    nodes = [
+        _node("o", "gauge", None),
+        _node("r", "farm", "o", areaKm2=2, mapMm=500, **src),
+        _node("a", "farm", "o", areaKm2=3, mapMm=3000, **src),
+        _node("b", "farm", "o", areaKm2=1),
+        _node("g", "farm", "o", areaKm2=1.5, mapMm=650, **src),
+    ]
+    s = _settings(unitRain={"mode": "perUnit", "reference": {"gauge": "rain_catchment_mm", "unitId": "r"}})
+    return {"settings": s, "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def unit_rain_reference_not_land() -> dict:
+    """A reference unit without area (not a land unit): no cell to fit on,
+    so the units' CHIRPS is levelled as without a reference (§2.4h)."""
+    doc = unit_rain_reference()
+    doc["model"]["nodes"].append(_node("z", "farm", "o", areaKm2=0, mapMm=500, mapSource="invented"))
+    doc["series"]["rain_chirps_cell_mm@z"] = doc["series"].pop("rain_chirps_cell_mm@r")
+    doc["settings"]["unitRain"]["reference"] = {"gauge": "rain_catchment_mm", "unitId": "z"}
+    return doc
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -666,4 +719,6 @@ PROBES = {
     "unit-rain-forecast-warmup": unit_rain_forecast_warmup(),
     "unit-rain-map-period": unit_rain_map_period(),
     "unit-rain-no-land-unit": unit_rain_no_land_unit(),
+    "unit-rain-reference": unit_rain_reference(),
+    "unit-rain-reference-not-land": unit_rain_reference_not_land(),
 }

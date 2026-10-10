@@ -127,6 +127,10 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('outcome-matrix');
 	await expect(panel).toHaveAttribute('data-state', 'empty');
+	// Not run: one row until the editor opens the form, focus on the levels (issue #465).
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveCount(0);
+	await panel.getByRole('button', { name: 'Run…' }).click();
+	await expect(panel.getByLabel(/^Demand levels/)).toBeFocused();
 	await expect(panel.getByTestId('outcome-empty')).toHaveText('No demand sweep on this run yet.');
 	await expect(panel.getByLabel(/^Demand levels/)).toHaveValue('100, 85, 70');
 	// The button is in an action row under the levels box and its hint, at the box's left edge (ui-playbook.md, action rows).
@@ -270,6 +274,7 @@ test('the matrix reads the Reserve rule table at a chosen gauge, saved for the p
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('outcome-matrix');
 	await expect(panel).toHaveAttribute('data-state', 'empty');
+	await panel.getByRole('button', { name: 'Run…' }).click();
 	const site = panel.getByLabel('Reserve site');
 	await expect(site.locator('option')).toHaveText(['Outlet (Outflow gauge)', 'Gauge: Upper gauge']);
 	await expect(site.locator('option:checked')).toHaveText('Outlet (Outflow gauge)');

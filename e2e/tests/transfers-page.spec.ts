@@ -6,7 +6,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveModelChanges } from '../support/network.ts';
-import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { expectAbove, expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { openTransfers, ruleCard, rulesCard, rulesListBox, seedManyTransfers } from '../support/transfers.ts';
 
@@ -246,6 +246,8 @@ test('the Transfers grid on the Network keeps its own Add transfer', async ({ pa
 	// One heading per modal: the title, then each rule's own; no "Transfer rules" under it.
 	await expect(grid.getByRole('heading', { level: 2 })).toHaveText(['Transfers']);
 	await expect(grid.getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
+	// Above the rules, not under them (issue #463).
+	await expectAbove(grid.getByRole('button', { name: '+ Add transfer', exact: true }), grid.getByTestId('transfer-rules'));
 	await grid.getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await expect(grid.getByLabel('From, transfer 2', { exact: true })).toBeFocused();
 });

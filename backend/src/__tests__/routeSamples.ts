@@ -59,6 +59,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'PUT /projects/:id/series': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-01', values: [1, 2] } }),
 	'PATCH /projects/:id/series/:seriesId': () => ({ body: { product: 'Ladder gauge', productVersion: '1' } }),
 	'POST /projects/:id/series/merge': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-02', values: [5, 6] } }),
+	'PUT /projects/:id/series/:seriesId/days/:date': () => ({ body: { value: 1 }, params: { date: '2021-10-02' } }),
 	'GET /projects/:id/runs/:runId/series': () => ({ query: { key: 'simulated_outflow' } }),
 	'GET /projects/:id/runs/:runId/day': (c) => ({ query: { date: '2021-10-03', nodeId: c.farmId } }),
 	'GET /projects/:id/runs/:runId/export/farms.csv': () => ({ query: { key: 'supplied' } }),

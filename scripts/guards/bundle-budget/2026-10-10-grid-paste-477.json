@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Issue #477: paste/CSV with the Expected format note for transfers' monthly rates, irrigation systems, crop types (crop factors adding crops) and Settings' monthly A-pan and pan coefficients (spreadsheet/paste/monthlyRows.ts, transfersPaste.ts, systemsPaste.ts, settings/monthlyPaste.ts, GridPasteDialog's format note) plus the help text. Measured 1900 KB before and 1906 KB after on one tree, a baseline copy built without this change."
+}

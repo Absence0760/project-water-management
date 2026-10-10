@@ -93,7 +93,7 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 	await expect(page.getByText('Baseline (run A) against What-if 2 (run B): every figure below is B − A.')).toBeVisible();
 	await expect(whatChanged(page).getByText('Upper farm: dam capacity 150\u202f000 m³ → 300\u202f000 m³')).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();
-	// Its water balance table is What changes' now: only the calibration (and WR2012) checks stay there.
+	// Its water balance table is What the change does' now: only the calibration (and WR2012) checks stay there.
 	await expect(page.getByRole('heading', { level: 3, name: 'Water balance' })).toHaveCount(0);
 	await expect(page.getByRole('table', { name: 'Headline water balance for both runs' })).toHaveCount(0);
 	await expect(page.getByRole('heading', { level: 3, name: 'Calibration against observed flow' })).toBeVisible();

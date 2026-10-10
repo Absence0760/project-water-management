@@ -11,6 +11,8 @@ import { blockCommas, DECIMAL_COMMA_NOTE, GROUPING_COMMA_NOTE, numberReader, rea
 export interface GridRow {
 	id: string;
 	name: string;
+	/** Other names a paste may give the row ("A-pan" for A-pan evaporation, "Upper → Lower" for Transfer 1). */
+	aliases?: readonly string[];
 }
 
 /** A value column of the grid, matched by any of its labels (a heading's unit in brackets is ignored). */
@@ -31,6 +33,11 @@ export interface MappedPaste {
 	values: PastedValue[];
 	/** How the paste was read: rows matched by name, columns left out, decimal commas. */
 	notes: string[];
+	/**
+	 * Rows the paste names that the grid doesn't have, with `addRows` (issue #477): each gets an id
+	 * `new:<n>`, which its values carry, in the order the paste names them. Empty without `addRows`.
+	 */
+	added: GridRow[];
 }
 
 /** Where a paste into the grid landed: the row and the value column of the focused cell. */
@@ -46,6 +53,8 @@ export interface MapOptions {
 	nameHeadings?: string[];
 	/** Headings of columns the grid's own CSV has but a paste can't change (a Total, a Kind): left out without a note. */
 	ignoreHeadings?: string[];
+	/** A name the grid doesn't have is a new row (MappedPaste.added), not one left out: a list the paste adds to (crops, irrigation systems). */
+	addRows?: boolean;
 }
 
 /**
@@ -129,8 +138,8 @@ export function mapPaste(text: string, rows: readonly GridRow[], cols: readonly 
 	const named = data.every((r) => !isBlank(r[0] ?? '') && Number.isNaN(reader.read(r[0]!.replace(/%$/, ''))));
 	const rowByName = new Map<string, GridRow[]>();
 	for (const r of rows) {
-		const k = normalName(r.name);
-		if (k) rowByName.set(k, [...(rowByName.get(k) ?? []), r]);
+		// An alias the row's own name already gives (or one listed twice) counts once, so it never reads as two rows.
+		for (const k of new Set([r.name, ...(r.aliases ?? [])].map(normalName))) if (k) rowByName.set(k, [...(rowByName.get(k) ?? []), r]);
 	}
 	const anchor = opts.anchor ?? { row: 0, col: 0 };
 	const startCol = named ? 1 : 0;
@@ -166,6 +175,7 @@ export function mapPaste(text: string, rows: readonly GridRow[], cols: readonly 
 
 	// --- each row ---
 	const values: PastedValue[] = [];
+	const added: GridRow[] = [];
 	const missing: string[] = [];
 	const ambiguous: string[] = [];
 	const used = new Set<string>();
@@ -180,15 +190,17 @@ export function mapPaste(text: string, rows: readonly GridRow[], cols: readonly 
 		if (named) {
 			const name = cells[0]!.trim();
 			const hits = rowByName.get(normalName(name)) ?? [];
-			if (hits.length === 0) {
+			if (hits.length === 0 && opts.addRows) {
+				if (added.some((a) => normalName(a.name) === normalName(name))) return { error: `${name} appears twice in the paste.` };
+				row = { id: `new:${added.length}`, name };
+				added.push(row);
+			} else if (hits.length === 0) {
 				missing.push(name);
 				continue;
-			}
-			if (hits.length > 1) {
+			} else if (hits.length > 1) {
 				ambiguous.push(name);
 				continue;
-			}
-			row = hits[0]!;
+			} else row = hits[0]!;
 			if (used.has(row.id)) return { error: `${name} appears twice in the paste.` };
 			used.add(row.id);
 		} else row = rows[anchor.row + i]!;
@@ -201,12 +213,13 @@ export function mapPaste(text: string, rows: readonly GridRow[], cols: readonly 
 			values.push({ rowId: row.id, key: col.key, value });
 		}
 	}
+	const matched = used.size - added.length;
 	if (named && used.size === 0) return { error: `None of the names in the first column is a row of the table (${[...missing, ...ambiguous].slice(0, 3).join(', ')}${missing.length + ambiguous.length > 3 ? ' …' : ''}).` };
-	if (named) notes.push(`Matched ${used.size} row${used.size === 1 ? '' : 's'} by name.`);
+	if (named && matched) notes.push(`Matched ${matched} row${matched === 1 ? '' : 's'} by name.`);
 	if (missing.length) notes.push(`Left out ${missing.length === 1 ? 'a row' : 'rows'} the table doesn't have: ${missing.join(', ')}.`);
 	if (ambiguous.length) notes.push(`Left out ${ambiguous.join(', ')}: two rows of the table have that name.`);
 	if (reader.sawComma) notes.push(commas === 'grouping' ? GROUPING_COMMA_NOTE : DECIMAL_COMMA_NOTE);
-	return { values, notes };
+	return { values, notes, added };
 }
 
 /**
@@ -243,6 +256,23 @@ export interface PastePlan {
 	/** Pasted values equal to what the grid already holds. */
 	unchanged: number;
 	notes: string[];
+	/** Rows the paste adds (a grid that takes new rows, MapOptions.addRows): their ids are the `new:<n>` the changes carry. */
+	added?: GridRow[];
+}
+
+/**
+ * The "Expected format" of a grid's paste box (issue #477, the shared note of
+ * issue #456, common/FormatHelp.svelte): the headings and units as a list, a
+ * few lines as typed, and the example as a file. Kept beside the grid's
+ * parser, whose tests feed the example file back through it.
+ */
+export interface GridFormat {
+	/** The layout, a line each: the headings, the units, what a blank or 0 does. */
+	rules: readonly string[];
+	/** A few lines as they'd be typed or copied (comma-separated). */
+	example: string;
+	/** The example file's name ("transfers-example.csv"); its text is `example`. */
+	exampleName: string;
 }
 
 /** Two display values are the same to the grid's precision (float noise from a % or ha conversion aside). */

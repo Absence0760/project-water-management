@@ -24,20 +24,21 @@
 	import { ownEfficiencyUsed, pctText, plantingSystemsLine, unitEfficiency } from '$lib/model/systems';
 	import { divertMonthsCell } from './supply';
 	import { cardLabel, fieldScale, fieldUnused, GROUPS, hasDam, isPct, isVolume, KIND_WORD, NODE_FIELDS, returnFlowHint, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
-	import { nodeSections, SECTION_SHORT, sectionId, type NodeSection } from './nodeSections';
+	import { nodeNavGroups, nodeSections } from './nodeSections';
 	import { keepInView } from './scroll';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
 	import NodeCard from './NodeCard.svelte';
 	import NodeDetail from './NodeDetail.svelte';
-	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
+	import { TABLES_MENU, withParam, withoutParam } from '$lib/workspace/overlays';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
-	import { applyNodePaste, nodeTableCsv, planNodePaste } from './nodePaste';
+	import { applyNodePaste, NODE_TABLE_FORMAT, nodeTableCsv, planNodePaste } from './nodePaste';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 	import { describeUser } from './users';
 	import { flowPathOrder, makeOutlet, moveTo, renumber } from './reorder';
@@ -414,13 +415,6 @@
 	});
 	const latestSupply = $derived(latestRun && supplyRun?.id === latestRun.id ? supplyByNode(nodes, supplyRun.summary) : null);
 	const latestName = $derived(latestRun ? latestRun.label || fmtDate(latestRun.createdAt, true) : null);
-	const GRID_LINKS: [GridId, string][] = [
-		['crop-factors', 'Crop factors'],
-		['planted-areas', 'Planted areas'],
-		['transfers', 'Transfers'],
-		['demands', 'Demands']
-	];
-	const GRID_ALL: [GridId, string][] = [['nodes', 'Hydrological unit table'], ...GRID_LINKS];
 	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
 	// The Tables menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
@@ -510,12 +504,12 @@
 				if (picked?.id === id) damEnd = null;
 			});
 	});
-	// --- the node sheet's extras: its sections for the jump row, and where its crops and transfers are set ---
+	// --- the node sheet's extras: its section menu, and where its crops and transfers are set ---
 	const sheetSections = $derived(editing ? nodeSections(editing, (editor.model.demandObjects ?? []).filter((o) => o.nodeId === editing.id).length) : []);
+	const sheetNav = $derived(editing && sheetSections.length > 1 ? nodeNavGroups(editing.id, sheetSections) : []);
 	/** Scrolls the sheet's form to a section and puts the focus on it (its fieldset, named by its legend). */
-	function jumpTo(s: NodeSection) {
-		if (!editing) return;
-		const el = document.getElementById(sectionId(editing.id, s));
+	function jumpTo(id: string) {
+		const el = document.getElementById(id);
 		el?.scrollIntoView({ block: 'start' });
 		el?.focus({ preventScroll: true });
 	}
@@ -549,7 +543,7 @@
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
 		<summary class="btn">Tables <span aria-hidden="true">▾</span></summary>
 		<div class="grids-pop" role="group" aria-label="Open as a table">
-			{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
+			{#each TABLES_MENU as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>
 	{#if !readonly}
@@ -632,6 +626,18 @@
 				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Settings &amp; calibration</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
 				<span class="wide-only">The help buttons beside each heading and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
+			<!-- The grid's actions above it, not under a long table and field guide where they went unseen (issue #463, as #461 did for the EWR settings). -->
+			{#if !readonly}
+				<div class="toolbar grid-actions" data-testid="grid-actions">
+					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add hydrological unit</button>
+					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
+					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
+						Sort by flow path
+					</button>
+					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
+					{#if outletCount === 1}<span class="muted small">New hydrological units drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
+				</div>
+			{/if}
 			<div class="table-wrap net-wrap">
 				<table class="data compact net">
 					<thead>
@@ -782,17 +788,6 @@
 					</tfoot>
 				</table>
 			</div>
-			{#if !readonly}
-				<div class="toolbar after">
-					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add hydrological unit</button>
-					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
-					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
-						Sort by flow path
-					</button>
-					<button type="button" class="btn" onclick={openPaste}>Paste from a spreadsheet…</button>
-					{#if outletCount === 1}<span class="muted small">New hydrological units drain into the outlet; change "Drains into" (or drag on the schematic) to nest them. Row order is for display only.</span>{/if}
-				</div>
-			{/if}
 			<details class="guide">
 				<summary>Field guide</summary>
 				<dl>
@@ -816,6 +811,7 @@
 					onapply={applyPaste}
 					csv={() => nodeTableCsv(nodes)}
 					csvName="hydrological-unit-table.csv"
+					format={NODE_TABLE_FORMAT}
 				/>
 			{/if}
 		{/if}
@@ -934,11 +930,13 @@
 					</select>
 					<button type="button" class="btn" aria-label="Next hydrological unit" disabled={editIndex >= nodes.length - 1} onclick={() => openEdit(nodes[editIndex + 1]!.id, true)}>›</button>
 				</div>
-				<!-- The form's sections, fixed above it: one press scrolls to a section and focuses it. -->
-				{#if sheetSections.length > 1}
-					<nav class="jump" aria-label="Sections of the form" data-testid="node-sheet-jump">
-						{#each sheetSections as sec (sec)}<button type="button" class="jump-link" onclick={() => jumpTo(sec)}>{SECTION_SHORT[sec]}</button>{/each}
-					</nav>
+				<!-- The form's sections, fixed above it: the pages' section menu (common/SectionNav, issue #462) as a
+				     bar in the sheet, marking the section being read; one press scrolls the form to a section and
+				     focuses it (onjump: no fragment in the URL). With one section, none. -->
+				{#if sheetNav.length}
+					<div data-testid="node-sheet-jump">
+						<SectionNav groups={sheetNav} label="Sections of the form" heading={null} onjump={jumpTo} />
+					</div>
 				{/if}
 			{/snippet}
 			<div class="sheet one-node">
@@ -1195,9 +1193,6 @@
 	.warn {
 		color: var(--warning);
 	}
-	.after {
-		margin: 0.75rem 0 0;
-	}
 	.guide {
 		margin-top: 0.75rem;
 		font-size: 0.85rem;
@@ -1244,34 +1239,6 @@
 	.add-one {
 		margin: 0 0 0.75rem;
 	}
-	/* The sheet's jump row: the sections as small links, wrapping onto a second row at most on a
-	   laptop (11 short names at 920 px); one strip that scrolls sideways on a phone (SectionNav's pattern). */
-	.jump {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.15rem 0.35rem;
-		padding: 0 0 0.4rem;
-		font-size: 0.85rem;
-	}
-	.jump-link {
-		/* At least 24 px (WCAG 2.5.8): the wrapped rows sit too close for the spacing exception. */
-		display: inline-flex;
-		align-items: center;
-		min-height: 24px;
-		min-width: 24px;
-		background: none;
-		border: 0;
-		padding: 0.15rem 0.35rem;
-		border-radius: var(--radius-sm);
-		color: var(--accent);
-		text-decoration: underline;
-		text-underline-offset: 2px;
-		cursor: pointer;
-		white-space: nowrap;
-	}
-	.jump-link:hover {
-		background: var(--row-hover);
-	}
 	.empty-actions {
 		display: flex;
 		flex-wrap: wrap;
@@ -1281,18 +1248,6 @@
 	.list-h:focus-visible {
 		outline: 2px solid var(--focus);
 		outline-offset: 2px;
-	}
-	@media (max-width: 640px) {
-		.jump {
-			flex-wrap: nowrap;
-			overflow-x: auto;
-		}
-		.jump-link {
-			min-height: 44px;
-			/* One scrolling row: each link keeps its width rather than shrinking into the next ("CatchFlowDam"). */
-			flex: none;
-			white-space: nowrap;
-		}
 	}
 	/* A control scrolled to by Tab stops below the sticky picker too, not
 	   just below the app header (WCAG 2.4.11, focus not obscured). */

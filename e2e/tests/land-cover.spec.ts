@@ -39,11 +39,11 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	await page.getByLabel(/^Run label/).fill('Invaded');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Invaded' })).toBeVisible();
-	// The table is on Units & supply's Other uses (issue #137), and the Summary says so and links there.
+	// The table is in Other uses on Hydrological units (issue #137), and the Summary says so and links there.
 	const toUses = page.getByTestId('other-uses-link');
-	await expect(toUses).toHaveText('Land cover: Other uses on Units & supply.');
+	await expect(toUses).toHaveText('Land cover: Other uses on Hydrological units.');
 	await expect(page.locator('#res-summary').getByRole('heading', { name: 'Land cover' })).toHaveCount(0);
-	await toUses.getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	await toUses.getByRole('link', { name: 'Other uses on Hydrological units' }).click();
 	await expect(page).toHaveURL(/[?&]tab=supply\b.*#res-other-uses$/);
 	const uses = page.getByRole('region', { name: 'Other uses of water' });
 	await expect(uses.getByRole('heading', { level: 3, name: 'Land cover' })).toBeVisible();

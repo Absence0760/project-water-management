@@ -82,6 +82,7 @@ test('an applicant reads their own issued pack, anonymised, and shares it by lin
 	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the applicant pack test');
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
+	await panel.getByRole('button', { name: 'Run…' }).click();
 	await panel.getByLabel('Parameter sets').fill('30');
 	await panel.getByLabel(/^Lowest skill kept/).fill('-10');
 	await panel.getByLabel('Worst WR2012 flag kept').selectOption('unusable');

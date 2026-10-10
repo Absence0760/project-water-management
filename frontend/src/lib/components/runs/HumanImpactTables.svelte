@@ -3,7 +3,7 @@
 	// The human-impact tables of a run (engine ≥ 0.22.0): land cover (WP-1.35),
 	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
-	// for a run that has any of them (humanImpacts.ts), on Units & supply
+	// for a run that has any of them (humanImpacts.ts), on Hydrological units
 	// (issue #137) and in the printable report.
 	import { CROPS_TAKE_KEY, DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
@@ -16,7 +16,7 @@
 		users = true
 	}: {
 		summary: RunSummary;
-		/** Draw the Other water users table. Units & supply leaves it out when the curtailment table lists them (one copy per page). */
+		/** Draw the Other water users table. Hydrological units leaves it out when the curtailment table lists them (one copy per page). */
 		users?: boolean;
 	} = $props();
 
@@ -40,7 +40,7 @@
 	// Where each one's number comes from (engine ≥ 1.56.0): a column and a line only when one records it.
 	const sources = $derived(demandBySource(objects.map(({ o }) => o)));
 	// Other water users with a pump capacity (engine ≥ 1.58.0, WP-3.8): their own table, drawn even when the
-	// curtailment table lists the users (it has no pump columns), so Units & supply shows the pump's limit.
+	// curtailment table lists the users (it has no pump columns), so Hydrological units shows the pump's limit.
 	const pumpUsers = $derived((summary.users ?? []).filter((u) => u.avgPumpLimitedM3Day !== undefined));
 	// Each unit's river abstractions beside its dam (engine ≥ 1.65.0, docs/model.md §2.7j), with what each pump
 	// left unmet while the river or its pool had it (engine ≥ 1.66.0: columns only when one has a pump capacity) and, with a

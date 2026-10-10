@@ -10,14 +10,14 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MonthFields from './MonthFields.svelte';
 	import PumpCapacityField from './PumpCapacityField.svelte';
-	import { userDemandOf, userPumpNote } from './users';
+	import { userDemandOf, userPriorityNote, userPumpNote } from './users';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `usr-${k}-${node.id}`;
 	const label = $derived(node.name || 'this user');
 	const PRIORITY_LABEL: Record<UserPriority, string> = {
-		senior: 'Senior: hydrological units upstream pass its demand first',
+		senior: 'Senior (default): hydrological units upstream pass its demand first',
 		junior: 'Junior: takes what reaches it'
 	};
 	const demand = $derived(userDemandOf(node));
@@ -29,9 +29,10 @@
 	<div class="row">
 		<div class="field">
 			<span class="lbl"><label for={id('priority')}>Priority</label><HelpTip key="node.userPriority" /></span>
-			<select id={id('priority')} disabled={readonly} value={node.userPriority ?? 'senior'} onchange={(e) => (node.userPriority = e.currentTarget.value as UserPriority)}>
+			<select id={id('priority')} aria-describedby={id('priority-note')} disabled={readonly} value={node.userPriority ?? 'senior'} onchange={(e) => (node.userPriority = e.currentTarget.value as UserPriority)}>
 				{#each USER_PRIORITIES as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
 			</select>
+			<span class="hint" id={id('priority-note')} data-testid="user-priority-note">{userPriorityNote(node.userPriority)}</span>
 		</div>
 		<div class="field">
 			<span class="lbl"><label for={id('return')}>Share returned <span class="u">(%)</span></label><HelpTip key="node.userReturnPct" /></span>
@@ -97,6 +98,10 @@
 	}
 	.pump {
 		margin-top: 0.5rem;
+	}
+	.hint {
+		display: block;
+		margin-top: 0.25rem;
 	}
 	@media (max-width: 640px) {
 		.field select,

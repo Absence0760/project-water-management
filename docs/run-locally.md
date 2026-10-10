@@ -120,7 +120,7 @@ user starts with no projects.
 pnpm seed:examples          # needs dev:db:up; about a minute with the showcase
 ```
 
-This loads four invented catchments and the **showcase** (below), each with one run (published by its
+This loads four invented catchments, the **showcase** and the **licence comparison map** (both below), each with one run (published by its
 owner, WP-2.3; Sandspruit's with an advisory notice in English and
 Afrikaans), for two local demo
 users: `demo@example.com` and `analyst@example.com`, password `demo-password`
@@ -170,6 +170,28 @@ warning appears, if a self-check fails, or if an example stops parsing as a
 project document. So an engine or schema change that leaves the examples
 behind shows up in `pnpm test`.
 
+### The licence comparison map
+
+**Example · Licence comparison map**, owned by `demo@example.com`, with
+`analyst@example.com` a viewer and **What viewers see** on, so both see the
+Allocations tab's map (issue #510, [allocations.md § The
+map](./allocations.md#the-map)). Open **Allocations**, press **Show the
+map**. Eight invented units on one river (`backend/scripts/examples/licenceMap.ts`,
+seeded by `licenceMapSeed.ts`): Groenkloof uses about 80 % of its volume
+(green) and holds a groundwater registration too (it has no borehole, so the
+**Groundwater** choice shows it using none of it); Oranjedraai 105 % and
+Randhoek exactly 100 % (orange, the band's lower edge); Rooiheuwel 130 %
+(light red); Brandvlei 200 % (bright red); Grysvlakte uses water with nothing
+registered (grey, hatched); Stilwater has no demand and nothing registered
+(outline only); Sonderkaart has no area on the map, so it is listed under
+it. The volumes aren't fixed numbers: after the baseline run the seed reads
+each unit's modelled mean surface use per whole water year from the
+comparison and registers that use ÷ its target ratio, so the bands hold
+whatever the engine's numbers do. `licenceMap.test.ts` asserts each unit's
+band. Seeded after the showcase and skipped with it (`SEED_SHOWCASE=0`);
+built under a working name and renamed when complete, so an interrupted seed
+is replaced by the next one.
+
 ### The showcase
 
 **Example · Showcase (every feature)**, owned by `demo@example.com` in the
@@ -194,7 +216,7 @@ aside by name, once its evidence nomination keeps it for good).
 | **Map** | The boundary, a parcel and a dam for each unit, both gauges, the town's works, the river, the boreholes, the river pump and the plantation, on the synthetic reference data's footprint, so the quaternary lookup, cultivated area from land cover and evaporation from the map all answer. |
 | **Runs & results / Compare** | *Before calibration (GR4J defaults)*, *Calibrated baseline* (pinned, with notes, **published** with a 20 % restriction notice in English and Afrikaans, nominated as **evidence**, with an uncertainty **ensemble**) and *Forecast (next 10 days)*: compare the first two to see the fit's effect. A **sensitivity sweep** and a **seasonal outlook** (demand at 100, 90 and 80 %). |
 | **Scenarios** | Five on the calibrated baseline, each with its run: a bigger dam, a new feedlot (a new demand), WUA **drought restrictions**, a crop change, and a drier climate (−15 % rain); and a cumulative **assessment** of the dam raise and the feedlot together. |
-| **Applications** | applicant@'s submitted *Raise the Vleiplaas dam*, run, with its prompts answered, for demo@ or analyst@ to assess. |
+| **Applications** | applicant@'s submitted *Raise the Vleiplaas dam*, run, with its prompts answered, for demo@ or analyst@ to assess: the dam raised by half, with a **pass-inflow release** that lets the EWR required at Vleiplaas through its on-channel dam before it stores (a hands-off flow would bind nothing there: the unit has no river pump and no River to dam). |
 | **Allocations** | Five registered water uses: a licence with months and a condition, an existing lawful use, a registration, a groundwater general authorisation and a dam's storage (21b); shown to viewers by unit. |
 | **Report / Evidence pack** | The evidence report of the calibrated baseline, and an evidence **pack** left a draft (signing and issuing need two-step sign-in). |
 | **Notes / History / Alerts / Share** | Notes on the project, a unit, a run and a scenario; the history of everything above; alert rules (a dam below 30 %, an EWR forecast failure, farms short) and demo@'s own subscription; a share link to the published baseline. |
@@ -670,6 +692,46 @@ A large workbook reads in a couple of seconds.
 
 A large workbook takes a minute or so to read with the Python script. It uses
 openpyxl's read-only mode, so memory stays bounded.
+
+### Which rules keep water for the EWR
+
+A run keeps water in the river for the EWR only through four rules, and all
+four are off by default; neither importer switches one on (issue #507). So a
+baseline run of an imported catchment *reports* the EWR but releases nothing
+for it, unless someone has since switched on:
+
+1. a dam's release rule **Pass inflow** (`damReleaseRule: 'passInflow'`;
+   with no monthly amounts it keeps the EWR required at the unit, with
+   amounts a set flow),
+2. a unit's **hands-off flow** (`handsOffM3Day`, and/or `handsOffEwr` to keep
+   the EWR),
+3. a river off-take's hands-off flow (a river transfer's `handsOffM3Day` /
+   `handsOffEwr`),
+4. the drought restriction rule's **EWR trigger**
+   (`settings.droughtRestriction.ewrTrigger`).
+
+To see which are on in a project, including the client's in production:
+
+1. Open the project and choose **Download project (JSON)** on the Project tab
+   (any member can, viewers too; `GET /projects/:id/export.json`). It reads
+   the stored model as you, through the app, so nothing touches the database
+   directly. Save a client project's file as
+   `data/client-catchment/export.json` (gitignored), never anywhere tracked.
+2. Run:
+
+   ```bash
+   pnpm list:ewr-rules data/client-catchment/export.json
+   ```
+
+It prints one line per rule switched on, with where it is (the unit, or the
+off-take's two ends), what it keeps (the EWR, a set flow in m³/day by
+water-year month, or the larger of the two) and, for a rule the run ignores
+as stored (on a unit without a dam, on a dam transfer, a switched-off
+transfer, 0 in every month, a trigger site that isn't an EWR gauge), why.
+With none on it says so: a run keeps nothing in the river for the EWR. Add
+`--json` for the list as data. The importer's `project.json` works the same
+way. It reads the file only (no DB, no server; the engine's
+`ewrReleaseRules`, `packages/engine/src/reserve/ewrReleaseRules.ts`).
 
 ## Multiple projects and teams
 

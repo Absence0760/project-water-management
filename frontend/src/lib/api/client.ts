@@ -699,6 +699,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			site: (id: string, seriesId: string, siteNodeId: string | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { siteNodeId }),
 			/** Where the values came from: a station, agency, file or feed; null clears it (107_series_source.sql). */
 			source: (id: string, seriesId: string, source: string | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { source }),
+			/** Set one day of a series by hand, or clear it (null); marked as edited by hand (212_series_hand_days). `unit` defaults to the series' own. */
+			setDay: (id: string, seriesId: string, date: string, value: number | null, unit?: string) =>
+				request<SeriesWriteResult>('PUT', `${p(id)}/series/${enc(seriesId)}/days/${enc(date)}`, { value, ...(unit ? { unit } : {}) }),
 			remove: (id: string, seriesId: string) =>
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},
