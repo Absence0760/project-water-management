@@ -1430,29 +1430,29 @@ run "alarms" {
 
   assert {
     condition = alltrue([for a in [
-      aws_cloudwatch_metric_alarm.lambda_errors,
-      aws_cloudwatch_metric_alarm.lambda_throttles,
-      aws_cloudwatch_metric_alarm.lambda_duration,
-      aws_cloudwatch_metric_alarm.unhandled_error,
-      aws_cloudwatch_metric_alarm.login_failed,
-      aws_cloudwatch_metric_alarm.migrate_errors,
-      aws_cloudwatch_metric_alarm.rds_cpu,
-      aws_cloudwatch_metric_alarm.rds_cpu_credits,
-      aws_cloudwatch_metric_alarm.rds_free_storage,
-      aws_cloudwatch_metric_alarm.rds_connections,
-      aws_cloudwatch_metric_alarm.rds_freeable_memory,
-      aws_cloudwatch_metric_alarm.ses_bounce_rate,
-      aws_cloudwatch_metric_alarm.ses_complaint_rate,
-      aws_cloudwatch_metric_alarm.jobs_dlq_depth,
-      aws_cloudwatch_metric_alarm.worker_errors,
-      aws_cloudwatch_metric_alarm.worker_throttles,
-      aws_cloudwatch_metric_alarm.worker_heartbeat,
-      aws_cloudwatch_metric_alarm.worker_tick_failed,
-      aws_cloudwatch_metric_alarm.jobs_backlog,
-      aws_cloudwatch_metric_alarm.job_dead,
-      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth,
-      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth,
-      aws_cloudwatch_metric_alarm.fetcher_errors,
+      aws_cloudwatch_metric_alarm.lambda_errors[0],
+      aws_cloudwatch_metric_alarm.lambda_throttles[0],
+      aws_cloudwatch_metric_alarm.lambda_duration[0],
+      aws_cloudwatch_metric_alarm.unhandled_error[0],
+      aws_cloudwatch_metric_alarm.login_failed[0],
+      aws_cloudwatch_metric_alarm.migrate_errors[0],
+      aws_cloudwatch_metric_alarm.rds_cpu[0],
+      aws_cloudwatch_metric_alarm.rds_cpu_credits[0],
+      aws_cloudwatch_metric_alarm.rds_free_storage[0],
+      aws_cloudwatch_metric_alarm.rds_connections[0],
+      aws_cloudwatch_metric_alarm.rds_freeable_memory[0],
+      aws_cloudwatch_metric_alarm.ses_bounce_rate[0],
+      aws_cloudwatch_metric_alarm.ses_complaint_rate[0],
+      aws_cloudwatch_metric_alarm.jobs_dlq_depth[0],
+      aws_cloudwatch_metric_alarm.worker_errors[0],
+      aws_cloudwatch_metric_alarm.worker_throttles[0],
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0],
+      aws_cloudwatch_metric_alarm.worker_tick_failed[0],
+      aws_cloudwatch_metric_alarm.jobs_backlog[0],
+      aws_cloudwatch_metric_alarm.job_dead[0],
+      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0],
+      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0],
+      aws_cloudwatch_metric_alarm.fetcher_errors[0],
     ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn])])
     error_message = "Every regional alarm must notify the alerts SNS topic."
   }
@@ -1460,10 +1460,10 @@ run "alarms" {
   # alarm can only notify a topic in its own region.
   assert {
     condition = alltrue([for a in [
-      aws_cloudwatch_metric_alarm.cloudfront_5xx,
-      aws_cloudwatch_metric_alarm.cloudfront_requests,
-      aws_cloudwatch_metric_alarm.cloudfront_bytes,
-      aws_cloudwatch_metric_alarm.waf_blocked_requests,
+      aws_cloudwatch_metric_alarm.cloudfront_5xx[0],
+      aws_cloudwatch_metric_alarm.cloudfront_requests[0],
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0],
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0],
     ] : a.alarm_actions == toset([aws_sns_topic.alerts_us_east_1.arn])])
     error_message = "Every us-east-1 alarm (CloudFront, WAF) must notify the us-east-1 alerts topic."
   }
@@ -1471,73 +1471,73 @@ run "alarms" {
   # --- Request-flood alarm (alarms.tf; issue #126, the audit's one High) -----
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.cloudfront_requests.namespace == "AWS/CloudFront" &&
-      aws_cloudwatch_metric_alarm.cloudfront_requests.metric_name == "Requests" &&
-      aws_cloudwatch_metric_alarm.cloudfront_requests.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.cloudfront_requests.period == 300 &&
-      aws_cloudwatch_metric_alarm.cloudfront_requests.dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
+      aws_cloudwatch_metric_alarm.cloudfront_requests[0].namespace == "AWS/CloudFront" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests[0].metric_name == "Requests" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests[0].period == 300 &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests[0].dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
     )
     error_message = "The request-flood alarm must sum this distribution's Requests (Region = Global) over 5 minutes."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.cloudfront_requests.threshold == 5000 && aws_cloudwatch_metric_alarm.cloudfront_requests.comparison_operator == "GreaterThanThreshold" && aws_cloudwatch_metric_alarm.cloudfront_requests.evaluation_periods == 1
+    condition     = aws_cloudwatch_metric_alarm.cloudfront_requests[0].threshold == 5000 && aws_cloudwatch_metric_alarm.cloudfront_requests[0].comparison_operator == "GreaterThanThreshold" && aws_cloudwatch_metric_alarm.cloudfront_requests[0].evaluation_periods == 1
     error_message = "By default the request-flood alarm fires on the first 5 minutes over 5,000 requests (a flood just under it costs $2.30-4.03/day)."
   }
   # --- Egress alarm: bytes, which the request alarm can't see (the tiles) ----
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.namespace == "AWS/CloudFront" &&
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.metric_name == "BytesDownloaded" &&
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.period == 300 &&
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.evaluation_periods == 1 &&
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.comparison_operator == "GreaterThanThreshold" &&
-      aws_cloudwatch_metric_alarm.cloudfront_bytes.dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].namespace == "AWS/CloudFront" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].metric_name == "BytesDownloaded" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].period == 300 &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].evaluation_periods == 1 &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes[0].dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
     )
     error_message = "The egress alarm must sum this distribution's BytesDownloaded (Region = Global) over 5 minutes and fire on the first period over."
   }
   assert {
     # One address at the tiles rule's limit, every range the 2 MiB tiles_range allows, must trip it in one period.
-    condition     = aws_cloudwatch_metric_alarm.cloudfront_bytes.threshold == 536870912 && aws_cloudwatch_metric_alarm.cloudfront_bytes.threshold < var.waf_tiles_rate_limit_per_ip * 2097152
+    condition     = aws_cloudwatch_metric_alarm.cloudfront_bytes[0].threshold == 536870912 && aws_cloudwatch_metric_alarm.cloudfront_bytes[0].threshold < var.waf_tiles_rate_limit_per_ip * 2097152
     error_message = "By default the egress alarm fires over 0.5 GB in 5 minutes, below what one address can pull at the WAF's tiles limit."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.namespace == "AWS/WAFV2" &&
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.metric_name == "BlockedRequests" &&
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.dimensions == tomap({ WebACL = "water-management-frontend-acl", Rule = "ALL" })
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].namespace == "AWS/WAFV2" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].metric_name == "BlockedRequests" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].dimensions == tomap({ WebACL = "water-management-frontend-acl", Rule = "ALL" })
     )
     error_message = "The WAF alarm must sum BlockedRequests across every rule (Rule = ALL) of the ACL, by its metric name, with no Region dimension (CLOUDFRONT scope)."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.waf_blocked_requests.dimensions["WebACL"] == aws_wafv2_web_acl.frontend.visibility_config[0].metric_name
+    condition     = aws_cloudwatch_metric_alarm.waf_blocked_requests[0].dimensions["WebACL"] == aws_wafv2_web_acl.frontend.visibility_config[0].metric_name
     error_message = "The WebACL dimension is the ACL's CloudWatch metric name."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.threshold == 100 &&
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.period == 300 &&
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.evaluation_periods == 3 &&
-      aws_cloudwatch_metric_alarm.waf_blocked_requests.datapoints_to_alarm == 3
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].threshold == 100 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].period == 300 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].evaluation_periods == 3 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests[0].datapoints_to_alarm == 3
     )
     error_message = "The WAF alarm fires on sustained blocks only: over 100 in each of three 5-minute periods."
   }
   assert {
-    condition     = strcontains(aws_cloudwatch_metric_alarm.cloudfront_requests.alarm_description, "docs/deployment.md, Runbooks, Request flood") && strcontains(aws_cloudwatch_metric_alarm.waf_blocked_requests.alarm_description, "docs/deployment.md, Runbooks, Request flood")
+    condition     = strcontains(aws_cloudwatch_metric_alarm.cloudfront_requests[0].alarm_description, "docs/deployment.md, Runbooks, Request flood") && strcontains(aws_cloudwatch_metric_alarm.waf_blocked_requests[0].alarm_description, "docs/deployment.md, Runbooks, Request flood")
     error_message = "Both edge alarms must point the operator at the Request flood runbook."
   }
 
   assert {
-    condition     = aws_cloudwatch_metric_alarm.lambda_duration.threshold == 24000
+    condition     = aws_cloudwatch_metric_alarm.lambda_duration[0].threshold == 24000
     error_message = "Duration alarm fires at 80% of the 30 s timeout."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.rds_connections.threshold < 80
+    condition     = aws_cloudwatch_metric_alarm.rds_connections[0].threshold < 80
     error_message = "Connection alarm must fire below db.t4g.micro's ~80 max_connections."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.ses_bounce_rate.threshold < 0.05 && aws_cloudwatch_metric_alarm.ses_complaint_rate.threshold < 0.001
+    condition     = aws_cloudwatch_metric_alarm.ses_bounce_rate[0].threshold < 0.05 && aws_cloudwatch_metric_alarm.ses_complaint_rate[0].threshold < 0.001
     error_message = "SES alarms must fire before AWS's review thresholds (5% bounce, 0.1% complaint)."
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
@@ -1629,28 +1629,28 @@ run "alarms" {
   # --- Self-check-failed metric filter + alarm ----------------------------
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.self_check_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.self_check_failed_worker.log_group_name == aws_cloudwatch_log_group.worker.name
+      aws_cloudwatch_log_metric_filter.self_check_failed[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker[0].log_group_name == aws_cloudwatch_log_group.worker.name
     )
     error_message = "Self-check failures must be counted from both log groups: the API's (user runs) and the worker's (automatic re-runs, forecast runs)."
   }
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.message.event = \"self_check_failed\" }"
+    condition     = aws_cloudwatch_log_metric_filter.self_check_failed[0].pattern == "{ $.message.event = \"self_check_failed\" }"
     error_message = "The filter must match executeRun's structured event name exactly."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.self_check_failed.metric_name == aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.self_check_failed.namespace == aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].namespace
+      aws_cloudwatch_metric_alarm.self_check_failed[0].metric_name == aws_cloudwatch_log_metric_filter.self_check_failed[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.self_check_failed[0].namespace == aws_cloudwatch_log_metric_filter.self_check_failed[0].metric_transformation[0].namespace
     )
     error_message = "The alarm must watch the metric the filter emits."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.self_check_failed.threshold == 0 && aws_cloudwatch_metric_alarm.self_check_failed.comparison_operator == "GreaterThanThreshold"
+    condition     = aws_cloudwatch_metric_alarm.self_check_failed[0].threshold == 0 && aws_cloudwatch_metric_alarm.self_check_failed[0].comparison_operator == "GreaterThanThreshold"
     error_message = "The alarm must fire on any self-check failure (> 0 in the period)."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.self_check_failed.alarm_actions == toset([aws_sns_topic.alerts.arn])
+    condition     = aws_cloudwatch_metric_alarm.self_check_failed[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
     error_message = "The self-check alarm must notify the same alerts SNS topic as every other alarm."
   }
 }
@@ -1959,38 +1959,38 @@ run "background_jobs" {
 
   # --- Alarms -----------------------------------------------------------------------
   assert {
-    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth.threshold == 0 && one([for m in aws_cloudwatch_metric_alarm.jobs_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.jobs_dlq.name
+    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth[0].threshold == 0 && one([for m in aws_cloudwatch_metric_alarm.jobs_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.jobs_dlq.name
     error_message = "A new message in the jobs DLQ must alarm (the arrival expression: observability.tftest.hcl)."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.jobs_backlog.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog.metric_name == "OldestDueJobAgeSeconds"
+    condition     = aws_cloudwatch_metric_alarm.jobs_backlog[0].namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog[0].metric_name == "OldestDueJobAgeSeconds"
     error_message = "The backlog alarm must read the metric lambda-worker.ts emits (METRIC_NAMESPACE, OldestDueJobAgeSeconds)."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.worker_heartbeat.namespace == "AWS/Lambda" &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.metric_name == "Invocations" &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.comparison_operator == "LessThanThreshold" &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.threshold == 1 &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.period * aws_cloudwatch_metric_alarm.worker_heartbeat.evaluation_periods == 900 &&
-      aws_cloudwatch_metric_alarm.worker_heartbeat.treat_missing_data == "breaching"
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].namespace == "AWS/Lambda" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].metric_name == "Invocations" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].comparison_operator == "LessThanThreshold" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].threshold == 1 &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].period * aws_cloudwatch_metric_alarm.worker_heartbeat[0].evaluation_periods == 900 &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat[0].treat_missing_data == "breaching"
     )
     error_message = "The worker heartbeat must alarm on < 1 invocation in 15 minutes (three ticks), with missing data breaching: a stopped worker emits no data."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.worker_tick_failed.namespace == "AWS/Events" &&
-      aws_cloudwatch_metric_alarm.worker_tick_failed.metric_name == "FailedInvocations" &&
-      aws_cloudwatch_metric_alarm.worker_tick_failed.dimensions["RuleName"] == aws_cloudwatch_event_rule.worker_tick.name &&
-      aws_cloudwatch_metric_alarm.worker_tick_failed.comparison_operator == "GreaterThanThreshold" &&
-      aws_cloudwatch_metric_alarm.worker_tick_failed.threshold == 0
+      aws_cloudwatch_metric_alarm.worker_tick_failed[0].namespace == "AWS/Events" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed[0].metric_name == "FailedInvocations" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed[0].dimensions["RuleName"] == aws_cloudwatch_event_rule.worker_tick.name &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed[0].comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed[0].threshold == 0
     )
     error_message = "EventBridge failing to deliver the worker tick must alarm (FailedInvocations > 0 on the worker-tick rule)."
   }
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.message.event = \"job_dead\" }"
+    condition     = aws_cloudwatch_log_metric_filter.job_dead[0].log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead[0].pattern == "{ $.message.event = \"job_dead\" }"
     error_message = "The dead-job filter must match runner.ts's structured event in the worker's log group."
   }
 
@@ -2009,8 +2009,8 @@ run "background_jobs" {
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.alert_storm.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.alert_storm.metric_name == "AlertMailsSent" &&
-      aws_cloudwatch_metric_alarm.alert_storm.alarm_actions == toset([aws_sns_topic.alerts.arn])
+      aws_cloudwatch_metric_alarm.alert_storm[0].namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.alert_storm[0].metric_name == "AlertMailsSent" &&
+      aws_cloudwatch_metric_alarm.alert_storm[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
     )
     error_message = "The alert-storm alarm must read the metric lambda-worker.ts emits (AlertMailsSent) and notify the alerts topic."
   }
@@ -2124,9 +2124,9 @@ run "mail_suppression" {
   # --- Alarm ------------------------------------------------------------------------
   assert {
     condition = (
-      one([for m in aws_cloudwatch_metric_alarm.mail_events_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.mail_events_dlq.name &&
-      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.alarm_actions == toset([aws_sns_topic.alerts.arn])
+      one([for m in aws_cloudwatch_metric_alarm.mail_events_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.mail_events_dlq.name &&
+      aws_cloudwatch_metric_alarm.mail_events_dlq_depth[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.mail_events_dlq_depth[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
     )
     error_message = "A new message in the mail-events DLQ must alarm."
   }
@@ -2238,15 +2238,15 @@ run "data_feeds" {
   # --- Alarms -----------------------------------------------------------------------
   assert {
     condition = (
-      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq.name &&
-      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq.name &&
-      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.threshold == 0
+      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq.name &&
+      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0].threshold == 0
     )
     error_message = "A new message in either feed DLQ must alarm."
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.fetcher_errors.dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name
+    condition     = aws_cloudwatch_metric_alarm.fetcher_errors[0].dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name
     error_message = "Fetcher errors must alarm."
   }
 }
@@ -2524,10 +2524,10 @@ run "reports" {
   }
   assert {
     condition = (
-      one([for m in aws_cloudwatch_metric_alarm.render_requests_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_requests_dlq.name &&
-      one([for m in aws_cloudwatch_metric_alarm.render_results_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_results_dlq.name &&
-      aws_cloudwatch_metric_alarm.render_requests_dlq_depth.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.render_results_dlq_depth.threshold == 0
+      one([for m in aws_cloudwatch_metric_alarm.render_requests_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_requests_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.render_results_dlq_depth[0].metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_results_dlq.name &&
+      aws_cloudwatch_metric_alarm.render_requests_dlq_depth[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.render_results_dlq_depth[0].threshold == 0
     )
     error_message = "A new message in either render DLQ must alarm."
   }
@@ -3244,9 +3244,9 @@ run "mail_failures_and_log_privacy" {
 
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.self_check_failed_worker.pattern == aws_cloudwatch_log_metric_filter.self_check_failed.pattern &&
-      aws_cloudwatch_log_metric_filter.self_check_failed_worker.metric_transformation[0].name == aws_cloudwatch_metric_alarm.self_check_failed.metric_name &&
-      aws_cloudwatch_log_metric_filter.self_check_failed_worker.metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.self_check_failed.namespace
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker[0].pattern == aws_cloudwatch_log_metric_filter.self_check_failed[0].pattern &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker[0].metric_transformation[0].name == aws_cloudwatch_metric_alarm.self_check_failed[0].metric_name &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker[0].metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.self_check_failed[0].namespace
     )
     error_message = "The worker's self-check filter must match the same event and feed the metric the self-check alarm watches."
   }
@@ -3260,43 +3260,43 @@ run "mail_failures_and_log_privacy" {
   }
   assert {
     condition = alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed :
-      f.metric_transformation[0].name == aws_cloudwatch_metric_alarm.mail_send_failed.metric_name &&
-      f.metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.mail_send_failed.namespace
+      f.metric_transformation[0].name == aws_cloudwatch_metric_alarm.mail_send_failed[0].metric_name &&
+      f.metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.mail_send_failed[0].namespace
     ])
     error_message = "The mail-send alarm must watch the metric both filters emit."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.mail_send_failed.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.mail_send_failed.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.mail_send_failed.comparison_operator == "GreaterThanThreshold" &&
-      aws_cloudwatch_metric_alarm.mail_send_failed.treat_missing_data == "notBreaching" &&
-      contains(aws_cloudwatch_metric_alarm.mail_send_failed.alarm_actions, aws_sns_topic.alerts.arn)
+      aws_cloudwatch_metric_alarm.mail_send_failed[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.mail_send_failed[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.mail_send_failed[0].comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.mail_send_failed[0].treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.mail_send_failed[0].alarm_actions, aws_sns_topic.alerts.arn)
     )
     error_message = "One failed email must page the alerts topic."
   }
 
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.unhandled_error.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.message.event = \"unhandled_error\" }"
+      aws_cloudwatch_log_metric_filter.unhandled_error[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.unhandled_error[0].pattern == "{ $.message.event = \"unhandled_error\" }"
     )
     error_message = "unhandled_error must be counted from the API's log group, by the exact event name handleError logs."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.unhandled_error.metric_name == aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.unhandled_error.namespace == aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].namespace
+      aws_cloudwatch_metric_alarm.unhandled_error[0].metric_name == aws_cloudwatch_log_metric_filter.unhandled_error[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.unhandled_error[0].namespace == aws_cloudwatch_log_metric_filter.unhandled_error[0].metric_transformation[0].namespace
     )
     error_message = "The unhandled-error alarm must watch the metric the filter emits."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.unhandled_error.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.unhandled_error.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.unhandled_error.comparison_operator == "GreaterThanThreshold" &&
-      aws_cloudwatch_metric_alarm.unhandled_error.treat_missing_data == "notBreaching" &&
-      contains(aws_cloudwatch_metric_alarm.unhandled_error.alarm_actions, aws_sns_topic.alerts.arn)
+      aws_cloudwatch_metric_alarm.unhandled_error[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.unhandled_error[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.unhandled_error[0].comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.unhandled_error[0].treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.unhandled_error[0].alarm_actions, aws_sns_topic.alerts.arn)
     )
     error_message = "One unhandled 500 must page the alerts topic."
   }
@@ -3305,27 +3305,27 @@ run "mail_failures_and_log_privacy" {
   # can't see one password sprayed over many accounts.
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.message.event = \"login_failed\" }"
+      aws_cloudwatch_log_metric_filter.login_failed[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.login_failed[0].pattern == "{ $.message.event = \"login_failed\" }"
     )
     error_message = "login_failed must be counted from the API's log group, by the exact event name logLoginFailed logs (backend/src/auth/loginFailed.ts)."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.login_failed.metric_name == aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.login_failed.namespace == aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].namespace
+      aws_cloudwatch_metric_alarm.login_failed[0].metric_name == aws_cloudwatch_log_metric_filter.login_failed[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.login_failed[0].namespace == aws_cloudwatch_log_metric_filter.login_failed[0].metric_transformation[0].namespace
     )
     error_message = "The login-failed alarm must watch the metric the filter emits."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.login_failed.threshold == 30 &&
-      aws_cloudwatch_metric_alarm.login_failed.period == 900 &&
-      aws_cloudwatch_metric_alarm.login_failed.evaluation_periods == 1 &&
-      aws_cloudwatch_metric_alarm.login_failed.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.login_failed.comparison_operator == "GreaterThanThreshold" &&
-      aws_cloudwatch_metric_alarm.login_failed.treat_missing_data == "notBreaching" &&
-      contains(aws_cloudwatch_metric_alarm.login_failed.alarm_actions, aws_sns_topic.alerts.arn)
+      aws_cloudwatch_metric_alarm.login_failed[0].threshold == 30 &&
+      aws_cloudwatch_metric_alarm.login_failed[0].period == 900 &&
+      aws_cloudwatch_metric_alarm.login_failed[0].evaluation_periods == 1 &&
+      aws_cloudwatch_metric_alarm.login_failed[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.login_failed[0].comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.login_failed[0].treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.login_failed[0].alarm_actions, aws_sns_topic.alerts.arn)
     )
     error_message = "More than 30 failed sign-ins in 15 minutes (the default) must page the alerts topic."
   }
@@ -3450,9 +3450,9 @@ run "worker_sqs_triggers" {
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.worker_throttles.metric_name == "Throttles" &&
-      aws_cloudwatch_metric_alarm.worker_throttles.dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
-      aws_cloudwatch_metric_alarm.worker_throttles.threshold == 0
+      aws_cloudwatch_metric_alarm.worker_throttles[0].metric_name == "Throttles" &&
+      aws_cloudwatch_metric_alarm.worker_throttles[0].dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
+      aws_cloudwatch_metric_alarm.worker_throttles[0].threshold == 0
     )
     error_message = "Any worker throttle must alarm."
   }

@@ -571,6 +571,7 @@ resource "aws_cloudfront_origin_request_policy" "report_downloads" {
 # --- Alarms -----------------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "render_requests_dlq_depth" {
+  count = local.alarms_full ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-render-requests-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -602,6 +603,7 @@ resource "aws_cloudwatch_metric_alarm" "render_requests_dlq_depth" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "render_results_dlq_depth" {
+  count = local.alarms_full ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-render-results-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -633,7 +635,7 @@ resource "aws_cloudwatch_metric_alarm" "render_results_dlq_depth" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "renderer_errors" {
-  count = local.renderer_enabled ? 1 : 0
+  count = local.renderer_enabled && local.alarms_full ? 1 : 0
 
   alarm_name          = "${local.project}-renderer-errors"
   comparison_operator = "GreaterThanThreshold"
@@ -655,7 +657,7 @@ resource "aws_cloudwatch_metric_alarm" "renderer_errors" {
 # The renderer hit its reserved concurrency: a throttled SQS poll still counts
 # a receive, so a sustained run dead-letters render requests.
 resource "aws_cloudwatch_metric_alarm" "renderer_throttles" {
-  count = local.renderer_enabled ? 1 : 0
+  count = local.renderer_enabled && local.alarms_full ? 1 : 0
 
   alarm_name          = "${local.project}-renderer-throttles"
   comparison_operator = "GreaterThanThreshold"
@@ -682,6 +684,7 @@ resource "aws_cloudwatch_metric_alarm" "renderer_throttles" {
 # longest a worked message waits, and the worker has given up on the report
 # (store.ts, 1 hour) well before, so 30 minutes means nothing is rendering.
 resource "aws_cloudwatch_metric_alarm" "render_requests_age" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-render-requests-age"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -707,6 +710,7 @@ resource "aws_cloudwatch_metric_alarm" "render_requests_age" {
 # text or the render token. The log group exists before the function does, so
 # this filter and its alarm are not gated on renderer_enabled.
 resource "aws_cloudwatch_log_metric_filter" "report_render_failed" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-report-render-failed"
   log_group_name = aws_cloudwatch_log_group.renderer.name
   pattern        = "{ $.message.event = \"report_render_failed\" }"
@@ -721,11 +725,12 @@ resource "aws_cloudwatch_log_metric_filter" "report_render_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "report_render_failed" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-report-render-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.report_render_failed[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.report_render_failed[0].metric_transformation[0].namespace
   period              = 3600
   statistic           = "Sum"
   threshold           = 0
@@ -736,7 +741,7 @@ resource "aws_cloudwatch_metric_alarm" "report_render_failed" {
 
 # A render creeping towards the 120 s limit (the app's own cap is 100 s).
 resource "aws_cloudwatch_metric_alarm" "renderer_duration" {
-  count = local.renderer_enabled ? 1 : 0
+  count = local.renderer_enabled && local.alarms_full ? 1 : 0
 
   alarm_name          = "${local.project}-renderer-duration"
   comparison_operator = "GreaterThanThreshold"

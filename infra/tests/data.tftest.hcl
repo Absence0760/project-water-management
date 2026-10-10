@@ -770,21 +770,21 @@ run "db_cpu_credit_alarms" {
   # throttling. The descriptions must say so.
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.rds_cpu_credits.metric_name == "CPUCreditBalance"
-      && !strcontains(lower(aws_cloudwatch_metric_alarm.rds_cpu_credits.alarm_description), "about to be throttled")
-      && strcontains(aws_cloudwatch_metric_alarm.rds_cpu_credits.alarm_description, "Unlimited")
+      aws_cloudwatch_metric_alarm.rds_cpu_credits[0].metric_name == "CPUCreditBalance"
+      && !strcontains(lower(aws_cloudwatch_metric_alarm.rds_cpu_credits[0].alarm_description), "about to be throttled")
+      && strcontains(aws_cloudwatch_metric_alarm.rds_cpu_credits[0].alarm_description, "Unlimited")
     )
     error_message = "The CPU-credit balance alarm must describe T4g Unlimited (billed surplus), not throttling."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.metric_name == "CPUSurplusCreditsCharged"
-      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.namespace == "AWS/RDS"
-      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.statistic == "Sum"
-      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.comparison_operator == "GreaterThanThreshold"
-      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.threshold == 0
-      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.dimensions["DBInstanceIdentifier"] == "water-management"
-      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged.alarm_actions == toset([aws_sns_topic.alerts.arn])
+      aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].metric_name == "CPUSurplusCreditsCharged"
+      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].namespace == "AWS/RDS"
+      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].statistic == "Sum"
+      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].comparison_operator == "GreaterThanThreshold"
+      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].threshold == 0
+      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].dimensions["DBInstanceIdentifier"] == "water-management"
+      && aws_cloudwatch_metric_alarm.rds_cpu_surplus_charged[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
     )
     error_message = "Any charged surplus CPU credit (CPUSurplusCreditsCharged, Sum > 0) on the DB must page the alerts topic."
   }
