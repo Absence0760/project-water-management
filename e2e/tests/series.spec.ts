@@ -598,7 +598,8 @@ test('the Series details row labels the charted series’ product, where measure
 	await flow.getByRole('button', { name: 'View', exact: true }).click();
 	const details = page.getByRole('group', { name: 'Series details' });
 	await expect(details.getByRole('term')).toHaveText(['Measured at', 'Source', 'Upload unit']);
-	await expect(details.getByTestId('series-given-unit')).toHaveText('Not recorded');
+	// The upload records the unit it was given in (here m³/s, no conversion).
+	await expect(details.getByTestId('series-given-unit')).toHaveText('m³/s');
 	const site = details.getByRole('combobox', { name: 'Measured at' });
 	await expect(site.getByRole('option')).toHaveText(['The outlet', 'Gauge Middle weir']);
 	await site.selectOption({ label: 'Gauge Middle weir' });
@@ -624,7 +625,7 @@ test('the Series details row labels the charted series’ product, where measure
 	await vFlow.getByRole('button', { name: 'View', exact: true }).click();
 	const vDetails = v.getByRole('group', { name: 'Series details' });
 	await expect(vDetails.getByRole('term')).toHaveText(['Measured at', 'Source', 'Upload unit']);
-	await expect(vDetails.getByRole('definition')).toHaveText(['Gauge Middle weir', 'DWS X1H001', 'Not recorded']);
+	await expect(vDetails.getByRole('definition')).toHaveText(['Gauge Middle weir', 'DWS X1H001', 'm³/s']);
 	await expect(vDetails.getByRole('combobox')).toHaveCount(0);
 	await expect(vDetails.getByRole('textbox')).toHaveCount(0);
 	await expectNoViolations(v);

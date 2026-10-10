@@ -132,7 +132,8 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	expect(Math.abs(chart.y + chart.height - (bars.y + bars.height))).toBeLessThan(2);
 	expect(chart.height).toBeGreaterThan(500);
 	expect((await page.locator('#res-ewr figure.chart .u-over').boundingBox())!.height).toBeGreaterThan(300);
-	expect((await page.locator('#res-ewr-grid').boundingBox())!.y).toBeLessThan(vh);
+	// The next panel is Reserve rules met (or its stub; findings first, issue #465).
+	expect((await page.locator('#res-reserve').boundingBox())!.y).toBeLessThan(vh);
 	expect(await innerScrollers(page)).toEqual([]);
 });
 
