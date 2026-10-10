@@ -48,7 +48,8 @@ const ref = (d: number) => 1 + (((d % 7) + 7) % 7);
 
 describe("rain-source 'fit' factors and a reanalysis fallback", () => {
 	// WY 2012–2016 the primary reads 2 × the reanalysis; WY 2017 is replaced by an alt gauge reading 0.8 × reanalysis.
-	const days = span('2012-10-01', '2018-09-30');
+	const wyEnd = fromEpochDay(toEpochDay('2017-10-01') + 364); // WY 2017's last day
+	const days = span('2012-10-01', wyEnd);
 	const d0 = days[0]!;
 	const p0 = toEpochDay('2017-10-01');
 	const primary = days.map((d) => (d >= p0 ? 50 : 2 * ref(d))); // nonsense in the period: never read
@@ -61,7 +62,7 @@ describe("rain-source 'fit' factors and a reanalysis fallback", () => {
 	};
 	const period = {
 		start: '2017-10-01',
-		end: '2018-09-30',
+		end: wyEnd,
 		series: 'rain_catchment_alt_mm' as const,
 		factors: 'fit' as const,
 		fitReference: { series: 'rain_reanalysis_mm' as const, fromWaterYear: 2012, toWaterYear: 2016 },
@@ -95,7 +96,7 @@ describe("rain-source 'fit' factors and a reanalysis fallback", () => {
 					rainSource: [
 						{
 							start: '2017-10-01',
-							end: '2018-09-30',
+							end: wyEnd,
 							series: 'rain_catchment_alt_mm',
 							factors: new Array(12).fill(1.25),
 							provenance: { source: 'invented', fittedFrom: '2012-10-01', fittedTo: '2017-09-30', method: 'invented' },

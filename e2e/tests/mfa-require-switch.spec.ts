@@ -10,23 +10,16 @@
 // banner, and the project stays), and, once signed in with a code, does it
 // (positive control). Team: an admin turns the team's switch on; a co-admin on a
 // password is refused an admin action (renaming the team), and passes with a code.
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 import { base32Decode, hotp, totpStep } from '../../backend/src/auth/totp.ts';
 import { acceptInvites, addMember, createProject, PASSWORD } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL, MFA_API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { viaMfaApi } from '../support/mfaApi.ts';
 import { openProject } from '../support/project.ts';
 import { openRowMenu, row } from '../support/projects.ts';
 import { openTeamSettings } from '../support/teams.ts';
-
-/** Every API call the page makes goes to the API with the requirement on. */
-async function viaMfaApi(page: Page) {
-	await page.route(`${API_URL}/**`, async (route) => {
-		const response = await route.fetch({ url: route.request().url().replace(API_URL, MFA_API_URL) });
-		await route.fulfill({ response });
-	});
-}
 
 /** An authenticator for the context's account, through the API: the session it shares is reissued as signed in with a code. */
 async function appOn(request: APIRequestContext): Promise<void> {

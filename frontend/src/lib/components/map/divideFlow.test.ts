@@ -106,14 +106,14 @@ describe('the points', () => {
 });
 
 describe('the ticks', () => {
-	const p = plan([unit('top', { role: 'abstraction', drainsInto: 'gauge' }), unit('gauge', { nodeId: null, name: 'G1', role: 'gauge', areaM2: null, geometry: null, current: null })]);
+	const p = plan([unit('top', { role: 'abstraction', drainsInto: 'gauge' }), unit('gauge', { nodeId: null, name: 'G4', role: 'gauge', areaM2: null, geometry: null, current: null })]);
 
 	it('open unticked, a new gauge named as its point; tick every value ticks what was proposed', () => {
 		const t = initialDivideTicks(p);
 		expect(t).toEqual({
 			units: [
 				{ key: 'top', area: false, drainsInto: false, runoffToDam: false, add: false },
-				{ key: 'gauge', area: false, drainsInto: false, runoffToDam: false, add: false, name: 'G1' }
+				{ key: 'gauge', area: false, drainsInto: false, runoffToDam: false, add: false, name: 'G4' }
 			],
 			rest: { to: 'none' }
 		});
@@ -121,7 +121,7 @@ describe('the ticks', () => {
 		expect(divideOffers(p.units[1]!)).toEqual({ add: true, area: false, drainsInto: true, runoffToDam: false, upstreamToDam: false });
 		expect(tickAllDivide(p, t).units).toEqual([
 			{ key: 'top', area: true, drainsInto: true, runoffToDam: false, add: false },
-			{ key: 'gauge', area: false, drainsInto: true, runoffToDam: false, add: true, name: 'G1' }
+			{ key: 'gauge', area: false, drainsInto: true, runoffToDam: false, add: true, name: 'G4' }
 		]);
 	});
 
@@ -129,14 +129,14 @@ describe('the ticks', () => {
 		const names = nodes.map((n) => n.name);
 		const t = initialDivideTicks(p);
 		t.units[0]!.drainsInto = true;
-		expect(divideProblem(p, t, names)).toMatch(/new gauge G1, which isn’t being added/);
+		expect(divideProblem(p, t, names)).toMatch(/new gauge G4, which isn’t being added/);
 		t.units[1]!.add = true;
 		expect(divideProblem(p, t, names)).toBeNull();
 		t.units[1]!.name = 'mid weir';
 		expect(divideProblem(p, t, names)).toMatch(/Two hydrological units would be called “mid weir”/);
 		t.units[1]!.name = ' ';
 		expect(divideProblem(p, t, names)).toMatch(/Name the new gauge/);
-		t.units[1] = { ...t.units[1]!, add: false, name: 'G1', drainsInto: true };
+		t.units[1] = { ...t.units[1]!, add: false, name: 'G4', drainsInto: true };
 		t.units[0]!.drainsInto = false;
 		expect(divideProblem(p, t, names)).toMatch(/tick Add it before/);
 		const r = initialDivideTicks(p);

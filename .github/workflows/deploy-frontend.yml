@@ -131,7 +131,7 @@ jobs:
       # SDK's and adds its two origins to the meta CSP.
       # The engine build record (WP-3.13, docs/model.md §2.10f): the engine's
       # unit suite, its invariant tests included, with a soak of 1 600 random
-      # networks (4× CI's; each shard's time budget is 0.2 s a case, so a
+      # networks (4× CI's; each shard's time budget is set per case, so a
       # larger soak needs the budget raised first). A failure stops the
       # release. The script puts ENGINE_BUILD in $GITHUB_ENV, which the next
       # step's build injects (frontend/vite.config.ts), so every report of

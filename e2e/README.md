@@ -29,7 +29,8 @@ pnpm -C e2e e2e:list      # list the tests without running them
    **:7801** (in the main checkout). A second backend on **:3201** runs with
    the two-step sign-in requirement on (`MFA_REQUIRED` unset, as in
    production; the first has it off) against the same database:
-   `mfa-required.spec.ts` sends the browser's API calls there, so a real
+   `mfa-required.spec.ts` sends the browser's API calls there
+   (`support/mfaApi.ts` `viaMfaApi`), so a real
    server refuses an owner's action. That second backend mails through
    Mailpit (SMTP :1026), so `mfa-email-mailpit.spec.ts` reads the emailed
    two-step codes there (206) and `mfa-reset-mailpit.spec.ts` a reset's
@@ -225,6 +226,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `support/global-setup.ts` | Rebuilds the checkout's e2e database |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
 | `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the first backend's log (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make. `plantEmailCode` replaces an account's live emailed two-step code with one the spec knows (206; HMAC under the e2e `APP_ENCRYPTION_KEY`), and `ageEmailCodeSends` moves its send log back a minute, so "Send again" needs no wait. For a second-factor reset (205): `endMfaResetWait` (the 3-day wait ends now, for the next tick), `mfaResetState`, and `keepRecoveryCodes` (leave n codes) |
+| `support/mfaApi.ts` | `viaMfaApi(page)`: the page's API calls go to the second backend (:3201), the request's URL rewritten and sent by the browser (`route.continue`). Never fetch-and-fulfill from the test process: a background call still in the handler when the test ends has its fetched response disposed with the context, and the fulfill fails a passing test ("Fetch response has been disposed") |
 | `support/mailpit.ts` | Reads the emails the second backend (:3201) and the worker's tick send, from Mailpit's API: `waitForEmail(to, subject)` (polls until it arrives), `linkIn(email, prefix)` (the one link to a page), `mailpitUp()` for the skip |
 | `support/session.ts` | Mints a session token the way the backend signs one, for states the API can't make on demand: an unconfirmed account's session, an invitee, and (`amr`, `otp_at`) a session whose code is older than a fresh-code action allows |
 | `support/static-server.ts`, `support/site.ts` | Serves the e2e frontend build on the site port, routed by CloudFront's `spa_rewrite` function itself (run from `infra/s3_cloudfront.tf` through `infra/scripts/cloudfront-functions.mjs`, so the two can't drift): `index.html` for an extension-less path (the SPA fallback), `/welcome` and the other prerendered pages from their HTML, the build's files as they are, the function's 404 page for a path with an extension outside the build's file locations (`/nope.pdf`), and a plain 404, as S3 answers, for a missing file inside them. `support/site.test.ts` (`pnpm -C e2e test`) pins each case. No dependencies |
@@ -356,8 +358,8 @@ model, scenarios, runs, transfers-page and diagram-labels specs at 6 workers
 (issue #138). The traces showed no slow step: 7 s alone, 15–24 s in that mix,
 with the time spread evenly over the steps (settings' 24 fills 1.1 s → 3.6 s,
 the network 0.7 → 2.1 s, registering 0.7 → 2.6 s). Its 103 API requests took
-1.5 s in all alone and 5–7.5 s in the mix; the slowest, the model run, 0.2 s
-and 0.9 s. A CPU profile of twelve Settings fills (~300 ms) put ~5 ms in the
+1.5 s in all alone and 5–7.5 s in the mix; the slowest, the model run, well under a second
+alone and 0.9 s in the mix. A CPU profile of twelve Settings fills (~300 ms) put ~5 ms in the
 app's code, no long tasks, and a third in Playwright's selector engine
 resolving `getByLabel`; the rest was idle and protocol round trips. There was
 nothing in the app to fix.
