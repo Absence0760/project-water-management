@@ -191,7 +191,7 @@ For a run, per farm or water user, per water source and per **water year**
   return. That water left the river and was never used, so it is added to
   the surface side (`diverted_loss`), beside the draws. Filling the dam isn't
   counted, and spill and releases go back to the river. Under a cap
-  (Settings › Registered volumes) the loss counts against the year's volume
+  (a scenario's allocation mode: the baseline only compares, issue #507) the loss counts against the year's volume
   before the day's draws, never against a licence's daily rate or months, and
   the cap can't stop it, so a year can read over its volume by losses alone.
   Runs from an older engine have no such series and read as before. Pending

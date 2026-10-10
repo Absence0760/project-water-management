@@ -1,13 +1,15 @@
 <!--
 	Settings for settings.zeroRainRuns (engine ≥ 0.15.0, CR-20, docs/model.md
 	§2.4c): what a run does with the zero-rain runs the Data tab flags, plus
-	keep-dry and missing periods; and (engine ≥ 0.20.0, audit B4, §2.4d) what
+	keep-dry and missing periods, and (engine ≥ 1.81.0, issue #507 item 3) the
+	CHIRPS reading above which a flagged day is filled; and (engine ≥ 0.20.0, audit B4, §2.4d) what
 	it does with multi-day accumulations, plus readings kept as recorded and
 	windows listed by hand. `error` is set while any list is invalid, so the
 	parent form can block saving.
 -->
 <script lang="ts">
-	import type { ZeroRainSettings } from '@water-management/engine';
+	import { ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM, type ZeroRainSettings } from '@water-management/engine';
+	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import PeriodList from '$lib/components/common/PeriodList.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { ACCUMULATION_OPTIONS, ZERO_RAIN_OPTIONS } from './rain';
@@ -43,6 +45,23 @@
 		<span class="hint explain" id="st-zero-rain-h">{option?.help}</span>
 	</div>
 	{#if value.mode === 'missing'}
+		<!-- Engine ≥ 1.81.0 (issue #507 item 3): absent on settings saved before it, which run the default. -->
+		<div class="field mode" data-testid="zero-rain-threshold">
+			<label class="lbl-text" for="st-zero-rain-mm">Fill a flagged day only where CHIRPS reads more than <span class="u">(mm)</span></label>
+			<NumberInput
+				id="st-zero-rain-mm"
+				min={0}
+				max={ZERO_RAIN_FILL_ABOVE_CHIRPS_MAX_MM}
+				step="any"
+				disabled={readonly}
+				bind:value={() => value.fillAboveChirpsMm ?? ZERO_RAIN_FILL_ABOVE_CHIRPS_MM, (v) => (value.fillAboveChirpsMm = v ?? ZERO_RAIN_FILL_ABOVE_CHIRPS_MM)}
+				aria-describedby="st-zero-rain-mm-h"
+			/>
+			<span class="hint explain" id="st-zero-rain-mm-h"
+				>Inside a flagged run, a day CHIRPS reads more than this on is treated as missing and filled; at this or less the gauge’s 0 is kept as a dry day, since
+				CHIRPS reports too many light-rain days. A day with no CHIRPS reading is still filled from forecast rain. Default {ZERO_RAIN_FILL_ABOVE_CHIRPS_MM} mm.</span
+			>
+		</div>
 		<PeriodList
 			bind:list={value.keepDry}
 			bind:error={keepDryError}
@@ -139,6 +158,18 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
+	}
+	.lbl-text {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.mode :global(input) {
+		max-width: 8rem;
+	}
+	.u {
+		color: var(--text-muted);
+		font-weight: 400;
 	}
 	.lbl label {
 		font-weight: 500;

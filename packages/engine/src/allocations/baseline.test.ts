@@ -59,13 +59,19 @@ describe("a compare-only baseline ignores the registered volumes (issue #507)", 
 
 	it('random networks with allocations (the engine fuzz): bit-identical without them', () => {
 		let tried = 0;
+		let diverting = 0;
 		for (let seed = 1; tried < 25 && seed < 2000; seed++) {
 			const input = randomInput(seed, { maxDays: 800 });
 			if (!input.model.allocations?.length) continue;
 			tried++;
-			expectBitIdentical(run(input, input.model.allocations), run(input, undefined), `seed ${seed}`);
+			const withThem = run(input, input.model.allocations);
+			expectBitIdentical(withThem, run(input, undefined), `seed ${seed}`);
+			if (withThem.series.some((s) => s.key === 'diverted_loss' && s.values.some((v) => v > 0))) diverting++;
 		}
 		expect(tried).toBe(25);
+		// Some of them lose diverted river water from a dam beside the river (engine 1.79.0, PR #509): a compare-only run
+		// carries that series whatever the volumes; only a cap counts it against them.
+		expect(diverting).toBeGreaterThan(0);
 	});
 
 	it('positive control: a cap or a full allocation (a scenario’s modes) does change the run', () => {

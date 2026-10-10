@@ -326,6 +326,31 @@ export class ModelEditor {
 		}
 	}
 
+	/**
+	 * Many farm × crop areas at once (Import plantings, issue #477), in one pass over a plain copy of
+	 * the list and one assignment, so a list of thousands stays fast. As setCropArea: 0 removes the
+	 * row. `systemId`: an id sets the unit's own system, null clears it (the crop's default),
+	 * undefined keeps it as it is.
+	 */
+	setPlantings(list: readonly { nodeId: string; cropId: string; areaM2: number; systemId?: string | null }[]) {
+		const next = $state.snapshot(this.model.cropAreas) as ProjectModel['cropAreas'];
+		const at = new Map(next.map((a, i) => [`${a.nodeId}|${a.cropId}`, i]));
+		const cleared = new Set<(typeof next)[number]>();
+		for (const p of list) {
+			const k = `${p.nodeId}|${p.cropId}`;
+			let i = at.get(k);
+			if (i === undefined) {
+				i = next.push({ nodeId: p.nodeId, cropId: p.cropId, areaM2: p.areaM2 }) - 1;
+				at.set(k, i);
+			} else next[i]!.areaM2 = p.areaM2;
+			if (p.systemId === null) delete next[i]!.irrigationSystemId;
+			else if (p.systemId !== undefined) next[i]!.irrigationSystemId = p.systemId;
+			if (p.areaM2) cleared.delete(next[i]!);
+			else cleared.add(next[i]!);
+		}
+		this.model.cropAreas = cleared.size ? next.filter((a) => !cleared.has(a)) : next;
+	}
+
 	// --- transfers ------------------------------------------------------
 	/** A new rule between the first two hydrological units (a gauge or an other water user can't take part). */
 	addTransfer() {

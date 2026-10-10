@@ -107,7 +107,7 @@ describe('the scale factor', () => {
 	});
 
 	it("'area': the modelled area ÷ the table area", () => {
-		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', scaling: 'area', tabM3s: new Array(12).fill(1), tableAreaKm2: 120 };
+		const src: EwrDailySource = { ...blankEwrDailySource(), method: 'tab', scaling: 'area', tabM3s: new Array(12).fill(1), tableAreaKm2: 120 };
 		expect(ewrDailyScale(src, new Float64Array(5), 5, 30)).toEqual({ method: 'tab', scaling: 'area', scale: 0.25, modelAreaKm2: 30, tableAreaKm2: 120 });
 	});
 });

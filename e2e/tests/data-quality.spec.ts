@@ -89,7 +89,7 @@ test('the Time series tab flags zero-rain runs and water years far below CHIRPS'
 	await expect(items.nth(1)).toContainText('67 % (365 days)');
 });
 
-// CR-20: a run treats the flagged zero run as missing (CHIRPS fills it). The
+// CR-20: a run treats the flagged zero run as missing where CHIRPS saw rain (CHIRPS fills it). The
 // Data tab shades those days; Settings → Zero-rain runs keeps a run dry or
 // switches the rule off, and the shading follows the saved settings.
 test('flagged zero-rain runs are shaded as missing until Settings keeps them dry', async ({ page, owner }) => {
@@ -97,13 +97,17 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	const projectId = await seedZeroRain(page.request, 'Zero rain settings');
 	const chart = page.locator('figure.chart');
 	const tab = (name: string) => page.getByRole('link', { name, exact: true });
-	const shaded = page.getByText('Shaded: 1 period, 76 days, that a run treats as missing, so CHIRPS fills them (Settings → Zero-rain runs).');
+	// Engine ≥ 1.81.0 (issue #507 item 3): only the run's days CHIRPS reads more than 2 mm on (4 mm every third day) are
+	// set aside and shaded, one day each; the other 50 keep the gauge's 0.
+	const shaded = page.getByText(
+		'Shaded: 1 period, 26 days, that a run treats as missing, so CHIRPS fills them (50 other days of flagged runs stay dry: CHIRPS reads 2 mm or less) (Settings → Zero-rain runs).'
+	);
 
 	await page.goto(`/projects/${projectId}?tab=series`);
 	await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
 	await expect(shaded).toBeVisible();
-	await expect(chart).toHaveAttribute('data-shaded', '1');
+	await expect(chart).toHaveAttribute('data-shaded', '26');
 
 	// Keep the run dry: a period needs a reason before Save is allowed.
 	await tab('Settings & calibration').click();

@@ -296,3 +296,55 @@ describe('ModelEditor', () => {
 		expect(transferIsBlank({ ...t, monthlyRateM3s: new Array(12).fill(0) })).toBe(true);
 	});
 });
+
+describe('ModelEditor, for Import plantings (issue #477)', () => {
+	it('adds a named unit draining into the outlet, and none without an outlet', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		expect(ed.addUnit('New farm')).toBeNull();
+		const g = ed.addNode();
+		const u = ed.addUnit('New farm')!;
+		expect([u.name, u.kind, u.downstreamNodeId, u.areaKm2, u.damCapacityM3]).toEqual(['New farm', 'farm', g.id, 0, 0]);
+		expect(u.sortOrder).toBeGreaterThan(g.sortOrder);
+		expect(ed.dirty).toBe(true);
+	});
+
+	it('adds a named crop on the system asked for, else drip, with factors of 0', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		const a = ed.addCrop('Pecans', 'micro');
+		const b = ed.addCrop('Okra', null);
+		expect([a.name, a.irrigationSystemId, b.name, b.irrigationSystemId]).toEqual(['Pecans', 'micro', 'Okra', 'drip']);
+		expect(a.cropFactor).toEqual(new Array(12).fill(0));
+	});
+
+	it('sets many plantings in one edit: adds, changes, clears and sets or clears a unit’s own system', () => {
+		const ed = new ModelEditor();
+		ed.load({
+			nodes: [],
+			crops: [],
+			cropAreas: [
+				{ nodeId: 'u', cropId: 'c', areaM2: 100, irrigationSystemId: 'pivot' },
+				{ nodeId: 'u', cropId: 'm', areaM2: 200 },
+				{ nodeId: 'l', cropId: 'c', areaM2: 300 },
+				{ nodeId: 'z', cropId: 'c', areaM2: 0 }
+			],
+			transfers: []
+		});
+		ed.setPlantings([
+			{ nodeId: 'u', cropId: 'c', areaM2: 150, systemId: null },
+			{ nodeId: 'u', cropId: 'm', areaM2: 0 },
+			{ nodeId: 'l', cropId: 'c', areaM2: 300, systemId: 'drip' },
+			{ nodeId: 'n', cropId: 'c', areaM2: 50 },
+			{ nodeId: 'n', cropId: 'c', areaM2: 60 }
+		]);
+		expect(ed.model.cropAreas).toEqual([
+			{ nodeId: 'u', cropId: 'c', areaM2: 150 },
+			{ nodeId: 'l', cropId: 'c', areaM2: 300, irrigationSystemId: 'drip' },
+			// A row the list didn't touch stays as it was.
+			{ nodeId: 'z', cropId: 'c', areaM2: 0 },
+			{ nodeId: 'n', cropId: 'c', areaM2: 60 }
+		]);
+		expect(ed.dirty).toBe(true);
+	});
+});

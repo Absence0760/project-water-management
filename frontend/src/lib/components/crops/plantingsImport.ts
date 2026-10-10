@@ -344,36 +344,52 @@ export function planPlantingsImport(text: string, model: Model, opts: PlanOption
 export interface PlantingsEditor {
 	/** Add a crop type of this name with factors of 0 on `systemId` (null: the new-crop default); its id. */
 	addCrop(name: string, systemId: string | null): string;
-	/** Add a hydrological unit of this name, draining into the outlet; its id. */
-	addUnit(name: string): string;
-	setCropArea(nodeId: string, cropId: string, areaM2: number): void;
-	setPlantingSystem(nodeId: string, cropId: string, systemId: string | null): void;
+	/** Add a hydrological unit of this name, draining into the outlet; its id, or null without an outlet. */
+	addUnit(name: string): string | null;
+	/** Set many farm × crop areas at once (ModelEditor.setPlantings: 0 removes; `systemId` undefined keeps the unit's own system). */
+	setPlantings(list: { nodeId: string; cropId: string; areaM2: number; systemId?: string | null }[]): void;
 }
 
-/** Apply a plan: its new crops and (with `createFarms`) units first, then every area and system it changes. */
-export function applyPlantingsImport(plan: PlantingsPlan, ed: PlantingsEditor): { crops: number; units: number; areas: number } {
+/** What an apply did: crop types and units added, with their names, and the planted areas set. */
+export interface PlantingsApplied {
+	crops: string[];
+	units: string[];
+	areas: number;
+}
+
+/** Apply a plan: its new crops and (with `createFarms`) units first, then every area and system it changes, in one edit. */
+export function applyPlantingsImport(plan: PlantingsPlan, ed: PlantingsEditor): PlantingsApplied {
 	const ids = new Map<string, string>();
 	// Only the crops a change uses: a new crop listed only on a unit left out isn't added.
 	const used = new Set(plan.changes.map((c) => c.cropKey));
-	let crops = 0;
+	const crops: string[] = [];
 	for (const c of plan.newCrops)
 		if (used.has(c.key)) {
 			ids.set(c.key, ed.addCrop(c.name, c.systemId));
-			crops++;
+			crops.push(c.name);
 		}
-	let units = 0;
+	const units: string[] = [];
 	if (plan.createFarms)
 		for (const f of plan.newFarms) {
-			ids.set(f.key, ed.addUnit(f.name));
-			units++;
+			const id = ed.addUnit(f.name);
+			if (id === null) continue;
+			ids.set(f.key, id);
+			units.push(f.name);
 		}
+	const list: Parameters<PlantingsEditor['setPlantings']>[0] = [];
 	for (const c of plan.changes) {
-		const node = ids.get(c.nodeKey) ?? c.nodeKey;
-		const crop = ids.get(c.cropKey) ?? c.cropKey;
-		ed.setCropArea(node, crop, Math.round(c.toHa * M2_PER_HA * 1e6) / 1e6);
-		if (c.ownSystem !== undefined && c.toHa > 0) ed.setPlantingSystem(node, crop, c.ownSystem);
+		const node = c.nodeKey.startsWith('new-farm:') ? ids.get(c.nodeKey) : c.nodeKey;
+		const crop = c.cropKey.startsWith('new-crop:') ? ids.get(c.cropKey) : c.cropKey;
+		if (!node || !crop) continue;
+		list.push({
+			nodeId: node,
+			cropId: crop,
+			areaM2: Math.round(c.toHa * M2_PER_HA * 1e6) / 1e6,
+			...(c.ownSystem !== undefined && c.toHa > 0 ? { systemId: c.ownSystem } : {})
+		});
 	}
-	return { crops, units, areas: plan.changes.length };
+	ed.setPlantings(list);
+	return { crops, units, areas: list.length };
 }
 
 /** The project's plantings as the list: a row per planting, to edit and load back (or to start from). */
@@ -405,7 +421,7 @@ export const PLANTINGS_EXAMPLE = toCsv([
 export const PLANTINGS_FORMAT: FileFormat = {
 	id: 'plantings',
 	title: 'Planted areas, a row per planting',
-	where: 'Crops & demand → Import plantings (and Tables → Planted areas)',
+	where: 'Crops & demand → Import plantings',
 	accepts: `A CSV file (.csv, comma- or semicolon-separated), tab-separated (.tsv) or text (.txt), in UTF-8, at most 2 MB and ${PLANTINGS_MAX_LINES.toLocaleString('en-US').replace(',', ' ')} rows; or the rows copied from a spreadsheet and pasted. An Excel workbook isn’t read: save the sheet as CSV (UTF-8) first.`,
 	lead: 'A heading row, then one row per farm and crop: the farm, the crop and its planted area.',
 	rules: [

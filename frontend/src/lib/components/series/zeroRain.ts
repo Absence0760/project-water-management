@@ -1,6 +1,7 @@
 // Which days of the catchment rain a run will treat as missing
-// (settings.zeroRainRuns, engine ≥ 0.15.0, docs/model.md §2.4c) or rebuild
-// from a multi-day accumulation (engine ≥ 0.20.0, §2.4d), or set aside as a
+// (settings.zeroRainRuns, engine ≥ 0.15.0, docs/model.md §2.4c)
+// (of a flagged run, only the days CHIRPS reads more than the fill threshold
+// on, engine ≥ 1.81.0) or rebuild from a multi-day accumulation (engine ≥ 0.20.0, §2.4d), or set aside as a
 // reading that ends a blank outage (engine ≥ 1.70.0, §2.4d), for shading the
 // Data tab's chart. The engine's own zeroRainMask and rainAccumulations
 // decide, over the whole series, so the chart shows what a run over the full
@@ -61,10 +62,30 @@ export function zeroRainShading(
 	const m = zeroRainMask(series, settings, d0, n, (day) => claimed.has(day), undefined, { dq: fit.dq, chirps });
 	const periods = m?.infill.periods ?? [];
 	const days = m?.infill.days ?? 0;
+	// The days set aside, as runs of consecutive days: a flagged run's days CHIRPS reads at or below the fill
+	// threshold (engine ≥ 1.81.0) and its keep-dry days stay dry, so the run's whole span isn't shaded.
+	const asideRanges: { start: string; end: string }[] = [];
+	if (m) {
+		const iso = (t: number) => new Date((d0 + t) * 86_400_000).toISOString().slice(0, 10);
+		for (let t = 0; t < m.mask.length; ) {
+			if (!m.mask[t]) {
+				t++;
+				continue;
+			}
+			let j = t;
+			while (j + 1 < m.mask.length && m.mask[j + 1]) j++;
+			asideRanges.push({ start: iso(t), end: iso(j) });
+			t = j + 1;
+		}
+	}
+	const chirpsDry = m?.infill.chirpsDryDays ?? 0;
 	if (periods.length === 0 && windows.length === 0 && aside.length === 0) return { ranges: [], days: 0, spreadDays: 0, setAsideDays: 0, caption: null };
 
 	const parts: string[] = [];
-	if (periods.length) parts.push(`${plural(periods.length, 'period')}, ${plural(days, 'day')}, that a run treats as missing, so CHIRPS fills them (Settings → Zero-rain runs)`);
+	if (periods.length) {
+		const dry = chirpsDry ? ` (${plural(chirpsDry, 'other day')} of flagged runs ${chirpsDry === 1 ? 'stays' : 'stay'} dry: CHIRPS reads ${m!.infill.fillAboveChirpsMm} mm or less)` : '';
+		parts.push(`${plural(periods.length, 'period')}, ${plural(days, 'day')}, that a run treats as missing, so CHIRPS fills them${dry} (Settings → Zero-rain runs)`);
+	}
 	if (windows.length) {
 		parts.push(
 			`${plural(windows.length, 'multi-day accumulation')}, ${plural(claimed.size, 'day')}, whose recorded total a run spreads over the days it covers by CHIRPS`
@@ -72,7 +93,7 @@ export function zeroRainShading(
 	}
 	if (aside.length) parts.push(`${plural(aside.length, 'reading')} after an outage that a run sets aside, so CHIRPS fills its day`);
 	return {
-		ranges: [...periods.map(clip), ...windows.map(clip), ...aside.map(clip)].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)),
+		ranges: [...asideRanges, ...windows.map(clip), ...aside.map(clip)].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)),
 		days,
 		spreadDays: claimed.size,
 		setAsideDays: aside.length,

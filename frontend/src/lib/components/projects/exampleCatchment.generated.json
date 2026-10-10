@@ -35,13 +35,13 @@
 		"gr4j": {
 			"x1": 426.0810500977728,
 			"x2": 0,
-			"x3": 55.91397846127095,
-			"x4": 2.4753800855010017,
+			"x3": 47.3793803685375,
+			"x4": 2.5447538701361117,
 			"warmupDays": 365
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.78.0",
+			"engineVersion": "1.81.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -53,10 +53,10 @@
 					"params": {
 						"x1": 426.0810500977728,
 						"x2": 0,
-						"x3": 55.91397846127095,
-						"x4": 2.4753800855010017
+						"x3": 47.3793803685375,
+						"x4": 2.5447538701361117
 					},
-					"score": 0.9285748745322544,
+					"score": 0.9280805480538775,
 					"best": true
 				}
 			],
@@ -71,8 +71,8 @@
 			"params": {
 				"x1": 426.0810500977728,
 				"x2": 0,
-				"x3": 55.91397846127095,
-				"x4": 2.4753800855010017
+				"x3": 47.3793803685375,
+				"x4": 2.5447538701361117
 			},
 			"startParams": {
 				"x1": 350,
@@ -96,7 +96,8 @@
 				"aboveRating": "censor",
 				"belowRating": "exclude",
 				"suspect": "exclude",
-				"infilled": "exclude"
+				"infilled": "exclude",
+				"zeroFlowMonths": []
 			},
 			"dayQuality": {
 				"flowKind": "flow_observed_m3s",
@@ -107,6 +108,7 @@
 					"suspect": "exclude",
 					"infilled": "exclude"
 				},
+				"zeroFlowMonths": [],
 				"windowDays": 5114,
 				"flow": {
 					"inRange": 4912,
@@ -123,14 +125,14 @@
 				"suspectZeroDays": 0,
 				"longZeroDays": 0,
 				"rain": {
-					"observed": 4759,
-					"infilled": 153,
+					"observed": 4786,
+					"infilled": 126,
 					"missing": 0,
-					"zeroRunDays": 82
+					"zeroRunDays": 55
 				},
 				"notes": [
 					"No highest gauging is recorded for the gauge record (Settings → Calibration record → Rating), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.",
-					"Of the scored days, 82 days fall in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled."
+					"Of the scored days, 55 days fall in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled."
 				]
 			},
 			"fitAllDays": null,
@@ -142,17 +144,17 @@
 				"waterYears": [2009,2010,2011,2012,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024],
 				"scores": {
 					"days": 4912,
-					"kgePrime": 0.9285748745322544,
-					"kgeYearly": 0.9132716898767709,
-					"kgeNp": 0.9704076446469443,
-					"nse": 0.8683012456033138,
-					"nseSqrt": 0.9484251046884514,
-					"nseLog": 0.9829123220015741,
-					"kgeLowHigh": 0.9393318590058605,
-					"volumeErrorPct": 1.4859448724271576,
-					"fdcHighPct": -3.8212240344573205,
-					"fdcMidSlopePct": 0.08512292046254942,
-					"fdcLowPct": 36.11199213164933
+					"kgePrime": 0.9280805480538775,
+					"kgeYearly": 0.9097286490056049,
+					"kgeNp": 0.9686561003233886,
+					"nse": 0.8591026780915967,
+					"nseSqrt": 0.9433565918783146,
+					"nseLog": 0.9778396769462006,
+					"kgeLowHigh": 0.9248371653234944,
+					"volumeErrorPct": 1.488594339407708,
+					"fdcHighPct": -1.8580728926182577,
+					"fdcMidSlopePct": 0.05935112960951528,
+					"fdcLowPct": 41.612956955617406
 				},
 				"wr2012Fit": {
 					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
@@ -161,40 +163,40 @@
 						{
 							"key": "mar",
 							"observed": 32.231923163345435,
-							"simulated": 32.925624638848625,
-							"diffPct": 2.1522186932118155,
+							"simulated": 32.89312163285652,
+							"diffPct": 2.0513776548803904,
 							"bandPct": 4,
 							"withinBand": true
 						},
 						{
 							"key": "meanLog",
 							"observed": 1.4976074423388743,
-							"simulated": 1.5061101029459651,
-							"diffPct": 0.5677496229460417,
+							"simulated": 1.505792771105006,
+							"diffPct": 0.5465603692078613,
 							"bandPct": 4,
 							"withinBand": true
 						},
 						{
 							"key": "sd",
 							"observed": 7.129015757319639,
-							"simulated": 7.435074151458045,
-							"diffPct": 4.2931367324327265,
+							"simulated": 7.368868752504821,
+							"diffPct": 3.3644615659450015,
 							"bandPct": 6,
 							"withinBand": true
 						},
 						{
 							"key": "logSd",
 							"observed": 0.10551704211890882,
-							"simulated": 0.10991396418524742,
-							"diffPct": 4.167025513645121,
+							"simulated": 0.10952879695359599,
+							"diffPct": 3.8019970557611567,
 							"bandPct": 6,
 							"withinBand": true
 						},
 						{
 							"key": "seasonalIndex",
 							"observed": 112.91322240336207,
-							"simulated": 115.77979357628256,
-							"diffPct": 2.538738255720114,
+							"simulated": 116.30898913564084,
+							"diffPct": 3.0074128255307517,
 							"bandPct": 8,
 							"withinBand": true
 						}
@@ -207,16 +209,16 @@
 					"seed": 20210101,
 					"years": 15,
 					"kgePrime": {
-						"lo": 0.9193131449636827,
-						"hi": 0.9352637777959885
+						"lo": 0.9176340739158318,
+						"hi": 0.9350041307682168
 					},
 					"nse": {
-						"lo": 0.8508757805964092,
-						"hi": 0.8824902459447744
+						"lo": 0.8391463448490274,
+						"hi": 0.8754971036988698
 					},
 					"kgeLowHigh": {
-						"lo": 0.9341959012459352,
-						"hi": 0.9431907313672844
+						"lo": 0.9185468961971981,
+						"hi": 0.9292418153016825
 					}
 				},
 				"benchmarks": {
@@ -258,17 +260,17 @@
 				"waterYears": [2009,2010,2011,2012,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024],
 				"scores": {
 					"days": 4912,
-					"kgePrime": 0.8735484216486815,
-					"kgeYearly": 0.8625329366967865,
-					"kgeNp": 0.910163625706752,
-					"nse": 0.8062076322597098,
-					"nseSqrt": 0.9262236810260396,
-					"nseLog": 0.9767904686687764,
-					"kgeLowHigh": 0.9162095738939162,
-					"volumeErrorPct": 8.491141963801585,
-					"fdcHighPct": 1.8083595569254935,
-					"fdcMidSlopePct": 0.21960025193536942,
-					"fdcLowPct": 19.790936240050513
+					"kgePrime": 0.8746234965048036,
+					"kgeYearly": 0.8634805713418705,
+					"kgeNp": 0.911642216784251,
+					"nse": 0.8071149254033636,
+					"nseSqrt": 0.9264473637491983,
+					"nseLog": 0.976813675276808,
+					"kgeLowHigh": 0.9167513504984122,
+					"volumeErrorPct": 8.332050329436777,
+					"fdcHighPct": 1.5298672659405281,
+					"fdcMidSlopePct": 0.2104186228481919,
+					"fdcLowPct": 19.792990147347847
 				},
 				"wr2012Fit": {
 					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
@@ -277,40 +279,40 @@
 						{
 							"key": "mar",
 							"observed": 32.231923163345435,
-							"simulated": 35.228349801543345,
-							"diffPct": 9.296456258637043,
+							"simulated": 35.146685278065334,
+							"diffPct": 9.043090913155952,
 							"bandPct": 4,
 							"withinBand": false
 						},
 						{
 							"key": "meanLog",
 							"observed": 1.4976074423388743,
-							"simulated": 1.5369524801154946,
-							"diffPct": 2.627192992255267,
+							"simulated": 1.5361376022861641,
+							"diffPct": 2.5727810144369805,
 							"bandPct": 4,
 							"withinBand": true
 						},
 						{
 							"key": "sd",
 							"observed": 7.129015757319639,
-							"simulated": 7.452402326918238,
-							"diffPct": 4.536202199673427,
+							"simulated": 7.348903829039211,
+							"diffPct": 3.0844099551022035,
 							"bandPct": 6,
 							"withinBand": true
 						},
 						{
 							"key": "logSd",
 							"observed": 0.10551704211890882,
-							"simulated": 0.10227812109776525,
-							"diffPct": -3.0695714702593477,
+							"simulated": 0.10135817018072957,
+							"diffPct": -3.9414220249773044,
 							"bandPct": 6,
 							"withinBand": true
 						},
 						{
 							"key": "seasonalIndex",
 							"observed": 112.91322240336207,
-							"simulated": 116.89691052510896,
-							"diffPct": 3.528097097004183,
+							"simulated": 116.8587200329425,
+							"diffPct": 3.4942742272343033,
 							"bandPct": 8,
 							"withinBand": true
 						}
@@ -323,16 +325,16 @@
 					"seed": 20210101,
 					"years": 15,
 					"kgePrime": {
-						"lo": 0.858704380467497,
-						"hi": 0.8878493439528415
+						"lo": 0.8600272993991401,
+						"hi": 0.8884506227546698
 					},
 					"nse": {
-						"lo": 0.7824809481507068,
-						"hi": 0.8265425037493949
+						"lo": 0.782940248403708,
+						"hi": 0.8273882319281811
 					},
 					"kgeLowHigh": {
-						"lo": 0.9086933070869594,
-						"hi": 0.9232199461498901
+						"lo": 0.9093885513756242,
+						"hi": 0.9236895635890966
 					}
 				},
 				"benchmarks": {
@@ -542,17 +544,17 @@
 					"waterYears": [2017,2018,2019,2020,2021,2022,2023,2024],
 					"scores": {
 						"days": 2456,
-						"kgePrime": 0.9184707661877902,
-						"kgeYearly": 0.9016242255747378,
-						"kgeNp": 0.9613467421696122,
-						"nse": 0.841681189485876,
-						"nseSqrt": 0.9401362151365418,
-						"nseLog": 0.9790371595438057,
-						"kgeLowHigh": 0.9254528532051634,
-						"volumeErrorPct": 2.5283953063262357,
-						"fdcHighPct": -1.4058213685948215,
-						"fdcMidSlopePct": -0.059379462687044714,
-						"fdcLowPct": 38.451667303192465
+						"kgePrime": 0.9194442860544512,
+						"kgeYearly": 0.9025862442210012,
+						"kgeNp": 0.9631956743996175,
+						"nse": 0.8426508446847361,
+						"nseSqrt": 0.9402428776723424,
+						"nseLog": 0.979020495534224,
+						"kgeLowHigh": 0.9259152515419748,
+						"volumeErrorPct": 2.2102621229340538,
+						"fdcHighPct": -1.8990402080624635,
+						"fdcMidSlopePct": -0.0835294146404978,
+						"fdcLowPct": 38.45884796347923
 					},
 					"wr2012Fit": {
 						"waterYears": [2018,2020,2022,2023],
@@ -561,40 +563,40 @@
 							{
 								"key": "mar",
 								"observed": 30.23276444067768,
-								"simulated": 31.301768132484145,
-								"diffPct": 3.5359111599074886,
+								"simulated": 31.12363334042475,
+								"diffPct": 2.946700099142835,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "meanLog",
 								"observed": 1.465989210358517,
-								"simulated": 1.4764619063862547,
-								"diffPct": 0.7143774288199938,
+								"simulated": 1.4745716272612575,
+								"diffPct": 0.5854352025306881,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "sd",
 								"observed": 8.619189666342281,
-								"simulated": 10.08507418365672,
-								"diffPct": 17.007219635027656,
+								"simulated": 9.853619065502045,
+								"diffPct": 14.321873017601403,
 								"bandPct": 6,
 								"withinBand": false
 							},
 							{
 								"key": "logSd",
 								"observed": 0.13257102691430178,
-								"simulated": 0.15339278022662745,
-								"diffPct": 15.706111506389341,
+								"simulated": 0.15113358233158772,
+								"diffPct": 14.001970000040336,
 								"bandPct": 6,
 								"withinBand": false
 							},
 							{
 								"key": "seasonalIndex",
 								"observed": 113.8130120720058,
-								"simulated": 117.95496042619509,
-								"diffPct": 3.639257303522382,
+								"simulated": 117.86694595458187,
+								"diffPct": 3.561924782388914,
 								"bandPct": 8,
 								"withinBand": true
 							}
@@ -607,16 +609,16 @@
 						"seed": 20210101,
 						"years": 8,
 						"kgePrime": {
-							"lo": 0.904734215250939,
-							"hi": 0.9279803021812476
+							"lo": 0.9056018896355358,
+							"hi": 0.9283491936603898
 						},
 						"nse": {
-							"lo": 0.8165425139241436,
-							"hi": 0.8687060765021559
+							"lo": 0.8176237060938754,
+							"hi": 0.8687199050559329
 						},
 						"kgeLowHigh": {
-							"lo": 0.9140548166506617,
-							"hi": 0.9333448849958328
+							"lo": 0.9146974399745049,
+							"hi": 0.933469031482861
 						}
 					},
 					"benchmarks": {
@@ -666,17 +668,17 @@
 					"waterYears": [2009,2010,2012,2016,2021,2022,2023],
 					"scores": {
 						"days": 2364,
-						"kgePrime": 0.9375789458400674,
-						"kgeYearly": 0.9206552720432482,
-						"kgeNp": 0.9729078335694663,
-						"nse": 0.88207553745461,
-						"nseSqrt": 0.9531920460512355,
-						"nseLog": 0.9846318004298706,
-						"kgeLowHigh": 0.9408626100001934,
-						"volumeErrorPct": -0.564273965080783,
-						"fdcHighPct": -3.654448197295276,
-						"fdcMidSlopePct": 0.8569287960810764,
-						"fdcLowPct": 43.02531281728146
+						"kgePrime": 0.9375789458414042,
+						"kgeYearly": 0.9206552720456568,
+						"kgeNp": 0.9729078335670813,
+						"nse": 0.882075537453895,
+						"nseSqrt": 0.9531920460499563,
+						"nseLog": 0.9846318004285068,
+						"kgeLowHigh": 0.9408626099956681,
+						"volumeErrorPct": -0.5642739661104589,
+						"fdcHighPct": -3.654448197306114,
+						"fdcMidSlopePct": 0.8569287960821622,
+						"fdcLowPct": 43.025312818751296
 					},
 					"wr2012Fit": {
 						"waterYears": [2012,2016,2022,2023],
@@ -685,40 +687,40 @@
 							{
 								"key": "mar",
 								"observed": 25.677587618677833,
-								"simulated": 25.453859509503484,
-								"diffPct": -0.8712972281384004,
+								"simulated": 25.453859509503094,
+								"diffPct": -0.8712972281399223,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "meanLog",
 								"observed": 1.403456777435582,
-								"simulated": 1.3981022230192868,
-								"diffPct": -0.3815261362077072,
+								"simulated": 1.3981022230192806,
+								"diffPct": -0.3815261362081502,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "sd",
 								"observed": 4.856382729698985,
-								"simulated": 5.3103594883634555,
-								"diffPct": 9.348043264551551,
+								"simulated": 5.310359488363279,
+								"diffPct": 9.348043264547911,
 								"bandPct": 6,
 								"withinBand": false
 							},
 							{
 								"key": "logSd",
 								"observed": 0.08504563024467414,
-								"simulated": 0.09601622123360254,
-								"diffPct": 12.89965275977882,
+								"simulated": 0.09601622123359932,
+								"diffPct": 12.899652759775035,
 								"bandPct": 6,
 								"withinBand": false
 							},
 							{
 								"key": "seasonalIndex",
 								"observed": 117.29912043503035,
-								"simulated": 115.54580381324432,
-								"diffPct": -1.4947397860132756,
+								"simulated": 115.54580381324458,
+								"diffPct": -1.4947397860130576,
 								"bandPct": 8,
 								"withinBand": true
 							}
@@ -731,16 +733,16 @@
 						"seed": 20210101,
 						"years": 7,
 						"kgePrime": {
-							"lo": 0.9230654541903929,
-							"hi": 0.945158706050534
+							"lo": 0.9230654541904514,
+							"hi": 0.94515870605052
 						},
 						"nse": {
-							"lo": 0.8576799548830029,
-							"hi": 0.8971632543135852
+							"lo": 0.8576799548798035,
+							"hi": 0.8971632543130377
 						},
 						"kgeLowHigh": {
-							"lo": 0.9341876339914771,
-							"hi": 0.9444825582361488
+							"lo": 0.9341876339911149,
+							"hi": 0.944482558235967
 						}
 					},
 					"benchmarks": {
@@ -782,17 +784,17 @@
 					"waterYears": [2011,2014,2015,2017,2018,2019,2020],
 					"scores": {
 						"days": 2456,
-						"kgePrime": 0.9250055619991159,
-						"kgeYearly": 0.9123777554583933,
-						"kgeNp": 0.9700866359068395,
-						"nse": 0.8626270670703886,
-						"nseSqrt": 0.9473375684906573,
-						"nseLog": 0.9835545963983806,
-						"kgeLowHigh": 0.9339499820240659,
-						"volumeErrorPct": -0.7459376694933497,
-						"fdcHighPct": -7.185198850559648,
-						"fdcMidSlopePct": -0.4526024151579871,
-						"fdcLowPct": 33.85002713321641
+						"kgePrime": 0.9247972179924536,
+						"kgeYearly": 0.9131532347181078,
+						"kgeNp": 0.9692345386342689,
+						"nse": 0.863132706518082,
+						"nseSqrt": 0.947383881080122,
+						"nseLog": 0.9835372098400428,
+						"kgeLowHigh": 0.9338192294053277,
+						"volumeErrorPct": -1.0111303450589995,
+						"fdcHighPct": -7.43573835762322,
+						"fdcMidSlopePct": -0.4851777453538412,
+						"fdcLowPct": 33.858066116411315
 					},
 					"wr2012Fit": {
 						"waterYears": [2011,2014,2017,2018,2020],
@@ -801,40 +803,40 @@
 							{
 								"key": "mar",
 								"observed": 37.475391599079536,
-								"simulated": 37.60951349254905,
-								"diffPct": 0.35789324072815387,
+								"simulated": 37.4682695953971,
+								"diffPct": -0.019004481016838274,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "meanLog",
 								"observed": 1.5729279742615083,
-								"simulated": 1.5745450368947922,
-								"diffPct": 0.10280589192541287,
+								"simulated": 1.573031856780658,
+								"diffPct": 0.006604404069963583,
 								"bandPct": 4,
 								"withinBand": true
 							},
 							{
 								"key": "sd",
 								"observed": 2.5750000864983664,
-								"simulated": 2.471674290168016,
-								"diffPct": -4.0126521498824035,
+								"simulated": 2.2471675128454582,
+								"diffPct": -12.731361655941296,
 								"bandPct": 6,
-								"withinBand": true
+								"withinBand": false
 							},
 							{
 								"key": "logSd",
 								"observed": 0.02978753219291676,
-								"simulated": 0.028613973960870242,
-								"diffPct": -3.939763201751845,
+								"simulated": 0.026265501087743694,
+								"diffPct": -11.823843218575112,
 								"bandPct": 6,
-								"withinBand": true
+								"withinBand": false
 							},
 							{
 								"key": "seasonalIndex",
 								"observed": 115.08726486574085,
-								"simulated": 116.88499728439382,
-								"diffPct": 1.562060251193022,
+								"simulated": 116.8229949690333,
+								"diffPct": 1.5081860754248801,
 								"bandPct": 8,
 								"withinBand": true
 							}
@@ -847,16 +849,16 @@
 						"seed": 20210101,
 						"years": 7,
 						"kgePrime": {
-							"lo": 0.9157581809591351,
-							"hi": 0.9295376899818661
+							"lo": 0.91587505306018,
+							"hi": 0.9293411745155541
 						},
 						"nse": {
-							"lo": 0.8413385588260625,
-							"hi": 0.8816327010436903
+							"lo": 0.841583287165894,
+							"hi": 0.8817732708762177
 						},
 						"kgeLowHigh": {
-							"lo": 0.9286441219345083,
-							"hi": 0.9369075267145737
+							"lo": 0.9286659123861972,
+							"hi": 0.936855599168661
 						}
 					},
 					"benchmarks": {

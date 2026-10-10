@@ -43,7 +43,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "High (catchments whose rain record has gaps exported as zeros)",
 		"title": "Missing catchment rain recorded as 0 runs the catchment dry",
-		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24; provisional decision 2026-10-01 keeps the default; which runs are real is pending the client's station records)"
+		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24; provisional decision 2026-10-01 keeps the default; which runs are real is pending the client's station records). Revised, engine 1.81.0 (issue #507 item 3, decided by the client's hydrologist 2026-10-10, below)"
 	},
 	{
 		"id": "B3",
@@ -65,13 +65,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"severity": "Medium (fits on records with suspect days, or a gauged range entered)",
 		"title": "Automatic calibration scored every observed day as recorded",
 		"status": "Fixed, engine 1.22.0 (issue #66; provisional decision 2026-10-01 keeps the defaults, the hydrologist's confirmation pending; zero-flow stretches changed in engine 1.62.0, C3)"
-	},
-	{
-		"id": "C3",
-		"source": "finding",
-		"severity": "Medium (fits on records of rivers that stop for 90 days or more)",
-		"title": "A long stretch of zero flow was suspect, so the fit never saw the river dry",
-		"status": "Fixed, engine 1.62.0 (provisional decision 2026-10-01, the client's hydrologist's confirmation pending; calibration-research.md § Provisional decisions)"
 	},
 	{
 		"id": "A1",

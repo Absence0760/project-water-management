@@ -1,6 +1,8 @@
 <script module lang="ts">
 	// Load crop factors (issue #54 item 1) is its own chunk, fetched when first opened (as in CropGrids).
 	const loadCropFactors = () => import('./LoadCropFactorsDialog.svelte');
+	// Import plantings (issue #477) is its own chunk too.
+	const importPlantings = () => import('./ImportPlantingsDialog.svelte');
 </script>
 
 <script lang="ts">
@@ -49,6 +51,7 @@
 	import CropSheet from './CropSheet.svelte';
 	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, noPlantedAreaNote } from './demand';
 	import DemandTable from './DemandTable.svelte';
+	import type { PlantingsApplied } from './plantingsImport';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 
 	let {
@@ -207,6 +210,23 @@
 	const loaded = (names: string[]) =>
 		(announce = `Loaded crop factors into ${names.join(', ')}. Review them and save the model to keep them.`);
 
+	// --- Import plantings (issue #477): mounted on first open, then kept ---
+	let importMounted = $state(false);
+	let importOpen = $state(false);
+	function openImport() {
+		importMounted = true;
+		importOpen = true;
+	}
+	const imported = (done: PlantingsApplied) =>
+		(announce = [
+			`Imported ${done.areas} planted ${done.areas === 1 ? 'area' : 'areas'}.`,
+			done.crops.length ? `Added ${done.crops.join(', ')}, which need crop factors.` : '',
+			done.units.length ? `Added ${done.units.join(', ')} as hydrological units, which need placing on the Network page.` : '',
+			'Save the model to keep them.'
+		]
+			.filter(Boolean)
+			.join(' '));
+
 	// --- the Tables menu (the Network's too, TABLES_MENU): every grid in the grid modal ---
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();
@@ -245,6 +265,7 @@
 		{#if crops.length}
 			<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
 		{/if}
+		<button type="button" class="btn" onclick={openImport} onpointerenter={() => prefetch(importPlantings)} onfocus={() => prefetch(importPlantings)}>Import plantings…</button>
 		<button type="button" class="btn" onclick={add}>+ Add crop</button>
 	{/if}
 {/snippet}
@@ -254,7 +275,7 @@
 		<span class="key" class:hatch={member} style:background={member ? null : colourOf(r.id)} aria-hidden="true"></span>
 		<span class="who">
 			<span class="name">{r.name}</span>
-			<span class="facts">{ha(r.areaM2)} ha · {r.peak >= 0 ? `peak need in ${WATER_YEAR_MONTHS[r.peak]}` : 'no crop factors yet'}{member ? ' · in Other' : ''}</span>
+			<span class="facts">{ha(r.areaM2)} ha · {r.peak >= 0 ? `peak need in ${WATER_YEAR_MONTHS[r.peak]}` : 'needs crop factors'}{member ? ' · in Other' : ''}</span>
 		</span>
 		<Sparkline values={r.factors} labels={WATER_YEAR_MONTHS} caption={FACTOR_CAPTION} captionHidden name={r.name} format={factor} hi={r.top} />
 		{#if r.high.length}
@@ -406,6 +427,13 @@
 		<Lazy load={loadCropFactors}>
 			{#snippet children(LoadCropFactorsDialog)}
 				<LoadCropFactorsDialog bind:open={loadOpen} {editor} {settings} {farmIds} onapplied={loaded} />
+			{/snippet}
+		</Lazy>
+	{/if}
+	{#if importMounted}
+		<Lazy load={importPlantings}>
+			{#snippet children(ImportPlantingsDialog)}
+				<ImportPlantingsDialog bind:open={importOpen} {editor} onapplied={imported} />
 			{/snippet}
 		</Lazy>
 	{/if}

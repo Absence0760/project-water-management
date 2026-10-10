@@ -257,18 +257,37 @@ noise rather than a flow, does it fall back to an exponent.
 Every box that reads a file or a request body says what it expects, beside
 it, in one shared piece (`common/FormatHelp.svelte`, issue #456): a closed
 **Expected format** disclosure whose first line names the file types and
-limits, then the structure and units (the caller's own list, since the
-words must match what that box's parser accepts), an **Example** of a few
-lines and, where a file helps, **Download an example file** (a data URL
-built in the browser from the example's text, `common/formatHelp.ts`; a
-CSV starts with a byte-order mark for Excel, which every CSV reader in the
-app skips), or several (`exampleFiles`, each link worded by its `label`).
-Where one page has several of the note, `context` adds words a screen
-reader reads after the summary ("Expected format of a file for the rule
-table at Outlet"). Each example is proved against its parser: by unit tests where
-the parser is the browser's, by `backend/src/geo/geojson.test.ts` for the
-map's file, and end to end in `e2e/tests/upload-formats.spec.ts`, which
-feeds each downloaded or shown example back into its box.
+limits, then the structure and units, an **Example** of a few lines and,
+where a file helps, **Download an example file** (a data URL built in the
+browser from the example's text, `common/formatHelp.ts`; a CSV starts with
+a byte-order mark for Excel, which every CSV reader in the app skips), or
+several (each link worded by its `label`), and a link to the
+[File formats](#file-formats-help-page) help page. The words are one
+`FileFormat` object per box (`common/formatHelp.ts`, issue #477: an anchor
+id, a title, where the box is, what it accepts, the rules with a small
+markup of `` `code` ``, `**bold**` and `*italics*`, never HTML, the example
+and its files), kept beside the box's parser, and `common/FormatBody.svelte`
+draws it, so the note and the help page can't differ. A note whose box
+switches formats (Load crop factors' sources, the project import's two
+kinds) starts closed again for the other format. Where one page has
+several of the note, `context` adds words a screen reader reads after the
+summary ("Expected format of a file for the rule table at Outlet"). Each
+example is proved against its parser: by unit tests where the parser is
+the browser's, by `backend/src/geo/geojson.test.ts` for the map's file,
+and end to end in `e2e/tests/upload-formats.spec.ts`, which feeds each
+downloaded or shown example back into its box.
+
+### File formats help page
+
+**Help → Reference → File formats** (`/help/formats`,
+`routes/help/formats/+page.svelte`, issue #477) gathers every box's
+Expected format in one place, open, grouped by the page the box is on, each
+under its own anchor (`/help/formats#<id>`, which each note links to, in a
+new tab) with the box's place in the app and its example files. The list
+is `lib/help/fileFormats.ts`; its test (`fileFormats.test.ts`) fails when a
+note anywhere in the app (a `FormatHelp`, or a grid's paste dialog's
+`format`) shows a format the page doesn't list, or when two share an
+anchor. `e2e/tests/planted-areas-import.spec.ts` checks the page.
 
 | Box | Takes | Example | Errors name |
 |---|---|---|---|
@@ -282,13 +301,15 @@ feeds each downloaded or shown example back into its box.
 | Import a project file | .json, 5 MB | – (*Download project (JSON)* writes one) | the line and column where the JSON stops (`jsonErrorAt`) |
 | Settings, the daily EWR at the outlet and each Reserve rule table (`settings/DrmFormatHelp.svelte`) | a DRM .rul or .tab (plain text, either line ending); a rule table also a CSV, read into its paste box | `drm-example.rul` (m³/s), `drm-example-mcm.rul`, `drm-example.tab` (`drmFiles.ts drmExampleFiles`) and the CSV layouts (`ewr-example.csv`; `ewr-total-example.csv`, `ewr-low-flow-example.csv`) | the file's line (“line 13: the Jan row of the total Reserve block needs 10 numbers…”) |
 | Settings, API keys (**Expected format of a request**) | JSON to `/ingest/v1/series/merge` | the merge body (`INGEST_EXAMPLE_BODY`) | `details`, each problem's place in the body |
+| Crops & demand, Import plantings (`crops/plantingsImport.ts` `PLANTINGS_FORMAT`) | .csv (comma or semicolon), .tsv or .txt, 2 MB, 5 000 rows; or the rows pasted | `plantings-template.csv`, **Download the template** (`PLANTINGS_EXAMPLE`); **Download the current plantings** beside the file field | each row's line, in the preview |
 
 The grids' paste dialog (`model/GridPasteDialog.svelte`) takes the note
 too, through its `format` prop (`GridFormat` in `spreadsheet/paste/grid.ts`:
 the layout as a list, an example and its file name; issue #477): the
 dialog adds the shared first line (cells copied from a spreadsheet, or a
-.csv, .tsv or .txt file) and one rule on decimals, so every grid words
-them alike. Each grid's format sits beside its parser, and that parser's
+.csv, .tsv or .txt file) and one rule on decimals (`gridFileFormat`), so
+every grid words them alike; a grid's format names its anchor, title and
+place for the File formats page too. Each grid's format sits beside its parser, and that parser's
 unit test reads the example back.
 
 | Grid's paste | Example file | Layout |
@@ -2449,7 +2470,10 @@ itself.
       nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
       fetched once the page has drawn, `workspace/mapLinks.ts`, as on
       Hydrological units and Dams); no Edit of its own since 2026-10-03 (the
-      row's, in All hydrological units, is the one). A farm has two tiles:
+      row's, in All hydrological units, is the one). A hydrological unit with
+      no catchment area (one just added, or one [Import plantings](#import-plantings)
+      created) says **Needs placing** under its name, until its area is set
+      (issue #477). A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, the band in words under the % ("Under
@@ -3836,15 +3860,16 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   grid, named and ordered as the Network's menu, `TABLES_MENU`, issue #463; Escape
   or a click outside closes it), then for editors **Load crop factors…**
   (once there is a crop; the [same dialog](#load-crop-factors), its own
-  chunk) and **+ Add crop**. The header shows with no crops too, over an
+  chunk), **Import plantings…** ([a list of farm, crop and area](#import-plantings),
+  its own chunk) and **+ Add crop**. The header shows with no crops too, over an
   "Add crop" prompt that says the factors can then come from the library or
   a workbook. The panels' headings are h2 under the header's h1.
 - **Crop list** ("Crops", *Largest planted area first*): one compact row per
   crop, sorted by planted area on the units shown, largest first (equal areas,
   unplanted crops included, keep crop order; `rankCrops`). A row has the
   crop's colour key, its name, its area and the month of its **peak need**
-  (A-pan × factor; the factor alone while A-pan is unset; "no crop factors
-  yet" when every factor is 0), a small sparkline of its 12 factors
+  (A-pan × factor; the factor alone while A-pan is unset; "needs crop
+  factors" when every factor is 0, as a crop Import plantings adds starts), a small sparkline of its 12 factors
   (`charts/Sparkline.svelte`, the compact chart pattern; `cropRows` in
   `crops/cards.ts`): one column header over the sparklines names them
   ("Crop factor by month, Oct–Sep"), each has Oct and Sep under its ends and
@@ -4180,6 +4205,73 @@ shared `ModelEditor` and closes; the save bar then saves them with the
 optional reason, and History records the change. Cancel, Esc or unticking
 every crop leaves the model untouched. It loads into the project's existing
 crops only: add a crop first to load into it.
+
+### Import plantings
+
+**Import plantings…** (editors only, in the Crops & demand header; issue
+#477, `crops/ImportPlantingsDialog.svelte`, its own chunk) reads a list of a
+catchment's plantings, potentially hundreds of rows, as a **CSV file**
+(**Load a CSV file**: comma- or semicolon-separated .csv, .tsv or .txt,
+UTF-8, at most 2 MB and 5 000 rows; an Excel workbook is refused with the
+advice to save the sheet as CSV) or as **rows pasted** from a spreadsheet.
+The reader is `crops/plantingsImport.ts` (`planPlantingsImport`), pure and
+tested in `plantingsImport.test.ts`.
+
+- **The layout: one row per farm and crop** (long format), with a heading
+  row: `Farm`, `Crop`, `Area (ha)` and optionally `Irrigation system`, in
+  any order (`PLANTING_HEADINGS` also takes Hydrological unit, Crop type,
+  Planted area, Hectares and others). Long rather than the planted-areas
+  grid's wide layout (a column per crop) because that is how a scheme's
+  register or a farm survey is kept, a crop name is data rather than a
+  heading the list must already agree on, and it holds an irrigation
+  system per planting. Other columns are left out and named in the
+  preview; areas in another unit (`Area (m²)`) are refused rather than
+  converted silently. Without a heading row the list is refused, with the
+  layout to use: a guess at which column is which would put areas on the
+  wrong farms.
+- **Matching:** a farm to a hydrological unit and a crop to a crop type by
+  name, ignoring capitals and runs of spaces (`normalName`, as every grid
+  paste matches). A name two units or two crops share, a gauge or an other
+  water user, a system the project doesn't have, a number that isn't one or
+  is below 0 make that row a problem, listed by its line in the file (blank
+  and `#` lines counted); the other rows still apply. A farm and crop
+  listed twice have their areas added (a farm's blocks of one crop); two
+  different systems for one planting is a problem. 0 clears a planting; a
+  planting the list doesn't name keeps its area. The system, when given,
+  becomes the unit's own system for the crop, or none when it is the crop's
+  default.
+- **A crop the project doesn't have** is added as a crop type with factors
+  of 0, on the system every row of it names, else drip (as **+ Add crop**
+  makes one). Its factors of 0 need no water, so the preview and the crop
+  list flag it **needs crop factors** until they are filled (the crop's
+  Edit, or [Load crop factors](#load-crop-factors)).
+- **A farm the project doesn't have** is listed, and its rows are left out,
+  unless **Add them as new hydrological units** is ticked: then each is
+  added as **+ Add hydrological unit** makes one (`ModelEditor.addUnit`),
+  draining into the outlet with no catchment area, dam or connections, and
+  flagged **needs placing** in the preview. On the Network page a
+  hydrological unit with no catchment area shows **Needs placing** on its
+  card (`network/NodeCard.svelte`) until its area is set. Not ticked by
+  default because a misspelt farm would otherwise become a new unit; a
+  network without an outlet can't take one, and the preview says so.
+- **Preview before anything changes:** one status line counts the rows
+  read, the planted areas that change, the crop types and units added,
+  the farms not in the project and the rows with a problem; under it the
+  new crop types, the farms not in the project, the rows left out by line,
+  and a table of the changes (farm, crop, now and listed in ha, system;
+  the first 200 drawn, the count covers all). **Apply** edits the model
+  through the editor in one step (`ModelEditor.setPlantings`, one pass over
+  the list and one assignment, so thousands of rows stay quick), unsaved:
+  the save bar saves it, with a reason, and History records it, like any
+  other edit.
+- **Template and format:** the dialog's [Expected format](#expected-format)
+  (`PLANTINGS_FORMAT`) offers **Download the template**
+  (`plantings-template.csv`, invented names), and **Download the current
+  plantings** writes the project's plantings in the same layout
+  (`plantingsCsv`) to edit and load back. The unit test reads the template
+  back through the reader; `e2e/tests/planted-areas-import.spec.ts` uploads
+  it and a list with a new crop, a new farm and a bad row, applies and
+  saves.
 
 ### Farm drawer
 
@@ -5047,6 +5139,10 @@ Charting that catchment rain series tints the days a run will treat as
 missing (flagged zero runs and listed periods, per Settings → *Zero-rain
 runs*; `series/zeroRain.ts` over the engine's `zeroRainMask`), with a caption
 naming the periods and days ([model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)).
+Only the days set aside are tinted, as runs of consecutive days: a flagged
+run's days CHIRPS reads at or below the fill threshold (engine ≥ 1.81.0) and
+its keep-dry days stay untinted, and the caption counts the CHIRPS-dry days
+("50 other days of flagged runs stay dry: CHIRPS reads 2 mm or less").
 It also tints the multi-day accumulation windows a run will spread by CHIRPS
 (engine `rainAccumulations`, judged against the first CHIRPS series by name
 and the CHIRPS bias setting, as a run does), and the caption counts them and
@@ -5607,8 +5703,13 @@ two.
   (`settings/ZeroRainSection.svelte`, `settings.zeroRainRuns`,
   [model.md §2.4c](./model.md#24c-zero-rain-runs-treated-as-missing)): a
   **Flagged zero runs** picker ("Treat as missing (default)" or "Run as
-  recorded (dry)"), then **Keep dry** (only in the default mode) and **Also
-  treat as missing** period lists. These share the calibration exclusions'
+  recorded (dry)"), then (only in the default mode, engine ≥ 1.81.0, issue
+  #507 item 3) **Fill a flagged day only where CHIRPS reads more than (mm)**
+  (`fillAboveChirpsMm`, 0–50, default 2; a day CHIRPS reads at or below it
+  keeps the gauge's 0), **Keep dry** (only in the default mode) and **Also
+  treat as missing** period lists. Fit provenance describes a recorded
+  setting as "flagged runs treated as missing where CHIRPS reads more than
+  2 mm" (`describeZeroRain`; a fit from before 1.81.0 has no threshold). These share the calibration exclusions'
   editor (`common/PeriodList.svelte`), with the same required reason and the
   same checks that block Save. The Keep dry hint says that kept-dry days
   count in the CHIRPS factor fit, filled runs are left out of it, and a run
@@ -5691,7 +5792,16 @@ two.
   recorded") and with **days below the lowest gauging**, **suspect days**
   and **infilled days** ("Leave out (default)", "Score as recorded"). A
   range without its source, or a lowest gauging not below the highest, shows
-  an alert and blocks Save. An emptied range stores nothing.
+  an alert and blocks Save. An emptied range stores nothing. Below them
+  (engine ≥ 1.81.0, issue #507 item 2) **Months the river stops**
+  (`settings.qualityFlags.zeroFlowMonths`, `common/MonthPicker.svelte`, so
+  each toggle keeps a 24 px target, 44 px on a phone): the months a
+  zero-flow stretch is trusted in, none by default, with a hint on the
+  river-stops rule (model.md §2.10h) and the months in words under them
+  ("None: a zero stretch is judged by its length alone" when none). The
+  section's summary line adds "river stops Feb, Mar, Apr" once months are
+  set. The data-quality panel's suspect row reads "Suspect (outlier, flat
+  stretch or doubtful zero flow)".
     Then **Flow gaps** (engine ≥ 1.23.0, issue
   #66, `settings/FlowGapFillFields.svelte`, [model.md §2.10i](./model.md)):
   per observed record the project has (the gauge, the logger), a **Fill gaps
@@ -5964,13 +6074,15 @@ two.
   the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
   default 90 %: a water year counts as met at that supply ratio; engine ≥
   0.32.0), and **Registered volumes** (engine ≥ 1.18.0, issue #72): the
-  **allocation mode** (`settings.allocationMode`: *Compare only*, the
-  default; *Cap use at the registered volume*; *Full allocation*, [model.md
+  **allocation mode**, read only: always *Compare only* since issue #507
+  (licence data never drives the baseline; `settings-allocation-mode`, no
+  select, and the hint says a cap or a full allocation is a scenario's
+  Change a setting › Allocation mode, [model.md
   §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72))
   and the **comparison band** (± %, `settings.allocationTolerance`, default
   10 %, the Allocations tab's "within band"), each with its help tip and
-  field history. Either is a model setting: saving it makes the latest run
-  out of date.
+  field history. The band is a model setting: saving it makes the latest
+  run out of date.
 - **The daily EWR at the outlet** (inside `#set-ewr`, first, above the
   pragmatic EWR row, which then says it isn't used while the daily EWR comes
   from the DRM tables (kept for switching back), and the panel's head names
@@ -5980,15 +6092,23 @@ two.
   `settings.ewrDailySource.method`: *The pragmatic EWR (above)*, the default;
   *The DRM TAB file (monthly total flows)*; or *The DRM percentile tables
   (read at each day's natural flow)*. With either DRM source: **Scale the
-  tables by** (*MAR ratio* or *Area ratio*), **Table MAR** (Mm³/a) and
-  **Table catchment area** (km², its hint naming the modelled area, the units'
-  areas summed), and a line with the **scale factor**: for the area ratio its
+  tables by** (*Area ratio*, the default for a new source since 2026-10-10,
+  issue #90 B2, listed first, or *MAR ratio*; a saved source keeps its own),
+  **Table MAR** (Mm³/a) and **Table catchment area** (km², its hint naming the
+  modelled area, the area the natural flow is made on: the calibration
+  catchment area when set, else the units' areas summed), and a line with the **scale factor**: for the area ratio its
   value and inputs; for the MAR ratio the last run's natural MAR ÷ the table
   MAR (the last run's own s when it used the tables, else an estimate from its
   mean natural flow, so labelled; "Run the model to see it" without a run).
   Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
   **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
-  ten points, m³/s), each before scaling. **Load a DRM file (.rul / .tab)**
+  ten points, m³/s), each before scaling, and under them **The tables scaled
+  to the model (each value × s)** (open; `settings/ScaledEwrTablesView.svelte`,
+  `ewrDailySource.ts scaledEwrTables`, issue #90 B1 gap a): the tables the
+  method reads × s, read only, as soon as s is known (the area ratio at once,
+  the MAR ratio from the last run, exact or estimated as the factor line
+  says), else a line saying they show once the tables and s are known.
+  **Load a DRM file (.rul / .tab)**
   sits above those tables, under the fields, so it is seen without scrolling
   past them, with a hint, its own **File result** status line and the
   **Expected format** beside it; it reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
@@ -6020,7 +6140,12 @@ two.
   (issue #460, [scenarios.md](./scenarios.md)). Run results say which EWR a run used: the *EWR not met* stat on
   Runs & results and in the printed report (the same `RunSummaryView`)
   carries "EWR: the DRM TAB file × 0.4123 (natural MAR … ÷ … Mm³/a)" or "EWR:
-  the pragmatic EWR", and the run's warnings repeat it. Wherever a screen
+  the pragmatic EWR", and the run's warnings repeat it. Under the run
+  summary on Runs & results, a run judged by a DRM table has a closed
+  **The daily EWR's tables as this run read them (× s = …)**
+  (`runs/RunScaledEwrTables.svelte`, its own chunk): its settings snapshot's
+  tables × the s in its summary (`summary.catchment.outletEwr.scale`), so
+  they are the values that run read whatever Settings say now. Wherever a screen
   names the outlet's daily test (Judge results by's choice and Automatic, the
   Summary's reserve strip, River & reserve's judged-by line, water-year bars
   and EWR by month note, Compare runs' water-year bars, the outcome matrix's
@@ -8428,8 +8553,8 @@ surface and its storage is required.
 *modelled, not metered* and a difference is something to look into, not a
 finding; slim notes for volumes not matched to a unit (editors: "Change a
 volume to match it"), or matched to a unit the run doesn't have. A run made
-with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
-says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
+with an allocation mode (engine ≥ 1.18.0; since issue #507 a scenario's
+run, as the baseline only compares) says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
 full allocation ("… what the river would look like if every registered or
 licensed volume were taken in full (a registration is not an entitlement), not
@@ -9093,8 +9218,8 @@ baseline card links to the published run's report (**Report**, beside
   years reads *Not enough years* in every row. A note under the board says
   existing use is the baseline's as that run modelled it, and that existing
   *authorised* use needs a baseline at every holder's full registered volume
-  (a full-allocation run: Settings › Registered volumes › Allocation mode,
-  or a scenario that sets it). Against such a baseline the step reads
+  (a full-allocation run: a scenario that sets the allocation mode, since
+  licence data never drives the project's own baseline, issue #507). Against such a baseline the step reads
   *Existing authorised use in the baseline “…”* and the note says so; a pair
   where only one run is at full allocation gets a note under the board
   ([model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).

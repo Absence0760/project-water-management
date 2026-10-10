@@ -480,7 +480,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'allocation-mode',
 		term: 'Allocation mode',
-		short: 'What registered volumes do to a run. The baseline only compares use with them (licence data never drives it); a scenario may cap each unit’s yearly use at them, or scale its demand to them.',
+		short: 'What registered volumes do to a run. The baseline only compares use with them; a scenario may cap use at them or scale demand to them.',
 		category: 'results',
 		fields: ['settings.allocationMode']
 	},

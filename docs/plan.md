@@ -668,6 +668,15 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
    cases?
 10. **Zero observed flows.** The workbook skips days where observed flow is
     zero when scoring the fit; the app keeps them. Real readings or gaps?
+    *Answered by the client's hydrologist 2026-10-10 (issue #507 item 2):
+    the river does stop flowing in dry years in February, March and April,
+    and the logger has been known to fail. Engine 1.81.0: a zero stretch
+    wholly inside the months the river is known to stop (Settings →
+    Calibration record → Months the river stops; set Feb–Apr on the client
+    project) is scored as the river stopping; any other zero stretch, or
+    with no months one longer than 30 days, is suspect ("check with the
+    client") and left out of the fit by default; an exclusion period stays
+    the manual override ([model.md §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1220-calibration-research-cr-181922), engine-audit C3).*
 11. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
     fits against them, or also score monthly totals? *Decided (calibration
     research CR-6): daily fits carry no rating words; monthly scoring is the
@@ -696,6 +705,11 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     with bias-corrected CHIRPS by default. Are they missing data, or real
     dry spells? Are there other stretches (e.g. partial-record years that
     read far below CHIRPS) that should be treated as missing?
+    *Partly answered by the client's hydrologist 2026-10-10 (issue #507 item
+    3): inside a flagged run only days CHIRPS reads more than 2 mm on are
+    filled; at 2 mm or less the gauge's zero is kept as dry (a project
+    setting, default 2 mm; engine 1.81.0, engine-audit B2). Which runs are
+    wholly real dry spells still needs the station's records.*
 16. **Multi-day accumulations (issue #2).** Some readings look like several
     days' rain entered on the day the gauge was read, after days entered as
     0. From engine 0.20.0 the app

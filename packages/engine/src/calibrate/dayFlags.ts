@@ -56,7 +56,7 @@ export const FLOW_FLAG_LABEL: Record<FlowDayFlag, string> = {
 	humanUse: 'Human use dominant',
 	belowRating: 'Below the lowest gauging',
 	aboveRating: 'Above the highest gauging',
-	suspect: 'Suspect (outlier or flat stretch)',
+	suspect: 'Suspect (outlier, flat stretch or doubtful zero flow)',
 	infilled: 'Infilled',
 	missing: 'Missing'
 };

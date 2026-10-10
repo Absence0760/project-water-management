@@ -73,7 +73,7 @@ export const ZERO_RAIN_OPTIONS: { value: ZeroRainMode; label: string; help: stri
 	{
 		value: 'missing',
 		label: 'Treat as missing (default)',
-		help: 'Long runs of zero catchment rain in the wet season (the Data tab flags them) count as blank days, so bias-corrected CHIRPS, then forecast rain, fills them. The stored series is not changed, and each run lists what it filled.'
+		help: 'Long runs of zero catchment rain in the wet season (the Data tab flags them) count as blank days where CHIRPS saw rain (more than the threshold below), so bias-corrected CHIRPS, then forecast rain, fills them; a day CHIRPS reads as dry or drizzle stays 0 mm. The stored series is not changed, and each run lists what it filled.'
 	},
 	{
 		value: 'asRecorded',
@@ -100,12 +100,15 @@ export const ACCUMULATION_OPTIONS: { value: AccumulationMode; label: string; hel
 const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /**
- * A zero-rain setting in one line, for fit provenance: "treated as missing;
- * 1 keep-dry period; accumulations spread". A setting saved before engine
- * 0.20.0 has no accumulation mode: it ran them as recorded.
+ * A zero-rain setting in one line, for fit provenance: "treated as missing
+ * where CHIRPS reads more than 2 mm; 1 keep-dry period; accumulations
+ * spread". A setting saved before engine 0.20.0 has no accumulation mode: it
+ * ran them as recorded; one recorded before 1.81.0 has no fill threshold: it
+ * filled every flagged day.
  */
 export function describeZeroRain(z: Partial<ZeroRainSettings> & Pick<ZeroRainSettings, 'mode' | 'keepDry' | 'missing'>): string {
-	const parts = [z.mode === 'missing' ? 'flagged runs treated as missing' : 'flagged runs run as recorded (dry)'];
+	const threshold = typeof z.fillAboveChirpsMm === 'number' ? ` where CHIRPS reads more than ${z.fillAboveChirpsMm} mm` : '';
+	const parts = [z.mode === 'missing' ? `flagged runs treated as missing${threshold}` : 'flagged runs run as recorded (dry)'];
 	if (z.mode === 'missing' && z.keepDry.length) parts.push(count(z.keepDry.length, 'keep-dry period'));
 	if (z.missing.length) parts.push(count(z.missing.length, 'extra missing period'));
 	const spread = z.accumulationMode === 'spread';

@@ -221,8 +221,8 @@ describe('buildOp', () => {
 
 	it('offers the allocation mode a baseline can’t have: a cap or a full allocation is a scenario’s (issue #507)', () => {
 		const spec = draftSpec({ kind: 'settings.set', field: 'allocationMode' });
-		expect(spec).toMatchObject({ t: 'enum' });
-		expect((spec as { options: { value: string }[] }).options.map((o) => o.value)).toEqual(['none', 'cap', 'fullAllocation']);
+		if (spec?.t !== 'enum') throw new Error(`allocationMode is not an enum: ${JSON.stringify(spec)}`);
+		expect(spec.options.map((o) => o.value)).toEqual(['none', 'cap', 'fullAllocation']);
 		for (const value of ['cap', 'fullAllocation'])
 			expect(buildOp(draft({ kind: 'settings.set', field: 'allocationMode', value }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'allocationMode', value } });
 	});

@@ -1422,8 +1422,27 @@ That is why the default fills.
 **The rule.** Before rain used is picked, the run blanks the catchment rain on:
 
 1. every day of every zero run the issue #2 check flags, in mode `'missing'`
-   (the default), except days inside a **keep-dry** period; and
+   (the default), except days inside a **keep-dry** period and (engine ≥
+   1.81.0) days the stored CHIRPS reads **at or below the fill threshold**
+   `fillAboveChirpsMm` (2 mm by default) on; and
 2. every day inside a **missing** period, in either mode, whatever it reads.
+
+**Each day of a flagged run is decided on its own (engine ≥ 1.81.0, issue
+#507 item 3, [audit B2](./engine-audit.md)).** A flagged run's day is set
+aside only where the stored CHIRPS series reads more than
+`fillAboveChirpsMm` mm, or has no reading there (blank, not finite, or
+negative, CHIRPS's no-data code). Where CHIRPS reads a value from 0 up to
+and including the threshold, the gauge's 0 is kept as a dry day: CHIRPS saw
+at most drizzle, and CHIRPS reports too many light-rain days (calibration
+research D7), so filling those days would add rain the catchment probably
+didn't get and hide the dry spells the recession checks read (§2.10d,
+CR-13). The test reads the raw stored CHIRPS value, before any bias
+factor, and applies only to flagged runs: a listed missing period sets
+aside every day whatever CHIRPS reads, and `'asRecorded'` mode ignores the
+threshold. A day with no CHIRPS reading is set aside as before (forecast
+rain, else nothing, stands in). The threshold is the hydrologist's 2 mm
+(2026-10-10); a day at exactly 2 mm stays dry and one at 2.001 mm is filled.
+Up to 1.80.0 every day of a flagged run was set aside.
 
 Those days are then blank days like any other: bias-corrected CHIRPS fills
 them, then forecast rain, then nothing (the model treats a day with no value
@@ -1437,6 +1456,7 @@ recorded rain exactly.
 | `mode` | `'missing'` (default), `'asRecorded'` | What to do with flagged zero runs. `'asRecorded'` runs them dry, as up to 0.14 and as the workbook does |
 | `keepDry` | periods | Flagged zero runs the hydrologist confirms as real dry spells: their days stay 0 and count in the CHIRPS factor fit (§2.4b; engine ≥ 0.18.0). Only affects flagged runs |
 | `missing` | periods | Extra periods whose catchment rain is bad, e.g. the gap days inside a low-vs-CHIRPS year. They are also left out of the CHIRPS factor fit (§2.4b) |
+| `fillAboveChirpsMm` | mm, 0 to 50 (default 2) | Engine ≥ 1.81.0, mode `'missing'` only: a flagged run's day is set aside only where the stored CHIRPS reads more than this; at or below it the gauge's 0 stays. Absent on settings saved before 1.81.0, which run the default; an invalid value runs the default with a warning (`resolveZeroRain`) |
 
 A period is a whole water year (`{ waterYear, reason }`) or a date range
 (`{ start, end, reason }`), always with a reason, as for calibration
@@ -1464,15 +1484,26 @@ guard), and then its water years stay out and the run warns. Up to 0.17 the
 fit left out every water year a flagged run touched, even one kept dry.
 Because `keepDry` now changes the factors as well as the kept days, a fit
 record's `forcing.zeroRainRuns` (fit provenance, §2.10b) still flags
-"Forcing changed since fit" on any change to it.
+"Forcing changed since fit" on any change to it. The fill threshold
+(engine ≥ 1.81.0) **moves no factor**: every day of a flagged run, kept dry
+by CHIRPS or filled, stays out of the factor fit as before, so the factors
+are the same whatever the threshold. It does change the forcing: a fit
+record whose forcing ran a different threshold is flagged (absent on either
+side reads as the default 2 mm, except that a fit recorded by an engine
+before 1.81.0 in `'missing'` mode filled every flagged day, so today's
+threshold is a change for it; `'asRecorded'` on both sides is none).
 
 **Output.** `summary.zeroRainInfill` has the mode and each period set aside,
 flagged or listed, with its reason, the run days set aside, the catchment
 rain recorded on them, the rain used instead, and the days with nothing to
 fill them. It also lists the keep-dry periods that kept any days, and, in
-`'asRecorded'` mode, how many flagged-run days ran dry. It has totals too. The run
-warns once for what it set aside and filled, once for what it kept dry, and
-once when the mode left flagged runs dry. The `rain_catchment_missing` column
+`'asRecorded'` mode, how many flagged-run days ran dry. In `'missing'` mode
+(engine ≥ 1.81.0) it carries the threshold (`fillAboveChirpsMm`) and the
+flagged-run days kept dry by it (`chirpsDryDays`); a period's `days` count
+only the days it set aside. It has totals too. The run
+warns once for what it set aside and filled, once for what it kept dry
+(listed keep-dry periods, and separately the days CHIRPS read at or below
+the threshold on), and once when the mode left flagged runs dry. The `rain_catchment_missing` column
 (§2.4b table) marks each day set aside. The run's summary CSV has a *Catchment rain
 treated as missing* block (`zeroRainLines` in
 `backend/src/export/run-tables.ts`). Run comparison lists changes to the
@@ -1481,12 +1512,15 @@ mode and to both period lists. A run saved before 0.15.0 compares as
 
 **Workbook regression.** The workbook runs the zeros dry, so the client
 catchment suite replays with `'asRecorded'`. Its "B2:" test checks that the
-default sets aside exactly the flagged runs, changes catchment rain on no
+default sets aside exactly the flagged runs' days CHIRPS reads more than
+2 mm on (or has no reading on), changes catchment rain on no
 other day, finds CHIRPS for every day it sets aside, and passes the
 self-checks. It runs with multi-day accumulations as recorded, so B2 is
 judged on its own; the "B4:" test (§2.4d) runs both defaults.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `'missing'` as the default. Which flagged runs are real dry spells needs the station's records (keep-dry periods take the answer).
+
+**Decided rule, 2026-10-10 (issue #507 item 3, the client's hydrologist):** inside a flagged zero run, a day CHIRPS reads more than 2 mm on is missing and filled; at 2 mm or less the gauge's zero is kept as dry. The threshold is the project setting `fillAboveChirpsMm` (Settings → *Zero-rain runs*), default 2 mm. Built in engine 1.81.0. To check on the client catchment after a rerun: the CHIRPS factors don't move (above), and CR-13's recession segments (§2.10d) may gain segments from the days now kept dry.
 
 ### 2.4d Multi-day rainfall accumulations
 
@@ -6395,6 +6429,17 @@ multiplied by s, the user's choice:
   when set, else the units' areas summed (in node-id order), so the table and
   the flow it is read against are on one area.
 
+**The default scaling is the area ratio** (the client's hydrologist,
+2026-10-10, issue #90 B2; the MAR ratio before): a new source
+(`blankEwrDailySource`, the Settings form's starting point) and both
+importers' fallback when the `[EWR options]` sheet gives no scaling take
+`'area'`. Both scalings stay. The run never fills in a default, so a stored
+source keeps its own choice and no run moves (no engine version change).
+Settings shows the tables × s under the entered ones once s is known, and a
+run judged by a DRM table shows its snapshot's tables × its own s (issue #90
+B1 gap a, [ui.md](./ui.md)). The percentile lookup above is the
+hydrologist's own process (confirmed 2026-10-10, #90 B1a; engine-audit A8).
+
 A resumed run (§2.16) takes the capture run's s and its inputs from the
 snapshot (`pinned.outletEwr`), so it is the uninterrupted run's to the bit.
 Calibration (§2.10b) re-reads the EWR from each candidate's natural flow, as
@@ -6424,7 +6469,7 @@ flow fails there, as with a rule table (§2.9c).
 
 **The workbook.** The b023 importers read an optional `[EWR options]` sheet
 (defined names `zEwrOpt_Method`: Pragmatic | TAB file | Percentile tables,
-`zEwrOpt_Scaling`: MAR ratio | Area ratio, `zEwrOpt_TableMar`,
+`zEwrOpt_Scaling`: MAR ratio | Area ratio, blank = Area ratio, `zEwrOpt_TableMar`,
 `zEwrOpt_TableArea`, `zEwrOpt_TabM3s` 12 cells, `zEwrOpt_PctPoints` 10 cells,
 `zEwrOpt_NaturalPct` and `zEwrOpt_ReservePct` 12 × 10) into
 `settings.ewrDailySource` (scripts/wbt-import/README.md); a workbook without
@@ -7239,8 +7284,10 @@ r / (0.01·Q) days, and a run is flagged once it lasts three such steps
 0.004 needs 75, and 0.002 or less the cap. Zero flow counts like any low value
 and gets the cap, so 90 days of a dry riverbed warn (expected in ephemeral
 rivers; the check never changes results). The per-day flags for calibration
-don't follow it there: from engine 1.62.0 a zero-flow stretch is never a
-suspect day (§2.10h, QF-3). With fewer than two distinct values
+don't follow it there: a zero-flow stretch is judged by its own rule
+instead, trusted inside the months the river is known to stop and up to 30
+days otherwise (engine ≥ 1.81.0; 1.62.0 – 1.80.0 trusted every one, §2.10h,
+QF-3). With fewer than two distinct values
 the resolution is unknown and a non-zero run needs 14 days. Every number here
 is judgement. The Data tab's per-day flags use the same rule.
 
@@ -8214,7 +8261,7 @@ applies, in this order:
 | --- | --- | --- |
 | missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
 | infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
-| suspect | an outlier or inside a flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a) | left out |
+| suspect | an outlier or inside a non-zero flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a), or inside a zero-flow stretch the river-stops rule doesn't trust (engine ≥ 1.81.0, below) | left out |
 | aboveRating | above the record's highest field gauging | censored |
 | belowRating | above zero but below its lowest gauging | left out |
 | humanUse | human use dominates the flow | scored |
@@ -8296,19 +8343,51 @@ information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters.
 
-**Zero flow held for months (engine ≥ 1.62.0, QF-3, engine-audit C3).** A
-river that really stops trips the flat-stretch check after 90 days of zero
-flow (`settings.dataQuality.flatlineFlowMaxDays`, 90 by default). Up to
-1.61.0 those days were suspect, so the default left them out and hid the dry
-spell from the fit. Now a zero-flow stretch is never suspect (`flowDayFlags`
-calls only a non-zero flat stretch and an outlier suspect), as GSIM's
-flat-line rule flags only values above zero (Gudmundsson et al. 2018). The
-Data checks still list the stretch as a run warning, and the panel names the
-days (`DayQuality.longZeroDays`, counted over runs of consecutive zero
-readings at least the cap long) with the way out for a logger that failed
-reading zero: an exclusion period. `suspectZeroDays` stays for older
-reports and is 0 from 1.62.0. The run's `observed_flow_quality` column
+**Zero flow: the river-stops rule (engine ≥ 1.81.0, issue #507 item 2,
+engine-audit C3, QF-3).** A zero-flow reading is either the river stopping
+or a logger that failed (a broken or blocked logger also reads zero; the
+client's has been known to fail). `settings.qualityFlags.zeroFlowMonths`
+lists the calendar months (1–12) the river is known to stop in (default
+none; Settings → *Calibration record* → *Months the river stops*). A
+**zero-flow stretch** is a maximal run of consecutive readings of exactly 0
+(a blank, NaN or negative day ends it), found over the **whole stored
+record**, so its length doesn't depend on the run window
+(`zeroFlowSuspect` in `dayFlags.ts`):
+- a stretch whose every day falls in one of the listed months is **trusted**
+  as the river stopping and scored, however long;
+- with months listed, any other stretch (one that runs outside them, even
+  for a day or two, judged whole) is **suspect**;
+- with no months listed, a stretch longer than 30 days
+  (`ZERO_FLOW_TRUST_MAX_DAYS`) is suspect and a shorter one is trusted (a
+  30-day stretch is trusted, 31 days is suspect).
+
+Suspect zero-flow days take the `suspect` treatment (left out by default),
+and the data-quality panel says "check with the client" with what to do:
+list the months if the river stops then, or record the logger failure as an
+exclusion period. An exclusion period stays the manual override either way.
+The rule is part of the suspect class, so a run whose input lacks the
+record's history (a resumed run) leaves it out with the rest of that class.
+`DayQuality.suspectZeroDays` counts the suspect zero-flow days in the
+window, `longZeroDays` the trusted ones in a stretch longer than 30 days,
+and `zeroFlowMonths` records the months the flags read. The months are part
+of the quality-flag settings, so a fit made under other months is flagged
+"Quality flags changed since fit" (a resolved setting from before 1.81.0
+reads as none), and run comparison lists the change ("Months the river
+stops: none → Feb, Mar, Apr"). The run's `observed_flow_quality` column
 follows.
+
+History: up to 1.61.0 a zero stretch past the flat-stretch cap (90 days) was
+suspect like any flat stretch. Engine 1.62.0 – 1.80.0 trusted every zero
+stretch (QF-3, after GSIM's flat-line rule, which flags only values above
+zero, Gudmundsson et al. 2018); that rule is built for official gauging
+stations, and the client's record is a small private logger.
+**Decided rule, 2026-10-10 (issue #507 item 2, the client's hydrologist):**
+the river does stop in dry years in February, March and April, and the
+logger has been known to fail, so a zero stretch inside Feb–Apr is trusted
+and any other one longer than 30 days, or running outside those months, is
+"check with the client". Set `zeroFlowMonths` to [2, 3, 4] for the client
+catchment (project data, through Settings). This also answers plan.md
+question 10.
 
 The defaults (censor above the rating; leave out below-rating, suspect and
 infilled days) are a *provisional decision 2026-10-01, to be confirmed by
@@ -9137,8 +9216,11 @@ comparison of modelled use with the licensed volume and of dam capacity with
 the licensed dam volume. `allocations/baseline.test.ts` guards it: with
 `none`, a run is bit-identical (every series value, by `Object.is`, and the
 summary) with and without allocations, on the outlook catchment and on 25
-random fuzz networks, apart from `RunSummary.allocations` and the warnings
-about the allocation rows themselves.
+random fuzz networks (some with a dam beside the river losing diverted
+water, `diverted_loss`, §2.12: a compare-only run carries that series
+whatever the volumes, and only a cap counts it against them), apart from
+`RunSummary.allocations` and the warnings about the allocation rows
+themselves.
 
 The
 backend puts the project's allocations on every run's input

@@ -74,7 +74,8 @@
 	li + li {
 		margin-top: 0.15rem;
 	}
-	code {
+	/* FormatText's `code` runs. */
+	.format-body :global(code) {
 		font-family: var(--font-mono);
 		font-size: 0.95em;
 	}

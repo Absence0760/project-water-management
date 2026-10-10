@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 108 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 115 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -60,7 +60,9 @@ The core daily chain, with every setting of it the generator varies:
   pooled fallback and 0.25–4 clamp; the low-vs-CHIRPS years, the flagged zero
   runs and the missing periods left out of it), else forecast rain; zero-rain
   runs (the wet-season 60-day rule, the plain 180-day rule, `'missing'` /
-  `'asRecorded'`, listed missing periods as dates or water years);
+  `'asRecorded'`, listed missing periods as dates or water years; engine ≥
+  1.81.0, a flagged day kept dry where CHIRPS reads at most the fill
+  threshold `fillAboveChirpsMm`);
   multi-day accumulations (detection, `'spread'` / `'asRecorded'`, and their
   days left out of the fit; engine ≥ 1.70.0, a blank or listed-missing stretch
   of more than 7 days ending the run, and a reading straight after one set
@@ -277,7 +279,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (108
+`test_verify.py` breaks `model.py` one documented rule at a time (115
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;

@@ -803,6 +803,14 @@ describe('SettingsPatch.zeroRainRuns (CR-20)', () => {
 			accumulationMode: 'asRecorded'
 		});
 	});
+
+	it('the CHIRPS fill threshold (engine ≥ 1.81.0, issue #507 item 3): mm from 0 to 50, default 2, merged into settings stored before it', () => {
+		expect(defaultProjectSettings().zeroRainRuns.fillAboveChirpsMm).toBe(2);
+		for (const v of [0, 2, 2.5, 50]) expect(ok({ fillAboveChirpsMm: v }), String(v)).toBe(true);
+		for (const bad of [-0.1, 50.1, '2', null, Number.NaN]) expect(ok({ fillAboveChirpsMm: bad }), String(bad)).toBe(false);
+		expect(mergeSettings({ zeroRainRuns: { mode: 'missing', keepDry: [], missing: [] } }).zeroRainRuns.fillAboveChirpsMm).toBe(2);
+		expect(patchSettings({}, { zeroRainRuns: { fillAboveChirpsMm: 5 } }).zeroRainRuns).toEqual({ ...defaultProjectSettings().zeroRainRuns, fillAboveChirpsMm: 5 });
+	});
 });
 
 describe('SettingsPatch.fitRecord', () => {
@@ -877,6 +885,16 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok(record)).toBe(true);
 		expect(ok({ ...full, dayQuality: { ...dq, extra: 1 } })).toBe(false);
 		expect(ok({ ...full, qualityFlags: { ...settings, suspect: 'drop' } })).toBe(false);
+		// Engine ≥ 1.81.0: the river-stops months in the settings and the summary; a record from before them has neither.
+		const months = { ...settings, zeroFlowMonths: [2, 3, 4] };
+		const dq2 = dayQuality({ flowKind: 'flow_logger_m3s', settings: months, windowIdx: [0, 1, 2, 3], flags, scoring: scoringDays([0, 1, 2, 3], flags, months, null, 4), observed: Float64Array.from([1, 2, 0, NaN]), rainFlags: null, zeroRunMask: null });
+		expect(dq2.zeroFlowMonths).toEqual([2, 3, 4]);
+		expect(ok({ ...full, qualityFlags: months, dayQuality: dq2 })).toBe(true);
+		const { zeroFlowMonths: _z, ...oldFlags } = settings;
+		const { zeroFlowMonths: _d, ...oldDq } = dq;
+		expect(ok({ ...full, qualityFlags: oldFlags, dayQuality: oldDq })).toBe(true);
+		expect(ok({ ...full, qualityFlags: { ...settings, zeroFlowMonths: [13] } })).toBe(false);
+		expect(ok({ ...full, dayQuality: { ...dq, use: { ...dq.use, zeroFlowMonths: [2] } } })).toBe(false);
 	});
 
 	it('accepts how automated calibration chose the fit (engine ≥ 1.25.0, issue #153), and refuses a kept case that wasn’t eligible', () => {
@@ -975,6 +993,9 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { mode: 'missing', keepDry: [], missing: [] } } })).toBe(true);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, accumulationMode: 'smear' } } })).toBe(false);
 		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, keepDry: [{ waterYear: 2003, reason: ' ' }] } } })).toBe(false);
+		// The CHIRPS fill threshold (engine ≥ 1.81.0) is optional there too, and bounded as in the settings.
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, fillAboveChirpsMm: 2 } } })).toBe(true);
+		expect(ok({ ...record, forcing: { ...forcing, zeroRainRuns: { ...zr, fillAboveChirpsMm: -1 } } })).toBe(false);
 	});
 
 	it('accepts an optional CHIRPS fit period and factor sets inside forcing (engine ≥ 0.29.0)', () => {
@@ -1375,10 +1396,28 @@ describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {
 	});
 
 	it('fills the defaults for settings stored before it, and a patch merges field by field with the ratings replaced whole', () => {
-		expect(mergeSettings({}).qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+		expect(mergeSettings({}).qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [] });
 		const stored = { qualityFlags: { suspect: 'include', ratings: { flow_logger_m3s: rating } } };
 		const s = patchSettings(stored, { qualityFlags: { ratings: { flow_observed_m3s: rating } } });
-		expect(s.qualityFlags).toEqual({ ratings: { flow_observed_m3s: rating }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'include', infilled: 'exclude' });
+		expect(s.qualityFlags).toEqual({ ratings: { flow_observed_m3s: rating }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'include', infilled: 'exclude', zeroFlowMonths: [] });
+	});
+
+	it('the river-stops months (engine ≥ 1.81.0, issue #507 item 2): calendar months 1–12, each once; patched without touching the rest', () => {
+		expect(ok({ zeroFlowMonths: [2, 3, 4] })).toBe(true);
+		expect(ok({ zeroFlowMonths: [] })).toBe(true);
+		expect(ok({ zeroFlowMonths: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] })).toBe(true);
+		for (const bad of [[0], [13], [2.5], [2, 2], '2,3', [null], new Array(13).fill(1)]) expect(ok({ zeroFlowMonths: bad }), JSON.stringify(bad)).toBe(false);
+		const r = SettingsPatch.safeParse({ qualityFlags: { zeroFlowMonths: [3, 3] } });
+		expect(JSON.stringify(r.error!.issues)).toContain('a river-stops month is listed twice');
+		const stored = { qualityFlags: { suspect: 'include', ratings: { flow_logger_m3s: rating } } };
+		expect(patchSettings(stored, { qualityFlags: { zeroFlowMonths: [2, 3, 4] } }).qualityFlags).toEqual({
+			ratings: { flow_logger_m3s: rating },
+			aboveRating: 'censor',
+			belowRating: 'exclude',
+			suspect: 'include',
+			infilled: 'exclude',
+			zeroFlowMonths: [2, 3, 4]
+		});
 	});
 });
 

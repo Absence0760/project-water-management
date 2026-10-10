@@ -475,7 +475,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Crop demand; ARC/SABI Irrigation Design Manual ch. 4; docs/model.md §2.3'
 	},
 	'crop-area': {
-		long: 'The hydrological unit’s demand is the sum over its crops of area × requirement. Stand-alone dams and natural areas have no crop area.',
+		long: 'The hydrological unit’s demand is the sum over its crops of area × requirement. Stand-alone dams and natural areas have no crop area.\n\nA whole catchment’s planted areas can come in from a list: **Import plantings…** on Crops & demand reads a CSV file or pasted rows, one row per farm and crop with its hectares, matches farms and crops by name, and adds the crops (and, when asked, the farms) the project doesn’t have. Help → File formats gives the layout and a template.',
 		aliases: ['cropped area', 'hectares', 'farm demand'],
 		related: ['crop-factor', 'irrigation-demand'],
 		source: 'b023 Farm demand'

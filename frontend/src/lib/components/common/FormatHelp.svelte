@@ -26,6 +26,8 @@
 	} = $props();
 </script>
 
+<!-- A note for another format starts closed, as a new box's does (one note can switch formats: Load crop factors' sources, the project import's two kinds). -->
+{#key format.id}
 <details class="format-help" data-testid="format-help">
 	<summary>{summary}{#if context}<span class="visually-hidden">{` ${context}`}</span>{/if}</summary>
 	<div class="body">
@@ -35,6 +37,7 @@
 		</p>
 	</div>
 </details>
+{/key}
 
 <style>
 	.format-help {

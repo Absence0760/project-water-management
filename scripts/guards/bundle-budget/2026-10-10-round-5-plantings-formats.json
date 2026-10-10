@@ -1,0 +1,4 @@
+{
+	"addKb": 24,
+	"why": "Round 5 (PR #512), all of its frontend growth in one entry: issue #477's Import plantings dialog and reader (crops/ImportPlantingsDialog.svelte, plantingsImport.ts, ~8 KB gzipped with the shared format body), the File formats help page (routes/help/formats, lib/help/fileFormats.ts, ~1.5 KB of its own; the format modules it lists were already shipped), the FileFormat refactor of every Expected format note, and the other round-5 agents' EWR, baseline-allocation and calibration UI. Measured locally on the round-5 tree: 1935 KB against a 1913 KB ceiling (+22 KB); 2 KB headroom."
+}

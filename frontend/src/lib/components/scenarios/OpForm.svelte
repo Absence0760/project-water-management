@@ -53,7 +53,7 @@
 	const loadEwrDailyEditor = () => import('$lib/components/settings/EwrDailySourceFields.svelte');
 	// The area ratio's numerator, as the run works it out and the Settings form shows it: the area the natural flow is
 	// made on (after the ops listed): the calibration override, else the units' areas summed.
-	const ewrModelAreaKm2 = $derived(resolveCatchmentAreaKm2(input.settings.calibration, input));
+	const ewrModelAreaKm2 = $derived(resolveCatchmentAreaKm2({ catchmentAreaKm2: input.settings.calibration?.catchmentAreaKm2 ?? null }, input));
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
 	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
@@ -573,7 +573,7 @@
 				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
 			{/each}
 		</fieldset>
-		<p class="hint">What the allocation mode caps or scales a run to (Settings › Registered volumes). A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
+		<p class="hint">What a scenario’s allocation mode caps or scales its run to (the baseline only compares). A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
 	{:else if d.kind === 'cropArea.set'}
 		<div class="form-row">
 			<div class="field">
