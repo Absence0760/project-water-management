@@ -1291,6 +1291,18 @@ describe('remapSettingNodeIds (project copy)', () => {
 		expect(remapSettingNodeIds(null, ids)).toEqual({});
 	});
 
+	it('moves the unit-rain reference’s unit and a unit gauge’s key, leaving the catchment gauge alone (engine 1.80.0, issue #500)', () => {
+		const ids = new Map([
+			['f1', 'new-f1'],
+			['f2', 'new-f2']
+		]);
+		const at = (gauge: string, unitId: string) => ({ unitRain: { enabled: true, gaugeMapMm: 600, reference: { gauge, unitId } } });
+		expect(remapSettingNodeIds(at('rain_catchment_mm@f2', 'f1'), ids)).toEqual(at('rain_catchment_mm@new-f2', 'new-f1'));
+		expect(remapSettingNodeIds(at('rain_catchment_mm', 'f1'), ids)).toEqual(at('rain_catchment_mm', 'new-f1'));
+		expect(remapSettingNodeIds(at('rain_catchment_mm@gone', 'gone'), ids)).toEqual(at('rain_catchment_mm@gone', 'gone'));
+		expect(remapSettingNodeIds({ unitRain: { enabled: true } }, ids)).toEqual({ unitRain: { enabled: true } });
+	});
+
 	it('moves the outcome matrix’s site too, leaving the outlet (null) and an unknown site alone', () => {
 		const ids = new Map([['g1', 'new-g1']]);
 		const at = (siteNodeId: string | null) => ({ outcomes: { yearClassMethod: 'terciles', siteNodeId } });

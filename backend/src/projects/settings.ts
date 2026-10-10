@@ -170,6 +170,14 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
 		if (isObj(r.ewrTrigger) && typeof r.ewrTrigger.siteNodeId === 'string' && ids.has(r.ewrTrigger.siteNodeId)) r.ewrTrigger = { ...r.ewrTrigger, siteNodeId: ids.get(r.ewrTrigger.siteNodeId) };
 		s.droughtRestriction = r;
 	}
+	// The unit-rain reference (engine ≥ 1.80.0, issue #500): its unit, and a unit's own gauge named by its key.
+	if (isObj(s.unitRain) && isObj(s.unitRain.reference)) {
+		const ref = { ...s.unitRain.reference };
+		if (typeof ref.unitId === 'string' && ids.has(ref.unitId)) ref.unitId = ids.get(ref.unitId);
+		const at = typeof ref.gauge === 'string' ? ref.gauge.indexOf('@') : -1;
+		if (at > 0 && ids.has((ref.gauge as string).slice(at + 1))) ref.gauge = `${(ref.gauge as string).slice(0, at)}@${ids.get((ref.gauge as string).slice(at + 1))}`;
+		s.unitRain = { ...s.unitRain, reference: ref };
+	}
 	if (typeof s.calibrationSiteNodeId === 'string' && ids.has(s.calibrationSiteNodeId)) s.calibrationSiteNodeId = ids.get(s.calibrationSiteNodeId);
 	if (isObj(s.fitRecord) && typeof s.fitRecord.siteNodeId === 'string' && ids.has(s.fitRecord.siteNodeId)) {
 		s.fitRecord = { ...s.fitRecord, siteNodeId: ids.get(s.fitRecord.siteNodeId) };
