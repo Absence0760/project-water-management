@@ -15,6 +15,8 @@ import { answerConfirm } from '../support/confirm.ts';
 
 const RUL = new URL('../fixtures/drm-synthetic.rul', import.meta.url).pathname;
 const TAB = new URL('../fixtures/drm-synthetic.tab', import.meta.url).pathname;
+/** The TAB flows the first test reads from drm-synthetic.tab (Oct 0.4704, Feb 0.0579 m³/s), as Settings saves them. */
+const TAB_M3S = [0.4704, 0.4, 0.3, 0.2, 0.0579, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4];
 
 async function seed(request: APIRequestContext, name: string): Promise<string> {
 	const project = await createProject(request, name);
@@ -29,7 +31,7 @@ async function seed(request: APIRequestContext, name: string): Promise<string> {
 	return project.id;
 }
 
-test('a .tab file sets the TAB flows (shown converted before use), a .rul the percentile tables, and the run says which EWR it used', async ({ page, owner }) => {
+test('a .tab file sets the TAB flows (shown converted before use), and the run says which EWR it used', async ({ page, owner }) => {
 	void owner;
 	const id = await seed(page.request, 'Daily EWR from DRM files');
 	await page.goto(`/projects/${id}?tab=settings`);
@@ -72,9 +74,23 @@ test('a .tab file sets the TAB flows (shown converted before use), a .rul the pe
 	await createRun(page.request, id, 'TAB file');
 	await page.goto(`/projects/${id}?tab=runs`);
 	await expect(page.getByTestId('outlet-ewr-source').first()).toContainText(/^EWR: the DRM TAB file × [\d.]+ \(natural MAR [\d.]+ ÷ 49\.8 Mm³\/a\)$/);
+});
+
+// The .rul half, on its own: one test with both halves made five page loads and three whole-page scans of Settings
+// (~3,000 elements), 17–19 s on CI and over the 30 s budget on a loaded runner. This starts from the TAB file the
+// first test saves, set through the API.
+test('a .rul under the TAB file fills the percentile tables and keeps the TAB file; a .tab under the tables offers its MAR only; the tables are kept for switching back', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Daily EWR, percentile tables from DRM files');
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'mar', tableMarMm3: 49.8, tableAreaKm2: null, tabM3s: TAB_M3S, naturalPctM3s: null, reservePctM3s: null }
+	});
+	await page.goto(`/projects/${id}?tab=settings`);
+	const daily = page.getByRole('group', { name: /^The daily EWR at the outlet/ });
+	const loadFile = daily.getByLabel('Load a DRM file (.rul / .tab)');
+	const preview = daily.getByTestId('ewr-tab-preview');
 
 	// A .rul loaded under the TAB file fills the percentile tables but keeps the TAB file, and says so.
-	await page.goto(`/projects/${id}?tab=settings`);
 	await expect(daily.getByLabel('Daily EWR from')).toHaveValue('tab');
 	await loadFile.setInputFiles(RUL);
 	const fileResult = daily.getByRole('status', { name: 'File result' });
