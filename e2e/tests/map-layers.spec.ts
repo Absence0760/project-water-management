@@ -170,6 +170,29 @@ test('the hydrological units, the MAP grid and the CHIRPS grid: each a toggle in
 	await expect(page.getByTestId('map-mapgrid-summary')).toBeVisible();
 });
 
+test('the DEM grid: every 10th elevation-model cell each way in view, with its elevation, a toggle in the URL', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Map DEM grid');
+	await openMap(page, project.id);
+	// A small boundary over the synthetic DEM's valley (e2e's DEM_URL, backend/src/delineation/fixture.ts), so the view is the DEM's.
+	const valley = JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'Valley' }, geometry: { type: 'Polygon', coordinates: [[[20.71, -33.47], [20.77, -33.47], [20.77, -33.4], [20.71, -33.4], [20.71, -33.47]]] } }] });
+	await uploadThroughSheet(page, null, 'valley.geojson', valley);
+	await mapReady(page);
+
+	await openLayers(page);
+	const toggle = layers(page).getByRole('checkbox', { name: 'DEM grid' });
+	await expect(toggle).not.toBeChecked();
+	await toggle.check();
+	await expect(page).toHaveURL(/[?&]layers=demgrid(&|$)/);
+	await expect(page.getByTestId('map-demgrid-summary')).toHaveText(
+		/^[\d\s,]+ points in view: every 10th cell of the elevation model each way \(cells about [\d\s,]+ m, so a point every [\d\s,]+ m\), -?[\d\s,]+ m to -?[\d\s,]+ m\. The map has no fonts for labels here, so it shows the points without their values\.$/
+	);
+	await expect(page.getByTestId('map-demgrid-source')).toContainText('Source: Synthetic DEM');
+	await expect(layers(page).getByRole('status')).toContainText(/DEM grid points? shown\./);
+	await page.goBack();
+	await expect(page.getByTestId('map-demgrid')).toHaveCount(0);
+});
+
 test('the Area fill slider: the polygons filled less, outlines kept, remembered in this browser', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map area fill');

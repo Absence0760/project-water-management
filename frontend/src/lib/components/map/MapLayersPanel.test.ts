@@ -176,6 +176,26 @@ describe('the Layers box’s Hydrological units, MAP grid and CHIRPS grid toggle
 	});
 });
 
+describe('the Layers box’s DEM grid toggle', () => {
+	const grid = (answer: unknown, extra: Record<string, unknown> = {}) => ({ on: true, zoomIn: false, error: null, answer, range: [640, 812], retry: () => {}, ...extra }) as never;
+	const html_ = (demGrid: unknown) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, demGrid: demGrid as never } }).body);
+	const ok = { bbox: [0, 0, 1, 1], dataset: { label: 'Synthetic DEM 1', attribution: '', zoom: 10 }, stride: 10, cellM: 32, points: [[20.71, -33.43, 812], [20.72, -33.43, 640]], tooDense: false, max: 5000 };
+
+	it('is offered only when the tab passes it, and says what is drawn, how far apart, the range and the source', () => {
+		expect(html_(null)).not.toContain('map-layer-demgrid');
+		const b = html_(grid(ok));
+		expect(b).toContain('2 points in view: every 10th cell of the elevation model each way (cells about 32 m, so a point every 320 m), 640 m to 812 m.');
+		expect(b).toContain('Source: Synthetic DEM 1');
+	});
+
+	it('says to zoom in, too dense, nothing in view, or the error', () => {
+		expect(html_(grid(null, { zoomIn: true }))).toContain('Zoom in to see the DEM grid');
+		expect(html_(grid({ ...ok, points: [], tooDense: true }))).toMatch(/This view holds more than 5.000 of the grid’s points/);
+		expect(html_(grid({ ...ok, points: [] }))).toContain('The elevation model has no cell in this view.');
+		expect(html_(grid(null, { error: 'The DEM grid is off: the server has no elevation model (DEM_URL is empty).' }))).toContain('no elevation model');
+	});
+});
+
 describe('the Layers box’s Area fill slider', () => {
 	it('is offered only when the tab passes it, at its percentage, with a note on what it fills', () => {
 		const render_ = (areaFill: unknown) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, areaFill: areaFill as AreaFill | null } }).body);

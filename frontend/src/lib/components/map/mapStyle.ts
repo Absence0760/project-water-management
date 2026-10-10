@@ -609,6 +609,70 @@ export function mapGridLayers(dark: boolean, labels: boolean): { over: Layer[]; 
 	};
 }
 
+/** A DEM grid point as the map takes it. */
+export interface DemGridPointData {
+	lon: number;
+	lat: number;
+	elevationM: number;
+}
+
+/** The `demgrid` source's data: each sampled DEM cell with its elevation and label ("812 m"). */
+export function demGridData(points: readonly DemGridPointData[] | null | undefined) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: (points ?? []).map((p) => ({
+			type: 'Feature' as const,
+			properties: { m: p.elevationM, label: `${Math.round(p.elevationM)} m` },
+			geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] }
+		}))
+	};
+}
+
+/**
+ * The elevation ramp: sand to dark brown by metres, a hypsometric order apart
+ * from the MAP grid's blues, the same in both themes (each point ringed in the
+ * halo colour, as the MAP points are). Its stops are the key's.
+ */
+export const DEM_RAMP: readonly (readonly [number, string])[] = [
+	[0, '#f1e3b8'],
+	[400, '#d8b46c'],
+	[800, '#ad7c3c'],
+	[1200, '#7c5026'],
+	[2000, '#4a2d12']
+];
+
+/** The DEM grid layer: a dot at each sampled cell's centre (a DEM cell, not a station), coloured by elevation, and its value beside it. */
+export function demGridLayers(dark: boolean, labels: boolean): { over: Layer[]; labels: Layer[] } {
+	const t = labelColours(dark);
+	const src = { source: 'demgrid' };
+	return {
+		over: [
+			{
+				id: 'demgrid-point',
+				type: 'circle',
+				...src,
+				paint: {
+					'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 2, 15, 4.5],
+					'circle-color': ['interpolate', ['linear'], ['get', 'm'], ...DEM_RAMP.flat()],
+					'circle-stroke-color': t.halo,
+					'circle-stroke-width': 1
+				}
+			}
+		],
+		labels: labels
+			? [
+					{
+						id: 'demgrid-label',
+						type: 'symbol',
+						...src,
+						layout: { 'text-field': ['get', 'label'], 'text-font': [LABEL_FONTS.regular], 'text-size': 10, 'text-offset': [0, 0.8], 'text-anchor': 'top', 'text-padding': 2 },
+						paint: { 'text-color': t.text, 'text-halo-color': t.halo, 'text-halo-width': 1.5 }
+					}
+				]
+			: []
+	};
+}
+
 /** The CHIRPS grid's colour: an orange apart from the water blues, the parcels' green and the quaternaries' purple. */
 export const chirpsColour = (dark: boolean) => (dark ? '#ffb15c' : '#a34700');
 
@@ -678,6 +742,8 @@ export interface StyleOptions {
 	mapGrid?: ReturnType<typeof mapGridData>;
 	/** The CHIRPS grid's cells and points (chirpsData()); none when omitted. */
 	chirps?: ReturnType<typeof chirpsData>;
+	/** The DEM grid's sampled cells (demGridData()); none when omitted. */
+	demGrid?: ReturnType<typeof demGridData>;
 	/** The area fills' opacity scale, 0–1 (the Area fill slider, fillOpacity()); 1 when omitted. */
 	fillScale?: number;
 }
@@ -696,6 +762,7 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 	const qt = quaternaryLayers(dark, !!glyphs);
 	const un = unitsLayers(dark, !!glyphs);
 	const mg = mapGridLayers(dark, !!glyphs);
+	const dg = demGridLayers(dark, !!glyphs);
 	const style: Style = {
 		...base,
 		sources: {
@@ -707,7 +774,8 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			proposal: { type: 'geojson', data: opts.proposal ?? proposalData(null) },
 			units: { type: 'geojson', data: opts.units ?? unitsData(null) },
 			mapgrid: { type: 'geojson', data: opts.mapGrid ?? mapGridData(null) },
-			chirps: { type: 'geojson', data: opts.chirps ?? chirpsData(null) }
+			chirps: { type: 'geojson', data: opts.chirps ?? chirpsData(null) },
+			demgrid: { type: 'geojson', data: opts.demGrid ?? demGridData(null) }
 		},
 		layers: [
 			...base.layers,
@@ -717,11 +785,13 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...overlayLayers(dark, opts.fillScale ?? 1),
 			...un.over,
 			...chirpsLayers(dark),
+			...dg.over,
 			...mg.over,
 			...proposalLayers(dark),
 			...(glyphs && tilesUrl ? labelLayers(dark) : []),
 			...qt.labels,
 			...un.labels,
+			...dg.labels,
 			...mg.labels
 		]
 	};

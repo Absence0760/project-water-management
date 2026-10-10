@@ -74,6 +74,7 @@
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
+	import { DemGridLayer } from './demGridLayer.svelte';
 	import { AreaFill } from './areaFill.svelte';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
@@ -807,6 +808,14 @@
 	});
 	const chirpsOn = $derived(layersOn(params).has('chirps'));
 	const chirpsInView = $derived(chirpsOn ? chirpsCells(mapView) : null);
+	const demGrid = new DemGridLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('demgrid'),
+		view: () => mapView,
+		load: api.map.demGrid
+	});
+	/** The DEM grid is offered unless the server is known to have no elevation model (an editor's delineation check says so). */
+	const demGridOffered = $derived(!(canEdit && delineationLoaded && !delineation?.available));
 	/** The Area fill slider (kept in this browser): the polygons' fill strength. */
 	const areaFill = new AreaFill();
 
@@ -1291,6 +1300,7 @@
 		{mapGrid}
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
+		demGrid={demGridOffered ? demGrid : null}
 		{areaFill}
 	/>
 {/snippet}
@@ -1455,6 +1465,7 @@
 									units={unitsLabelled}
 									mapGrid={mapGrid.points}
 									chirps={chirpsInView}
+									demGrid={demGrid.points}
 									fillScale={areaFill.scale}
 								/>
 							{/snippet}

@@ -96,6 +96,8 @@
 		mapGridData,
 		type MapGridPointData,
 		chirpsData,
+		demGridData,
+		type DemGridPointData,
 		AREA_FILL_LAYER,
 		fillOpacity,
 		type ChirpsCellData
@@ -144,6 +146,7 @@
 		units = null,
 		mapGrid = null,
 		chirps = null,
+		demGrid = null,
 		fillScale = 1
 	}: {
 		features: MapFeature[];
@@ -206,6 +209,8 @@
 		mapGrid?: readonly MapGridPointData[] | null;
 		/** The CHIRPS grid layer's cells and points (mapLayers.ts chirpsCells); null or empty: none. */
 		chirps?: readonly ChirpsCellData[] | null;
+		/** The DEM grid layer's sampled cells, each labelled with its elevation; null or empty: none. */
+		demGrid?: readonly DemGridPointData[] | null;
 		/** The area fills' opacity, 0–1 (the Layers box's Area fill slider): parcels, dams and results colours, never the outlines. */
 		fillScale?: number;
 	} = $props();
@@ -389,6 +394,7 @@
 	const syncUnits = () => setSource('units', () => unitsData(units, features));
 	const syncMapGrid = () => setSource('mapgrid', () => mapGridData(mapGrid));
 	const syncChirps = () => setSource('chirps', () => chirpsData(chirps));
+	const syncDemGrid = () => setSource('demgrid', () => demGridData(demGrid));
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
@@ -453,6 +459,7 @@
 						units: unitsData(units, features),
 						mapGrid: mapGridData(mapGrid),
 						chirps: chirpsData(chirps),
+						demGrid: demGridData(demGrid),
 						fillScale
 					});
 				const style = styleNow();
@@ -628,6 +635,12 @@
 		void status;
 		syncChirps();
 	});
+	$effect(() => {
+		void demGrid;
+		void status;
+		syncDemGrid();
+	});
+
 	// The Area fill slider: the fill layer's opacity set in place (a restyle would re-send every source).
 	$effect(() => {
 		const scale = fillScale;

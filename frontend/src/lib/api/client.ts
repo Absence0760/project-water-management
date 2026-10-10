@@ -159,6 +159,7 @@ import type {
 	MapLinkedNodes,
 	QuaternaryLookup,
 	MapGridLayer,
+	DemGridLayer,
 	UnitMapApplied,
 	UnitMapProposal,
 	QuaternaryLayer,
@@ -1132,6 +1133,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
 			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
 				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** Every 10th cell of the elevation model each way in `bbox` (at most 0.5° a side), for the map's DEM grid layer. */
+			demGrid: (id: string, bbox: readonly [number, number, number, number]) =>
+				request<DemGridLayer>('GET', `${p(id)}/map/dem-grid?${new URLSearchParams({ bbox: bbox.join(',') })}`),
 			/** One loaded MAP grid's points in `bbox` (at most 2° a side; `dataset` null: the default), for the map's MAP grid layer. */
 			mapGrid: (id: string, bbox: readonly [number, number, number, number], dataset?: string | null) =>
 				request<MapGridLayer>('GET', `${p(id)}/map/map-grid?${new URLSearchParams({ bbox: bbox.join(','), ...(dataset ? { dataset } : {}) })}`),

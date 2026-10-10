@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
 import {
 	CHIRPS_MAX_POINTS,
+	DEM_GRID_BBOX_MAX_DEG,
+	demGridViewBbox,
+	snappedViewBbox,
 	chirpsCells,
 	creditedFeature,
 	creditedReach,
@@ -199,5 +202,19 @@ describe('layersStatus (the Layers box’s one status region, WCAG 4.1.3)', () =
 	it('says nothing for a layer with nothing around or that failed (its own alert says it), nor a pick with the rivers off', () => {
 		expect(layersStatus({ ...loading, idle: true }, { ...loading, failed: true }, null)).toBe('');
 		expect(layersStatus(off, off, 'Reach 3')).toBe('');
+	});
+});
+
+describe('snappedViewBbox and demGridViewBbox', () => {
+	it('snaps a view outward to the step and refuses one past the widest, as every view-asked layer does', () => {
+		expect(snappedViewBbox([20.701, -33.449, 20.779, -33.421], 0.01, 0.5)).toEqual([20.7, -33.45, 20.78, -33.42]);
+		expect(snappedViewBbox([20, -34, 21, -33], 0.01, 0.5)).toBeNull();
+		expect(snappedViewBbox(null, 0.01, 0.5)).toBeNull();
+		expect(demGridViewBbox([20.701, -33.449, 20.779, -33.421])).toEqual([20.7, -33.45, 20.78, -33.42]);
+		expect(demGridViewBbox([20, -34, 20 + DEM_GRID_BBOX_MAX_DEG + 0.1, -33.9])).toBeNull();
+	});
+
+	it('takes the DEM grid as a layer of its own in the URL', () => {
+		expect(new URLSearchParams(withLayer('?tab=map', 'demgrid', true)).get('layers')).toBe('demgrid');
 	});
 });

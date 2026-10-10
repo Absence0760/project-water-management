@@ -2127,6 +2127,34 @@ in the browser from its definition (corners on whole multiples of 0.05° from
 carry no values. The Layers box says how many are in view; past 2 500
 (about a 2.5° view) it says to zoom in.
 
+## DEM grid
+
+The Map tab's **DEM grid** layer (`layers=demgrid`) shows the elevation
+model's own cells, thinned for looking at: one point every 10 cells along
+each row and column (one cell in 100) at the DEM's deepest zoom, each at its
+cell's centre with the cell's elevation in whole metres ("812 m"), a dot on a
+sand-to-dark-brown ramp (`mapStyle.ts` `DEM_RAMP`, ringed in the halo
+colour). With Copernicus GLO-30 at zoom 12 a cell is about 32 m here, so a
+point every ~320 m; the Relief layer is the same data drawn as shading.
+
+- **The points stay put.** The cells are picked on the global pixel grid
+  (their index a multiple of 10), so a pan never shifts them
+  (`backend/src/delineation/demGrid.ts`).
+- **The view decides what is asked.** `GET …/map/dem-grid?bbox=`
+  ([api.md § Catchment map](./api.md#catchment-map)) with the view snapped
+  out to 0.01° (`mapLayers.ts` `demGridViewBbox`, through the shared
+  `snappedViewBbox`), at most 0.5° a side ("Zoom in to see the DEM grid");
+  more than 5 000 points (counted before a tile is read) comes back
+  `tooDense`. It reads the DEM's decoded tiles, cached per process
+  (`dem.ts`), and isn't counted against the elevation-model cap, which is for
+  delineation's work.
+- **Cells below −500 m** are left out as no-data or sea (no land in South
+  Africa is that low).
+- **Off without a DEM** (`DEM_URL` empty): the route answers 409, and the
+  toggle isn't offered once an editor's delineation check says there is
+  none. Locally: `pnpm dev:tiles:terrain`, then `DEM_URL` in
+  `backend/.env.development.local` ([§ Delineation](#delineation)).
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on

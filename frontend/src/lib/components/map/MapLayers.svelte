@@ -31,6 +31,7 @@
 		CHIRPS_MAX_POINTS,
 		type ChirpsCell,
 		MAP_GRID_BBOX_MAX_DEG,
+		DEM_GRID_BBOX_MAX_DEG,
 		type MapLayer,
 		layersStatus,
 		mapLabel,
@@ -41,8 +42,9 @@
 		type UnitLabel,
 		withLayer
 	} from './mapLayers';
-	import { chirpsColour, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
+	import { chirpsColour, DEM_RAMP, MAP_RAMP, overlayColours, quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { MapGridLayer } from './mapGridLayer.svelte';
+	import type { DemGridLayer } from './demGridLayer.svelte';
 	import { AREA_FILL_STEP, type AreaFill } from './areaFill.svelte';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
@@ -59,6 +61,7 @@
 		mapGrid = null,
 		chirps = null,
 		labels = true,
+		demGrid = null,
 		areaFill = null
 	}: {
 		quaternaries: QuaternaryLayer;
@@ -80,6 +83,8 @@
 		chirps?: { on: boolean; cells: readonly ChirpsCell[] | null } | null;
 		/** The map writes labels (glyphs are configured); without, the lists here are the only place to read them. */
 		labels?: boolean;
+		/** The DEM grid layer's state. Null: no toggle (the server has no elevation model). */
+		demGrid?: DemGridLayer | null;
 		/** The Area fill slider's state (areaFill.svelte.ts): how strongly the polygons are filled. Null: no slider. */
 		areaFill?: AreaFill | null;
 	} = $props();
@@ -122,6 +127,10 @@
 	});
 	/** The ramp's swatch: the MAP colours left to right, lowest first. */
 	const rampGradient = `linear-gradient(90deg, ${MAP_RAMP.map(([, c]) => c).join(', ')})`;
+	/** The DEM grid's swatch: its elevation colours, lowest first. */
+	const demGradient = `linear-gradient(90deg, ${DEM_RAMP.map(([, c]) => c).join(', ')})`;
+	const dg = $derived(demGrid?.answer ?? null);
+	const dgRange = $derived(demGrid?.range ?? null);
 
 	const status = $derived(
 		layersStatus(
@@ -137,7 +146,14 @@
 							: `${mg.cells.length} MAP grid ${mg.cells.length === 1 ? 'point' : 'points'} shown.`
 						: 'Loading the MAP grid…'
 					: null,
-				chirps?.on && chirps.cells ? `${chirps.cells.length} CHIRPS grid ${chirps.cells.length === 1 ? 'point' : 'points'} shown.` : null
+				chirps?.on && chirps.cells ? `${chirps.cells.length} CHIRPS grid ${chirps.cells.length === 1 ? 'point' : 'points'} shown.` : null,
+				demGrid?.on && !demGrid.zoomIn && !demGrid.error
+					? dg
+						? dg.tooDense
+							? 'Too many DEM grid points in view: zoom in.'
+							: `${dg.points.length} DEM grid ${dg.points.length === 1 ? 'point' : 'points'} shown.`
+						: 'Loading the DEM grid…'
+					: null
 			]
 		)
 	);
@@ -347,6 +363,33 @@
 					<p class="muted" data-testid="map-chirps-summary">
 						{fmtNum(chirps.cells.length, 0, true)} CHIRPS v3 grid {chirps.cells.length === 1 ? 'point' : 'points'} in view, each the centre of a {CHIRPS_CELL_DEG}° cell (about 5 km): where CHIRPS gives its daily rainfall.
 					</p>
+				{/if}
+			</div>
+		{/if}
+	{/if}
+	{#if demGrid}
+		<label class="toggle">
+			<input type="checkbox" checked={demGrid.on} onchange={(e) => toggle('demgrid', e.currentTarget.checked)} data-testid="map-layer-demgrid" />
+			<span class="swatch ramp-swatch" style:--ramp={demGradient} aria-hidden="true"></span>
+			DEM grid
+		</label>
+		{#if demGrid.on}
+			<div class="qt small" data-testid="map-demgrid">
+				{#if demGrid.zoomIn}
+					<p class="muted" data-testid="map-demgrid-zoom">Zoom in to see the DEM grid (to about {DEM_GRID_BBOX_MAX_DEG}° across).</p>
+				{:else if demGrid.error}
+					<p class="err" role="alert">The DEM grid couldn’t be loaded: {demGrid.error} <button type="button" class="btn btn-sm" onclick={() => demGrid.retry()}>Try again</button></p>
+				{:else if !dg}
+					<p class="muted">Loading the DEM grid…</p>
+				{:else if dg.tooDense}
+					<p class="muted" data-testid="map-demgrid-dense">This view holds more than {fmtNum(dg.max, 0, true)} of the grid’s points: zoom in to see them.</p>
+				{:else if !dg.points.length}
+					<p class="muted" data-testid="map-demgrid-empty">The elevation model has no cell in this view.</p>
+				{:else}
+					<p class="muted" data-testid="map-demgrid-summary">
+						{fmtNum(dg.points.length, 0, true)} {dg.points.length === 1 ? 'point' : 'points'} in view: every {dg.stride}th cell of the elevation model each way (cells about {fmtNum(dg.cellM, 0, true)} m, so a point every {fmtNum((dg.cellM ?? 0) * dg.stride, 0, true)} m){dgRange ? `, ${fmtNum(dgRange[0], 0, true)} m to ${fmtNum(dgRange[1], 0, true)} m` : ''}.{labels ? '' : ' The map has no fonts for labels here, so it shows the points without their values.'}
+					</p>
+					<p class="muted" data-testid="map-demgrid-source">Elevation, m. Source: {dg.dataset.label}{dg.dataset.attribution && dg.dataset.attribution !== dg.dataset.label ? ` (${dg.dataset.attribution})` : ''}</p>
 				{/if}
 			</div>
 		{/if}
