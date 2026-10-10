@@ -84,7 +84,8 @@ describe('unitUse and wholeWaterYears', () => {
 		const a = c.nodes.find((n) => n.nodeId === 'A')!;
 		const mean = unitUse(a, 'surface', null)!;
 		expect(mean.band).toBe('over');
-		expect(mean.ratio!).toBeCloseTo((36_500 + 36_500) / 2 / (36_500 / 1.3), 6);
+		// Both whole years used 36 500 m³ against a volume of 36 500 / 1.3.
+		expect(mean.ratio!).toBeCloseTo(1.3, 6);
 		expect(unitUse(a, 'surface', 2002)!.modelledM3).toBe(36_500);
 		// The part year isn't offered, and a year outside the run has nothing.
 		expect(unitUse(a, 'surface', 2003)).toBeNull();

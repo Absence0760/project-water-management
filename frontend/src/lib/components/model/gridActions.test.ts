@@ -37,6 +37,16 @@ function editor(): ModelEditor {
 const settings: ProjectSettings = { ...defaultProjectSettings(), apanMm: [150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 150] };
 
 /** The grid-actions row comes before the grid's first body row, and holds these buttons in this order. */
+// Svelte's SSR markers (<!---->, <!--[-->), removed until none is left.
+function noComments(text: string) {
+	let prev;
+	do {
+		prev = text;
+		text = text.replace(/<!--[\s\S]*?-->/g, '');
+	} while (text !== prev);
+	return text;
+}
+
 function actionsBeforeGrid(html: string, first: string, buttons: string[]) {
 	const row = html.indexOf('data-testid="grid-actions"');
 	expect(row).toBeGreaterThan(-1);
@@ -45,7 +55,7 @@ function actionsBeforeGrid(html: string, first: string, buttons: string[]) {
 	expect(at).toBeGreaterThan(-1);
 	expect(row).toBeLessThan(Math.min(body === -1 ? Infinity : body, at));
 	const rowHtml = html.slice(row, html.indexOf('</div>', row + html.slice(row).indexOf('<button')) + 6);
-	const got = [...rowHtml.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1]!.replace(/<!--[\s\S]*?-->/g, '').trim());
+	const got = [...rowHtml.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map((m) => noComments(m[1]!).trim());
 	expect(got).toEqual(buttons);
 }
 
