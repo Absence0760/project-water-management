@@ -115,8 +115,7 @@ export interface FlowFlagInput {
  */
 export function zeroFlowSuspect(s: DailySeries, months: readonly number[] = []): Uint8Array {
 	const out = new Uint8Array(s.values.length);
-	const inMonths = new Uint8Array(13);
-	for (const m of months) if (m >= 1 && m <= 12) inMonths[m] = 1;
+	const inMonths = (m: number) => months.includes(m);
 	const d0 = toEpochDay(s.startDate);
 	const v = s.values;
 	for (let i = 0; i < v.length; ) {
@@ -127,7 +126,7 @@ export function zeroFlowSuspect(s: DailySeries, months: readonly number[] = []):
 		let j = i;
 		let inside = months.length > 0;
 		while (j < v.length && v[j] === 0) {
-			if (inside && !inMonths[monthOfEpochDay(d0 + j)]) inside = false;
+			if (inside && !inMonths(monthOfEpochDay(d0 + j))) inside = false;
 			j++;
 		}
 		if (!inside && (months.length > 0 || j - i > ZERO_FLOW_TRUST_MAX_DAYS)) out.fill(1, i, j);
