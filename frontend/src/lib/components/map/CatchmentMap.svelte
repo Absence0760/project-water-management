@@ -96,6 +96,8 @@
 		mapGridData,
 		type MapGridPointData,
 		chirpsData,
+		AREA_FILL_LAYER,
+		fillOpacity,
 		type ChirpsCellData
 	} from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
@@ -141,7 +143,8 @@
 		onpiecepick,
 		units = null,
 		mapGrid = null,
-		chirps = null
+		chirps = null,
+		fillScale = 1
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -203,6 +206,8 @@
 		mapGrid?: readonly MapGridPointData[] | null;
 		/** The CHIRPS grid layer's cells and points (mapLayers.ts chirpsCells); null or empty: none. */
 		chirps?: readonly ChirpsCellData[] | null;
+		/** The area fills' opacity, 0–1 (the Layers box's Area fill slider): parcels, dams and results colours, never the outlines. */
+		fillScale?: number;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -447,7 +452,8 @@
 						proposal: proposalData(proposal),
 						units: unitsData(units, features),
 						mapGrid: mapGridData(mapGrid),
-						chirps: chirpsData(chirps)
+						chirps: chirpsData(chirps),
+						fillScale
 					});
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
@@ -622,6 +628,12 @@
 		void status;
 		syncChirps();
 	});
+	// The Area fill slider: the fill layer's opacity set in place (a restyle would re-send every source).
+	$effect(() => {
+		const scale = fillScale;
+		if (!map || status !== 'ready' || !map.getLayer(AREA_FILL_LAYER)) return;
+		map.setPaintProperty(AREA_FILL_LAYER, 'fill-opacity', fillOpacity(scale) as never);
+	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.
 	let framedProposal: string | null = null;
@@ -718,6 +730,7 @@
 <div
 	class="map-wrap"
 	data-view={view || undefined}
+	data-fill-scale={fillScale}
 	class:fill
 	class:drawing
 	data-status={status}
