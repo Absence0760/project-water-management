@@ -366,6 +366,18 @@ pnpm dev:feeds:run          # one tick that queues EVERY enabled feed, due or no
 pnpm dev:jobs:tick          # one tick: only the feeds that are due (and any other due job)
 ```
 
+The fixtures tag each file by its bytes, as an ETag would. To watch the
+re-check of cached finals CHC rewrites in place
+([architecture.md § Data feeds](./architecture.md#data-feeds)), backfill a
+CHIRPS feed past 120 days back, then set `FEED_FIXTURE_REWRITE=1` in a
+gitignored `backend/.env.development.local` and restart: the finals
+`backend/fixtures/feeds/chirps-rewrite.json` names (100–120 days back) are
+served ×1.25 at the same URL. Files are HEADed 90 days after their last
+check, so to see it at once run
+`UPDATE chirps_file SET checked_at = now() - interval '91 days';` in
+`pnpm dev:db:psql`, then "Run now": the History gets a `series.merged`
+event naming the revision.
+
 To try the real sources from your machine, put `FEED_SOURCE=live` in a
 gitignored `backend/.env.development.local` and use real coordinates. CHIRPS
 and the forecast are public; the DWS site may refuse requests from outside

@@ -55,7 +55,9 @@ import {
 	chirpsLayers,
 	demGridData,
 	demGridLayers,
-	DEM_RAMP
+	DEM_RAMP,
+	AREA_FILL_LAYER,
+	fillOpacity
 } from './mapStyle';
 
 /** Relative luminance and contrast ratio (WCAG 2.2). */
@@ -626,5 +628,25 @@ describe('the DEM grid (docs/maps.md § DEM grid)', () => {
 		expect(over[0]!.paint).toMatchObject({ 'circle-stroke-color': labelColours(false).halo });
 		expect(labels.map((l) => l.id)).toEqual(['demgrid-label']);
 		expect(demGridLayers(false, false).labels).toEqual([]);
+	});
+});
+
+describe('the Area fill slider (fillOpacity)', () => {
+	it('scales a results colour from 0.75 and a kind’s tint from 1, clamped to 0–1; full by default', () => {
+		expect(fillOpacity()).toEqual(['case', ['has', 'fill'], RESULT_FILL_OPACITY, 1]);
+		expect(fillOpacity(0.4)).toEqual(['case', ['has', 'fill'], RESULT_FILL_OPACITY * 0.4, 0.4]);
+		expect(fillOpacity(0)).toEqual(['case', ['has', 'fill'], 0, 0]);
+		expect(fillOpacity(3)).toEqual(fillOpacity(1));
+		expect(fillOpacity(-1)).toEqual(fillOpacity(0));
+		expect(fillOpacity(NaN)).toEqual(fillOpacity(1));
+	});
+
+	it('drives only the area fill: the outlines and the selection keep their paint at any scale', () => {
+		const at = (k: number) => overlayLayers(false, k);
+		expect(at(0.3).find((l) => l.id === AREA_FILL_LAYER)!.paint).toMatchObject({ 'fill-opacity': fillOpacity(0.3) });
+		const lines = (k: number) => at(k).filter((l) => l.id !== AREA_FILL_LAYER);
+		expect(lines(0.3)).toEqual(lines(1));
+		const s = mapStyle(null, false, overlayData([], null), { fillScale: 0.5 });
+		expect(s.layers.find((l) => l.id === AREA_FILL_LAYER)!.paint).toMatchObject({ 'fill-opacity': fillOpacity(0.5) });
 	});
 });

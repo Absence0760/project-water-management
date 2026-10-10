@@ -14,6 +14,7 @@ import type { RiverReach } from '$lib/api';
 import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 import { reachKey } from './mapLayers';
 import type { RiverLayer } from './riverLayer.svelte';
+import type { AreaFill } from './areaFill.svelte';
 import { withoutComments } from '../__fixtures__/withoutComments';
 
 // HelpTip links to the glossary under the app's base path.
@@ -192,5 +193,19 @@ describe('the Layers box’s DEM grid toggle', () => {
 		expect(html_(grid({ ...ok, points: [], tooDense: true }))).toMatch(/This view holds more than 5.000 of the grid’s points/);
 		expect(html_(grid({ ...ok, points: [] }))).toContain('The elevation model has no cell in this view.');
 		expect(html_(grid(null, { error: 'The DEM grid is off: the server has no elevation model (DEM_URL is empty).' }))).toContain('no elevation model');
+	});
+});
+
+describe('the Layers box’s Area fill slider', () => {
+	it('is offered only when the tab passes it, at its percentage, with a note on what it fills', () => {
+		const render_ = (areaFill: unknown) => withoutComments(render(MapLayers, { props: { quaternaries, rivers: riversOff, dark: false, areaFill: areaFill as AreaFill | null } }).body);
+		expect(render_(null)).not.toContain('map-area-fill');
+		const b = render_({ percent: 40, scale: 0.4, set: () => {} });
+		expect(b).toMatch(/<input[^>]*type="range"[^>]*data-testid="map-area-fill-slider"/);
+		expect(b).toMatch(/aria-valuetext="40 %"/);
+		expect(b).toMatch(/<span[^>]*aria-hidden="true"[^>]*data-testid="map-area-fill-value"[^>]*>40 %<\/span>/);
+		// One live region in the box (WCAG 4.1.3): the slider's value is no second one.
+		expect(b).not.toContain('<output');
+		expect(b).toContain('outlines stay');
 	});
 });

@@ -11,9 +11,10 @@ import { z } from 'zod';
 import { chirpsProduct, configSchema, type DwsConfig, type FeedConfig, type FeedSource, FEED_SOURCES, type GridConfig, gridCells } from './config.js';
 import { FEED_ERROR_MAX, feedErrorMessage, FeedFormatError, FeedNoDataError } from './errors.js';
 import type { FeedHttp } from './http.js';
-import { CELL_VALUE_MAX_BITS, CHC_COLS, CHC_ROWS, cellCentre, encodeCellValue } from './cellCache.js';
-import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_DAILY_PRODUCTS } from './config.js';
-import { cellsUsed, fetchChirps, fetchChirpsCells, fetchGefs, type NoDataPolicy } from './sources/chirps.js';
+import { CELL_VALUE_MAX_BITS, CHC_COLS, CHC_ROWS, cellCentre, encodeCellValue, RECHECK_HEAD_DAYS, RECHECK_READ_DAYS } from './cellCache.js';
+import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_DAILY_PRODUCTS, CHIRPS_PRODUCT_FIRST_DAY } from './config.js';
+import { FILE_TAG_MAX, FILE_TAG_RE } from './http.js';
+import { cellsUsed, fetchChirps, fetchChirpsCells, fetchGefs, type NoDataPolicy, recheckChirpsFinals } from './sources/chirps.js';
 import { dwsUrl, DWS_MAX_YEARS, parseDwsDaily } from './sources/dws.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/limits.js';
 
@@ -58,6 +59,14 @@ export interface FetchRequest {
 	 * The answer is each cell's own values (CellsResult), never the mean.
 	 */
 	cells?: { cells: [number, number][]; plan: string };
+	/**
+	 * CHIRPS, with `cells` only: the re-check of cached finals CHC may have
+	 * rewritten in place (feeds/cellCache.ts RECHECK_*, claimed by the fetch
+	 * job, 210_chirps_final_recheck): the final files to HEAD, and the days to
+	 * read again at the feed's cells (all of them, [row, column]). Answered in
+	 * CellsResult's `recheck`.
+	 */
+	recheck?: { cells: [number, number][]; head: string[]; read: string[] };
 	/**
 	 * A CHIRPS request without `cells`, from a worker before the cell cache
 	 * (one still in flight while a release rolls out): the feed's newest day,
@@ -169,6 +178,15 @@ export type FetchResult = z.output<typeof FetchResult>;
  * the day wasn't read.
  */
 const CellValue = z.union([z.literal(-1), z.number().int().min(0).max(CELL_VALUE_MAX_BITS)]).nullable();
+/** A file's tag (http.ts fileTag), as the fetcher reports it: checked again by the cache's functions (chirps_tag_ok). */
+const FileTag = z.string().max(FILE_TAG_MAX).regex(FILE_TAG_RE);
+const CellGrid = z.tuple([z.number().int().min(0).max(CHC_ROWS - 1), z.number().int().min(0).max(CHC_COLS - 1)]);
+/** Days of a re-check: each once, in order. */
+const RecheckDays = (max: number) =>
+	z
+		.array(SeriesStartDate)
+		.max(max)
+		.refine((ds) => ds.every((d, i) => i === 0 || d > ds[i - 1]!), 'each day once, in order');
 
 /**
  * The fetcher's answer to a request with `cells`: each cell's own values,
@@ -194,11 +212,14 @@ export const CellsResult = z
 				/** [row, column] of the CHC grid. */
 				cells: z.array(z.tuple([z.number().int().min(0).max(CHC_ROWS - 1), z.number().int().min(0).max(CHC_COLS - 1)])).max(BBOX_MAX_CELLS),
 				/** Per cell, per day of `read`. */
-				values: z.array(z.array(CellValue).max(CHIRPS_MAX_DAYS)).max(BBOX_MAX_CELLS)
+				values: z.array(z.array(CellValue).max(CHIRPS_MAX_DAYS)).max(BBOX_MAX_CELLS),
+				/** Per day of `read`: the final file's tag on an `f` day, else null. Absent from a fetcher before 210. */
+				tags: z.array(FileTag.nullable()).max(CHIRPS_MAX_DAYS).optional()
 			})
 			.strict()
 			.superRefine((c, ctx) => {
 				const bad = (message: string) => ctx.addIssue({ code: 'custom', message });
+				if (c.tags && (c.tags.length !== c.read.length || c.tags.some((t, d) => t !== null && c.read[d] !== 'f'))) return bad('a tag on a final day only, one per day');
 				if (c.values.length !== c.cells.length) return bad('one row of values per cell');
 				if (new Set(c.cells.map(([r, k]) => `${r},${k}`)).size !== c.cells.length) return bad('a cell is listed twice');
 				if (c.product === 'rnl' && c.read.includes('p')) return bad('rnl has no preliminary files');
@@ -208,6 +229,29 @@ export const CellsResult = z
 					for (let d = 0; d < row.length; d++) if ((row[d] === null) !== (c.read[d] === '-')) return bad('a value for exactly the days read');
 				}
 			}),
+		/**
+		 * The re-check the request asked for (FetchRequest.recheck): each HEADed
+		 * file's tag, and each day read again with a value per cell (in the
+		 * request's cells' order, encoded as above, never null), or none when
+		 * the file is gone. Which days were asked for is the worker's to check
+		 * (210 chirps_recheck_apply takes only the days the fetch claimed or
+		 * the feed's cells hold stale).
+		 */
+		recheck: z
+			.object({
+				head: z.array(z.object({ day: SeriesStartDate, tag: FileTag.nullable() }).strict()).max(RECHECK_HEAD_DAYS),
+				read: z
+					.array(
+						z
+							.object({ day: SeriesStartDate, tag: FileTag.nullable(), values: z.array(CellValue.unwrap()).max(BBOX_MAX_CELLS).nullable() })
+							.strict()
+							.refine((r) => r.values !== null || r.tag === null, 'no tag for a file that is gone')
+					)
+					.max(RECHECK_READ_DAYS)
+			})
+			.strict()
+			.refine((r) => r.head.every((h, i) => i === 0 || h.day > r.head[i - 1]!.day) && r.read.every((h, i) => i === 0 || h.day > r.read[i - 1]!.day), 'each day once, in order')
+			.optional(),
 		meta: FetchMeta
 	})
 	.strict();
@@ -240,6 +284,19 @@ export const FetchRequestSchema = z
 				plan: z.string().regex(/^[012]+$/)
 			})
 			.strict()
+			.optional(),
+		recheck: z
+			.object({
+				cells: z
+					.array(CellGrid)
+					.min(1)
+					.max(BBOX_MAX_CELLS)
+					.refine((cs) => new Set(cs.map(([r]) => r)).size <= BBOX_MAX_ROWS, `at most ${BBOX_MAX_ROWS} grid rows`)
+					.refine((cs) => new Set(cs.map(([r, c]) => `${r},${c}`)).size === cs.length, 'a cell is listed twice'),
+				head: RecheckDays(RECHECK_HEAD_DAYS),
+				read: RecheckDays(RECHECK_READ_DAYS)
+			})
+			.strict()
 			.optional()
 	})
 	.strict()
@@ -265,6 +322,15 @@ export const FetchRequestSchema = z
 		if (v.cells !== undefined && (v.source !== 'chirps' || v.heldThrough !== undefined || v.cells.plan.length !== Math.max(0, days))) {
 			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'not a CHIRPS plan of one day per day of the window' });
 			return z.NEVER;
+		}
+		// The re-check goes with a cell-cache request, and asks only for final files the product can have by today.
+		if (v.recheck !== undefined) {
+			const first = CHIRPS_PRODUCT_FIRST_DAY[chirpsProduct(config.data as GridConfig)];
+			const days = [...v.recheck.head, ...v.recheck.read];
+			if (v.cells === undefined || days.some((d) => d < first || d > v.today) || new Set(days).size !== days.length) {
+				ctx.addIssue({ code: 'custom', path: ['recheck'], message: 'not a re-check of final files the product has' });
+				return z.NEVER;
+			}
 		}
 		if (v.cells !== undefined && chirpsProduct(config.data) === 'rnl' && v.cells.plan.includes('2')) {
 			ctx.addIssue({ code: 'custom', path: ['cells'], message: 'rnl has no preliminary days to hold' });
@@ -297,11 +363,19 @@ export async function runFetch(req: FetchRequest, http: FeedHttp): Promise<Fetch
 					const cells = req.cells.cells;
 					const r = await fetchChirpsCells(http, cells.map(([row, col]) => cellCentre({ row, col })), req.start, req.cells.plan, product, { today: req.today });
 					const read = [...r.read].filter((d) => d !== '-').length;
-					return {
+					const answer: CellsResult = {
 						ok: true,
-						cells: { product, startDate: r.startDate, read: r.read, cells, values: r.values.map((row) => row.map(encodeCellValue)) },
+						cells: { product, startDate: r.startDate, read: r.read, cells, values: r.values.map((row) => row.map(encodeCellValue)), tags: r.tags },
 						meta: { product, daysRead: read, cellDaysRead: read * cells.length }
 					};
+					if (req.recheck) {
+						const rc = req.recheck;
+						const got = await recheckChirpsFinals(http, rc.cells.map(([row, col]) => cellCentre({ row, col })), product, rc.head, rc.read);
+						answer.recheck = { head: got.head, read: got.read.map((d) => ({ ...d, values: d.values && d.values.map((v) => encodeCellValue(v)!) })) };
+						// A failed HEAD or read is left out (its claim comes due again) and counted, never failing the feed's own fetch.
+						answer.meta = { ...answer.meta, filesChecked: got.head.length, recheckDaysRead: got.read.filter((d) => d.values).length, ...(got.failed ? { recheckFailed: got.failed } : {}) };
+					}
+					return answer;
 				}
 				const { cells, noData, used } = gridRead(req.config as GridConfig);
 				const r = await fetchChirps(http, cells, req.start, req.end, product, { heldThrough: req.heldThrough ?? null, today: req.today, noData });

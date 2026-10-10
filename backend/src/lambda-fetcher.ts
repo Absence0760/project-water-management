@@ -74,7 +74,9 @@ export function withDeadline(http: FeedHttp, deadline: number): FeedHttp {
 	};
 	return {
 		range: async (url, start, end) => (check(), http.range(url, start, end)),
-		text: async (url) => (check(), http.text(url))
+		text: async (url) => (check(), http.text(url)),
+		...(http.rangeTagged ? { rangeTagged: async (url: string, start: number, end: number) => (check(), http.rangeTagged!(url, start, end)) } : {}),
+		...(http.head ? { head: async (url: string) => (check(), http.head!(url)) } : {})
 	};
 }
 

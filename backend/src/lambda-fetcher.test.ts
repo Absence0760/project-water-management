@@ -111,6 +111,13 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		await expect(d.range('https://x', 0, 1)).rejects.toMatchObject({ name: 'FeedUnavailableError' });
 		const live = withDeadline(inner, Date.now() + 60_000);
 		expect(await live.text('https://x')).toBe('page');
+		// The re-check's tagged reads and HEADs stop at the deadline too, and are there only when the client has them.
+		expect(d.head).toBeUndefined();
+		const tagged: FeedHttp = { ...inner, head: async () => ({ tag: '"t"' }), rangeTagged: async () => ({ bytes: new Uint8Array(1), tag: '"t"' }) };
+		const late = withDeadline(tagged, Date.now() - 1);
+		await expect(late.head!('https://x')).rejects.toMatchObject({ name: 'FeedUnavailableError' });
+		await expect(late.rangeTagged!('https://x', 0, 1)).rejects.toMatchObject({ name: 'FeedUnavailableError' });
+		expect(await withDeadline(tagged, Date.now() + 60_000).head!('https://x')).toEqual({ tag: '"t"' });
 	});
 
 	it('logs one feed_fetch_failed line per failed answer, with a reason code and never the stored message (infra/feeds.tf alarms on it)', async () => {

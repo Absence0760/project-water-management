@@ -72,6 +72,12 @@ export interface FeedRow {
 	cellsUsed?: number | null;
 	/** CHIRPS: the last day through which the series holds final values (last_meta.finalThrough, ingest.ts): fetchWindow doesn't re-read them. */
 	finalThrough: string | null;
+	/**
+	 * CHIRPS: the transaction id from which the feed's next refresh of revised
+	 * days looks (last_meta.revisionXmin, feeds/ingest.ts refreshRevisedDays;
+	 * 210_chirps_final_recheck chirps_revision.xid). Null: it hasn't looked yet.
+	 */
+	revisionXmin?: string | null;
 	/** Changes whenever the feed is saved: a fetch result for an older version is dropped. */
 	version: string;
 	/** What an owner confirmed the feed may replace (data_feed.replace_series_from, 032): `CHIRPS/2.0`, '' = unrecorded; null = nothing. */
@@ -199,6 +205,7 @@ export async function feedForJob(db: Db, projectId: string, feedId: string): Pro
 			CASE WHEN last_meta->>'through' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'through' END AS "readThrough",
 			CASE WHEN last_meta->>'cellsUsed' ~ '^[0-9]{1,4}$' THEN (last_meta->>'cellsUsed')::int END AS "cellsUsed",
 			CASE WHEN last_meta->>'finalThrough' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN last_meta->>'finalThrough' END AS "finalThrough",
+			CASE WHEN last_meta->>'revisionXmin' ~ '^[0-9]{1,20}$' THEN last_meta->>'revisionXmin' END AS "revisionXmin",
 			to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS version, replace_series_from AS "replaceFrom"
 		 FROM data_feed WHERE project_id = $1 AND id = $2`,
 		[projectId, feedId]

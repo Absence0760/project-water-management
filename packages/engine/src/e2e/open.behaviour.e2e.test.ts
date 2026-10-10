@@ -177,7 +177,7 @@ describe('item 7 (c): the gap-fill columns are written even when no filled day i
 	});
 
 	it('a 2017/18 window: no filled day in it, yet both columns are written (all 0 / all blank)', () => {
-		const out: ModelOutput = runModel(gr4j(series, { ...fill, simulationStart: '2017-10-01', simulationEnd: '2018-09-30' }));
+		const out: ModelOutput = runModel(gr4j(series, { ...fill, simulationStart: '2017-10-01', simulationEnd: fromEpochDay(toEpochDay('2017-10-01') + 364) }));
 		expect(out.days).toBe(365);
 		expect(out.summary.flowGapFill![0]!.interpolatedDays).toBe(0);
 		expect(get(out, null, 'observed_flow_fill').every((c) => c === 0)).toBe(true);

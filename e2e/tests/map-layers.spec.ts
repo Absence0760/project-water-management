@@ -193,6 +193,32 @@ test('the DEM grid: every 10th elevation-model cell each way in view, with its e
 	await expect(page.getByTestId('map-demgrid')).toHaveCount(0);
 });
 
+test('the Area fill slider: the polygons filled less, outlines kept, remembered in this browser', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Map area fill');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'parcels.geojson', parcelsGeoJson());
+	await mapReady(page);
+	const map = page.locator('[data-fill-scale]');
+	await expect(map).toHaveAttribute('data-fill-scale', '1');
+
+	await openLayers(page);
+	const slider = layers(page).getByRole('slider', { name: 'Area fill' });
+	await expect(slider).toHaveValue('100');
+	await slider.fill('30');
+	await expect(page.getByTestId('map-area-fill-value')).toHaveText('30 %');
+	await expect(slider).toHaveAttribute('aria-valuetext', '30 %');
+	await expect(map).toHaveAttribute('data-fill-scale', '0.3');
+	// Not in the URL: a viewer's convenience, kept in this browser.
+	await expect(page).not.toHaveURL(/fill/);
+
+	await page.reload();
+	await mapReady(page);
+	await expect(map).toHaveAttribute('data-fill-scale', '0.3');
+	await openLayers(page);
+	await expect(layers(page).getByRole('slider', { name: 'Area fill' })).toHaveValue('30');
+});
+
 /** The fit with the Layers tab picked: the page doesn't scroll, the tab's panel ends inside the side column and scrolls in its box. */
 const fitWithLayers = (page: Page) =>
 	page.evaluate(() => {

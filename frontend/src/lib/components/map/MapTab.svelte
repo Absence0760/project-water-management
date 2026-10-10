@@ -75,6 +75,7 @@
 	import { chirpsCells, layersOn, unitLabels } from './mapLayers';
 	import { MapGridLayer } from './mapGridLayer.svelte';
 	import { DemGridLayer } from './demGridLayer.svelte';
+	import { AreaFill } from './areaFill.svelte';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import { RiverLayer } from './riverLayer.svelte';
@@ -815,6 +816,8 @@
 	});
 	/** The DEM grid is offered unless the server is known to have no elevation model (an editor's delineation check says so). */
 	const demGridOffered = $derived(!(canEdit && delineationLoaded && !delineation?.available));
+	/** The Area fill slider (kept in this browser): the polygons' fill strength. */
+	const areaFill = new AreaFill();
 
 	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
 	/**
@@ -1298,6 +1301,7 @@
 		chirps={{ on: chirpsOn, cells: chirpsInView }}
 		labels={!!glyphs}
 		demGrid={demGridOffered ? demGrid : null}
+		{areaFill}
 	/>
 {/snippet}
 {#snippet keyBody()}
@@ -1462,6 +1466,7 @@
 									mapGrid={mapGrid.points}
 									chirps={chirpsInView}
 									demGrid={demGrid.points}
+									fillScale={areaFill.scale}
 								/>
 							{/snippet}
 						</Lazy>

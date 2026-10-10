@@ -3151,17 +3151,16 @@ role and not before it.
         for nothing, and the backfill's next window follows in 5 s
         (`CACHED_NEXT_SECONDS`) instead of a minute. architecture.md § Data
         feeds → The CHIRPS cell cache.
-  - [ ] **CHIRPS finals CHC rewrites in place aren't re-read** (issue #482's
-        gotchas: the 2024 dailies were rewritten in 2025-12). A cached final
-        is never read again, as a feed's final marker never was before the
-        cache. The durable fix: record each daily file's ETag / Last-Modified
-        (`chirps_cell_year.source_etag` is reserved for it; `FeedHttp.range`
-        would need to return the header) and re-check finals by a cheap HEAD
-        on a slow cycle, re-reading the cells of a file whose tag changed.
-        Trigger: CHC announces (or a feed's double-mass check shows) a
-        rewrite of years a project uses; until then an operator can delete
-        the affected `chirps_cell_year` rows and clear the feeds' markers
-        (save each feed) to re-read them.
+  - [x] **CHIRPS finals CHC rewrites in place aren't re-read** (issue #482's
+        gotchas: the 2024 dailies were rewritten in 2025-12). **Done
+        (210_chirps_final_recheck):** each final file's tag (ETag, else
+        Last-Modified) is recorded per file in `chirps_file`; each CHIRPS
+        fetch HEADs up to 40 cached finals not checked in 90 days and re-reads
+        the cells of a file whose tag changed (`chirps_recheck_apply`, the
+        one path that replaces a final, logged in `chirps_revision`), and every
+        feed over a revised cell recomputes those days into its series with a
+        History event. architecture.md § Data feeds → Re-checking finals,
+        deployment.md § Data feeds (requests a month).
 
 - **Run comparison** (the per-node daily series overlay is built, issue #8,
   [run-comparison.md](./run-comparison.md)):
@@ -5923,7 +5922,7 @@ sequential scans of `river_reference`, the bbox query (21 ms: the btree
 `river_reference_bbox_idx` on `(min_lon, max_lon, min_lat, max_lat)` can't
 serve a four-sided overlap, so the planner skips it) and `riverDatasets()`'
 `count(*) … GROUP BY dataset` (25 ms), on every pan. Fine at South Africa's
-network; linear in the table, so about 0.2 s a request if the operator loads
+network; linear in the table, so a much slower request if the operator loads
 all of Africa. `GET …/map/stations` counts its datasets the same way.
 
 - **Durable fix:** in one migration, an expression GiST index on

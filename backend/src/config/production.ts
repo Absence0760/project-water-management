@@ -259,6 +259,9 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { fetcher: oneOf('live') }
 	},
 	INGEST_RESULTS_QUEUE_URL: { why: 'Where the fetcher answers.', checks: { fetcher: publicHttps } },
+	FEED_FIXTURE_REWRITE: {
+		why: 'Fixtures only (FEED_SOURCE=fixtures): 1 serves some synthetic CHIRPS finals rewritten in place, to watch the re-check locally. The live client never reads it, and the fetcher refuses the fixtures in production.'
+	},
 
 	// --- Reports ---------------------------------------------------------------------------
 	REPORT_RENDERER: {
