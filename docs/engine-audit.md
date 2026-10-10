@@ -502,6 +502,19 @@ hydrologist**; built in engine 1.70.0 (model.md §2.6a).
 | Q26 A room into a dam with a fixed release | A top-up off-take's room and a dam rule's room count the release in full, `MIN(amount, outlet)` (a dam rule's counted only a floor from 1.29.0); the dam's own inflow that day stays out. | The water moved in arrives before the release, so either the release is all of it (the dam ends ≤ capacity) or it is cut to the water above dead storage (the dam ends at dead storage ≤ capacity, damMinPct being 0–1): never overfilled. The floor left a dam near its dead storage below full. The inflow is known only once the network runs, after the off-takes are sized. | *Code*, engine 1.70.0. |
 | Q27 An off-take's keep and a pass-inflow release | The keep includes the source dam's pass-inflow release target (its amount, or the EWR at the source without amounts), as the unit's river pump and river abstractions keep it. The unit's own hands-off flow is still not kept by off-takes. | A pass-inflow release exists to keep that flow below the dam wall, and the off-take's intake is on that reach; taking it would turn the release into canal water. The hands-off flow is a condition on the unit's own abstraction. | *Code*, engine 1.70.0; `checkTransferLimits`. |
 
+## Provisional decisions 2026-10-10: diverted water lost from a dam (issue #507)
+
+Raised by the review of provisional answers (issue #507): the client's farm
+dams sit beside the river (`pctUpstreamToDam = 0`, confirmed 2026-10-02) and
+fill from River to dam or a top-up off-take, while surface use counted only
+draws from the dam. **Provisional, to be confirmed by the client's
+hydrologist**; built in engine 1.79.0 (model.md §2.12, §2.12a). Any other
+answer is a new engine version.
+
+| Item | Decision | Why (source) | What changed |
+| --- | --- | --- | --- |
+| Diverted river water lost from storage | A dam that can divert tracks the diverted share of its storage (fully mixed), and that share of its evaporation and of the seepage that doesn't return is surface use (`diverted_loss`). Filling the dam isn't counted, draws stay counted, spill, releases and returning seepage aren't. Under a cap the loss counts against the year's volume before the day's draws, never against a daily rate or months of use. | Under the National Water Act (Act 36 of 1998) s21(a) the take happens at the diversion; water lost from storage was taken and never used or returned. Counting only draws let a farm read inside its licence while taking more from the river. Q28's "filling a dam is not use" stands for the daily rate: evaporation isn't pumping. The alternative, a licence measured at the intake (count *O* itself, stop counting draws of diverted water, apply months and rate to *O*), is the larger change if the hydrologist prefers it. | *Code*, engine 1.79.0 (`network/simulate.ts` `divertsIntoDam`, `allocations/compare.ts`); a unit that can't divert into a dam runs to the bit as before. |
+
 ## Open questions for the hydrologist
 
 1. **H1 (closed 2026-09-26):** the base-flow reset was never replaced; engine

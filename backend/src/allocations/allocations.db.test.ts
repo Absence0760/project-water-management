@@ -378,6 +378,33 @@ describe('the run comparison', () => {
 		expect(x.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!) - sum(s.groundwater_used!) - Math.min(toDam, damDraw), 3);
 	});
 
+	it('counts diverted river water an off-river dam lost as surface use, beside the draws (engine 1.79.0, issue #507)', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: off-river dam' })).body.project.id;
+		const out = node('Weir', null);
+		// Beside the river: neither the upstream inflow nor its own runoff reaches the dam; River to dam fills it.
+		const f = node('Off-river farm', out.id, { damCapacityM3: 20_000, damInitialPct: 0.5, pctUpstreamToDam: 0, pctRunoffToDam: 0, divertCapacityM3Day: 300, damSeepagePerDay: 0.002, damSeepageReturnPct: 0.25 });
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		const m = { nodes: [out, f], crops: [crop], cropAreas: [{ nodeId: f.id, cropId: crop.id, areaM2: 30_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(0) } })).status).toBe(200);
+		const rain = Array.from({ length: 365 }, (_, i) => (i % 9 === 0 ? 25 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'off-river' });
+		expect(run.status, JSON.stringify(run.body)).toBe(201);
+		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/allocations`);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const x = res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === f.id);
+
+		const rows = await asOwner(`SELECT key, "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key IN ('supplied', 'diverted_loss')`, [run.body.run.id, f.id]);
+		const s = Object.fromEntries(rows.map((r) => [r.key as string, r.values as number[]]));
+		const sum = (a: number[]) => a.reduce((t, v) => t + v, 0);
+		// The fixture loses diverted water and draws on the dam, so both parts are there.
+		expect(sum(s.diverted_loss!)).toBeGreaterThan(0);
+		expect(sum(s.supplied!)).toBeGreaterThan(0);
+		expect(x.surface.years).toHaveLength(1);
+		expect(x.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!) + sum(s.diverted_loss!), 3);
+	});
+
 	it("leaves a forecast run's forecast days out (issue #51); an ordinary run of the same record is the control", async () => {
 		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: forecast' })).body.project.id;
 		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };

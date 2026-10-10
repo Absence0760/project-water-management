@@ -62,6 +62,7 @@ day trace read.
 | O | `diverted_to_dam` | MIN(`divertCapacityM3Day` (the month's `divertMonthlyM3Day` when set, engine ≥ 1.32.0), L + N) — diverted back into the dam; cut for the senior users (§2.7c) and the hands-off flow (§2.7h) |
 | G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.16.0, audit Q5) |
 | – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.16.0, audit N2; docs/model.md §2.7a) |
+| – | `diverted_loss` | on a unit that can divert into its dam only (River to dam or a top-up off-take): the diverted share of yesterday's storage, fully mixed, × evaporation and the seepage that doesn't return; surface use in the allocation comparison and cap (engine ≥ 1.79.0, docs/model.md §2.12) |
 | P | `interim_storage` | Qprev + rain on dam − evaporation − seepage + M + O + K + J − G |
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |

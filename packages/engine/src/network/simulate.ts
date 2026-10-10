@@ -1286,8 +1286,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const E = Math.min(day.E, there);
 				const Sp = Math.min(day.Sp, there - E);
 				const own = qPrev + day.Pd;
-				// The storage reset sets the storage afresh: its diverted share is a fresh run's.
-				if (t === resetDay && node.storageResetM3 !== undefined) divShare[i] = divertedShareAtStart(node);
+				// A storage reset (startStorage) sets the volume, not what the water is: the dam is mixed, so its diverted
+				// share carries over (setting each dam to the storage it had is then the plain run, to the bit).
 				let held = divShare[i]! * (J < 0 && own > 0 ? (qPrev * Math.max(0, own + J)) / own : qPrev);
 				let loss = 0;
 				if (there > 0 && held > 0) {
