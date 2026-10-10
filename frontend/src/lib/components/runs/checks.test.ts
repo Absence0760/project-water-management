@@ -145,6 +145,8 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		dam_seepage: 0,
 		// Present in a run whose dam loses seepage from the catchment or releases water (WP-3.5); none here.
 		dam_seepage_lost: 0,
+		// Diverted river water lost from the dam (engine 1.79.0): only on a unit that can divert into its dam.
+		diverted_loss: 0,
 		dam_release: 0,
 		interim_storage: 1075 - F,
 		dam_storage: 1000,
