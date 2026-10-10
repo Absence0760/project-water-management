@@ -499,7 +499,14 @@ answer, with no database connection held.
   over the e2e tests' catchment (21.3–21.4° E, 33.6–33.7° S), an invented
   dam whose edge is wet 35 % of the time and its middle 85 %, with an
   island; a one-cell stream wet 15 % of the time to a pond (joined only at
-  10 %); and a lake the raster's east edge cuts off. Locally:
+  10 %); and a lake the raster's east edge cuts off. Its test and the
+  synthetic DEM's (`backend/scripts/water-fixture.test.ts`,
+  `backend/scripts/dem-fixture.test.ts`) check the
+  committed file holds what the generator describes by decoded content
+  (header fields, metadata, directory, each tile's pixels;
+  `backend/scripts/pmtiles-content.ts`), not bytes, since the bytes follow the zlib
+  build (a Node linked to Homebrew's zlib deflates differently); re-run the
+  generator after changing the water or the terrain. Locally:
   `WATER_URL=fixtures/water/synthetic-water.pmtiles` in
   `backend/.env.development.local` (the e2e API has it), and Enter
   coordinates −33.6724971, 21.3191414.

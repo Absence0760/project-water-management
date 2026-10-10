@@ -24,6 +24,7 @@ import { createRun, nominateRun, PASSWORD, seedRunnableProject, updateSettings }
 import { ageEmailCodeSends } from '../support/db.ts';
 import { API_URL, MFA_API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { viaMfaApi } from '../support/mfaApi.ts';
 import { sessionToken } from '../support/session.ts';
 
 const MAILPIT = process.env.MAILPIT_URL ?? 'http://localhost:8026';
@@ -64,21 +65,6 @@ async function nextCode(to: string, seen: number): Promise<string> {
 /** A code that isn't `code`. */
 const not = (code: string) => (code === '000000' ? '000001' : '000000');
 
-/** Send every API call the page makes to the server with the requirement on and mail through Mailpit. */
-async function useMfaApi(page: Page) {
-	await page.route(`${API_URL}/**`, async (route) => {
-		const response = await route.fetch({ url: route.request().url().replace(API_URL, MFA_API_URL) });
-		await route.fulfill({ response });
-	});
-}
-
-// The page's own background calls (the account's /auth/mfa refresh) can still be on their way through useMfaApi's proxy when a
-// test ends; its route.fetch then throws "Test ended" and fails the run though every test passed. Drop the routes first, letting
-// any call still in flight end quietly: the test is over, so no answer is wanted.
-test.afterEach(async ({ page }) => {
-	await page.unrouteAll({ behavior: 'ignoreErrors' });
-});
-
 /** Turn codes by email on through the API, the code read from Mailpit (the screens are test 1). */
 async function emailOn(request: APIRequestContext, email: string): Promise<void> {
 	const seen = (await mailIds(email)).length;
@@ -110,7 +96,7 @@ async function password(page: Page, email: string) {
 }
 
 test('1. turn codes by email on from the Account page: the password, the emailed code, the recovery codes', async ({ page, owner }) => {
-	await useMfaApi(page);
+	await viaMfaApi(page);
 	await page.goto('/account');
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
 	const row = panel.locator('[data-method="email"]');
@@ -140,7 +126,7 @@ test('2. sign in by an emailed code: a wrong code is refused, and “Send again�
 	await ageEmailCodeSends(owner.email);
 	// The page's clock, so the minute's countdown can be moved on instead of waited out.
 	await page.clock.install();
-	await useMfaApi(page);
+	await viaMfaApi(page);
 	await page.goto('/');
 	await signOut(page, owner.displayName);
 	await password(page, owner.email);
@@ -224,7 +210,7 @@ test('3. signing an evidence pack with a code over 10 minutes old: “Email me a
 	await page.context().addCookies([
 		{ name: 'wm_session', value: sessionToken(owner.id, { amr: ['pwd', 'otp'], otp_at: Date.now() - 11 * 60_000 }), url: API_URL, httpOnly: true, sameSite: 'Lax' }
 	]);
-	await useMfaApi(page);
+	await viaMfaApi(page);
 
 	await page.goto(`/projects/${project.id}/packs/${packId}`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
@@ -262,7 +248,7 @@ test('3. signing an evidence pack with a code over 10 minutes old: “Email me a
 test('4. with both ways on, the sign-in offers both, and the app’s code still works', async ({ page, owner }) => {
 	const { secret, step } = await appOn(page.request);
 	await emailOn(page.request, owner.email);
-	await useMfaApi(page);
+	await viaMfaApi(page);
 	await page.goto('/');
 	await signOut(page, owner.displayName);
 	await password(page, owner.email);
@@ -283,7 +269,7 @@ test('4. with both ways on, the sign-in offers both, and the app’s code still 
 test('5. turning codes by email off with an emailed code', async ({ page, owner }) => {
 	await emailOn(page.request, owner.email);
 	await ageEmailCodeSends(owner.email);
-	await useMfaApi(page);
+	await viaMfaApi(page);
 	await page.goto('/account');
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
 	const row = panel.locator('[data-method="email"]');

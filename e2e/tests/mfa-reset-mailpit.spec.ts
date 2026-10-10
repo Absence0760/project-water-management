@@ -17,6 +17,7 @@ import { answerConfirm } from '../support/confirm.ts';
 import { ageEmailCodeSends, endMfaResetWait, mfaResetState } from '../support/db.ts';
 import { API_URL, MFA_API_URL, WEB_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { viaMfaApi } from '../support/mfaApi.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { emailIds, linkIn, mailpitUp, waitForEmail } from '../support/mailpit.ts';
 import { sessionToken } from '../support/session.ts';
@@ -28,14 +29,6 @@ test.beforeAll(async () => {
 const CONFIRM_SUBJECT = 'Confirm removing two-step sign-in — Water Management';
 const STARTED_SUBJECT = /^Two-step sign-in will be removed on \d{1,2} \w{3} \d{4} — Water Management$/;
 const DONE_SUBJECT = 'Two-step sign-in was removed — Water Management';
-
-/** Every API call the page makes goes to the API that sends mail through Mailpit. */
-async function viaMailpitApi(page: Page) {
-	await page.route(`${API_URL}/**`, async (route) => {
-		const response = await route.fetch({ url: route.request().url().replace(API_URL, MFA_API_URL) });
-		await route.fulfill({ response });
-	});
-}
 
 /** An authenticator for the signed-in page's account, from the Account page; its codes come from `next()`, a later step each time. */
 async function enrol(page: Page) {
@@ -137,7 +130,7 @@ async function secondDevice(email: string, code: string): Promise<APIRequestCont
 }
 
 test('lost phone and codes: the emailed link starts the wait, and when it is over the factor is gone, every session signed out, and the password alone signs in', async ({ page, owner }) => {
-	await viaMailpitApi(page);
+	await viaMfaApi(page);
 	const next = await enrol(page);
 	const device = await secondDevice(owner.email, next());
 	await signOut(page, owner.displayName);
@@ -152,10 +145,7 @@ test('lost phone and codes: the emailed link starts the wait, and when it is ove
 	const watcher = await page.context().browser()!.newContext();
 	await watcher.addCookies([{ name: 'wm_session', value: deviceCookie.value, domain: 'localhost', path: '/' }]);
 	const account = await watcher.newPage();
-	await account.route(`${API_URL}/**`, async (route) => {
-		const response = await route.fetch({ url: route.request().url().replace(API_URL, MFA_API_URL) });
-		await route.fulfill({ response });
-	});
+	await viaMfaApi(account);
 	await account.goto('/account');
 	await expect(account.locator('[data-pending-reset]')).toContainText('Someone asked to remove two-step sign-in from your account');
 	await expect(account.locator('[data-pending-reset]').getByRole('button', { name: 'Cancel the removal' })).toBeVisible();
@@ -188,7 +178,7 @@ test('lost phone and codes: the emailed link starts the wait, and when it is ove
 });
 
 test('the cancel link in the start email ends the wait, signed out, and the factor still works', async ({ page, owner, browser }) => {
-	await viaMailpitApi(page);
+	await viaMfaApi(page);
 	const next = await enrol(page);
 	await signOut(page, owner.displayName);
 	const started = await startReset(page, owner.email);
@@ -216,7 +206,7 @@ test('the cancel link in the start email ends the wait, signed out, and the fact
 });
 
 test('signing in with a code cancels a waiting reset, and its emailed cancel link then does nothing', async ({ page, owner }) => {
-	await viaMailpitApi(page);
+	await viaMfaApi(page);
 	const next = await enrol(page);
 	await signOut(page, owner.displayName);
 	const started = await startReset(page, owner.email);
@@ -237,7 +227,7 @@ test('signing in with a code cancels a waiting reset, and its emailed cancel lin
 });
 
 test('a team admin removes a member’s two-step sign-in: a fresh code, the confirm, the member’s email, and the member signs in with the password alone', async ({ page, owner, signIn, context }) => {
-	await viaMailpitApi(page);
+	await viaMfaApi(page);
 	const next = await enrol(page);
 	const member = await signIn('Phone Loser');
 	const created = await page.request.post(`${API_URL}/teams`, { data: { name: 'Reset WUA' } });
@@ -281,7 +271,7 @@ test('a team admin removes a member’s two-step sign-in: a fresh code, the conf
 });
 
 test('codes by email alone: “Can’t get the email…”, the emailed link, the wait, and when it is over the password alone signs in', async ({ page, owner }) => {
-	await viaMailpitApi(page);
+	await viaMfaApi(page);
 	await emailOn(page.request, owner.email);
 	await page.goto('/');
 	await signOut(page, owner.displayName);
@@ -308,7 +298,7 @@ test('codes by email alone: “Can’t get the email…”, the emailed link, th
 });
 
 test('signing in with an emailed code cancels a waiting reset', async ({ page, owner }) => {
-	await viaMailpitApi(page);
+	await viaMfaApi(page);
 	await emailOn(page.request, owner.email);
 	await page.goto('/');
 	await signOut(page, owner.displayName);

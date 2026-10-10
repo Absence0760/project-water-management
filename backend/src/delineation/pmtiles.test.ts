@@ -31,6 +31,15 @@ describe('PMTiles', () => {
 		expect(await r.getTile(3, 1, 1)).toBeNull();
 	});
 
+	it('writes the same bytes on every platform: its gzip parts say Unix, not the OS zlib ran on (macOS wrote 19)', async () => {
+		const archive = writePmtiles([{ z: 10, x: 570, y: 612, data: new Uint8Array([1]) }], { tileType: 2, bounds: [20, -34, 21, -33], metadata: { name: 'x' } });
+		const h = await new PmtilesReader(memory(archive)).getHeader();
+		for (const at of [h.rootOffset, h.metadataOffset]) {
+			expect([archive[at], archive[at + 1]]).toEqual([0x1f, 0x8b]);
+			expect(archive[at + 9]).toBe(3);
+		}
+	});
+
 	it('refuses a file that is not PMTiles v3', async () => {
 		const r = new PmtilesReader(memory(new Uint8Array(200)));
 		await expect(r.getHeader()).rejects.toThrow(/not a PMTiles archive/);
