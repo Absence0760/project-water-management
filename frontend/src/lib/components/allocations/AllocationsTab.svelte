@@ -380,7 +380,7 @@
 												{#if u.ratio !== null}<span class="ratio">{fmtNum(u.ratio * 100, 0)} %</span>{/if}
 											</p>
 											<p class="facts">
-												{u.registeredM3 > 0 ? `Registered ${fmtNum(u.registeredM3)}` : 'Nothing registered'} · modelled {fmtNum(u.modelledM3)} m³{u.partOnly ? ' in the part year' : ' a year'}
+												{u.registeredM3 > 0 ? `Registered ${fmtNum(u.registeredM3)}` : 'Nothing registered'} · modelled {fmtNum(u.modelledM3)} m³{u.partOnly ? ' in the part year' : ' a year'}{u.atIntake ? ', taken at the intake' : ''}
 											</p>
 										</li>
 									{/each}

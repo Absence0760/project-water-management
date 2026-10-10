@@ -391,7 +391,8 @@ export const TIPS: HelpTipText[] = [
 		term: 'Modelled use vs registered volume',
 		short: 'Each unit’s modelled use per water year beside its registered volume: above, within or below the band. Modelled, not metered.',
 		units: 'm³ a water year',
-		category: 'licensing'
+		category: 'licensing',
+		fields: ['run.intake_take', 'run.received_at_intake']
 	},
 	{
 		id: 'registered-storage',
@@ -849,7 +850,7 @@ export const TIPS: HelpTipText[] = [
 		short: 'A scenario’s multiplier on what a unit or water user would take, per month (0.85 = 85 %); on a unit also per part (crops, a category).',
 		units: 'multiplier ≥ 0 per month (a scenario op takes 0–2)',
 		category: 'farm',
-		fields: ['node.demandFactor', 'node.partDemandFactor']
+		fields: ['node.demandFactor', 'node.partDemandFactor', 'node.demandFactorWindows']
 	},
 	{
 		id: 'return-flow',

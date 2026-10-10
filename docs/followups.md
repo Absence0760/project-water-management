@@ -1744,7 +1744,8 @@ the suggested order (the IDs carry the detail):
       the docs leave open and a mutant per rule
       ([verify/README.md § Phase 2b](../verify/README.md#phase-2b-not-covered-yet)):
       demand factors by part (`partDemandFactor`, the `demand.scale` op with
-      a part, merged in #252), drought restrictions (once #258 merges),
+      a part, merged in #252), dated demand factors (`demandFactorWindows`,
+      the op with `from`/`to`, engine 1.82.0, #514), drought restrictions (once #258 merges),
       Reserve rule tables A1–A7 (§2.9c–d), forecast mode (§2.4f),
       calibration (§2.10, §2.10b), land cover (§2.5a), time-varying
       development (§2.7g), rain-source periods, the areal correction, the

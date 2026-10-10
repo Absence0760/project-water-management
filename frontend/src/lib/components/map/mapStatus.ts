@@ -170,7 +170,7 @@ function allocationStatuses(units: readonly UnitNode[], s: StatusSummary): MapSt
 			if (src.wholeYears === 0 || src.meanModelledM3PerYear === null || src.meanRegisteredM3PerYear === null) continue;
 			const status = src.yearsOver > 0 ? 'over' : allocationStatus(src.meanModelledM3PerYear, src.meanRegisteredM3PerYear, a.tolerance);
 			const ratio = src.meanRegisteredM3PerYear > 0 ? src.meanModelledM3PerYear / src.meanRegisteredM3PerYear : null;
-			const what = src.waterSource === 'groundwater' ? 'groundwater' : 'surface water';
+			const what = src.waterSource === 'groundwater' ? 'groundwater' : src.measuredAt === 'intake' ? 'surface water, taken at the intake' : 'surface water';
 			const label =
 				status === 'over' && src.yearsOver > 0
 					? `${STATUS_LABEL.over} in ${src.yearsOver} of ${src.wholeYears} whole year${src.wholeYears === 1 ? '' : 's'} (${what})`

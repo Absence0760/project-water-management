@@ -13,6 +13,7 @@ import type { ModelInput, ModelOutput } from '../project';
 import { runModelWithoutChecks } from '../run';
 import { randomInput } from '../testing/fuzz';
 import type { AllocationEntry } from './compare';
+import { INTAKE_SERIES } from './intake';
 
 /** The output minus what the allocations are allowed to add: the comparison, and the warnings that name an allocation. */
 function withoutComparison(out: ModelOutput) {
@@ -66,11 +67,11 @@ describe("a compare-only baseline ignores the registered volumes (issue #507)", 
 			tried++;
 			const withThem = run(input, input.model.allocations);
 			expectBitIdentical(withThem, run(input, undefined), `seed ${seed}`);
-			if (withThem.series.some((s) => s.key === 'diverted_loss' && s.values.some((v) => v > 0))) diverting++;
+			if (withThem.series.some((s) => s.key === INTAKE_SERIES.take.key && s.values.some((v) => v > 0))) diverting++;
 		}
 		expect(tried).toBe(25);
-		// Some of them lose diverted river water from a dam beside the river (engine 1.79.0, PR #509): a compare-only run
-		// carries that series whatever the volumes; only a cap counts it against them.
+		// Some of them have a dam beside the river, measured at its intake (engine 1.82.0, issue #513): a compare-only
+		// run carries that series whatever the volumes, and nothing in the run reads it.
 		expect(diverting).toBeGreaterThan(0);
 	});
 

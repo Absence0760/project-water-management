@@ -5,7 +5,8 @@
 // proposer's), runs the scenario, and the comparison with its base shows the
 // farm's demand cut by exactly the scaled months, the other farm's unchanged.
 // The daily demand of the scenario run is the base's × 0.5 in those months
-// and the base's everywhere else. Synthetic catchment (support/api.ts).
+// and the base's everywhere else. A second test limits the scaling to dates
+// (engine 1.82.0, issue #514) together with months. Synthetic catchment (support/api.ts).
 import type { APIRequestContext, Locator } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -124,4 +125,59 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 	const low = await demandCell(table, 'Lower farm');
 	expect(Math.abs(low.value - mean(baseLower.values))).toBeLessThanOrEqual(0.5);
 	expect(low.delta).toBe('no change');
+});
+
+// Dates (engine 1.82.0, issue #514): the dry-year stress's one change per drought year. With months ticked
+// too, only the days in both are scaled: here 20 Dec 2021 – 10 Jan 2022 in December and January.
+test('an editor limits a demand scaling to dates, with months, and the run scales exactly the days in both', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Scenario scale demand by date');
+	const baseRun = await createRun(page.request, project.id, 'Baseline');
+	const nodes = project.model.nodes as { id: string; name: string }[];
+	const upper = nodes.find((n) => n.name === 'Upper farm')!.id;
+	const name = 'Upper farm dry spell';
+
+	await page.goto(`/projects/${project.id}?tab=scenarios&new=1`);
+	const create = page.getByRole('dialog', { name: 'New scenario' });
+	await expect(create.getByLabel('Base run')).toHaveValue(baseRun);
+	await create.getByLabel('Name', { exact: true }).fill(name);
+	await create.getByRole('button', { name: 'Create scenario' }).click();
+	await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
+
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Kind of change').selectOption({ label: 'Scale demand' });
+	await form.getByLabel("Demand (% of what they'd take)").fill('150');
+	await form.getByRole('group', { name: 'Hydrological units (none ticked: all of them)' }).getByLabel('Upper farm').check();
+	const months = form.getByRole('group', { name: 'Months (none ticked: every month)' });
+	await months.getByLabel('Dec').check();
+	await months.getByLabel('Jan').check();
+	// A date that doesn't exist is refused, as Scale rainfall's are.
+	await form.getByLabel('From (YYYY-MM-DD)').fill('2021-12-32');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(form.getByRole('alert')).toHaveText('From: must be an ISO date (YYYY-MM-DD)');
+	await form.getByLabel('From (YYYY-MM-DD)').fill('2021-12-20');
+	await form.getByLabel('To (YYYY-MM-DD)').fill('2022-01-10');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	const changes = page.getByRole('list', { name: `Changes in ${name}` }).getByRole('listitem');
+	await expect(changes).toHaveCount(1);
+	await expect(changes).toContainText("Irrigation demand of Upper farm: 150 % of what they'd take (× 1.5), in Jan, Dec, 2021-12-20 to 2022-01-10");
+
+	await page.getByRole('button', { name: 'Run scenario' }).click();
+	await expect(page.getByRole('region', { name: 'Scenario against its base' }).getByRole('region', { name: 'Hydrological units' })).toBeVisible();
+
+	const { runs } = await getJson<{ runs: { id: string }[] }>(page.request, `/projects/${project.id}/runs`);
+	const scenarioRun = runs.find((r) => r.id !== baseRun)!.id;
+	const [base, scenario] = await Promise.all([dailyDemand(page.request, project.id, baseRun, upper), dailyDemand(page.request, project.id, scenarioRun, upper)]);
+	expect(scenario.startDate).toBe(base.startDate);
+	const start = Date.parse(`${base.startDate}T00:00:00Z`);
+	const [from, to] = [Date.parse('2021-12-20T00:00:00Z'), Date.parse('2022-01-10T00:00:00Z')];
+	let scaledDays = 0;
+	base.values.forEach((v, i) => {
+		const day = start + i * 86_400_000;
+		const scaled = day >= from && day <= to;
+		if (scaled) scaledDays += 1;
+		expect(scenario.values[i]).toBeCloseTo(scaled ? v * 1.5 : v, 9);
+	});
+	expect(scaledDays).toBe(22); // 12 December days + 10 January days
+	expect(base.values.some((v, i) => start + i * 86_400_000 >= from && start + i * 86_400_000 <= to && v > 1)).toBe(true);
 });

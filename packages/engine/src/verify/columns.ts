@@ -57,13 +57,6 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{
-		key: 'diverted_loss',
-		letter: null,
-		formula:
-			"the diverted share s of the dam's water × (evaporation + seepage lost), s = river water diverted into it (O, a top-up off-take) still held ÷ Q[t−1] + rain on dam + J, the dam taken as mixed (rain and transfers in aren't diverted; a transfer out, spill, release and draws carry s). Surface use: in the allocation comparison and, under a cap, off the water year's volume before the day's draws, never the licence's daily rate. Starts at 1 for a dam with 0 % upstream inflow and 0 % runoff to it, else 0. Only on a unit with a dam that can divert into it (engine ≥ 1.79.0, docs/model.md §2.12)",
-		optional: true
-	},
-	{
 		key: 'dam_release',
 		letter: 'X',
 		formula:
@@ -147,6 +140,20 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'offtake_to_dam',
 		letter: null,
 		formula: '(in − used) × the share of it the top-up rules brought: into the dam (S0 + M + O + K + J + this); the rest of what arrived joins U (engine ≥ 1.14.0)',
+		optional: true
+	},
+	{
+		key: 'intake_take',
+		letter: null,
+		formula:
+			"O + offtake_to_dam − MIN(R, O + offtake_to_dam) + river_abstraction + offtake_used + Σ river_take@ + water received from dams on the river (a dam rule's transfer in, remote_dam_in): the surface take at the river intake, the allocation comparison's surface use for this unit (draws from the dam aren't counted again). Only on a dam beside the river: a dam that can divert (River to dam or a top-up off-take), not run of river, with 0 % of the upstream inflow to it (engine ≥ 1.82.0, docs/model.md §2.12); accounting only, no other column reads it",
+		optional: true
+	},
+	{
+		key: 'received_at_intake',
+		letter: null,
+		formula:
+			"water received from dams beside the river (a dam rule's transfer in, remote_dam_in), already counted at their intake: netted against the unit's dam draw in the allocation comparison, like groundwater pumped into the dam. Only on a unit not measured at the intake that such a dam can give water to: a dam rule that can move water, or a remote share (engine ≥ 1.82.0, docs/model.md §2.12); accounting only",
 		optional: true
 	},
 	{

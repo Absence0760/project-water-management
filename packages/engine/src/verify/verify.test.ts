@@ -103,9 +103,7 @@ describe('farm working columns (engine 0.12.0)', () => {
 		const always = FARM_COLUMNS.filter((c) => !c.optional);
 		for (const c of always) expect(out.series.some((s) => s.nodeId === 'b' && s.key === c.key), c.key).toBe(true);
 		const farmKeys = out.series.filter((s) => s.nodeId === 'b').map((s) => s.key);
-		// Farm b diverts River to dam into its dam, so it has the diverted-loss column too (engine ≥ 1.79.0), a catalogue entry.
-		expect(FARM_COLUMNS.some((c) => c.key === 'diverted_loss')).toBe(true);
-		expect(farmKeys.sort()).toEqual([...always.map((c) => c.key), 'diverted_loss'].sort());
+		expect(farmKeys.sort()).toEqual(always.map((c) => c.key).sort());
 	});
 });
 

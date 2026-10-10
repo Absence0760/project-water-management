@@ -621,6 +621,24 @@ function optionalMonthlyChange(a: unknown, b: unknown, unit: string, none: strin
 	return monthlyChange(a, b, unit);
 }
 
+/**
+ * A node's dated demand factors (engine ≥ 1.82.0, NetworkNode.demandFactorWindows) in words: each window's
+ * dates, its factor (one value when every month is the same) and its part; "none" when there are none.
+ */
+function demandWindowsText(v: unknown): string {
+	if (!Array.isArray(v) || v.length === 0) return 'none';
+	return v
+		.map((w) => {
+			if (!w || typeof w !== 'object') return '?';
+			const x = w as { from?: unknown; to?: unknown; factor?: unknown; part?: unknown };
+			const f = Array.isArray(x.factor) ? x.factor : [];
+			const moved = f.filter((k) => k !== 1);
+			const factor = moved.length && moved.every((k) => k === moved[0]) ? `× ${fmtValue(moved[0])}${moved.length < f.length ? ` in ${moved.length} month${moved.length === 1 ? '' : 's'}` : ''}` : `× ${f.map((k) => fmtValue(k)).join(', ')} (Oct–Sep)`;
+			return `${typeof x.from === 'string' ? x.from : 'the start'} – ${typeof x.to === 'string' ? x.to : 'the end'} ${factor}${typeof x.part === 'string' ? ` (${x.part})` : ''}`;
+		})
+		.join('; ');
+}
+
 function arrayChange(a: unknown, b: unknown): string {
 	const xa = Array.isArray(a) ? a : [];
 	const xb = Array.isArray(b) ? b : [];
@@ -1383,6 +1401,9 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			const pf = optionalMonthlyChange(at(x), at(y), '×', 'none');
 			if (pf) parts.push(`${part} demand factor ${pf}`);
 		}
+		// Dated demand factors (engine ≥ 1.82.0, demand.scale with from/to).
+		if (!same(x.demandFactorWindows ?? null, y.demandFactorWindows ?? null) && (demandWindowsText(x.demandFactorWindows) !== 'none' || demandWindowsText(y.demandFactorWindows) !== 'none'))
+			parts.push(`dated demand factors ${demandWindowsText(x.demandFactorWindows)} → ${demandWindowsText(y.demandFactorWindows)}`);
 		// Dam storage (WP-3.5).
 		const rel = optionalMonthlyChange(x.damReleaseM3Day, y.damReleaseM3Day, 'm³/day', 'none');
 		if (rel) parts.push(`dam release ${rel}`);
@@ -1891,6 +1912,7 @@ export function nodeChangeFields(): [label: string, key: string][] {
 		['demand', 'userDemandM3Day'],
 		['demand factor', 'demandFactor'],
 		...DEMAND_PARTS.map((p): [string, string] => [`${p} demand factor`, 'partDemandFactor']),
+		['dated demand factors', 'demandFactorWindows'],
 		['dam release', 'damReleaseM3Day'],
 		// Operating rules (engine ≥ 1.32.0): the monthly rows diffModel words itself.
 		['hands-off flow', 'handsOffM3Day'],

@@ -161,6 +161,8 @@ export interface ComparisonRow {
 	name: string;
 	source: AllocationWaterSourceKind;
 	year: AllocationYear;
+	/** Surface water of a dam beside the river, measured at the river intake (engine ≥ 1.82.0, docs/model.md §2.12). */
+	atIntake: boolean;
 }
 
 /**
@@ -173,7 +175,7 @@ export function comparisonRows(c: AllocationComparison): ComparisonRow[] {
 	for (const n of c.nodes)
 		for (const side of [n.surface, n.groundwater]) {
 			if (side.years.every((y) => y.status === 'none')) continue;
-			for (const y of side.years) out.push({ key: `${n.nodeId}:${side.waterSource}:${y.waterYear}`, nodeId: n.nodeId, name: n.name, source: side.waterSource, year: y });
+			for (const y of side.years) out.push({ key: `${n.nodeId}:${side.waterSource}:${y.waterYear}`, nodeId: n.nodeId, name: n.name, source: side.waterSource, year: y, atIntake: side.measuredAt === 'intake' });
 		}
 	return out;
 }
@@ -194,6 +196,8 @@ export interface UnitRow {
 	ratio: number | null;
 	/** The run covers no whole water year of it: the figures are the part year's. */
 	partOnly: boolean;
+	/** Surface water of a dam beside the river, measured at the river intake (engine ≥ 1.82.0, docs/model.md §2.12). */
+	atIntake: boolean;
 }
 
 const STATUS_RANK: Record<AllocationStatus, number> = { over: 0, unregistered: 1, under: 2, within: 3, none: 4 };
@@ -226,6 +230,7 @@ export function unitRows(c: AllocationComparison): UnitRow[] {
 				modelledM3,
 				ratio: registeredM3 > 0 ? modelledM3 / registeredM3 : null,
 				partOnly,
+				atIntake: side.measuredAt === 'intake',
 				i: out.length
 			});
 		}

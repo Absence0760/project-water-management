@@ -7,8 +7,9 @@
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
 import { fromEpochDay, isIsoDate, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
-import { demandFactorStart } from '../demand';
-import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, DIVERTED_LOSS_SERIES } from '../allocations/compare';
+import { demandFactorStart, hasDatedDemandFactor } from '../demand';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations/compare';
+import { INTAKE_SERIES } from '../allocations/intake';
 import { ALLOCATION_SERIES, dailyLimits, inForceOver, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
@@ -2816,7 +2817,7 @@ function demandBeforeFactors(input: ModelInput, n: NetworkNode, get: SeriesMap, 
 	const day0 = toEpochDay(out.startDate);
 	const dff = input.settings?.demandFactorFrom;
 	const from = typeof dff === 'string' && isIsoDate(dff) ? demandFactorStart(dff, day0, out.days) : 0;
-	if (from >= out.days || (n.demandFactor == null && n.partDemandFactor == null)) return null;
+	if (from >= out.days || (n.demandFactor == null && n.partDemandFactor == null && !hasDatedDemandFactor(n))) return null;
 	const abstractFrom = abstractionStartDay(n, day0, out.days, []);
 	const wyOf = (t: number) => (monthOfEpochDay(day0 + t) + 2) % 12;
 	const base = new Float64Array(out.days);
@@ -2840,6 +2841,65 @@ function demandBeforeFactors(input: ModelInput, n: NetworkNode, get: SeriesMap, 
 		base[t] = v;
 	}
 	return base;
+}
+
+/**
+ * The surface take at the river intake (engine ≥ 1.82.0, docs/model.md §2.12),
+ * redone from the run's own columns: `intake_take` only on a farm whose dam is
+ * beside the river (a dam, 0 % of the upstream inflow to it, River to dam or a
+ * top-up off-take), equal to O + offtake_to_dam − MIN(R, O + offtake_to_dam) +
+ * the river water used directly + water from dams on the river (a dam rule's
+ * transfer, remote_dam_in); `received_at_intake` on another unit, the water it
+ * got from such dams. A run from before 1.82.0 has neither: nothing to check.
+ */
+function checkIntakeTake(input: ModelInput, out: ModelOutput, get: SeriesMap): string | null {
+	const nodes = input.model.nodes;
+	// Units measured at the intake are those with the take; whether the rule picked the right ones is checked below.
+	const atIntake = new Set(nodes.filter((n) => get.has(`${n.id}|${INTAKE_SERIES.take.key}`)).map((n) => n.id));
+	if (!atIntake.size) return nodes.some((n) => get.has(`${n.id}|${INTAKE_SERIES.received.key}`)) ? `${INTAKE_SERIES.received.key} in a run with no ${INTAKE_SERIES.take.key}` : null;
+	const rules = farmRules(input.model.transfers, nodes).filter((r) => !isRiverOfftake(r));
+	const vol = readRuleVolumes(rules, out.days, (id, k) => get.get(`${id}|${k}`));
+	if (!vol) return `${INTAKE_SERIES.take.key} in a run without its transfer rules' volumes`;
+	const fromDams = (id: string, intake: boolean) => {
+		const legs: ArrayLike<number>[] = rules.flatMap((r, k) => (r.toNodeId === id && canMove(r) && atIntake.has(r.fromNodeId) === intake ? [vol[k]!] : []));
+		const n = nodes.find((x) => x.id === id)!;
+		const rm = get.get(`${id}|${REMOTE_SERIES.in.key}`);
+		if (rm && n.cropRemoteNodeId && atIntake.has(n.cropRemoteNodeId) === intake) legs.push(rm);
+		return legs;
+	};
+	const zero = new Float64Array(out.days);
+	for (const n of nodes) {
+		const take = get.get(`${n.id}|${INTAKE_SERIES.take.key}`);
+		const rcv = get.get(`${n.id}|${INTAKE_SERIES.received.key}`);
+		if (take) {
+			if (n.kind !== 'farm' || !(n.damCapacityM3 > 0) || n.pctUpstreamToDam !== 0) return `${n.id}: ${INTAKE_SERIES.take.key} on a unit whose dam isn't beside the river`;
+			if (rcv) return `${n.id}: both ${INTAKE_SERIES.take.key} and ${INTAKE_SERIES.received.key}`;
+			const g = (k: string) => get.get(`${n.id}|${k}`) ?? zero;
+			const O = g('diverted_to_dam');
+			const XD = g('offtake_to_dam');
+			const R = g('spill');
+			const direct = [g('river_abstraction'), g('offtake_used'), ...[...get.entries()].filter(([k]) => k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v)];
+			const legs = fromDams(n.id, false);
+			for (let t = 0; t < out.days; t++) {
+				const d = O[t]! + XD[t]!;
+				let want = d - Math.min(R[t]!, d);
+				for (const x of direct) want += x[t]!;
+				for (const x of legs) want += x[t]!;
+				if (Math.abs(take[t]! - want) > tol(Math.max(Math.abs(want), d))) return `${n.id} day ${t}: ${INTAKE_SERIES.take.key} ${take[t]} ≠ O + top-up − MIN(spill, O + top-up) + river water used + water from dams on the river = ${want}`;
+			}
+			continue;
+		}
+		const legs = fromDams(n.id, true);
+		const any = legs.length > 0;
+		if (!!rcv !== any) return `${n.id}: ${rcv ? 'a' : 'no'} ${INTAKE_SERIES.received.key} series for a unit ${any ? 'a dam beside the river gives water to' : 'no dam beside the river gives water to'}`;
+		if (!rcv) continue;
+		for (let t = 0; t < out.days; t++) {
+			let want = 0;
+			for (const x of legs) want += x[t]!;
+			if (Math.abs(rcv[t]! - want) > tol(Math.abs(want))) return `${n.id} day ${t}: ${INTAKE_SERIES.received.key} ${rcv[t]} ≠ the water from dams beside the river ${want}`;
+		}
+	}
+	return null;
 }
 
 export function checkAllocations(input: ModelInput, out: ModelOutput): string | null {
@@ -2868,9 +2928,6 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 				const GD = g('groundwater_to_dam');
 				if (!G) return `${n.id}: supplied series missing`;
 				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
-				// Diverted river water the dam lost (engine ≥ 1.79.0): surface use counted before the day's draws, so the
-				// room the column shows is what the volume left after it; it never counts against the licence's daily rate.
-				const DL = source === 'surface' ? g(DIVERTED_LOSS_SERIES.key) : undefined;
 				// The licence conditions (engine ≥ 1.37.0): the room is at most the day's limit, which the
 				// input gives (0 outside the months of use, else the maximum rates × 86 400).
 				const limit = dailyLimits(allocs, source, day0, out.days);
@@ -2919,12 +2976,6 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 						left = b;
 						leftWant = b;
 						fresh = false;
-					}
-					const loss = DL ? DL[t]! : 0;
-					if (loss > 0) {
-						usedInRun += loss;
-						if (left !== null) left = Math.max(0, left - loss);
-						if (leftWant !== null) leftWant = Math.max(0, leftWant - loss);
 					}
 					const eps = tol(Math.max(b, Math.abs(use)));
 					if (room[t]! < 0 || room[t]! > Math.min(b, lim) + eps) return `${where}: ${source} allocation room ${room[t]} outside [0, the year's registered ${b}${lim < b ? ` and the licence's ${lim} today` : ''}]`;
@@ -3017,6 +3068,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 			return `${n.id}: a unit with a registered volume has no full-allocation demand factor`;
 		}
 	}
+	const intakeErr = checkIntakeTake(input, out, get);
+	if (intakeErr) return intakeErr;
 	const s = out.summary.allocations;
 	if (!input.model.allocations?.length) return s ? 'RunSummary.allocations without allocations in the input' : null;
 	if (!s) return 'RunSummary.allocations missing for an input with allocations';
@@ -3039,7 +3092,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					groundwaterToDam: get.get(`${n.id}|groundwater_to_dam`) ?? null,
 					riverAbstraction: get.get(`${n.id}|river_abstraction`) ?? null,
 					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v),
-					divertedLoss: get.get(`${n.id}|${DIVERTED_LOSS_SERIES.key}`) ?? null
+					intakeTake: get.get(`${n.id}|${INTAKE_SERIES.take.key}`) ?? null,
+					receivedAtIntake: get.get(`${n.id}|${INTAKE_SERIES.received.key}`) ?? null
 				}
 			];
 		})

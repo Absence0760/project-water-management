@@ -120,6 +120,18 @@ describe('unitUse and wholeWaterYears', () => {
 			`Farm A: 132 % of registered, ${fmtNum(1320)} m³ modelled against ${fmtNum(1000)} m³ registered (the mean water year). 10–50 % more.`
 		);
 	});
+
+	it('a dam beside the river: its surface use is the take at the intake, and the sentence says so (engine 1.82.0)', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [{ nodeId: 'E', name: 'Farm E', kind: 'farm', supplied: new Array(365).fill(50), intakeTake: new Array(365).fill(100) }],
+			allocations: [{ id: 'e', nodeId: 'E', waterSource: 'surface', volumeM3PerYear: 36_500 }]
+		});
+		const u = unitUse(c.nodes[0]!, 'surface', null)!;
+		expect(u).toMatchObject({ modelledM3: 36_500, atIntake: true, band: 'near' });
+		expect(useSentence('Farm E', u, 'the mean water year')).toMatch(/m³ modelled \(taken at the intake\) against/);
+		expect(unitUse(c.nodes[0]!, 'groundwater', null)?.atIntake).toBeUndefined();
+	});
 });
 
 describe('useShading: units on the map, and the ones without a polygon', () => {

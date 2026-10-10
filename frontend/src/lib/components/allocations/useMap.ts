@@ -93,6 +93,8 @@ export interface UnitUse {
 	/** modelled ÷ registered; null when nothing is registered. */
 	ratio: number | null;
 	band: UseBand;
+	/** The surface use is a dam beside the river's, measured at the river intake (engine ≥ 1.82.0, docs/model.md §2.12). */
+	atIntake?: boolean;
 }
 
 /**
@@ -116,7 +118,8 @@ export function unitUse(n: AllocationNodeComparison, source: UseSource, waterYea
 			registeredM3 += y.registeredM3;
 		}
 	}
-	return { modelledM3, registeredM3, ratio: registeredM3 > NOTHING_M3 ? modelledM3 / registeredM3 : null, band: useBand(modelledM3, registeredM3) };
+	const atIntake = sides.some((side) => side.measuredAt === 'intake');
+	return { modelledM3, registeredM3, ratio: registeredM3 > NOTHING_M3 ? modelledM3 / registeredM3 : null, band: useBand(modelledM3, registeredM3), ...(atIntake ? { atIntake } : {}) };
 }
 
 /** The label a unit carries on the map: its % of registered ("132 %"), or the band in a word or two. */
@@ -290,7 +293,7 @@ export function useBounds(s: UseShading): [[number, number], [number, number]] |
 /** A unit's figures in one sentence, for its label's accessible name and the list under the map. */
 export function useSentence(name: string, u: UnitUse | null, period: string): string {
 	if (!u) return `${name}: the run covers no whole water year for ${period}.`;
-	const m = `${fmtNum(u.modelledM3)} m³ modelled`;
+	const m = `${fmtNum(u.modelledM3)} m³ modelled${u.atIntake ? ' (taken at the intake)' : ''}`;
 	if (u.ratio === null) return u.band === 'unregistered' ? `${name}: ${m}, with no registered volume (${period}).` : `${name}: no modelled use and nothing registered (${period}).`;
 	return `${name}: ${fmtNum(u.ratio * 100, 0)} % of registered, ${m} against ${fmtNum(u.registeredM3)} m³ registered (${period}). ${BAND_SHORT[u.band]}.`;
 }

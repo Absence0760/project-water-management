@@ -185,18 +185,29 @@ For a run, per farm or water user, per water source and per **water year**
   not netted. The rule and its reasoning are in
   [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310);
   pending the hydrologist's confirmation.
-- **Diverted river water lost from the dam** (engine ≥ 1.79.0, issue #507):
-  a dam beside the river that fills from River to dam or a top-up off-take
-  loses some of that river water to evaporation and to seepage that doesn't
-  return. That water left the river and was never used, so it is added to
-  the surface side (`diverted_loss`), beside the draws. Filling the dam isn't
-  counted, and spill and releases go back to the river. Under a cap
-  (a scenario's allocation mode: the baseline only compares, issue #507) the loss counts against the year's volume
-  before the day's draws, never against a licence's daily rate or months, and
-  the cap can't stop it, so a year can read over its volume by losses alone.
-  Runs from an older engine have no such series and read as before. Pending
-  the hydrologist: the alternative is counting the diversion itself as the
-  take ([model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)).
+- **A dam beside the river is measured at the intake** (engine ≥ 1.82.0,
+  issue #513): the client's hydrologist answered on 2026-10-10 that the
+  licences state the volume taken at the river intake (s21(a)) and the
+  dam's volume (s21(b)). For a farm whose dam fills from River to dam or a
+  top-up off-take and takes none of the upstream river flow
+  (`pctUpstreamToDam` 0), the surface side is the take at the intake: River
+  to dam + the top-up off-take water into the dam + the river water used
+  directly (the river pump, off-take water used, the unit's river
+  abstractions) + water a dam on the river gave it, less the same day's
+  spill, at most that day's diversion (`intake_take`). Draws from the dam
+  aren't counted again; the page shows them beside the take ("taken at the
+  intake; drawn from the dam …, not added"). Water another unit gets from
+  such a dam (a dam rule, a remote share) was counted at its intake, so it's
+  netted against that unit's dam draw like groundwater pumped into the dam
+  (`received_at_intake`). Dams on the river keep the rule above. It is the
+  comparison's only: no other series of the run changes, and a cap scenario
+  still limits the draws. The spill netting is pending the hydrologist
+  (issue #90 R5-2). **Older runs** (no `intake_take`, any engine before
+  1.82.0) are compared by the draws; a 1.79.0–1.81.0 run's stored
+  `diverted_loss` (the superseded provisional rule: the diverted water the
+  dam lost counted on top of the draws) is ignored. Run the model again for
+  the take at the intake
+  ([model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)).
 - **Registered volume**: each allocation's volume × the days it is valid in
   that part of the year ÷ the days in the water year (365 or 366). A run that
   covers only part of a water year compares that part with the prorated
@@ -413,7 +424,9 @@ volumes; no engine behaviour changes.
   (`settings.allocationTolerance`), which also calls 0.90–1.00 *within
   band*; the key says so.
 - **Not colour alone** (WCAG 1.4.1): each unit carries its % of registered
-  ("132 %") as a button over its area, named with its figures, and the key
+  ("132 %") as a button over its area, named with its figures (a dam beside
+  the river's surface use says "taken at the intake", engine ≥ 1.82.0; so
+  does the Map tab's use-against-allocation label), and the key
   lists the bands in words with how many units are in each. Each label's
   text is at least 4.5:1 on its band's colour in light and dark
   (`useMap.test.ts`).

@@ -5,7 +5,7 @@
 // unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
-import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEFAULT_IRRIGATION_SYSTEMS, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type DemandFactorWindow, type IrrigationSystemDef, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	CROP_SET_FIELDS,
@@ -846,6 +846,17 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			}
 			// Water-year index (Oct = 0) of each calendar month the op scales.
 			const wy = new Set((op.months ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).map((c) => (c + 2) % 12));
+			if (op.from !== undefined || op.to !== undefined) {
+				// Dated (engine ≥ 1.82.0, issue #514): a window on each node, its months' factor on its days only.
+				if (op.part !== undefined && !allowed(DEMAND_PARTS, op.part)) fail(`"${String(op.part)}" is not a part of a unit's demand`);
+				const factor = Array.from({ length: 12 }, (_, i) => (wy.has(i) ? op.factor : 1));
+				for (const n of targets) {
+					const w: DemandFactorWindow = { ...(op.from !== undefined ? { from: op.from } : {}), ...(op.to !== undefined ? { to: op.to } : {}), factor: factor.slice(), ...(op.part !== undefined ? { part: op.part } : {}) };
+					n.demandFactorWindows = [...(Array.isArray(n.demandFactorWindows) ? n.demandFactorWindows : []), w];
+				}
+				if (!op.nodeIds) notes.push(`${targets.length} ${word}(s) scaled`);
+				break;
+			}
 			for (const n of targets) {
 				if (op.part !== undefined) {
 					// One part of the unit's demand (engine ≥ 1.45.0): its own factor, on top of the unit's.
