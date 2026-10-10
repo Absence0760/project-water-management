@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays, unitRainError } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
+import { autoFitRecordError, baselineAllocationModeError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, normaliseBaselineAllocationMode, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -1135,9 +1135,27 @@ describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', (
 describe('SettingsPatch allocation settings (engine ≥ 1.18.0, issue #72)', () => {
 	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
 
-	it('takes one of the three allocation modes', () => {
+	it('takes one of the three allocation modes (a project file may still name one; PATCH and the imports hold the baseline to compare only, below)', () => {
 		for (const v of ['none', 'cap', 'fullAllocation']) expect(ok({ allocationMode: v }), v).toBe(true);
 		for (const v of ['full', '', null, 1]) expect(ok({ allocationMode: v }), String(v)).toBe(false);
+	});
+
+	it('a save refuses a baseline cap or full allocation: licence data never drives the baseline (issue #507)', () => {
+		for (const allocationMode of ['cap', 'fullAllocation']) expect(baselineAllocationModeError({ allocationMode })).toMatch(/^settings\.allocationMode: the baseline only compares/);
+		for (const patch of [{ allocationMode: 'none' }, { allocationTolerance: 0.2 }, undefined]) expect(baselineAllocationModeError(patch)).toBeNull();
+	});
+
+	it('settings from outside a save come in comparing only, with a note; compare only, absent or null stay as they were', () => {
+		const capped: Record<string, unknown> = { allocationMode: 'fullAllocation', allocationTolerance: 0.2 };
+		expect(normaliseBaselineAllocationMode(capped)).toBe(
+			'Allocation mode “Full allocation: every user takes their registered volume” set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario).'
+		);
+		expect(capped).toEqual({ allocationMode: 'none', allocationTolerance: 0.2 });
+		for (const s of [{ allocationMode: 'none' }, {}, { allocationMode: null }]) {
+			const before = structuredClone(s);
+			expect(normaliseBaselineAllocationMode(s)).toBeNull();
+			expect(s).toEqual(before);
+		}
 	});
 
 	it('takes a comparison band in [0, 1), not a percentage', () => {

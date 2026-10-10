@@ -37,7 +37,6 @@
 	import { settingTarget } from '$lib/components/notes/notes';
 	import {
 		ALLOCATION_MODE_LABEL,
-		ALLOCATION_MODES,
 		CALIBRATION_FLOW_KINDS,
 		calibrationSeriesKey,
 		calibrationSites,
@@ -66,9 +65,10 @@
 		type SeriesOrigin,
 		type SeriesProvenance,
 		type ApanDailyFingerprint,
-		type AllocationMode,
 		type SeriesMeta,
-		defaultProjectSettings
+		type ModelInput,
+		defaultProjectSettings,
+		resolveCatchmentAreaKm2
 	} from '@water-management/engine';
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
@@ -275,6 +275,9 @@
 	const farmAreaKm2 = $derived(
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
+	// The daily EWR's area ratio numerator: the area the run's natural flow is made on (the engine's own choice: the
+	// land units' under per-unit rain, else the calibration override, else the units' areas summed).
+	const ewrModelAreaKm2 = $derived(resolveCatchmentAreaKm2(s.calibration, { model: { nodes: editor?.model.nodes ?? [] }, settings: s } as unknown as ModelInput));
 	const ewrAnnual = $derived(annualMm3(s.ewrPragmaticM3PerDay, s.februaryDays));
 	// The daily EWR at the outlet from the DRM tables (engine ≥ 1.77.0): the pragmatic row then isn't read.
 	const dailyFromDrm = $derived(!!s.ewrDailySource && s.ewrDailySource.method !== 'pragmatic');
@@ -1289,7 +1292,7 @@
 		<!-- Where the daily EWR comes from (engine ≥ 1.77.0, issue #455) first: it decides whether the row below is used. -->
 		<Lazy load={loadEwrDailySource}>
 			{#snippet children(EwrDailySourceFields)}
-				<EwrDailySourceFields bind:value={s.ewrDailySource} bind:error={draft.errors.ewrSource} {readonly} modelAreaKm2={farmAreaKm2} projectId={project.id} />
+				<EwrDailySourceFields bind:value={s.ewrDailySource} bind:error={draft.errors.ewrSource} {readonly} modelAreaKm2={ewrModelAreaKm2} projectId={project.id} />
 			{/snippet}
 		</Lazy>
 		<FieldHistoryLine field="settings:ewrDailySource" />
@@ -1373,17 +1376,10 @@
 		<fieldset class="plain" data-testid="settings-allocations">
 			<legend>Registered volumes <HelpTip key="settings.allocationMode" /></legend>
 			<div class="form-row">
+				<!-- Licence data never drives the baseline (issue #507): the project compares only; a cap or a full allocation is a scenario's. -->
 				<div class="field">
-					<label for="st-alloc-mode">Allocation mode</label>
-					<select
-						id="st-alloc-mode"
-						disabled={readonly}
-						value={s.allocationMode ?? 'none'}
-						onchange={(e) => (s.allocationMode = e.currentTarget.value as AllocationMode)}
-						aria-describedby="st-alloc-mode-h"
-					>
-						{#each ALLOCATION_MODES as m (m)}<option value={m}>{ALLOCATION_MODE_LABEL[m]}</option>{/each}
-					</select>
+					<span class="lbl"><span class="lbl-text">Allocation mode</span></span>
+					<span class="alloc-mode" data-testid="settings-allocation-mode">{ALLOCATION_MODE_LABEL.none}</span>
 				</div>
 				<div class="field">
 					<span class="lbl"><label for="st-alloc-tol">Comparison band <span class="u">(± %)</span></label><HelpTip key="settings.allocationTolerance" /></span>
@@ -1401,9 +1397,9 @@
 				</div>
 			</div>
 			<span class="hint explain" id="st-alloc-mode-h">
-				What the Allocations tab’s registered volumes do to a run. Compare only (the default) changes nothing; a cap keeps each unit’s surface and groundwater use per
-				water year within its volumes, and within its licences’ months and maximum rates; a full allocation scales each unit’s demand to its volumes, for “if every
-				registered or licensed volume were taken in full” (a registration is not an entitlement).
+				The baseline compares each unit’s modelled use with its registered volumes and changes nothing: licence data never drives the baseline, whose use comes from the
+				crops, demands, pumps and boreholes you enter. To cap use at the volumes, or to see “if every registered or licensed volume were taken in full”, make a scenario
+				that sets the allocation mode.
 			</span>
 			<span class="hint explain" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, a provisional default not yet confirmed by the catchment’s hydrologist.</span>
 			<FieldHistoryLine field="settings:allocationMode" />
@@ -1725,10 +1721,17 @@
 		align-items: center;
 		gap: 0.25rem;
 	}
-	.lbl label {
+	.lbl label,
+	.lbl-text {
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
+	}
+	/* The baseline's allocation mode, fixed at compare only (issue #507): read, not chosen. */
+	.alloc-mode {
+		display: flex;
+		align-items: center;
+		min-height: 36px;
 	}
 	legend :global(.helptip),
 	h2 :global(.helptip),

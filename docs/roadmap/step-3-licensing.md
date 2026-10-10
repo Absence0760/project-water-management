@@ -1041,7 +1041,7 @@ must build WP-2.15 Phase B.
 > `trigger` | `runOfRiver`), `pumpCapacityM3Day` (null = no limit) and
 > `supplyTriggerPct` / `supplyStopPct` (0.4 / 0.6); series `river_abstraction`,
 > `FarmSummary.avgRiverAbstractionM3Day`; the pump takes only the flow below
-> the dam above the senior users' requirement and a pass-inflow release's
+> the dam above the priority users' requirement and a pass-inflow release's
 > target ([model.md §2.7e](../model.md), which lists the decisions taken).
 > Default output is byte-identical (tests on random networks and an example;
 > the examples and the client catchment regression suite unchanged).
@@ -1054,7 +1054,7 @@ must build WP-2.15 Phase B.
 > The farm's `pumpCapacityM3Day` on a user node (no migration: 060's column
 > has no kind check), with no supply rule: the user takes MIN(demand, what
 > its priority leaves, capacity) from the river; its boreholes are separate;
-> a senior user's claim on the farms upstream is MIN(demand, capacity), so
+> a priority user's claim on the farms upstream is MIN(demand, capacity), so
 > they pass no more than it can lift. Null = no limit, the default, running
 > to the bit as before (a test on random networks). Series
 > `pump_limited` (the demand the pump left unmet although the river had

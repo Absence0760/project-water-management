@@ -128,6 +128,9 @@ export function nodeTableCsv(nodes: readonly NetworkNode[]): string {
 export const NODE_TABLE_FORMAT: GridFormat = (() => {
 	const h = (key: string) => heading(PASTE_FIELDS.find((f) => f.key === key)!);
 	return {
+		id: 'hydrological-unit-table',
+		title: 'Hydrological unit table',
+		where: 'Network → Tables → Hydrological unit table → Paste from a spreadsheet',
 		rules: [
 			`A heading row: ${NAME_HEADINGS[0]}, then any of the table's columns as the CSV below names them, in any order; a column you leave out keeps its values.`,
 			'A row per hydrological unit, its name first: a name the table doesn’t have is left out (add a unit with + Add hydrological unit first).',

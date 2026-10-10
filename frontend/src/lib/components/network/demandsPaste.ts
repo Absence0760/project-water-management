@@ -67,6 +67,9 @@ export function applyDemandPaste(plan: PastePlan, set: (rowKey: string, month: n
 /** The Demands grid's Expected format (issue #477), in the unit the table shows. */
 export function demandsFormat(unit = 'm³/day'): GridFormat {
 	return {
+		id: 'demands-grid',
+		title: 'Demands by month',
+		where: 'Network → Tables → Demands → Paste from a spreadsheet',
 		rules: [
 			`A heading row: ${NAME_HEADINGS[0]}, then the months Oct to Sep (or October to September), in any order; the CSV's other columns (Unit, Kind, Mean, Annual) are read past.`,
 			'A row per demand, its name first; a name two rows share takes its unit in brackets, as the CSV writes it. A demand the table doesn’t have is left out: add it on its unit first.',

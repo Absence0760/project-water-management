@@ -2735,9 +2735,9 @@ itself.
   every farm column ("not used for an other water user"), and below the
   network panel an **Other water users** panel lists each user (name, a
   one-line summary: priority, mean demand, share returned, what it drains
-  into) with its **Priority** (senior, the default: farms upstream pass its
-  demand first; junior: takes what reaches it; a note under it says that the
-  hydrological units upstream pass a senior user's demand before filling their
+  into) with its **Priority** (Priority, the default: farms upstream pass its
+  demand first; Non-priority: takes what reaches it; a note under it says that the
+  hydrological units upstream pass a priority user's demand before filling their
   dams or irrigating, so adding one changes what the farms upstream get, issue
   #507), **Share returned** (%) and **demand per
   month** (m³/day, Oct–Sep) with *Use October's demand for every month*
@@ -2745,7 +2745,7 @@ itself.
   1.58.0, [model.md §2.7c](./model.md)): blank is no limit, 0 no river pump;
   *Number of pumps* × *m³/h per pump* × 24 fills it, as on a unit's Supply
   fields (only the m³/day is stored), and the note under it says what the
-  value means (for a senior user, that the units upstream pass no more than
+  value means (for a priority user, that the units upstream pass no more than
   it for the user). The one-line summary adds "pump N m³/day" when set. A
   user's Supply group (a stale supply rule left from a farm) no longer shows
   the river pump field: the user's own is under "Other water user". The one-node form shows the same fields
@@ -2836,7 +2836,7 @@ itself.
   **Use October’s flow for every month**; unticked = none), and **Also leave
   the EWR in the river** keeps the EWR required at the farm too. A line under
   them says in plain words what the farm leaves and before which of its takes
-  (`handsOffPreview`, `handsOffTakers`): no hands-off flow (senior users only,
+  (`handsOffPreview`, `handsOffTakers`): no hands-off flow (priority users only,
   not the EWR), else the amount ("150 m³/day", or "between 150 and 12 345.5
   m³/day by month", every figure as entered) with the months without one, the
   EWR, or the larger of the two, before only the takes that apply: the river
@@ -2915,7 +2915,7 @@ itself.
   month below", and a line gives the capacity ("up to 0.01 m³/s", or
   "between 0.01 and 0.2 m³/s by month") and names the months it takes
   nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
-  dam's own hint says what it leaves in the river: senior users' demand, and
+  dam's own hint says what it leaves in the river: priority users' demand, and
   the hands-off flow under Supply when there is one. The months are edited
   only here: on a farm set by month the node table's River to dam cell
   (`NetworkTab.svelte`, desktop and phone card) has no input for the one
@@ -4280,8 +4280,8 @@ user's demand could only be read one node form at a time.
   20 %" under its name; *piped out* and *scheduled* tags), its unit, its
   kind (Irrigation (crops), the object's category, Other water user), where
   its water comes from (dam side, river abstraction, the crop supply
-  table's shares), its place in the supply order ("1 of 3"; a user's senior
-  or junior; – when the unit has one place), m³/day for each water-year
+  table's shares), its place in the supply order ("1 of 3"; a user's Priority
+  or Non-priority; – when the unit has one place), m³/day for each water-year
   month (shaded by size, as the crop demand table), the mean and Mm³/a, and
   **Edit** (viewers: **View**). The **Catchment** row sums the modelled
   rows, and a line above the table splits the annual total by kind,
@@ -5178,7 +5178,7 @@ Google Sheets recomputes the model itself, beside the model's own numbers and
 a column with each day's largest difference ([api.md § Export](./api.md#export)).
 It runs in the same worker, with the same progress line and Cancel. A unit
 whose rules the formulas don't carry yet (boreholes, a release rule, a river
-pump, off-takes, demand objects, senior users below, an allocation cap, a
+pump, off-takes, demand objects, priority users below, an allocation cap, a
 storage reset, a survey curve, a daily A-pan series on a dam, a dam capacity
 that changes over the run) gets "Workbook
 failed: The audit workbook can't recompute *unit* yet: …" naming each, never a
@@ -6113,8 +6113,13 @@ two.
   EWR charge, curtailment and the EWR required vs met under the EWR by month grid) and
   **Low flows judged on** (`settings.lowFlowMeasure`: *The month's total
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
-  filter, so a flood month can't pass its low flows). Each has a help tip;
-  scenarios can change both with `settings.set`.
+  filter, so a flood month can't pass its low flows; the total flow is the
+  catchment's hydrologist's choice, 2026-10-10). Under the low-flow choice a
+  warning badge, **Filter settings unconfirmed** (`data-testid
+  "baseflow-filter-unconfirmed"`), says the base-flow filter's passes and α
+  aren't yet checked against the Desktop Reserve Model's method (issue #507
+  item 6, model.md §2.9d). Each has a help tip; scenarios can change both
+  with `settings.set`.
 - **Drought restrictions** (`#set-restrict`, engine ≥ 1.54.0, WP-3.8): the
   model's restriction rule, off by default; see
   [§ Drought restrictions](#drought-restrictions).
@@ -7303,9 +7308,9 @@ read it before.
   are set per user category. A row of two cards gives the farm totals per
   stage; the table has one row per farm (a bar, the whole %, the m³/day), an
   **All hydrological units** total row, then **Other water users (outside
-  the equitable share)**: each user its own row with a *senior, not
-  curtailed* or *junior, curtailed* badge, and at stage 2 what it takes
-  after its supply cut (junior) or all it takes (senior), with an **All
+  the equitable share)**: each user its own row with a *priority, not
+  curtailed* or *non-priority, curtailed* badge, and at stage 2 what it takes
+  after its supply cut (non-priority) or all it takes (priority), with an **All
   other users** total. Each farm's equitable share volume stays in the
   per-farm table below.
   Every figure is the engine's `CurtailmentSummary`; nothing is recomputed.
@@ -7313,8 +7318,8 @@ read it before.
   "no demand" for a group with no demand (never a negative demand, which the
   client's sketch showed), "—" under 1 m³/day. A note under stage 2 names
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
-  cut beyond its equitable share, a senior user's charge that stands, a
-  junior user's charge beyond what it takes, or what a unit's basic-needs
+  cut beyond its equitable share, a priority user's charge that stands, a
+  non-priority user's charge beyond what it takes, or what a unit's basic-needs
   floor keeps of the cut (engine ≥ 1.44.0, issue #123: stage 2 never goes
   below it, and the paragraph under the board says so; the per-farm table
   badges the row in the same words, `basicNeedsNote`;
@@ -7325,7 +7330,7 @@ read it before.
   confirmed (O4, issue #90,
   [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
   the client: whether the town's uses count as domestic or irrigation.
-  Tests: `shareThePain.test.ts` (bounding, zero demand, senior / junior, the
+  Tests: `shareThePain.test.ts` (bounding, zero demand, priority / non-priority, the
   equal share's %, and seeded engine runs whose totals match the engine's
   and whose equal share is today's total %),
   `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
@@ -7358,7 +7363,7 @@ read it before.
   **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
   the % of demand supplied (flagged below 95 %, as the units are; issue
   #137), returned, EWR charge, the supply cut, and the charge left standing, with
-  "junior (curtailed)" or "senior (not curtailed)"; they are not in the
+  "Non-priority (curtailed)" or "Priority (not curtailed)"; they are not in the
   equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
   charged to farms and the natural part over the reporting window (all three

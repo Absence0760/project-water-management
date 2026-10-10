@@ -591,9 +591,9 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		];
 		const lines = [...otherUserLines({ users, curtailment: { ...c, otherUsers } } as unknown as RunSummary)];
 		expect(lines[0]).toBe('Other water users (whole run)');
-		expect(lines).toContain('Town,senior,100,90,10,90,45,5,3');
-		expect(lines).toContain('Town,senior,100,90,45,5,no (senior),0,0,5');
-		expect(lines.at(-1)).toMatch(/senior user is not curtailed/);
+		expect(lines).toContain('Town,Priority,100,90,10,90,45,5,3');
+		expect(lines).toContain('Town,Priority,100,90,45,5,no (priority),0,0,5');
+		expect(lines.at(-1)).toMatch(/priority user is not curtailed/);
 		// No user has a pump capacity: no pump columns.
 		expect(lines[1]).not.toMatch(/pump/);
 	});
@@ -604,8 +604,8 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		const lines = [...otherUserLines({ users: [town, mine] } as unknown as RunSummary)];
 		const header = lines[1]!.split(',');
 		expect(header.slice(-3)).toEqual(['Average pumped from the river (m³/day)', 'Average demand the pump capacity left unmet (m³/day)', 'Days the pump capacity left demand unmet']);
-		expect(lines[2]).toBe('Town,senior,100,60,40,60,30,5,3,60,25,12');
-		expect(lines[3]).toBe('Mine,junior,10,10,0,100,0,0,0,,,');
+		expect(lines[2]).toBe('Town,Priority,100,60,40,60,30,5,3,60,25,12');
+		expect(lines[3]).toBe('Mine,Non-priority,10,10,0,100,0,0,0,,,');
 		expect(lines[3]!.split(',')).toHaveLength(header.length);
 	});
 

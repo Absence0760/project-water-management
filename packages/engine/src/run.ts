@@ -673,7 +673,7 @@ function runNetwork(
 	const gaugeSeries = new Set<keyof NodeResult>(['inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
 	// An other water user (WP-1.33): what it wanted, took, returned and left in the river.
 	const userSeries = new Set<keyof NodeResult>(['demand', 'supplied', 'deficit', 'inflowUpstream', 'outflow', 'ewrCumulative', 'ewrShortfall']);
-	// The senior users' requirement passing each node, only when a senior user's demand is passed down to it.
+	// The priority users' requirement passing each node, only when a priority user's demand is passed down to it.
 	const hasSenior = plan.nodes.some((n) => n.seniorClaimed);
 	// Each unit's enabled demand objects' names, in the plan's order (engine ≥ 1.7.0).
 	const objectNames = new Map<string, string[]>();
@@ -691,11 +691,11 @@ function runNetwork(
 		// A dam whose capacity changes over the run (engine ≥ 1.30.0, ./network/development.ts): the day's capacity.
 		const ks = plan.nodes[i]!.capacityScale;
 		if (ks) push(node.id, DAM_CAPACITY_SERIES.key, DAM_CAPACITY_SERIES.label, DAM_CAPACITY_SERIES.unit, Float64Array.from(ks, (k) => k * node.damCapacityM3));
-		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this hydrological unit', 'm³/day', r.seniorRequirement);
+		if (hasSenior) push(node.id, 'senior_requirement', 'Priority users’ demand still to pass below this hydrological unit', 'm³/day', r.seniorRequirement);
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		// Bed losses in the reach below (engine ≥ 1.75.0, docs/model.md §2.6b): on any node that has them.
 		if (r.reachLoss) push(node.id, REACH_LOSS_SERIES.key, REACH_LOSS_SERIES.label, REACH_LOSS_SERIES.unit, r.reachLoss);
-		// The senior users' claims' share of them, which the node below takes off the senior requirement.
+		// The priority users' claims' share of them, which the node below takes off the priority requirement.
 		const srl = plan.nodes[i]!.seniorReachLoss;
 		if (srl) push(node.id, SENIOR_REACH_LOSS_SERIES.key, SENIOR_REACH_LOSS_SERIES.label, SENIOR_REACH_LOSS_SERIES.unit, srl);
 		if (plan.nodes[i]!.borehole) {
@@ -777,7 +777,7 @@ function runNetwork(
 		// Dam releases and seepage lost from the catchment (WP-3.5): only on a dam that has them.
 		if (plan.nodes[i]!.release) push(node.id, 'dam_release', 'Released below the dam (before irrigation; joins the outflow)', 'm³/day', w.damRelease);
 		if (plan.nodes[i]!.seepageReturn !== undefined) push(node.id, 'dam_seepage_lost', 'Dam seepage lost from the catchment (the rest joins the outflow)', 'm³/day', w.damSeepageLost);
-		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the senior users’ demand passes', 'm³/day', w.passedForSenior);
+		if (hasSenior) push(node.id, 'passed_for_senior', 'Kept out of the dam so the priority users’ demand passes', 'm³/day', w.passedForSenior);
 		if (w.offtakeUsed) {
 			push(node.id, OFFTAKE_SERIES.used.key, OFFTAKE_SERIES.used.label, 'm³/day', w.offtakeUsed);
 			push(node.id, OFFTAKE_SERIES.toDam.key, OFFTAKE_SERIES.toDam.label, 'm³/day', w.offtakeToDam!);
@@ -2113,9 +2113,9 @@ function consumptivePerSupplied(n: NetworkPlan['nodes'][number]): number {
 /**
  * Other water users (WP-1.33, docs/model.md §2.7c): each user node's daily
  * demand (its monthly m³/day, water-year months), return share and priority,
- * and the senior users' demand fragmented to the farms upstream of each by
+ * and the priority users' demand fragmented to the farms upstream of each by
  * flow share (claims[farm][t] = Σ_u D_u[t] × share_farm / Σ upstream shares of
- * u), the rule the EWR is fragmented by. A senior user with no farm share
+ * u), the rule the EWR is fragmented by. A priority user with no farm share
  * upstream can't be protected that way: it takes what reaches it, with a
  * warning. Map keyed by node index; claims only for farms that carry one.
  * A farm's claim is grossed up for the bed losses of every reach between it
@@ -2156,7 +2156,7 @@ function otherUsers(
 			for (const u of ups) down![u] = d;
 		});
 	}
-	// Users in node-id order: a farm below two senior users adds their claims in that order.
+	// Users in node-id order: a farm below two priority users adds their claims in that order.
 	const byId = nodes.map((_, i) => i).sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id));
 	for (const i of byId) {
 		const n = nodes[i]!;
@@ -2218,7 +2218,7 @@ function otherUsers(
 					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
 				}
 			} else {
-				warnings.push(`senior user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
+				warnings.push(`priority user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
 			}
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });

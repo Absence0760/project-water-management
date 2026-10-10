@@ -565,7 +565,7 @@ name**:
 A run stores some columns only when a feature is on (issue #54): a river
 pump (`river_abstraction`), boreholes (`groundwater_used`,
 `groundwater_to_dam`, `baseflow_depletion`, …), a release rule
-(`dam_release`), land cover (`landcover_reduction`), senior users
+(`dam_release`), land cover (`landcover_reduction`), priority users
 (`senior_requirement`, `passed_for_senior`), a seepage return share
 (`dam_seepage_lost`). A run without the feature there moved none of that
 water, so comparing a river-first scenario with its dam-first base is its

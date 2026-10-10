@@ -647,7 +647,7 @@ export interface ZeroRainRuns {
 export interface ZeroRunOptions {
 	/** settings.dataQuality, resolved; the defaults without it. */
 	dq?: DataQualitySettings;
-	/** The CHIRPS series, read only when dq.zeroRunChirpsCheck is on. */
+	/** The CHIRPS series, read only when dq.zeroRunChirpsCheck is on (and, by rain.ts zeroRainMask, for the per-day fill threshold, engine ≥ 1.81.0). */
 	chirps?: DailySeries | null;
 }
 

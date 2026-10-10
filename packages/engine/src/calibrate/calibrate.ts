@@ -532,8 +532,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			scoring,
 			observed,
 			rainFlags,
-			zeroRunMask: run.zeroRain?.mask ?? null,
-			zeroFlatMinDays: settings.dataQuality.flatlineFlowMaxDays
+			zeroRunMask: run.zeroRain?.mask ?? null
 		}),
 		reference: input.series?.flow_reference_m3s ? Float64Array.from(aligned('flow_reference_m3s'), (v) => (v === null ? NaN : v)) : null,
 		natural,

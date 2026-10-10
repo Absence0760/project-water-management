@@ -433,7 +433,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects/outcomes` | – | `{ projects: PortfolioProject[] }`: the [portfolio](#portfolio)'s figures for every project you can see (below) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId?, requireMfa? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows; `403 mfa_required` / `mfa_step_up` turning `requireMfa` on without being signed in with a second factor (below) | editor (owner when `teamId` or `requireMfa` is sent) |
+| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId?, requireMfa? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows; `400` for `settings.allocationMode` other than `'none'` ("the baseline only compares registered volumes …": licence data never drives the baseline, issue #507; a cap or a full allocation is a scenario's `settings.set`, [allocations.md](./allocations.md#the-allocation-mode-engine--1180)); `403 mfa_required` / `mfa_step_up` turning `requireMfa` on without being signed in with a second factor (below) | editor (owner when `teamId` or `requireMfa` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { packs } }` for a project with an evidence pack past draft (issued, superseded or withdrawn: its verify link must keep answering; 112, [Evidence packs](#evidence-packs)), checked first; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id, and each series' site (a gauge's record, a unit's own rain) to its node's; a unit's rain whose unit has left the model is left out; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
@@ -1531,7 +1531,7 @@ brought to 1 or below to save) and `damSeepagePerDay`. A body without them
 Other water users (engine ≥ 0.22.0, migration 011, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)):
 `kind` may be `"user"`, and every node carries `userDemandM3Day` (12 numbers
 ≥ 0, water-year months, m³/day, or `null`), `userReturnPct` (0–1) and
-`userPriority` (`"senior"` | `"junior"`). A body without them gets `null`, 0
+`userPriority` (`"senior"` | `"junior"`; the app shows them as Priority / Non-priority, model.md §2.7c). A body without them gets `null`, 0
 and `"senior"`; the engine ignores them on farms and gauges. `PUT` refuses a
 crop area or a transfer on a user node. A user's `pumpCapacityM3Day` (engine
 ≥ 1.58.0, the supply fields' column below) is its river pump: ≥ 0, or `null`
@@ -2080,11 +2080,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   left unmet although the river had it) and `daysPumpLimited`, beside its run
   series `pump_limited` (its river take is `supplied` − `groundwater_used`;
   `river_abstraction` stays a farm's). `summary.curtailment.otherUsers` has the same users over
-  the reporting window with `curtailed` (junior), `supplyCutM3Day` (≤ 0) and
+  the reporting window with `curtailed` (non-priority, stored `junior`), `supplyCutM3Day` (≤ 0) and
   `uncurtailedChargeM3Day` (the charge a cut doesn't remove; all of it for a
-  senior user). User nodes have the run series `demand`, `supplied`,
+  priority user). User nodes have the run series `demand`, `supplied`,
   `deficit`, `inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
-  `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
+  `ewr_shortfall` and `ewr_charge`; with a priority user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
 - `summary.catchment.outletEwr` (engine ≥ 1.77.0, issue #455; only when the
@@ -2965,9 +2965,12 @@ what](./allocations.md#who-sees-what)).
   `GET /projects/:id/model-input` and the stored run's `inputs.model.allocations`,
   without names, registration numbers or properties), and a write that changes
   what a run reads makes the latest run out of date (`project.updated_at`).
-  `settings.allocationMode` (`'none'` | `'cap'` | `'fullAllocation'`) and
-  `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
-  ([Projects](#projects)); `RunSummary.allocations` is the run's own
+  `settings.allocationMode` and `settings.allocationTolerance` (0 ≤ τ < 1)
+  are project settings ([Projects](#projects)); the project's mode is always
+  `'none'` (issue #507: a PATCH with `'cap'` or `'fullAllocation'` is `400`,
+  and import, copy and restore store `'none'` with a note in the revision's
+  reason), while a scenario's `settings.set` may run `'cap'` or
+  `'fullAllocation'`; `RunSummary.allocations` is the run's own
   comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
   In a cap run each of its sources carries `capReached: [{ waterYear,
   budgetM3, usedM3 }]` (the years the volume was used up) and, engine ≥

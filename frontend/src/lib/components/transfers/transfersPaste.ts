@@ -59,6 +59,9 @@ export function transfersCsv(transfers: readonly Rule[], nodeName: (id: string) 
 
 /** The Expected format of the transfers' paste (issue #477). Its example matches two rules between Upper farm and Lower farm. */
 export const TRANSFERS_FORMAT: GridFormat = {
+	id: 'transfers-grid',
+	title: 'Transfer rates by month',
+	where: 'Transfers → Paste from a spreadsheet',
 	rules: [
 		'A heading row: Transfer, then the months Oct to Sep (or October to September). From and To columns may stay; they are read from each rule’s card, not the paste.',
 		'A row per rule, named as its card is (Transfer 1) or by its route (Upper farm → Lower farm, or Upper farm -> Lower farm). Add a rule with + Add transfer first.',

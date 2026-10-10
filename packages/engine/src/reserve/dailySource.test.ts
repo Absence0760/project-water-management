@@ -92,7 +92,7 @@ describe('the scale factor', () => {
 	it("'mar': the model's natural MAR (mean m³/day × 365.25 ÷ 10⁶) ÷ the table MAR", () => {
 		const nat = new Float64Array(1000).fill(DAY); // 1 m³/s
 		expect(naturalMarMm3(nat, 1000)).toBeCloseTo(31.5576, 10);
-		const src: EwrDailySource = { ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 63.1152 };
+		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 63.1152 };
 		const info = ewrDailyScale(src, nat, 1000, 50);
 		expect(info).toMatchObject({ method: 'tab', scaling: 'mar', tableMarMm3: 63.1152 });
 		expect(info.scale).toBeCloseTo(0.5, 12);
@@ -107,7 +107,7 @@ describe('the scale factor', () => {
 	});
 
 	it("'area': the modelled area ÷ the table area", () => {
-		const src: EwrDailySource = { ...blankEwrDailySource(), method: 'tab', scaling: 'area', tabM3s: new Array(12).fill(1), tableAreaKm2: 120 };
+		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', scaling: 'area', tabM3s: new Array(12).fill(1), tableAreaKm2: 120 };
 		expect(ewrDailyScale(src, new Float64Array(5), 5, 30)).toEqual({ method: 'tab', scaling: 'area', scale: 0.25, modelAreaKm2: 30, tableAreaKm2: 120 });
 	});
 });
@@ -118,12 +118,12 @@ describe('fillOutletEwr', () => {
 	it('TAB: the month’s flow × s × 86 400', () => {
 		const tab = [10, 11, 12, 2, 14, 15, 16, 17, 18, 19, 20, 21]; // Oct … Sep: January is 2 m³/s
 		const out = new Float64Array(4);
-		fillOutletEwr({ ...blankEwrDailySource(), method: 'tab', tabM3s: tab, tableMarMm3: 1 }, 0.5, month, new Float64Array(4), out, 0, 4);
+		fillOutletEwr({ ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: tab, tableMarMm3: 1 }, 0.5, month, new Float64Array(4), out, 0, 4);
 		expect([...out]).toEqual([DAY, DAY, DAY, 5 * DAY]);
 	});
 
 	it('percentile tables: each day on its own natural flow, rows × s, and only the days asked for', () => {
-		const src: EwrDailySource = { ...blankEwrDailySource(), method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve(R), tableMarMm3: 1 };
+		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve(R), tableMarMm3: 1 };
 		const out = new Float64Array(4).fill(-1);
 		// s = 2: the rows become N × 2, R × 2. A natural flow of 14 m³/s sits between 16 and 12: R = 8 + 0.5 × (6 − 8) = 7.
 		fillOutletEwr(src, 2, month, [14 * DAY, 30 * DAY, 0.5 * DAY, 0], out, 0, 3);
@@ -136,7 +136,7 @@ describe('fillOutletEwr', () => {
 
 	it('a natural row that rises uses its running minimum, and the source notes say so', () => {
 		const rising = [10, 8, 9, 5, 4, 3, 2, 1.5, 1, 0.5];
-		const src: EwrDailySource = { ...blankEwrDailySource(), method: 'percentile', naturalPctM3s: twelve(rising), reservePctM3s: twelve(R), tableMarMm3: 1 };
+		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'percentile', naturalPctM3s: twelve(rising), reservePctM3s: twelve(R), tableMarMm3: 1 };
 		const out = new Float64Array(1);
 		fillOutletEwr(src, 1, [1], [7 * DAY], out, 0, 1);
 		expect(out[0]).toBeCloseTo(percentileReserveM3s(7, [10, 8, 8, 5, 4, 3, 2, 1.5, 1, 0.5], R) * DAY, 6);
@@ -145,13 +145,13 @@ describe('fillOutletEwr', () => {
 	});
 
 	it('a Reserve flow above the natural flow at its point (on the running minimum) is noted: even natural flow fails there', () => {
-		const src: EwrDailySource = { ...blankEwrDailySource(), method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve([12, ...R.slice(1)]), tableMarMm3: 1 };
+		const src: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'percentile', naturalPctM3s: twelve(N), reservePctM3s: twelve([12, ...R.slice(1)]), tableMarMm3: 1 };
 		expect(ewrDailySourceNotes(src)).toEqual(['the total Reserve flow is above the natural flow at 12 points (Oct 10 %, Nov 10 %, Dec 10 %, Jan 10 %, …), so even natural flow fails there']);
 	});
 });
 
 describe('ewrDailySourceIssues and resolveEwrDailySource', () => {
-	const tab = (over: Partial<EwrDailySource> = {}): EwrDailySource => ({ ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 100, ...over });
+	const tab = (over: Partial<EwrDailySource> = {}): EwrDailySource => ({ ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 100, ...over });
 
 	it('the blank source and a complete one are usable; pragmatic resolves to null (the pragmatic EWR)', () => {
 		expect(ewrDailySourceIssues(blankEwrDailySource())).toEqual([]);
@@ -160,6 +160,14 @@ describe('ewrDailySourceIssues and resolveEwrDailySource', () => {
 		expect(resolveEwrDailySource(null, [])).toBeNull();
 		expect(resolveEwrDailySource(undefined, [])).toBeNull();
 		expect(resolveEwrDailySource(tab(), [])).toEqual(tab());
+	});
+
+	it('a new source scales by area (the client hydrologist, issue #90 B2); a stored source keeps its own scaling', () => {
+		expect(blankEwrDailySource().scaling).toBe('area');
+		// Switching a blank source to a table method asks for the table area, not the MAR.
+		expect(ewrDailySourceIssues({ ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(1) }).map((i) => i.field)).toEqual(['tableAreaKm2']);
+		// A stored MAR-ratio source is read as stored: the default never reaches a saved source or a run.
+		expect(resolveEwrDailySource(tab(), [])?.scaling).toBe('mar');
 	});
 
 	it('the pragmatic method keeps tables half entered without complaint', () => {
@@ -198,7 +206,7 @@ describe('ewrDailySourceIssues and resolveEwrDailySource', () => {
 });
 
 describe('ewrDailySourceChanges (run comparison)', () => {
-	const tab: EwrDailySource = { ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 100 };
+	const tab: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 100 };
 	it('pragmatic in any form is one source; tables kept under it are no change', () => {
 		expect(ewrDailySourceChanges(undefined, null)).toEqual([]);
 		expect(ewrDailySourceChanges(undefined, { ...blankEwrDailySource(), naturalPctM3s: twelve(N) })).toEqual([]);
@@ -218,7 +226,7 @@ describe('describeEwrDailySource (a scenario change, issue #460)', () => {
 		expect(describeEwrDailySource(undefined)).toBe('the pragmatic EWR');
 		expect(describeEwrDailySource(null)).toBe('the pragmatic EWR');
 		expect(describeEwrDailySource({ ...blankEwrDailySource(), naturalPctM3s: twelve(N) })).toBe('the pragmatic EWR');
-		const tab: EwrDailySource = { ...blankEwrDailySource(), method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 12.5 };
+		const tab: EwrDailySource = { ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: new Array(12).fill(1), tableMarMm3: 12.5 };
 		expect(describeEwrDailySource(tab)).toBe('the DRM TAB file, scaled by MAR (table 12.5 Mm³/a)');
 		const pct: EwrDailySource = { ...tab, method: 'percentile', scaling: 'area', tableAreaKm2: 450, naturalPctM3s: twelve(N), reservePctM3s: twelve(R) };
 		expect(describeEwrDailySource(pct)).toBe('the DRM percentile tables, scaled by area (table 450 km²)');
@@ -289,7 +297,7 @@ const mean = natural.reduce((s, v) => s + v, 0) / DAYS;
 const MODEL_MAR = (mean * 365.25) / 1e6;
 // The tables' catchment: 4 × the modelled one, by MAR and by area.
 const TAB = [0.05, 0.06, 0.08, 0.1, 0.12, 0.1, 0.08, 0.06, 0.05, 0.04, 0.04, 0.05];
-const tabSource = (over: Partial<EwrDailySource> = {}): EwrDailySource => ({ ...blankEwrDailySource(), method: 'tab', tabM3s: TAB, tableMarMm3: 4 * MODEL_MAR, tableAreaKm2: 16, ...over });
+const tabSource = (over: Partial<EwrDailySource> = {}): EwrDailySource => ({ ...blankEwrDailySource(), scaling: 'mar', method: 'tab', tabM3s: TAB, tableMarMm3: 4 * MODEL_MAR, tableAreaKm2: 16, ...over });
 // Natural percentile rows around the run's natural flow × 4 (m³/s), and a Reserve that asks for 95 % to 45 % of them.
 const NAT = [1.6, 1.4, 1.2, 1.05, 0.9, 0.8, 0.7, 0.55, 0.4, 0.3];
 const RES = NAT.map((v, i) => v * (0.95 - (0.5 * i) / 9));

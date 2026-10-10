@@ -219,6 +219,14 @@ describe('buildOp', () => {
 		expect(draftSpec({ kind: 'node.set', field: 'supplyRule' })).toMatchObject({ t: 'enum' });
 	});
 
+	it('offers the allocation mode a baseline can’t have: a cap or a full allocation is a scenario’s (issue #507)', () => {
+		const spec = draftSpec({ kind: 'settings.set', field: 'allocationMode' });
+		expect(spec).toMatchObject({ t: 'enum' });
+		expect((spec as { options: { value: string }[] }).options.map((o) => o.value)).toEqual(['none', 'cap', 'fullAllocation']);
+		for (const value of ['cap', 'fullAllocation'])
+			expect(buildOp(draft({ kind: 'settings.set', field: 'allocationMode', value }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'allocationMode', value } });
+	});
+
 	it('builds the drought restriction rule whole from the editor’s copy, off as null, and says what is wrong first (engine 1.54.0)', () => {
 		const rule = { reviewDates: ['01-01'], levels: [{ belowPct: 0.5, cuts: { crops: 0.4 } }] };
 		expect(buildOp(draft({ kind: 'settings.set', field: 'droughtRestriction', restriction: rule }), m)).toEqual({ ok: true, op: { op: 'settings.set', path: 'droughtRestriction', value: rule } });

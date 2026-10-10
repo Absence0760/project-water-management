@@ -132,8 +132,8 @@ describe('handsOffTakers', () => {
 describe('handsOffPreview', () => {
 	const pumpAndDivert = { supplyRule: 'riverFirst' as const, pumpCapacityM3Day: 500, damCapacityM3: 150_000, pctUpstreamToDam: 0, pctRunoffToDam: 1, divertCapacityM3Day: 800 };
 
-	it('says what River to dam and the pump leave without one: senior users only, not the EWR', () => {
-		expect(handsOffPreview({})).toMatch(/^No hands-off flow: .*senior water users downstream need, not the EWR\.$/);
+	it('says what River to dam and the pump leave without one: priority users only, not the EWR', () => {
+		expect(handsOffPreview({})).toMatch(/^No hands-off flow: .*priority water users downstream need, not the EWR\.$/);
 		// 0 in every month without the EWR is none, as the run reads it.
 		expect(handsOffPreview({ handsOffM3Day: new Array(12).fill(0), handsOffEwr: false })).toMatch(/^No hands-off flow/);
 	});

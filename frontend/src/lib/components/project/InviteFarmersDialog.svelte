@@ -13,7 +13,7 @@
 	import { latestFileText } from '$lib/files/latest';
 	import { LANGUAGES } from '$lib/i18n/state.svelte';
 	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
-	import { BULK_MAX_ROWS, bulkSummary, farmNames, inviteExampleCsv, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
+	import { bulkSummary, farmNames, inviteFormat, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
 
 	let {
 		open = $bindable(false),
@@ -78,7 +78,6 @@
 	// The latest file only: a large file still read can't land over one picked after it.
 	const fileText = latestFileText();
 	/** The CSV the "Expected format" note shows and offers, from this project's units, so it reads back as it is. */
-	const exampleCsv = $derived(inviteExampleCsv(farms));
 	async function pickFile(file: File | undefined) {
 		if (!file) return;
 		fileName = file.name;
@@ -206,24 +205,7 @@
 				name, English if left out. A farmer with two hydrological units gets two rows and one
 				email. At most 200 rows.
 			</p>
-			<FormatHelp
-				accepts="Paste the rows, or upload a .csv or .txt file, in UTF-8."
-				example={exampleCsv.trimEnd()}
-				exampleFile={{ name: 'invite-farmers-example.csv', text: exampleCsv }}
-			>
-				<ul>
-					<li>
-						A header row is optional. With one, the columns may come in any order (<code>email</code> or <code>e-mail</code>, <code>farm</code> or
-						<code>farm name</code>, <code>language</code>); without one they are read as email, farm, language.
-					</li>
-					<li>Columns separated by commas, semicolons or tabs, as the first row has them. Quote a farm name that holds one (<code>"Smit, Oos"</code>).</li>
-					<li>Language: a code ({#each LANGUAGES as l, i (l.code)}{i ? ', ' : ''}<code>{l.code}</code>{/each}) or the language’s name; English if left blank.</li>
-					<li>
-						At most {BULK_MAX_ROWS} rows at a time. Blank lines are skipped. The preview lists every row by its line, with what will happen to it or what is
-						wrong with it.
-					</li>
-				</ul>
-			</FormatHelp>
+			<FormatHelp format={inviteFormat(farms)} />
 			<div class="field">
 				<label for="invite-csv">Paste the CSV</label>
 				<textarea

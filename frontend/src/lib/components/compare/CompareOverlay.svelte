@@ -206,7 +206,7 @@
 				{#if missingSide && pair}
 					<p class="summary" data-testid="overlay-zero-note">
 						Not in run {missingSide}: shown as 0. Run {missingSide} has no such feature at {where} (no river pump, borehole,
-						release rule, land cover or senior user there), so its value is 0 on every day it modelled.
+						release rule, land cover or priority user there), so its value is 0 on every day it modelled.
 					</p>
 				{/if}
 				{#if stats}

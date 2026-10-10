@@ -1,5 +1,6 @@
 import {
 	ACCUMULATION_MODES,
+	ALLOCATION_MODE_LABEL,
 	ALLOCATION_MODES,
 	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
@@ -334,6 +335,35 @@ export function dataQualityPatchError(settings: Pick<ProjectSettings, 'dataQuali
 	return dq.flatlineFlowMaxDays < dq.flatlineFlowMinDays
 		? `settings.dataQuality: the flow flat-line cap (${dq.flatlineFlowMaxDays} days) can't be below its floor (${dq.flatlineFlowMinDays} days)`
 		: null;
+}
+
+/**
+ * Licence data never drives the baseline (issue #507, docs/allocations.md §
+ * Allocation modes): a project's own settings compare registered volumes
+ * only. The engine's `cap` and `fullAllocation` modes stay, for scenarios
+ * (a `settings.set` op on `allocationMode`, docs/scenarios.md).
+ */
+export const BASELINE_ALLOCATION_MODE_ERROR =
+	"settings.allocationMode: the baseline only compares registered volumes ('none'); capping use at them or a full allocation is a scenario (settings.set allocationMode), since licence data never drives the baseline";
+
+/** A settings patch's refusal: any baseline allocation mode but 'none' (PATCH /projects/:id). */
+export function baselineAllocationModeError(patch: { allocationMode?: unknown } | undefined): string | null {
+	return patch?.allocationMode !== undefined && patch.allocationMode !== 'none' ? BASELINE_ALLOCATION_MODE_ERROR : null;
+}
+
+/**
+ * Settings arriving from outside a save (an import, a copy, a restore of an
+ * older revision or of a run's inputs, which may be a scenario's): a baseline
+ * allocation mode other than 'none' becomes 'none', and the returned note says
+ * so for the revision's reason. Null (nothing changed) otherwise. Mutates
+ * and returns nothing else: the caller stores `settings` as it was given.
+ */
+export function normaliseBaselineAllocationMode(settings: Record<string, unknown>): string | null {
+	const mode = settings.allocationMode;
+	if (mode === undefined || mode === null || mode === 'none') return null;
+	settings.allocationMode = 'none';
+	const label = (ALLOCATION_MODE_LABEL as Record<string, string>)[String(mode)] ?? String(mode);
+	return `Allocation mode “${label}” set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario).`;
 }
 
 /**

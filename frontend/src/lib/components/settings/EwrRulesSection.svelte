@@ -104,7 +104,12 @@
 					<option value="total">The month’s total flow</option>
 					<option value="baseflow">The month’s base flow</option>
 				</select>
-				<span class="hint explain" id="{uid}-low-h">Base flow keeps a flood month from passing its low flows. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
+				<span class="hint explain" id="{uid}-low-h"
+					>Base flow keeps a flood month from passing its low flows. The total flow is the catchment’s hydrologist’s choice.
+					<!-- issue #507 item 6, docs/model.md §2.9d: the filter's passes and α are not yet checked against the DRM's method. -->
+					<span class="badge badge-warn" data-testid="baseflow-filter-unconfirmed">Filter settings unconfirmed</span>
+					The base-flow filter (Lyne–Hollick, three passes, α 0.995) isn’t yet checked against the Desktop Reserve Model’s own method, which may use one pass.</span
+				>
 			</div>
 		</div>
 	{/if}

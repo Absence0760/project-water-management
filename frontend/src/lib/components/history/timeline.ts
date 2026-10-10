@@ -1,7 +1,7 @@
 // The History tab's pure logic (WP-2.4, docs/ui.md § History): what each
 // item says, grouping one request's items (a change set) into one entry, and
 // entries into the viewer's calendar days. No DOM, no fetch.
-import { registrationLine } from '@water-management/engine';
+import { ALLOCATION_MODE_LABEL, registrationLine, type AllocationMode } from '@water-management/engine';
 import { language, LOCALES } from '@water-management/engine/languages';
 import { roleLabel } from '$lib/api/roleLabels';
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
@@ -319,6 +319,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Signed off the calibration rules (revision ${num(s.revision) ?? '?'}) as ${str(s.fullName)}`;
 		case 'calibration_rules.sign_off_withdrawn':
 			return `Withdrew the sign-off of the calibration rules (revision ${num(s.revision) ?? '?'})`;
+		// 213 (issue #507): licence data never drives the baseline, so a stored cap or full allocation moved to compare only.
+		case 'settings.allocation_mode_reset': {
+			const from = ALLOCATION_MODE_LABEL[str(s.from) as AllocationMode] ?? str(s.from);
+			return `The baseline’s allocation mode “${from}” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)`;
+		}
 		case 'allocation.created':
 			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
 		case 'allocation.changed':

@@ -100,7 +100,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | Op | Fields | What it does |
 | --- | --- | --- |
 | `node.set` | `nodeId, field, value` | Sets one whitelisted field (below). Typed per field. |
-| `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, senior user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; `node.set` changes them on an existing farm. It may also carry the GN 538 property area and Table 2 rate (`gaPropertyAreaHa`, `gaRateM3HaYear`, engine ≥ 1.12.0, [model.md §2.7d](./model.md)), context for its groundwater; there is no `node.set` for them. |
+| `node.add` | `node` | Adds a **leaf** node that drains into an existing node (never a new outflow). Fields it leaves out take the engine's defaults (`upgradeLegacyModel`: no boreholes, priority user, dam area estimated, dam-first supply with no river pump). It may carry a supply rule and river pump (`supplyRule`, `pumpCapacityM3Day`, `supplyTriggerPct`, `supplyStopPct`, engine ≥ 0.42.0, [model.md §2.7e](./model.md)), checked like the rest; `node.set` changes them on an existing farm. It may also carry the GN 538 property area and Table 2 rate (`gaPropertyAreaHa`, `gaRateM3HaYear`, engine ≥ 1.12.0, [model.md §2.7d](./model.md)), context for its groundwater; there is no `node.set` for them. |
 | `node.remove` | `nodeId` | Removes a node. Nodes that drained into it now drain into its downstream node, so the network stays one tree. Drops its crop areas, transfers from or to it, its land-cover patches and any EWR rule table sited at it. Its registered volumes stay (the run lists them as on no unit) and the op's notes say how many, counting only those the caller sees (engine ≥ 1.35.0). The outflow node can't be removed. |
 | `node.move` | `nodeId, downstreamNodeId` | Makes a node drain into another (engine ≥ 1.35.0). What drains into it moves with it. The outflow node can't be moved, and a node can't drain into itself; a move that makes a loop (the new downstream node drains into this one), or makes a river off-take's destination drain into its source, is refused by the model rules, so the network stays one tree with one outlet. § Moving and inserting nodes. |
 | `node.insert` | `node, upstreamNodeIds` | A new node placed on a reach (engine ≥ 1.35.0): `node` as `node.add` takes it, and each node in `upstreamNodeIds`, which must drain into `node.downstreamNodeId` now, drains into the new node instead. So an on-channel dam or a weir goes in between existing nodes without moving anything else. § Moving and inserting nodes. |
@@ -245,7 +245,13 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
 `fullAllocation`: a full-allocation scenario on a base run is the "if every
 registered or licensed volume were taken in full" background (a registration
-is not an entitlement), [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
+is not an entitlement), [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72);
+since issue #507 a scenario is the **only** place `cap` or `fullAllocation`
+can be chosen: licence data never drives the baseline, so the project's own
+settings always compare only, and "what if use were capped at the licences"
+or "what if every licence were taken in full" is a scenario with this op,
+Change a setting › Allocation mode in the form,
+[allocations.md § The allocation mode](./allocations.md#the-allocation-mode-engine--1180)),
 and from engine 1.54.0 (WP-3.8) `droughtRestriction`: the drought
 restriction rule, whole (review and lift dates, levels with a threshold and
 a % cut per part of demand), or `null` for off, checked by the engine's
@@ -312,7 +318,7 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   the factor was refitted after the op and a uniform op changed nothing on a
   registered unit. Outside a full allocation nothing changed.
   For an other water user it multiplies the monthly demand (and so the
-  senior requirement passed to the farms above it). Model.md §2.3 step 4a.
+  priority requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of
   every month *list* in the engine (`transfer.months`); the 12-value *rows* (`demandFactor`,
   `userDemandM3Day`) run Oct–Sep. Left out, every month.
@@ -422,7 +428,8 @@ on-channel dam on the main stem above the weir".
 authorisation for a farm or other water user ([allocations.md](./allocations.md));
 a run's input carries them (no names) and `settings.allocationMode` decides
 whether they only compare with the run's use, cap it, or scale it (a full
-allocation). So a volume is a scenario input like a dam: "what if this
+allocation; the last two only in a scenario, issue #507, so a baseline run
+only compares). So a volume is a scenario input like a dam: "what if this
 licence were for 200 000 m³ a year" under `cap`, or the applicant's
 requested volume in a full-allocation background, is one op.
 
@@ -475,6 +482,73 @@ sensitivity (§2.10g) scales with the rest.
   EWR agreement, never the simulated water. Not scalable.
 - The reference gauge is never read by the engine.
 
+## Combined what-ifs belong here (worked example: a dry-year stress)
+
+The sensitivity runs ([model.md §2.10g](./model.md)) move one input at a
+time, to bracket inputs nobody can measure better. A **combined** case,
+where several things change together, is a scenario, never a sensitivity
+run or a project setting (issue #507 item 5, decided 2026-10-10). The
+scenario keeps its ops, is saved and re-run, and compares with its base run
+like any other.
+
+The case a licensing officer asks about is the **dry year**: less rain and,
+because farmers pump more when it doesn't rain, more abstraction at the same
+time. The two aren't independent, so the sensitivity panel's argument
+against stacking factors (calibration-research.md CR-21) doesn't hold for
+this pair. The decided stress test is **rain × 0.9 together with demand ×
+1.3**, in the record's drought years when the hydrologist names them,
+otherwise over the whole record. Which years count as drought years is the
+hydrologist's call, case by case (still open with the client, #507).
+
+**Over the whole record** it is three ops (Add change → *Scale rainfall
+or daily A-pan*, then *Scale demand* twice; leave the third out when the
+model has no other water user, or it is skipped as a problem):
+
+| # | Op | Fields |
+| --- | --- | --- |
+| 1 | `series.scale` | `kind: 'rain_catchment_mm', factor: 0.9` |
+| 2 | `demand.scale` | `factor: 1.3` (category `farm`, the units' irrigation and demand objects) |
+| 3 | `demand.scale` | `factor: 1.3, category: 'user'` (the other water users) |
+
+Add a `series.scale` for every other rain series the project has
+(`rain_chirps_mm`, which fills the station's gaps; a rain-source period's
+`rain_catchment_alt_mm`; `rain_reanalysis_mm`; under per-unit rain each
+unit's own records), so the whole forcing moves as the rain sensitivity
+moves it (§ Which series scale). Scaling only the station leaves the days
+CHIRPS fills at their full rain.
+
+**In named drought years** the rain ops carry dates: one `series.scale`
+per rain series per drought year, `from` and `to` the water year (1 October
+to 30 September). For drought years 2015/16 and 2018/19:
+
+| # | Op | Fields |
+| --- | --- | --- |
+| 1 | `series.scale` | `kind: 'rain_catchment_mm', factor: 0.9, from: '2015-10-01', to: '2016-09-30'` |
+| 2 | `series.scale` | `kind: 'rain_catchment_mm', factor: 0.9, from: '2018-10-01', to: '2019-09-30'` |
+| 3 | `demand.scale` | `factor: 1.3` |
+| 4 | `demand.scale` | `factor: 1.3, category: 'user'` |
+
+**`demand.scale` has no dates.** It takes calendar `months`, which repeat
+every year, not `from`/`to` (§ Demand scaling), so the demand half can't
+be limited to the drought years today: ops 3 and 4 above raise demand in
+every year. Two ways to read such a scenario until it can:
+
+- judge only the drought years, by setting the report window
+  (`settings.set reportStart` / `reportEnd`, model.md §2.11) to one drought
+  year per scenario. The dams then enter that year as the extra demand of
+  the years before left them, so the result leans pessimistic;
+- or run the whole-record stress above and read the drought years off its
+  results.
+
+A `from`/`to` on `demand.scale` would close this; it is an engine change
+(the op's `demandFactor` is per month, not per day) and bumps
+`ENGINE_VERSION`. A one-click "Dry-year stress" preset, reading a project
+list of drought years, is an optional later convenience (#507 item 5).
+
+Like any op without `nodeIds`, the demand ops classify the scenario as a
+baseline assumption (§ Classification below), which is what a stress test
+is: it changes how everyone behaves, not one applicant's proposal.
+
 ## Classification: proposal or baseline assumption
 
 `classifyOp(op, ownedNodeIds, input?, addedCropIds?)` returns `'proposal'` or `'baseline'`;
@@ -490,8 +564,8 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.30.0), or the bed losses below it, `reachLossFrac` / `reachLossMaxM3Day` (engine ≥ 1.75.0, the river's own); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, a dam's survey and sediment (the dam as it is), and the river's bed losses |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
-| `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own; and not a senior other water user (the default priority) | baseline. A senior user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
-| `node.move` | owned, no land or manual flow share, not a gauge or a senior other water user, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
+| `node.insert` | as `node.add`: not a gauge, and no land or manual flow share of its own; and not a priority other water user (the default priority) | baseline. A priority user inserted above other farms curtails them (they must pass its demand, [model.md §2.7c](./model.md)), and whether a new use ranks above existing lawful use is the authority's call, pending the hydrologist ([engine-audit.md](./engine-audit.md) L1), so it is a changed assumption, not the proposal. A new structure on the reach is the proposal (an on-channel dam is what a licence to build one asks for); the nodes it re-points keep their values and their order along the river, so their water reaching it is the proposal's effect, not a changed assumption |
+| `node.move` | owned, no land or manual flow share, not a gauge or a priority other water user, no node drains into it, and no EWR table sited at it (needs `input`) | baseline: moving the applicant's own abstraction point (a pump or dam they added or own, a leaf) is where they propose to take water; moving anything else, or a node others drain into, redraws the river as modelled. A node the scenario added or inserted counts as owned |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |
 | `crop.add` | always | |
 | `crop.set`, `crop.remove` | the crop is one the scenario itself added (`classifyScenario` passes them; `classifyOp`'s fourth argument) | baseline: a crop's factors and efficiency are agronomic data that apply on every farm growing it, farms the applicant may not see among them, so a change to one isn't theirs to propose (and classing by who grows it would tell an applicant whether a hidden farm does). Stopping a crop on their own farm is `cropArea.set` to 0, a proposal |
