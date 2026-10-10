@@ -665,12 +665,12 @@ run "dlq_alarms_fire_on_new_arrivals" {
   # Every DLQ in infra/, with the queue its alarm must watch.
   assert {
     condition = alltrue([for pair in [
-      [aws_cloudwatch_metric_alarm.jobs_dlq_depth, aws_sqs_queue.jobs_dlq.name],
-      [aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth, aws_sqs_queue.fetch_requests_dlq.name],
-      [aws_cloudwatch_metric_alarm.ingest_results_dlq_depth, aws_sqs_queue.ingest_results_dlq.name],
-      [aws_cloudwatch_metric_alarm.render_requests_dlq_depth, aws_sqs_queue.render_requests_dlq.name],
-      [aws_cloudwatch_metric_alarm.render_results_dlq_depth, aws_sqs_queue.render_results_dlq.name],
-      [aws_cloudwatch_metric_alarm.mail_events_dlq_depth, aws_sqs_queue.mail_events_dlq.name],
+      [aws_cloudwatch_metric_alarm.jobs_dlq_depth[0], aws_sqs_queue.jobs_dlq.name],
+      [aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth[0], aws_sqs_queue.fetch_requests_dlq.name],
+      [aws_cloudwatch_metric_alarm.ingest_results_dlq_depth[0], aws_sqs_queue.ingest_results_dlq.name],
+      [aws_cloudwatch_metric_alarm.render_requests_dlq_depth[0], aws_sqs_queue.render_requests_dlq.name],
+      [aws_cloudwatch_metric_alarm.render_results_dlq_depth[0], aws_sqs_queue.render_results_dlq.name],
+      [aws_cloudwatch_metric_alarm.mail_events_dlq_depth[0], aws_sqs_queue.mail_events_dlq.name],
       ] : (
       # Metric math, not the raw depth: a depth alarm stays in ALARM for the
       # DLQ's 14-day retention and a second failure never notifies.
@@ -699,25 +699,25 @@ run "fetcher_and_renderer_failures_alarm" {
   # --- Answered failures: a structured log line, a metric, an alarm -------------
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.feed_fetch_failed.log_group_name == aws_cloudwatch_log_group.fetcher.name &&
-      aws_cloudwatch_log_metric_filter.feed_fetch_failed.pattern == "{ $.message.event = \"feed_fetch_failed\" }" &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.metric_name == aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.namespace == aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].namespace &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.comparison_operator == "GreaterThanThreshold"
+      aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].log_group_name == aws_cloudwatch_log_group.fetcher.name &&
+      aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].pattern == "{ $.message.event = \"feed_fetch_failed\" }" &&
+      aws_cloudwatch_metric_alarm.feed_fetch_failed[0].metric_name == aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.feed_fetch_failed[0].namespace == aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].metric_transformation[0].namespace &&
+      aws_cloudwatch_metric_alarm.feed_fetch_failed[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.feed_fetch_failed[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.feed_fetch_failed[0].comparison_operator == "GreaterThanThreshold"
     )
     error_message = "A fetch the fetcher answers as failed (lambda-fetcher.ts logs feed_fetch_failed) must alarm: its Errors metric never sees it."
   }
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.report_render_failed.log_group_name == aws_cloudwatch_log_group.renderer.name &&
-      aws_cloudwatch_log_metric_filter.report_render_failed.pattern == "{ $.message.event = \"report_render_failed\" }" &&
-      aws_cloudwatch_metric_alarm.report_render_failed.metric_name == aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.report_render_failed.namespace == aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].namespace &&
-      aws_cloudwatch_metric_alarm.report_render_failed.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.report_render_failed.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.report_render_failed.comparison_operator == "GreaterThanThreshold"
+      aws_cloudwatch_log_metric_filter.report_render_failed[0].log_group_name == aws_cloudwatch_log_group.renderer.name &&
+      aws_cloudwatch_log_metric_filter.report_render_failed[0].pattern == "{ $.message.event = \"report_render_failed\" }" &&
+      aws_cloudwatch_metric_alarm.report_render_failed[0].metric_name == aws_cloudwatch_log_metric_filter.report_render_failed[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.report_render_failed[0].namespace == aws_cloudwatch_log_metric_filter.report_render_failed[0].metric_transformation[0].namespace &&
+      aws_cloudwatch_metric_alarm.report_render_failed[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.report_render_failed[0].threshold == 0 &&
+      aws_cloudwatch_metric_alarm.report_render_failed[0].comparison_operator == "GreaterThanThreshold"
     )
     error_message = "A render the renderer answers as failed (lambda-renderer.ts logs report_render_failed) must alarm: its Errors metric never sees it."
   }
@@ -725,11 +725,11 @@ run "fetcher_and_renderer_failures_alarm" {
   # --- Stuck queues ------------------------------------------------------------------
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.fetch_requests_age.metric_name == "ApproximateAgeOfOldestMessage" &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.dimensions["QueueName"] == aws_sqs_queue.fetch_requests.name &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.statistic == "Maximum" &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.threshold == 3600 &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.threshold < aws_sqs_queue.fetch_requests.message_retention_seconds
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].metric_name == "ApproximateAgeOfOldestMessage" &&
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].dimensions["QueueName"] == aws_sqs_queue.fetch_requests.name &&
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].statistic == "Maximum" &&
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].threshold == 3600 &&
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0].threshold < aws_sqs_queue.fetch_requests.message_retention_seconds
     )
     error_message = "A fetch request waiting over an hour must alarm, well before it expires."
   }
@@ -738,11 +738,11 @@ run "fetcher_and_renderer_failures_alarm" {
   assert {
     condition = (
       length(aws_lambda_function.renderer) == 0 &&
-      aws_cloudwatch_metric_alarm.render_requests_age.metric_name == "ApproximateAgeOfOldestMessage" &&
-      aws_cloudwatch_metric_alarm.render_requests_age.dimensions["QueueName"] == aws_sqs_queue.render_requests.name &&
-      aws_cloudwatch_metric_alarm.render_requests_age.statistic == "Maximum" &&
-      aws_cloudwatch_metric_alarm.render_requests_age.threshold == 1800 &&
-      aws_cloudwatch_metric_alarm.render_requests_age.threshold < aws_sqs_queue.render_requests.message_retention_seconds
+      aws_cloudwatch_metric_alarm.render_requests_age[0].metric_name == "ApproximateAgeOfOldestMessage" &&
+      aws_cloudwatch_metric_alarm.render_requests_age[0].dimensions["QueueName"] == aws_sqs_queue.render_requests.name &&
+      aws_cloudwatch_metric_alarm.render_requests_age[0].statistic == "Maximum" &&
+      aws_cloudwatch_metric_alarm.render_requests_age[0].threshold == 1800 &&
+      aws_cloudwatch_metric_alarm.render_requests_age[0].threshold < aws_sqs_queue.render_requests.message_retention_seconds
     )
     error_message = "The render-requests age alarm must exist even before the renderer does (an empty renderer_image_tag otherwise lets requests expire silently after 4 days)."
   }
@@ -750,10 +750,10 @@ run "fetcher_and_renderer_failures_alarm" {
   # --- Throttles ------------------------------------------------------------------------
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.fetcher_throttles.metric_name == "Throttles" &&
-      aws_cloudwatch_metric_alarm.fetcher_throttles.namespace == "AWS/Lambda" &&
-      aws_cloudwatch_metric_alarm.fetcher_throttles.dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name &&
-      aws_cloudwatch_metric_alarm.fetcher_throttles.threshold == 0
+      aws_cloudwatch_metric_alarm.fetcher_throttles[0].metric_name == "Throttles" &&
+      aws_cloudwatch_metric_alarm.fetcher_throttles[0].namespace == "AWS/Lambda" &&
+      aws_cloudwatch_metric_alarm.fetcher_throttles[0].dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name &&
+      aws_cloudwatch_metric_alarm.fetcher_throttles[0].threshold == 0
     )
     error_message = "Fetcher throttles must alarm: a throttled SQS poll burns a receive toward the DLQ."
   }
@@ -765,11 +765,11 @@ run "fetcher_and_renderer_failures_alarm" {
   # --- All of them notify the alerts topic ------------------------------------------------
   assert {
     condition = alltrue([for a in [
-      aws_cloudwatch_metric_alarm.feed_fetch_failed,
-      aws_cloudwatch_metric_alarm.report_render_failed,
-      aws_cloudwatch_metric_alarm.fetch_requests_age,
-      aws_cloudwatch_metric_alarm.render_requests_age,
-      aws_cloudwatch_metric_alarm.fetcher_throttles,
+      aws_cloudwatch_metric_alarm.feed_fetch_failed[0],
+      aws_cloudwatch_metric_alarm.report_render_failed[0],
+      aws_cloudwatch_metric_alarm.fetch_requests_age[0],
+      aws_cloudwatch_metric_alarm.render_requests_age[0],
+      aws_cloudwatch_metric_alarm.fetcher_throttles[0],
     ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn]) && a.treat_missing_data == "notBreaching"])
     error_message = "Each new alarm notifies the alerts SNS topic, and treats no data (an idle queue or Lambda) as OK."
   }
@@ -792,4 +792,77 @@ run "renderer_throttles_alarm_once_it_exists" {
     )
     error_message = "Renderer throttles must alarm once the renderer exists."
   }
+}
+
+# alarm_tier "essential" is what production runs (alarms.tf § Alarm tier): the
+# 12 alarm metrics below and nothing else, so the estate stays inside the
+# organization's shared CloudWatch free tier. A dropped alarm's log metric
+# filter goes with it.
+run "essential_alarm_tier" {
+  command = plan
+
+  variables {
+    alarm_tier = "essential"
+  }
+
+  assert {
+    condition = alltrue([for n in [
+      length(aws_cloudwatch_metric_alarm.ses_bounce_rate),
+      length(aws_cloudwatch_metric_alarm.ses_complaint_rate),
+      length(aws_cloudwatch_metric_alarm.jobs_dlq_depth),
+      length(aws_cloudwatch_metric_alarm.mail_events_dlq_depth),
+      length(aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth),
+      length(aws_cloudwatch_metric_alarm.ingest_results_dlq_depth),
+      length(aws_cloudwatch_metric_alarm.worker_heartbeat),
+      length(aws_cloudwatch_metric_alarm.rds_free_storage),
+      length(aws_cloudwatch_metric_alarm.cloudfront_5xx),
+      length(aws_cloudwatch_metric_alarm.lambda_errors),
+      length(aws_cloudwatch_metric_alarm.unhandled_error),
+      length(aws_cloudwatch_metric_alarm.mail_send_failed),
+      length(aws_cloudwatch_log_metric_filter.unhandled_error),
+    ] : n == 1]) && length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 2
+    error_message = "alarm_tier = \"essential\" must keep the 12 essential alarms and the filters that feed them."
+  }
+
+  assert {
+    condition = alltrue([for n in [
+      length(aws_cloudwatch_metric_alarm.lambda_duration),
+      length(aws_cloudwatch_metric_alarm.rds_cpu),
+      length(aws_cloudwatch_metric_alarm.render_requests_dlq_depth),
+      length(aws_cloudwatch_metric_alarm.cloudfront_requests),
+      length(aws_cloudwatch_metric_alarm.login_failed),
+      length(aws_cloudwatch_log_metric_filter.login_failed),
+      length(aws_cloudwatch_metric_alarm.job_dead),
+      length(aws_cloudwatch_log_metric_filter.job_dead),
+      length(aws_cloudwatch_metric_alarm.renderer_errors),
+    ] : n == 0])
+    error_message = "alarm_tier = \"essential\" must not create the full-tier alarms or their log metric filters."
+  }
+}
+
+run "no_alarm_tier" {
+  command = plan
+
+  variables {
+    alarm_tier = "none"
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudwatch_metric_alarm.ses_bounce_rate) == 0 &&
+      length(aws_cloudwatch_metric_alarm.lambda_errors) == 0 &&
+      length(aws_cloudwatch_log_metric_filter.mail_send_failed) == 0
+    )
+    error_message = "alarm_tier = \"none\" must create no alarms."
+  }
+}
+
+run "rejects_unknown_alarm_tier" {
+  command = plan
+
+  variables {
+    alarm_tier = "some"
+  }
+
+  expect_failures = [var.alarm_tier]
 }

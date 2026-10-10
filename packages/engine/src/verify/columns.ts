@@ -57,6 +57,13 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		optional: true
 	},
 	{
+		key: 'diverted_loss',
+		letter: null,
+		formula:
+			"the diverted share s of the dam's water × (evaporation + seepage lost), s = river water diverted into it (O, a top-up off-take) still held ÷ Q[t−1] + rain on dam + J, the dam taken as mixed (rain and transfers in aren't diverted; a transfer out, spill, release and draws carry s). Surface use: in the allocation comparison and, under a cap, off the water year's volume before the day's draws, never the licence's daily rate. Starts at 1 for a dam with 0 % upstream inflow and 0 % runoff to it, else 0. Only on a unit with a dam that can divert into it (engine ≥ 1.79.0, docs/model.md §2.12)",
+		optional: true
+	},
+	{
 		key: 'dam_release',
 		letter: 'X',
 		formula:

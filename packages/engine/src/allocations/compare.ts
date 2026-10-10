@@ -55,6 +55,17 @@ export interface AllocationEntry {
 	maxRateM3s?: number | null;
 }
 
+/**
+ * The run series of a unit's diverted river water lost from its dam (engine ≥
+ * 1.79.0, ../network/simulate.ts NodeResult.divertedLoss, docs/model.md §2.12):
+ * surface use, on a unit that can divert into a dam.
+ */
+export const DIVERTED_LOSS_SERIES = {
+	key: 'diverted_loss',
+	label: 'Diverted river water lost from the dam (evaporation, seepage not returned): counted as use',
+	unit: 'm³/day'
+} as const;
+
 /** A node's modelled use from a run. */
 export interface AllocationUseNode {
 	nodeId: string;
@@ -88,6 +99,12 @@ export interface AllocationUseNode {
 	 * groundwater pumped into the dam (§2.12).
 	 */
 	riverTakes?: readonly (ArrayLike<number | null> | null | undefined)[] | null;
+	/**
+	 * Diverted river water the dam lost (m³/day, engine ≥ 1.79.0): the run's
+	 * `diverted_loss` series; absent on a unit that can't divert into a dam,
+	 * or from an older engine. Surface use beside the draws (docs/model.md §2.12).
+	 */
+	divertedLoss?: ArrayLike<number | null> | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 }
@@ -254,6 +271,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const gd = n.groundwaterToDam ?? null;
 		const ra = n.riverAbstraction ?? null;
 		const rivers = (n.riverTakes ?? []).filter((x): x is ArrayLike<number | null> => !!x);
+		const lossDiv = n.divertedLoss ?? null;
 		const riverAt = (t: number) => {
 			let v = ra ? finite(ra[t]) : 0;
 			for (const x of rivers) v += finite(x[t]);
@@ -274,6 +292,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 					else {
 						const surface = finite(n.supplied[t]) - g;
 						modelled += surface;
+						if (lossDiv) modelled += finite(lossDiv[t]);
 						if (gd) {
 							toDam += pumped;
 							damDraw += Math.max(surface - riverAt(t), 0);

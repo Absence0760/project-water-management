@@ -62,6 +62,8 @@ export interface ModelNodeState {
 	boreholeUsedM3: number[] | null;
 	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.18.0); absent without a cap. */
 	allocationUsedM3?: [number, number];
+	/** The diverted share of the dam's storage the day before (engine ≥ 1.79.0); absent on a unit that can't divert into a dam. */
+	divertedShare?: number;
 	/** A full allocation's demand factor for the water year in progress (engine ≥ 1.18.0); absent without one. */
 	allocationFactor?: number;
 	/**

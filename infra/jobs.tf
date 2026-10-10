@@ -423,6 +423,7 @@ data "aws_iam_policy_document" "sqs_endpoint" {
 # --- Alarms --------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "jobs_dlq_depth" {
+  count = local.alarms_essential ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-jobs-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -454,6 +455,7 @@ resource "aws_cloudwatch_metric_alarm" "jobs_dlq_depth" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "worker_errors" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-worker-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -476,6 +478,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_errors" {
 # ends with messages in the DLQs. Raise worker_reserved_concurrency (and check
 # the RDS connection budget) or find what is flooding the queues.
 resource "aws_cloudwatch_metric_alarm" "worker_throttles" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-worker-throttles"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -503,6 +506,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_throttles" {
 # before the first backend release, which throws on every tick: the heartbeat
 # stays OK on a first deploy while worker-errors fires until the release.
 resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-worker-heartbeat"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 1
@@ -525,6 +529,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
 # retries nothing (worker_tick above), so each failed tick counts once and is
 # dropped; the next tick, 5 minutes later, tries again.
 resource "aws_cloudwatch_metric_alarm" "worker_tick_failed" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-worker-tick-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -544,6 +549,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_tick_failed" {
 
 # Emitted by every tick as an embedded metric (lambda-worker.ts metricLine).
 resource "aws_cloudwatch_metric_alarm" "jobs_backlog" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-jobs-backlog"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -561,6 +567,7 @@ resource "aws_cloudwatch_metric_alarm" "jobs_backlog" {
 # structured line (runner.ts). The filter matches the event name only; the
 # line carries ids and the kind, never a payload or an error text.
 resource "aws_cloudwatch_log_metric_filter" "job_dead" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-job-dead"
   log_group_name = aws_cloudwatch_log_group.worker.name
   pattern        = "{ $.message.event = \"job_dead\" }"
@@ -575,11 +582,12 @@ resource "aws_cloudwatch_log_metric_filter" "job_dead" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "job_dead" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-job-dead"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.job_dead.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.job_dead.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.job_dead[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.job_dead[0].metric_transformation[0].namespace
   period              = 300
   statistic           = "Sum"
   threshold           = 0
@@ -601,6 +609,7 @@ resource "aws_cloudwatch_metric_alarm" "job_dead" {
 # means many people or a loop). Runbook: docs/deployment.md § Runbooks,
 # "Alert storm" (the kill switch is var.alerts_enabled).
 resource "aws_cloudwatch_metric_alarm" "alert_storm" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-alert-storm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -616,6 +625,7 @@ resource "aws_cloudwatch_metric_alarm" "alert_storm" {
 
 # Alert mails the transport kept refusing (SES throttling, a rejected address).
 resource "aws_cloudwatch_metric_alarm" "alert_mail_failures" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-alert-mail-failures"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3

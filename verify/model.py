@@ -1522,7 +1522,7 @@ def run(doc: dict) -> dict:
         "baseflow_depletion", "depletion_deficit", "depletion_store", "senior_requirement", "passed_for_senior",
         "offtake_out", "offtake_in", "offtake_used", "offtake_to_dam", "offtake_loss_return",
         "allocation_room_surface", "allocation_room_groundwater", "allocation_left_surface", "allocation_left_groundwater",
-        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss",
+        "basic_needs", "remote_dam_in", "remote_dam_out", "reach_loss", "diverted_loss",
     ]
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
@@ -1542,6 +1542,19 @@ def run(doc: dict) -> dict:
     cat_short = [0.0] * n
     ewr_share = {x["id"]: shares.get(x["id"], 0.0) for x in farms}
     use_y: dict[tuple, float] = {}
+
+    # §2.12 (engine >= 1.79.0): the units that can divert river water into a dam (a dam, not run of river, River
+    # to dam above 0 or a top-up off-take into it) and the diverted share f of each one's storage, fully mixed.
+    def diverts(f):
+        if f["damCapacityM3"] <= 0 or supply_rule(f) == "runOfRiver":
+            return False
+        dm_ = f.get("divertMonthlyM3Day")
+        if (f.get("divertCapacityM3Day") or 0.0) > 0 or (dm_ and any(v > 0 for v in dm_)):
+            return True
+        return any(t.get("topUpDam") for t in ot_into.get(f["id"], []))
+
+    dv_share = {f["id"]: (1.0 if f["pctUpstreamToDam"] == 0 and f["pctRunoffToDam"] == 0 else 0.0) for f in farms if diverts(f)}
+    dv_held: dict[str, float] = {}
 
     def spend(nid, src, v):
         # §2.12a (engine >= 1.70.0): use on a day none of the source's allocations is in
@@ -1728,6 +1741,34 @@ def run(doc: dict) -> dict:
                 J[t["toNodeId"]] += v
                 drawn[t["fromNodeId"]] += v
                 sched[t["toNodeId"]] += v
+
+        # Diverted river water lost from each dam that can divert (§2.12, engine >= 1.79.0): the diverted share of
+        # yesterday's storage (a transfer out takes its share; rain and water brought in aren't diverted) × the day's
+        # evaporation and the seepage that doesn't return. Surface use, counted before anything the unit takes today.
+        for fid, f_dv in dv_share.items():
+            fx = by_id[fid]
+            area, pd, e_raw, sp_raw = pre[fid]
+            q0 = storage[fid]
+            jj = J[fid]
+            there = max(q0 + pd + jj, 0.0)
+            e_c = min(e_raw, there)
+            sp_c = min(sp_raw, there - e_c)
+            own_ = q0 + pd
+            held = f_dv * (q0 * max(0.0, own_ + jj) / own_ if jj < 0 and own_ > 0 else q0)
+            loss = 0.0
+            if there > 0 and held > 0:
+                sh = min(held / there, 1.0)
+                loss = sh * (e_c + sp_c * (1 - fx.get("damSeepageReturnPct", 1)))
+                held = max(0.0, held - sh * (e_c + sp_c))
+            dv_held[fid] = held
+            col[fid]["diverted_loss"][i] = loss
+            r0 = room.get((fid, "surface"))
+            if r0 is not None and math.isfinite(r0[3]):
+                if loss > 0:
+                    spend(fid, "surface", loss)
+                # The day's room is what the loss left (it takes the volume only, never the daily limit).
+                lft = max(0.0, r0[3] - al_used[(fid, "surface")])
+                room[(fid, "surface")] = (min(lft, r0[2]), lft, r0[2], r0[3])
 
         # River off-takes (§2.6a): each rule's share of its destination's
         # need, fixed before the day runs.
@@ -2297,6 +2338,11 @@ def run(doc: dict) -> dict:
             if objs[xid] and any(obj_sup[ob["id"]][i] < obj_dem[ob["id"]][i] * (1 - 1e-9) for ob in objs[xid]):
                 diag["object_shortage_days"] += 1
             storage[xid] = Q
+            if xid in dv_share:
+                # §2.12: the diverted share of tonight's storage, from everything the dam held before water left it.
+                mix = startd + M + O + K + j + to_dam + GWd
+                if mix > 0:
+                    dv_share[xid] = min(max((dv_held[xid] + O + to_dam) / mix, 0.0), 1.0)
             U[xid] = Uo
             Z[xid] = z
             AA[xid] = aa
@@ -2456,6 +2502,8 @@ def run(doc: dict) -> dict:
                 extra.append("remote_dam_in")
             if xid in remote_into:
                 extra.append("remote_dam_out")
+            if xid in dv_share:
+                extra.append("diverted_loss")
             for ob in objs[xid]:
                 put(xid, f"object_demand@{ob['id']}", obj_dem[ob["id"]])
                 put(xid, f"object_supplied@{ob['id']}", obj_sup[ob["id"]])

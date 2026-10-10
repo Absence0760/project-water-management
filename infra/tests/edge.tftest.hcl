@@ -888,18 +888,18 @@ run "direct_function_url_traffic_alarm" {
 
   assert {
     condition = (
-      aws_cloudwatch_log_metric_filter.origin_secret_rejected.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.origin_secret_rejected.pattern == "{ $.message.event = \"origin_secret_rejected\" }"
+      aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].pattern == "{ $.message.event = \"origin_secret_rejected\" }"
     )
     error_message = "origin_secret_rejected must be counted from the API's log group, by the exact event name backend/src/app.ts logs (app.security.test.ts pins the line)."
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.origin_secret_rejected.metric_name == aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.origin_secret_rejected.namespace == aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].namespace &&
-      aws_cloudwatch_metric_alarm.origin_secret_rejected.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.origin_secret_rejected.alarm_actions == toset([aws_sns_topic.alerts.arn]) &&
-      aws_cloudwatch_metric_alarm.origin_secret_rejected.treat_missing_data == "notBreaching"
+      aws_cloudwatch_metric_alarm.origin_secret_rejected[0].metric_name == aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.origin_secret_rejected[0].namespace == aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].namespace &&
+      aws_cloudwatch_metric_alarm.origin_secret_rejected[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.origin_secret_rejected[0].alarm_actions == toset([aws_sns_topic.alerts.arn]) &&
+      aws_cloudwatch_metric_alarm.origin_secret_rejected[0].treat_missing_data == "notBreaching"
     )
     error_message = "The direct-traffic alarm must sum the origin_secret_rejected metric and notify the alerts topic."
   }

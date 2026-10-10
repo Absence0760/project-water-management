@@ -286,6 +286,7 @@ resource "aws_iam_role_policy" "lambda_ses_release" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "mail_events_dlq_depth" {
+  count = local.alarms_essential ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-mail-events-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"

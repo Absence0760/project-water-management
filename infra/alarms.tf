@@ -136,6 +136,22 @@ resource "aws_sns_topic_policy" "alerts" {
 # and the per-resource alarms are what bound and report a runaway as it
 # happens; the budgets are the backstop that says what it cost.
 
+# --- Alarm tier ----------------------------------------------------------------
+# Every CloudWatch alarm in this root (here, feeds.tf, jobs.tf, reports.tf,
+# ses.tf) is created per var.alarm_tier. The CloudWatch free tier is 10 alarm
+# metrics shared across the whole AWS Organization, and "full" is ~50 here.
+# "essential" keeps the 12 that catch a client-visible outage or a risk to the
+# account: SES reputation (AWS pauses sending past its bounce/complaint
+# limits), dead-lettered work on the jobs, mail-events and feed queues, the
+# worker going quiet, RDS running out of disk, the site 5xxing, API errors and
+# mail that failed after the user was told it was sent. A dropped alarm takes
+# its log metric filter with it: a filter with default_value publishes a
+# custom metric, which has its own 10-metric free tier.
+locals {
+  alarms_essential = var.alarm_tier != "none"
+  alarms_full      = var.alarm_tier == "full"
+}
+
 locals {
   budget_daily_usd = (
     var.budget_daily_usd != null
@@ -255,6 +271,7 @@ resource "aws_ce_anomaly_subscription" "services" {
 # --- Lambda alarms ---------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-lambda-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -273,6 +290,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-lambda-throttles"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -293,6 +311,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_throttles" {
 # --- API Lambda: runs approaching the timeout ------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-lambda-duration-p95"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -323,6 +342,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
 # filter per log group feeds the same metric, and the one alarm sees both.
 
 resource "aws_cloudwatch_log_metric_filter" "self_check_failed" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-self-check-failed"
   log_group_name = aws_cloudwatch_log_group.lambda.name
   pattern        = "{ $.message.event = \"self_check_failed\" }"
@@ -337,11 +357,12 @@ resource "aws_cloudwatch_log_metric_filter" "self_check_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "self_check_failed" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-self-check-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.self_check_failed[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.self_check_failed[0].metric_transformation[0].namespace
   period              = 300
   statistic           = "Sum"
   threshold           = 0
@@ -353,13 +374,14 @@ resource "aws_cloudwatch_metric_alarm" "self_check_failed" {
 # The worker's half: same pattern, same metric (name + namespace), so the
 # alarm above counts self-check failures from either Lambda.
 resource "aws_cloudwatch_log_metric_filter" "self_check_failed_worker" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-self-check-failed-worker"
   log_group_name = aws_cloudwatch_log_group.worker.name
-  pattern        = aws_cloudwatch_log_metric_filter.self_check_failed.pattern
+  pattern        = aws_cloudwatch_log_metric_filter.self_check_failed[0].pattern
 
   metric_transformation {
-    name          = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].name
-    namespace     = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].namespace
+    name          = aws_cloudwatch_log_metric_filter.self_check_failed[0].metric_transformation[0].name
+    namespace     = aws_cloudwatch_log_metric_filter.self_check_failed[0].metric_transformation[0].namespace
     value         = "1"
     default_value = "0"
     unit          = "Count"
@@ -383,10 +405,10 @@ resource "aws_cloudwatch_log_metric_filter" "self_check_failed_worker" {
 # alert_mail_failures.)
 
 resource "aws_cloudwatch_log_metric_filter" "mail_send_failed" {
-  for_each = {
+  for_each = local.alarms_essential ? {
     api    = aws_cloudwatch_log_group.lambda.name
     worker = aws_cloudwatch_log_group.worker.name
-  }
+  } : {}
   name           = "${local.project}-mail-send-failed-${each.key}"
   log_group_name = each.value
   pattern        = "{ $.message.event = \"mail_send_failed\" }"
@@ -401,6 +423,7 @@ resource "aws_cloudwatch_log_metric_filter" "mail_send_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-mail-send-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -428,6 +451,7 @@ resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
 # unexpected failures are job_failed / job_dead (jobs.tf).
 
 resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
+  count          = local.alarms_essential ? 1 : 0
   name           = "${local.project}-unhandled-error"
   log_group_name = aws_cloudwatch_log_group.lambda.name
   pattern        = "{ $.message.event = \"unhandled_error\" }"
@@ -442,11 +466,12 @@ resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-unhandled-error"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.unhandled_error[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.unhandled_error[0].metric_transformation[0].namespace
   period              = 300
   statistic           = "Sum"
   threshold           = 0
@@ -475,6 +500,7 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
 # in under 5 minutes. Alarm, not a circuit breaker: why is in docs/security.md.
 
 resource "aws_cloudwatch_log_metric_filter" "login_failed" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-login-failed"
   log_group_name = aws_cloudwatch_log_group.lambda.name
   pattern        = "{ $.message.event = \"login_failed\" }"
@@ -489,11 +515,12 @@ resource "aws_cloudwatch_log_metric_filter" "login_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "login_failed" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-login-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.login_failed[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.login_failed[0].metric_transformation[0].namespace
   period              = 900
   statistic           = "Sum"
   threshold           = var.login_failed_alarm_per_15min
@@ -549,6 +576,7 @@ locals {
 # of "mismatch" while CloudFront and Lambda converge, hence the threshold.
 
 resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-origin-secret-rejected"
   log_group_name = aws_cloudwatch_log_group.lambda.name
   pattern        = "{ $.message.event = \"origin_secret_rejected\" }"
@@ -563,11 +591,12 @@ resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "origin_secret_rejected" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-origin-secret-rejected"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.origin_secret_rejected[0].metric_transformation[0].namespace
   period              = 3600
   statistic           = "Sum"
   threshold           = 20
@@ -581,6 +610,7 @@ resource "aws_cloudwatch_metric_alarm" "origin_secret_rejected" {
 # manual invocation (e.g. after a password rotation) that nobody watched.
 
 resource "aws_cloudwatch_metric_alarm" "migrate_errors" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-migrate-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -601,6 +631,7 @@ resource "aws_cloudwatch_metric_alarm" "migrate_errors" {
 # --- RDS alarms ------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-rds-cpu"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -625,6 +656,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
 # vCPUs) and an extra charge from here on. This alarm is the early warning;
 # rds_cpu_surplus_charged below is the one that says money is being spent.
 resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-rds-cpu-credits"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
@@ -647,6 +679,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
 # its surplus back. Any charge in an hour pages; one is a few cents, but it
 # means the instance class is too small for the load or something is spinning.
 resource "aws_cloudwatch_metric_alarm" "rds_cpu_surplus_charged" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-rds-cpu-surplus-charged"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -665,6 +698,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_surplus_charged" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_free_storage" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-rds-free-storage"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 2
@@ -685,6 +719,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_free_storage" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_connections" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-rds-connections"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -707,6 +742,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "rds_freeable_memory" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-rds-freeable-memory"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 3
@@ -732,6 +768,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_freeable_memory" {
 # nothing is sent, hence notBreaching.
 
 resource "aws_cloudwatch_metric_alarm" "ses_bounce_rate" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-ses-bounce-rate"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -746,6 +783,7 @@ resource "aws_cloudwatch_metric_alarm" "ses_bounce_rate" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ses_complaint_rate" {
+  count               = local.alarms_essential ? 1 : 0
   alarm_name          = "${local.project}-ses-complaint-rate"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -854,6 +892,7 @@ resource "aws_sns_topic_policy" "alerts_us_east_1" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
+  count               = local.alarms_essential ? 1 : 0
   provider            = aws.us_east_1
   alarm_name          = "${local.project}-cloudfront-5xx"
   comparison_operator = "GreaterThanThreshold"
@@ -893,6 +932,7 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
 #     the threshold, so the first period fires, ~$0.48-0.84 in.
 # The budget's ACTUAL notifications lag 8-24 h; this is the prompt signal.
 resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
+  count               = local.alarms_full ? 1 : 0
   provider            = aws.us_east_1
   alarm_name          = "${local.project}-cloudfront-requests"
   comparison_operator = "GreaterThanThreshold"
@@ -922,6 +962,7 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
 # for a busy 5 minutes of real use). BytesDownloaded is a default CloudFront
 # metric (no additional-metrics subscription), in us-east-1.
 resource "aws_cloudwatch_metric_alarm" "cloudfront_bytes" {
+  count               = local.alarms_full ? 1 : 0
   provider            = aws.us_east_1
   alarm_name          = "${local.project}-cloudfront-bytes"
   comparison_operator = "GreaterThanThreshold"
@@ -956,6 +997,7 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_bytes" {
 # CLOUDFRONT-scope ACL's metrics have no Region dimension (AWS WAF metrics
 # and dimensions, developer guide).
 resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
+  count               = local.alarms_full ? 1 : 0
   provider            = aws.us_east_1
   alarm_name          = "${local.project}-waf-blocked-requests"
   comparison_operator = "GreaterThanThreshold"

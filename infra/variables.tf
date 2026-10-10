@@ -592,6 +592,17 @@ variable "jobs_backlog_alarm_seconds" {
 
 # --- Alert emails (jobs.tf, WP-2.13) -------------------------------------------
 
+variable "alarm_tier" {
+  description = "Which CloudWatch alarms to create. \"full\": every alarm (~50 alarm metrics). \"essential\": 12 alarm metrics: SES bounce + complaint rate, the jobs / mail-events / fetch-requests / ingest-results DLQ arrivals, worker heartbeat, RDS free storage, CloudFront 5xx, API Lambda errors, unhandled API errors and failed mail sends. \"none\": no alarms. Each alarm metric past the AWS Organization's shared 10 free costs ~$0.10/month (more in af-south-1). Budgets and cost anomaly detection are not alarms and are unaffected."
+  type        = string
+  default     = "full"
+
+  validation {
+    condition     = contains(["full", "essential", "none"], var.alarm_tier)
+    error_message = "alarm_tier must be one of \"full\", \"essential\", \"none\"."
+  }
+}
+
 variable "alerts_enabled" {
   description = "The alert-email kill switch (ALERTS_ENABLED on the worker). false: alerts are still evaluated and shown in the app, but no alert email is sent and waiting ones are dropped. Runbook: docs/deployment.md § Runbooks, Alert storm."
   type        = bool

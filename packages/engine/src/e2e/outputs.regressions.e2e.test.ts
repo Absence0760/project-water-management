@@ -25,6 +25,8 @@ function handSurface(o: ModelOutput, id: string): Map<number, { surface: number;
 	const sup = series(o, id, 'supplied')!;
 	const gw = series(o, id, 'groundwater_used');
 	const toDam = series(o, id, 'groundwater_to_dam');
+	// Diverted river water the dam lost (engine ≥ 1.79.0, §2.12): surface use beside the draws, outside the netting.
+	const lost = series(o, id, 'diverted_loss');
 	const river = riverSide(o, id);
 	const d0 = toEpochDay(o.startDate);
 	const y = new Map<number, { gross: number; toDam: number; draw: number; river: number }>();
@@ -32,7 +34,7 @@ function handSurface(o: ModelOutput, id: string): Map<number, { surface: number;
 		const wy = waterYearOf(d0 + t);
 		const r = y.get(wy) ?? { gross: 0, toDam: 0, draw: 0, river: 0 };
 		const surface = sup[t]! - (gw?.[t] ?? 0);
-		r.gross += surface;
+		r.gross += surface + (lost?.[t] ?? 0);
 		r.toDam += toDam?.[t] ?? 0;
 		r.draw += Math.max(surface - river[t]!, 0);
 		r.river += river[t]!;

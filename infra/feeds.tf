@@ -228,6 +228,7 @@ resource "aws_lambda_event_source_mapping" "worker_ingest_results" {
 # --- Alarms --------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "fetch_requests_dlq_depth" {
+  count = local.alarms_essential ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-fetch-requests-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -259,6 +260,7 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_dlq_depth" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "ingest_results_dlq_depth" {
+  count = local.alarms_essential ? 1 : 0
   # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
   alarm_name          = "${local.project}-ingest-results-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
@@ -290,6 +292,7 @@ resource "aws_cloudwatch_metric_alarm" "ingest_results_dlq_depth" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "fetcher_errors" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-fetcher-errors"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -310,6 +313,7 @@ resource "aws_cloudwatch_metric_alarm" "fetcher_errors" {
 # The fetcher hit its reserved concurrency: a throttled SQS poll still counts
 # a receive, so a sustained run dead-letters fetch requests.
 resource "aws_cloudwatch_metric_alarm" "fetcher_throttles" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-fetcher-throttles"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -333,6 +337,7 @@ resource "aws_cloudwatch_metric_alarm" "fetcher_throttles" {
 # visibility timeout (~1 hour) before the DLQ, so an hour-old message is one
 # that isn't being worked; without this it would expire unseen after 4 days.
 resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-fetch-requests-age"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
@@ -360,6 +365,7 @@ resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
 # day, and SNS only notifies on the change to ALARM, so a source that stays
 # down alarms once, not on every fetch.
 resource "aws_cloudwatch_log_metric_filter" "feed_fetch_failed" {
+  count          = local.alarms_full ? 1 : 0
   name           = "${local.project}-feed-fetch-failed"
   log_group_name = aws_cloudwatch_log_group.fetcher.name
   pattern        = "{ $.message.event = \"feed_fetch_failed\" }"
@@ -374,11 +380,12 @@ resource "aws_cloudwatch_log_metric_filter" "feed_fetch_failed" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
+  count               = local.alarms_full ? 1 : 0
   alarm_name          = "${local.project}-feed-fetch-failed"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].name
-  namespace           = aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.feed_fetch_failed[0].metric_transformation[0].namespace
   period              = 3600
   statistic           = "Sum"
   threshold           = 0
