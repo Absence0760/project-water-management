@@ -688,6 +688,17 @@ Applied 2026-10-04 (minimal tier), and tested plan-only with mocked providers in
   case), so a copied example tfvars can't leave the alarms paging nobody
   (`dmarc_report_email`, when set, gets the same check).
 
+  Which of those alarms exist is set by `alarm_tier` (`infra/alarms.tf`
+  § Alarm tier). Production runs `"essential"`: SES bounce and complaint
+  rates, the jobs / mail-events / fetch-requests / ingest-results DLQ
+  arrivals, the worker heartbeat, RDS free storage, CloudFront 5xx, API
+  Lambda errors, `unhandled_error` and `mail_send_failed`, 12 alarm metrics.
+  Everything else listed above is declared but not created; its metrics and
+  log lines are still there, just unpaged. Set `alarm_tier = "full"` in the
+  prod tfvars to page on all of it (~$5/month in af-south-1). The RDS event
+  subscription, the KMS key EventBridge rule, the budgets and Cost Anomaly
+  Detection are not CloudWatch alarms and run on every tier.
+
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
 billing access for the budget, the SES sandbox exit, and the `production`
