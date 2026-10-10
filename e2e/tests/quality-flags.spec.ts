@@ -22,12 +22,19 @@ test('a gauged range needs its source, and saves with it', async ({ page, owner 
 	await source.fill('Synthetic rating table');
 	await expect(flags.getByText('Gauge record gauged range: A gauged range needs its source.')).toHaveCount(0);
 	await flags.getByLabel('Suspect days').selectOption({ label: 'Score as recorded' });
+	// The months the river is known to stop (engine ≥ 1.81.0, issue #507 item 2): none by default.
+	const months = flags.getByRole('group', { name: 'Months the river stops' });
+	await expect(months).toContainText('None: a zero stretch is judged by its length alone');
+	for (const m of ['Feb', 'Mar', 'Apr']) await months.getByRole('checkbox', { name: m, exact: true }).check();
+	await expect(months).toContainText('Feb, Mar, Apr');
 	await saveSettings(page);
 	await page.reload();
 	await expect(flags.getByLabel(/^Gauge record: highest gauging/)).toHaveValue('0.3');
 	await expect(flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true })).toHaveValue('Synthetic rating table');
 	await expect(flags.getByLabel('Suspect days')).toHaveValue('include');
 	await expect(flags.getByLabel('Days above the highest gauging')).toHaveValue('censor');
+	for (const m of ['Feb', 'Mar', 'Apr']) await expect(months.getByRole('checkbox', { name: m, exact: true })).toBeChecked();
+	await expect(months.getByRole('checkbox', { name: 'May', exact: true })).not.toBeChecked();
 });
 
 test('the fit censors days above the highest gauging, shows its data quality, and its record notices a flag change', async ({ page, owner }) => {

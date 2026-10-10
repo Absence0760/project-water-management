@@ -74,13 +74,18 @@ class ReadEwrOptions(unittest.TestCase):
         out = read_ewr_options(sheet(method="percentile TABLES", scaling="Area Ratio", area=40))
         self.assertEqual((out["method"], out["scaling"], out["tableAreaKm2"]), ("percentile", "area", 40.0))
         self.assertEqual(read_ewr_options(sheet(method=None, scaling=None))["method"], "pragmatic")
+        # A blank scaling is the area ratio (issue #90 B2), so a TAB file needs the table area.
+        wb = sheet(method="TAB file", scaling=None, mar=None, area=40, tab=[0.5] * 12)
+        out = read_ewr_options(wb)
+        self.assertEqual((out["method"], out["scaling"], out["tableAreaKm2"]), ("tab", "area", 40.0))
+        self.assertEqual(wb.notes, ["[EWR options] the daily EWR at the outlet: the DRM TAB file, scaled by the area ratio (docs/model.md 2.9f)"])
 
     def test_an_unknown_method_or_scaling_warns_and_falls_back(self):
         wb = sheet(method="Monthly", scaling="Volume")
         out = read_ewr_options(wb)
-        self.assertEqual((out["method"], out["scaling"]), ("pragmatic", "mar"))
+        self.assertEqual((out["method"], out["scaling"]), ("pragmatic", "area"))
         self.assertTrue(wb.notes[0].startswith('WARNING: [EWR options] the EWR method "Monthly"'))
-        self.assertTrue(wb.notes[1].startswith('WARNING: [EWR options] the scaling "Volume"'))
+        self.assertEqual(wb.notes[1], 'WARNING: [EWR options] the scaling "Volume" is not MAR ratio or Area ratio: imported as Area ratio')
 
     def test_a_method_missing_what_it_needs_imports_as_pragmatic_and_keeps_the_values(self):
         wb = sheet(method="Percentile tables", scaling="Area ratio", natural=[[1.0] * 9 + [None]] + [[1.0] * 10] * 11)

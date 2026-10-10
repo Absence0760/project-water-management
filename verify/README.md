@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 108 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 115 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -60,7 +60,9 @@ The core daily chain, with every setting of it the generator varies:
   pooled fallback and 0.25–4 clamp; the low-vs-CHIRPS years, the flagged zero
   runs and the missing periods left out of it), else forecast rain; zero-rain
   runs (the wet-season 60-day rule, the plain 180-day rule, `'missing'` /
-  `'asRecorded'`, listed missing periods as dates or water years);
+  `'asRecorded'`, listed missing periods as dates or water years; engine ≥
+  1.81.0, a flagged day kept dry where CHIRPS reads at most the fill
+  threshold `fillAboveChirpsMm`);
   multi-day accumulations (detection, `'spread'` / `'asRecorded'`, and their
   days left out of the fit; engine ≥ 1.70.0, a blank or listed-missing stretch
   of more than 7 days ending the run, and a reading straight after one set
@@ -142,7 +144,7 @@ the ranks within one (engine ≥ 1.64.0),
   by month, daily caps, priorities, hands-off flows (and the EWR), canal
   losses and their return to a chosen unit, off-take water used first at the
   destination, and the attribution's seepage legs.
-- **Other water users** (§2.7c): senior and junior, returns, the seniors'
+- **Other water users** (§2.7c): priority and non-priority, returns, the priority users’
   requirement passed by the farms upstream, boreholes on users.
 - **Supply rules** (§2.7e): river first, the trigger with its stop level,
   run of river, pump capacities, what the pump must leave in the river.
@@ -168,7 +170,7 @@ the ranks within one (engine ≥ 1.64.0),
   attribution (`remote_dam_in`, `remote_dam_out`).
 - **Bed losses** (§2.6b, engine ≥ 1.75.0): MIN(cap, f × outflow) lost in
   the reach below any node but the outlet, the node below receiving the
-  rest; a senior user's claim grossed up through every reach on the way, and
+  rest; a priority user's claim grossed up through every reach on the way, and
   the requirement crossing each less what the claims were grossed up by for
   it (`reach_loss`, `senior_reach_loss`).
 
@@ -277,7 +279,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (108
+`test_verify.py` breaks `model.py` one documented rule at a time (115
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -299,7 +301,7 @@ priority asking only MIN(limit, need) for off-takes and dam rules (not first
 capped at the free flow or water), a receiver's room shared by what the
 sources gave (not by what the rules ask: the wasted room) and offered again
 while a receiver fills (not one round), and a top-up's and a dam rule's room
-counting a fixed release's MIN(amount, outlet) in full (engine 1.70.0); junior users, user returns, the seniors' pass; the trigger's stop
+counting a fixed release's MIN(amount, outlet) in full (engine 1.70.0); non-priority users, user returns, the priority users’ pass; the trigger's stop
 level, the pump's capacity and what it must leave; the survey curve, the
 outlet on a pass-inflow release, dead storage and the room for transfers on
 a fixed one; the hands-off flow on a dam, its EWR flag, no River to dam on
@@ -312,8 +314,8 @@ day, and the 7-day limit off by one (engine 1.70.0); a return flow above
 the losses not capped at 1 − e (engine 1.71.0); a unit's own system on a
 planting ignored, a crop's default system ignored, and the project's
 systems table ignored for the SABI defaults (engine 1.72.0); bed losses left
-in the river, uncapped, a senior claim not grossed up for them, and the
-senior requirement crossing a reach whole (engine 1.75.0). Per-unit
+in the river, uncapped, a priority claim not grossed up for them, and the
+priority requirement crossing a reach whole (engine 1.75.0). Per-unit
 rain's 21 (engine 1.78.0): the units' records used with the setting off; a
 unit's inflow as natural × share; `catchmentAreaKm2` kept; no land unit
 refused; the catchment's series weighting every unit alike; a unit's
@@ -407,8 +409,8 @@ and written into docs/model.md:
 
 Coverage probes (rules the docs settle, which the random networks rarely
 reach in a way a mutant would show): `trigger-hysteresis` (the trigger rule
-keeps pumping until the stop level, §2.7e), `junior-user` (a junior user
-leaves the seniors' requirement, §2.7c) and `offtake-keep-bands` (off-takes
+keeps pumping until the stop level, §2.7e), `junior-user` (a non-priority user
+leaves the priority users’ requirement, §2.7c) and `offtake-keep-bands` (off-takes
 of one priority share the flow in bands at their keeps, so a sibling without
 a hands-off flow doesn't let the others take below theirs, §2.6a, engine
 1.69.0), `offtake-release-keep-and-floor` (an off-take leaves its source's

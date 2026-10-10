@@ -16,8 +16,11 @@ import {
 	rainDayFlags,
 	ratingError,
 	ratingText,
+	recordFlowFlags,
 	resolveQualityFlags,
 	scoringDays,
+	zeroFlowMonthsError,
+	zeroFlowSuspect,
 	type QualityFlagSettings
 } from './dayFlags';
 
@@ -59,13 +62,74 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(got[40]).toBe('inRange');
 	});
 
-	it('a long zero-flow stretch is scored as a river that stopped, not suspect (QF-3, engine 1.62.0); the same stretch at a non-zero value is', () => {
+	// The river-stops rule (engine ≥ 1.81.0, issue #507 item 2, audit C3): zero stretches are trusted only by months, else up to 30 days.
+	const at = (date: string) => toEpochDay(date) - d0;
+	const zeroOver = (values: (number | null)[], from: string, to: string) => {
+		for (let i = at(from); i <= at(to); i++) values[i] = 0;
+	};
+
+	it('with no river-stops months, a zero stretch of 30 days is scored and one of 31 is suspect; a non-zero flat stretch stays suspect', () => {
 		const values: (number | null)[] = varying(300);
-		for (let i = 20; i < 140; i++) values[i] = 0; // 120 days of zero flow: past the 90-day cap the Data checks list
+		zeroOver(values, '2000-10-21', '2000-11-19'); // exactly 30 days: trusted (the edge)
+		zeroOver(values, '2000-12-01', '2000-12-31'); // 31 days: suspect
 		for (let i = 200; i < 230; i++) values[i] = 0.75; // positive control: 30 days of one non-zero value
 		const got = names(flowDayFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values }, start: d0, days: 300 }));
-		expect(got.slice(20, 140).every((f) => f === 'inRange')).toBe(true);
+		expect(got.slice(at('2000-10-21'), at('2000-11-19') + 1).every((f) => f === 'inRange')).toBe(true);
+		expect(got.slice(at('2000-12-01'), at('2000-12-31') + 1).every((f) => f === 'suspect')).toBe(true);
+		expect(got[at('2000-11-30')]).toBe('inRange');
+		expect(got[at('2001-01-01')]).toBe('inRange');
 		expect(got.slice(200, 230).every((f) => f === 'suspect')).toBe(true);
+		expect(Array.from(zeroFlowSuspect({ startDate: start, values }).slice(at('2000-12-01'), at('2000-12-31') + 1)).every((v) => v === 1)).toBe(true);
+	});
+
+	it('with months listed, a stretch wholly inside them is trusted at any length; one running outside them is suspect whole, however short', () => {
+		const values: (number | null)[] = varying(400);
+		zeroOver(values, '2001-02-15', '2001-04-20'); // 65 days, all in Feb–Apr: the river stopping
+		zeroOver(values, '2000-11-10', '2000-11-12'); // 3 days in November: outside the months
+		zeroOver(values, '2001-01-25', '2001-02-05'); // 12 days from January into February: runs outside them
+		const flags = (zeroFlowMonths?: number[]) =>
+			names(flowDayFlags({ kind: 'flow_logger_m3s', series: { startDate: start, values }, start: d0, days: 400, ...(zeroFlowMonths ? { zeroFlowMonths } : {}) }));
+		const feb = flags([2, 3, 4]);
+		expect(feb.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'inRange')).toBe(true);
+		expect(feb.slice(at('2000-11-10'), at('2000-11-12') + 1).every((f) => f === 'suspect')).toBe(true);
+		// The February days of the crossing stretch are suspect too: the stretch is judged whole.
+		expect(feb.slice(at('2001-01-25'), at('2001-02-05') + 1).every((f) => f === 'suspect')).toBe(true);
+		expect(feb[at('2001-02-06')]).toBe('inRange');
+		// Positive control, no months: the length rule alone; the 65-day stretch is suspect, the short ones scored.
+		const none = flags();
+		expect(none.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'suspect')).toBe(true);
+		expect(none.slice(at('2000-11-10'), at('2000-11-12') + 1).every((f) => f === 'inRange')).toBe(true);
+		expect(none.slice(at('2001-01-25'), at('2001-02-05') + 1).every((f) => f === 'inRange')).toBe(true);
+		// A stretch longer than 30 days that isn't wholly inside the months is suspect (Feb–Mar listed, the stretch runs into April).
+		const febMar = flags([2, 3]);
+		expect(febMar.slice(at('2001-02-15'), at('2001-04-20') + 1).every((f) => f === 'suspect')).toBe(true);
+	});
+
+	it('judges a zero stretch over the whole stored record, not the run window; a blank day ends a stretch; suspect: false leaves the rule out', () => {
+		const values: (number | null)[] = varying(200);
+		zeroOver(values, '2000-11-01', '2000-12-10'); // 40 days
+		zeroOver(values, '2001-01-01', '2001-01-20'); // 20 days, a blank, 20 days: two stretches of 20, both scored
+		values[at('2001-01-21')] = null;
+		zeroOver(values, '2001-01-22', '2001-02-10');
+		const series = { startDate: start, values };
+		// A run from 2000-11-25 sees 16 days of the 40-day stretch: still suspect.
+		const late = toEpochDay('2000-11-25');
+		const got = names(flowDayFlags({ kind: 'flow_logger_m3s', series, start: late, days: 30 }));
+		expect(got.slice(0, 16).every((f) => f === 'suspect')).toBe(true);
+		const all = names(flowDayFlags({ kind: 'flow_logger_m3s', series, start: d0, days: 200 }));
+		expect(all.slice(at('2001-01-01'), at('2001-02-10') + 1).filter((f) => f !== 'missing').every((f) => f === 'inRange')).toBe(true);
+		expect(names(flowDayFlags({ kind: 'flow_logger_m3s', series, start: d0, days: 200, suspect: false })).slice(at('2000-11-01'), at('2000-12-10') + 1).every((f) => f === 'inRange')).toBe(true);
+	});
+
+	it('recordFlowFlags reads the months from settings.qualityFlags, at the outlet and at an inner gauge', () => {
+		const values: (number | null)[] = varying(400);
+		zeroOver(values, '2001-02-01', '2001-04-30');
+		const series = { startDate: start, values };
+		const of = (zeroFlowMonths: number[], siteNodeId: string | null) =>
+			names(recordFlowFlags({ kind: 'flow_logger_m3s', series, start: d0, days: 400, settings: { qualityFlags: { ...defaultQualityFlags(), zeroFlowMonths } }, siteNodeId }))[at('2001-03-01')];
+		expect(of([2, 3, 4], null)).toBe('inRange');
+		expect(of([2, 3, 4], 'gauge-1')).toBe('inRange');
+		expect(of([], null)).toBe('suspect');
 	});
 
 	it('reads the project’s data-check limits (settings.dataQuality), not the defaults', () => {
@@ -121,7 +185,7 @@ describe('flowDayFlags (CR-18)', () => {
 
 describe('resolveQualityFlags and ratingError', () => {
 	it('defaults: censor above the rating, leave the other flagged classes out, no rating', () => {
-		expect(resolveQualityFlags(undefined)).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+		expect(resolveQualityFlags(undefined)).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [] });
 		expect(resolveQualityFlags(undefined)).toEqual(defaultQualityFlags());
 	});
 
@@ -133,6 +197,18 @@ describe('resolveQualityFlags and ratingError', () => {
 		expect(q.ratings.flow_observed_m3s).toEqual({ gaugedMaxM3s: 12, gaugedMinM3s: 0.1, source: 'DWS gaugings' });
 		expect(warnings).toHaveLength(1);
 		expect(warnings[0]).toMatch(/aboveRating/);
+	});
+
+	it('river-stops months (engine ≥ 1.81.0): sorted when valid; a non-month, a repeat or a non-list falls back to none with a warning; absent = none', () => {
+		expect(resolveQualityFlags({ zeroFlowMonths: [4, 2, 3] }).zeroFlowMonths).toEqual([2, 3, 4]);
+		expect(resolveQualityFlags({ suspect: 'exclude' }).zeroFlowMonths).toEqual([]);
+		for (const bad of [[0], [13], [2.5], [2, 2], '2,3', null]) {
+			const warnings: string[] = [];
+			expect(resolveQualityFlags({ zeroFlowMonths: bad }, warnings).zeroFlowMonths).toEqual([]);
+			expect(warnings).toEqual([expect.stringMatching(/zeroFlowMonths/)]);
+		}
+		expect(zeroFlowMonthsError([1, 12])).toBeNull();
+		expect(zeroFlowMonthsError([])).toBeNull();
 	});
 
 	it('drops an invalid rating with a warning, and ignores a kind that can’t be calibrated against', () => {
@@ -222,20 +298,29 @@ describe('dayQuality (CR-22)', () => {
 		expect(q.use).toEqual({ aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
 	});
 
-	it('names zero flow held for the flat-line cap or longer as scored (QF-3), and not a shorter zero run', () => {
+	it('names zero flow held for more than 30 days inside the river-stops months as scored (engine ≥ 1.81.0), and not a shorter zero run', () => {
 		const n = 200;
 		const flags = new Uint8Array(n).fill(code('inRange'));
 		const observed = new Float64Array(n).fill(4);
-		for (let t = 10; t < 110; t++) observed[t] = 0; // 100 days of zero
+		for (let t = 10; t < 110; t++) observed[t] = 0; // 100 days of zero, trusted by the months
 		for (let t = 150; t < 160; t++) observed[t] = 0; // 10 days: a short dry spell, not named
 		const windowIdx = Array.from({ length: n }, (_, i) => i);
-		const q = dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx, flags, scoring: scoringDays(windowIdx, flags, settings, null, n), observed, rainFlags: null, zeroRunMask: null });
+		const s: QualityFlagSettings = { ...settings, zeroFlowMonths: [2, 3, 4] };
+		const q = dayQuality({ flowKind: 'flow_logger_m3s', settings: s, windowIdx, flags, scoring: scoringDays(windowIdx, flags, s, null, n), observed, rainFlags: null, zeroRunMask: null });
 		expect(q.longZeroDays).toBe(100);
 		expect(q.suspectZeroDays).toBe(0);
 		expect(q.scoredDays).toBe(n);
-		expect(q.notes.join('\n')).toMatch(/100 days are zero flow held for 90 days or more\. They are scored as a river that stopped flowing/);
-		// The project's own cap.
-		expect(dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx, flags, scoring: scoringDays(windowIdx, flags, settings, null, n), observed, rainFlags: null, zeroRunMask: null, zeroFlatMinDays: 120 }).longZeroDays).toBe(0);
+		expect(q.zeroFlowMonths).toEqual([2, 3, 4]);
+		expect(q.notes.join('\n')).toMatch(/100 days are zero flow held for more than 30 days inside the months the river is known to stop \(Feb, Mar, Apr\)\. They are scored as a river that stopped flowing/);
+		// The same stretch flagged suspect (no months): counted as suspect zero flow, not as a trusted long stretch.
+		const sus = flags.slice();
+		for (let t = 10; t < 110; t++) sus[t] = code('suspect');
+		const q2 = dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx, flags: sus, scoring: scoringDays(windowIdx, sus, settings, null, n), observed, rainFlags: null, zeroRunMask: null });
+		expect(q2.longZeroDays).toBe(0);
+		expect(q2.suspectZeroDays).toBe(100);
+		expect(q2.notes.join('\n')).toMatch(/100 of the suspect days are zero flow held for more than 30 days, with no months listed .* check with the client whether the river stopped or the logger failed/);
+		const q3 = dayQuality({ flowKind: 'flow_logger_m3s', settings: s, windowIdx, flags: sus, scoring: scoringDays(windowIdx, sus, s, null, n), observed, rainFlags: null, zeroRunMask: null });
+		expect(q3.notes.join('\n')).toMatch(/zero flow in stretches that run outside the months the river is known to stop \(Feb, Mar, Apr\)/);
 	});
 
 	it('says what the record can’t support: no rating, suspect days left out, zero flow among them, and a large share left out', () => {
@@ -275,6 +360,10 @@ describe('qualityFlagChanges and ratingText', () => {
 			{ subject: 'Gauged range (logger record)', text: 'Gauged range (logger record): none → 0.05–12 m³/s' },
 			{ subject: 'Suspect days in the fit', text: 'Suspect days in the fit: left out → scored as recorded' }
 		]);
+		// The river-stops months (engine ≥ 1.81.0); a resolved setting from before them has none.
+		const { zeroFlowMonths: _z, ...old } = a;
+		expect(qualityFlagChanges(old, { ...a, zeroFlowMonths: [2, 3, 4] })).toEqual([{ subject: 'Months the river stops', text: 'Months the river stops: none → Feb, Mar, Apr' }]);
+		expect(qualityFlagChanges(old, a)).toEqual([]);
 	});
 
 	it('ratingText', () => {

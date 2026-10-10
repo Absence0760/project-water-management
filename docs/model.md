@@ -1422,8 +1422,27 @@ That is why the default fills.
 **The rule.** Before rain used is picked, the run blanks the catchment rain on:
 
 1. every day of every zero run the issue #2 check flags, in mode `'missing'`
-   (the default), except days inside a **keep-dry** period; and
+   (the default), except days inside a **keep-dry** period and (engine ≥
+   1.81.0) days the stored CHIRPS reads **at or below the fill threshold**
+   `fillAboveChirpsMm` (2 mm by default) on; and
 2. every day inside a **missing** period, in either mode, whatever it reads.
+
+**Each day of a flagged run is decided on its own (engine ≥ 1.81.0, issue
+#507 item 3, [audit B2](./engine-audit.md)).** A flagged run's day is set
+aside only where the stored CHIRPS series reads more than
+`fillAboveChirpsMm` mm, or has no reading there (blank, not finite, or
+negative, CHIRPS's no-data code). Where CHIRPS reads a value from 0 up to
+and including the threshold, the gauge's 0 is kept as a dry day: CHIRPS saw
+at most drizzle, and CHIRPS reports too many light-rain days (calibration
+research D7), so filling those days would add rain the catchment probably
+didn't get and hide the dry spells the recession checks read (§2.10d,
+CR-13). The test reads the raw stored CHIRPS value, before any bias
+factor, and applies only to flagged runs: a listed missing period sets
+aside every day whatever CHIRPS reads, and `'asRecorded'` mode ignores the
+threshold. A day with no CHIRPS reading is set aside as before (forecast
+rain, else nothing, stands in). The threshold is the hydrologist's 2 mm
+(2026-10-10); a day at exactly 2 mm stays dry and one at 2.001 mm is filled.
+Up to 1.80.0 every day of a flagged run was set aside.
 
 Those days are then blank days like any other: bias-corrected CHIRPS fills
 them, then forecast rain, then nothing (the model treats a day with no value
@@ -1437,6 +1456,7 @@ recorded rain exactly.
 | `mode` | `'missing'` (default), `'asRecorded'` | What to do with flagged zero runs. `'asRecorded'` runs them dry, as up to 0.14 and as the workbook does |
 | `keepDry` | periods | Flagged zero runs the hydrologist confirms as real dry spells: their days stay 0 and count in the CHIRPS factor fit (§2.4b; engine ≥ 0.18.0). Only affects flagged runs |
 | `missing` | periods | Extra periods whose catchment rain is bad, e.g. the gap days inside a low-vs-CHIRPS year. They are also left out of the CHIRPS factor fit (§2.4b) |
+| `fillAboveChirpsMm` | mm, 0 to 50 (default 2) | Engine ≥ 1.81.0, mode `'missing'` only: a flagged run's day is set aside only where the stored CHIRPS reads more than this; at or below it the gauge's 0 stays. Absent on settings saved before 1.81.0, which run the default; an invalid value runs the default with a warning (`resolveZeroRain`) |
 
 A period is a whole water year (`{ waterYear, reason }`) or a date range
 (`{ start, end, reason }`), always with a reason, as for calibration
@@ -1464,15 +1484,26 @@ guard), and then its water years stay out and the run warns. Up to 0.17 the
 fit left out every water year a flagged run touched, even one kept dry.
 Because `keepDry` now changes the factors as well as the kept days, a fit
 record's `forcing.zeroRainRuns` (fit provenance, §2.10b) still flags
-"Forcing changed since fit" on any change to it.
+"Forcing changed since fit" on any change to it. The fill threshold
+(engine ≥ 1.81.0) **moves no factor**: every day of a flagged run, kept dry
+by CHIRPS or filled, stays out of the factor fit as before, so the factors
+are the same whatever the threshold. It does change the forcing: a fit
+record whose forcing ran a different threshold is flagged (absent on either
+side reads as the default 2 mm, except that a fit recorded by an engine
+before 1.81.0 in `'missing'` mode filled every flagged day, so today's
+threshold is a change for it; `'asRecorded'` on both sides is none).
 
 **Output.** `summary.zeroRainInfill` has the mode and each period set aside,
 flagged or listed, with its reason, the run days set aside, the catchment
 rain recorded on them, the rain used instead, and the days with nothing to
 fill them. It also lists the keep-dry periods that kept any days, and, in
-`'asRecorded'` mode, how many flagged-run days ran dry. It has totals too. The run
-warns once for what it set aside and filled, once for what it kept dry, and
-once when the mode left flagged runs dry. The `rain_catchment_missing` column
+`'asRecorded'` mode, how many flagged-run days ran dry. In `'missing'` mode
+(engine ≥ 1.81.0) it carries the threshold (`fillAboveChirpsMm`) and the
+flagged-run days kept dry by it (`chirpsDryDays`); a period's `days` count
+only the days it set aside. It has totals too. The run
+warns once for what it set aside and filled, once for what it kept dry
+(listed keep-dry periods, and separately the days CHIRPS read at or below
+the threshold on), and once when the mode left flagged runs dry. The `rain_catchment_missing` column
 (§2.4b table) marks each day set aside. The run's summary CSV has a *Catchment rain
 treated as missing* block (`zeroRainLines` in
 `backend/src/export/run-tables.ts`). Run comparison lists changes to the
@@ -1481,12 +1512,15 @@ mode and to both period lists. A run saved before 0.15.0 compares as
 
 **Workbook regression.** The workbook runs the zeros dry, so the client
 catchment suite replays with `'asRecorded'`. Its "B2:" test checks that the
-default sets aside exactly the flagged runs, changes catchment rain on no
+default sets aside exactly the flagged runs' days CHIRPS reads more than
+2 mm on (or has no reading on), changes catchment rain on no
 other day, finds CHIRPS for every day it sets aside, and passes the
 self-checks. It runs with multi-day accumulations as recorded, so B2 is
 judged on its own; the "B4:" test (§2.4d) runs both defaults.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `'missing'` as the default. Which flagged runs are real dry spells needs the station's records (keep-dry periods take the answer).
+
+**Decided rule, 2026-10-10 (issue #507 item 3, the client's hydrologist):** inside a flagged zero run, a day CHIRPS reads more than 2 mm on is missing and filled; at 2 mm or less the gauge's zero is kept as dry. The threshold is the project setting `fillAboveChirpsMm` (Settings → *Zero-rain runs*), default 2 mm. Built in engine 1.81.0. To check on the client catchment after a rerun: the CHIRPS factors don't move (above), and CR-13's recession segments (§2.10d) may gain segments from the days now kept dry.
 
 ### 2.4d Multi-day rainfall accumulations
 
@@ -2829,7 +2863,7 @@ keep among them, so a sibling without a hands-off flow, even one taking
 
 ```
 keep_k  = MAX(Zs, target, handsOff_k, handsOffEwr_k ? Z : 0)
-          Zs: senior users' requirement passing the source (§2.7c)
+          Zs: priority users' requirement passing the source (§2.7c)
           target: the source dam's pass-inflow release target (§2.7a, §2.7e), engine ≥ 1.70.0; 0 without one
 need_k  = (MIN(D_dst, sroom_dst) + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
 sroom_dst = dst's surface allocation room at the start of the day under a cap (§2.12a), ∞ without one (engine ≥ 1.70.0)
@@ -2865,8 +2899,8 @@ question 20):
 - *Where it takes.* From the river leaving the source unit, after the unit's
   own abstraction: the unit's own licence is at its own place, the off-take at
   the bottom of its reach. Upstream use first, as everywhere in the network.
-- *What must pass.* The senior users' requirement always (farms and their
-  off-takes are junior to them, §2.7c), and (engine ≥ 1.70.0) the target
+- *What must pass.* The priority users' requirement always (farms and their
+  off-takes rank below them, §2.7c), and (engine ≥ 1.70.0) the target
   of a pass-inflow release on the source's dam: see "The keep and a
   pass-inflow release" below. The EWR is **not** protected unless
   the rule says so (`handsOffEwr`) or a hands-off flow is set, as the river
@@ -3143,7 +3177,7 @@ the flow without a cap is allowed but the run warns ("more than half the
 flow lost in the reach below it; check this is meant (with a cap this is how
 WRSM's Bedloss is expressed)"); with a cap, f = 1 is the WRSM form.
 
-**The senior users' requirement is grossed up.** A senior user's claim (§2.7c)
+**The priority users' requirement is grossed up.** A priority user's claim (§2.7c)
 is what must *arrive* at it, so a farm upstream passes enough that the claim
 still arrives after every reach on the way: its fragment Y_f is grossed up
 through each reach between it and the user, nearest the user first, by the
@@ -3167,7 +3201,7 @@ nothing is left to hold back below it. The water passed is enough: the
 reach's actual loss on a flow of at least Zs, MIN(L, f × Zs) at most where
 it binds, is never more than S_k, since the cap applies once to the sum and
 once to each claim. This is how a release for a downstream user is sized in
-practice (demand plus the losses on the way). A junior user leaves the
+practice (demand plus the losses on the way). A non-priority user leaves the
 requirement as it stands at its own position, which is already net of the
 reaches above it.
 
@@ -3227,7 +3261,7 @@ and could count it twice.
 `reachLossM3`, an out term, only on a run with bed losses: the residual stays
 float noise. `checkBalance` holds each node's routed inflow to Σ upstream
 (U − loss), recomputes every day's loss from the node's setting and counts it
-out of the catchment; `checkWorkings` and the users' check net the senior
+out of the catchment; `checkWorkings` and the users' check net the priority
 requirement arriving from upstream by the stored `senior_reach_loss`, which
 is never negative nor more than the requirement it is taken from. The fuzz generator puts bed
 losses on a fifth of the random networks (any kind of node, the outlet too,
@@ -3267,7 +3301,7 @@ storage to whole m³; the engine doesn't (R1).
 | L | Upstream inflow "below dam" | `H − K` |
 | M | Farm runoff into dam | `I × pctRunoffToDam` |
 | N | Farm runoff below dam | `I − M` |
-| O | Diverted back to dam ("River to dam") | 0 for a dam on the river, `pctUpstreamToDam` = 100 % (engine ≥ 1.68.0; the stored capacity is kept but not used, and the run warns when one is entered); otherwise `MIN(divertCapacity, L + N)`, the capacity being the month's when River to dam is set by month (engine ≥ 1.32.0, §2.7h); then cut so S passes the senior users' requirement (§2.7c) and, with a hands-off flow, so `S ≥ MIN(L + N, hands-off keep)`, or on a farm without a dam today `S ≥ MIN(H + I, hands-off keep)`, cutting K and M too once O is 0 (§2.7h) |
+| O | Diverted back to dam ("River to dam") | 0 for a dam on the river, `pctUpstreamToDam` = 100 % (engine ≥ 1.68.0; the stored capacity is kept but not used, and the run warns when one is entered); otherwise `MIN(divertCapacity, L + N)`, the capacity being the month's when River to dam is set by month (engine ≥ 1.32.0, §2.7h); then cut so S passes the priority users' requirement (§2.7c) and, with a hands-off flow, so `S ≥ MIN(L + N, hands-off keep)`, or on a farm without a dam today `S ≥ MIN(H + I, hands-off keep)`, cutting K and M too once O is 0 (§2.7h) |
 | A, Pd, E, Sp | Dam area, rain on the dam, evaporation, seepage | §2.7a (engine ≥ 0.16.0, N2); the workbook has none |
 | G | **Irrigation supplied** | `MIN(MAX(store[t−1] + Pd − E − Sp + M + O + K + J − damCapacity × damMinPct, 0), D)`: only the storage above the dam's minimum operating level (engine ≥ 0.16.0, Q5), up to the abstraction demand (N1). A farm with a supply rule other than `damFirst` also pumps from the river below the dam (§2.7e) |
 | P | Interim storage | `store[t−1] + Pd − E − Sp + M + O + K + J − G` |
@@ -3646,6 +3680,17 @@ Sources and caveats:
   not S-pan (§2.3, Q9): filling a conversion on an S-pan row would convert
   it twice. Which preset the client's catchment takes is the hydrologist's
   ([followups.md § Hydrologist](./followups.md#hydrologist)).
+- **Decided by the client's hydrologist 2026-10-10 (issue #507 item 4,
+  answers 6.3 and 6.3a):** A-pan is for **crop demand only**; **dam
+  evaporation** uses the A-pan row converted to S-pan, so the client project
+  takes the **"WR90 lake factors, Taljaard (2023) pan conversion"** preset
+  (S-pan = 0.8706 A − 11.1745 a month, × the WR90 monthly lake factors),
+  chosen over the WR90 conversion because Taljaard recommends his equation
+  for monthly values. This is a project data change made through Settings
+  → Demand → Dam evaporation preset (an operator task, confirmed with the
+  operator first), not an engine change: the default stays flat 0.75 for
+  every other project. The runoff model's PE stays at the station-based
+  level for now (#13 as built, §2.4a); an S-pan PE for GR4J is parked.
 
 The source note is recorded with each run (its settings snapshot), so run
 comparison lists a change of it as its own line ("Dam evaporation factor
@@ -3867,13 +3912,20 @@ measures the impacted river, so a missing user also biases calibration (issue #4
 question 3 for the hydrologist). **Off by default**: a network with no node of
 kind `user` runs exactly as before (no new series or summary fields).
 
+**Wording (issue #507 item 4, 2026-10-10).** The app shows the two classes
+as **Priority** and **Non-priority** everywhere (the node form, the curtailment
+table, the share-the-pain board, Compare, help, exports and reports); the
+stored values stay `senior` and `junior` (`USER_PRIORITY_LABEL` in the
+engine's `project.ts` maps them, no migration, no API change). "Non-priority"
+is our pick pending the client's hydrologist's confirmation (#507 item 4).
+
 **The element.** A node of kind `user` (`NetworkNode.kind = 'user'`) has:
 
 | Field | Meaning |
 | --- | --- |
 | `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
 | `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
-| `userPriority` | `senior` (default: a municipal allocation is usually senior; whether a new user should start junior is open, plan.md question 21, issue #507) or `junior` |
+| `userPriority` | `senior`, shown as Priority (default: a municipal allocation is usually a priority user; confirmed as the default by the client's hydrologist 2026-10-10, issue #507) or `junior`, shown as Non-priority |
 | `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
 
 It has no area, flow share, dam, crops, transfers, EWR share or supply
@@ -3884,28 +3936,28 @@ A scenario's `demand.scale` with `category: 'user'` (engine ≥ 0.41.0)
 multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 
 **Each day** (network/simulate.ts), with H = Σ upstream outflow and Zs_in =
-Σ upstream senior requirement (below):
+Σ upstream priority requirement (below):
 
 ```
-G  = MIN(D, H, P)                 senior
-G  = MIN(D, MAX(0, H − Zs_in), P) junior: leaves the senior users' water in the river
+G  = MIN(D, H, P)                 priority (senior)
+G  = MIN(D, MAX(0, H − Zs_in), P) non-priority (junior): leaves the priority users' water in the river
 T  = r × G                        returned below it
 U  = H − G + T
 deficit = D − G
 Z  = Σ upstream Z                 (no EWR share of its own; its shortfall MIN(U − Z, 0) is shown like a gauge's)
 ```
 
-**Priority against the farms: the senior requirement.** The network is
+**Priority against the farms: the priority requirement.** The network is
 solved upstream first, so without a rule a user below a farm could only have
-what the farm leaves. A senior user's demand is instead a requirement the
+what the farm leaves. A priority user's demand is instead a requirement the
 farms upstream of it must pass, fragmented to them by flow share the way the
 pragmatic EWR is (§2.5):
 
 ```
 C_u  = MIN(D_u, P_u)                    the user's claim: its demand, up to its pump capacity (engine ≥ 1.58.0; = D_u without one)
-Y_f  = Σ over senior users u downstream of f of C_u × share_f / Σ_{g upstream of u} share_g
+Y_f  = Σ over priority users u downstream of f of C_u × share_f / Σ_{g upstream of u} share_g
 Zs   = Y_f + Σ upstream Zs              at a farm (series senior_requirement)
-Zs   = MAX(0, Σ upstream Zs − C_u)      below a senior user; junior users and gauges pass it on
+Zs   = MAX(0, Σ upstream Zs − C_u)      below a priority user; non-priority users and gauges pass it on
 ```
 
 With bed losses in a reach (engine ≥ 1.75.0, §2.6b) Y_f is grossed up through
@@ -3921,13 +3973,13 @@ out). This is the usual "pass inflow up to the downstream requirement"
 condition on a dam, and for a dam-less farm it is real-time curtailment of its
 river take. It never breaks the farm balance: only the split between the dam
 and the river below it changes. It does not make a farm release stored water,
-so a senior user can still be short when the farms upstream are dry. A senior
+so a priority user can still be short when the farms upstream are dry. A priority
 user with no farm flow share upstream of it can't be protected this way: it
-takes what reaches it, and the run warns. Several senior users in series are
+takes what reaches it, and the run warns. Several priority users in series are
 served by position (the upstream one first), never by list order: the claims
-of several senior users on one farm, and each user's Σ upstream shares, are
-added in node-id order (engine ≥ 0.26.1, §6 "The ordering rule"), and junior
-users take by position too, since each node reads only what reaches it. A junior user upstream of a farm
+of several priority users on one farm, and each user's Σ upstream shares, are
+added in node-id order (engine ≥ 0.26.1, §6 "The ordering rule"), and non-priority
+users take by position too, since each node reads only what reaches it. A non-priority user upstream of a farm
 still takes first: farms have no protected claim, the same as the EWR, which
 the model reports rather than protects.
 
@@ -3939,7 +3991,7 @@ part). The EWR sites table's "farms upstream" and "charged" include the users.
 
 **Curtailment** (provisional decision 2026-10-01, to be confirmed by the
 client's hydrologist, issue #90: kept as built; the NWA reading below is the
-target once the client gives each senior user's population). Of the
+target once the client gives each priority user's population). Of the
 two readings put to the hydrologist, the one the National Water Act
 supports is **"exempt only the basic-human-needs share"**: the Reserve
 (basic human needs and the ecological Reserve, s16–18) is the only use with
@@ -3948,20 +4000,20 @@ included, can be restricted (Schedule 3 item 6; DWS restriction notices cut
 domestic and urban use too, by a smaller share). The model can't apply it
 yet: an other water user has no population, so its basic-needs share (25 l
 a person a day) isn't known, and cutting it without that could take a town
-below basic needs. So a senior user stays uncurtailed and its standing
+below basic needs. So a priority user stays uncurtailed and its standing
 charge is shown in the curtailment table and the share-the-pain board
 ("its EWR charge … stands"), never moved onto the farms. Needs client data:
-the population each senior user serves (the durable fix is followups.md §
+the population each priority user serves (the durable fix is followups.md §
 Hydrologist, *Drought restrictions on the other water users*, option b).
 Other users are **outside
 the irrigation equitable-share benchmark** (§2.11): their demand is not
 irrigation, and the benchmark's totals and fraction stay farms only. They get
 their own rows (`CurtailmentSummary.otherUsers`):
 
-- a **junior** user is curtailed for its EWR charge like a farm: supply cut
+- a **non-priority** user is curtailed for its EWR charge like a farm: supply cut
   −ΔG = MAX(R ÷ (1 − r), −supplied) (taking ΔG less removes (1 − r)·ΔG of
   use), and whatever the cut can't remove stands;
-- a **senior** user is **not** curtailed: its charge is reported and left
+- a **priority** user is **not** curtailed: its charge is reported and left
   standing (`uncurtailedChargeM3Day`). It is **not** moved onto the farms,
   which would charge irrigators for the town's use.
 
@@ -3975,10 +4027,10 @@ so it needs only the capacity P. The choices:
   pumps with their own capacities, and a supplemental one still fills what
   the river pump leaves. With primary boreholes, the river is asked only for
   what they leave.
-- *A senior user claims only what it can lift.* The farms upstream pass
+- *A priority user claims only what it can lift.* The farms upstream pass
   C = MIN(D, P), not D: water it can't pump would only flow past it. So a
-  small pump on a senior town leaves the farms above it more, and the
-  requirement below it drops by C. Engine-audit L1's point (a new senior user
+  small pump on a priority town leaves the farms above it more, and the
+  requirement below it drops by C. Engine-audit L1's point (a new priority user
   curtails the farms above) holds for the capped claim.
 - *No pump = no limit, silently.* Unlike a farm's river pump (which warns
   when a river-pumping rule has no capacity), every user before 1.58.0 had
@@ -3997,7 +4049,7 @@ so it needs only the capacity P. The choices:
 
 **Outputs.** Per user: `demand`, `supplied` (taken), `deficit`,
 `inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
-`ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any senior user's
+`ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any priority user's
 demand is passed down, at every node, with the farms' `passed_for_senior`).
 With a pump capacity (engine ≥ 1.58.0) also `pump_limited` =
 MAX(0, MIN(what its priority leaves, its allocation room, D − GW) − Gr), with
@@ -4011,12 +4063,12 @@ the farms upstream passed only its capped claim and it took it all), with
 
 **Checks** (`verify/checks.ts`): the user's day (G as above, T = r·G,
 U = H − G + T, deficit, shortfall; with a pump, G − GW ≤ P, the
-`pump_limited` replay and the requirement below a senior user dropping by at
+`pump_limited` replay and the requirement below a priority user dropping by at
 most MIN(D, P), and the summary's pump means), the farm keeps MIN(Zs, H + I) below its
 dam and holds nothing back without a requirement, Zs never grows past a user,
 the attribution check counts users as contributors, and the summaries and
 curtailment rows are the means of the series. The fuzz generator adds up to
-three users (senior or junior, any return share, demand from none to far more
+three users (priority or non-priority, any return share, demand from none to far more
 than the river) to 30 % of networks, and a pump capacity (0, a trickle, or up
 to more than any flow) to half the users of 30 % of seeds. Hand examples:
 `network/users.test.ts` and `network/userPump.test.ts`.
@@ -4371,7 +4423,7 @@ disagree with itself. The pumps × m³/h × 24 calculator belongs in the form,
 like the irrigation-system efficiency helper.
 
 **Each day** (§2.7's columns; S = L + N − O is the flow below the dam, Zs the
-senior users' requirement passing the farm, §2.7c):
+priority users' requirement passing the farm, §2.7c):
 
 ```
 on the river:  riverFirst, runOfRiver: always
@@ -4410,8 +4462,8 @@ water to an absent dam (Q19). The decisions:
 
 - *The pump draws only on the flow below the dam, S*, as the roadmap says,
   never on the dam's inflow (that is K, M and the diversion O).
-- *What must pass comes first.* The pump leaves the senior users'
-  requirement (farms are junior to them, like a junior user, §2.7c) and a
+- *What must pass comes first.* The pump leaves the priority users'
+  requirement (farms rank below them, like a non-priority user, §2.7c) and a
   pass-inflow release's target in the river: a release exists to keep that
   flow below the dam, and a pump taking S while the dam released to top it
   up would move dam water to the pump. A fixed release doesn't interact.
@@ -4610,12 +4662,12 @@ replace it. The rest:
 - *Objects share the unit's sources.* An object is supplied from the same
   dam, river pump and boreholes as the unit's crops, never from the river
   past them. A demand that draws on the river by itself, at its own place,
-  is an other water user (§2.7c), which also carries the senior claim on the
-  farms upstream. Objects have no senior claim on other units.
+  is an other water user (§2.7c), which also carries the priority claim on the
+  farms upstream. Objects have no priority claim on other units.
 - *Priority is within the unit.* `first` is the basic-needs order the NWA
-  gives domestic supply; across units, the existing senior/junior user
-  priority applies. Splitting one demand into senior and junior slices is two
-  objects (Q14). The client confirmed senior/junior is enough (issue #90):
+  gives domestic supply; across units, the existing priority / non-priority user
+  classes apply. Splitting one demand into priority and non-priority slices is two
+  objects (Q14). The client confirmed the two classes, priority and non-priority (stored `senior`/`junior`), are enough (issue #90):
   no finer priority classes across units. Within a unit, objects can be
   ranked inside `first` and `last` (engine ≥ 1.64.0, issue #343), for two
   demands whose licences differ in seniority.
@@ -4822,7 +4874,7 @@ capacity, so a dam is never more than 100 % full.
 
 **Abstraction from a date.** Before `abstractionFrom` the unit's demand is
 0: its crops' abstraction, its demand objects' and a water user's own
-demand (so a senior user's claim passed to the farms upstream starts then
+demand (so a priority user's claim passed to the farms upstream starts then
 too, §2.7c). The soil-water store and the rain the crops would have used run
 as usual (they set the demand's shape, not its size). Boreholes and the
 river pump follow the demand, so they take nothing before it either.
@@ -4858,7 +4910,7 @@ the area errs towards more evaporation. The rate itself is client data
 ### 2.7h Hands-off flow and River to dam by month (engine ≥ 1.32.0, roadmap WP-3.8, issue #204)
 
 **Why.** The river pump (§2.7e) and River to dam (the diversion O, §2.7)
-both left the senior users' requirement (§2.7c) in the river, but nothing
+both left the priority users' requirement (§2.7c) in the river, but nothing
 else: on a dry day a farm could pump or divert the river below its Reserve.
 A hands-off flow is the usual licence condition for that: abstraction only
 while the river carries more than a threshold. And River to dam was one
@@ -4886,7 +4938,7 @@ baseline's existing users are current use and aren't held to it.
 ```
 keep_h = MAX(handsOff[m], handsOffEwr ? Z : 0)                 0 without a hands-off flow
 O      = MIN(divert[m] (or divertCapacity), L + N)
-         then the senior users' pass (§2.7c) cuts O, K and M so S ≥ MIN(Zs, H + I)
+         then the priority users' pass (§2.7c) cuts O, K and M so S ≥ MIN(Zs, H + I)
          then, with a dam today, O = MIN(O, MAX(0, L + N − keep_h))   River to dam leaves MIN(L + N, keep_h)
          or, with none (capacity 0 today), O then K and M cut          the farm leaves MIN(H + I, keep_h)
          so S = H + I − (K + M + O) ≥ MIN(H + I, keep_h)
@@ -4896,9 +4948,9 @@ Gr     = on the river ? MIN(pump capacity, MAX(0, S − pump keep), demand) : 0
 ```
 
 The same `MAX(handsOff, handsOffEwr ? Z : 0)` a river off-take keeps at its
-source (§2.6a, beside the senior requirement and, engine ≥ 1.70.0, a
+source (§2.6a, beside the priority requirement and, engine ≥ 1.70.0, a
 pass-inflow release's target), with Z the node's own cumulative EWR. The
-senior users' pass runs first and the hands-off cut second; either order
+priority users' pass runs first and the hands-off cut second; either order
 gives the same K, M and O (the pass cuts K and M only once O is 0), and this
 one keeps `passed_for_senior` meaning what it did.
 
@@ -4919,7 +4971,7 @@ one keeps `passed_for_senior` meaning what it did.
   §2.7g), what the split and River to dam send "into the dam" is irrigated
   straight from the river, b023's stand-in for a river pump (§2.7e), so all
   three are abstraction. The farm leaves `MIN(H + I, keep_h)`: O is cut
-  first, then K and M pro rata, as the senior users' pass does (§2.7c),
+  first, then K and M pro rata, as the priority users' pass does (§2.7c),
   exactly 0 when everything passes. Cutting only O there would leave the
   keep unenforced: `pctUpstreamToDam` 1, a hands-off flow of 700, H = 1000
   and a demand of 2000 irrigated all 1000 and left the river dry. What the
@@ -4956,7 +5008,7 @@ without S = H + I − (K + M + O) ≥ MIN(H + I, keep_h); 0 ≤ O ≤ the month'
 River to dam capacity. These are bounds, so `checkWorkings` also replays
 them: the pump's room with the hands-off keep, and O itself, O₀ = MIN(the
 month's capacity, L + N) cut so S = MAX(L + N − O₀, MIN(Zs, H + I), MIN(L + N,
-keep_h)) when K and M are uncut, and O = 0 when either was cut (the senior
+keep_h)) when K and M are uncut, and O = 0 when either was cut (the priority
 users' pass and a dam-less hands-off flow cut them only once O is 0); a
 diversion wrongly cut to 0 fails it. The fuzz generator gives 25 % of networks
 hands-off flows on half their farms (months from 0 to more than any flow, 0
@@ -5317,7 +5369,7 @@ in [followups.md § Hydrologist](./followups.md#hydrologist)):
   before, and moving a demand to the river never changes what the dam
   gives the others.
 - *What must pass comes first, as for the unit's own pump.* The
-  abstractions leave the senior users' requirement, a pass-inflow
+  abstractions leave the priority users' requirement, a pass-inflow
   release's target and the unit's hands-off flow (and, with `handsOffEwr`,
   the EWR at the unit) in the river (§2.7e, §2.7h); the hands-off flow is
   the unit's, not one per abstraction. Without a hands-off flow the EWR
@@ -6264,6 +6316,8 @@ limitations list it.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `lowFlowMeasure: 'total'` (base flow at α 0.995, three passes, judged on the record to date, as the option), freshets capped by natural events and counted per water year, the half-peak-for-half-duration event rule, and no DRM high-flow volume check. Hughes, Hannart & Watkins (2003) use the same filter family (β 0.5 at a daily step, α 0.925–0.997); their pass count is still unread (an earlier persona reading says one forward pass), so check it before switching base flow on.
 
+**Decided 2026-10-10 (the client's hydrologist, issue #507 item 6):** the Reserve's low-flow requirement is judged on the model's **simulated total flow** (`lowFlowMeasure: 'total'`, the default), so nothing changes for the client catchment. Base flow stays an off-by-default option, and until its filter is confirmed against the Desktop Reserve Model's published method (Hughes, Hannart & Watkins 2003: the number of passes, one or three, and α) Settings shows **"Filter settings unconfirmed"** beside *Low flows judged on* (`EwrRulesSection.svelte`, [ui.md](./ui.md)). Once the paper is read, a pass count that differs from three is an engine change and bumps `ENGINE_VERSION` (engine-audit.md A5).
+
 ### 2.9e No-flow days, and users served in full while an EWR site fails (engine ≥ 1.33.0, issue #71)
 
 Two river measures the licensing evidence report asked for
@@ -6375,6 +6429,17 @@ multiplied by s, the user's choice:
   when set, else the units' areas summed (in node-id order), so the table and
   the flow it is read against are on one area.
 
+**The default scaling is the area ratio** (the client's hydrologist,
+2026-10-10, issue #90 B2; the MAR ratio before): a new source
+(`blankEwrDailySource`, the Settings form's starting point) and both
+importers' fallback when the `[EWR options]` sheet gives no scaling take
+`'area'`. Both scalings stay. The run never fills in a default, so a stored
+source keeps its own choice and no run moves (no engine version change).
+Settings shows the tables × s under the entered ones once s is known, and a
+run judged by a DRM table shows its snapshot's tables × its own s (issue #90
+B1 gap a, [ui.md](./ui.md)). The percentile lookup above is the
+hydrologist's own process (confirmed 2026-10-10, #90 B1a; engine-audit A8).
+
 A resumed run (§2.16) takes the capture run's s and its inputs from the
 snapshot (`pinned.outletEwr`), so it is the uninterrupted run's to the bit.
 Calibration (§2.10b) re-reads the EWR from each candidate's natural flow, as
@@ -6404,7 +6469,7 @@ flow fails there, as with a rule table (§2.9c).
 
 **The workbook.** The b023 importers read an optional `[EWR options]` sheet
 (defined names `zEwrOpt_Method`: Pragmatic | TAB file | Percentile tables,
-`zEwrOpt_Scaling`: MAR ratio | Area ratio, `zEwrOpt_TableMar`,
+`zEwrOpt_Scaling`: MAR ratio | Area ratio, blank = Area ratio, `zEwrOpt_TableMar`,
 `zEwrOpt_TableArea`, `zEwrOpt_TabM3s` 12 cells, `zEwrOpt_PctPoints` 10 cells,
 `zEwrOpt_NaturalPct` and `zEwrOpt_ReservePct` 12 × 10) into
 `settings.ewrDailySource` (scripts/wbt-import/README.md); a workbook without
@@ -7219,8 +7284,10 @@ r / (0.01·Q) days, and a run is flagged once it lasts three such steps
 0.004 needs 75, and 0.002 or less the cap. Zero flow counts like any low value
 and gets the cap, so 90 days of a dry riverbed warn (expected in ephemeral
 rivers; the check never changes results). The per-day flags for calibration
-don't follow it there: from engine 1.62.0 a zero-flow stretch is never a
-suspect day (§2.10h, QF-3). With fewer than two distinct values
+don't follow it there: a zero-flow stretch is judged by its own rule
+instead, trusted inside the months the river is known to stop and up to 30
+days otherwise (engine ≥ 1.81.0; 1.62.0 – 1.80.0 trusted every one, §2.10h,
+QF-3). With fewer than two distinct values
 the resolution is unknown and a non-zero run needs 14 days. Every number here
 is judgement. The Data tab's per-day flags use the same rule.
 
@@ -8173,6 +8240,8 @@ not findings.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the 0.8 decision share, the ranges and one factor at a time; the joint uncertainty is the ensemble's (§2.10e), so no worst-case corners (CR-21).
 
+**Combined cases are scenarios, not sensitivity runs (decided 2026-10-10, issue #507 item 5).** The panel stays one factor at a time: it brackets inputs that are genuinely uncertain. A case where several inputs move together, such as the **dry-year stress** (rain × 0.9 *and* abstraction × 1.3, since farmers pump more when it doesn't rain, so the two aren't independent), is built in the scenario module, which combines `series.scale` and `demand.scale` ops, limits rain to dates, saves the case and compares it with its base run. The worked example, and the one gap (`demand.scale` takes months, not dates), are in [scenarios.md § Combined what-ifs](./scenarios.md#combined-what-ifs-belong-here-worked-example-a-dry-year-stress).
+
 ### 2.10h Per-day quality flags and the flag-aware objective (engine ≥ 1.22.0, calibration research CR-18/19/22)
 
 A gauge measures water level; its rating curve turns level into flow, and the
@@ -8192,7 +8261,7 @@ applies, in this order:
 | --- | --- | --- |
 | missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
 | infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
-| suspect | an outlier or inside a flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a) | left out |
+| suspect | an outlier or inside a non-zero flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a), or inside a zero-flow stretch the river-stops rule doesn't trust (engine ≥ 1.81.0, below) | left out |
 | aboveRating | above the record's highest field gauging | censored |
 | belowRating | above zero but below its lowest gauging | left out |
 | humanUse | human use dominates the flow | scored |
@@ -8274,19 +8343,51 @@ information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters.
 
-**Zero flow held for months (engine ≥ 1.62.0, QF-3, engine-audit C3).** A
-river that really stops trips the flat-stretch check after 90 days of zero
-flow (`settings.dataQuality.flatlineFlowMaxDays`, 90 by default). Up to
-1.61.0 those days were suspect, so the default left them out and hid the dry
-spell from the fit. Now a zero-flow stretch is never suspect (`flowDayFlags`
-calls only a non-zero flat stretch and an outlier suspect), as GSIM's
-flat-line rule flags only values above zero (Gudmundsson et al. 2018). The
-Data checks still list the stretch as a run warning, and the panel names the
-days (`DayQuality.longZeroDays`, counted over runs of consecutive zero
-readings at least the cap long) with the way out for a logger that failed
-reading zero: an exclusion period. `suspectZeroDays` stays for older
-reports and is 0 from 1.62.0. The run's `observed_flow_quality` column
+**Zero flow: the river-stops rule (engine ≥ 1.81.0, issue #507 item 2,
+engine-audit C3, QF-3).** A zero-flow reading is either the river stopping
+or a logger that failed (a broken or blocked logger also reads zero; the
+client's has been known to fail). `settings.qualityFlags.zeroFlowMonths`
+lists the calendar months (1–12) the river is known to stop in (default
+none; Settings → *Calibration record* → *Months the river stops*). A
+**zero-flow stretch** is a maximal run of consecutive readings of exactly 0
+(a blank, NaN or negative day ends it), found over the **whole stored
+record**, so its length doesn't depend on the run window
+(`zeroFlowSuspect` in `dayFlags.ts`):
+- a stretch whose every day falls in one of the listed months is **trusted**
+  as the river stopping and scored, however long;
+- with months listed, any other stretch (one that runs outside them, even
+  for a day or two, judged whole) is **suspect**;
+- with no months listed, a stretch longer than 30 days
+  (`ZERO_FLOW_TRUST_MAX_DAYS`) is suspect and a shorter one is trusted (a
+  30-day stretch is trusted, 31 days is suspect).
+
+Suspect zero-flow days take the `suspect` treatment (left out by default),
+and the data-quality panel says "check with the client" with what to do:
+list the months if the river stops then, or record the logger failure as an
+exclusion period. An exclusion period stays the manual override either way.
+The rule is part of the suspect class, so a run whose input lacks the
+record's history (a resumed run) leaves it out with the rest of that class.
+`DayQuality.suspectZeroDays` counts the suspect zero-flow days in the
+window, `longZeroDays` the trusted ones in a stretch longer than 30 days,
+and `zeroFlowMonths` records the months the flags read. The months are part
+of the quality-flag settings, so a fit made under other months is flagged
+"Quality flags changed since fit" (a resolved setting from before 1.81.0
+reads as none), and run comparison lists the change ("Months the river
+stops: none → Feb, Mar, Apr"). The run's `observed_flow_quality` column
 follows.
+
+History: up to 1.61.0 a zero stretch past the flat-stretch cap (90 days) was
+suspect like any flat stretch. Engine 1.62.0 – 1.80.0 trusted every zero
+stretch (QF-3, after GSIM's flat-line rule, which flags only values above
+zero, Gudmundsson et al. 2018); that rule is built for official gauging
+stations, and the client's record is a small private logger.
+**Decided rule, 2026-10-10 (issue #507 item 2, the client's hydrologist):**
+the river does stop in dry years in February, March and April, and the
+logger has been known to fail, so a zero stretch inside Feb–Apr is trusted
+and any other one longer than 30 days, or running outside those months, is
+"check with the client". Set `zeroFlowMonths` to [2, 3, 4] for the client
+catchment (project data, through Settings). This also answers plan.md
+question 10.
 
 The defaults (censor above the rating; leave out below-rating, suspect and
 infilled days) are a *provisional decision 2026-10-01, to be confirmed by
@@ -8810,15 +8911,15 @@ labelled table, not a silent redefinition of M.
 two stages per group, each ÷ the group's demand: supplied (K) and volume
 left (V), with the equitable share (P = K_tot, the same for every farm and
 summing to the supplied total) stated once in the board's intro, and the other water users
-as their own rows (supplied, then supplied + supply cut for a junior user,
-all of it for a senior one). It is a view: every figure comes from this
+as their own rows (supplied, then supplied + supply cut for a non-priority user,
+all of it for a priority one). It is a view: every figure comes from this
 table, bounded as *Demand left %* is, and `ENGINE_VERSION` is unchanged
 ([ui.md § Share the pain](./ui.md#share-the-pain)).
 
 **Other water users (engine ≥ 0.22.0, WP-1.33).** Users are not rows of this
 table and not in its totals or equitable fraction. `CurtailmentSummary.otherUsers`
 lists each over the same window: demand, taken, returned, the mean EWR charge,
-whether it is curtailed (junior) and its supply cut and the charge left
+whether it is curtailed (non-priority) and its supply cut and the charge left
 standing (§2.7c).
 
 The totals row (`CurtailmentSummary.totals`) is a plain `SUM` of H, I, J, M,
@@ -9095,7 +9196,33 @@ result is the same at UTC+14 and UTC−11.
 ### 2.12a Allocations and full-allocation runs (engine ≥ 1.18.0, issue #72)
 
 `settings.allocationMode` makes the registered volumes part of the run
-(`packages/engine/src/allocations/mode.ts`; `ENGINE_VERSION` 1.18.0). The
+(`packages/engine/src/allocations/mode.ts`; `ENGINE_VERSION` 1.18.0).
+
+**Licence data never drives the baseline** (the operator's principle, issue
+#507, 2026-10-10). The baseline's abstractions come from the hydrologist's
+inputs only (crops and areas, demand objects, pump and diversion capacities,
+boreholes), so a project's own settings always run **`none`**: the API
+refuses another mode on a settings save, and an import, a copy or a restore
+turns one into `none` (migration 213 moved the stored projects;
+[allocations.md § The allocation mode](./allocations.md#the-allocation-mode-engine--1180),
+[data-model.md](./data-model.md)). `cap` and `fullAllocation`, and with them
+a licence's months of use and maximum rate (L2, Q24, Q28), apply only to a
+**scenario** that sets them (`settings.set allocationMode`,
+[scenarios.md](./scenarios.md)): "what if use were capped at the licences",
+"what if every licence were taken in full". The engine itself is unchanged:
+it runs whatever mode its input names, and the rule is held at the project's
+settings, not in `runModel`. The licence data's outputs are separate: §2.12's
+comparison of modelled use with the licensed volume and of dam capacity with
+the licensed dam volume. `allocations/baseline.test.ts` guards it: with
+`none`, a run is bit-identical (every series value, by `Object.is`, and the
+summary) with and without allocations, on the outlook catchment and on 25
+random fuzz networks (some with a dam beside the river losing diverted
+water, `diverted_loss`, §2.12: a compare-only run carries that series
+whatever the volumes, and only a cap counts it against them), apart from
+`RunSummary.allocations` and the warnings about the allocation rows
+themselves.
+
+The
 backend puts the project's allocations on every run's input
 (`ProjectModel.allocations`: id, unit, source, volume, storage, validity and
 the licence conditions; never a name, registration number or property), so a
@@ -9115,7 +9242,7 @@ arrives as its own 21(b) row; read as a take, its storage would have capped
 the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
 `waterUse` is a take (21a), as before 1.59.0, so no stored input changes.
 
-- **`none`** (the default, and every run before 1.18.0): nothing changes but
+- **`none`** (the default, the baseline's only mode since issue #507, and every run before 1.18.0): nothing changes but
   the summary. A run whose input has allocations reports
   `RunSummary.allocations`: the mode, the band *τ*, how many allocations it
   used and how many weren't matched, and per unit with an allocation and per
@@ -9123,7 +9250,7 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   `yearsOver`, the mean modelled use and registered volume per whole year).
   The per-year detail stays in the Allocations tab's comparison (a summary of
   60 units × 40 years × 2 sources would be most of a megabyte).
-- **`cap`**: each unit's use per water year stays within what is registered
+- **`cap`** (a scenario's, issue #507): each unit's use per water year stays within what is registered
   for it, per source:
 
   ```
@@ -9220,7 +9347,7 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   volumes; the comparison still nets it, and reads the unit below its
   surface volume by that much. Pending the hydrologist, with dam filling vs
   registered storage (s21b, issue #90).
-- **`fullAllocation`**: "what if every registered or licensed volume were
+- **`fullAllocation`** (a scenario's, issue #507): "what if every registered or licensed volume were
   taken in full" (a registration is not an entitlement, issue #281),
   the background run of a cumulative assessment (WP-3.11). Each unit's
   abstraction demand D = F / e + its demand objects' (a water user's own
@@ -9237,7 +9364,7 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   verify/ probe `full-allocation-tail-new-year`), so it asks for exactly its registered volume and keeps its own
   seasonal shape; the crop requirement F and every demand object scale by the
   same *k*, and the soil-water store and effective rain are untouched (they
-  set the shape). A senior water user is scaled before its demand is passed
+  set the shape). A priority water user is scaled before its demand is passed
   to the farms upstream (§2.7c), so they pass the scaled demand. A year with
   no demand can't be scaled and asks for nothing (a warning names the unit
   and year); a unit without a volume keeps its modelled demand (a warning
@@ -9485,7 +9612,7 @@ the dam can give, not what a restriction policy asks of it (pending the
 hydrologist). When no transfer touches the dam
 or anything upstream of it, a probe simulates only the dam and the nodes
 upstream of it: nothing below the dam changes what reaches it, and nothing
-above it depends on its draft (senior users' claims are fixed per node
+above it depends on its draft (priority users' claims are fixed per node
 before the simulation, §2.7c). Otherwise the whole network runs.
 
 **The search** (`firmYield`): a bisection on *x*.
@@ -10270,7 +10397,7 @@ can store one per base run. The state holds:
   months' base-flow windows reach back into, 730 days before that month
   and its days so far (§2.9d);
 - the columns the capture run carried because some day of it needed them
-  (a zero-run or accumulation mask, a storage reset's step, the senior
+  (a zero-run or accumulation mask, a storage reset's step, the priority
   users' requirement), so a resumed run has the same columns, 0 on days
   that don't need them; a dam that came into service after the capture
   run's first day keeps its `dam_capacity` column from the snapshot's
@@ -10557,8 +10684,8 @@ text:
 
 | Check | What must hold |
 | --- | --- |
-| `checkBalance` | Every value finite (observed flow, its gap-filled values, rain and a few other inputs may be blank on a missing day). The observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, §2.10h; `checkFlowQuality`): stored at most once, beside the scored `observed_flow` (the calibration site's, else the catchment's), as long as it; every day a class code, never human use; infilled exactly on the gap-filled days, missing exactly on the other days without a reading; above the highest gauging only when the reading is above the record's highest gauging, below only when it is above zero and below the lowest, in range never outside the gauged range (a gauge inside the network has none); and a run with gap-filled days stores the column. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
-| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity (0 for a dam on the river, engine ≥ 1.68.0; the month's, when River to dam is by month, engine ≥ 1.32.0), L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
+| `checkBalance` | Every value finite (observed flow, its gap-filled values, rain and a few other inputs may be blank on a missing day). The observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, §2.10h; `checkFlowQuality`): stored at most once, beside the scored `observed_flow` (the calibration site's, else the catchment's), as long as it; every day a class code, never human use; infilled exactly on the gap-filled days, missing exactly on the other days without a reading; above the highest gauging only when the reading is above the record's highest gauging, below only when it is above zero and below the lowest, in range never outside the gauged range (a gauge inside the network has none); and a run with gap-filled days stores the column. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when priority, MIN(D, MAX(0, H − priority requirement arriving)) when non-priorityior; return = r × G; outflow = H − G + return; deficit = D − G; the priority requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
+| `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity (0 for a dam on the river, engine ≥ 1.68.0; the month's, when River to dam is by month, engine ≥ 1.32.0), L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With priority other users below (§2.7c): the farm's priority requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
 | `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release (engine ≥ 1.29.0; MIN(amount, outlet) in full from engine 1.70.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
@@ -10627,7 +10754,7 @@ seeds over both runoff models). So every sum that feeds the daily balance runs
 in **id order** (`packages/engine/src/order.ts`), never list order: the
 farms' flow shares (area and hi/lo totals), the catchment area Σ farm area,
 each farm's crops and crop areas (crop id, then area), the land-cover patches
-on a unit (patch id, §2.5a), the senior users' claims on a farm and each
+on a unit (patch id, §2.5a), the priority users' claims on a farm and each
 user's upstream share total (node id, §2.7c), the transfer rules (id, §2.6),
 each node's upstream inflows (node id, review F8), the river off-take water
 arriving at a unit and the canal seepage returning at one (rule id, §2.6a;
@@ -10807,7 +10934,7 @@ step when a definition changes.
 | **Spill** | Water that overflows a full dam and continues downstream. |
 | **Condensed cover** | The area of a patch of trees as if its canopy were closed: area × canopy cover. Land-cover reductions scale with it (engine ≥ 0.24.0, §2.5a). |
 | **Stream depletion** | River flow a borehole's pumping captures: a share d of the pumping, lagged, taken from the river at the node (engine ≥ 0.23.0, §2.7d). |
-| **Other water user** | A town, industry or unlisted irrigator taking a monthly demand from the river at its node, with a return share and a senior/junior priority (engine ≥ 0.22.0, §2.7c). |
+| **Other water user** | A town, industry or unlisted irrigator taking a monthly demand from the river at its node, with a return share and a priority (Priority or Non-priority, stored `senior`/`junior`; engine ≥ 0.22.0, §2.7c). |
 | **Dam evaporation** | Open-water evaporation from a farm dam's surface: lake factor × A-pan × area (engine ≥ 0.16.0). |
 | **Seepage** | Water that leaks out of a dam each day; it reaches the river below the wall. |
 | **Irrigation efficiency** | The share of the water abstracted for irrigation that reaches the crop (engine ≥ 0.16.0). Abstraction demand = crop requirement ÷ efficiency. |

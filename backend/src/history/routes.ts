@@ -13,6 +13,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
+import { normaliseBaselineAllocationMode } from '../projects/settings.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
@@ -27,6 +28,7 @@ import {
 	describeChange,
 	inputsSnapshot,
 	Reason,
+	REASON_MAX,
 	recordDroppedLinks,
 	recordModelRevision,
 	relinkCandidates,
@@ -248,9 +250,13 @@ async function restoreInputs(
 	if (problems.length) throw new ApiError(409, "this version can't be restored: its model doesn't pass today's checks", problems);
 	const change = await beginModelChange(db, projectId);
 	await saveModel(db, projectId, parsed.data);
-	mustChange(await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(target.settings ?? {})]));
+	// A revision or a run's inputs from before 213 may cap or fully allocate: the baseline compares only (issue #507), and the restore's reason says so.
+	const settings: Record<string, unknown> = { ...((target.settings ?? {}) as Record<string, unknown>) };
+	const allocNote = normaliseBaselineAllocationMode(settings);
+	mustChange(await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(settings)]));
 	await recordDroppedLinks(db, projectId, change, 'restore');
-	const revision = await recordModelRevision(db, projectId, { source: 'restore', before: change.before, ...o });
+	const reason = (o.reason && allocNote ? `${o.reason}${/[.!?]$/.test(o.reason) ? '' : '.'} ${allocNote}` : (o.reason ?? allocNote ?? undefined))?.slice(0, REASON_MAX);
+	const revision = await recordModelRevision(db, projectId, { source: 'restore', before: change.before, ...o, reason });
 	// Nothing to restore: the transaction rolls back, so nothing was written.
 	if (!revision) throw new ApiError(409, 'the current inputs already match this version');
 	const farms = parsed.data.nodes.filter((n) => n.kind === 'farm').map((n) => n.id);

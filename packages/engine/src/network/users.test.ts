@@ -170,7 +170,7 @@ describe('other water users (WP-1.33)', () => {
 
 	it('warns when a senior user has no farm with a flow share above it', () => {
 		const o = run(input([node('U', 'user', null, { userDemandM3Day: flat(100) }), node('A', 'farm', 'U', { areaKm2: 0 })], null));
-		expect(o.summary.warnings.some((w) => w.includes('senior user "U" has no unit with a flow share upstream'))).toBe(true);
+		expect(o.summary.warnings.some((w) => w.includes('priority user "U" has no unit with a flow share upstream'))).toBe(true);
 	});
 
 	it('the self-checks catch a user that breaks its balance or takes a senior user’s water', () => {

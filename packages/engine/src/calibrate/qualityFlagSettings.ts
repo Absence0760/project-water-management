@@ -32,10 +32,35 @@ export interface QualityFlagSettings {
 	belowRating: FlagUse;
 	suspect: FlagUse;
 	infilled: FlagUse;
+	/**
+	 * Calendar months (1–12, ascending, no repeats) in which the river is known
+	 * to stop flowing (engine ≥ 1.81.0, issue #507 item 2, audit C3, QF-3). A
+	 * zero-flow stretch wholly inside them is trusted as the river stopping and
+	 * scored; with months listed, any zero stretch that runs outside them is
+	 * suspect, and with none (the default) only a stretch longer than
+	 * ZERO_FLOW_TRUST_MAX_DAYS is (./dayFlags.ts zeroFlowSuspect). Absent on
+	 * settings saved before 1.81.0: none.
+	 */
+	zeroFlowMonths?: number[];
 }
 
-/** Defaults (pending the hydrologist, issue #66): censor floods above the rating, leave out the rest. */
-export const defaultQualityFlags = (): QualityFlagSettings => ({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+/**
+ * A zero-flow stretch longer than this many days that is not wholly inside
+ * settings.qualityFlags.zeroFlowMonths is suspect (engine ≥ 1.81.0, issue
+ * #507 item 2): the hydrologist's "check with the client" length.
+ */
+export const ZERO_FLOW_TRUST_MAX_DAYS = 30;
+
+/** Defaults (pending the hydrologist, issue #66): censor floods above the rating, leave out the rest; no river-stops months. */
+export const defaultQualityFlags = (): QualityFlagSettings => ({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [] });
+
+/** Why a river-stops month list is invalid, or null: whole calendar months 1–12, each once. */
+export function zeroFlowMonthsError(v: unknown): string | null {
+	if (!Array.isArray(v)) return 'the river-stops months must be a list';
+	if (!v.every((m) => Number.isInteger(m) && m >= 1 && m <= 12)) return 'each river-stops month must be a calendar month, 1 to 12';
+	if (new Set(v).size !== v.length) return 'a river-stops month is listed twice';
+	return null;
+}
 
 export const RATING_SOURCE_MAX = 200;
 /** Records a rating can be given for. */
@@ -90,12 +115,19 @@ export function resolveQualityFlags(raw: unknown, warnings: string[] = []): Qual
 			ratings[k] = { gaugedMaxM3s: o.gaugedMaxM3s, gaugedMinM3s: o.gaugedMinM3s, source: o.source.trim() };
 		}
 	}
+	let zeroFlowMonths = d.zeroFlowMonths;
+	if (raw.zeroFlowMonths !== undefined) {
+		const err = zeroFlowMonthsError(raw.zeroFlowMonths);
+		if (err) warnings.push(`quality-flag setting zeroFlowMonths: ${err}; using none`);
+		else zeroFlowMonths = [...(raw.zeroFlowMonths as number[])].sort((a, b) => a - b);
+	}
 	return {
 		ratings,
 		aboveRating: pick('aboveRating', ABOVE_RATING_USES, d.aboveRating),
 		belowRating: pick('belowRating', FLAG_USES, d.belowRating),
 		suspect: pick('suspect', FLAG_USES, d.suspect),
-		infilled: pick('infilled', FLAG_USES, d.infilled)
+		infilled: pick('infilled', FLAG_USES, d.infilled),
+		zeroFlowMonths
 	};
 }
 
@@ -121,6 +153,11 @@ export const FLAG_USE_TEXT: Record<AboveRatingUse, string> = {
 	include: 'scored as recorded'
 };
 const RATING_LABEL: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'Gauged range (gauge record)', flow_logger_m3s: 'Gauged range (logger record)' };
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const ZERO_FLOW_MONTHS_LABEL = 'Months the river stops';
+
+/** "Feb, Mar, Apr", or "none". */
+export const zeroFlowMonthsText = (months: readonly number[] | undefined): string => (months?.length ? months.map((m) => MONTH_ABBR[m - 1] ?? String(m)).join(', ') : 'none');
 
 /** "0.05–12 m³/s", "up to 12 m³/s", "from 0.05 m³/s" or "none". */
 export function ratingText(r: GaugeRating | null | undefined): string {
@@ -145,5 +182,9 @@ export function qualityFlagChanges(a: QualityFlagSettings, b: QualityFlagSetting
 	for (const k of ['aboveRating', 'belowRating', 'suspect', 'infilled'] as const) {
 		if (a[k] !== b[k]) out.push({ subject: QUALITY_FLAG_USE_LABEL[k], text: `${QUALITY_FLAG_USE_LABEL[k]}: ${FLAG_USE_TEXT[a[k]]} → ${FLAG_USE_TEXT[b[k]]}` });
 	}
+	// Engine ≥ 1.81.0; an older resolved setting without it had none.
+	const ma = zeroFlowMonthsText(a.zeroFlowMonths);
+	const mb = zeroFlowMonthsText(b.zeroFlowMonths);
+	if (ma !== mb) out.push({ subject: ZERO_FLOW_MONTHS_LABEL, text: `${ZERO_FLOW_MONTHS_LABEL}: ${ma} → ${mb}` });
 	return out;
 }

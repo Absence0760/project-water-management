@@ -227,6 +227,8 @@ def random_input(seed: int, dense: bool = False) -> dict:
             "accumulationMode": rng.choice(["spread", "spread", "asRecorded"]),
             "keepReadings": [],
             "addAccumulations": [],
+            # §2.4c (engine ≥ 1.81.0): the CHIRPS fill threshold, from its own stream so the other draws don't move.
+            "fillAboveChirpsMm": random.Random(seed * 999983 + 5).choice([2, 2, 0, 0.5, 5]),
         },
     }
     if rng.random() < 0.2:

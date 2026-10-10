@@ -26,7 +26,9 @@ import { buildExamples, inputOf, type ExampleProject } from './catchments.js';
 const EXPECTED_WARNINGS: Record<string, RegExp[]> = {
 	'Example · Kleinberg (winter rainfall)': [
 		/^CHIRPS rain bias-corrected on \d+ days where catchment rain is blank/,
-		/^Catchment rain treated as missing on 90 days: 2019-06-01 to 2019-08-15 \(76 days, flagged zero run\); 2021-07-05 to 2021-07-18 \(14 days, listed: /,
+		// Engine ≥ 1.81.0 (issue #507 item 3): only the flagged run's days CHIRPS reads more than 2 mm on are filled; the rest stay dry.
+		/^Catchment rain treated as missing on 61 days: 2019-06-01 to 2019-08-15 \(47 days, flagged zero run\); 2021-07-05 to 2021-07-18 \(14 days, listed: /,
+		/^Flagged zero runs kept as recorded \(dry\) on 29 days where CHIRPS reads 2 mm or less/,
 		/^Rainfall \(catchment\): 1 run of zero rain .*2019-06-01 to 2019-08-15/,
 		// Three weeks read in one go (B4); the gauge's own dry days before them join the window.
 		/^Catchment rain accumulations spread over the days they cover: 1 window, \d+ run days: 2017-0[56]-\d\d to 2017-06-26 /,

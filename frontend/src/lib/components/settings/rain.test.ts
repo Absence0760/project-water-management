@@ -56,22 +56,23 @@ describe('ACCUMULATION_OPTIONS', () => {
 describe('describeZeroRain', () => {
 	const d = defaultProjectSettings().zeroRainRuns;
 	it('names the modes and counts the periods that apply', () => {
-		expect(describeZeroRain(d)).toBe('flagged runs treated as missing; accumulations spread');
+		expect(describeZeroRain(d)).toBe('flagged runs treated as missing where CHIRPS reads more than 2 mm; accumulations spread');
 		const one = { waterYear: 2003, reason: 'x' };
 		expect(describeZeroRain({ ...d, keepDry: [one], missing: [one, { waterYear: 2004, reason: 'y' }] })).toBe(
-			'flagged runs treated as missing; 1 keep-dry period; 2 extra missing periods; accumulations spread'
+			'flagged runs treated as missing where CHIRPS reads more than 2 mm; 1 keep-dry period; 2 extra missing periods; accumulations spread'
 		);
 		// Keep-dry periods don't apply when every flagged run is run as recorded, nor kept readings when no accumulation is spread.
 		expect(describeZeroRain({ ...d, mode: 'asRecorded', keepDry: [one], accumulationMode: 'asRecorded', keepReadings: [one] })).toBe(
 			'flagged runs run as recorded (dry); accumulations as recorded'
 		);
 		expect(describeZeroRain({ ...d, keepReadings: [one], addAccumulations: [one, one] })).toBe(
-			'flagged runs treated as missing; accumulations spread; 1 reading kept as recorded; 2 listed accumulations'
+			'flagged runs treated as missing where CHIRPS reads more than 2 mm; accumulations spread; 1 reading kept as recorded; 2 listed accumulations'
 		);
 	});
 
-	it('describes a fit recorded before engine 0.20.0 as having run accumulations as recorded', () => {
+	it('describes a fit recorded before engine 0.20.0 as having run accumulations as recorded, and one before 1.81.0 as filling every flagged day', () => {
 		expect(describeZeroRain({ mode: 'missing', keepDry: [], missing: [] })).toBe('flagged runs treated as missing; accumulations as recorded');
+		expect(describeZeroRain({ ...d, fillAboveChirpsMm: 0.5 })).toBe('flagged runs treated as missing where CHIRPS reads more than 0.5 mm; accumulations spread');
 	});
 });
 

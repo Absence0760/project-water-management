@@ -21,19 +21,19 @@ const decoded = (href: string) => decodeURIComponent(href.slice(href.indexOf(','
 const links = (html: string) => [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*download="([^"]+)"/g)].map((m) => ({ href: m[1]!.replace(/&amp;/g, '&'), name: m[2]! }));
 
 describe('DrmFormatHelp builds on the shared Expected format', () => {
-	it('is the shared note, its summary told apart for a screen reader, with the DRM example files and the caller’s CSV', () => {
-		const html = render(DrmFormatHelp, {
-			props: { target: 'ruleTable', context: 'of a file for the rule table at Outlet', csvFiles: [{ name: 'x.csv', text: 'Month,10%\nOct,1\n', label: 'Example CSV' }] }
-		}).body;
+	it('is the shared note, its summary told apart for a screen reader, with the DRM example files and the form’s CSVs', () => {
+		const html = render(DrmFormatHelp, { props: { target: 'ruleTable', context: 'of a file for the rule table at Outlet' } }).body;
 		expect(html).toContain('data-testid="format-help"');
 		expect(html).toMatch(/<summary[^>]*>Expected format(<!--[^>]*-->)?<span class="visually-hidden"> of a file for the rule table at Outlet<\/span>(<!--[^>]*-->)?<\/summary>/);
 		expect(html).toContain('data-testid="format-accepts"');
-		expect(links(html).map((l) => l.name)).toEqual(['drm-example.rul', 'drm-example-mcm.rul', 'drm-example.tab', 'x.csv']);
+		expect(links(html).map((l) => l.name)).toEqual(['drm-example.rul', 'drm-example-mcm.rul', 'drm-example.tab', 'ewr-total-example.csv', 'ewr-low-flow-example.csv']);
+		// The link to every format, on the File formats help page (issue #477).
+		expect(html).toContain('href="/help/formats#reserve-rule-table"');
 	});
 
 	it('offers files its boxes read: each DRM example parses as its kind, each in plain text with no byte-order mark', () => {
 		const html = render(DrmFormatHelp, { props: { target: 'dailyEwr', context: 'x' } }).body;
-		const got = links(html);
+		const got = links(html).filter((l) => !l.name.endsWith('.csv'));
 		expect(got.map((l) => l.name)).toEqual(['drm-example.rul', 'drm-example-mcm.rul', 'drm-example.tab']);
 		for (const l of got) {
 			expect(l.href.startsWith('data:text/plain;charset=utf-8,')).toBe(true);

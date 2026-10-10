@@ -296,7 +296,8 @@ describe('fit record', () => {
 		const rating = { gaugedMaxM3s: 12, gaugedMinM3s: null, source: 'DWS gaugings' };
 		const qualityFlags = { ratings: { flow_logger_m3s: rating }, aboveRating: 'censor' as const, belowRating: 'exclude' as const, suspect: 'exclude' as const, infilled: 'exclude' as const };
 		const rec = fitRecordFromReport(report({ fitAllDays: period('2012-10-01', '2014-09-30', 0.5), dayQuality: null }), { ...ctx, settings: { ...ctx.settings, qualityFlags } });
-		expect(rec.qualityFlags).toEqual(qualityFlags);
+		// Recorded resolved: settings from before engine 1.81.0 had no river-stops months.
+		expect(rec.qualityFlags).toEqual({ ...qualityFlags, zeroFlowMonths: [] });
 		expect(rec.fitAllDays).toEqual(period('2012-10-01', '2014-09-30', 0.5));
 		expect(rec.dayQuality).toBeNull();
 		// Positive control: the same flag settings are no change, and the scores are in-sample.
@@ -308,10 +309,13 @@ describe('fit record', () => {
 		expect(st.qualityFlagsChanged).toBe(true);
 		expect(fitRecordCaveats(st)).toContainEqual(expect.stringMatching(/quality-flag settings .* have changed since the fit/));
 		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, suspect: 'include' } }, rec).qualityFlagsChanged).toBe(true);
+		// The river-stops months (engine ≥ 1.81.0) decide which zero-flow days are suspect: listing some is a change; none is not.
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, zeroFlowMonths: [2, 3, 4] } }, rec).qualityFlagsChanged).toBe(true);
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, zeroFlowMonths: [] } }, rec).qualityFlagsChanged).toBe(false);
 		expect(calibrationFitStatus({ ...s, qualityFlags: moved, fitRecord: rec }, 'flow_logger_m3s')).toBe('otherPeriod');
 		// Settings without the field run the defaults: the same as a record made under them.
 		const plain = fitRecordFromReport(report(), ctx);
-		expect(plain.qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+		expect(plain.qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude', zeroFlowMonths: [] });
 		expect(fitRecordStatus({ ...s, qualityFlags: undefined } as never, plain).qualityFlagsChanged).toBe(false);
 		// A record made before engine 1.22.0 has none to compare: never flagged.
 		const { qualityFlags: _q, ...old } = plain;
@@ -339,6 +343,15 @@ describe('fit record', () => {
 		).toBe(true);
 		// … and a run snapshot from before the setting ran flagged runs as recorded.
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' }, withZr).forcingChanged).toBe(true);
+		// The fill threshold (engine ≥ 1.81.0): absent runs the default 2 mm, so only a real change flags the fit …
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, fillAboveChirpsMm: 2 } }, withZr).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, fillAboveChirpsMm: 5 } }, withZr).forcingChanged).toBe(true);
+		// … a fit by an engine before 1.81.0 filled every flagged day, so today's threshold is a change …
+		const pre181 = { ...withZr, engineVersion: '1.80.0' };
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: zr }, pre181).forcingChanged).toBe(true);
+		// … except where nothing was filled: 'asRecorded' on both sides.
+		const pre181Dry = { ...pre181, forcing: { ...pre181.forcing!, zeroRainRuns: { ...zr, mode: 'asRecorded' as const } } };
+		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, pre181Dry).forcingChanged).toBe(false);
 		// The accumulation fields (engine ≥ 0.20.0) are part of it: a change of mode or list flags it …
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, accumulationMode: 'asRecorded' } }, withZr).forcingChanged).toBe(true);
 		expect(

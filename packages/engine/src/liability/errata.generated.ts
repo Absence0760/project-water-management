@@ -139,7 +139,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"firstAffected": "1.14.0",
 		"fixedIn": "1.69.0",
 		"severity": "Medium",
-		"appliesWhen": "Two or more river off-takes of one priority from one source that keep different flows in the river (a hands-off flow, keeping the EWR at the source, or the senior users' requirement; none counts as 0)",
+		"appliesWhen": "Two or more river off-takes of one priority from one source that keep different flows in the river (a hands-off flow, keeping the EWR at the source, or the priority users' requirement; none counts as 0)",
 		"summary": "The off-takes shared the flow above the lowest keep among them, so the ones with a higher keep together took the river below it (the dam-transfer form of this was ER-11)",
 		"source": "model.md §2.6a; engine-audit.md N6"
 	},

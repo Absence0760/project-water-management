@@ -6,7 +6,7 @@
 	// buildOp, which runs the engine's validator. Whether the op applies to
 	// the base run is the server's check, shown in the list after saving.
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
+	import { BOREHOLE_MODES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName, resolveCatchmentAreaKm2 } from '@water-management/engine';
 	import { findSystem, systemLabel, systemsOf } from '$lib/model/systems';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { guardUnsaved } from '$lib/nav/unsaved';
@@ -51,8 +51,9 @@
 	const loadRestrictionEditor = () => import('$lib/components/settings/DroughtRestrictionFields.svelte');
 	// settings.set ewrDailySource (engine ≥ 1.77.0, issue #460): the daily outlet EWR's source, in the Settings tab's own editor.
 	const loadEwrDailyEditor = () => import('$lib/components/settings/EwrDailySourceFields.svelte');
-	// The area ratio's numerator, as the Settings form shows it: the units' areas summed (after the ops listed).
-	const farmAreaKm2 = $derived(nodes.filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0));
+	// The area ratio's numerator, as the run works it out and the Settings form shows it: the area the natural flow is
+	// made on (after the ops listed): the calibration override, else the units' areas summed.
+	const ewrModelAreaKm2 = $derived(resolveCatchmentAreaKm2({ catchmentAreaKm2: input.settings.calibration?.catchmentAreaKm2 ?? null }, input));
 	const ewrSites = $derived(siteOptions(nodes.filter((n) => n.kind !== 'gauge' || n.downstreamNodeId === null || n.ewrSite !== false)));
 	const ewrSiteOption = $derived(ewrSites.find((o) => (o.id ?? OUTLET_SITE) === d.ewrSite));
 	const ewrCurrent = $derived(d.kind === 'ewrRule.set' && d.ewrSite ? siteTable(input, d.ewrSite === OUTLET_SITE ? null : d.ewrSite) : undefined);
@@ -192,7 +193,7 @@
 			<legend>{label}</legend>
 			<Lazy load={loadEwrDailyEditor}>
 				{#snippet children(EwrDailySourceFields)}
-					<EwrDailySourceFields bind:value={d.ewrDaily} announce={false} modelAreaKm2={farmAreaKm2} {projectId} />
+					<EwrDailySourceFields bind:value={d.ewrDaily} announce={false} modelAreaKm2={ewrModelAreaKm2} {projectId} />
 				{/snippet}
 			</Lazy>
 			<!-- Unset is the pragmatic EWR, as the engine runs it, so there is always a "now". -->
@@ -572,7 +573,7 @@
 				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
 			{/each}
 		</fieldset>
-		<p class="hint">What the allocation mode caps or scales a run to (Settings › Registered volumes). A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
+		<p class="hint">What a scenario’s allocation mode caps or scales its run to (the baseline only compares). A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
 	{:else if d.kind === 'cropArea.set'}
 		<div class="form-row">
 			<div class="field">

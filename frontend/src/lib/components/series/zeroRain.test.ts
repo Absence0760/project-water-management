@@ -44,8 +44,34 @@ describe('zeroRainShading', () => {
 		// CHIRPS dry over the run too, with the CHIRPS check on: a dry spell that may be real, not shaded.
 		const chirps = { startDate: s.startDate, values: s.values.slice() };
 		expect(zeroRainShading(s, on, chirps, 'monthly', { dq: { ...dq, zeroRunChirpsCheck: true } }).days).toBe(0);
-		// Positive control: CHIRPS as usual over the run keeps it flagged.
-		expect(zeroRainShading(s, on, series(), 'monthly', { dq: { ...dq, zeroRunChirpsCheck: true } }).days).toBeGreaterThanOrEqual(92);
+		// Positive control: CHIRPS as usual over the run keeps it flagged; engine ≥ 1.81.0 (issue #507 item 3) sets aside
+		// only its days CHIRPS reads more than 2 mm on (the fixture rains every other day), the rest stay dry.
+		const usual = series();
+		let wet = 0;
+		for (let i = idx('2003-05-01'); i <= idx('2003-07-31'); i++) if (usual.values[i]! > 2) wet++;
+		expect(wet).toBeGreaterThan(0);
+		expect(wet).toBeLessThan(92);
+		expect(zeroRainShading(s, on, usual, 'monthly', { dq: { ...dq, zeroRunChirpsCheck: true } }).days).toBe(wet);
+	});
+
+	it('shades only the days a run sets aside: a flagged run’s days CHIRPS reads 2 mm or less on stay dry, unshaded, and the caption says so (engine ≥ 1.81.0)', () => {
+		const s = series();
+		for (let i = idx('2003-05-01'); i <= idx('2003-07-31'); i++) s.values[i] = 0;
+		// CHIRPS: 5 mm on the run's first ten days, 1 mm (drizzle) on the next five, 5 mm on the rest.
+		const chirps = { startDate: s.startDate, values: s.values.map(() => 5 as number | null) };
+		for (let i = idx('2003-05-11'); i <= idx('2003-05-15'); i++) chirps.values[i] = 1;
+		const r = zeroRainShading(s, zr({ mode: 'missing', keepDry: [], missing: [] }), chirps, 'monthly', { dq: defaultDataQualitySettings() });
+		const run = r.ranges.filter((x) => x.end >= '2003-05-01' && x.start <= '2003-07-31');
+		// The fixture's 0 mm on 2003-04-30 starts the flagged run a day early.
+		expect(run).toEqual([
+			{ start: '2003-04-30', end: '2003-05-10' },
+			{ start: '2003-05-16', end: '2003-07-31' }
+		]);
+		expect(r.caption).toContain('(5 other days of flagged runs stay dry: CHIRPS reads 2 mm or less)');
+		// Positive control: a 0.5 mm threshold fills the drizzle days too, one shaded range, no kept-dry note.
+		const low = zeroRainShading(s, zr({ mode: 'missing', keepDry: [], missing: [], fillAboveChirpsMm: 0.5 }), chirps, 'monthly', { dq: defaultDataQualitySettings() });
+		expect(low.ranges.filter((x) => x.end >= '2003-05-01' && x.start <= '2003-07-31')).toEqual([{ start: '2003-04-30', end: '2003-07-31' }]);
+		expect(low.caption).not.toContain('stay dry');
 	});
 
 	it('shades a listed missing period, clipped to the series', () => {

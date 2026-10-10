@@ -102,6 +102,13 @@ describe('the other water users’ pumps table (engine 1.58.0)', () => {
 		expect(body).not.toContain('Mill');
 	});
 
+	it('shows a user’s priority as Priority / Non-priority, not the stored senior / junior (#507)', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: withUsers([user(), user({ nodeId: 'm', name: 'Mill', priority: 'junior' })]) } }).body);
+		expect(body).toContain('Town below 95% Priority 800');
+		expect(body).toContain('Mill below 95% Non-priority 800');
+		expect(body).not.toMatch(/senior|junior/i);
+	});
+
 	it('has no pumps table when no user has a pump capacity', () => {
 		const body = text(render(HumanImpactTables, { props: { summary: withUsers([user()]) } }).body);
 		expect(body).not.toContain('pumps');

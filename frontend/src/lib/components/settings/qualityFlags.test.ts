@@ -33,6 +33,19 @@ describe('the quality-flag fields (Settings → Calibration record)', () => {
 	});
 });
 
+describe('the river-stops months (engine ≥ 1.81.0, issue #507 item 2)', () => {
+	it('defaults to none', () => {
+		expect(base().zeroFlowMonths).toEqual([]);
+	});
+
+	it('blocks Save on months the API refuses (a stored list edited by hand); a valid list or none is fine', () => {
+		expect(qualityFlagsError({ ...base(), zeroFlowMonths: [2, 3, 4] })).toBeNull();
+		expect(qualityFlagsError({ ...base(), zeroFlowMonths: [13] })).toBe('Months the river stops: Each river-stops month must be a calendar month, 1 to 12.');
+		const { zeroFlowMonths: _z, ...old } = base();
+		expect(qualityFlagsError(old)).toBeNull();
+	});
+});
+
 describe('ratingProblem', () => {
 	const rating = (r: Partial<{ gaugedMaxM3s: number | null; gaugedMinM3s: number | null; source: string }>): QualityFlagSettings => ({
 		...base(),

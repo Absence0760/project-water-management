@@ -226,7 +226,7 @@ rows and columns don't break it.
   §2.9f): an optional `[EWR options]` sheet with the defined names
   `zEwrOpt_Method` (*Pragmatic*, *TAB file* or *Percentile tables*, case
   ignored; blank = Pragmatic), `zEwrOpt_Scaling` (*MAR ratio* or *Area
-  ratio*; blank = MAR ratio), `zEwrOpt_TableMar` (Mm³/a) and
+  ratio*; blank = Area ratio, the default since 2026-10-10, issue #90 B2), `zEwrOpt_TableMar` (Mm³/a) and
   `zEwrOpt_TableArea` (km², may be blank), `zEwrOpt_TabM3s` (12 cells, Oct …
   Sep, m³/s), `zEwrOpt_PctPoints` (10 cells, 0.1 … 0.99) and
   `zEwrOpt_NaturalPct` / `zEwrOpt_ReservePct` (12 rows × 10 columns, m³/s)

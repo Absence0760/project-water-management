@@ -1,7 +1,9 @@
 // View helpers for ApiKeysPanel (WP-2.9, docs/ui.md § API keys): a key's
 // state, the words for its row, and the curl example. Pure, so they are
 // unit-tested (apiKeys.test.ts).
+import { SERIES_KINDS } from '@water-management/engine';
 import type { ApiKey, ApiKeySeries } from '$lib/api/types';
+import type { FileFormat } from '$lib/components/common/formatHelp';
 import { fmtDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
@@ -90,6 +92,24 @@ export const INGEST_EXAMPLE_BODY = JSON.stringify(
 	null,
 	2
 );
+
+/** The panel's Expected format of a request (issue #456; the File formats help page, issue #477). */
+export const INGEST_FORMAT: FileFormat = {
+	id: 'ingest-request',
+	title: 'Logger readings sent with an API key',
+	where: 'Settings & calibration → API keys',
+	accepts: 'JSON (Content-Type: application/json), sent with POST to /ingest/v1/series/merge with the key as Authorization: Bearer <key>.',
+	rules: [
+		`\`kind\`: one of ${SERIES_KINDS.map((k) => `\`${k}\``).join(', ')}.`,
+		'`name`: the series’ name, as the Data page shows it. A key limited to some series writes only those. A name the project doesn’t have yet makes a new series only while the project has no outlet series of that kind; otherwise add the series on the Data page first (the request is answered 409).',
+		'`unit`: flow in m3/s, l/s, m3/day, m3/h or ML/day; rain and evaporation in mm, cm or in. The values are converted to m³/s or mm when stored.',
+		'`startDate` (YYYY-MM-DD) and `values`, one a day from that date. Only the days sent are touched: new ones are added, changed ones corrected, and a `null` clears its day (unlike an upload’s Append / update, which keeps the stored value).',
+		'Optional: `source`, a label of up to 100 characters kept in History.',
+		'A body the server can’t take is answered 400, and its `details` name each problem’s place in the body (`["values", 3]`); nothing is written.'
+	],
+	example: INGEST_EXAMPLE_BODY,
+	files: [{ name: 'ingest-example.json', text: INGEST_EXAMPLE_BODY, type: 'application/json' }]
+};
 
 export function curlExample(base: string, series: ApiKeySeries | null, today: string): string {
 	const s = series ?? { kind: 'flow_logger_m3s', name: 'Logger' };

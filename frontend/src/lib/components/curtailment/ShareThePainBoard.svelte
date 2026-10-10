@@ -5,7 +5,7 @@
 	the EWR is met (bounded 0–100 %, never a negative demand). The equitable
 	share is one sentence in the intro, with its footnote, not a stage: every
 	hydrological unit gets the same %, and its total is always today's (issue
-	#177). Other water users are their own rows, marked senior or junior,
+	#177). Other water users are their own rows, marked priority or non-priority,
 	outside the share. View model:
 	./shareThePain.ts. Presentation only: every figure is the engine's.
 -->
@@ -114,7 +114,7 @@
 						<tr>
 							<th scope="row">
 								{r.name}
-								<span class="badge" class:badge-senior={r.priority === 'senior'}>{r.priority === 'senior' ? 'senior, not curtailed' : 'junior, curtailed'}</span>
+								<span class="badge" class:badge-senior={r.priority === 'senior'}>{r.priority === 'senior' ? 'priority, not curtailed' : 'non-priority, curtailed'}</span>
 							</th>
 							<td class="num">{r.demand}</td>
 							<td>{@render cell(r.today)}</td>
@@ -142,7 +142,7 @@
 		<em>EWR met</em> starts from the equitable share and removes each hydrological unit's supply cut for its EWR charge; it never goes
 		below 0 % of demand, or below a hydrological unit's basic-needs floor ({DEMAND_NORMS.basicLitresPerPersonDay} litres a person a
 		day for the people its domestic and municipal demands serve; what the floor keeps of the cut is noted in its row). A hydrological unit with no demand has nothing to cut: any charge it carries is to store less or pass inflow,
-		noted in its row. A junior user is cut for its charge; a senior one is not, and its charge stands.
+		noted in its row. A non-priority user is cut for its charge; a priority one is not, and its charge stands.
 	</p>
 </section>
 

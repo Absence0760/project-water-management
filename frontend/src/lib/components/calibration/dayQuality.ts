@@ -13,7 +13,7 @@ export const FLOW_ROWS: { flag: FlowDayFlag; label: string }[] = [
 	{ flag: 'inRange', label: 'In the gauged range' },
 	{ flag: 'aboveRating', label: 'Above the highest gauging' },
 	{ flag: 'belowRating', label: 'Below the lowest gauging' },
-	{ flag: 'suspect', label: 'Suspect (outlier or flat stretch)' },
+	{ flag: 'suspect', label: 'Suspect (outlier, flat stretch or doubtful zero flow)' },
 	{ flag: 'infilled', label: 'Infilled' },
 	{ flag: 'humanUse', label: 'Human use dominant' },
 	{ flag: 'missing', label: 'Missing' }

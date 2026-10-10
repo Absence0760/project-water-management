@@ -106,6 +106,7 @@ def default_settings() -> dict:
             "accumulationMode": "spread",
             "keepReadings": [],
             "addAccumulations": [],
+            "fillAboveChirpsMm": 2,
         },
         "calibration": {"rainThresholdMm": 2, "catchmentAreaKm2": None},
         "ewrPragmaticM3PerDay": [0] * 12,
@@ -378,6 +379,17 @@ def prepare_rain(settings: dict, series: dict) -> dict:
 
     kept_dry = flagged_days & keep_dry if mode == "missing" else set()
     flagged_out = flagged_days - kept_dry  # left out of the fit, day by day
+    # §2.4c (engine ≥ 1.81.0): in 'missing' mode a flagged day whose stored
+    # CHIRPS reads a value (finite, ≥ 0) at or below the threshold keeps the
+    # gauge's 0. It stays out of the factor fit like any flagged day.
+    threshold = zr.get("fillAboveChirpsMm")
+    if threshold is None:
+        threshold = 2
+    chirps_dry = (
+        {o for o in flagged_days - kept_dry if valid(h.get(o)) and h.get(o) <= threshold}
+        if mode == "missing"
+        else set()
+    )
     base_left_out = flagged_out | missing_days
     det_factors = fit_chirps_factors(c, h, base_left_out, low_years)
     blocked = missing_days | (keep_dry if mode == "missing" else set())
@@ -387,7 +399,7 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     # 'spread' mode its day is set aside (CHIRPS, then forecast, fill it).
     factors = fit_chirps_factors(c, h, base_left_out | window_days | set(outage_readings), low_years)
 
-    set_aside = ((flagged_days - kept_dry) if mode == "missing" else set()) | missing_days
+    set_aside = ((flagged_days - kept_dry - chirps_dry) if mode == "missing" else set()) | missing_days
     set_aside -= window_days - missing_days
     if acc_mode != "asRecorded":
         set_aside |= set(outage_readings)
@@ -438,6 +450,7 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     last = max(b for _, b in cands) if cands else None
     diag = {
         "zero_run_days_set_aside": len(set_aside - missing_days - set(outage_readings)),
+        "zero_run_days_kept_dry_by_chirps": len(chirps_dry),
         "accumulation_windows": len(windows),
         "accumulation_readings_set_aside": len(outage_readings),
         "low_vs_chirps_years": len(low_years),

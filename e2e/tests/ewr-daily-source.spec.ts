@@ -67,6 +67,11 @@ test('a .tab file sets the TAB flows (shown converted before use), and the run s
 	await preview.getByRole('button', { name: 'Use these values' }).click();
 	await expect(daily.getByLabel('TAB flow, Oct, m³/s')).toHaveValue(/^0\.470/);
 	await expect(daily.getByLabel('Table MAR (Mm³/a)')).toHaveValue('49.8');
+	// A new source scales by area (the client's hydrologist, issue #90 B2), which a .tab can't give: the MAR ratio is a pick.
+	await expect(daily.getByLabel('Scale the tables by')).toHaveValue('area');
+	await expect(daily.getByTestId('ewr-scale-factor')).toHaveText('Scale factor: enter the table’s catchment area.');
+	await expect(daily.getByTestId('ewr-scaled-pending')).toBeVisible();
+	await daily.getByLabel('Scale the tables by').selectOption('mar');
 	await expect(daily.getByTestId('ewr-scale-factor')).toContainText('49.8 Mm³/a');
 	await saveSettings(page);
 
@@ -74,6 +79,31 @@ test('a .tab file sets the TAB flows (shown converted before use), and the run s
 	await createRun(page.request, id, 'TAB file');
 	await page.goto(`/projects/${id}?tab=runs`);
 	await expect(page.getByTestId('outlet-ewr-source').first()).toContainText(/^EWR: the DRM TAB file × [\d.]+ \(natural MAR [\d.]+ ÷ 49\.8 Mm³\/a\)$/);
+});
+
+// The scaled tables (issue #90 B1 gap a): each value × s, in Settings as soon as s is known (the area ratio needs no
+// run) and with the run, from its own settings snapshot and s. The units are 12 + 8 = 20 km²; the table's 40 km², so s = 0.5.
+test('the TAB flows scaled to the model show in Settings and with the run that read them', async ({ page, owner }) => {
+	void owner;
+	const id = await seed(page.request, 'Daily EWR, scaled tables');
+	await updateSettings(page.request, id, {
+		ewrDailySource: { method: 'tab', scaling: 'area', tableMarMm3: null, tableAreaKm2: 40, tabM3s: TAB_M3S, naturalPctM3s: null, reservePctM3s: null }
+	});
+	await page.goto(`/projects/${id}?tab=settings`);
+	const daily = page.getByRole('group', { name: /^The daily EWR at the outlet/ });
+	await expect(daily.getByTestId('ewr-scale-factor')).toHaveText('Scale factor s = 20 km² ÷ 40 km² = 0.5.');
+	const scaled = daily.getByTestId('ewr-scaled').getByRole('table', { name: /^TAB flows scaled to the model/ });
+	await expect(scaled).toContainText('× s = 0.5');
+	// Oct 0.4704 × 0.5, Feb 0.0579 × 0.5.
+	await expect(scaled.getByRole('row', { name: /^m³\/s/ }).getByRole('cell')).toHaveText(['0.235', '0.200', '0.150', '0.100', '0.029', '0.050', '0.075', '0.100', '0.125', '0.150', '0.175', '0.200']);
+
+	await createRun(page.request, id, 'Scaled TAB');
+	await page.goto(`/projects/${id}?tab=runs`);
+	await expect(page.getByTestId('outlet-ewr-source').first()).toHaveText('EWR: the DRM TAB file × 0.5 (area 20 ÷ 40 km²)');
+	const runScaled = page.getByTestId('run-ewr-scaled');
+	await runScaled.getByText(/^The daily EWR’s tables as this run read them/).click();
+	await expect(runScaled.getByRole('row', { name: /^m³\/s/ }).getByRole('cell').first()).toHaveText('0.235');
+	await expectNoViolations(page);
 });
 
 // The .rul half, on its own: one test with both halves made five page loads and three whole-page scans of Settings

@@ -5,7 +5,7 @@
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
 	// for a run that has any of them (humanImpacts.ts), on Hydrological units
 	// (issue #137) and in the printable report.
-	import { CROPS_TAKE_KEY, DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
+	import { CROPS_TAKE_KEY, DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, USER_PRIORITY_LABEL, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
@@ -335,7 +335,7 @@
 					{@const short = u.fractionSupplied < SUPPLY_TARGET}
 					<tr class:flag={short}>
 						<th scope="row">{u.name}{#if short}<span class="badge badge-warn">below {fmtPct(SUPPLY_TARGET, 0)}</span>{/if}</th>
-						<td>{u.priority}</td>
+						<td>{USER_PRIORITY_LABEL[u.priority]}</td>
 						<td class="num">{fmtNum(u.avgDemandM3Day)}</td>
 						<td class="num">{fmtNum(u.avgSuppliedM3Day)}</td>
 						<td class="num" class:neg={u.avgDeficitM3Day > 0.5}>{fmtNum(u.avgDeficitM3Day)}</td>

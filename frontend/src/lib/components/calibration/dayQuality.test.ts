@@ -32,7 +32,7 @@ describe('the data-quality panel (CR-22)', () => {
 			{ label: 'In the gauged range', days: '3', share: '50.0 %', treatment: 'scored' },
 			{ label: 'Above the highest gauging', days: '1', share: '16.7 %', treatment: 'censored at the highest gauging' },
 			{ label: 'Below the lowest gauging', days: '0', share: '0.0 %', treatment: 'left out' },
-			{ label: 'Suspect (outlier or flat stretch)', days: '1', share: '16.7 %', treatment: 'left out' },
+			{ label: 'Suspect (outlier, flat stretch or doubtful zero flow)', days: '1', share: '16.7 %', treatment: 'left out' },
 			{ label: 'Missing', days: '1', share: '16.7 %', treatment: 'no reading' }
 		]);
 	});

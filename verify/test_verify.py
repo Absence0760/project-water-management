@@ -41,6 +41,11 @@ MUTANTS = [
         "if False:",
     ),
     (
+        "a flagged zero-rain day is filled whatever CHIRPS reads (before engine 1.81.0, B2)",
+        'set_aside = ((flagged_days - kept_dry - chirps_dry) if mode == "missing" else set()) | missing_days',
+        'set_aside = ((flagged_days - kept_dry) if mode == "missing" else set()) | missing_days',
+    ),
+    (
         "a reading after a blank outage stays on its day (Q31)",
         "set_aside |= set(outage_readings)",
         "pass",

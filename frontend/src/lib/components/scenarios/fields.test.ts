@@ -378,3 +378,11 @@ describe('a crop and a land-cover patch (crop.set, landCover.set, engine 1.35.0)
 		expect(formatValue(CROP_FIELD_SPECS.irrigationEfficiency.spec, null)).toBe("the hydrological unit's");
 	});
 });
+
+describe('an other water user’s priority (issue #507 item 4)', () => {
+	it('offers the stored senior / junior as Priority / Non-priority, and shows them that way', () => {
+		const spec = NODE_FIELD_SPECS.userPriority.spec;
+		expect(spec).toMatchObject({ t: 'enum', options: [{ value: 'senior', label: 'Priority' }, { value: 'junior', label: 'Non-priority' }] });
+		expect(formatValue(spec, 'junior')).toBe('Non-priority');
+	});
+});

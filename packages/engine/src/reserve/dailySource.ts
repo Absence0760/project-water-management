@@ -75,9 +75,15 @@ export const EWR_DAILY_METHOD_LABELS: Record<EwrDailyMethod, string> = {
 	percentile: 'the DRM percentile tables (natural and total Reserve flow)'
 };
 
-/** A new source: the pragmatic EWR, scaled by MAR, with empty tables (the Settings form's starting point). */
+/**
+ * A new source: the pragmatic EWR, scaled by area, with empty tables (the
+ * Settings form's starting point, and the importers' fallback). The area
+ * ratio is the default since 2026-10-10 (the client's hydrologist, issue #90
+ * B2; the MAR ratio before). Only a new source takes it: a stored source
+ * keeps its own scaling, and the run never reads this, so no run moves.
+ */
 export function blankEwrDailySource(): EwrDailySource {
-	return { method: 'pragmatic', scaling: 'mar', tableMarMm3: null, tableAreaKm2: null, tabM3s: null, naturalPctM3s: null, reservePctM3s: null };
+	return { method: 'pragmatic', scaling: 'area', tableMarMm3: null, tableAreaKm2: null, tabM3s: null, naturalPctM3s: null, reservePctM3s: null };
 }
 
 function monthsIssue(v: unknown): string | null {

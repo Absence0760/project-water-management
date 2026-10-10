@@ -2,7 +2,9 @@
 // docs/allocations.md): licence conditions through the API and the table's
 // CHECKs, the allocations every run's input now carries (without names), the
 // project's comparison band (settings.allocationTolerance) and a capped run
-// (settings.allocationMode, engine 1.18.0) end to end.
+// (settings.allocationMode, engine 1.18.0) end to end. Since issue #507 a cap
+// is a scenario's (settings.set allocationMode): the baseline compares only,
+// and a PATCH that caps or fully allocates it is refused.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 
@@ -152,17 +154,40 @@ describe('allocations in the run input (engine 1.18.0)', () => {
 	});
 });
 
+/** A baseline run, then a scenario on it that caps use at the registered volumes (issue #507): the scenario run's id. */
+async function cappedRun(label: string): Promise<string> {
+	const baseRun = await owner.call('POST', `/projects/${projectId}/runs`, { label: `${label} (baseline)` });
+	expect(baseRun.status, JSON.stringify(baseRun.body)).toBe(201);
+	const sc = await owner.call('POST', `/projects/${projectId}/scenarios`, {
+		name: label,
+		baseRunId: baseRun.body.run.id,
+		ops: [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }]
+	});
+	expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+	const run = await owner.call('POST', `/projects/${projectId}/scenarios/${sc.body.scenario.id}/runs`, {});
+	expect(run.status, JSON.stringify(run.body)).toBe(201);
+	return run.body.run.id;
+}
+
 describe('the allocation settings (issue #72)', () => {
 	let runId: string;
 
-	it('caps a run at the registered volume (settings.allocationMode), and says so', async () => {
+	it('refuses a baseline cap or full allocation (issue #507), and keeps compare only', async () => {
+		for (const allocationMode of ['cap', 'fullAllocation']) {
+			const res = await owner.call('PATCH', `/projects/${projectId}`, { settings: { allocationMode } });
+			expect(res.status).toBe(400);
+			expect(res.body.error).toMatch(/^settings\.allocationMode: the baseline only compares registered volumes/);
+		}
+		// Positive control: compare only (and the band) save.
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { allocationMode: 'none', allocationTolerance: 0.2 } })).status).toBe(200);
+		expect((await owner.call('GET', `/projects/${projectId}`)).body.project.settings.allocationMode).toBe('none');
+	});
+
+	it('caps a scenario run at the registered volume (settings.set allocationMode), and says so', async () => {
 		await asOwner('DELETE FROM allocation WHERE project_id = $1', [projectId]);
 		// Farm A's surface volume: a trickle, so the cap binds in both water years.
 		expect((await owner.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: farmA.id, volumeM3PerYear: 500 })).status).toBe(201);
-		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { allocationMode: 'cap', allocationTolerance: 0.2 } })).status).toBe(200);
-		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'capped' });
-		expect(run.status, JSON.stringify(run.body)).toBe(201);
-		runId = run.body.run.id;
+		runId = await cappedRun('capped');
 		const [{ summary }] = await asOwner('SELECT summary FROM model_run WHERE id = $1', [runId]);
 		expect(summary.verification.passed).toBe(true);
 		expect(summary.allocations).toMatchObject({ mode: 'cap', tolerance: 0.2, used: 1, notMatched: 0 });
@@ -198,7 +223,7 @@ describe('the allocation settings (issue #72)', () => {
 		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { allocationTolerance: 1 } })).status).toBe(400);
 		expect((await viewer.call('PATCH', `/projects/${projectId}`, { settings: { allocationTolerance: 0.3 } })).status).toBe(403);
 		const s = (await viewer.call('GET', `/projects/${projectId}`)).body.project.settings;
-		expect([s.allocationMode, s.allocationTolerance]).toEqual(['cap', 0.2]);
+		expect([s.allocationMode, s.allocationTolerance]).toEqual(['none', 0.2]);
 	});
 
 	it('a capped run keeps to the stored licence’s months of use and maximum rate (engine 1.37.0)', async () => {
@@ -206,9 +231,7 @@ describe('the allocation settings (issue #72)', () => {
 		// A volume far above the demand, so only the conditions bind: January only, at most 0.0001 m³/s (8.64 m³ a day).
 		const created = await owner.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: farmA.id, volumeM3PerYear: 1e9, months: [1], maxRateM3s: 0.0001 });
 		expect(created.status, JSON.stringify(created.body)).toBe(201);
-		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'licence conditions' });
-		expect(run.status, JSON.stringify(run.body)).toBe(201);
-		const id = run.body.run.id;
+		const id = await cappedRun('licence conditions');
 		const [{ summary }] = await asOwner('SELECT summary FROM model_run WHERE id = $1', [id]);
 		expect(summary.verification.passed).toBe(true);
 		const series = async (nodeId: string, key: string) =>

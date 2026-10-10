@@ -199,8 +199,8 @@
 			<h4 id="other-users-heading">Other water users</h4>
 			<p class="muted small">
 				Towns, industry and unlisted users are outside the irrigation equitable share. They are charged for the EWR by
-				their net impact (taken − returned) like hydrological units. A <strong>junior</strong> user is curtailed for its charge; a
-				<strong>senior</strong> one is not, and its charge stands (it is not moved onto the hydrological units). Daily averages over {range}.
+				their net impact (taken − returned) like hydrological units. A <strong>non-priority</strong> user is curtailed for its charge; a
+				<strong>priority</strong> one is not, and its charge stands (it is not moved onto the hydrological units). Daily averages over {range}.
 			</p>
 			<div class="table-wrap">
 				<table class="data" aria-labelledby="other-users-heading">
@@ -222,7 +222,7 @@
 							{@const short = u.fractionSupplied !== null && u.fractionSupplied < SUPPLY_TARGET}
 							<tr>
 								<th scope="row">{farmNames[u.nodeId] ?? u.name}{#if short}<span class="badge badge-warn">below {fmtPct(SUPPLY_TARGET, 0)}</span>{/if}</th>
-								<td>{u.curtailed ? 'junior (curtailed)' : 'senior (not curtailed)'}</td>
+								<td>{u.curtailed ? 'Non-priority (curtailed)' : 'Priority (not curtailed)'}</td>
 								<td class="num">{fmtVol(u.demandM3Day)}</td>
 								<td class="num">{fmtVol(u.suppliedM3Day)}</td>
 								<td class="num" class:neg={short}>{u.fractionSupplied === null ? '–' : fmtPct(u.fractionSupplied)}</td>

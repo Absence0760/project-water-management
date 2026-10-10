@@ -230,7 +230,7 @@
 				{#if g === 'reach'}
 					<p class="hint section-note" data-testid="reach-note">
 						Water lost into the river bed and banks between {node.name || 'this hydrological unit'} and the next one downstream: it leaves the catchment
-						and doesn’t come back as baseflow. The next unit receives the outflow less the loss; senior water users downstream are still passed
+						and doesn’t come back as baseflow. The next unit receives the outflow less the loss; priority water users downstream are still passed
 						their demand in full. Leave it at 0 % unless the flow records show the river losing water here.
 					</p>
 				{/if}

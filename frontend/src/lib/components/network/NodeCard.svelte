@@ -84,6 +84,11 @@
 		</div>
 	{/if}
 
+	{#if node.kind === 'farm' && !isOutlet && !(node.areaKm2 > 0)}
+		<!-- A unit with no land of its own yet: one just added, or one Import plantings created for a farm the network didn't have (issue #477). -->
+		<p class="placing" data-testid="node-needs-placing"><strong>Needs placing:</strong> no catchment area yet. Set its area and where it drains with Edit.</p>
+	{/if}
+
 	<dl>
 		{#if !isOutlet}<div><dt>Drains into<HelpTip key="node.downstreamNodeId" /></dt><dd>{downstream}</dd></div>{/if}
 		{#if node.kind === 'user'}
@@ -111,6 +116,13 @@
 </section>
 
 <style>
+	.placing {
+		margin: 0;
+		padding: 0.4rem 0.6rem;
+		border-radius: var(--radius-sm);
+		background: var(--warning-soft);
+		font-size: 0.85rem;
+	}
 	.card {
 		display: grid;
 		gap: 0.75rem;
