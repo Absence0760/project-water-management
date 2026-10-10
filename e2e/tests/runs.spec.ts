@@ -314,7 +314,7 @@ test('a run past the cap drops the oldest run from the list straight away', asyn
 	await expect(list.getByRole('button', { name: /^Old 02/ })).toBeVisible();
 });
 
-test('a runs list that answers after a new run never puts back the list from before it', async ({ page, owner }) => {
+test('a runs list that answers after a new run never puts back the list from before it', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs late list');
 	await createRun(page.request, project.id, 'First');
@@ -324,7 +324,8 @@ test('a runs list that answers after a new run never puts back the list from bef
 	let release!: () => void;
 	const released = new Promise<void>((resolve) => (release = resolve));
 	let lists = 0;
-	await page.route(
+	await fetchRoute(
+		page,
 		(url) => url.pathname.endsWith(listUrl),
 		async (route) => {
 			if (route.request().method() !== 'GET' || ++lists === 1) return route.continue();
@@ -463,7 +464,7 @@ test('with a gauge covering the whole run there is no choice of days to make (po
 // read answers stayed deleted only by luck: the older list, arriving last, put
 // the run back and opened it ("not found"). Here the read is taken before the
 // delete and held until after it, every time.
-test('a run deleted while the list is still loading stays deleted', async ({ page, owner }) => {
+test('a run deleted while the list is still loading stays deleted', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs delete race');
 	await createRun(page.request, project.id, 'Baseline');
@@ -474,7 +475,8 @@ test('a run deleted while the list is still loading stays deleted', async ({ pag
 	let release = () => {};
 	const gate = new Promise<void>((r) => (release = r));
 	let served = 0;
-	await page.route(
+	await fetchRoute(
+		page,
 		(url) => url.pathname === `/projects/${project.id}/runs`,
 		async (route) => {
 			if (route.request().method() !== 'GET') return route.fallback();

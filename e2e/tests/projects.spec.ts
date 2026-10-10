@@ -127,10 +127,10 @@ test('a refused example import says why, keeps the empty list and lets you try a
 	await expect(start).toBeFocused();
 });
 
-test('an example whose run failed is created, and the card says so with the way in', async ({ page, owner }) => {
+test('an example whose run failed is created, and the card says so with the way in', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	// The real import, answered as if its run had failed (an example that runs can't be made to fail here).
-	await page.route(/\/projects\/import\?run=1$/, async (route) => {
+	await fetchRoute(page, /\/projects\/import\?run=1$/, async (route) => {
 		const res = await route.fetch();
 		const { runId, ...body } = (await res.json()) as { runId?: string; project: { id: string } };
 		void runId;

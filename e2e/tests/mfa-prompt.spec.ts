@@ -14,12 +14,12 @@ import { createProject, PASSWORD } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
-import { expect, test } from '../support/fixtures.ts';
+import { expect, test, type FetchRoute } from '../support/fixtures.ts';
 import { openRowMenu, row } from '../support/projects.ts';
 
 /** GET /auth/mfa as production would answer it for this owner, with `patch` laid over the real answer. */
-async function mfaStatusAs(page: Page, patch: Record<string, boolean>) {
-	await page.route(`${API_URL}/auth/mfa`, async (route: Route) => {
+async function mfaStatusAs(fetchRoute: FetchRoute, page: Page, patch: Record<string, boolean>) {
+	await fetchRoute(page, `${API_URL}/auth/mfa`, async (route: Route) => {
 		if (route.request().method() !== 'GET') return route.fallback();
 		const response = await route.fetch();
 		await route.fulfill({ response, json: { ...(await response.json()), ...patch } });
@@ -39,10 +39,10 @@ async function refuseDelete(page: Page, projectId: string, origin: string, code:
 	});
 }
 
-test('an owner without an authenticator is not prompted for the role alone; a refused action prompts, and leads to the Account page’s panel', async ({ page, owner, baseURL }) => {
+test('an owner without an authenticator is not prompted for the role alone; a refused action prompts, and leads to the Account page’s panel', async ({ page, owner, baseURL, fetchRoute }) => {
 	const project = await createProject(page.request, 'Banner farm');
 	// Production's answer for an owner: required, not enrolled. No banner, no badge (the operator's decision, 2026-10-03).
-	await mfaStatusAs(page, { required: true });
+	await mfaStatusAs(fetchRoute, page, { required: true });
 	await refuseDelete(page, project.id, new URL(baseURL!).origin, 'mfa_required');
 	await page.goto('/');
 	await expect(row(page, 'Banner farm')).toBeVisible();

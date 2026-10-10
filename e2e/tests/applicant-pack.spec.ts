@@ -73,7 +73,7 @@ async function issuePack(request: APIRequestContext, projectId: string, runId: s
 	return pack;
 }
 
-test('an applicant reads their own issued pack, anonymised, and shares it by link', async ({ page, owner, signIn, browser }) => {
+test('an applicant reads their own issued pack, anonymised, and shares it by link', async ({ page, owner, signIn, browser, fetchRoute }) => {
 	void owner;
 	// A nominated, published baseline with the declared rule and its ensemble.
 	const project = await seedRunnableProject(page.request, 'Applicant pack catchment');
@@ -138,7 +138,7 @@ test('an applicant reads their own issued pack, anonymised, and shares it by lin
 	await expect(view.getByTestId('applicant-pack-errata-since')).toHaveCount(0);
 	// ... and one listed when the API names one: no real erratum can be added from a test, so the live answer with one added.
 	const packApi = `${API_URL}/projects/${project.id}/scenarios/${scenarioId}/packs/${pack.id}`;
-	await a.route(packApi, async (route) => {
+	const errata = await fetchRoute(a, packApi, async (route) => {
 		const res = await route.fetch();
 		const body = await res.json();
 		body.verify.errataFoundSince = [{ id: 'ER-999', summary: 'A bug found after this pack was issued' }];
@@ -149,7 +149,7 @@ test('an applicant reads their own issued pack, anonymised, and shares it by lin
 	await expect(since).toContainText('Errata found since issue:');
 	await expect(since.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
 	await expectNoViolations(a);
-	await a.unroute(packApi);
+	await errata.unroute();
 	await a.reload();
 	await expect(view.getByTestId('applicant-pack-standing')).toHaveAttribute('data-status', 'issued');
 

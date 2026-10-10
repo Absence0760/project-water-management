@@ -419,12 +419,12 @@ test('Dams today is every dam together, and the card opens the Dams page', async
 	await expectNoViolations(page);
 });
 
-test('Dams today: a run from before the summary kept dam figures still shows it, from the daily series', async ({ page, owner }) => {
+test('Dams today: a run from before the summary kept dam figures still shows it, from the daily series', async ({ page, owner, fetchRoute }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary dams, older run');
 	await createRun(page.request, project.id, 'Baseline');
 	// Strip the dam figures from the run's summary, as a run saved before engine 1.2.0 has none.
-	await page.route(/\/runs\/[0-9a-f-]+$/, async (route) => {
+	await fetchRoute(page, /\/runs\/[0-9a-f-]+$/, async (route) => {
 		if (route.request().method() !== 'GET') return route.fallback();
 		const res = await route.fetch();
 		const body = (await res.json()) as { run: { summary: { farms: Record<string, unknown>[] } } };
