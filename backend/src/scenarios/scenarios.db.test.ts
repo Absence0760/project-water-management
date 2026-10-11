@@ -107,7 +107,7 @@ describe('a dam-raise scenario', () => {
 			runCount: 0,
 			lastRun: null
 		});
-		expect(res.body.check).toEqual({ applied: [{ index: 0, op: damRaise(c.farm.id, 120_000), notes: [expect.stringMatching(/^dam area when full \d+ → \d+ m² along the dam's own area–volume relation/)] }], problems: [], classified: ['baseline'], renamed: [], reIds: [] });
+		expect(res.body.check).toEqual({ applied: [{ index: 0, op: damRaise(c.farm.id, 120_000), notes: [expect.stringMatching(/^dam area when full \d+ → \d+ m² along the dam's own area–volume relation/)] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [] });
 		// The farm made the proposer's own: the same op is a proposal.
 		const owned = await owner.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ownedNodeIds: [c.farm.id] });
 		expect(owned.status).toBe(200);
@@ -208,7 +208,7 @@ describe('scenario ops', () => {
 
 		// A named farm that isn't the author's is another party's: baseline, until it is theirs.
 		const checked = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
-		expect(checked.body.check).toEqual({ applied: [{ index: 0, op: halve, notes: [] }], problems: [], classified: ['baseline'], renamed: [], reIds: [] });
+		expect(checked.body.check).toEqual({ applied: [{ index: 0, op: halve, notes: [] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [] });
 		expect(checked.body.scenario.opNames).toEqual([{ id: c.farm.id, name: 'Rooikloof' }]);
 		const owned = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ownedNodeIds: [c.farm.id] });
 		expect(owned.status).toBe(200);
@@ -258,7 +258,7 @@ describe('scenario ops', () => {
 		const everyone: ScenarioOp = { op: 'demand.scale', factor: 0.85 };
 		const sid = await create(u, c.projectId, { name: 'Everyone at 85 %', baseRunId: base, ops: [everyone], ownedNodeIds: [c.farm.id, c.other.id] });
 		const res = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
-		expect(res.body.check).toEqual({ applied: [{ index: 0, op: everyone, notes: ['2 farm(s) scaled'] }], problems: [], classified: ['baseline'], renamed: [], reIds: [] });
+		expect(res.body.check).toEqual({ applied: [{ index: 0, op: everyone, notes: ['2 farm(s) scaled'] }], problems: [], classified: ['baseline'], baseEwrRules: [], renamed: [], reIds: [] });
 		// Positive control: the same scale naming both owned farms is a proposal.
 		const named: ScenarioOp = { op: 'demand.scale', factor: 0.85, nodeIds: [c.farm.id, c.other.id] };
 		const sid2 = await create(u, c.projectId, { name: 'Both named at 85 %', baseRunId: base, ops: [named], ownedNodeIds: [c.farm.id, c.other.id] });
@@ -662,5 +662,29 @@ describe('a scenario saved before issue #385 with a name over two lines', () => 
 		expect((await asOwner('SELECT ops FROM scenario WHERE id = $1', [sid]))[0].ops).toEqual(row.ops);
 		// A new scenario can't take the old name either.
 		expect((await u.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'Copy', baseRunId: base, ops: [legacy] })).status).toBe(400);
+	});
+});
+
+// A base run from before 216 kept water for the EWR in its baseline (issue #523 B4). Its recorded input is
+// reproduced as it is, so the scenario runs with those rules without an op; the check lists them so the
+// comparison isn't read as "the EWR kept by this scenario".
+describe('a scenario on a base run that still keeps the EWR (issue #523 B4)', () => {
+	it('lists the base run’s EWR-keeping rules in the check, and none on a base from 216 on (positive control)', async () => {
+		const u = await signUp('BaseEwr');
+		const c = await catchment(u, 'Base EWR');
+		const base = await run(u, c.projectId, 'base');
+		const sid = await create(u, c.projectId, { name: 'Raise Rooikloof', baseRunId: base, ops: [damRaise(c.farm.id, 120_000)] });
+		expect((await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`)).body.check.baseEwrRules).toEqual([]);
+
+		// As a run recorded before 216 would hold it: Rooikloof's hands-off flow keeps the EWR.
+		await asOwner(
+			`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (SELECT jsonb_agg(CASE WHEN n ->> 'id' = $2 THEN n || '{"handsOffEwr": true}' ELSE n END) FROM jsonb_array_elements(inputs -> 'model' -> 'nodes') n)) WHERE id = $1`,
+			[base, c.farm.id]
+		);
+		const check = (await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`)).body.check;
+		expect(check.baseEwrRules).toEqual([expect.stringMatching(/^unit "Rooikloof": hands-off flow at a unit keeps the EWR, which only a scenario may do/)]);
+		// Reproducibility: the base input is the run's own, rules and all (nothing strips a recorded run).
+		const input = await withUser(u.id, (db) => loadRunInput(db, base));
+		expect(input.model.nodes.find((n: NetworkNode) => n.id === c.farm.id)!.handsOffEwr).toBe(true);
 	});
 });

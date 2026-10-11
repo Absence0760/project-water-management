@@ -1,6 +1,7 @@
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
+	import { baseEwrRulesLead } from './baseEwrRules';
 	// One scenario (docs/ui.md § Scenarios): the "Based on run X" banner, its
 	// changes (ops) with their class and the server's check, the red
 	// "Baseline assumptions changed" callout, and for an editor on a draft the
@@ -434,6 +435,16 @@
 
 	{#if data.checkError}
 		<div class="alert alert-warning" role="status">These changes can't be checked: {data.checkError}</div>
+	{/if}
+	{#if data.check?.baseEwrRules?.length}
+		{@const lines = data.check.baseEwrRules}
+		<!-- Issue #523 B4: a base run from before 216 kept the EWR in its baseline; the comparison isn't this scenario's doing. -->
+		<div class="alert alert-info" role="note" data-testid="scenario-base-ewr-rules">
+			{baseEwrRulesLead(lines.length)}
+			<ul>
+				{#each lines as l, i (i)}<li>{nameIds(l, names)}</li>{/each}
+			</ul>
+		</div>
 	{/if}
 	{#if baseError}
 		<div class="alert alert-warning" role="status">The base run's model couldn't be loaded ({baseError}), so changes are listed without their current values.</div>

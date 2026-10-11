@@ -62,10 +62,13 @@ import { CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenario
  */
 function checkView(c: ScenarioCheck, role: Role) {
 	const view = { applied: c.applied, problems: c.problems, classified: c.classified, ...(c.masked ? { maskedRules: c.maskedRules } : {}) };
-	if (role === 'contributor') return view;
-	// The unmasked reasons are the assessors' (164): editors and up, who read every farm anyway. Never a contributor.
-	return { ...view, renamed: c.renamed, reIds: c.reIds, ...(c.masked && rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
+	// The base run's own EWR-keeping rules (issue #523 B4): a contributor learns how many, never where (a unit may be hidden from them).
+	if (role === 'contributor') return { ...view, baseEwrRules: c.baseEwrRules.map(() => BASE_EWR_RULE_UNNAMED) };
+	return { ...view, baseEwrRules: c.baseEwrRules, renamed: c.renamed, reIds: c.reIds, ...(c.masked && rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
 }
+
+/** A base run's EWR-keeping rule as a contributor reads it: no unit named. */
+const BASE_EWR_RULE_UNNAMED = 'a rule in the base run keeps water for the EWR';
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
 async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {

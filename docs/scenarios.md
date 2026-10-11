@@ -537,16 +537,27 @@ scenario's input is a `ModelInput` like any other):
   to the same model with them stored.
 - **The save.** `PUT /projects/:id/model` and `PATCH /projects/:id` refuse
   one (400 `ewr_rule_scenario_only`, one line per rule in `details`;
-  [api.md](./api.md)); the forms show each switch disabled with the reason
-  ([ui.md](./ui.md)).
+  [api.md](./api.md)); the workspace's forms show each switch disabled with
+  the reason ([ui.md](./ui.md)). Only the project's own editor is the
+  baseline (`new ModelEditor({ baseline: true })`, Settings'
+  `DroughtRestrictionFields baseline`): Override mode reuses the same tables
+  and forms with every switch working and no issue raised, so ticking one
+  there records the op above.
 - **Arriving from outside a save** (a project file, a copy, a restore of an
   older revision or of a run's inputs, which may be a scenario's): switched
   off, the revision's reason naming them (`backend/src/projects/ewrRules.ts`).
 - **Stored before.** Migration 216 switched every stored one off and recorded
   what each was on the project's History (`model.ewr_rules_reset`,
   [data-model.md](./data-model.md)), so it can be rebuilt as a scenario.
-  Earlier runs keep them in their recorded inputs; a scenario on such a base
-  run still runs with them.
+  Earlier runs keep them in their recorded inputs, which are never stripped
+  (a run reproduces as it ran), so a scenario on such a base run runs with
+  them without an op of its own. Its check says so: `check.baseEwrRules`
+  lists each (`checkScenario`, `backend/src/scenarios/execute.ts`; a
+  contributor gets a line per rule without the unit's name), and the
+  scenario page shows them in a note (*The base run carries … water for the
+  EWR …*), so the comparison isn't read as the EWR kept by the scenario.
+  Rebasing onto a run from 216 on drops them unless the scenario's ops keep
+  them.
 
 `pnpm list:ewr-rules` marks each one `[scenario only]`
 ([run-locally.md § Which rules keep water for the EWR](./run-locally.md#which-rules-keep-water-for-the-ewr)).

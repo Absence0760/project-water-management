@@ -1799,7 +1799,9 @@ per rule naming where it is and the scenario op that keeps it. A set flow
 (`handsOffM3Day`, a pass-inflow release with amounts) is accepted. A project
 file (`POST /projects/import`), a copy and a restore bring such rules in
 switched off instead, their revision's reason saying which, and the input a
-baseline run reads (`GET /projects/:id/model-input` too) never has them.
+baseline run reads (`GET /projects/:id/model-input` too) never has them. A scenario's `check` carries `baseEwrRules: string[]`: the rules a base
+run recorded before 216 still keeps (it runs with them without an op), one
+line each; a contributor's lines name no unit.
 
 ## Time series
 

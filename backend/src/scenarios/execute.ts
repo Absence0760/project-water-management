@@ -4,7 +4,7 @@
 // through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, baselineEwrRules, classifyScenario, scenarioOnlyLine, type AppliedOp, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
@@ -130,6 +130,13 @@ export interface ScenarioCheck {
 	maskedRules: MaskedRuleRef[];
 	/** An application, checked under its applicant's mask: only then do `maskedRules` and `assessorProblems` say anything. */
 	masked: boolean;
+	/**
+	 * The rules keeping water for the EWR that the **base run** already carries (issue #523 B4), one line each
+	 * (engine scenarioOnlyLine): a run from before 216 kept them in its baseline, and its recorded input is
+	 * reproduced as it is, so a scenario on it runs with them without an op. Said beside the comparison so it
+	 * isn't read as "the EWR kept by this scenario". Empty for a base from 216 on.
+	 */
+	baseEwrRules: string[];
 }
 
 /**
@@ -197,7 +204,8 @@ export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ow
 	const masked = s.origin === 'applicant';
 	const options = masked ? { mask: { ...applicationMask(base, s.ownedNodeIds), hiddenHolders: holders } } : {};
 	const { input, applied, problems, renamed, reIds, assessorProblems, maskedRules } = applyScenario(base, s.ops, options);
-	return { input, base, applied, problems, renamed, reIds, assessorProblems, maskedRules, masked, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+	const baseEwrRules = baselineEwrRules({ model: { nodes: base.model.nodes, transfers: base.model.transfers ?? [] }, settings: base.settings }).map(scenarioOnlyLine);
+	return { input, base, applied, problems, renamed, reIds, assessorProblems, maskedRules, masked, baseEwrRules, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
 }
 
 /** Who may run a scenario, and the scenario as they read it: the route's check, made when the run is read and again when it is stored. */

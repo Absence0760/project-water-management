@@ -1253,6 +1253,12 @@ export interface ScenarioCheck {
 	maskedRules?: MaskedRuleRef[];
 	/** Every problem line in its real words (164). Editors and up only, on an application; never to its applicant. */
 	assessorProblems?: string[];
+	/**
+	 * The rules keeping water for the EWR that the base run itself carries (issue #523 B4): a run from before
+	 * migration 216 kept them in its baseline, so the scenario runs with them without an op. One line each (a
+	 * contributor's name no unit). Absent from an older server; empty for a base from 216 on.
+	 */
+	baseEwrRules?: string[];
 }
 
 /** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
