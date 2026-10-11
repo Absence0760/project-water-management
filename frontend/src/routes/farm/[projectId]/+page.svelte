@@ -32,7 +32,7 @@
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
 	import { farmCsvForReader } from '$lib/components/farm/csvNote';
-	import { farmHref } from '$lib/components/farm/load';
+	import { farmHref, wordsHref } from '$lib/components/farm/load';
 	import { fetchDownload, saveBlob } from '$lib/export/download';
 	import { errorText } from '$lib/i18n/apiError';
 	import { readUnit } from '$lib/components/farm/savedCopy';
@@ -172,7 +172,7 @@
 				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download onclick={(e) => downloadCsv(e, api.farm.exportUrl(projectId, view.farm.nodeId))}
 					>{t('Download my figures (CSV)')}</a
 				>
-				<a href="{base}/farm/words">{t('What do these words mean?')}</a>
+				<a href={wordsHref(base, page.url)}>{t('What do these words mean?')}</a>
 			</nav>
 			{#if csvError}<p class="fine" role="alert">{csvError}</p>{/if}
 		{/if}

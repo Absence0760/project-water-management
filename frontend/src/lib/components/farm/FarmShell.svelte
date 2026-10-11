@@ -9,11 +9,13 @@
 	// board 1 has it.
 	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { signOutTo } from '$lib/auth/signOut';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
+	import { wordsHref } from './load';
 	import { keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
@@ -123,7 +125,7 @@
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
 				<li><a href="{base}/farm">{t('Your hydrological units')}</a></li>
-				<li><a href="{base}/farm/words">{t('What do these words mean?')}</a></li>
+				<li><a href={wordsHref(base, page.url)}>{t('What do these words mean?')}</a></li>
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
 				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
@@ -205,6 +207,19 @@
 		gap: 8px;
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
+	}
+	/* From a desktop width the header's ends line up with the 560 px column's
+	   content (16 px in), not the window's edges: the title over the farm's name,
+	   Menu's words over the cards' right edge, its list under it. The preview
+	   banner and the saved-copy strip line up the same way. An account page keeps
+	   its own wider column, so its header spans the window as before. */
+	.farm:not(.account-page) .farm-header {
+		padding-left: max(16px, calc((100% - 560px) / 2 + 16px));
+		padding-right: max(8px, calc((100% - 560px) / 2 + 6px));
+	}
+	.farm:not(.account-page) .preview,
+	.farm:not(.account-page) .strip {
+		padding-inline: max(16px, calc((100% - 560px) / 2 + 16px));
 	}
 	.spacer {
 		flex: 1;

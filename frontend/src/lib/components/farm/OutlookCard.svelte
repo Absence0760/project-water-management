@@ -6,7 +6,9 @@
 	// "Season outlook" in words. Loaded lazily by the farm page (issue #122):
 	// most farms have no outlook published, and the page chunk is near its budget.
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { t } from '$lib/i18n/locale.svelte';
+	import { wordsHref } from './load';
 	import type { OutlookVm } from './outlookCard';
 
 	let { vm }: { vm: OutlookVm } = $props();
@@ -20,7 +22,7 @@
 	{#if vm.dam}<p>{vm.dam}</p>{/if}
 	{#if vm.review}<p>{vm.review}</p>{/if}
 	<p class="fine">{vm.fine}</p>
-	<a class="link" href="{base}/farm/words#farm-season-outlook">{t('What is the season outlook?')}</a>
+	<a class="link" href={wordsHref(base, page.url, 'farm-season-outlook')}>{t('What is the season outlook?')}</a>
 </section>
 
 <style>

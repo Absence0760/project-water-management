@@ -6,6 +6,9 @@
 	import { onMount } from 'svelte';
 	import { stateText } from './cards';
 
+	/** Each card's height in px: the main farm page's by default; a page with fewer cards passes its own. */
+	let { heights = [180, 150, 260, 200] }: { heights?: number[] } = $props();
+
 	let slow = $state(false);
 	onMount(() => {
 		const t = setTimeout(() => (slow = true), 3000);
@@ -14,7 +17,7 @@
 </script>
 
 <p class="visually-hidden" role="status">{stateText('loading')}</p>
-{#each [180, 150, 260, 200] as h, i (i)}
+{#each heights as h, i (i)}
 	<div class="skeleton" style:height="{h}px" aria-hidden="true">
 		<span style:width="55%"></span>
 		<span style:width="35%" class="tall"></span>

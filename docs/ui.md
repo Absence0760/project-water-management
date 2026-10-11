@@ -10075,8 +10075,10 @@ It renders a `FarmView` (`packages/engine/src/views/farmView.ts`) from
 farm; `GET /projects/:id/farm` lists the farms and says whether anything is
 published.
 
-- **Routes.** `/farm` lists every farm linked to the user across projects
-  (notice level, received %, dam %, or "Not published yet"; while a card's
+- **Routes.** `/farm` lists every farm linked to the user across projects,
+  the worst notice first (a restriction, then an advisory, then none, then
+  nothing published; ties keep the projects' order: `farm/load.ts`
+  `worstFirst`), each with its notice level, received %, dam %, or "Not published yet" (while a card's
   figures load it says "Updating…", and when neither they nor a saved copy
   can be had, "We couldn’t load your hydrological unit", never a blank
   line), and goes straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
@@ -10087,7 +10089,15 @@ published.
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
   entries in the `farmer` category ("What do these words mean?"; since
   issue #47 one of them is *WUA (Water User Association)*, which says some
-  areas still have an irrigation board). The root
+  areas still have an irrigation board). Every link to it from a farm page
+  (the Menu, the main page's foot, Why?'s, the dam page's and the outlook's
+  entry links) carries that page as `?from=` (`farm/load.ts` `wordsHref`),
+  and its back link, **My hydrological unit**, returns there, so a farmer
+  with several farms comes back to the one they were reading. `from` is
+  taken only when it is a farm page's own address (`/farm/<id>`, its `/why`,
+  `/dam` or `/who-decides`, an optional `?node=`; `farmReturn`), never
+  another site or app page; without one the back link is **Your
+  hydrological units** to `/farm`. The root
   page sends a user whose every membership is `farmer` to `/farm`; the
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
@@ -10101,7 +10111,10 @@ published.
   it in Team settings (`GET /projects/:id/privacy-contact`): name, a
   `mailto:` email link and the postal address when given. Without a contact
   it says to ask the person who invited them or the WUA. Both link the
-  privacy notice's § 2.
+  privacy notice's § 2. While it loads, the title and one skeleton card the
+  card's height; a failure is the farm pages' error state with **Try again**
+  (the contact line after a second failure), and 403/404 their "removed"
+  state (`farm-view.spec.ts`).
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert
   emails" link lands there): the header's **Your hydrological units** back link in
@@ -10113,6 +10126,9 @@ published.
   FarmShell is loaded as its own chunk then). If that list or the chunk
   fails, the workspace frame is the fallback. A farmer who is also a
   member of a catchment keeps the workspace frame. One 560 px column, a 16 px base, 44 px targets,
+  the header's title (or back link) and Menu lined up with the column's
+  content from a desktop width, the preview banner and saved-copy strip too
+  (an account page keeps its full-width header over its wider column),
   nothing under 13 px, existing tokens only, light and dark. Pieces it
   borrows from the workspace are lifted to that floor in the farm's copy
   (the notes card's help line, meta line and buttons, sized from the 14 px

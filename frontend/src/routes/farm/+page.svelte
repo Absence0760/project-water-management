@@ -2,7 +2,7 @@
 <script lang="ts">
 	// "Your farms" (docs/design/farmer-view.md §6.5 board 9): every farm linked
 	// to this user, across projects, with its notice level, received % and dam
-	// %. A farmer with one farm goes straight to its page. The root page sends
+	// %, the worst notice first. A farmer with one farm goes straight to its page. The root page sends
 	// a user whose every membership is `farmer` here.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -16,7 +16,7 @@
 	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
 	import { farmSummaryLine, farmsPrivacy, levelWord, stateText } from '$lib/components/farm/cards';
 	import { t } from '$lib/i18n/locale.svelte';
-	import { classify, farmHref } from '$lib/components/farm/load';
+	import { classify, farmHref, worstFirst } from '$lib/components/farm/load';
 	import { readSaved } from '$lib/components/farm/savedCopy';
 
 	interface Row {
@@ -71,11 +71,14 @@
 				return;
 			}
 			failures = 0;
-			rows = list;
+			// The worst notice first (a restriction before an advisory, before none, before
+			// unpublished), each level in the projects' order: a restricted farm is never a screen down.
+			const ordered = worstFirst(list);
+			rows = ordered;
 			// The figures on each card: live when published, else the phone's saved copy.
 			const user = session.user?.id ?? null;
 			await Promise.all(
-				list.map(async (row, i) => {
+				ordered.map(async (row, i) => {
 					if (!row.publication) return;
 					const view = await api.farm.view(row.projectId, row.nodeId).catch(() =>
 						user ? (readSaved(user, row.projectId, row.nodeId)?.view ?? null) : null

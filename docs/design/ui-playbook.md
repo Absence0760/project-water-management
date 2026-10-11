@@ -405,6 +405,23 @@ section it belongs to, with the example that taught it.
   the frame's own copy (`farm/FarmNotes.svelte`), and pin the floor by
   walking the page's text (`farm-view.spec.ts` fails on any visible text
   under 13 px).
+- **A frame's header lines up with its column.** The farm pages' header
+  spanned the window at 1440 (the title at the left edge, Menu at the right)
+  over a centred 560 px column, so the eye jumped 440 px between the title
+  and the farm's name, and Menu's list opened far from the cards. Pad the
+  bar's ends to the column's content edge (`max(16px, calc((100% - 560px) /
+  2 + 16px))`, less a control's own padding at the right) and keep its
+  background full width; a page in the same frame with a wider column (the
+  account pages) keeps the full-width bar (`farm-view.spec.ts` checks the
+  title and Menu against the heading and the cards at 1440, 1280 and 360).
+- **A back link goes where the reader came from, by a checked address.**
+  `/farm/words` always went back to `/farm`, so a farmer with several farms
+  landed on the list. Links into a shared page carry the page they're on as
+  `?from=`, and the shared page takes it only when it matches the one shape
+  it may be (a farm page's own path, `farm/load.ts` `farmReturn`), so it is
+  never an open redirect; the label follows the target ("Your hydrological
+  units" for the fallback). Pass `from` on from the page itself, or its own
+  Menu link drops it.
 - **Print is a layout too.** The report route feeds the server PDF, so the
   frame must never reach paper: the shell's `.app-header` was renamed when
   the sidebar came in, the report's print rule kept hiding the old name, and

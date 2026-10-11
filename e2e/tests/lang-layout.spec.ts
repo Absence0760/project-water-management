@@ -68,7 +68,7 @@ for (const lang of LANGS) {
 				await heading(p);
 				await expect(p.locator('main[aria-busy]')).toHaveCount(0);
 			};
-			for (const path of [`/farm/${projectId}`, `/farm/${projectId}/why`, `/farm/${projectId}/dam`, '/farm/words']) {
+			for (const path of [`/farm/${projectId}`, `/farm/${projectId}/why`, `/farm/${projectId}/dam`, '/farm/words', `/farm/${projectId}/who-decides`]) {
 				await checkPage(page, path, settled);
 			}
 			await checkPage(page, '/account', async (p) => {

@@ -481,7 +481,7 @@ test('the farm pages pass an a11y scan on a phone and a desktop, in light and da
 		await page.emulateMedia({ colorScheme: scheme });
 		for (const size of [PHONE, DESKTOP]) {
 			await page.setViewportSize(size);
-			for (const path of [`/farm/${projectId}`, `/farm/${projectId}/why`, `/farm/${projectId}/dam`, '/farm/words']) {
+			for (const path of [`/farm/${projectId}`, `/farm/${projectId}/why`, `/farm/${projectId}/dam`, '/farm/words', `/farm/${projectId}/who-decides`]) {
 				await page.goto(path);
 				await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 				await expect(page.locator('main[aria-busy]')).toHaveCount(0);
@@ -678,4 +678,134 @@ test('a farmer sees their own registered water, not an entitlement, and no one e
 	await expectNoViolations(fp);
 	await fp.setViewportSize(DESKTOP);
 	await expectNoViolations(fp);
+});
+
+// Round 2 of the farm pages' polish (ui.md § Farmer view).
+
+test('who decides shows its card’s shape while loading, and a failed load offers Try again', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER1);
+	const { projectId } = await farmOf(page.context());
+	let release!: () => void;
+	let held = new Promise<void>((r) => (release = r));
+	let fail = true;
+	await page.route(`${API_URL}/projects/${projectId}/privacy-contact`, async (route) => {
+		await held;
+		if (fail) await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) });
+		else await route.fallback();
+	});
+	await page.goto(`/farm/${projectId}/who-decides`);
+	// Loading: the title, a skeleton card and a status line, not a bare title.
+	await expect(page.getByRole('heading', { level: 1, name: 'Who decides about your farm’s information' })).toBeVisible();
+	await expect(page.locator('main[aria-busy="true"] .skeleton')).toHaveCount(1);
+	release();
+	// A failure: the farm pages' error state, with Try again, never the raw error.
+	const again = page.getByRole('button', { name: 'Try again' });
+	await expect(again).toBeVisible();
+	await expect(page.getByRole('alert')).toContainText('We couldn’t load your hydrological unit');
+	await expect(page.getByText('Internal error')).toHaveCount(0);
+	fail = false;
+	held = Promise.resolve();
+	await again.click();
+	await expect(page.locator('section.card[data-ready="true"]')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Privacy notice' })).toBeVisible();
+	await expect(page.locator('main[aria-busy]')).toHaveCount(0);
+	await page.unrouteAll({ behavior: 'wait' });
+});
+
+test('the words page goes back to the farm page it was opened from, and only to a farm page', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER2);
+	await expect(page).toHaveURL(/\/farm$/);
+	await page.getByRole('link', { name: /Kareebos/ }).click();
+	await expect(page.getByRole('heading', { level: 1, name: /^Kareebos/ })).toBeVisible();
+	const farmPath = new URL(page.url()).pathname;
+	// From the link at the foot of the farm page.
+	await page.getByRole('navigation', { name: 'More' }).getByRole('link', { name: 'What do these words mean?' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'What do these words mean?' })).toBeVisible();
+	const back = page.locator('.farm-header').getByRole('link', { name: 'My hydrological unit' });
+	await expect(back).toHaveAttribute('href', farmPath);
+	await back.click();
+	await expect(page.getByRole('heading', { level: 1, name: /^Kareebos/ })).toBeVisible();
+
+	// From Why?'s link into an entry: back to Why?, the entry still landed.
+	await page.goto(`${farmPath}/why`);
+	await page.getByRole('link', { name: 'What is the river’s reserve?' }).click();
+	await expect(page.locator('#farm-reserve')).toBeInViewport();
+	await expect(page.locator('.farm-header').getByRole('link', { name: 'My hydrological unit' })).toHaveAttribute('href', `${farmPath}/why`);
+
+	// From the Menu on the words page itself, the way back is kept.
+	await page.getByRole('button', { name: 'Menu' }).click();
+	await page.locator('#farm-menu').getByRole('link', { name: 'What do these words mean?' }).click();
+	await expect(page.locator('.farm-header').getByRole('link', { name: 'My hydrological unit' })).toHaveAttribute('href', `${farmPath}/why`);
+
+	// Opened on its own, or with anything but a farm page's address: back to the list, named as such.
+	for (const from of ['', '?from=https%3A%2F%2Fevil.example%2F', '?from=%2F%2Fevil.example%2Ffarm%2Fx', '?from=%2Fprojects']) {
+		await page.goto(`/farm/words${from}`);
+		await expect(page.getByRole('heading', { level: 1, name: 'What do these words mean?' })).toBeVisible();
+		await expect(page.locator('.farm-header').getByRole('link', { name: 'Your hydrological units' })).toHaveAttribute('href', '/farm');
+	}
+});
+
+test('on a desktop the farm header lines up with the page’s column', async ({ page }) => {
+	await signIn(page, FARMER1);
+	const { projectId } = await farmOf(page.context());
+	for (const size of [{ width: 1440, height: 960 }, DESKTOP, PHONE]) {
+		await page.setViewportSize(size);
+		for (const path of [`/farm/${projectId}`, `/farm/${projectId}/why`]) {
+			await page.goto(path);
+			await expect(page.locator('main[aria-busy]')).toHaveCount(0);
+			const h1 = await page.getByRole('heading', { level: 1 }).boundingBox();
+			const main = await page.locator('main.farm-main').evaluate((el) => {
+				const r = el.getBoundingClientRect();
+				return { left: r.left + 16, right: r.right - 16 };
+			});
+			// The title or back link starts where the page's heading does.
+			const start = await page.locator('.farm-header > :first-child').boundingBox();
+			expect(Math.abs(start!.x - h1!.x), `${path} at ${size.width}`).toBeLessThanOrEqual(1);
+			expect(Math.abs(h1!.x - main.left)).toBeLessThanOrEqual(1);
+			// Menu's word ends where the cards' content does (the button keeps its 10 px padding).
+			const menu = await page.getByRole('button', { name: 'Menu' }).boundingBox();
+			expect(Math.abs(menu!.x + menu!.width - 10 - main.right), `${path} at ${size.width}`).toBeLessThanOrEqual(2);
+		}
+	}
+});
+
+test('the farms list puts the worst notice first, whatever the catchments’ order', async ({ page, owner, signIn: signInAs }) => {
+	test.setTimeout(90_000);
+	void owner;
+	const req = page.context().request;
+	const farmer = await signInAs('Two-notice farmer');
+	const names: string[] = [];
+	// Published restricted first, so the projects list (newest first) gives the unrestricted one first.
+	for (const [k, level] of (['restricted', 'none'] as const).entries()) {
+		const project = await createProject(req, `Order catchment ${k + 1}`);
+		const base = sampleModel();
+		const [gauge, template] = [base.nodes[0]!, base.nodes[1]!];
+		const farm = { ...template, id: crypto.randomUUID(), name: `${level === 'restricted' ? 'Restricted' : 'Unrestricted'} farm`, sortOrder: 2 };
+		const crop = base.crops[0]!;
+		await putModel(req, project.id, { nodes: [gauge, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 100_000 }], transfers: [] });
+		await updateSettings(req, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: Array(12).fill(1000) });
+		await putSeries(req, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(60) });
+		await putSeries(req, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(60) });
+		const runId = await createRun(req, project.id, 'Baseline');
+		const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, {
+			data: { runId, restriction: level === 'restricted' ? { level, pct: 20, notice: { en: 'Pump at night only.' } } : { level } }
+		});
+		expect(pub.status(), await pub.text()).toBe(201);
+		const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farm.id] } });
+		expect(add.status(), await add.text()).toBe(201);
+		await acceptInvites(farmer.user.email, project.id);
+		names.push(farm.name);
+	}
+	// The control: the catchments come back with the unrestricted one first.
+	const { projects } = (await (await farmer.page.request.get(`${API_URL}/projects`)).json()) as { projects: { name: string; role: string }[] };
+	expect(projects.filter((p) => p.role === 'farmer').map((p) => p.name)).toEqual(['Order catchment 2', 'Order catchment 1']);
+
+	const fp = farmer.page;
+	await fp.setViewportSize(PHONE);
+	await fp.goto('/farm');
+	await expect(fp.getByRole('heading', { level: 1, name: 'Your hydrological units' })).toBeVisible();
+	await expect(fp.locator('ul.farms > li strong')).toHaveText(['Restricted farm', 'Unrestricted farm']);
+	await expect(fp.locator('ul.farms > li').first()).toContainText('Restriction');
 });

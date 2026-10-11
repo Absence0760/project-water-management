@@ -11,6 +11,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
+	import { farmReturn } from '$lib/components/farm/load';
 	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { FARMER_HELP } from '$lib/help/farmer';
 	import { helpTranslations, type HelpTranslation } from '$lib/help/translations';
@@ -48,6 +49,11 @@
 	);
 	const paragraphs = (s: string) => s.split(/\n{2,}/);
 
+	// Back to the farm page the words were opened from (?from=, only ever a farm page's own address:
+	// load.ts farmReturn), so a farmer with several farms doesn't land on the list; else the farms.
+	const from = $derived(farmReturn(page.url.searchParams.get('from')));
+	const back = $derived(from ? { href: `${base}${from}`, label: t('My hydrological unit') } : { href: `${base}/farm`, label: t('Your hydrological units') });
+
 	// The SPA renders after navigation, so jump to #id once the list exists,
 	// and hold the entry there while the page settles (lib/help/anchor.ts).
 	$effect(() => {
@@ -68,7 +74,7 @@
 
 <svelte:head><title>{t('{page} · My hydrological unit', { page: t('What do these words mean?') })}</title></svelte:head>
 
-<FarmShell back={{ href: `${base}/farm`, label: t('My hydrological unit') }} busy={!ready}>
+<FarmShell {back} busy={!ready}>
 	<h1>{t('What do these words mean?')}</h1>
 	{#each ready ? entries : [] as e (e.id)}
 		<section class="card" id={e.id} aria-labelledby="{e.id}-h" lang={e.lang !== wordsLang() ? e.lang : undefined}>

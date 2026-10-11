@@ -14,7 +14,7 @@
 	import Rich from '$lib/i18n/Rich.svelte';
 	import { datesLine } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
-	import { farmHref } from '$lib/components/farm/load';
+	import { farmHref, wordsHref } from '$lib/components/farm/load';
 	import { step1, step2, step3, whatThisIsNot, whyIntro, whyTitle, wuaDecided } from '$lib/components/farm/why';
 	import { t } from '$lib/i18n/locale.svelte';
 
@@ -104,7 +104,7 @@
 			<ul class="not">
 				{#each whatThisIsNot(view.farm) as line (line)}<li>{line}</li>{/each}
 			</ul>
-			<a class="link" href="{base}/farm/words#farm-reserve">{t('What is the river’s reserve?')}</a>
+			<a class="link" href={wordsHref(base, page.url, 'farm-reserve')}>{t('What is the river’s reserve?')}</a>
 		</section>
 	{/snippet}
 </FarmPage>
@@ -115,9 +115,9 @@
 		flex-direction: column;
 		gap: 8px;
 	}
+	/* The labels sit in the flow under the track, so the bar needs no room of its own below them. */
 	.share {
 		position: relative;
-		padding-bottom: 22px;
 	}
 	.track {
 		height: 12px;
