@@ -1767,7 +1767,13 @@ In short:
   leaking the victim's data, every write must fail, and the victim's data
   must be unchanged afterwards. Every table with a `project_id` is then
   read, updated and deleted through RLS as those users and as another
-  project's API key: nothing visible, nothing changed. Both sweeps come
+  project's API key: nothing visible, nothing changed. An owner-only
+  table `water_app` has no grant on at all (`allocation_holder_salt`, 219)
+  is left out of that sweep by name, and pinned on its own: every role,
+  the project's owner included, is refused it (42501), while its definer
+  function still keys the owner's holders with it (the positive control);
+  any other table the app role can't read fails the sweep as a lost
+  grant. Both sweeps come
   from the live route list and the catalogue, so a new route or table is
   covered automatically; the owner's positive controls prove they aren't
   vacuous. The two layers are tested apart: `requireRole` answers 404 at

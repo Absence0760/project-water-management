@@ -201,18 +201,38 @@ async function snapshot() {
 	};
 }
 
+/**
+ * Project tables (with a project_id) water_app has no grant on at all:
+ * owner-only, read only by SECURITY DEFINER functions, so RLS never comes
+ * into it and no member, key or outsider can read them (catalogue.db.test.ts
+ * OWNER_ONLY; docs/security.md § Allocations). The salt behind the allocation
+ * holder keys (219_allocation_holder_keys): a secret that never leaves the
+ * database. Any other table the app role can't read is a lost grant, and fails.
+ */
+const OWNER_ONLY_TABLES = ['allocation_holder_salt'];
+
+/** The project tables, split by whether water_app may read them at all. */
+const projectTables = async (granted: boolean) =>
+	(
+		await asOwner(
+			`SELECT c.table_name FROM information_schema.columns c
+			 JOIN information_schema.tables t USING (table_schema, table_name)
+			 WHERE c.table_schema = 'public' AND c.column_name = 'project_id' AND t.table_type = 'BASE TABLE'
+			   AND has_table_privilege('water_app', format('%I.%I', c.table_schema, c.table_name), 'SELECT') = $1
+			 ORDER BY 1`,
+			[granted]
+		)
+	).map((r) => r.table_name as string);
+
 describe('table sweep: RLS shows and changes nothing of another project', () => {
 	let tables: string[] = [];
 
 	beforeAll(async () => {
-		tables = (
-			await asOwner(
-				`SELECT c.table_name FROM information_schema.columns c
-				 JOIN information_schema.tables t USING (table_schema, table_name)
-				 WHERE c.table_schema = 'public' AND c.column_name = 'project_id' AND t.table_type = 'BASE TABLE'
-				 ORDER BY 1`
-			)
-		).map((r) => r.table_name as string);
+		tables = await projectTables(true);
+	});
+
+	it('leaves out only the owner-only tables, which no one reads through water_app (pinned below)', async () => {
+		expect(await projectTables(false)).toEqual(OWNER_ONLY_TABLES);
 	});
 
 	// Rows of the victim's project in each table, counted as the schema owner (arrangement only).
@@ -289,5 +309,59 @@ describe('table sweep: RLS shows and changes nothing of another project', () => 
 		}
 		expect(changed).toEqual([]);
 		expect(await ownerCounts()).toEqual(before);
+	});
+});
+
+describe('the allocation holder salt: no one reads it through water_app, its definer functions do', () => {
+	const holders = ['A', 'B', 'C', 'D', 'E'].map((x) => `Holder ${x} ${MARKER}`);
+
+	beforeAll(async () => {
+		// Five holders on one water source: app_allocation_volumes gives a viewer's totals' rows from 5 (FARMER_K).
+		for (const holder of holders) {
+			const r = await victim.owner.call('POST', `/projects/${victim.projectId}/allocations`, {
+				nodeId: victim.farmNodeId,
+				holder,
+				authorisation: 'licence',
+				waterSource: 'surface',
+				volumeM3PerYear: 1000
+			});
+			expect(r.status).toBe(201);
+		}
+	});
+
+	it('positive control: the project has its salt, and its definer function keys every holder with it', async () => {
+		const [salt] = await asOwner('SELECT salt FROM allocation_holder_salt WHERE project_id = $1', [victim.projectId]);
+		expect(typeof salt?.salt).toBe('string');
+		const keys = await withUser(victim.owner.id, async (db) => (await db.query<{ holder: string }>('SELECT holder FROM app_allocation_volumes($1)', [victim.projectId])).rows.map((r) => r.holder));
+		expect(new Set(keys).size).toBe(holders.length);
+		for (const k of keys) expect(k).toMatch(/^[0-9a-f]{32}$/);
+		// Salted: a key is not the md5 of the name alone, so a list of candidate names gives nothing to match.
+		const [unsalted] = await asOwner(`SELECT array_agg(md5('h:' || lower(n))) AS k FROM unnest($1::text[]) n`, [holders]);
+		expect(keys.filter((k) => (unsalted!.k as string[]).includes(k))).toEqual([]);
+	});
+
+	it('refuses it to the project’s own owner, an outsider and another project’s API key: no grant (42501), for reading or writing', async () => {
+		const refused: string[] = [];
+		const attempt = async (who: string, db: Parameters<Parameters<typeof withUser>[1]>[0]) => {
+			for (const stmt of [
+				'SELECT salt FROM allocation_holder_salt WHERE project_id = $1',
+				`UPDATE allocation_holder_salt SET salt = 'x' WHERE project_id = $1`,
+				'DELETE FROM allocation_holder_salt WHERE project_id = $1'
+			]) {
+				await db.query('SAVEPOINT attempt');
+				try {
+					await db.query(stmt, [victim.projectId]);
+				} catch (e) {
+					if ((e as { code?: string }).code === '42501') refused.push(`${who}: ${stmt.split(' ')[0]}`);
+					else throw e;
+				} finally {
+					await db.query('ROLLBACK TO SAVEPOINT attempt');
+				}
+			}
+		};
+		await withUser(victim.owner.id, (db) => attempt('owner', db));
+		await withUser(outsider.id, (db) => attempt('outsider', db));
+		await withApiKey(neighbourKeyId, (db) => attempt('neighbour key', db));
+		expect(refused).toEqual(['owner', 'outsider', 'neighbour key'].flatMap((w) => ['SELECT', 'UPDATE', 'DELETE'].map((s) => `${w}: ${s}`)));
 	});
 });
