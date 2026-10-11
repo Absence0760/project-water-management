@@ -130,12 +130,12 @@
 		</div>
 		<fieldset class="series">
 			<legend>What it may write</legend>
-			<label class="choice"><input type="radio" name="key-limit" value={false} bind:group={limit} /> Any series of this project</label>
-			<label class="choice"><input type="radio" name="key-limit" value={true} bind:group={limit} disabled={series.length === 0} /> Only these series</label>
+			<label class="check"><input type="radio" name="key-limit" value={false} bind:group={limit} /> Any series of this project</label>
+			<label class="check"><input type="radio" name="key-limit" value={true} bind:group={limit} disabled={series.length === 0} /> Only these series</label>
 			{#if limit}
 				<div class="picks">
 					{#each series as s (seriesKey(s))}
-						<label class="choice"><input type="checkbox" value={seriesKey(s)} bind:group={picked} /> {seriesText(s)}</label>
+						<label class="check"><input type="checkbox" value={seriesKey(s)} bind:group={picked} /> {seriesText(s)}</label>
 					{/each}
 				</div>
 			{/if}
@@ -231,10 +231,7 @@
 	}
 	/* Each row at least 24 px tall, so stacked radios and checkboxes sit 24 px
 	   apart (WCAG 2.2 target size, 2.5.8, spacing exception). */
-	.choice {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
+	.check {
 		min-height: 24px;
 		font-weight: 400;
 		margin: 0.15rem 0;

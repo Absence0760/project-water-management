@@ -502,8 +502,6 @@
 	}
 	.check {
 		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
 		font-weight: 500;
 		font-size: 0.9rem;
 	}

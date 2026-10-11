@@ -259,9 +259,6 @@
 		padding: 0.5rem 0.75rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 		min-height: 24px;
 	}
 	.err {

@@ -1073,6 +1073,17 @@ Interaction details that bit:
   To line a box up with a wrapped label's first line, use `align-items:
   flex-start` and `margin-top: calc((1lh - 1rem) / 2)` on the box, rather
   than centring it on the whole label.
+- **A box with its words is `<label class="check">`, styled once.**
+  `app.css`'s `label.check` is the flex row (`gap: 0.4rem`, `align-items:
+  flex-start`) and gives the box block margins that fill one line
+  (`calc((1lh - 1rem) / 2)`), so the box sits on the first line's middle when
+  the words wrap and still centres when a component keeps `align-items:
+  center` for a taller row (a `min-height` of 28 px or more). A component's
+  own `.check` rule keeps only what differs: `display: inline-flex`, a
+  min-height, a font size, margins. About forty components each wrote the
+  same three declarations (issue #521); don't add a fourth spelling (`.tick`,
+  `.toggle`, `.choice` were folded into it). A switch drawn over a hidden box
+  (`.switch`) and the month toggles are not this pattern.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with

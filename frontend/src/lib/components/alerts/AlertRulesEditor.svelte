@@ -158,8 +158,6 @@
 	}
 	.check {
 		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
 		min-width: 14rem;
 		min-height: 24px;
 	}

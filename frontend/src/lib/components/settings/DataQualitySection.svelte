@@ -210,9 +210,6 @@
 		margin: 0.5rem 0 0.75rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
 		margin: 0.75rem 0 0.25rem;
 		font-weight: 500;
 	}

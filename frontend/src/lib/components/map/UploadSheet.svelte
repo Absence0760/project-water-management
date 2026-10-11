@@ -207,7 +207,7 @@
 			{#if replacing && review.currentBoundary}
 				<div class="alert alert-warning replace" data-testid="map-import-replaces">
 					<p>{replaceBoundaryText(review.currentBoundary)}</p>
-					<label class="tick"><input type="checkbox" bind:checked={replaceTicked} data-testid="map-import-replace-tick" /> Replace the current boundary</label>
+					<label class="check"><input type="checkbox" bind:checked={replaceTicked} data-testid="map-import-replace-tick" /> Replace the current boundary</label>
 				</div>
 			{/if}
 			{#if importable}
@@ -319,10 +319,8 @@
 		display: grid;
 		gap: 0.5rem;
 	}
-	.tick {
+	.check {
 		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
 		min-height: 24px;
 		font-weight: 600;
 	}

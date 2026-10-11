@@ -194,9 +194,6 @@
 		gap: 0.25rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 		font-size: 0.85rem;
 		margin-bottom: 0.5rem;
 	}

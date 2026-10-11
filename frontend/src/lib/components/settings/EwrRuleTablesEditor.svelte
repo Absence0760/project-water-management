@@ -530,15 +530,11 @@
 		gap: 0.5rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: flex-start;
 		font-size: 0.8rem;
 		margin-top: 0.35rem;
 	}
 	.check input {
 		width: auto;
-		margin-top: 0.15rem;
 	}
 	.notes {
 		color: var(--warning);

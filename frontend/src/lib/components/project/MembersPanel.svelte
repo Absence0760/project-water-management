@@ -237,7 +237,7 @@
 									{/if}
 								{/if}
 								{#if m.party && isOwner}
-									<label class="specialist small">
+									<label class="check small">
 										<input
 											type="checkbox"
 											checked={m.specialist}
@@ -253,7 +253,7 @@
 								{#if m.role === 'editor' || m.role === 'owner'}
 									{#if isOwner}
 										<div class="tip-row">
-											<label class="authority small">
+											<label class="check small">
 												<input
 													type="checkbox"
 													checked={m.actsForAuthority ?? false}
@@ -327,12 +327,6 @@
 </section>
 
 <style>
-	.authority {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		margin-top: 0.25rem;
-	}
 	.add {
 		margin-top: 1rem;
 	}
@@ -364,11 +358,12 @@
 		margin-top: 0.25rem;
 		max-width: 12rem;
 	}
-	.specialist {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
+	.check,
+	.authority {
 		margin-top: 0.25rem;
+	}
+	.authority {
+		display: block;
 	}
 	.skeleton td {
 		height: 37px;

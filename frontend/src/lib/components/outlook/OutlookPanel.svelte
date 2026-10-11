@@ -551,11 +551,6 @@
 	.start input[type='text'] {
 		min-width: 14rem;
 	}
-	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
-	}
 	/* The checkbox's words on the same line as the text in the levels box. */
 	.start .field,
 	.start .check {

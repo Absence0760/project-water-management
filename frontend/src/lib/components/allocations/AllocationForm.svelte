@@ -205,7 +205,7 @@
 				<span class="lbl" id="af-months-l">Months water may be taken</span>
 				<div class="months" role="group" aria-labelledby="af-months-l" data-testid="allocation-months">
 					{#each WATER_YEAR_MONTHS as m (m)}
-						<label class="month"><input type="checkbox" value={m} bind:group={draft.months} />{monthShort(m)}</label>
+						<label class="check"><input type="checkbox" value={m} bind:group={draft.months} />{monthShort(m)}</label>
 					{/each}
 				</div>
 				<span class="hint">None ticked: no months stated (all year).</span>
@@ -255,10 +255,8 @@
 		flex-wrap: wrap;
 		gap: 0.5rem 1rem;
 	}
-	.month {
+	.check {
 		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
 		min-height: 1.5rem;
 		font-weight: normal;
 	}
