@@ -163,3 +163,26 @@ test('a link to a deleted scenario or run says so and offers the newest, not a T
 	await expect(page).toHaveURL(new RegExp(`[?&]run=${run}`));
 	await expect(page.getByRole('heading', { level: 2, name: 'Base' })).toBeVisible();
 });
+
+test('the Project page’s notes and registration checks offer Try again after a failed load, and it recovers', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Retry lists');
+	// Each list's reads fail until the server is back.
+	let down = true;
+	await page.route(new RegExp(`/projects/${project.id}/(notes|registration-checks)(\\?|$)`), (r) =>
+		r.request().method() === 'GET' && down ? r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Server unavailable"}' }) : r.fallback()
+	);
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const notes = page.getByRole('region', { name: 'Recent notes' });
+	const checks = page.getByTestId('registration-checks');
+	await expect(notes.getByRole('alert')).toHaveText(/^Couldn’t load the notes: Server unavailable/);
+	await expect(checks.getByRole('alert')).toHaveText(/^Server unavailable/);
+	down = false;
+	await notes.getByRole('button', { name: 'Try again' }).click();
+	await expect(notes).toContainText('No notes yet.');
+	await expect(notes.getByRole('alert')).toHaveCount(0);
+
+	await checks.getByRole('button', { name: 'Try again' }).click();
+	await expect(checks).toContainText('No check recorded yet.');
+	await expect(checks.getByRole('alert')).toHaveCount(0);
+});
