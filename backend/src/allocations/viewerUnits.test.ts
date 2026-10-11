@@ -3,14 +3,15 @@
 // refusal) is in allocations.db.test.ts.
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { comparisonTotals, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, type VolumeRow } from './viewerUnits.js';
+import { comparisonTotals, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, withoutOthersRegistered, type VolumeRow } from './viewerUnits.js';
 
 let nextHolder = 0;
+const key = () => `k${++nextHolder}`;
 /** A row; each its own holder unless `holder` says. */
 const row = (o: Partial<VolumeRow>): VolumeRow => ({
 	waterSource: 'surface',
 	holders: 6,
-	holder: ++nextHolder,
+	holder: key(),
 	nodeId: 'n1',
 	volumeM3PerYear: 1000,
 	storageM3: null,
@@ -48,7 +49,7 @@ describe('volumeTotals', () => {
 		const [t] = volumeTotals(rows, '2026-10-11');
 		expect(t).toEqual({ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null, storageWithheld: true });
 		// One holder with five rows in force is still one holder.
-		const one = Array.from({ length: 5 }, () => row({ holder: 999, holders: 5, volumeM3PerYear: 10 }));
+		const one = Array.from({ length: 5 }, () => row({ holder: 'same', holders: 5, volumeM3PerYear: 10 }));
 		expect(volumeTotals(one, '2026-10-11')[0]!.registeredM3PerYear).toBeNull();
 		// Positive control: the day all five were in force, the total is theirs.
 		expect(volumeTotals(rows, '2023-10-01')[0]).toEqual({ waterSource: 'surface', holders: 5, registeredM3PerYear: 323_457, storageM3: 8_321 });
@@ -61,8 +62,8 @@ describe('comparisonTotals', () => {
 	const days = 365;
 	const nodes = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'].map((id, i) => ({ nodeId: id, name: `Unit ${id}`, kind: 'farm' as const, supplied: new Array<number>(365 + 365 + 366).fill(i + 1), groundwater: null, riverAbstraction: null }));
 
-	it('sums each unit’s registered volume and modelled use per water year, as compareAllocations reads them', () => {
-		const rows = five({ volumeM3PerYear: 100 }).map((r, i) => ({ ...r, volumeM3PerYear: (i + 1) * 100 }));
+	it('sums each unit’s modelled use per water year and says how it compares with the registered volume, as compareAllocations reads them, with no registered m³', () => {
+		const rows = five({ volumeM3PerYear: 100 }).map((r, i) => ({ ...r, volumeM3PerYear: (i + 3) * 100 }));
 		const t = comparisonTotals({ startDate: '2021-10-01', nodes: nodes.map((n) => ({ ...n, supplied: n.supplied.slice(0, days) })), tolerance: 0.1, rows });
 		expect(t.sources).toHaveLength(1);
 		const s = t.sources[0]!;
@@ -76,27 +77,50 @@ describe('comparisonTotals', () => {
 		});
 		const want = (k: 'modelledM3' | 'registeredM3') => c.nodes.filter((n) => n.nodeId !== 'n6').reduce((a, n) => a + n.surface.years[0]![k], 0);
 		expect(s.years[0]!.modelledM3).toBeCloseTo(want('modelledM3'), 6);
-		expect(s.years[0]!.registeredM3!).toBeCloseTo(want('registeredM3'), 6);
-		expect(s.years[0]!).toMatchObject({ waterYear: 2021, partial: false, status: 'over' });
+		expect(s.years[0]!).toEqual({ waterYear: 2021, partial: false, modelledM3: s.years[0]!.modelledM3, status: 'over' });
 		expect(JSON.stringify(t)).not.toContain('Unit');
+		expect(JSON.stringify(t)).not.toMatch(/registered/i);
+		expect(JSON.stringify(t)).not.toContain(String(Math.round(want('registeredM3'))));
 	});
 
-	it('#523 G: withholds a water year whose rows in force are fewer than 5 holders’, keeping its modelled use; a year all five hold is the control', () => {
+	it('#523 G: withholds even the status of a water year whose rows in force are fewer than 5 holders’; a year all five hold is the control', () => {
 		// One holder since 2005 (123 457 m³/a), four from 2023-10-01: 2021 and 2022 are the one holder's alone.
-		const rows = [row({ holders: 5, volumeM3PerYear: 123_457, validFrom: '2005-10-01' }), ...five({ holders: 5, validFrom: '2023-10-01' }).slice(0, 4).map((r, i) => ({ ...r, nodeId: `n${i + 2}` }))];
+		const rows = [row({ holders: 5, volumeM3PerYear: 123_457, validFrom: '2005-10-01' }), ...five({ holders: 5, volumeM3PerYear: 50_000, validFrom: '2023-10-01' }).slice(0, 4).map((r, i) => ({ ...r, nodeId: `n${i + 2}` }))];
 		const t = comparisonTotals({ startDate: '2021-10-01', nodes, tolerance: 0.1, rows });
 		const years = t.sources[0]!.years;
-		expect(years.map((y) => [y.waterYear, y.withheld ?? false])).toEqual([
-			[2021, true],
-			[2022, true],
-			[2023, false]
+		expect(years.map((y) => [y.waterYear, y.withheld ?? false, y.status !== null])).toEqual([
+			[2021, true, false],
+			[2022, true, false],
+			[2023, false, true]
 		]);
-		for (const y of years.slice(0, 2)) {
-			expect([y.registeredM3, y.status]).toEqual([null, null]);
-			expect(y.modelledM3).toBeGreaterThan(0);
+		for (const y of years) expect(y.modelledM3).toBeGreaterThan(0);
+	});
+
+	it('#523 L/M: no registered m³ in any year, so neither today’s total less a year nor one year less the next gives a holder’s volume', () => {
+		// L: 5 holders on the run's units and a sixth unmatched (no unit); M: a sixth from 2022-10-01.
+		const matched = five({ holders: 6, volumeM3PerYear: 50_000 });
+		const unmatched = row({ holders: 6, nodeId: null, volumeM3PerYear: 123_457 });
+		const later = row({ holders: 6, nodeId: 'n6', volumeM3PerYear: 123_457, validFrom: '2022-10-01' });
+		for (const rows of [[...matched, unmatched], [...matched, later]]) {
+			const t = comparisonTotals({ startDate: '2021-10-01', nodes, tolerance: 0.1, rows });
+			const text = JSON.stringify(t);
+			for (const v of [123_457, 250_000, 373_457]) expect(text).not.toContain(String(v));
+			// Today's total is the only registered m³ (positive control: it is shown, all six in force).
+			expect(volumeTotals(rows, '2026-10-11')[0]!.registeredM3PerYear).toBe(373_457);
 		}
-		expect(years[2]!.registeredM3!).toBeCloseTo(123_457 + 4 * 1000, 6);
-		expect(JSON.stringify(t)).not.toMatch(/123457/);
+	});
+});
+
+describe('the dominance rule (#523 O, provisional)', () => {
+	it('withholds a sum one holder has more than 80 % of, or two more than 90 %, though 5 or more hold it', () => {
+		const big = [row({ holders: 6, volumeM3PerYear: 900_000 }), ...Array.from({ length: 5 }, () => row({ holders: 6, volumeM3PerYear: 1 }))];
+		expect(volumeTotals(big, '2026-10-11')[0]!.registeredM3PerYear).toBeNull();
+		// Two large: 60 % and 35 % of the sum, the other four 5 %.
+		const two = [row({ volumeM3PerYear: 600 }), row({ volumeM3PerYear: 350 }), ...Array.from({ length: 4 }, () => row({ volumeM3PerYear: 12.5 }))];
+		expect(volumeTotals(two, '2026-10-11')[0]!.registeredM3PerYear).toBeNull();
+		// Control: the largest 40 %, the two largest 70 %.
+		const fair = [row({ volumeM3PerYear: 400 }), row({ volumeM3PerYear: 300 }), ...Array.from({ length: 3 }, () => row({ volumeM3PerYear: 100 }))];
+		expect(volumeTotals(fair, '2026-10-11')[0]!.registeredM3PerYear).toBe(1000);
 	});
 });
 
@@ -143,6 +167,25 @@ describe('redactReportAllocations (issue #523 G1)', () => {
 		expect(report.summaries.baseline.allocations.nodes).toHaveLength(1);
 		// Baseline evidence: no application summary.
 		expect(redactReportAllocations({ ...report, summaries: { ...report.summaries, application: null } }).summaries.application).toBeNull();
+	});
+});
+
+describe('§ 5 for a viewer kept from each volume (#523 K/L/M)', () => {
+	it('leaves out the totals of other units’ registered m³ (each year, the means, the cap), keeping their status and modelled use and the applicant’s own units', () => {
+		const y = { waterYear: 2021, days: 365, yearDays: 365, partialA: false, partialB: false, registeredA: 373_457, modelledA: 9, statusA: 'under', registeredB: 250_000, modelledB: 8, statusB: 'under' };
+		const src = { waterSource: 'surface', years: [y], countsA: null, countsB: null, meanModelledA: 9, meanRegisteredA: 373_457, meanModelledB: 8, meanRegisteredB: 250_000, capA: null, capB: null };
+		const own = { nodeId: 'own', name: 'Mine', kind: 'farm', own: true, onlyIn: null, sources: [{ ...src, meanRegisteredA: 1_234, meanRegisteredB: 1_234, years: [{ ...y, registeredA: 1_234, registeredB: 1_234 }] }] };
+		const total = { nodeId: 'others:surface', name: 'Other registered users (5 units)', aggregate: 5, kind: 'farm', own: false, onlyIn: null, sources: [src] };
+		const report = { allocations: { units: [own, total] }, appendix: { baselineInputs: null }, summaries: { baseline: null, application: null } };
+		const out = redactReportAllocations(report as never) as unknown as { allocations: { othersRegisteredWithheld?: true; units: (typeof total)[] } };
+		expect(out.allocations.othersRegisteredWithheld).toBe(true);
+		const t = out.allocations.units[1]!.sources[0]!;
+		expect([t.meanRegisteredA, t.meanRegisteredB, t.years[0]!.registeredA, t.years[0]!.registeredB, t.years[0]!.statusA, t.years[0]!.modelledA]).toEqual([null, null, null, null, 'under', 9]);
+		expect(out.allocations.units[0]!.sources[0]!.years[0]!.registeredA).toBe(1_234);
+		expect(JSON.stringify(out)).not.toMatch(/373457|250000/);
+		// The input isn't changed; a § 5 with no total of other units is passed through.
+		expect(total.sources[0]!.years[0]!.registeredA).toBe(373_457);
+		expect(withoutOthersRegistered({ units: [own] } as never)).toEqual({ units: [own] });
 	});
 });
 

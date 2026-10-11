@@ -1669,11 +1669,18 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		expect((await editor.call('GET', packPath(old))).status).toBe(200);
 		// Without such a total (§ 5 left the one unit out), the same format is served, redacted.
 		expect((await viewer.call('GET', packPath(current))).status).toBe(200);
-		// evidence-18 gates each year on the holders in force: served.
+		// evidence-18 gates each year on the holders in force: served, but without the total's registered m³ (#523 K/L/M:
+		// the only registered m³ such a viewer reads is today's per-source total), and its PDF, which prints it, refused.
 		const now = await plant('evidence-18', { edit: withTotal });
 		const read = await viewer.call('GET', packPath(now));
 		expect(read.status, JSON.stringify(read.body)).toBe(200);
-		expect(read.body.manifest.report.allocations.units[0].aggregate).toBe(5);
+		const al = read.body.manifest.report.allocations;
+		expect([al.units[0].aggregate, al.othersRegisteredWithheld, al.units[0].sources[0].years[0].registeredA, al.units[0].sources[0].years[0].statusA]).toEqual([5, true, null, 'under']);
+		expect(JSON.stringify(read.body)).not.toContain(String(VOLUME));
+		withheld(await viewer.call('GET', `${packPath(now)}/pdf`));
+		// Positive control: the editor reads the figure, and passes the PDF check (a draft: 409).
+		expect((await editor.call('GET', packPath(now))).body.manifest.report.allocations.units[0].sources[0].years[0].registeredA).toBe(VOLUME);
+		expect((await editor.call('GET', `${packPath(now)}/pdf`)).status).toBe(409);
 	});
 
 	it('serves a viewer page 1’s folded authorised volume mix in the full one’s place (none for a board built before), and refuses the PDF, which prints the full one (evidence-17)', async () => {

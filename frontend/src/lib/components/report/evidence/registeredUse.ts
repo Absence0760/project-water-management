@@ -59,7 +59,13 @@ export const REGISTERED_WITHHELD = 'not shown';
  * whose total of other units is too few registered users' (evidence-18,
  * `withheldA` / `B`) reads "not shown", never a figure.
  */
-export function registeredText(y: Pick<EvidenceAllocationYear, 'registeredA' | 'registeredB' | 'withheldA' | 'withheldB'>, application: boolean): { main: string; sub: string | null } {
+export function registeredText(
+	y: Pick<EvidenceAllocationYear, 'registeredA' | 'registeredB' | 'withheldA' | 'withheldB'>,
+	application: boolean,
+	/** A total of other units served to a viewer kept from each volume (othersRegisteredWithheld, #523 K/L/M): no registered m³ at all. */
+	othersWithheld = false
+): { main: string; sub: string | null } {
+	if (othersWithheld) return { main: REGISTERED_WITHHELD, sub: null };
 	const a = y.withheldA ? REGISTERED_WITHHELD : y.registeredA === null ? null : m3(y.registeredA);
 	const b = !application ? null : y.withheldB ? REGISTERED_WITHHELD : y.registeredB === null ? null : m3(y.registeredB);
 	const differ = a !== null && b !== null && (y.withheldA || y.withheldB ? a !== b : Math.abs(y.registeredA! - y.registeredB!) > 0.5);

@@ -16,8 +16,8 @@
 <section class="panel" aria-labelledby="alloc-totals-h" data-testid="allocation-totals">
 	<h2 id="alloc-totals-h">Registered water use in this catchment <HelpTip key="allocation-viewer-access" /></h2>
 	<p class="muted">
-		This catchment’s registered volumes are shown to viewers as totals per water source, and only where at least 5 registered users hold one, so no farm’s volume can be
-		read from them. The organisation’s editors and owners see each farm.
+		This catchment’s registered volumes are shown to viewers as today’s totals per water source, and only where at least 5 registered users hold one in force and no one
+		or two of them hold most of it, so no farm’s volume can be read from them. The organisation’s editors and owners see each farm.
 	</p>
 	{#if totals && totals.length}
 		<ul class="totals">
@@ -31,10 +31,14 @@
 
 	{#if runLabel && years?.sources.length}
 		<h3 class="sub-h">Modelled use against the registered volumes, run “{runLabel}”</h3>
-		<p class="small muted">Summed over the units with a registered volume, each water year (October–September). Modelled, not metered: arithmetic, not a finding about anyone’s use.</p>
+		<p class="small muted">
+			Summed over the units with a registered volume, each water year (October–September), and how it compares with the volumes registered for them. Modelled, not metered:
+			arithmetic, not a finding about anyone’s use. The registered volume itself is shown only as today’s total above: two totals over different years would give the
+			volumes that changed between them.
+		</p>
 		{#if years.sources.some((s) => s.years.some((y) => y.withheld))}
 			<p class="small muted" data-testid="allocation-totals-years-withheld">
-				“Not shown”: fewer than 5 registered users held a volume in force that year, so the year’s registered total would be too few people’s.
+				“Not judged”: the volumes in force that year were fewer than 5 registered users’, or mostly one or two users’.
 			</p>
 		{/if}
 		{#each years.sources as s (s.waterSource)}
@@ -44,7 +48,6 @@
 					<thead>
 						<tr>
 							<th scope="col">Water year</th>
-							<th scope="col" class="num">Registered (m³)</th>
 							<th scope="col" class="num">Modelled use (m³)</th>
 							<th scope="col">Compared</th>
 						</tr>
@@ -53,7 +56,6 @@
 						{#each s.years as y (y.waterYear)}
 							<tr>
 								<th scope="row">{waterYearLabel(y.waterYear)}{y.partial ? ' (part)' : ''}</th>
-								<td class="num">{y.registeredM3 === null ? 'Not shown' : fmtNum(y.registeredM3)}</td>
 								<td class="num">{fmtNum(y.modelledM3)}</td>
 								<td>{y.partial ? 'Part year, not judged' : y.status === null ? 'Not judged' : STATUS_LABEL[y.status]}</td>
 							</tr>

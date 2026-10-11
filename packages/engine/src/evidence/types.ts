@@ -167,11 +167,13 @@ export interface EvidenceRunInput {
 	allocations?: AllocationComparison | null;
 	/**
 	 * evidence-18: who holds each of the run's allocations (by id), as an
-	 * opaque key (backend app_allocation_holders, 215), never a name: § 5
+	 * opaque key (backend app_run_allocation_holders, 215), never a name: § 5
 	 * gives a total of other units' registered volume in a water year only
 	 * when the rows in force that year are held by FARMER_K (5) or more
-	 * registered users (#523 G). An allocation without a key counts as its
-	 * unit's (`n:<nodeId>`), as 162 counts an unnamed row.
+	 * registered users, none dominating it (#523 G/O). The keys are frozen
+	 * with the run (backend run_allocation_holder, 215). An allocation the
+	 * map lacks shares the key 'gone' (at most one holder, #523 N); with no
+	 * map at all, each counts as its unit's (`n:<nodeId>`).
 	 */
 	allocationHolders?: Readonly<Record<string, string>> | null;
 }
@@ -944,6 +946,13 @@ export interface EvidenceAllocations {
 	 * older pack's document.
 	 */
 	unitYears?: { overA: number; judgedA: number; overB: number | null; judgedB: number | null };
+	/**
+	 * Set only on the copy served to a viewer kept from each registered volume
+	 * (backend withoutOthersRegistered, #523 K/L/M): the totals of other units
+	 * carry no registered m³ (each year's, the means, the cap), only the
+	 * status and modelled use. Never in a frozen document.
+	 */
+	othersRegisteredWithheld?: true;
 }
 
 /** Why the licence impact board couldn't be built; the page words it. */

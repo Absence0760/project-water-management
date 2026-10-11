@@ -3696,7 +3696,11 @@ from the WP:
       the same way (`app_allocation_volumes` returns each row's holder).
       Pre-`evidence-18` packs with such a total are refused to a viewer
       kept from the volumes. The folded authorised mix is served as shares
-      with no m³ (round 3 H and J).
+      with no m³ (round 3 H and J). Round 4 (K–P): such a viewer reads
+      registered m³ only as today's per-source totals (dominance rule,
+      provisional, #92); run years and § 5's other-unit totals carry status
+      and modelled use only; each run freezes its rows' salted holder keys
+      (`run_allocation_holder`, 215).
 - [ ] **Totals read at different times can be differenced** (issue #523
       G1 review finding 6's second half, round 3's accepted residuals).
       Two pack versions' § 5 totals (a unit's rows added or ended between
@@ -3705,11 +3709,19 @@ from the WP:
       a frozen mix's share times a later live total. Also: with no dated
       rows, a share times the sum of a viewer's totals estimates a line to
       within 1 % of the mix's total ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
-      Durable fix: round every total a viewer kept from the volumes reads
-      (to a band wide enough that one holder's change moves no figure), or
-      add bounded noise per release, and coarsen the mix's shares to 5 %.
-      Trigger: before a project with outside viewers issues a second pack
-      version, or counsel asks for k-anonymity across releases.
+      Today's total read on two days differs by the rows that started or
+      ended between them (often one holder's). Durable fix: round every
+      total a viewer kept from the volumes reads (to a band wide enough that
+      one holder's change moves no figure), or add bounded noise per
+      release, and coarsen the mix's shares to 5 %. Trigger: before a
+      project with outside viewers issues a second pack version, or counsel
+      asks for k-anonymity across releases.
+- [ ] **Confirm the dominance rule's limits** (#523 O, provisional: no
+      holder above 80 % of a total a restricted reader sees, no two above
+      90 %; `DOMINANCE_TOP1` / `DOMINANCE_TOP2`, engine
+      `allocations/holders.ts`). Pending the CISO and counsel's D3 review
+      (#92). Trigger: that review, or a client's catchment where the rule
+      withholds a total they need.
 - [ ] **A full-allocation run's per-unit figures give the volume** (issue
       #523 G1 security review, finding 7; real by the model's definition,
       model.md §2.12a: demand is scaled per water year to the registered

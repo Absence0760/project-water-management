@@ -55,8 +55,10 @@ applicant's application, a team scenario's all in the totals, and page 1's
 authorised volume mix giving no fewer than 5 registered users' volume
 (report format `evidence-17`, issue #523 G1, 2026-10-11); and § 5's
 *Other registered users* totals gated on registered users, not units, and
-per water year on the holders whose volumes are in force that year (a year
-too few hold reads "not shown", its modelled use kept), with the folded
+per water year on the holders whose volumes are in force that year, none
+dominating (a year too few hold, or one or two hold most of, reads "not
+shown", its modelled use kept; holders counted by keys frozen with each
+run), with the folded
 mix frozen as whole-percent shares with no m³ (report format
 `evidence-18`, issue #523 G/H/J, 2026-10-11). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
@@ -831,7 +833,12 @@ prints the old one); and one drafted before `evidence-18` whose § 5 has an
 *Other registered users* total with a registered volume: those were gated
 on units over every date, so a year's total could be one holder's (#523 G),
 and which years were isn't in the frozen document. An editor drafts a new
-version (at `evidence-18`) for such a viewer to read. Its redacted manifest also leaves out the ops that set
+version (at `evidence-18`) for such a viewer to read. From `evidence-18`
+the manifest served to such a viewer leaves out § 5's totals of other
+units' registered m³ (each year, the means, the cap; their status and
+modelled use stay, `othersRegisteredWithheld`), and the PDF, which prints
+them, is refused: two such sums read at the same time (baseline and
+application, or two water years) give the rows between them (#523 K/L/M). Its redacted manifest also leaves out the ops that set
 a volume on a unit that isn't an applicant's own and an authorised volume
 mix built before the 5-holder rule, and such a pack's PDF is refused
 (`packWithheldPart`). The live evidence report leaves the same parts out

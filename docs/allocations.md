@@ -339,8 +339,8 @@ existing lawful use beside the application's numbers.
   smallest line that isn't an entitlement (*…, with the ways of holding too
   few hold to show*), so no difference gives them; how many users were left
   out is said only at 5 or more, else only that some were (holders counted
-  as `app_allocation_volumes` counts them, through `app_allocation_holders`,
-  215). Since `evidence-18` (issue #523 H/J) the folded mix is frozen, and
+  as `app_allocation_volumes` counts them, by the keys frozen with the
+  baseline run, `app_run_allocation_holders`, 215). Since `evidence-18` (issue #523 H/J) the folded mix is frozen, and
   served, as each line's whole-percent share of the lines' sum (largest
   remainder, adding up to 100), with no m³ and no total: the mix sums every
   row of the baseline whatever its dates, while that viewer's live totals
@@ -421,10 +421,15 @@ existing lawful use beside the application's numbers.
   only), and the flag names the applicant's units or the total. The
   project's editors see every unit on the Allocations tab. A run's
   allocations carry no holder, so the backend hands the report each one's
-  opaque holder key (`EvidenceRunInput.allocationHolders`, from
-  `app_allocation_holders`, 215, the same for every reader); a row gone
-  since the run counts as a living row's on the same unit, else as its
-  unit's.
+  holder key as frozen when the run was stored
+  (`EvidenceRunInput.allocationHolders`, from `app_run_allocation_holders`,
+  215, the same for every reader, whatever was deleted since; a row no
+  living holder had, such as one a scenario op adds, shares one key). The
+  gate is also the dominance rule: no year's total is shown where one
+  holder has more than 80 % of it, or two more than 90 % (provisional,
+  #92). A viewer kept from each volume reads these totals with no
+  registered m³ at all, only their status and modelled use (#523 K/L/M,
+  [Who sees what](#who-sees-what)).
 
 ### What the comparison is not
 
@@ -512,10 +517,10 @@ reasoning is in [security.md § Allocations](./security.md#allocations-popia-min
 | Reader | Volumes, numbers, dates | Registered user's name | Writes |
 | --- | --- | --- | --- |
 | Owner, editor | all | all | yes |
-| Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise totals per water source held by 5 or more registered users: the volume and storage in force today, and a run's use against them by water year, each sum given only when the rows in it (in force that day or year) are 5 or more registered users' (#523 G) | none | no |
+| Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise today's total per water source (volume and storage in force today) at 5 or more registered users in force, none holding more than 80 % of it nor two more than 90 % (provisional, #92); a run's use by water year and the evidence report's totals of other units as modelled use and status only, never a registered m³ (#523 G–O) | none | no |
 | Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
 | Share links, pack links, the verify page | none (any later total at 5 or more holders, never per unit) | none | no |
-| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`), at 5 or more registered users in force each water year (`evidence-18`) | none | no |
+| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`), at 5 or more registered users in force each water year with the dominance rule (`evidence-18`); a viewer kept from each volume reads the totals' status and modelled use only, and gets no PDF that prints them; an applicant's own pack view has no § 5 | none | no |
 | Not a member | nothing | nothing | no |
 
 The switch is off by default, for viewers can be outside the organisation

@@ -8935,10 +8935,13 @@ in this catchment* (`AllocationTotals.svelte`): per water source held by 5
 or more registered users, the holders, the volume registered today and the
 storage (`totalsSentence`), and the run's modelled use against the
 registered volumes summed per water year; "No total is shown" when no
-source has 5 holders. A sum whose rows in force that day or year are fewer
-than 5 registered users' isn't given: the sentence says the volume (or
-storage) in force today "isn't shown", and the year's row reads *Not shown*
-and *Not judged* with a note (`allocation-totals-years-withheld`; #523 G).
+source has 5 holders. A sum whose rows in force today are fewer than 5
+registered users', or mostly one or two users' (the dominance rule,
+provisional), isn't given: the sentence says the volume (or storage) in
+force today "isn't shown". The run's table by water year has the modelled
+use and how it compares, no registered column (#523 K/L/M), and *Not
+judged* for a year whose rows fail the same rule, with a note
+(`allocation-totals-years-withheld`).
 No unit, number, name or Download CSV. Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every
@@ -10064,8 +10067,11 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     source, left out below 5 registered users (5 units before
     `evidence-18`), and a note says which (`evidence-allocations-others`);
     a year whose registered volume in force is fewer than 5 registered
-    users' reads *not shown* (`evidence-18`, #523 G), its modelled use kept,
-    and the whole years count it as *not shown*. *Not assessed* when the runs carry no volumes, or
+    users', or mostly one or two users', reads *not shown* (`evidence-18`,
+    #523 G/O), its modelled use kept, and the whole years count it as *not
+    shown*. A viewer kept from each volume reads every year of these totals
+    as *not shown*, with a note (`evidence-allocations-others-withheld`,
+    #523 K/L/M). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units

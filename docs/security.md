@@ -2834,7 +2834,7 @@ database:
   | --- | --- | --- |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
-  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`), each sum given only when the rows in it, in force that day or water year, are ≥ 5 registered users' (215, #523 G) |
+  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise only today's total per water source, at ≥ 5 registered users in force and none (or two) dominating it (provisional, #92); a run's years and § 5's totals of other units as status and modelled use, no registered m³ (#523 G–O) |
   | Share links, pack links, the public verify page | never | never per unit (none shown today; any later total at ≥ 5 holders) |
   | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`); at ≥ 5 registered users, and each water year's registered volume only at ≥ 5 in force that year (`evidence-18`, #523 G) |
 
@@ -2871,37 +2871,84 @@ database:
   printed that way, without either project's volumes, and any reader of the
   report's project may download it. A scenario sweep's members
   (`GET …/sweeps`, `…/sweeps/:sweepId`) come without their summaries'
-  per-unit allocations and their `allocation.set` ops. Every "5 or more
-  registered users" total counts the holders of the rows actually summed
-  into it (#523 G, 215's opaque per-row holder key): today's per-source
-  totals (`volumeTotals`), each water year of a run's totals
-  (`comparisonTotals`) and of § 5's *Other registered users*
-  (`evidence-18`, for every reader); before, the count was over the
-  source's rows of every date, so with staggered `valid_from` / `valid_to`
-  a total of "5 or more" could be one holder's volume. A pack drafted
-  before `evidence-18` whose § 5 has such a total is refused to such a
-  viewer (manifest and PDF; which years were affected isn't in the frozen
-  document). Page 1's authorised volume mix is frozen twice: the full one
-  for editors, owners, the authority and the PDF (refused to such a
-  viewer), and a folded one served in its place to such a viewer, no line
-  of it fewer than 5 registered users' volume and no count of them below 5
+  per-unit allocations and their `allocation.set` ops.
+
+  **The one registered m³ such a viewer reads** (issue #523 rounds 3–4,
+  operator's decision 2026-10-11): today's total per water source
+  (`GET …/allocations` `totals`, `volumeTotals`), given only when the
+  takes (or the storage) in force today are 5 or more registered users'
+  and pass the **dominance rule**: no one holder above 80 % of the sum and
+  no two above 90 % (`totalShown`, engine `allocations/holders.ts`). The
+  dominance rule and its limits are **provisional**, pending the CISO and
+  counsel's D3 review (#92); before it, one estate of 900 000 m³/a beside
+  four farms of 1 m³/a gave the estate's volume as a "5 holder" total
+  (#523 O). Every other figure is withheld from that viewer: a run's
+  water years (`GET …/runs/:runId/allocations` `totals`) carry the
+  modelled use and the status only (no status either for a year whose
+  rows in force fail the same rule), and § 5's *Other registered users*
+  totals in the live evidence report and in a served pack manifest carry
+  no registered m³, per year, mean or cap, for the baseline or the
+  application (`withoutOthersRegistered`, `othersRegisteredWithheld`);
+  their status and modelled use stay, and so do an applicant's own units.
+  A pack PDF that prints such a total is refused to them (`403
+  pack_volumes_withheld`; `packWithheldPart` `pdf`), as is the manifest
+  and PDF of a pack drafted before `evidence-18` with one (its totals were
+  gated on units over every date). Why not a gate per figure: two sums
+  over different rows read at the same time give the rows between them
+  exactly, whatever each one's count: a team scenario's baseline and
+  application year that differ by one removed row (#523 K), today's total
+  less a run's year (the unmatched rows and units the run lacks, L), and
+  two consecutive years (a row starting at a year boundary, M). Editors,
+  owners and the authority read every figure.
+
+  The holders behind each sum are counted from the rows actually in it,
+  by a salted key per row (215): `md5` of a random per-project salt
+  (`allocation_holder_salt`, owner-only, never leaves the database) and
+  the holder as 162 counts them, so a member who knows the project and a
+  list of names has nothing to match the keys against (#523 P). A run
+  freezes its rows' keys when it is stored (`run_allocation_holder`,
+  owner-only, written by a trigger, read only through
+  `app_run_allocation_holders` for the given rows of one run), so rows
+  deleted later can't count as new holders (#523 N; a row no living
+  holder had, one a scenario op adds, shares one key `gone`). A key is a
+  pseudonym of the holder's name: it can't be turned back without the
+  salt, and goes with its run or project (a deleted allocation's key stays
+  with the runs that used it, as the run's own copy of the row does). § 5's totals
+  of other units are gated on registered users, not units, and per water
+  year on the holders in force, with the dominance rule, for every reader
+  (`evidence-18`).
+
+  Applicants and contributors read no registered m³ of anyone else's: an
+  applicant's pack view (`app_applicant_pack`, an allowlisted projection)
+  carries no § 5, their copy prints that view, and the base they build on
+  keeps only their own units' rows. An editor can't change an applicant's
+  application (only its applicant), and the applicant's ops can't reach a
+  hidden row (`applicationMask`: a hidden allocation id answers "not
+  found"), so a pack of an application has no K-type difference.
+
+  Page 1's authorised volume mix is frozen twice: the full one for
+  editors, owners, the authority and the PDF (refused to such a viewer),
+  and a folded one served in its place to such a viewer, no line of it
+  fewer than 5 registered users' volume and no count of them below 5
   (`foldedMix`), as whole-percent shares with no m³ (`evidence-18`; an
-  `evidence-17` folded m³ mix is served as its shares). No m³ figure of the
-  mix is served to that viewer, so it can't be differenced against their
-  live totals, which are of the rows in force today while the mix sums
-  every row of the run (#523 H), nor a kind's line against the per-source
-  totals as the margins of a source × kind table (#523 J). What is true
-  now: no total such a viewer reads is the sum of fewer than 5 registered
-  users' volumes, and no difference between two figures read at the same
-  time gives one exactly. Left: where the mix's rows and that viewer's
-  live totals are the same rows (none dated, none changed since the board
-  was built), a share times the sum of the totals estimates a line's m³ to
-  within 1 % of the mix's total (whole-percent rounding), and with outside
-  knowledge of an empty source × kind cell (J's premise) such estimates can
-  be combined to bound one holder's volume to within that 1 % (coarser than
-  J's exact figure, and needing the same outside knowledge, which no route
-  gives); figures read at different times (successive pack versions, a
-  frozen mix against a later live total) can still be differenced (below). A storage-only (21b) row's warning no longer quotes
+  `evidence-17` folded m³ mix is served as its shares), so it can't be
+  differenced against the live totals (#523 H) nor form a source × kind
+  table with them (#523 J).
+
+  What is true now: such a viewer reads registered m³ only as today's
+  per-source totals, each at 5 or more registered users in force, none
+  (or two) dominating; no two figures they read at the same time are sums
+  over different sets of today's rows. Left: today's total less an
+  applicant's own units (listed in their application's live report) is
+  the other holders' sum, a group of 4 or more, which the two-holder limb
+  of the dominance rule keeps from being mostly one of them; where the
+  mix's rows and the live totals are the same rows, a share times the
+  total estimates a line to within 1 % of the mix's total, and with
+  outside knowledge of an empty source × kind cell (J's premise) can bound
+  one holder's volume to that 1 %; and figures read at different times
+  (today's total on two days, successive pack versions, a frozen mix
+  against a later total) can still be differenced
+  ([followups.md § Allocations](./followups.md#allocations-wp-310)). A storage-only (21b) row's warning no longer quotes
   its volume (engine; it reaches a run's summary and the evidence report's
   A.5 verbatim).
 
@@ -2924,8 +2971,13 @@ database:
   has four more holders' rows in force only from 2040, so the source has 5
   holders while the canaries are the only volumes in force on any day or
   year: a total gated on the source's holders of every date would give a
-  canary (#523 G; the staggered-dates test beside it holds the review's
-  repro on each path, with an editor positive control). Left, tracked:
+  canary (#523 G). Five groundwater holders in force throughout make the
+  run's years and § 5's total shown to the editor, and every answer is
+  also searched for any number under a `registered…` or
+  `meanRegistered…` key: only `GET …/allocations`'s today's totals may
+  carry one (#523 K/L/M, which give a volume by subtraction, not as
+  digits). The tests beside it hold the review's repros for G, K, L, M, N
+  and O, each with an editor positive control. Left, tracked:
   totals in successive pack versions, and the folded mix across boards or
   packs, can be differenced; a full-allocation
   scenario run scales each unit's demand to its volume, so its per-unit

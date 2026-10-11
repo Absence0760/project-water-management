@@ -342,6 +342,12 @@ export function namesEveryUnit(reportVersion: string): boolean {
 	return !m || Number(m[1]) < 15;
 }
 
+/** Whether § 5 has a total of other units with a registered m³ figure. */
+const othersRegistered = (report: PackManifest['report']) =>
+	(report.allocations?.units ?? []).some(
+		(u) => u.aggregate !== undefined && u.sources.some((s) => s.meanRegisteredA != null || s.meanRegisteredB != null || s.years.some((y) => y.registeredA !== null || y.registeredB !== null))
+	);
+
 /**
  * Whether a pack's report format gates § 5's totals of other units on units
  * over every date, not on the registered users in force each year: before
@@ -404,15 +410,15 @@ async function packOwnUnits(db: Db, projectId: string, pack: Pick<PackMeta, 'sce
  * volume (gated on units over every date, a year's total could be one
  * holder's, #523 G); `pdf` for one whose
  * page-1 prints the full authorised volume mix (the manifest is served with
- * the folded one instead, or none). Null: the redacted manifest and the PDF
+ * the folded one instead, or none), or whose § 5 prints a total of other
+ * units' registered m³ (the manifest is served without it, #523 K/L/M). Null: the redacted manifest and the PDF
  * hold nothing more.
  */
 export function packWithheldPart(reportVersion: string, report: PackManifest['report'], origin: ScenarioOrigin | null): 'pack' | 'pdf' | null {
 	if (namesEveryUnit(reportVersion)) return 'pack';
 	// Before evidence-18, § 5's "Other registered users" totals were gated on units over every date, so a year's total
 	// could be one holder's volume (#523 G). Which years were isn't in the frozen document, so any such total refuses it.
-	if (gatesTotalsOnUnits(reportVersion) && (report.allocations?.units ?? []).some((u) => u.aggregate !== undefined && u.sources.some((s) => s.years.some((y) => y.registeredA !== null || y.registeredB !== null))))
-		return 'pack';
+	if (gatesTotalsOnUnits(reportVersion) && othersRegistered(report)) return 'pack';
 	if (origin !== 'applicant' && origin !== null) {
 		if ((report.allocations?.units ?? []).some((u) => u.aggregate === undefined)) return 'pack';
 		if ((report.ops ?? []).some((o) => o.op.op.startsWith('allocation.'))) return 'pack';
@@ -420,6 +426,8 @@ export function packWithheldPart(reportVersion: string, report: PackManifest['re
 	// The PDF prints the full mix (evidence-17 freezes a folded one too, for the redacted manifest).
 	const mix = report.licenceImpactAuthorised?.mix;
 	if (mix && !mix.folded && mix.rows.length) return 'pdf';
+	// The PDF prints § 5's totals of other units with their registered m³, which the redacted manifest leaves out (#523 K/L/M).
+	if (othersRegistered(report)) return 'pdf';
 	return null;
 }
 

@@ -309,10 +309,10 @@ describe('a viewer’s totals (162, decision D3)', () => {
 
 	it('says a sum held by fewer than 5 in force today isn’t shown, with no figure (#523 G)', () => {
 		expect(totalsSentence({ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null, storageWithheld: true })).toBe(
-			'Surface water: 5 registered users, the volume in force today isn’t shown; the storage in force today isn’t shown (fewer than 5 of them hold one in force today).'
+			'Surface water: 5 registered users, the volume in force today isn’t shown; the storage in force today isn’t shown (fewer than 5 of them hold one in force today, or one or two hold most of it).'
 		);
 		expect(totalsSentence({ waterSource: 'surface', holders: 6, registeredM3PerYear: 1_000, storageM3: null, storageWithheld: true })).toBe(
-			`Surface water: 6 registered users, ${fmtNum(1_000)} m³ a year registered today; the storage in force today isn’t shown (fewer than 5 of them hold one in force today).`
+			`Surface water: 6 registered users, ${fmtNum(1_000)} m³ a year registered today; the storage in force today isn’t shown (fewer than 5 of them hold one in force today, or one or two hold most of it).`
 		);
 	});
 

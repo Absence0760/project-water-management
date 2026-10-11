@@ -21,12 +21,13 @@ import {
 	type AllocationUseNode,
 	type AllocationWaterSource,
 	type ScenarioOp,
-	holdersWithin,
 	mixShares,
+	shownWithin,
 	totalShown,
 	waterYearWithin,
 	type AuthorisedMix,
-	type AuthorisedMixShares
+	type AuthorisedMixShares,
+	type EvidenceAllocations
 } from '@water-management/engine';
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
@@ -46,8 +47,8 @@ export interface VolumeRow {
 	waterSource: AllocationWaterSource;
 	/** Registered users holding this source over all its rows, whatever their dates (5 or more, or no row is returned). */
 	holders: number;
-	/** This row's holder: an opaque ordinal (215), only to count the holders of the rows a total sums. */
-	holder: number;
+	/** This row's holder: a salted key (215), only to count the holders, and their shares, of the rows a total sums. */
+	holder: string;
 	nodeId: string | null;
 	volumeM3PerYear: number;
 	storageM3: number | null;
@@ -66,31 +67,42 @@ export async function loadVolumes(db: Db, projectId: string): Promise<VolumeRow[
 	return rows;
 }
 
-/** A water source's registered volumes in force on a day, summed: what a viewer reads instead of the list. */
+/**
+ * A water source's registered volumes in force today, summed: the only
+ * registered m³ a viewer kept from each volume reads (#523 G/K/L/M, operator
+ * decision 2026-10-11). Any other figure (a run's water years, the evidence
+ * report's totals of other units) is over another set of rows, and two sums
+ * over different rows read at the same time give their difference.
+ */
 export interface AllocationTotal {
 	waterSource: AllocationWaterSource;
 	/** Registered users holding this source over all its rows (5 or more, or it isn't returned). */
 	holders: number;
 	/**
-	 * Volumes in force that day, m³ a year (takes only; a 21b row is storage); null when fewer than 5
-	 * registered users hold the takes in force that day (#523 G): the sum would be fewer than 5 holders' volume.
+	 * Volumes in force today, m³ a year (takes only; a 21b row is storage); null when the takes in force
+	 * today are fewer than 5 registered users', or one or two of them dominate the sum (totalShown).
 	 */
 	registeredM3PerYear: number | null;
-	/** Registered storage in force that day, m³; null when none states one, or when it is withheld (`storageWithheld`). */
+	/** Registered storage in force today, m³; null when none states one, or when it is withheld (`storageWithheld`). */
 	storageM3: number | null;
-	/** The storage in force that day is held by fewer than 5 registered users, so it isn't given (#523 G). */
+	/** The storage in force today is fewer than 5 registered users', or dominated by one or two (#523 G/O). */
 	storageWithheld?: true;
 }
 
 const inForce = (r: Pick<VolumeRow, 'validFrom' | 'validTo'>, day: string) => (!r.validFrom || r.validFrom <= day) && (!r.validTo || r.validTo >= day);
 const SOURCES: readonly AllocationWaterSource[] = ['surface', 'groundwater'];
-const holdersOf = (rows: readonly Pick<VolumeRow, 'holder'>[]) => new Set(rows.map((r) => r.holder)).size;
+/** Each holder's part of a sum over `rows`. */
+const partsOf = <R extends { holder: string }>(rows: readonly R[], amount: (r: R) => number) => {
+	const out = new Map<string, number>();
+	for (const r of rows) out.set(r.holder, (out.get(r.holder) ?? 0) + amount(r));
+	return out.values();
+};
 
 /**
  * Each water source's takes and storage in force on `day`, summed, each sum
- * given only when the rows in it are held by 5 or more registered users
- * (none at all is 0, or no storage): the 5-holder rule on the rows summed,
- * not on the source's rows of every date (#523 G).
+ * given only when it passes the 5-holder and dominance rules over the rows in
+ * it (totalShown; none at all is 0, or no storage), not over the source's
+ * rows of every date (#523 G, O).
  */
 export function volumeTotals(rows: readonly VolumeRow[], day: string): AllocationTotal[] {
 	return SOURCES.flatMap((src) => {
@@ -98,12 +110,12 @@ export function volumeTotals(rows: readonly VolumeRow[], day: string): Allocatio
 		if (!mine.length) return [];
 		const takes = mine.filter((r) => r.waterUse !== '21b' && r.volumeM3PerYear > 0 && inForce(r, day));
 		const storages = mine.filter((r) => r.storageM3 !== null && r.storageM3 > 0 && inForce(r, day));
-		const storageShown = totalShown(holdersOf(storages));
+		const storageShown = totalShown(partsOf(storages, (r) => r.storageM3!));
 		return [
 			{
 				waterSource: src,
 				holders: mine[0]!.holders,
-				registeredM3PerYear: totalShown(holdersOf(takes)) ? takes.reduce((s, r) => s + r.volumeM3PerYear, 0) : null,
+				registeredM3PerYear: totalShown(partsOf(takes, (r) => r.volumeM3PerYear)) ? takes.reduce((s, r) => s + r.volumeM3PerYear, 0) : null,
 				storageM3: storages.length && storageShown ? storages.reduce((s, r) => s + r.storageM3!, 0) : null,
 				...(storageShown ? {} : { storageWithheld: true as const })
 			}
@@ -111,17 +123,20 @@ export function volumeTotals(rows: readonly VolumeRow[], day: string): Allocatio
 	});
 }
 
-/** One water year of a source's use, summed over the units with a volume on it. */
+/**
+ * One water year of a source's use, summed over the units with a volume on
+ * it: the modelled use and how it compares with the registered volume, never
+ * the registered volume itself (#523 K/L/M: consecutive years, or a year and
+ * today's total, differ by one holder's volume).
+ */
 export interface AllocationYearTotal {
 	waterYear: number;
 	/** A part of the year only (the run's edge): listed, not judged. */
 	partial: boolean;
-	/** Null when fewer than 5 registered users hold the takes in force that year (`withheld`, #523 G). */
-	registeredM3: number | null;
 	modelledM3: number;
-	/** Null when the registered volume is withheld. */
+	/** Null when the registered volume in force that year fails the 5-holder or dominance rule (`withheld`). */
 	status: AllocationStatus | null;
-	/** The registered volume in force that year is held by fewer than 5 registered users, so neither it nor the status is given. */
+	/** The year's registered volume is fewer than 5 registered users', or dominated, so not even its status is given. */
 	withheld?: true;
 }
 
@@ -141,9 +156,10 @@ export interface AllocationComparisonTotals {
 /**
  * The run's modelled use against the registered volumes, summed per water
  * source and water year over the units that hold one (compareAllocations,
- * then the sum). A source with fewer than 5 holders isn't in `rows`, so it
- * isn't here; a year whose takes in force on the run's units are held by
- * fewer than 5 gives its modelled use only (#523 G).
+ * then the sum): the modelled use and the status, no registered m³. A source
+ * with fewer than 5 holders isn't in `rows`, so it isn't here; a year whose
+ * takes in force on the run's units fail the 5-holder or dominance rule gives
+ * its modelled use only (#523 G).
  */
 export function comparisonTotals(input: { startDate: string; nodes: readonly AllocationUseNode[]; tolerance: number; rows: readonly VolumeRow[] }): AllocationComparisonTotals {
 	const holders = new Map(input.rows.map((r) => [r.waterSource, r.holders]));
@@ -177,9 +193,8 @@ export function comparisonTotals(input: { startDate: string; nodes: readonly All
 			.sort((a, b) => a.waterYear - b.waterYear)
 			.map((y): AllocationYearTotal => {
 				const span = waterYearWithin(y.waterYear, c.startDate, c.endDate);
-				if (span && !totalShown(holdersWithin(summed, span.from, span.to)))
-					return { waterYear: y.waterYear, partial: y.partial, registeredM3: null, modelledM3: y.modelledM3, status: null, withheld: true };
-				return { ...y, status: allocationStatus(y.modelledM3, y.registeredM3, input.tolerance) };
+				if (span && !shownWithin(summed, span.from, span.to)) return { waterYear: y.waterYear, partial: y.partial, modelledM3: y.modelledM3, status: null, withheld: true };
+				return { waterYear: y.waterYear, partial: y.partial, modelledM3: y.modelledM3, status: allocationStatus(y.modelledM3, y.registeredM3, input.tolerance) };
 			});
 		return [{ waterSource: src, holders: holders.get(src)!, units: held.length, years }];
 	});
@@ -241,7 +256,40 @@ type ReportLike = {
 	summaries: { baseline: { allocations?: { nodes?: unknown[] } | null } | null; application: { allocations?: { nodes?: unknown[] } | null } | null };
 	ops?: { op: ScenarioOp }[];
 	licenceImpactAuthorised?: { mix?: AuthorisedMix | AuthorisedMixShares | null; mixFolded?: AuthorisedMix | AuthorisedMixShares | null } | null;
+	/** § 5 (EvidenceAllocations); typed loosely so a frozen manifest of any format passes. */
+	allocations?: unknown;
 };
+
+/**
+ * § 5 without the registered m³ of its totals of other units, per year, mean
+ * or cap (#523 K/L/M): a viewer kept from each volume reads registered m³
+ * only as today's per-source totals. Two sums over different rows read at
+ * the same time (the baseline's and the application's year, two consecutive
+ * years, a year and today's total) give the rows between them, often one
+ * holder's. The status and modelled use stay; the applicant's own units stay.
+ */
+export function withoutOthersRegistered(al: EvidenceAllocations): EvidenceAllocations {
+	if (!Array.isArray(al.units) || !al.units.some((u) => u.aggregate !== undefined)) return al;
+	return {
+		...al,
+		othersRegisteredWithheld: true,
+		units: al.units.map((u) =>
+			u.aggregate === undefined
+				? u
+				: {
+						...u,
+						sources: u.sources.map((src) => ({
+							...src,
+							meanRegisteredA: null,
+							meanRegisteredB: null,
+							capA: null,
+							capB: null,
+							years: src.years.map((y) => ({ ...y, registeredA: null, registeredB: null }))
+						}))
+					}
+		)
+	};
+}
 
 /**
  * An evidence report as a viewer who can't read each registered volume gets
@@ -252,10 +300,10 @@ type ReportLike = {
  * scenario) left out, and page 1's authorised volume mix replaced by its
  * folded one as whole-percent shares with no m³ (`mixFolded`: shares since
  * evidence-18, an evidence-17 board's m³ turned into its shares by
- * mixShares; none for a board built before, #523 H/J). § 5 stays: since
- * `evidence-15` it lists only the applicant's own units, the rest as totals
- * (since `evidence-17` none of a team scenario's; since `evidence-18` gated on
- * 5 or more registered users in force each year, #523 G). A frozen pack manifest redacted this way no longer hashes to
+ * mixShares; none for a board built before, #523 H/J). § 5 lists only the
+ * applicant's own units (`evidence-15`; none of a team scenario's since
+ * `evidence-17`), the rest as totals, whose registered m³ is left out
+ * (withoutOthersRegistered, #523 K/L/M): their status and modelled use stay. A frozen pack manifest redacted this way no longer hashes to
  * its manifestSha256, so the caller says so (packs.ts `volumesWithheld`).
  * Appendix A.2's input diff is the caller's: the live report builds it
  * without other units' volumes (evidence/report.ts), and an issuable pack's
@@ -273,7 +321,8 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one.
 		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
-		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) }
+		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
+		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {})
 	};
 }
 

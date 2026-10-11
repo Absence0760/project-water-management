@@ -1133,8 +1133,8 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const others = ['O1', 'O2', 'O3', 'O4', 'O5'];
 		const VOL = 123_457;
 		/** Baseline evidence of five neighbour units, each with its own row; `from` their first days, `holder` who holds each. */
-		const evidenceOf = (from: (string | null)[], holder: (i: number) => string) => {
-			const entries: AllocationEntry[] = others.map((id, i) => ({ id: `a-${id}`, nodeId: id, waterSource: 'surface', volumeM3PerYear: i === 0 ? VOL : 1000, validFrom: from[i] ?? null }));
+		const evidenceOf = (from: (string | null)[], holder: (i: number) => string, other = 50_000) => {
+			const entries: AllocationEntry[] = others.map((id, i) => ({ id: `a-${id}`, nodeId: id, waterSource: 'surface', volumeM3PerYear: i === 0 ? VOL : other, validFrom: from[i] ?? null }));
 			const days = baseOut.series.find((x) => x.nodeId === 'F2' && x.key === 'supplied')!.values.length;
 			const c = compareAllocations({
 				startDate: START,
@@ -1160,7 +1160,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 			// From 1993 all five hold one: the total is shown (positive control).
 			const shown = total.years.find((y) => y.waterYear === 1993)!;
 			expect(shown.withheldA).toBeUndefined();
-			expect(shown.registeredA).toBeCloseTo(VOL + 4 * 1000, 6);
+			expect(shown.registeredA).toBeCloseTo(VOL + 4 * 50_000, 6);
 			// No year's figure, nor the mean, is the lone holder's volume (or its pro-rated part of a year).
 			const text = canonicalJson(al);
 			expect(text).not.toMatch(new RegExp(`(^|\\D)${VOL}(\\D|$)`));
@@ -1173,6 +1173,18 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 			const open = evidenceOf([null, null, null, null, null], (k) => `h${k}`).units.find((u) => u.nodeId === 'others:surface')!.sources[0]!;
 			expect(open.years.some((y) => y.withheldA)).toBe(false);
 			expect(open.countsA!.withheld).toBeUndefined();
+		});
+
+		it('#523 O: withholds a year one holder dominates, though five hold a volume in force (provisional 80 % rule)', () => {
+			const al = evidenceOf([null, null, null, null, null], (k) => `h${k}`, 1000);
+			const total = al.units.find((u) => u.nodeId === 'others:surface')!.sources[0]!;
+			expect(total.years.every((y) => y.withheldA === true && y.registeredA === null)).toBe(true);
+			expect(canonicalJson(al)).not.toMatch(new RegExp(`(^|\\D)${VOL + 4000}(\\D|$)`));
+		});
+
+		it('#523 N: rows whose holder key is gone share one key, so they add at most one holder', () => {
+			const al = evidenceOf([null, null, null, null, null], () => 'gone');
+			expect(al.units.map((u) => u.nodeId)).not.toContain('others:surface');
 		});
 
 		it('counts registered users, not units: one holder of five units is left out (finding 6)', () => {

@@ -20,7 +20,8 @@ const NO_RLS = new Set(['schema_migrations']);
  * schema owner, reads it (deployment.md § Restoring the database).
  */
 // A reset's cancel-link hashes and the cap on asking for one (205_mfa_recovery): only its SECURITY DEFINER functions touch them.
-const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota']);
+// The allocation holder keys' salt and each run's frozen keys (215_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS

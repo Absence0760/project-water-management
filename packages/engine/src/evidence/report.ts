@@ -14,7 +14,7 @@ import {
 	type AllocationWaterSource,
 	type AllocationYear
 } from '../allocations/compare';
-import { holdersWithin, totalShown, waterYearWithin, type HeldVolume } from '../allocations/holders';
+import { holdersWithin, shownWithin, waterYearWithin, type HeldVolume } from '../allocations/holders';
 import { FARMER_K } from '../views/farmView';
 import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
 import { errataFor, type Erratum } from '../liability/errata';
@@ -1523,13 +1523,15 @@ const sumOrNull = (xs: (number | null)[]) => (xs.some((x) => x !== null) ? xs.re
  * One run's registered volumes on given units and a water source, each with
  * its holder (evidence-18, #523 G): the rows its comparison counted
  * (`allocationIds`), with their dates from the run's own input and their
- * holder from `allocationHolders` (a row without one is its unit's). Null
+ * holder from `allocationHolders` (a row without one shares the key 'gone';
+ * no map at all, each row is its unit's). Null
  * when the run has no comparison.
  */
 type HeldBy = { rows: (nodeIds: ReadonlySet<string>, src: AllocationWaterSource) => HeldVolume[]; start: string; end: string };
 function heldBy(run: EvidenceRunInput, c: AllocationComparison | null): HeldBy | null {
 	if (!c) return null;
-	const keys = run.allocationHolders ?? {};
+	const keys = run.allocationHolders ?? null;
+	// With keys, a row without one shares one key ('gone': at most one holder, #523 N); without any (an older caller), each is its unit's.
 	const entries = new Map((run.inputs.model.allocations ?? []).map((e) => [e.id, e]));
 	return {
 		start: c.startDate,
@@ -1541,7 +1543,7 @@ function heldBy(run: EvidenceRunInput, c: AllocationComparison | null): HeldBy |
 					n[src].allocationIds.map((id): HeldVolume => {
 						const e = entries.get(id);
 						// A counted row always comes from the run's input; were one missing, it counts as open-dated, its unit's.
-						return { holder: keys[id] ?? `n:${n.nodeId}`, volumeM3PerYear: e ? e.volumeM3PerYear : 1, waterUse: e?.waterUse ?? null, validFrom: e?.validFrom ?? null, validTo: e?.validTo ?? null };
+						return { holder: keys ? (keys[id] ?? 'gone') : `n:${n.nodeId}`, volumeM3PerYear: e ? e.volumeM3PerYear : 1, waterUse: e?.waterUse ?? null, validFrom: e?.validFrom ?? null, validTo: e?.validTo ?? null };
 					})
 				)
 	};
@@ -1554,7 +1556,8 @@ function heldBy(run: EvidenceRunInput, c: AllocationComparison | null): HeldBy |
  * registered users, not units (evidence-18, #523 G and the G1 review's finding
  * 6): a source fewer than FARMER_K hold over both runs is left out (its units
  * counted in `leftOut`), and a year whose takes in force on those units are
- * held by fewer than FARMER_K in a run gives that run's modelled use only
+ * held by fewer than FARMER_K in a run, or dominated by one or two of them
+ * (allocations/holders.ts totalShown), gives that run's modelled use only
  * (`withheldA` / `B`), as one holder's volume would otherwise be the total.
  */
 function otherUnitTotals(
@@ -1577,10 +1580,10 @@ function otherUnitTotals(
 			for (const u of holding) left.add(u.nodeId);
 			continue;
 		}
-		/** Whether a run's registered volume in water year `wy` is fewer than FARMER_K holders' (never when that run has no comparison). */
+		/** Whether a run's registered volume in water year `wy` is fewer than FARMER_K holders', or one or two of them dominate it (never when that run has no comparison). */
 		const withheld = (held: HeldBy | null, rows: HeldVolume[], wy: number) => {
 			const span = held ? waterYearWithin(wy, held.start, held.end) : null;
-			return !!span && !totalShown(holdersWithin(rows, span.from, span.to));
+			return !!span && !shownWithin(rows, span.from, span.to);
 		};
 		const parts = holding.map((u) => u.sources.find((s) => s.waterSource === src)!);
 		const wys = [...new Set(parts.flatMap((p) => p.years.map((y) => y.waterYear)))].sort((x, y) => x - y);

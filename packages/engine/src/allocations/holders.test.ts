@@ -1,6 +1,6 @@
 // Who holds the volumes in a total (issue #523 G, D3): the holders counted are those of the rows summed.
 import { describe, expect, it } from 'vitest';
-import { holdersWithin, takesWithin, totalShown, waterYearWithin } from './holders';
+import { amountsWithin, holdersWithin, shownWithin, takesWithin, totalShown, waterYearWithin } from './holders';
 
 describe('holdersWithin', () => {
 	const rows = [
@@ -22,7 +22,29 @@ describe('holdersWithin', () => {
 	});
 
 	it('shows a sum of none or of 5 or more holders, never of 1 to 4', () => {
-		expect([0, 1, 4, 5, 6].map(totalShown)).toEqual([true, false, false, true, true]);
+		const even = (n: number) => new Array<number>(n).fill(10);
+		expect([0, 1, 4, 5, 6].map((n) => totalShown(even(n)))).toEqual([true, false, false, true, true]);
+		// A holder whose part is 0 isn't one.
+		expect(totalShown([...even(4), 0])).toBe(false);
+	});
+
+	it('#523 O: withholds a sum one holder has more than 80 % of, or two more than 90 % (provisional)', () => {
+		expect(totalShown([900_000, 1, 1, 1, 1])).toBe(false);
+		expect(totalShown([80, 5, 5, 5, 5])).toBe(true);
+		expect(totalShown([81, 5, 5, 5, 4])).toBe(false);
+		expect(totalShown([60, 31, 3, 3, 3])).toBe(false);
+		expect(totalShown([60, 30, 4, 3, 3])).toBe(true);
+	});
+
+	it('weighs each holder by days in force, so a row in force a day of the year is a day’s part of it (#523 M)', () => {
+		const year = ['2021-10-01', '2022-09-30'] as const;
+		const parts = amountsWithin(
+			[{ holder: 'a', volumeM3PerYear: 365, validFrom: null }, ...['b', 'c', 'd', 'e'].map((h) => ({ holder: h, volumeM3PerYear: 365, validTo: '2021-10-02' }))],
+			...year
+		);
+		expect([...parts.values()]).toEqual([365 * 365, 730, 730, 730, 730]);
+		// Five holders, but one has nearly all of the year: withheld.
+		expect(shownWithin([{ holder: 'a', volumeM3PerYear: 365 }, ...['b', 'c', 'd', 'e'].map((h) => ({ holder: h, volumeM3PerYear: 365, validTo: '2021-10-02' }))], ...year)).toBe(false);
 	});
 });
 

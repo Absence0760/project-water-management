@@ -151,6 +151,8 @@
 	const bandsA = $derived(report.uncertainty.baseline?.bands ?? null);
 	const paired = $derived(report.uncertainty.paired);
 	const al = $derived(report.allocations);
+	/** A total of other units whose registered m³ the server left out for this reader (#523 K/L/M). */
+	const hidesOthers = (u: { aggregate?: number }) => !!al.othersRegisteredWithheld && u.aggregate !== undefined;
 	const cum = $derived(report.cumulative);
 	// The authority's words (163_licensing_authority, evidence-13); a pack drafted before keeps its frozen approved / approved_with_conditions.
 	const OUTCOME: Record<string, string> = { licence_issued: 'licence issued', approved: 'approved', approved_with_conditions: 'approved with conditions' };
@@ -629,7 +631,9 @@
 						<p class="small muted" data-testid="evidence-allocations-others">
 							{app ? 'Only the applicant’s own units are listed one by one.' : 'No unit is listed one by one.'} Every other unit’s volume and use is in one total per water
 							source, “Other registered users”, when enough registered users hold that source; a year’s registered volume in that total is “not shown” when fewer
-							than 5 registered users hold one in force that year.{#if al.othersLeftOut}
+							than 5 registered users hold one in force that year, or one or two hold most of it.{#if al.othersRegisteredWithheld}
+								{' '}<span data-testid="evidence-allocations-others-withheld">This project shows registered volumes to its editors and owners only: in these totals you read each year’s
+									modelled use and how it compares, not the registered volume.</span>{/if}{#if al.othersLeftOut}
 								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: too few registered
 								users hold one from that water source. The project’s editors see each unit on the Allocations tab.{/if}
 						</p>
@@ -695,7 +699,7 @@
 											<tr>
 												<th scope="row">{u.name}<span class="sub">{SOURCE_LABEL[src.waterSource]}</span></th>
 												<td class="nowrap">{waterYearLabel(y.waterYear)}{#if partNote(y, app)}<span class="sub">{partNote(y, app)}</span>{/if}</td>
-												<td class="num">{registeredText(y, app).main}{#if registeredText(y, app).sub}<span class="sub">{registeredText(y, app).sub}</span>{/if}</td>
+												<td class="num">{registeredText(y, app, hidesOthers(u)).main}{#if registeredText(y, app, hidesOthers(u)).sub}<span class="sub">{registeredText(y, app, hidesOthers(u)).sub}</span>{/if}</td>
 												<td class="num"
 													>{m3(y.modelledA)}<span class="sub">{ratioText(y.modelledA, y.registeredA)}</span>{#if measuredNote(src, y, 'A')}<span class="sub" data-testid="evidence-allocation-measured">{measuredNote(src, y, 'A')}</span>{/if}</td
 												>

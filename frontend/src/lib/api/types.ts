@@ -2259,11 +2259,11 @@ export interface AllocationList {
 export interface AllocationTotal {
 	waterSource: 'surface' | 'groundwater';
 	holders: number;
-	/** Null when fewer than 5 registered users hold the takes in force today (#523 G). */
+	/** Null when the takes in force today are fewer than 5 registered users', or one or two of them dominate the sum (#523 G/O). */
 	registeredM3PerYear: number | null;
 	/** Null when none states one, or when withheld (`storageWithheld`). */
 	storageM3: number | null;
-	/** The storage in force today is held by fewer than 5 registered users (#523 G). */
+	/** The storage in force today is fewer than 5 registered users', or dominated by one or two (#523 G/O). */
 	storageWithheld?: true;
 }
 
@@ -2274,8 +2274,11 @@ export interface AllocationComparisonTotals {
 		waterSource: 'surface' | 'groundwater';
 		holders: number;
 		units: number;
-		/** `withheld`: fewer than 5 registered users hold the volumes in force that year, so `registeredM3` and `status` are null (#523 G). */
-		years: { waterYear: number; partial: boolean; registeredM3: number | null; modelledM3: number; status: import('@water-management/engine').AllocationStatus | null; withheld?: true }[];
+		/**
+		 * No registered m³: only today's totals carry it (#523 K/L/M). `withheld`: the volumes in force that year are fewer
+		 * than 5 registered users', or one or two dominate them, so `status` is null too (#523 G/O).
+		 */
+		years: { waterYear: number; partial: boolean; modelledM3: number; status: import('@water-management/engine').AllocationStatus | null; withheld?: true }[];
 	}[];
 }
 

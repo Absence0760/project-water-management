@@ -126,6 +126,8 @@ describe('a total of other units’ year too few registered users hold (evidence
 		expect(registeredText({ registeredA: 1000, registeredB: 1000.4 }, true)).toEqual({ main: fmtNum(1000), sub: null });
 		expect(registeredText({ registeredA: null, registeredB: 1000 }, true)).toEqual({ main: fmtNum(1000), sub: null });
 		expect(registeredText({ registeredA: null, registeredB: null }, false)).toEqual({ main: '–', sub: null });
+		// A total of other units served to a viewer kept from each volume carries none (#523 K/L/M).
+		expect(registeredText({ registeredA: null, registeredB: null }, true, true)).toEqual({ main: 'not shown', sub: null });
 	});
 
 	it('counts the whole years not shown beside the judged ones', () => {

@@ -303,7 +303,7 @@ export function allocationsContext(volumes: number, unmatched: number, rows: rea
 export function totalsSentence(t: AllocationTotal): string {
 	const storage = t.storageM3 !== null ? `, ${fmtNum(t.storageM3)} m³ of storage` : t.storageWithheld ? '; the storage in force today isn’t shown' : '';
 	const volume = t.registeredM3PerYear !== null ? `${fmtNum(t.registeredM3PerYear)} m³ a year registered today` : 'the volume in force today isn’t shown';
-	const why = t.registeredM3PerYear === null || t.storageWithheld ? ' (fewer than 5 of them hold one in force today)' : '';
+	const why = t.registeredM3PerYear === null || t.storageWithheld ? ' (fewer than 5 of them hold one in force today, or one or two hold most of it)' : '';
 	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${volume}${storage}${why}.`;
 }
 
