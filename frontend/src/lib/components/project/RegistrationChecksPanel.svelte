@@ -12,6 +12,7 @@
 	// latest check says registered). Editors read the list; owners, and the
 	// editors an owner marked as acting for the responsible authority (163),
 	// record.
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount, tick } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '$lib/api';
@@ -212,7 +213,7 @@
 				</div>
 				<div class="field">
 					<label for="rc-date">Checked on</label>
-					<input id="rc-date" type="date" bind:value={form.checkedAt} max={today()} required />
+					<DayInput id="rc-date" bind:value={form.checkedAt} max={today()} required />
 				</div>
 			</div>
 			<div class="field">

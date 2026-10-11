@@ -11,6 +11,7 @@
 	has been left. Removing a period with something written in it asks first.
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { HEAVY_DAY_MM, QM_MIN_WET_DAYS, QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN, waterYearLabel, type RainSourcePeriod } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -103,11 +104,11 @@
 						<div class="row">
 							<div class="field">
 								<label for="{uid}-s{i}">From</label>
-								<input id="{uid}-s{i}" type="date" readonly={readonly} value={p.start} onchange={(e) => patch(i, { start: e.currentTarget.value })} {...invalidOn(i, 'start')} />
+								<DayInput id="{uid}-s{i}" readonly={readonly} value={p.start} onchange={(v) => patch(i, { start: v })} {...invalidOn(i, 'start')} />
 							</div>
 							<div class="field">
 								<label for="{uid}-e{i}">To</label>
-								<input id="{uid}-e{i}" type="date" readonly={readonly} value={p.end} onchange={(e) => patch(i, { end: e.currentTarget.value })} {...invalidOn(i, 'end')} />
+								<DayInput id="{uid}-e{i}" readonly={readonly} value={p.end} onchange={(v) => patch(i, { end: v })} {...invalidOn(i, 'end')} />
 							</div>
 							<div class="field reason">
 								<label for="{uid}-r{i}">Reason</label>
@@ -155,11 +156,11 @@
 								</div>
 								<div class="field">
 									<label for="{uid}-pf{i}">Fitted on, from</label>
-									<input id="{uid}-pf{i}" type="date" readonly={readonly} value={p.provenance?.fittedFrom ?? ''} onchange={(e) => patch(i, { provenance: { ...p.provenance!, fittedFrom: e.currentTarget.value } })} {...invalidOn(i, 'fittedFrom')} />
+									<DayInput id="{uid}-pf{i}" readonly={readonly} value={p.provenance?.fittedFrom ?? ''} onchange={(v) => patch(i, { provenance: { ...p.provenance!, fittedFrom: v } })} {...invalidOn(i, 'fittedFrom')} />
 								</div>
 								<div class="field">
 									<label for="{uid}-pt{i}">to</label>
-									<input id="{uid}-pt{i}" type="date" readonly={readonly} value={p.provenance?.fittedTo ?? ''} onchange={(e) => patch(i, { provenance: { ...p.provenance!, fittedTo: e.currentTarget.value } })} {...invalidOn(i, 'fittedTo')} />
+									<DayInput id="{uid}-pt{i}" readonly={readonly} value={p.provenance?.fittedTo ?? ''} onchange={(v) => patch(i, { provenance: { ...p.provenance!, fittedTo: v } })} {...invalidOn(i, 'fittedTo')} />
 								</div>
 								<div class="field grow">
 									<label for="{uid}-pm{i}">Method</label>

@@ -8,6 +8,7 @@
 	head, as a fieldset by its legend; ui-playbook.md § 2).
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { exclusionsError, exclusionRange, waterYearLabel, type CalibrationExclusion } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -105,11 +106,11 @@
 					{:else}
 						<div class="field">
 							<label for="{uid}-s{i}">From</label>
-							<input id="{uid}-s{i}" type="date" readonly={readonly} value={x.start} onchange={(e) => setDate(i, 'start', e.currentTarget.value)} />
+							<DayInput id="{uid}-s{i}" readonly={readonly} value={x.start} onchange={(v) => setDate(i, 'start', v)} />
 						</div>
 						<div class="field">
 							<label for="{uid}-e{i}">To</label>
-							<input id="{uid}-e{i}" type="date" readonly={readonly} value={x.end} onchange={(e) => setDate(i, 'end', e.currentTarget.value)} />
+							<DayInput id="{uid}-e{i}" readonly={readonly} value={x.end} onchange={(v) => setDate(i, 'end', v)} />
 						</div>
 					{/if}
 					<div class="field reason">

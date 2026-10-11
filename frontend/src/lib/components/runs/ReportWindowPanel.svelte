@@ -9,6 +9,7 @@
 	through the windows looked at.
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -176,11 +177,11 @@
 		{#if choice.preset === 'custom' && !unavailable}
 			<div class="field">
 				<label for="rw-start">From</label>
-				<input id="rw-start" type="date" min={run.startDate} max={run.endDate} value={choice.start} onchange={(e) => pickDate('start', e.currentTarget.value)} />
+				<DayInput id="rw-start" commit="change" min={run.startDate} max={run.endDate} value={choice.start} onchange={(v) => pickDate('start', v)} />
 			</div>
 			<div class="field">
 				<label for="rw-end">To</label>
-				<input id="rw-end" type="date" min={run.startDate} max={run.endDate} value={choice.end} onchange={(e) => pickDate('end', e.currentTarget.value)} />
+				<DayInput id="rw-end" commit="change" min={run.startDate} max={run.endDate} value={choice.end} onchange={(v) => pickDate('end', v)} />
 			</div>
 		{/if}
 	</div>

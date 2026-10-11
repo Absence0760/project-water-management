@@ -5,6 +5,7 @@
 	// the outcome or confirm a review (the API answers anyone else 403, and
 	// ProjectTab renders it for editors and owners only). Provisional position
 	// (pre-counsel research, 2026-10-01).
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type LicenceRecord } from '$lib/api';
@@ -106,13 +107,13 @@
 					{#if form.outcome !== ''}
 						<div class="field">
 							<label for="lr-on">Decided on</label>
-							<input id="lr-on" type="date" bind:value={form.outcomeOn} />
+							<DayInput id="lr-on" bind:value={form.outcomeOn} />
 						</div>
 					{/if}
 					{#if form.outcome === 'granted'}
 						<div class="field">
 							<label for="lr-expires">Licence expires on</label>
-							<input id="lr-expires" type="date" bind:value={form.expiresOn} />
+							<DayInput id="lr-expires" bind:value={form.expiresOn} />
 						</div>
 					{/if}
 					<div class="field">

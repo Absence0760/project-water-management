@@ -4,8 +4,8 @@
 //   its values (a required prop), the same chevron, named action and "needs fixing".
 // - The explain switch is common/ExplainSwitch.svelte, and app.css holds the one rule that hides `.explain`.
 // - A paste dialog is model/PasteDialogFrame.svelte's frame.
-// - A typed date is a text field read by parseDay, never <input type="date"> (the browser's own order: 12/30/2021
-//   in a US browser). The fields from before the rule are counted below and may only go down.
+// - A typed date is common/DayInput.svelte (a text field read by parseDay), never <input type="date"> (the
+//   browser's own order: 12/30/2021 in a US browser). The 30 fields from before the rule were converted (issue #521).
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,28 +27,6 @@ const where = (re: RegExp, except: string[] = []) => files.filter((f) => !except
 /** <input type="date">, in any quoting. */
 const NATIVE_DATE = /\btype\s*=\s*(?:"date"|'date'|\{\s*['"]date['"]\s*\})/g;
 
-/**
- * Native date fields written before the typed-date rule (ui-playbook § 2, "A typed date is day first too"),
- * by file. Converting them needs a shared day field that joins the save blocker's invalid fields, as
- * NumberInput does; until then the count per file may only go down. Lower it when you convert one.
- */
-const NATIVE_DATE_BEFORE_THE_RULE: Record<string, number> = {
-	'lib/components/allocations/AllocationForm.svelte': 2,
-	'lib/components/calibration/CalibrationWindowFields.svelte': 2,
-	'lib/components/common/PeriodList.svelte': 2,
-	'lib/components/feeds/DataFeedsPanel.svelte': 1,
-	'lib/components/feeds/UnitRain.svelte': 1,
-	'lib/components/import/WorkbookReview.svelte': 1,
-	'lib/components/network/DemandScheduleFields.svelte': 2,
-	'lib/components/network/DevelopmentFields.svelte': 3,
-	'lib/components/project/LicenceRecordPanel.svelte': 2,
-	'lib/components/project/RegistrationChecksPanel.svelte': 1,
-	'lib/components/runs/PublicationPanel.svelte': 1,
-	'lib/components/runs/ReportWindowPanel.svelte': 2,
-	'lib/components/scenarios/ApplicationPanel.svelte': 2,
-	'lib/components/settings/RainSourceSection.svelte': 4,
-	'lib/components/settings/SettingsTab.svelte': 4
-};
 
 describe('shared UI patterns (issue #521)', () => {
 	it('every fold is common/Fold.svelte', () => {
@@ -83,8 +61,12 @@ describe('shared UI patterns (issue #521)', () => {
 		expect(count("{ t: 'date', nullLabel: 'start' }")).toBe(0);
 	});
 
-	it('no new native date field: a typed date is day first (parseDay), and the old ones only go down', () => {
+	it('no native date field: a typed date is DayInput, day first (parseDay)', () => {
 		const found = Object.fromEntries(files.map((f) => [f.path, f.text.match(NATIVE_DATE)?.length ?? 0]).filter(([, n]) => n));
-		expect(found).toEqual(NATIVE_DATE_BEFORE_THE_RULE);
+		expect(found).toEqual({});
+		// The shared field is a text box read by parseDay (dayField.svelte.ts), and the forms use it.
+		expect(files.find((f) => f.path === 'lib/components/common/DayInput.svelte')!.text).toContain('type="text"');
+		expect(readFileSync(join(ROOT, 'lib/components/common/dayField.svelte.ts'), 'utf8')).toContain('parseDay(');
+		expect(where(/<DayInput\b/).length).toBeGreaterThanOrEqual(15);
 	});
 });

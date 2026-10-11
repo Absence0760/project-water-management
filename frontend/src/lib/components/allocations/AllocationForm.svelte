@@ -3,6 +3,7 @@
 	// in a side sheet the page opens from `volume=new` or `volume=<id>`. The
 	// unit picker is how a row is matched by hand. Only editors reach it, and
 	// only they send a holder name (decision D3).
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { api, type Allocation, type AllocationInput } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -174,11 +175,11 @@
 			</div>
 			<div class="field">
 				<label for="af-from">Valid from</label>
-				<input id="af-from" type="date" bind:value={draft.validFrom} />
+				<DayInput id="af-from" bind:value={draft.validFrom} />
 			</div>
 			<div class="field">
 				<label for="af-to">Valid to</label>
-				<input id="af-to" type="date" bind:value={draft.validTo} />
+				<DayInput id="af-to" bind:value={draft.validTo} />
 			</div>
 			<div class="field">
 				<label for="af-reg">Registration or licence number</label>

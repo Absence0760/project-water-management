@@ -5,6 +5,7 @@
 // run's self-checks pass with them.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
+import { API_URL } from '../support/env.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
@@ -29,7 +30,8 @@ test('date a dam’s survey, sediment and service, and a unit’s abstraction st
 	await capacity.getByRole('spinbutton', { name: /^Sediment/ }).fill('1.5');
 	await capacity.getByRole('spinbutton', { name: /^Sediment/ }).blur();
 	await expect(capacity.getByRole('alert')).toHaveText(/sediment rate needs the date the capacity was surveyed/);
-	await capacity.getByLabel('Survey date', { exact: true }).fill('2015-06-01');
+	// A typed day is day first or ISO (DayInput); the field shows it back day first and stores YYYY-MM-DD.
+	await capacity.getByLabel('Survey date', { exact: true }).fill('1/6/2015');
 	await expect(capacity.getByRole('alert')).toHaveCount(0);
 	await capacity.getByLabel('In service from', { exact: true }).fill('2000-01-01');
 	await page.getByTestId(/^development-abstraction-/).getByLabel('Abstraction starts', { exact: true }).fill('2001-10-01');
@@ -38,10 +40,13 @@ test('date a dam’s survey, sediment and service, and a unit’s abstraction st
 
 	await page.reload();
 	const again = (await openUpperFarm(page)).getByTestId(/^development-dam-/);
-	await expect(again.getByLabel('Survey date', { exact: true })).toHaveValue('2015-06-01');
+	await expect(again.getByLabel('Survey date', { exact: true })).toHaveValue('1 Jun 2015');
 	await expect(again.getByRole('spinbutton', { name: /^Sediment/ })).toHaveValue('1.5');
-	await expect(again.getByLabel('In service from', { exact: true })).toHaveValue('2000-01-01');
-	await expect(page.getByTestId(/^development-abstraction-/).getByLabel('Abstraction starts', { exact: true })).toHaveValue('2001-10-01');
+	await expect(again.getByLabel('In service from', { exact: true })).toHaveValue('1 Jan 2000');
+	await expect(page.getByTestId(/^development-abstraction-/).getByLabel('Abstraction starts', { exact: true })).toHaveValue('1 Oct 2001');
+	// Stored as YYYY-MM-DD, whatever was typed.
+	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { damSurveyDate?: string | null }[] };
+	expect(stored.nodes.map((n) => n.damSurveyDate).filter(Boolean)).toEqual(['2015-06-01']);
 	await expectNoViolations(page, { include: `[data-testid^="development-"]` });
 
 	// Cleared, a date is off again (null), and the save bar comes back for it.

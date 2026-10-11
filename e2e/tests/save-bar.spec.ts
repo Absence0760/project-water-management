@@ -173,14 +173,14 @@ test('a number that needs fixing counts as unsaved: the bar lists it, and leavin
 
 	// Another page drops the field (it unmounts): asked first; Stay keeps the text.
 	await sections(page).getByRole('link', { name: 'Summary', exact: true }).click();
-	await answerConfirm(page, false, 'numbers that need fixing');
+	await answerConfirm(page, false, 'fields that need fixing');
 	await expect(storage).toHaveValue('120');
 	// Its link puts the cursor back in it.
 	await invalidBar(page).getByRole('link', { name: /^Min source storage of transfer 1, %/ }).click();
 	await expect(storage).toBeFocused();
 	// Discard puts the stored value back, and nothing asks any more.
 	await invalidBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
-	await answerConfirm(page, true, 'the number that needs fixing');
+	await answerConfirm(page, true, 'the field that needs fixing');
 	await expect(storage).toHaveValue('20');
 	await sections(page).getByRole('link', { name: 'Summary', exact: true }).click();
 	await expect(title(page, 'Summary')).toBeVisible();

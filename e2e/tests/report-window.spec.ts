@@ -85,15 +85,19 @@ test('a viewer picks the last 7 days on Hydrological units: worked out from the 
 	// A custom range starts from the days shown, and each date lands in the URL.
 	await picker.selectOption({ label: 'Custom range' });
 	await expect(v).toHaveURL(/[?&]window=2022-01-22\.\.2022-01-28(&|$)/);
-	await panel.getByLabel('From', { exact: true }).fill('2021-12-01');
+	// Typed day first or ISO (DayInput), taken once typing ends (Enter or leaving the field), not on each keystroke.
+	await panel.getByLabel('From', { exact: true }).fill('1/12/2021');
+	await panel.getByLabel('From', { exact: true }).press('Enter');
 	await expect(v).toHaveURL(/[?&]window=2021-12-01\.\.2022-01-28(&|$)/);
+	await expect(panel.getByLabel('From', { exact: true })).toHaveValue('1 Dec 2021');
 	await panel.getByLabel('To', { exact: true }).fill('2021-12-10');
+	await panel.getByLabel('To', { exact: true }).blur();
 	await expect(v).toHaveURL(/[?&]window=2021-12-01\.\.2021-12-10(&|$)/);
 	await expect(period).toHaveText('Custom range: daily averages over 2021-12-01 – 2021-12-10 (10 days).');
 	// A reload keeps it.
 	await v.reload();
 	await expect(period).toHaveText('Custom range: daily averages over 2021-12-01 – 2021-12-10 (10 days).');
-	await expect(panel.getByLabel('From', { exact: true })).toHaveValue('2021-12-01');
+	await expect(panel.getByLabel('From', { exact: true })).toHaveValue('1 Dec 2021');
 
 	// Nothing was saved: the setting is as it was and no run was made.
 	const res = await page.request.get(`${API_URL}/projects/${project.id}`);
