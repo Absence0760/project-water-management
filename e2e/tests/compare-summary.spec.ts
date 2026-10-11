@@ -13,6 +13,7 @@ import { addMember } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { runCard, runSelect, sectionHeader, seedWhatIfs, whatChanged } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { showHeaderControls } from '../support/sectionHeader.ts';
 
 const outcomes = (page: Page) => page.getByRole('table', { name: /^Headline outcomes of the baseline and each what-if/ });
 /** Export impact report with two what-ifs: a menu (a `<details>`), one item per what-if. */
@@ -237,7 +238,8 @@ for (const [label, size] of [
 		await page.getByRole('region', { name: 'Days below the reserve, each year' }).getByText('Show as a table').click();
 		await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();
 		await expectNoViolations(page);
-		// The export menu open, and the impact report it leads to.
+		// The export menu open (on a phone in the header's More actions list), and the impact report it leads to.
+		await showHeaderControls(page);
 		await exportMenu(page).click();
 		await expectNoViolations(page);
 		await page.goto(`/projects/${p.id}/report?run=${p.whatIf2}&against=${p.id}:${p.baseline}`);

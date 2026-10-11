@@ -75,7 +75,11 @@
 
 	--series-1: #2a78d6;
 	--series-2: #eb6834;
-	--series-3: #1baf7a;
+	/* 3.6:1 on --surface, 3.2:1 on --surface-2: a line chart's series is a
+	   mark (WCAG 1.4.11); #1baf7a was 2.8:1 (issue #521, the canvas guard).
+	   Darkening it kept it apart from its palette neighbours --series-2 and
+	   --series-5 for colour-blind readers (no pair moved closer). */
+	--series-3: #15996b;
 	/* More categorical colours (the Crops page's crop set, crops/cards.ts
 	   CROP_PALETTE). --series-4 is the line charts' own violet (LineChart), so
 	   the set skips it. Validated with --series-1…3 as an ordered set: every
@@ -94,11 +98,25 @@
 	--radius: 6px;
 	--radius-sm: 4px;
 	--shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.04);
+	/* Overlays (Dialog, popovers, menus): what sets them off the page. Dark
+	   needs a deeper backdrop, a stronger edge and a darker shadow, or a sheet
+	   reads as the page it covers (1.1:1, issue #521). */
+	--overlay-backdrop: rgb(0 0 0 / 0.35);
+	--overlay-border: var(--border);
+	--overlay-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+	--popover-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	/* A bar docked at the window's foot (the save bar): its shadow falls upward onto the page. */
+	--bar-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);
 	--gutter: 16px;
 	/* The phone bar's height (AppShell); 0 from 900 px, where the sidebar replaces it. */
 	--header-h: 52px;
 	/* Minimum touch target on small / touch screens. */
 	--tap: 44px;
+	/* The two small text sizes (ui-playbook § 3, type scale): badges, units, tags and card labels take
+	   --font-xs, hints, captions, .small lines and table heads --font-sm. Nothing on screen is set smaller
+	   (uiPatterns.test.ts scans for it). A phone lifts both to 12 px, below. */
+	--font-xs: 0.75rem;
+	--font-sm: 0.8rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -143,6 +161,11 @@
 		--chart-grid: #2c2f2c;
 		--chart-axis: #9a9e99;
 		--shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+		--overlay-backdrop: rgb(0 0 0 / 0.6);
+		--overlay-border: var(--border-strong);
+		--overlay-shadow: 0 10px 30px rgb(0 0 0 / 0.7);
+		--popover-shadow: 0 6px 20px rgb(0 0 0 / 0.6);
+		--bar-shadow: 0 -2px 8px rgb(0 0 0 / 0.5);
 	}
 }
 
@@ -271,6 +294,14 @@ p a:not(.btn),
 	background: var(--accent);
 	border-color: var(--accent);
 	color: var(--accent-contrast);
+}
+.btn-primary:disabled {
+	/* Plainly off in both themes: a faded accent read as a live secondary
+	   button on the dark page (issue #521). */
+	background: var(--surface-2);
+	border-color: var(--border-strong);
+	color: var(--text-muted);
+	opacity: 1;
 }
 .btn-primary:hover:not(:disabled) {
 	background: var(--accent-hover);
@@ -407,7 +438,7 @@ textarea {
 	color: var(--text-2);
 }
 .field .hint {
-	font-size: 0.8rem;
+	font-size: var(--font-sm);
 	color: var(--text-muted);
 }
 .form-row {
@@ -415,6 +446,26 @@ textarea {
 	flex-wrap: wrap;
 	gap: 0.75rem;
 	align-items: flex-end;
+}
+/* A field showing its error line (NumberInput's and DayInput's .num-err) grows downward and never moves its row
+   (issue #521, round 6; ui-playbook.md § 2). Rows align their fields to the bottom, so a label that wraps keeps the
+   inputs in line, and an error under one field then pushed its neighbours down by the error's height. While a
+   field in a row shows one, the row's fields stretch to the row's height with their label and input at the top
+   (one-line labels: nothing moves), and a .form-row's buttons hold the inputs' line. Any row, not only .form-row:
+   Settings' and the node sheet's own rows align to the bottom too. Stretch rather than flex-start, so a column of
+   fields (a column flexbox, where align-self is horizontal) keeps its full width. */
+:has(> .field .num-err) > .field {
+	align-self: stretch;
+}
+/* Nor does it widen its field: it wraps to the input's width (a day's message, 90 characters, made its field
+   79 px wider and pushed the next one aside). */
+.num-err {
+	contain: inline-size;
+}
+.form-row:has(> .field .num-err) > :is(.btn, button) {
+	align-self: flex-start;
+	/* A field's label line and the gap under it (.field > label: 0.85rem at the body's 1.45 line height). */
+	margin-top: calc(0.85rem * 1.45 + 0.25rem);
 }
 /* A form's buttons: one row under its fields, hints and checkboxes, at the content edge, the main
    run first (ui-playbook.md § 3, Action rows). The same gap above it whatever comes before, so the
@@ -541,13 +592,23 @@ textarea {
    absolutely positioned bits inside its cells (visually-hidden labels), so
    they are clipped with the table instead of widening the page: on a phone
    they gave /compare and the report 185 px of sideways scroll. */
+/* A table wider than its box shows it (issue #521 round 5: a table cut at a column edge looked finished): a soft
+   shadow on the side that has more, drawn by CSS alone. Two covers in the surface's colour scroll with the
+   content (`local`) and sit on its two ends; two shadows stay on the box's edges (`scroll`). At an end, its cover
+   lies over that edge's shadow; with nothing to scroll, both covers hide both shadows. */
 .table-wrap {
+	--scroll-shade: color-mix(in srgb, var(--text) 22%, transparent);
 	position: relative;
 	overflow: auto;
 	max-height: 70vh;
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
-	background: var(--surface);
+	background:
+		linear-gradient(to right, var(--surface) 40%, transparent) left / 2.5rem 100% no-repeat local,
+		linear-gradient(to left, var(--surface) 40%, transparent) right / 2.5rem 100% no-repeat local,
+		radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) left / 0.9rem 100% no-repeat scroll,
+		radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) right / 0.9rem 100% no-repeat scroll,
+		var(--surface);
 }
 table.data {
 	width: 100%;
@@ -570,7 +631,7 @@ table.data thead {
 table.data thead th {
 	background: var(--surface-2);
 	font-weight: 600;
-	font-size: 0.8rem;
+	font-size: var(--font-sm);
 	color: var(--text-2);
 	text-align: left;
 	white-space: nowrap;
@@ -590,6 +651,27 @@ table.data tbody th {
 	text-align: left;
 	font-weight: 500;
 }
+/* On a phone a table's row names stay in view as it scrolls sideways (issue #521 round 5; the Settings tables
+   did it on their own): in a box that scrolls sideways (`data-scrolls-x`, set by lib/a11y/scrollRegions.ts), a
+   first column that names the rows (a th scope="row") is fixed at the left. A table restyled as cards on a
+   phone doesn't scroll, so it never gets it. */
+@media (max-width: 640px) {
+	.table-wrap[data-scrolls-x] table.data tbody th[scope='row']:first-child,
+	.table-wrap[data-scrolls-x] table.data:has(tbody th[scope='row']:first-child) thead tr:last-child th:first-child {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: var(--surface);
+		box-shadow: inset -1px 0 0 var(--border);
+	}
+	.table-wrap[data-scrolls-x] table.data:has(tbody th[scope='row']:first-child) thead tr:last-child th:first-child {
+		z-index: 2;
+		background: var(--surface-2);
+	}
+	.table-wrap[data-scrolls-x] table.data tbody tr.flag > th[scope='row']:first-child {
+		background: var(--row-flag);
+	}
+}
 table.data tfoot td,
 table.data tfoot th {
 	border-top: 2px solid var(--border-strong);
@@ -602,6 +684,14 @@ table.data td input:where(:not([type='checkbox'], [type='radio'])),
 table.data td select {
 	width: 100%;
 	padding: 0.2rem 0.35rem;
+	/* WCAG 2.5.8's 24 px everywhere, the tap size on a touch screen (issue #521 round 5: 21–25 px). */
+	min-height: 24px;
+}
+@media (pointer: coarse) {
+	table.data td input:where(:not([type='checkbox'], [type='radio'])),
+	table.data td select {
+		min-height: var(--tap);
+	}
 }
 table.data.compact td input[type='number'] {
 	min-width: 4.5rem;
@@ -640,13 +730,18 @@ table.data tr.flag {
 .badge {
 	display: inline-block;
 	padding: 0.05rem 0.45rem;
-	border-radius: 999px;
-	font-size: 0.75rem;
+	/* Half a one-line badge's height: a pill on one line, a rounded box when a
+	   long one wraps in a narrow cell (999px turned that into a tall blob, issue #521). */
+	border-radius: 0.7rem;
+	font-size: var(--font-xs);
 	font-weight: 600;
 	background: var(--surface-2);
 	border: 1px solid var(--border);
 	color: var(--text-2);
-	text-transform: capitalize;
+}
+/* A badge starts with a capital, never Every Word Capitalised. */
+.badge::first-letter {
+	text-transform: uppercase;
 }
 .badge-owner {
 	background: var(--accent-soft);
@@ -674,7 +769,7 @@ table.data tr.flag {
 	margin: 0;
 }
 .stat dt {
-	font-size: 0.78rem;
+	font-size: var(--font-sm);
 	color: var(--text-muted);
 	margin-bottom: 0.15rem;
 }
@@ -687,7 +782,7 @@ table.data tr.flag {
 	font-weight: 600;
 }
 .stat dd small {
-	font-size: 0.75rem;
+	font-size: var(--font-xs);
 	font-weight: 400;
 	color: var(--text-muted);
 	margin-left: 0.2rem;
@@ -726,7 +821,17 @@ table.data tr.flag {
 
 /* Secondary text: hints, captions, notes. Usually with .muted. */
 .small {
-	font-size: 0.8rem;
+	font-size: var(--font-sm);
+}
+/* A phone's floor for small text (issue #521, rounds 5 and 6): under 640 px both small sizes are at least 12 px
+   (10.5 and 11.2 px at the 14 px root), still in rem above it so a larger root font scales them; on screen only
+   (paper keeps its sizes, even from a narrow window). Every component's small text takes these tokens, so the
+   floor holds app-wide; e2e/tests/text-floor.spec.ts measures every workspace tab. */
+@media screen and (max-width: 640px) {
+	:root {
+		--font-xs: max(0.75rem, 12px);
+		--font-sm: max(0.8rem, 12px);
+	}
 }
 /* A unit beside a label or in a table head: "Area <span class="u">ha</span>". */
 .u {

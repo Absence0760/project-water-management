@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #521 round 5, phone workspace: the phone header's More actions list and phone-bar title, one-row save footers, the members two-line rows, table scroll cues and sticky first column (scrollRegions), Upload GeoJSON's phone cards and rejected-file state, the planted-areas card layout, three collapsibles on Fold; measured 1973 KB against 1968 KB"
+}

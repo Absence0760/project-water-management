@@ -1361,7 +1361,8 @@
 						<!-- A narrow page: above the map (the side column is below it there). On a wide page, the side column. -->
 						{@render drawBar()}
 					{/if}
-					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null}>
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined} data-channels={channels.on ? (reviewingProposal ? 'dim' : 'on') : undefined} style:--map-inset-left={toolsW ? `${toolsW + 8}px` : null} style:min-height={toolsH ? `calc(${toolsH}px + 4rem)` : null}>
+						<!-- At least the tools' height and the key row under them, so the tool column stays inside the card while the map's chunk loads or when it fails (on a phone it ran over the Features list, issue #521). -->
 						<!-- The tools, on the map's left edge where they act (until 2026-10-02, buttons in the header). -->
 						{#if mapState !== 'failed' || canEdit}
 							<div class="tools-at ov" bind:clientWidth={toolsW} bind:clientHeight={toolsH}>
@@ -1913,7 +1914,7 @@
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--accent-contrast);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 	}
 	/* A panel over the map: it scrolls in its own box, never the page. */
@@ -1977,7 +1978,7 @@
 		background: var(--text);
 		color: var(--bg);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.2);
+		box-shadow: var(--popover-shadow);
 	}
 	/* The toast swaps the page's colours: its Dismiss and focus ring take the toast's text colour (ui-playbook § 4). */
 	.toast .btn {
@@ -2027,7 +2028,7 @@
 		outline-offset: -3px;
 	}
 	.tab-count {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
 		border-radius: 999px;

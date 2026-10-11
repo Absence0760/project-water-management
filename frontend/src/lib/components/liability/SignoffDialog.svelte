@@ -309,6 +309,6 @@
 	}
 	.hash {
 		overflow-wrap: anywhere;
-		font-size: 0.8em;
+		font-size: var(--font-sm);
 	}
 </style>

@@ -102,7 +102,12 @@
 		{#if unsaved}
 			<p class="alert alert-info small" data-testid="auto-rules-unsaved">The calibration rules have unsaved changes. Save them first: the server only runs, and applies fits under, saved rules.</p>
 		{/if}
-		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+		{#if error && follower.loadFailed}
+			<div class="alert alert-error" role="alert" data-testid="auto-load-error">
+				Couldn’t load the calibration rules’ fits: {error}
+				<button type="button" class="btn btn-sm" onclick={() => follower.retry()}>Try again</button>
+			</div>
+		{:else if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
 		{#if latest && runState}
 			<div class="result" data-testid="auto-result">

@@ -86,7 +86,7 @@
 
 <style>
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 85ch;
 	}
 	.verdict {
@@ -97,7 +97,7 @@
 	}
 	.verdict .muted {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin-top: 0.15rem;
 	}
 	.scroll {
@@ -110,8 +110,5 @@
 	}
 	.more {
 		margin-top: 0.5rem;
-	}
-	.badge {
-		text-transform: none;
 	}
 </style>

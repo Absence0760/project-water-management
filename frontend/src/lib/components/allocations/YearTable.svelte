@@ -77,11 +77,11 @@
 	.sub {
 		display: block;
 		font-weight: 400;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 	}
 	.part {
 		margin-left: 0.3rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.nowrap {
@@ -129,7 +129,7 @@
 		.cards th[data-label]::before {
 			content: attr(data-label);
 			display: block;
-			font-size: 0.75rem;
+			font-size: var(--font-xs);
 			font-weight: 400;
 			color: var(--text-2);
 		}

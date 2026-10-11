@@ -386,7 +386,7 @@
 	}
 	.mono {
 		font-family: var(--font-mono);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		overflow-wrap: anywhere;
 	}
 	.hashes {

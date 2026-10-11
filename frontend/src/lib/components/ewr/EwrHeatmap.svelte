@@ -267,16 +267,6 @@
 			--heat-ink-4: #121312;
 		}
 	}
-	:global(:root[data-theme='dark']) .ewr-heatmap {
-		--heat-1: #184f95;
-		--heat-2: #256abf;
-		--heat-3: #3987e5;
-		--heat-4: #86b6ef;
-		--heat-ink-1: #ffffff;
-		--heat-ink-2: #ffffff;
-		--heat-ink-3: #121312;
-		--heat-ink-4: #121312;
-	}
 
 	.head {
 		display: flex;
@@ -320,7 +310,7 @@
 		gap: 0.35rem 0.9rem;
 		padding: 0;
 		margin: 0 0 0.4rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.legend li {
@@ -336,7 +326,7 @@
 	}
 	.readout {
 		min-height: 1.3em;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-2);
 		margin: 0 0 0.35rem;
 		font-variant-numeric: tabular-nums;
@@ -348,7 +338,7 @@
 	table.heat {
 		border-collapse: separate;
 		border-spacing: 2px;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-variant-numeric: tabular-nums;
 	}
 	.heat th {
@@ -434,7 +424,7 @@
 		background: repeating-linear-gradient(45deg, transparent 0 3px, var(--border) 3px 4px);
 	}
 	.note {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin-top: 0.4rem;
 	}
 	@media (forced-colors: active) {

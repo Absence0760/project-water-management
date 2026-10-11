@@ -93,7 +93,10 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	// The row's fill tools are folded under one line (issue #521), which names the source.
 	await expect(page.getByTestId('pan-tools-summary')).toHaveText('preset, FAO-56 helper, paste · source: not given');
 	await openFold(page, 'pan-tools');
-	await page.getByText('Suggest from FAO-56 Table 5 (humidity, wind, siting)').click();
+	// The helper is the app's fold too (common/Fold, issue #521 round 5), closed, its line naming what it reads.
+	const helper = page.getByTestId('pan-coefficient-helper');
+	await expect(helper.locator(':scope > summary')).toContainText('Suggest from FAO-56 Table 5: humidity, wind, siting');
+	await openFold(page, 'pan-coefficient-helper');
 	await page.getByLabel('Windward fetch of green crop').selectOption('10');
 	const fill = page.getByRole('button', { name: 'Fill the pan-coefficient row' });
 	await expect(fill).toBeDisabled();

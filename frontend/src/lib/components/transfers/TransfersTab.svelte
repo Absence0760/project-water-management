@@ -409,12 +409,12 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		white-space: nowrap;
 	}
 	.rules-head .small {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		overflow-wrap: anywhere;
 	}
 
@@ -489,7 +489,7 @@
 		padding: 0.05rem 0.4rem;
 		border: 1px solid var(--border-strong);
 		border-radius: 999px;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -515,7 +515,7 @@
 		min-width: 0;
 	}
 	.end-l {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		color: var(--text-2);
 	}
@@ -634,7 +634,7 @@
 		/* As tall as the rates' title line (its summary button), so the three groups' fields start level. */
 		min-height: 24px;
 		margin-bottom: 0.3rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		letter-spacing: 0.02em;
 		text-transform: uppercase;
@@ -668,7 +668,7 @@
 		gap: 0.3rem;
 		/* As tall as a help tip, so a label with one and a label without start their fields on one line. */
 		min-height: 24px;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		white-space: nowrap;
 	}

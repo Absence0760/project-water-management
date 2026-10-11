@@ -8,7 +8,8 @@
 //   1. exchange the single-use render token for a render session
 //      (POST /auth/render-session): a cookie that reads this one project and
 //      run (and an impact report's one comparison with its baseline), as the
-//      requesting user, under RLS (reports/scope.ts);
+//      requesting user, under RLS (reports/scope.ts), and the project's time
+//      zone, which the page's browser then runs in (renderTimeZone);
 //   2. open the report, wait for main[data-report-ready] (every section
 //      loaded, every chart drawn), or stop at the page's own error message;
 //   3. page.pdf({ format: 'A4', printBackground: true }). The running footer
@@ -25,6 +26,8 @@
 // the renderer Lambda's container image (lambda-renderer.ts).
 //
 // playwright-core is imported lazily: the API never loads it.
+import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
+import { isValidTimeZone } from './due.js';
 
 /** The report is refused, or the page broke: a message safe to store and show (no URLs, no tokens). */
 export class RenderError extends Error {
@@ -97,6 +100,21 @@ export function sessionRefusal(status: number, body: unknown): RenderError {
 		return new RenderError('the render token was refused (used, expired, or the requester lost access)', { retry: false });
 	}
 	return new RenderError(`the render session could not start (HTTP ${status})`);
+}
+
+/**
+ * The zone the report's browser runs in: the project's, from the render
+ * session's answer (POST /auth/render-session), so every date and time the
+ * page formats in the browser's own zone (a run made, a sign-off, a
+ * registration check, a pack issued, "prepared") is the catchment's day, as
+ * a browser there prints it, never UTC's, a day behind before 02:00 there
+ * (issue #521). The answer is checked like any input: a zone this runtime's
+ * Intl doesn't know, or none (an API older than the field, a requester who
+ * is no member), prints in DEFAULT_TIME_ZONE.
+ */
+export function renderTimeZone(body: unknown): string {
+	const tz = typeof body === 'object' && body !== null ? (body as { timeZone?: unknown }).timeZone : undefined;
+	return typeof tz === 'string' && isValidTimeZone(tz) ? tz : DEFAULT_TIME_ZONE;
 }
 
 /** Render settings from the environment (the worker's and the renderer Lambda's). */
@@ -237,20 +255,31 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 		});
 		// If the timeout fired while Chromium was starting, close it now.
 		if (closed) await browser.close();
-		// Light, like the print stylesheet forces; the UTC clock the tests pin too.
-		// No service workers: the report needs none, and a worker's requests outlive the page's routing.
-		const context = await browser.newContext({ colorScheme: 'light', locale: 'en-ZA', timezoneId: 'UTC', viewport: { width: 1200, height: 1600 }, serviceWorkers: 'block' });
-		const { left } = await confineToOrigins(context, o);
-		const res = await context.request.post(`${o.apiUrl}/auth/render-session`, {
+		// The exchange first, in a context of its own that opens no page: its
+		// answer names the project's zone, which a context takes only when it
+		// is made. The session cookie moves to the report's context below.
+		const exchange = await browser.newContext({ serviceWorkers: 'block' });
+		const res = await exchange.request.post(`${o.apiUrl}/auth/render-session`, {
 			data: { token: t.token },
 			headers: { origin: o.siteUrl },
 			failOnStatusCode: false
 		});
-		if (!res.ok()) {
-			// A WAF block's body is HTML, not the API's JSON: no code, so retried.
-			const body: unknown = await res.json().catch(() => null);
-			throw sessionRefusal(res.status(), body);
-		}
+		// A WAF block's body is HTML, not the API's JSON: no code, so retried. An older API's answer has no zone.
+		const body: unknown = await res.json().catch(() => null);
+		if (!res.ok()) throw sessionRefusal(res.status(), body);
+		const storageState = await exchange.storageState();
+		await exchange.close();
+		// Light, like the print stylesheet forces; the project's clock, as a browser where the catchment is (renderTimeZone).
+		// No service workers: the report needs none, and a worker's requests outlive the page's routing.
+		const context = await browser.newContext({
+			colorScheme: 'light',
+			locale: 'en-ZA',
+			timezoneId: renderTimeZone(body),
+			viewport: { width: 1200, height: 1600 },
+			serviceWorkers: 'block',
+			storageState
+		});
+		const { left } = await confineToOrigins(context, o);
 		const page = await context.newPage();
 		const url = `${o.siteUrl}${targetPath(t)}`;
 		await Promise.race([page.goto(url, { waitUntil: 'domcontentloaded', timeout: o.timeoutMs }), left]);

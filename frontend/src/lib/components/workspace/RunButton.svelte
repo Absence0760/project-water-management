@@ -19,6 +19,7 @@
 		problems = 0,
 		running,
 		error = null,
+		behind = false,
 		onrun
 	}: {
 		/** What a run still needs ('a network', 'a rainfall series'). */
@@ -35,6 +36,8 @@
 		running: boolean;
 		/** Why the last run the page started didn't start (also in the header's notice line). */
 		error?: string | null;
+		/** Data came in since the last run: on a phone the button says Re-run model, and the notice line under the header drops its own. */
+		behind?: boolean;
 		onrun: (label: string | undefined, forecast: boolean) => void | Promise<void>;
 	} = $props();
 
@@ -127,7 +130,7 @@
 		onclick={toggle}
 	>
 		{#if running}<span class="spin" aria-hidden="true"></span>{:else}<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor" /></svg>{/if}
-		{running ? 'Running model…' : 'Run model'}
+		{#if running}Running model…{:else if behind}<span class="re">Re-run model</span><span class="plain">Run model</span>{:else}Run model{/if}
 	</button>
 	<div class="pop" id="{id}-pop" role="dialog" aria-label="Run the model" bind:this={pop} hidden={!open} style:translate={shift ? `${shift}px 0` : null}>
 		<form onsubmit={submit} aria-busy={running}>
@@ -168,6 +171,18 @@
 </div>
 
 <style>
+	/* Re-run model only on a phone, where it stands for the notice line's own button (SectionHeader's container). */
+	.re {
+		display: none;
+	}
+	@container section-header (max-width: 640px) {
+		.re {
+			display: inline;
+		}
+		.plain {
+			display: none;
+		}
+	}
 	.run-button {
 		position: relative;
 		display: flex;
@@ -186,7 +201,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 		font-size: 0.9rem;
 		color: var(--text);
 	}

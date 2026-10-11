@@ -179,7 +179,7 @@
 		border-radius: 999px;
 		background: var(--accent-soft);
 		color: var(--text);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 	}
 	.stage-name {
@@ -209,7 +209,7 @@
 	}
 	.vol {
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-variant-numeric: tabular-nums;
 	}
 	.bar {
@@ -228,7 +228,7 @@
 	}
 	.note-line {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		white-space: normal;
 		max-width: 22rem;
@@ -244,7 +244,6 @@
 	}
 	.badge {
 		margin-left: 0.35rem;
-		text-transform: none;
 	}
 	.badge-senior {
 		background: var(--accent-soft);

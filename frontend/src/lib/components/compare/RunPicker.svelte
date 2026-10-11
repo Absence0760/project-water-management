@@ -107,7 +107,7 @@
 		float: left;
 		width: 100%;
 		padding: 0;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
@@ -133,7 +133,7 @@
 		margin-bottom: 0.35rem;
 	}
 	.card label {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin: 0;
 	}
 	.card .err {
@@ -144,7 +144,7 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin: 0;
 	}
 </style>

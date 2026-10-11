@@ -60,8 +60,8 @@
 	<p class="muted">No hydrological unit appears in both runs, so there is nothing to compare hydrological unit by hydrological unit.</p>
 {:else}
 	<p class="muted small">
-		Daily averages over each run. Each cell shows run B's value and, below it, the change from run A (▲ up, ▼ down; green
-		= better, red = worse, grey = no judgement). Click a column heading to sort by that change.
+		Daily averages over each run. Each cell shows run B's value and, below it, the change from run A (▲ up, ▼ down; coloured
+		as better or worse, plain when there is no judgement). Click a column heading to sort by that change.
 	</p>
 	<div class="table-wrap">
 		<table class="data">
@@ -148,7 +148,7 @@
 		display: block;
 	}
 	td :global(.delta) {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.onlys {
 		display: grid;

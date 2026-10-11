@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, parseNum, tidyDay, zonedIsoDate } from './number';
+import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, pastDayMoment, parseNum, tidyDay, zonedIsoDate } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -129,6 +129,36 @@ describe('localIsoDate', () => {
 		const late = new Date(2026, 8, 23, 23);
 		expect(late.toISOString().slice(0, 10)).toBe('2026-09-24');
 		expect(localIsoDate(late)).toBe('2026-09-23');
+	});
+});
+
+describe('pastDayMoment: a picked day the server takes as passed', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('sends today as the current moment, so just after midnight in South Africa it has passed', () => {
+		process.env.TZ = 'Africa/Johannesburg'; // UTC+2: 00:30 on the 12th is 22:30 on the 11th in UTC
+		const now = new Date('2026-10-11T22:30:00Z');
+		expect(localIsoDate(now)).toBe('2026-10-12');
+		// The bare day would be UTC midnight on the 12th: 90 minutes in the future.
+		expect(Date.parse('2026-10-12') > now.getTime()).toBe(true);
+		const sent = pastDayMoment('2026-10-12', now);
+		expect(sent).toBe('2026-10-11T22:30:00.000Z');
+		expect(new Date(sent).getTime()).toBeLessThanOrEqual(now.getTime());
+		// Read back in the viewer's zone, it is still the day they picked.
+		expect(fmtDate(sent)).toBe('2026-10-12');
+	});
+	it('sends an earlier day as itself, in any zone', () => {
+		for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Africa/Johannesburg']) {
+			process.env.TZ = zone;
+			const now = new Date('2026-10-11T23:30:00Z');
+			expect(pastDayMoment('2026-10-01', now)).toBe('2026-10-01');
+			const yesterday = new Date(now);
+			yesterday.setDate(yesterday.getDate() - 1);
+			// The viewer's yesterday, as UTC midnight, has always passed.
+			expect(Date.parse(pastDayMoment(localIsoDate(yesterday), now))).toBeLessThanOrEqual(now.getTime());
+		}
 	});
 });
 

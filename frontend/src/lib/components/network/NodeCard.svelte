@@ -139,7 +139,7 @@
 		gap: 0.35rem;
 	}
 	.kicker {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -169,7 +169,7 @@
 	}
 	.t-l,
 	.t-s {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.t-v {

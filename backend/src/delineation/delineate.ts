@@ -136,8 +136,8 @@ export function largerChannelRefusal(
  */
 export function offChannelText(what: string, snapRadiusM: number, kind: 'click' | 'gauge' = 'click'): string {
 	return kind === 'gauge'
-		? `No terrain channel runs within ${snapRadiusM} m of ${what}. Move the gauge onto a terrain channel (Delineate and Sub-catchments draw them as red lines) and propose again.`
-		: `No terrain channel runs within ${snapRadiusM} m of ${what}. Zoom in until the terrain channels (the red lines) show, and click on one: they are the elevation model's rivers, which the outline follows.`;
+		? `No terrain channel runs within ${snapRadiusM} m of ${what}. Move the gauge onto a terrain channel (Delineate and Sub-catchments draw them; they're in the map's key) and propose again.`
+		: `No terrain channel runs within ${snapRadiusM} m of ${what}. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows.`;
 }
 
 /**

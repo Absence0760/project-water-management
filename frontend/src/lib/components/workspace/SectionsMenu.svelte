@@ -131,7 +131,7 @@
 		background: none;
 		color: var(--text-muted);
 		font: inherit;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		cursor: pointer;
 	}
 	/* Icon only (the sidebar's head): a 24 px square, so "Catchment", the role
@@ -190,7 +190,7 @@
 		margin-bottom: 0.25rem;
 		padding: 0;
 		color: var(--text-muted);
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -207,7 +207,7 @@
 		cursor: default;
 	}
 	.tab-hint {
-		font-size: 0.8125rem;
+		font-size: 0.85rem;
 	}
 	.hint {
 		margin: 0;

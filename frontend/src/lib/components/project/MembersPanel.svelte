@@ -191,25 +191,30 @@
 		</div>
 	{:else}
 	<LoadState loading={false} error={loadError} retry={load} empty={shown.length === 0} emptyText="No members.">
-		<div class="table-wrap">
-			<table class="data">
-				<thead>
-					<tr>
-						<th scope="col">Name</th>
-						<th scope="col" class="email">Email</th>
-						<th scope="col">Role</th>
-						<th scope="col"><span class="visually-hidden">Actions</span></th>
+		<!-- On a phone each member is one row of two lines (as the team page's, issue #520): the name with the email
+		     under it beside the role, then Leave or Remove on a line of its own, so nothing is cut at the right edge. The
+		     rows are grids there, so the table keeps its roles explicitly (Safari drops them otherwise). -->
+		<div class="table-wrap members-wrap">
+			<!-- svelte-ignore a11y_no_redundant_roles -->
+			<table class="data member-rows" role="table" aria-labelledby="members-h-t">
+				<thead role="rowgroup">
+					<tr role="row">
+						<th scope="col" role="columnheader">Name</th>
+						<th scope="col" role="columnheader" class="email">Email</th>
+						<th scope="col" role="columnheader">Role</th>
+						<th scope="col" role="columnheader" class="act-h"><span class="visually-hidden">Actions</span></th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody role="rowgroup">
 					{#each shown as m (m.userId)}
-						<tr>
-							<th scope="row">
+						{@const canAct = isOwner || m.userId === currentUserId}
+						<tr role="row" class:extras={m.role === 'contributor' || !!m.party || m.role === 'editor' || m.role === 'owner'}>
+							<th scope="row" role="rowheader">
 								{m.displayName}{#if m.userId === currentUserId}&nbsp;<span class="muted">(you)</span>{/if}
-								<span class="sub-email"><EmailText email={m.email} /></span>
+								<span class="sub-email"><EmailText email={m.email} breakAfter="." /></span>
 							</th>
-							<td class="email"><EmailText email={m.email} /></td>
-							<td>
+							<td role="cell" class="email"><EmailText email={m.email} /></td>
+							<td role="cell" class="role">
 								{#if isOwner}
 									<select
 										aria-label="Role for {m.displayName}"
@@ -273,8 +278,8 @@
 									{/if}
 								{/if}
 							</td>
-							<td class="act">
-								{#if isOwner || m.userId === currentUserId}
+							<td role="cell" class="act" class:none={!canAct}>
+								{#if canAct}
 									<button
 										type="button"
 										class="btn btn-sm btn-danger"
@@ -386,7 +391,7 @@
 	.sub-email {
 		display: none;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	@media (max-width: 560px) {
@@ -395,6 +400,69 @@
 		}
 		.sub-email {
 			display: block;
+		}
+		/* Each member a grid of two lines: the name (the email under it) beside the role, then the row's action
+		   under both (issue #521 round 5: Leave read "Lea" and Remove "Remo" at 390 px, the role select 25 px tall). */
+		.members-wrap {
+			max-height: none;
+		}
+		.member-rows,
+		.member-rows tbody,
+		.member-rows thead {
+			display: block;
+		}
+		.member-rows tr {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 9rem;
+			align-items: center;
+			border-bottom: 1px solid var(--border);
+		}
+		.member-rows tbody tr:last-child {
+			border-bottom: 0;
+		}
+		.member-rows :is(th, td) {
+			border-bottom: 0;
+			min-width: 0;
+		}
+		.member-rows thead .email,
+		.member-rows .act-h {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		/* A role with more under it (the applying party, the authority tick) takes the full width under the name. */
+		.member-rows tr.extras :is(th, td.role) {
+			grid-column: 1 / -1;
+		}
+		.member-rows tr.extras td.role {
+			padding-top: 0;
+		}
+		.member-rows td.role select {
+			width: 100%;
+			min-height: var(--tap);
+		}
+		.party,
+		.party-row {
+			max-width: none;
+		}
+		.party-row .party {
+			flex: 1;
+			min-height: var(--tap);
+		}
+		.act {
+			grid-column: 1 / -1;
+			padding-top: 0;
+			text-align: right;
+		}
+		.act .btn {
+			min-height: var(--tap);
+		}
+		.act.none {
+			display: none;
 		}
 	}
 	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */

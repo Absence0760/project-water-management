@@ -79,7 +79,7 @@ capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
 window without scrolling (`account.spec.ts` › layout pins both widths). Form
 fields share one right edge (at most 36rem); Save name sits beside the
 display name; the new and repeated passwords sit side by side once the card
-is 30rem wide; the language switch is its compact joined form
+is 30rem wide (one column below that, never wider than the card); the language switch is its compact joined form
 (`LanguageSwitch segmented`); the m³ / ML radios sit in one row, 32 px
 tall with a mouse and 44 px on touch and phones. Submit buttons are the
 primary style; Choose your alert emails, Download my data and Turn alert
@@ -98,17 +98,29 @@ in an alert above the form, with the field it's about marked
 `aria-invalid`: *Your current password is wrong.* (the server's `403`, which
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
-characters.*, the two not matching).
+characters.*, the two not matching). For a farmer the page sits in the farm
+frame, so nothing on it is under 13 px (labels, hints, badges, the status
+lines and the language switch are sized in px), and a long button label
+wraps inside its button rather than leaving its card (*Kies jou
+waarskuwings-e-posse* at 320 px; `farm-view.spec.ts` and `lang-layout.spec.ts`
+walk the text and check every control against its card, issue #521).
 
 **Two-step sign-in** (`lib/components/account/TwoStepSignIn.svelte`, issue
 #282, codes by email 206, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
-`GET /auth/mfa`). One line on what it does ("choose how you get the code;
-you can turn on both"), then the two ways as rows, each with its name, an
-**On** / **Off** badge in words, and a word on its strength: **Authenticator
-app** (**Stronger**, first: only your phone can make the codes) and **Code
-by email** (**Easier**, with the honest tradeoff beside the button: whoever
-can read your email can also reset your password, so with codes by email
-your inbox guards your account). The app's **Set up the app** asks for the
+`GET /auth/mfa`). The heading row carries the state as a badge in words:
+**On (app)**, **On (email)**, **On (both)** or **Off**. One line under it
+("A 6-digit code after your password. Turn on one or both."), then the two
+ways as rows, each with one head row (its name, a word on its strength, an
+**On** / **Off** badge and its action at the row's right end; on a card
+narrower than 22rem the action takes a full row under the head) and one
+short line: **Authenticator app** (**Stronger**, first: "Codes from an app
+on your phone.") and **Code by email** (**Easier**: "Codes sent to
+*address*: only as safe as your inbox.", a warning, so it stays visible).
+The full sentences (what the second step does, the app names, and the
+honest tradeoff: whoever can read your email can also reset your password,
+so with codes by email your inbox guards your account) sit unchanged in a
+closed fold, **How the two ways differ** (`common/Fold`, Show / Hide;
+issue #521; `account.spec.ts` pins the rows and the fold). The app's **Set up the app** asks for the
 current password (**Continue**), then shows two numbered steps: the QR code
 for the authenticator app, drawn in the page (`account/qr.ts`, uqr; black on
 white in both themes, with its quiet zone, 220 px; the encoder loads only at
@@ -201,6 +213,35 @@ Dates a person reads are **day first**: a calendar day is `fmtDay` ("1 Oct
 "on" in a sentence). `fmtDate`'s ISO form ("2026-10-11 14:05") is for file
 names and codes. Runs & results, the Summary and History use them.
 
+### Day fields
+
+Every day a user types goes through `common/DayInput.svelte` (issue #521
+round 5; there is no `<input type="date">` left, whose order is the
+browser's own: 12/30/2021 in a US browser, and `lib/uiPatterns.test.ts`
+refuses one). It is a text field read by `parseDay`: "15 Nov 2021", "15
+November 2021", "15/11/2021", "15.11.2021" and "2021-11-15" all read, never
+month first, and once typing ends it shows the day as "15 Nov 2021". The
+value kept, saved and sent stays YYYY-MM-DD ('' or null for none), so
+nothing on the server changed. `min` / `max` bound it (the reporting
+window's From / To to the run's days, a registration check to today). Text
+it can't read, or a day out of range, is kept with a message under the
+field ("Enter a day from 1 Jan 2021 to 31 Dec 2024, day first: 15 Nov
+2021, 15/11/2021 or 2021-11-15"), marked `aria-invalid` and described by
+it; it counts in the save bar's problems and the leave guard as a number
+that needs fixing does (they now say "fields that need fixing"), and it is
+the input's custom validity, so a form that validates refuses to submit it
+rather than send the last day it read. The fields: the simulation period
+and curtailment reporting window (Settings), rain-source periods and their
+fit period, calibration exclusions and the calibration window, a demand
+object's dated windows, a dam's survey and in-service dates and a unit's
+abstraction start, a registered volume's validity, a CHIRPS feed's start
+(the Data feeds form and Rain for every unit), the workbook import's
+scaling start, the licence record's dates, a registration check's day, a
+publication's next expected update, the reporting window's custom range
+(taken once typing ends, Enter or leaving the field, since each change
+recomputes), and an application's objection closing date and decision
+date (`day-input.spec.ts`).
+
 ### Number fields
 
 Every number a user types goes through `common/NumberInput.svelte`, and every
@@ -235,7 +276,9 @@ maps `null` to 0 in its `onchange`. A revision line saved before the change
 ### Flow units
 
 A flow rate has a small unit select beside its label (or, in the node
-table, in place of the column heading's unit), at least 24 px tall: **m³/s**, **l/s** or
+table, in place of the column heading's unit), at least 24 px tall, its
+outline the input border (`--border-input`, ≥ 3:1 in both themes; the faint
+`--border` it had was 1.3–1.5:1, issue #521): **m³/s**, **l/s** or
 **m³/day** (`network/FlowUnitSelect.svelte`, `network/flowUnit.svelte.ts`).
 One choice per kind of rate, each starting at the unit it always showed:
 **River to dam** (the node table column, the unit form and River to dam by
@@ -270,7 +313,13 @@ stored in its fixed unit is read.
 A chart's value axis writes its ticks short (`charts/series.ts`
 `fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
 decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float
-noise rather than a flow, does it fall back to an exponent.
+noise rather than a flow, does it fall back to an exponent. A log axis spans
+at most six decades under its largest value (`logFloor`, `LOG_DECADES`):
+smaller values run off its foot, the read-out still giving them, and it
+labels whole decades only, every second or third when more than fit one a
+label's height apart (`decadeTicks`). The Showcase's flow duration curve
+reached float noise and printed a label for every decade down to 1e-19, a
+solid block (issue #521).
 
 ## Expected format
 
@@ -908,7 +957,7 @@ settings", "… to the project details", and for the model alone the areas
 that changed: "… to the model (network and transfers)",
 `model/changedAreas.ts`); its region is named *Unsaved model changes* with
 model edits, else *Unsaved settings* or *Unsaved project details*, and
-*Unsaved changes* when only a number that needs fixing is. Anything that blocks
+*Unsaved changes* when only a field that needs fixing is (a number or a day). Anything that blocks
 the save is listed under the bar as links to where it is fixed
 (`model/ProblemLinks.svelte`: the first three, then **and N more**): a
 node's problem opens its sheet (`?tab=network&edit=<id>`), a crop's its
@@ -955,6 +1004,20 @@ areas', its own being above it), **Discard model changes**, which asks
 first and says it reverts every unsaved model edit, not only the modal's,
 and **Save changes**, after which the row says "Changes saved." and the
 focus stays in it, on **Done**.
+
+**On a phone** (issue #521 round 5; both were three rows, about 144 px, even
+with nothing to save): a save row is one row of three equal buttons,
+**Discard**, **Done** and **Save** (their names stay "Discard model changes"
+and "Save changes", the rest of the words hidden but read); "No unsaved
+changes" is kept for screen readers only, and the status and the reason
+show once there are changes (`ModelSaveRow`'s own container query, 560 px).
+The page's save bar puts its status in the buttons' row as the dot and a
+word ("Unsaved", "2 problems"; the whole sentence stays the live region's
+text, and a failed save keeps its message on a row of its own), with the
+reason under it: two rows, about 110 px. The page's `scroll-padding-bottom`
+follows the bar's measured height, so a focused field is never under it
+(WCAG 2.4.11). `e2e/tests/phone-edit-controls.spec.ts` pins both at 390,
+360 and 320 px.
 
 **Run model with unsaved edits.** A run uses the saved model, so the
 header's **Run model** on every other tab (its form's **Run model** and
@@ -1007,7 +1070,7 @@ project details and the settings (the workspace page; the header's
 **Unsaved changes** badge counts all three), override mode's unrecorded edits, a
 half-filled **Add a change** form or a typed but unsaved scenario rename,
 a name typed into the **New scenario** dialog, and a number field holding
-text it can't take ("numbers that need fixing": any change of page or tab
+text it can't take ("fields that need fixing", a number or a day field: any change of page or tab
 drops it, since the field unmounts; a `#fragment` doesn't). A navigation that would
 drop any of it (another page for the page-level work; another tab or
 scenario for a scenario's) is cancelled and the app's own dialog asks,
@@ -1076,6 +1139,16 @@ unsaved input: while **Add data** holds a file that is read but not uploaded
 dialog above; Dialog's `beforeclose` may answer later). Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
+Dialogs, sheets and popovers take what sets them off the page from overlay
+tokens in `app.css` (`--overlay-backdrop`, `--overlay-border`,
+`--overlay-shadow`, `--popover-shadow`; the save bar's upward `--bar-shadow`), deeper in dark mode (a 60 % backdrop,
+the strong border, a 70 % shadow), where the old literals left a sheet at
+1.1:1 against the page it covered (issue #521). A disabled main button turns
+to the plain surface with muted text in both themes, where a faded accent read
+as a live button on the dark page; a badge starts with a capital and leaves
+the rest as written ("Dam settings changed since the run", not Every Word
+Capitalised), and its corners are half a one-line badge's height, so a long
+one that wraps in a narrow cell is a rounded box, not a tall blob.
 Every `Dialog.svelte` dialog but the confirmation question also has a **✕** in its top-right corner
 (`aria-label="Close dialog"`, tooltip "Close (Esc)") for people who don't know
 Escape closes it. It is last in the DOM, so opening a dialog still focuses its
@@ -1175,19 +1248,43 @@ role, freshness, Add data) and each tab's own header:
   header as it was. `section-header.spec.ts` pins at most 2 context lines at
   1440/1280/1024, and 1 whenever the controls are beside it.
 - **Phones (a header 640 px wide or less, a container query):** the same
-  header after the Sections button. The pills are a line of their own: the
-  Summary's **Setup complete** (or the Map's **Getting started**) and the
-  rain pill share it, the rain pill's words wrapping inside it (its date and
-  its age each whole) rather than each pill taking a half-empty row; a
-  pill's list opens rightwards from the row's left edge, on the screen
-  (`overview.spec.ts`); a picker (a run select) takes a full row;
-  the tab's buttons and the main box then fill full rows, every control
-  growing to fill its row, and Add data and Run model always end the
-  header (the main box never splits; Run model's form is nudged to stay on
-  the screen). Runs' run form is a row of its own under Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
-  on every section with a big catchment, plus the overlays' phone scans (node
-  sheet, node table, Allocations' sheets, New scenario, Add data, the
-  Sections menu).
+  header after the Sections button, laid out so the tab's content starts in
+  the first half of a 360 × 740 screen (issue #521 round 5: it started at
+  429–579 px, the header taking 48–78 % of the first screen). The
+  catchment's name and your role go in the app's phone bar in place of the
+  "Water Management" word mark (the logo stays, linking to the projects;
+  `layout/sidebar.svelte.ts` `fillPhoneTitle`), the name in at most two
+  lines with the whole name in its title. **How this page works** is a "?"
+  after the title (36 px, its target 44 px), named in words. The pills share
+  one row: the Summary's **Setup complete** (or the Map's **Getting
+  started**) and the rain pill, the last pill's words wrapping inside it (its
+  date and its age each whole); a pill's list opens rightwards from the
+  row's left edge, on the screen (`overview.spec.ts`). The tab's own
+  controls fold into one **⋯** button (**More actions**) at the end of that
+  row, its list under it naming every one: its pickers (each named over its
+  select there, the name only for screen readers on a wide screen), links,
+  buttons and menus (Tables ▾ opens in place inside the list). The same
+  elements as on a wide screen, so nothing is dropped: a pick closes the
+  list and leaves the focus on ⋯, so a sheet it opens hands the focus back
+  there; a control inside one of the list's own menus leaves it open;
+  Escape (after a menu inside it), a click elsewhere or leaving it closes
+  it. Without pills the ⋯ starts the main box's row. Add data and Run model
+  then share the last row (the main box never splits; Run model's form is
+  nudged to stay on the screen); on Runs & results the run label and its
+  field fill a row, then Add data, Run forecast and Run model share the next
+  in equal parts (the form draws no box of its own there). While new data is
+  waiting the header's button reads **Re-run model** and the notice line is
+  words only ("New data since the last run (…)."), since the two buttons did
+  the same thing 8 px apart; a wide screen keeps both. A viewer's **View
+  only** note is one line ("View only. Ask the owner to edit."; the role
+  badge in the bar says it too), the full sentence still read by screen
+  readers. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
+  on every section at 360, 390 and 320 px with a big catchment (the header's
+  foot at most 370 px down at 360 × 740, the ⋯ on the pills' row, the last
+  row filled, Re-run model), More actions' list (names, on the screen,
+  Escape, focus back from a sheet, a menu inside it), the viewer, plus the
+  overlays' phone scans (node sheet, node table, Allocations' sheets, New
+  scenario, Add data, the Sections menu).
 - **Compare runs** draws no title of its own in the workspace: it gives the
   header its context ("Baseline “…” against one what-if · …"); the
   standalone `/compare` page keeps its own `h1`.
@@ -1844,6 +1941,14 @@ it scrolls, and isn't fitted to the window.
   until 2026-09 (issue #176): each repeats the header line of the tab it
   links to, so the first row now answers what the project is and who has
   it.
+- **Members** on a phone (under 560 px; issue #521 round 5: Leave read
+  "Lea" and Remove "Remo" at 390 px, the role select 25 px tall): each
+  member is a row of two lines, as on the team page (issue #520), the name
+  with the email under it beside the role, the role taking the full width
+  when it has more under it (the applying party, the authority tick), then
+  **Leave** or **Remove** on a line of its own; the role picker and the
+  buttons are 44 px. The rows are grids there, so the table keeps its roles
+  explicitly.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
@@ -1869,7 +1974,10 @@ it scrolls, and isn't fitted to the window.
   **+ Record a check** in the panel's head row, which opens the form
   (member, register, category, number, name on the register, found, the
   checking organisation, the date, a note; the register's address to look it
-  up) with focus on Member; **Cancel**, or recording the check, closes it and
+  up) with focus on Member. The date starts at, and stops at, the viewer's
+  own today (not the UTC day, a day behind until 02:00 in South Africa); a
+  check dated today is sent as the moment it was recorded, so the server,
+  which refuses a check in the future, takes it just after midnight too; **Cancel**, or recording the check, closes it and
   returns focus to the button. A list that fails to load says why with
   **Try again**. Closed at first since issue #521 § 13: a
   check is recorded about once a year a signer. The owner the tick box "Issuing an
@@ -2083,7 +2191,11 @@ that hasn't run is not flagged.
 **Filter, search, sort, all in the URL.** The owner filter is a row of chips
 (All projects, Personal, each team, Shared with me, with counts, and
 **Manage teams**), or a select when the page is 600 px or narrower. Search
-matches name, description and team (`?q=`). Sort (`?sort=`): *Recently
+matches name, description and team (`?q=`); a search is one step in history:
+its first keystroke after the box takes the focus adds an entry, the rest
+replace it, so Back returns to the list before the search, not letter by
+letter (until issue #521 every keystroke replaced the entry the list came
+from, so Back left the page). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *EWR status* (worst
 first), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
 first; the Data heading), *Last run* (newest first), *Name*, from the Sort
@@ -3135,7 +3247,7 @@ itself.
   each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
   dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
   a label (**Window n**), **Days** (the span; changing it resets the bounds),
-  its bounds (**From** / **To**: MM-DD each year, date pickers once, days
+  its bounds (**From** / **To**: MM-DD each year, typed days once (day first, [§ Day fields](#day-fields)), days
   from Easter Sunday), **Factor** (0 = off, up to 10), **On** Mon–Sun
   checkboxes (all ticked = every day), **Move window n up / down** (order
   matters: the later window wins a day two cover; the focus stays with the
@@ -3310,7 +3422,10 @@ map" card) stays the schematic; this is the geography.
   sits above or over the map; on a narrow page, where the column is below
   the map, it stays above the map. Pressed (`aria-pressed`) while on;
   a group, so Tab goes through them in order after the header and before the
-  map; each at least 46 × 62 px. Viewers get Measure alone. While a tool is
+  map; each at least 46 × 62 px. The map's box is never shorter than the
+  column and the Key row under it, so the column stays inside the card while
+  the map's chunk loads or when the map fails (at 390 px it ran over the
+  Features list, issue #521). Viewers get Measure alone. While a tool is
   on, a strip over the map's top middle names it and how to leave it
   (`mapTools.ts` `toolStrip`: "Delineating · Esc to stop", "Drawing a shape
   · Esc to cancel", "Editing “Upper farm” · Esc to cancel"; hidden from
@@ -3318,7 +3433,11 @@ map" card) stays the schematic; this is the geography.
   note or the busy line under it. The picked feature's name over the map's
   top-left corner sits right of the column (CatchmentMap's
   `--map-inset-left`). Over the map otherwise only small buttons: **Layers**
-  under the zoom buttons (below), **Show everything** (issue #374: frames
+  under the zoom buttons (MapLibre's, in the app's surface, input border and
+  focus ring, their icons turned light in dark mode: `map/maplibre-theme.css`,
+  loaded with MapLibre's own sheet, so the Map tab, the farm view and the
+  Allocations map match; issue #521, until then a white patch with the
+  library's #0096ff ring), **Show everything** (issue #374: frames
   every feature) and **Key** at the bottom left (below), each opening its
   panel in the side column on a wide page (below), and for owners and editors without
   a basemap configured a small "No basemap configured (docs/maps.md)" under
@@ -3570,11 +3689,12 @@ map" card) stays the schematic; this is the geography.
   Latitude and Longitude behind **Enter coordinates**), the dataset line
   (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
   (“Delineating…”). Under the clicked position: "The point goes on the
-  nearest terrain channel (the red lines), within 150 m; mapped rivers
-  never move it." A refusal shows its sentence in the sheet ("That point
+  nearest terrain channel (terrain channels in the map's key), within
+  150 m; mapped rivers never move it." (Named by the key, not a colour:
+  the channels are orange-red in the dark theme.) A refusal shows its sentence in the sheet ("That point
   is outside the elevation model …"; off the channels, "No terrain channel
-  runs within 150 m of that point. Zoom in until the terrain channels (the
-  red lines) show, and click on one …"). A point beside a much larger terrain channel shows a
+  runs within 150 m of that point. Zoom in until the terrain channels
+  show (they're in the map's key), and click on one …"). A point beside a much larger terrain channel shows a
   warning box instead: "A much larger terrain channel runs 504 m north of
   your point: at least 620 km² drains through it inside the 34 km routed
   around your point, and more from beyond (the mapped river here, reach …
@@ -3872,16 +3992,25 @@ map" card) stays the schematic; this is the geography.
   from QGIS; its **Expected format** gives the shapes, the `kind` words and
   an example file, `map/example-features.geojson`, [Expected format](#expected-format))
   and **Review**, which reads it on the server
-  (`POST …/map/import/preview`). Then the sheet widens to the review: a line
-  with the file's name and its features counted by kind ("Check each kind
-  before you import; nothing is saved until then"), **Set every row’s
+  (`POST …/map/import/preview`). Under the file field one short line
+  ("WGS84 longitude and latitude; a file in a Lo zone or UTM is refused."),
+  the reprojection recipe and "a file may mix kinds" kept in its
+  description and its ⓘ. Then the sheet widens to the review: a line
+  with the file's name and its features counted by kind ("Kinds come from
+  the file’s properties, else from each shape" when some do, then "Check
+  each kind before you import; nothing is saved until then"), **Set every row’s
   kind** (a default for the Kind column: each row whose shape can be that
   kind takes it, and the line under it counts those that can't), and a
   table, one row per feature: #, Name (editable), Shape (point, line or
   polygon, with its area), Kind (only the kinds its shape can be, with
-  "from the file" or "from its shape" under it, and why a kind the file gave
-  wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
-  boundary or river) and Problems. While a row is marked as the boundary
+  "from its shape" under it when it was guessed, and why a kind the file gave
+  wasn't used; "from the file" is said once in the summary and stays each
+  row's description for a screen reader), Stands for (the nodes that kind
+  can stand for, or "–" for a boundary or river) and Problems, a column only
+  while some row has one (a column of "None" took the room the names need:
+  Name is at least 14rem). The column names stay at the top of the sheet's
+  scroll (the table's box doesn't scroll, so its head sticks to the sheet's
+  body); the cells are top-aligned. While a row is marked as the boundary
   and the project has one, a warning over the table says "Importing
   replaces the current catchment boundary “X”: it goes from the map." with
   a **Replace the current boundary** tick (off for every file); **Import**
@@ -3890,8 +4019,16 @@ map" card) stays the schematic; this is the geography.
   refused feature, or a file imported already (by SHA-256) show in an alert
   over the table and disable **Import n features**; **Choose another file**
   goes back. A refused file imports nothing; a taken one closes the sheet
-  and picks its first feature. On a phone each row is a card of labelled
-  fields (`importReview.ts` holds the rules, `importReview.test.ts`). Under
+  and picks its first feature. A file nothing in can be imported says
+  "Nothing in this file can be imported.", lists its problems once in the
+  alert (no table of dashes repeating them) and leaves **Choose another
+  file** as the one, main action. On a phone each row is a card of labelled
+  fields under 200 px (it was 352 px; issue #521 round 5): a head line with
+  the number and shape ("1 · Polygon, 0.35 ha"), the name, then Kind and
+  Stands for side by side where the card is 20rem or wider, no Problems line
+  on a row without one, labels at 0.85rem (`importReview.ts` holds the
+  rules, `importReview.test.ts`; `map-import-review.spec.ts` pins the
+  layout at 1440, 390, 360 and 320 px). Under
   it, **Imported files**: each file with its feature count, date, who
   imported it and its SHA-256 cut to 12 characters (the full hash in the
   tooltip) with **Copy**.
@@ -5610,11 +5747,11 @@ two.
   so ("fill it again, or update the note"). The Pan-coefficient preset
   picker goes back to "Choose a preset…" after a pick the same way (it used
   to keep showing the preset),
-  and, behind an **Advanced** disclosure (issue #174: 28.25 is kept for
-  workbook parity and rarely changed), days in February. The closed
-  disclosure's summary names the value ("Advanced: days in February,
-  28.25") and adds "(not the default 28.25)" in amber when it differs, so a
-  changed value is never hidden.
+  and, folded into its value (issue #174: 28.25 is kept for workbook parity
+  and rarely changed; the app's fold, `common/Fold.svelte`, since issue #521
+  round 5), days in February. The closed fold's line names the value
+  ("Advanced, days in February: 28.25") and adds "(not the default 28.25)"
+  when it differs, so a changed value is never hidden.
 - **Calibration is four panels**, each its own menu entry, rather than one
   long one: Flow calibration, Calibration record, Fit the parameters and the
   WR2012 check, in that order, after Rain gaps (under Data & rain).
@@ -5738,8 +5875,9 @@ two.
       indicative, from FAO-56 Table 5 climate classes, Allen et al. 1998;
       model.md §2.4a) fills the pan-coefficient row with a starting point;
       the row stays editable after, and the preset's name goes into the
-      **Pan coefficient source** note below the row. Below it, a collapsed **Suggest from
-      FAO-56 Table 5 (humidity, wind, siting)** helper
+      **Pan coefficient source** note below the row. Below it, a closed fold,
+      **Suggest from FAO-56 Table 5: humidity, wind, siting** (the app's fold
+      since issue #521 round 5), the helper
       (`settings/PanCoefficientHelper.svelte`, part of the Settings tab's
       chunk, hidden on a read-only view): the pan siting (Case A, green crop, or
       Case B, dry fallow) as radios, the windward fetch as a select (1, 10,
@@ -6108,7 +6246,11 @@ two.
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
     At the card's foot (issue #521), **Fit record of these parameters**
-    (`calibration/FitProvenance.svelte`) shows the record: model and time (day first, in UTC: "GR4J fit of 24 Sep 2026 10:05 UTC"),
+    (`calibration/FitProvenance.svelte`), in a fold whose line is the
+    record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",
+    `provenance.ts fitRecordLine`; open from 1024 px, closed on a phone,
+    where its ~1,300 px stood between the two cards, issue #521 round 5;
+    Find a setting still opens it), shows the record: model and time (day first, in UTC: "GR4J fit of 24 Sep 2026 10:05 UTC"),
     objective, seed, model runs, engine version, the record and window fitted
     to, the pan coefficient and A-pan evaporation it ran under (month by
     month, or "not recorded" for a fit made before this was tracked) and the
@@ -6310,7 +6452,8 @@ two.
   Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
   **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
   ten points, m³/s), each before scaling, and under them **The tables scaled
-  to the model (each value × s)** (open; `settings/ScaledEwrTablesView.svelte`,
+  to the model: each value × s** (an open fold, its line saying "once the
+  tables and the scale factor are known" until then; `settings/ScaledEwrTablesView.svelte`,
   `ewrDailySource.ts scaledEwrTables`, issue #90 B1 gap a): the tables the
   method reads × s, read only, as soon as s is known (the area ratio at once,
   the MAR ratio from the last run, exact or estimated as the factor line
@@ -6936,7 +7079,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   there), and step aside under *All*; Shift+drag moves the view too. It sits beside **Days
   below the reserve, each water year** (`#res-reserve-years`, Compare runs'
   `ReserveYearsChart` with this one run: the engine's
-  `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years faded,
+  `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years outlined with a light fill (a faded bar fell under 3:1),
   a table behind *Show as a table*; about six years labelled, always the
   last, and a label near an edge moved in so it is never cut off,
   `compare/yearAxis.ts`, issue #162: the narrow column clipped "2024/25" to
@@ -7447,7 +7590,11 @@ read it before.
   the total and links to Network and Settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
-  run shown; editors delete one with its ✕ (a run already gone, deleted
+  run shown; a run picked from the list (or **Show the newest run**, "go to
+  latest", a new run) is a step in history, so Back returns to the run before,
+  as a unit, dam or run pick does on River & reserve, Hydrological units, Dams
+  and Allocations; the default pick and the fallback after a delete replace
+  the entry (issue #521; until then a pick here replaced it); editors delete one with its ✕ (a run already gone, deleted
   elsewhere or trimmed, just leaves the list; a run that can't be opened
   because it's gone says so in words, `runs/runList.ts` `runErrorText`, never
   the API's "not found", with **Show the newest run** in place of a Try
@@ -7470,7 +7617,9 @@ read it before.
   ("1 Oct 2021 – 28 Jan 2022 (120 days) · ran today 01:13 by Ann · engine
   1.81.0"; a forecast's badge "Forecast from 29 Jan 2022"). From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
-  whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
+  whose label contains every word typed (any case), with "N of M runs". The
+  words are in the URL (`q=`), so a reload and Back keep them; one search is
+  one step in history, as on the project list (issue #521). Its header links to **Compare
   runs** (the Compare runs tab, `?tab=compare`, [run-comparison.md](./run-comparison.md)).
   Viewing an older run, the header offers "go to latest".
   **Which run opens** when the URL names none (`defaultRunId` in
@@ -7797,7 +7946,8 @@ read it before.
   demand, supply, the *equitable share volume* and *above (−) / below (+)
   equitable share* under "Equitable share (fairness benchmark, ex EWR)", then
   the EWR columns. No label or badge says "gain" (audit Q11): a farm below its
-  share reads "below its equitable share by X m³/day", and the table ends with
+  share reads "below its equitable share by X m³/day" (the name column is at
+  least 11rem, so that badge takes two lines rather than five, issue #521), and the table ends with
   the fixed footnote "Fairness benchmark only: … Not an allocation or licence
   condition." From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
   column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
@@ -7853,7 +8003,8 @@ read it before.
   are thin strips along the foot of the plot, behind the lines, one strip
   per flagged class (above the highest gauging, below the lowest, suspect,
   infilled; top to bottom in that order, each in its own `--series-*`
-  colour), so a class reads by its place as well as its colour. A key under
+  colour at full strength, as its key swatch), so a class reads by its place
+  as well as its colour. A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
   with its days and what Fit automatically does with them under the run's
   own settings snapshot: "Above the highest gauging: 14 days; Fit
@@ -7874,7 +8025,10 @@ read it before.
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
   demand, Explore outputs, the model stores, the Data tab's series chart and
-  the run comparison's daily series overlay. The m³/s ↔ m³/day switch sits on every flow chart
+  the run comparison's daily series overlay. Every chart's legend swatch is
+  its series' colour and line style: a dashed or stepped line has a dashed
+  swatch, a points-only series (recessions, double mass) a filled one, where
+  uPlot's default left it empty. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them (Explore's **Series**
   picker names each daily volume in the unit the switch shows, "Simulated
@@ -8223,7 +8377,9 @@ read it before.
 - **Water account** (`#res-water-account`, last on River & reserve;
   `reliability/WaterAccountPanel.svelte`, in River & reserve's chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
-  what came in and where it went or was stored, each with a labelled key;
+  what came in and where it went or was stored, each with a labelled key
+  (segments in the categorical palette's order, `--series-1, -2, -3, -5, -6,
+  -7`, with their dark values; six raw hex colours until issue #521);
   then a table of every term per water year and the whole run (terms a
   network doesn't have are left out), the change in dam storage and the
   residual (to two significant figures, float noise). Runs before engine
@@ -8372,6 +8528,15 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 - **No recommendation.** The panel reports how past years went at each
   level ("Historical, not a forecast; the choice of level is the WUA's") and
   never picks one (a unit test holds the view model to that).
+
+When the lookup of the run's sweep fails (or a pending sweep can't be
+followed), the panel says so ("Couldn’t look up this run’s demand sweep:
+…") with **Try again**, which reads it again; the Seasonal outlook does the
+same ("Couldn’t look up this run’s seasonal outlook: …"), and so does
+Automated calibration in Settings ("Couldn’t load the calibration rules’
+fits: …"; a failed start or apply keeps its plain message, the button being
+its retry). Until issue #521 each showed the bare server text with no way
+to try again but a reload (`e2e/tests/history-steps.spec.ts`).
 
 Tests: `outcomes/matrix.test.ts` (the adapter, NaN mapping, n years, not
 enough years, default vs custom cut-offs, problem members; the site list,
@@ -8637,7 +8802,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
 - **Days below the reserve, each year** (right): grouped bars per water year
-  (`ReserveYearsChart.svelte`, a chunk shared with River & reserve; part years faded), a legend,
+  (`ReserveYearsChart.svelte`, a chunk shared with River & reserve; part years outlined), a legend,
   a note and **Show as a table**. Its value axis is labelled "days below";
   when every year is 0 the plot says "No day below the reserve in any
   year" rather than showing empty bars. It fills the height of its row.
@@ -9146,9 +9311,15 @@ finished import is still reported on the page.
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
 source, purpose, volume, storage, valid from/to, registration number,
 property, the registered user (editors), reference, and **Licence
-conditions** (issue #72; "a cap run keeps to the months and the rate"): the months
-water may be taken (twelve boxes in water-year order, none ticked = none
-stated, each a 24 px target), the maximum rate (m³/s) and the other
+conditions** (issue #72): a short legend, with "Optional; a cap run keeps to
+the months and the rate." as the line under it and the fieldset's
+description (until issue #521 it sat in the legend, which wrapped at 390 px
+with the border running through it): the months water may be taken (the
+app's month picker, `common/MonthPicker.svelte` since issue #521 round 5,
+which replaced its own 21 px boxes: twelve toggles in water-year order, at
+least 24 px and two rows of six at 44 px on a phone, with **All months** /
+**No months** and the months in words under them; none ticked = none
+stated), the maximum rate (m³/s) and the other
 conditions one a line; Save and Cancel pinned.
 
 **Phone and narrow windows**: one column (list, picked unit, volumes, every
@@ -9305,7 +9476,8 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   **Decided**, **Withdrawn**, each with its count; `&status=awaiting|decided|withdrawn`
   in the URL, so Back steps through the filters and a link keeps one; an
   unknown value shows all) and **Sort by** newest first or status (awaiting
-  a decision first, the longest-waiting on top).
+  a decision first, the longest-waiting on top; `&sort=status` in the URL,
+  so a reload and Back keep it, issue #521).
 - **The table:** name (a link to it in the Scenarios tab), applicant ("shared
   with N" under it), status as a pill in words (Awaiting a decision;
   the authority's outcome in the band colours: *Licence issued (see its
@@ -9420,14 +9592,19 @@ the viewer's day, with a request's change set folded into one entry.
   live in the URL (`&unit=<nodeId>`, `&kind=revision|series|run|…`), pushed,
   so Back steps back through them and a link keeps them; an unknown kind, or
   a unit not in the model, is no filter. The parameter words narrow what's
-  loaded as you type, then go into the URL after a pause (`&q=`, replaced,
-  not pushed), where the server keeps only revisions with a matching line on
+  loaded as you type, then go into the URL after a pause (`&q=`; a typed
+  search is one step in history, as on Runs and the project list: its first
+  write after the box takes the focus pushes, the rest replace, so Back undoes
+  the whole search), where the server keeps only revisions with a matching line on
   every page, so an old match isn't lost behind 50 newer changes (events are
   still filtered in the page). A field's history line links here with all
   three ([§ Field history](#field-history)).
 - **Wide (the card's column from 840 px):** a list of compact rows beside the
   picked change. A row is a link: time and author, what it was (a revision's
-  title, or an event's sentence), its first line with "+N more", and its
+  title, or an event's sentence: every kind the server records has one, a
+  test reading `backend/src/history/record.ts` holds it so; "Changed the alert
+  rules: Dam low, Data feed behind (3 rules, 2 on, 1 off)" showed as
+  `alert_rules.changed` until issue #521), its first line with "+N more", and its
   reason, one line each. The pick is `&entry=<key>` (Back returns to the
   previous one; with none, or one no longer loaded, the newest shows,
   without writing the URL). The detail: a heading (the revision's title, or
@@ -9562,7 +9739,9 @@ March") is kept against what it is about.
   them again), and signing out forgets them.
 - **Writing.** Every member can add a note; the author edits theirs (marked
   *edited*); the author or an editor deletes (a confirm, then a soft delete:
-  hidden from everyone, kept for the audit trail). On a farm, *Also show to
+  hidden from everyone, kept for the audit trail). After a delete the focus
+  goes to the note now in its place (the next, else the last), and with none
+  left to the add field (issue #521; it fell to the page's start). On a farm, *Also show to
   this farm's farmers* makes a note farm-visible, marked *Shown to its farmers*;
   everything else is read by the project team only.
 - **On a scenario** (WP-3.15, the Application panel and each Applications
@@ -10325,16 +10504,35 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   `scripts/help-art/catchment.py`) renders every shot at its full and half
   width to `static/help/<shot>-<w>.webp`, and projects each labelled feature
   through that shot's camera into `lib/help/pictures.json`, so a marker always
-  sits on its feature. The output is committed; re-run it (needs Blender 5,
-  ImageMagick 7 and python3) only after changing the scene, or pass
-  `HELP_ART_ONLY=farm,soil` to re-render some shots.
+  sits on its feature. Each shot is rendered twice from one camera: by day
+  for light mode and at dusk for dark mode (`static/help/<shot>-dusk-<w>.webp`;
+  issue #521). Dusk is the scene relit, not a filter: a deep blue sky, a cool
+  key, the last of the sunset low from the west, a lit farmhouse window, a
+  lamp over the gauging hut and a cool fill on the block's cut face so the
+  soil layers stay apart on a dark page; the sun stays a sun, since the
+  catchment tour marks it as evaporation. The landing page's dusk hero is the
+  same rig with the sun as a moon (`scripts/landing-art/diorama.py`). The
+  output is committed; re-run it (needs Blender 5, ImageMagick 7 and python3)
+  only after changing the scene, or pass `HELP_ART_ONLY=farm,soil` to
+  re-render some shots and `HELP_ART_LIGHT=day` or `dusk` for one lighting.
+  `HELP_ART_DEVICE` picks Cycles' device (OptiX by default; `CPU` on a
+  machine without a working GPU backend: the dusk set was rendered on the
+  CPU, 128 samples, about 4½ minutes). `lib/help/tour.test.ts` fails if a
+  shot lacks either lighting at either width, if the two differ in size, or
+  if a file reaches check:bundle's 100 KB asset ceiling.
 - **Picture tours** (`help/PictureTour.svelte`): a shot with numbered markers
   and, under it, the numbered list of stops, which is the full text. The
   markers are a pointer shortcut (out of the tab order and hidden from screen
   readers, since the list says the same); clicking one lights its stop, and
   hovering or focusing a stop lights its marker. A stop with more to say has
   **Show more** (`aria-expanded`), which opens it in place across the full
-  width: key points beside a close-up shot, or a diagram.
+  width: key points beside a close-up shot, or a diagram. Every picture, here
+  and in a help tip, is a `<picture>` whose dusk source the dark theme picks
+  (`DUSK_MEDIA`, the OS preference app.css follows, as the landing hero
+  does); no filter goes over it. In dark mode a shot that fills its frame
+  keeps a 1 px border-coloured outline, since its evening sky meets the dark
+  page with little contrast; the cut-out catchment block (`cutout` in
+  `pictures.json`) gets none (`help.spec.ts`, both themes).
 - **Overview** (`/help`): the catchment tour (eight stops from rain to the
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
   setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
@@ -10578,7 +10776,14 @@ published.
   words, and its percentage as "Set by the WUA: a 20 % cut in registered
   water use." whenever it published one, beside its words as the alert email
   has it), or "No
-  restriction from the WUA", then the estimate line (below). The notice is in the language the reader
+  restriction from the WUA", then the estimate line (below). With a notice
+  the supply card's heading still starts on a 360 × 740 phone's first
+  screen, in English and Afrikaans: under 400 px the notice card is tighter
+  (12 px padding, its byline at the end of its last line), the estimate
+  line's icon sits in its first line with the text the box's full width
+  (same words, 16 px), the dates line's clock likewise, the cards 10 px
+  apart, and the header's title gives way to the mark below 380 px
+  (`farm-view.spec.ts`, issue #521). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
   English, else in the first other language the WUA wrote, with "The WUA
@@ -10724,8 +10929,13 @@ published.
 - **States.** Skeleton cards with a hidden status and "Slow signal?" after
   3 s; no publication; an error with Try again (a contact line after the
   second failure, never raw error text); access removed (403/404), which
-  also clears the saved copy. The contact lines ("Questions? Contact …",
-  the removed and second-failure lines) name the WUA when the project has
+  also clears the saved copy; and a link to a unit that isn't the farmer's
+  (`?node=` the catchment's list doesn't hold, while it holds others): "This
+  hydrological unit isn’t linked to your account. If it should be, contact
+  …", never "no longer" (it may never have been theirs), with **Your
+  hydrological units in this catchment** listing their own there
+  (`not-yours`, `farmState.svelte.ts`; issue #521). The contact lines ("Questions? Contact …",
+  the removed, not-linked and second-failure lines) name the WUA when the project has
   its name (`wuaName`, set on the Project page's details), else say "your
   WUA" (`contactText` in `farm/cards.ts`). "Compared with last season"
   without a year of figures says "Not available: the model's data starts
@@ -11397,6 +11607,30 @@ data button or Run button.
   scroll them (WCAG 2.1.1). One watcher does this app-wide
   (`lib/a11y/scrollRegions.ts`, started by the root layout); a box names
   itself with `data-scroll-label`, or takes its table caption or section name.
+  Each box that scrolls sideways shows it (issue #521 round 5: a table cut at
+  a column edge looked finished): a soft shadow on the edge that has more,
+  drawn by CSS alone (`.table-wrap`'s background, app.css), and the watcher
+  marks it `data-scrolls-x`, so on a phone a first column that names the
+  rows (`th scope="row"`) stays at the left as it scrolls. A table restyled
+  as cards on a phone doesn't scroll, so it never gets that
+  (`phone-edit-controls.spec.ts`).
+- **Fields**: a field in a table cell is at least 24 px tall everywhere
+  (WCAG 2.5.8; some were 21–25 px), 44 px on a touch screen; a field that
+  stands alone on a phone (a picker beside its label, a filter, every field
+  of a card) is 44 px (issue #521 round 5).
+- **Small text on a phone**: every piece of small text in the workspace
+  (badges, `.small` lines, hints, table column heads, tile labels, units,
+  tags, a table's card labels, the app frame's counts and kickers) is at
+  least 12 px under 640 px (0.85rem, 11.9 px, counts), where it was 8.4 to
+  11.2 px; on a desktop nothing is under 0.75rem (10.5 px). Small text takes
+  app.css's two size tokens, `--font-xs` (0.75rem) and `--font-sm` (0.8rem),
+  which a phone lifts to 12 px (issue #521 rounds 5 and 6).
+  `text-floor.spec.ts` measures every tab at 390 and 1440 px, and
+  `uiPatterns.test.ts` refuses a literal size under 0.85rem outside print
+  styles and the decided exceptions: text in an svg (charts and diagrams),
+  aria-hidden glyphs (▾, ▲▼) and count bubbles on icon buttons. On a phone
+  a sparkline's mark takes its own line under the two ends where 12 px
+  doesn't fit between them (the Crops list, the Dams cards).
 - **Charts say what they show** ([ui-playbook](design/ui-playbook.md) § 3,
   "Label every chart"): a title or caption naming the quantity, its units,
   the time axis, a legend or direct labels, and a text equivalent. A line

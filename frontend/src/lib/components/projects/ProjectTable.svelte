@@ -406,7 +406,7 @@
 		margin-top: 0.15rem;
 		color: var(--text-muted);
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.meta-narrow,
 	.meta-mid {
@@ -431,12 +431,12 @@
 		max-width: 72ch;
 		color: var(--text-2);
 		font-weight: 400;
-		font-size: 0.83rem;
+		font-size: 0.85rem;
 	}
 	.sub {
 		display: block;
 		margin-top: 0.2rem;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.sub.warn {
@@ -450,7 +450,6 @@
 	.flag {
 		max-width: 100%;
 		border-radius: var(--radius-sm);
-		text-transform: none;
 		font-weight: 500;
 		line-height: 1.35;
 	}
@@ -459,7 +458,7 @@
 		margin-top: 0.25rem;
 	}
 	.run {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.short {
@@ -467,7 +466,6 @@
 		color: var(--danger);
 	}
 	.alerts-badge {
-		text-transform: none;
 		white-space: nowrap;
 	}
 	.actions {
@@ -495,7 +493,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: var(--shadow), 0 6px 18px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 		text-align: left;
 		cursor: default;
 	}

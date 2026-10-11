@@ -277,7 +277,7 @@
 		flex: 1 1 auto;
 		min-width: 0;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.copied {
 		margin: 0.35rem 0 0;
@@ -290,7 +290,7 @@
 	.state {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.state.live {
@@ -306,7 +306,7 @@
 	.nothing {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--warning);
 	}
 	tr.dead th,

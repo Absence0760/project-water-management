@@ -86,7 +86,7 @@
 	}
 	.what {
 		margin: -0.35rem 0 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.head a {
@@ -157,7 +157,7 @@
 		flex-wrap: wrap;
 		gap: 0.2rem 0.9rem;
 		margin: 0.6rem 0 0;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.key i {

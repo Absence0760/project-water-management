@@ -916,7 +916,7 @@
 		background: linear-gradient(var(--mk-casing), var(--mk-casing)) padding-box;
 		box-shadow: inset 0 -5px 0 var(--piece-tint, var(--mk-proposal));
 		color: var(--mk-badge-text);
-		font: 700 0.8rem/1 var(--font, system-ui, sans-serif);
+		font: 700 var(--font-sm)/1 var(--font, system-ui, sans-serif);
 		cursor: pointer;
 	}
 	.map :global(.piece-badge[data-lit='true']) {
@@ -928,7 +928,7 @@
 		opacity: 0.6;
 	}
 	.picked-kind {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.picked-label {

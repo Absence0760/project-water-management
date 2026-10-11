@@ -224,7 +224,7 @@
 
 <style>
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 		color: var(--text-muted);
 	}
@@ -248,7 +248,7 @@
 	}
 	.u {
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.actions {
 		display: flex;
@@ -259,6 +259,6 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 </style>

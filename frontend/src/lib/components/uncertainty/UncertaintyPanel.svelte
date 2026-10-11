@@ -456,7 +456,7 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8em;
+		font-size: var(--font-sm);
 	}
 	.rule {
 		padding: 0.6rem 0.75rem;
@@ -466,7 +466,7 @@
 		font-size: 0.9rem;
 	}
 	.stat .sub {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.actions {

@@ -19,6 +19,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { blankEwrDailySource, EWR_PERCENTILE_POINTS, type EwrDailySource } from '@water-management/engine';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -363,14 +364,22 @@
 			{@render grid('reservePctM3s', 'Total Reserve flow percentile table')}
 		{/if}
 
-		<details class="scaled-wrap" open data-testid="ewr-scaled">
-			<summary>The tables scaled to the model (each value × s)</summary>
+		<!-- A statement, not fields: open to start with, its line saying whether the tables are there yet (common/Fold). -->
+		<Fold
+			name="The tables scaled to the model:"
+			line={scaled ? 'each value × s' : 'once the tables and the scale factor are known'}
+			open={true}
+			problem={false}
+			body="none"
+			spaced
+			testid="ewr-scaled"
+		>
 			{#if scaled}
 				<ScaledEwrTablesView tables={scaled} />
 			{:else}
-				<p class="small" data-testid="ewr-scaled-pending">The scaled tables show here once the tables and the scale factor are known (see the scale factor above).</p>
+				<p class="small pending" data-testid="ewr-scaled-pending">The scaled tables show here once the tables and the scale factor are known (see the scale factor above).</p>
 			{/if}
-		</details>
+		</Fold>
 
 	{/if}
 	{#if error}<p class="err" role={announce ? 'alert' : undefined} data-testid="ewr-daily-error">{error}</p>{/if}
@@ -444,13 +453,13 @@
 		min-height: 32px;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.factor {
 		grid-column: 1 / -1;
@@ -515,17 +524,9 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
-	.scaled-wrap {
-		margin-top: 0.75rem;
-	}
-	.scaled-wrap summary {
-		font-weight: 500;
-		font-size: 0.85rem;
-		cursor: pointer;
-	}
-	.scaled-wrap p {
+	.pending {
 		margin: 0.35rem 0 0;
 	}
 </style>

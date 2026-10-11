@@ -81,7 +81,7 @@
 	}
 	h4 .muted {
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.pick {
 		display: flex;
@@ -91,11 +91,10 @@
 	}
 	.u {
 		font-weight: 400;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.badge {
-		text-transform: none;
 		white-space: nowrap;
 	}
 </style>

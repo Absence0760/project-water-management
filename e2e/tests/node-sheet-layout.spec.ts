@@ -91,9 +91,15 @@ test('a unit’s sheet folds to its sections, opens the one the menu points at, 
 
 	// A closed card never hides a problem: an initial storage that isn't a number marks the Dam's heading.
 	await expect(dam.locator(':scope > summary').getByText('needs fixing')).toBeHidden();
+	// Its error line grows the field downward and moves nothing beside it (issue #521, round 6): the capacity, in
+	// the same row, keeps its place.
+	const capacityBefore = (await capacity.boundingBox())!;
+	expect(Math.round(capacityBefore.y)).toBe(Math.round((await dam.getByLabel('Initial (%)').boundingBox())!.y));
 	await dam.getByLabel('Initial (%)').fill('abc');
 	await dam.getByLabel('Initial (%)').blur();
 	await expect(dam.getByLabel('Initial (%)')).toHaveAttribute('aria-invalid', 'true');
+	await expect(dam.locator('.num-err')).toBeVisible();
+	expect((await capacity.boundingBox())!.y).toBeCloseTo(capacityBefore.y, 0);
 	await dam.locator(':scope > summary').click();
 	await expect(dam).not.toHaveAttribute('open', '');
 	await expect(dam.locator(':scope > summary').getByText('needs fixing')).toBeVisible();

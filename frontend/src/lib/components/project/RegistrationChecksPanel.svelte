@@ -12,12 +12,13 @@
 	// latest check says registered). Editors read the list; owners, and the
 	// editors an owner marked as acting for the responsible authority (163),
 	// record.
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount, tick } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '$lib/api';
 	import { REGISTRATION_BODIES, registrationBody as bodyInfo, registrationCategoriesOf, type RegistrationBodyCode } from '@water-management/engine';
 	import { session } from '$lib/auth/session.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtDate, localIsoDate, pastDayMoment } from '$lib/format/number';
 
 	let { projectId, isOwner }: { projectId: string; isOwner: boolean } = $props();
 
@@ -34,7 +35,8 @@
 	let firstField: HTMLSelectElement | undefined = $state();
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-	const today = () => new Date().toISOString().slice(0, 10);
+	// The viewer's own day, never the UTC one (a day behind until 02:00 in South Africa).
+	const today = () => localIsoDate();
 	let form = $state<RegistrationCheckRequest & { userId: string }>({
 		userId: '',
 		registrationBody: 'sacnasp',
@@ -84,7 +86,7 @@
 		note = '';
 		try {
 			const { userId, ...body } = form;
-			const c = await api.registrationChecks.record(projectId, userId, { ...body, note: body.note?.trim() ?? '' });
+			const c = await api.registrationChecks.record(projectId, userId, { ...body, checkedAt: pastDayMoment(body.checkedAt), note: body.note?.trim() ?? '' });
 			checks = [c, ...(checks ?? [])];
 			note = `Recorded the check of ${name(userId)}’s registration.`;
 			form = { ...form, registrationNo: '', registerName: '', note: '' };
@@ -212,7 +214,7 @@
 				</div>
 				<div class="field">
 					<label for="rc-date">Checked on</label>
-					<input id="rc-date" type="date" bind:value={form.checkedAt} max={today()} required />
+					<DayInput id="rc-date" bind:value={form.checkedAt} max={today()} required />
 				</div>
 			</div>
 			<div class="field">

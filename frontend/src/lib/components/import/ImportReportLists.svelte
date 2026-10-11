@@ -154,7 +154,7 @@
 		overflow-wrap: anywhere;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	summary {
 		cursor: pointer;

@@ -202,7 +202,7 @@
 		border-radius: 50%;
 		background: var(--accent-soft);
 		color: var(--accent);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 	}
 	/* Two-step sign-in still needed: a small "i" on the avatar's corner, in the banner's warning colour. */
@@ -239,7 +239,7 @@
 	}
 	.email {
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.name,
 	.email {
@@ -264,7 +264,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 	}
 	.menu[hidden] {
 		display: none;
@@ -300,7 +300,7 @@
 		color: var(--danger);
 	}
 	.item .hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	/* In the sidebar's foot the trigger fills the width and the menu opens above it. */

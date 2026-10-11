@@ -9,6 +9,7 @@
 	from the head's "Rain from the map" to read. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, tick, untrack } from 'svelte';
@@ -20,7 +21,6 @@
 	import BoundaryRain from './BoundaryRain.svelte';
 	import UnitRain from './UnitRain.svelte';
 	import {
-		CHIRPS_PRODUCT_FIRST_DAY,
 		cellsUsedNote,
 		conflictMessage,
 		describePlace,
@@ -191,6 +191,12 @@
 		e?.preventDefault();
 		// A map proposal has its own Apply (Enter in its start date lands here).
 		if (busy || mapArea) return;
+		// Text the start date field can't read as a day: it says so under itself (DayInput); go there.
+		const box = document.getElementById(`${uid}-start`) as HTMLInputElement | null;
+		if (box?.validity.customError) {
+			box.focus();
+			return;
+		}
 		const parsed = draftToBody(draft);
 		if ('error' in parsed) {
 			formError = parsed.error;
@@ -418,10 +424,8 @@
 								</div>
 								<div class="field">
 									<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
-									<input
+									<DayInput
 										id="{uid}-start"
-										type="date"
-										min={CHIRPS_PRODUCT_FIRST_DAY[draft.product]}
 										bind:value={draft.startDate}
 										aria-invalid={formField === 'start' || undefined}
 										aria-describedby="{uid}-product-h{formField === 'start' ? ` ${uid}-err` : ''}"
@@ -596,7 +600,7 @@
 		}
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.feeds {
@@ -621,7 +625,7 @@
 		align-items: baseline;
 	}
 	.state {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.45rem;
 		border-radius: 999px;

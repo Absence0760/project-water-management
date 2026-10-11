@@ -65,7 +65,7 @@
 	async function discard() {
 		const ok = await confirmDialog({
 			title: 'Discard all unsaved model changes?',
-			message: `Your unsaved changes to ${listAnd([...(areas.length ? areas.map((a) => AREA_WORDS[a]) : editor.dirty ? ['the model'] : []), ...(invalid.length ? ['the numbers that need fixing'] : [])])} will be lost, including any made on other pages before this one opened. This can’t be undone.`,
+			message: `Your unsaved changes to ${listAnd([...(areas.length ? areas.map((a) => AREA_WORDS[a]) : editor.dirty ? ['the model'] : []), ...(invalid.length ? ['the fields that need fixing'] : [])])} will be lost, including any made on other pages before this one opened. This can’t be undone.`,
 			confirmLabel: 'Discard changes',
 			danger: true
 		});
@@ -80,7 +80,8 @@
 </script>
 
 <div class="save">
-	<p class="status small" aria-live="polite">
+	<!-- Clean, the line says nothing a disabled Save doesn't, so a phone keeps it for screen readers only. -->
+	<p class="status small" class:quiet={!dirty && !editor.saving && !editor.saveError && !settled} aria-live="polite">
 		{#if editor.saving}
 			Saving…
 		{:else if editor.saveError}
@@ -103,20 +104,23 @@
 		</label>
 	{/if}
 	<div class="buttons">
-		<button type="button" class="btn" onclick={discard} disabled={editor.saving || !dirty}>Discard model changes</button>
+		<!-- On a phone the three share one row as Discard, Done and Save; their names stay whole (the rest is hidden, still read). -->
+		<button type="button" class="btn" onclick={discard} disabled={editor.saving || !dirty}>Discard<span class="long">{' '}model changes</span></button>
 		<button type="button" class="btn" onclick={ondone} bind:this={doneBtn}>Done</button>
 		<button
 			type="button"
 			class="btn btn-primary"
 			onclick={save}
 			disabled={editor.saving || blocking > 0 || !editor.dirty}
-			aria-describedby={dirty && blocking && linked.length ? `${uid}-problems` : undefined}>Save changes</button
+			aria-describedby={dirty && blocking && linked.length ? `${uid}-problems` : undefined}>Save<span class="long">{' '}changes</span></button
 		>
 	</div>
 </div>
 
 <style>
 	.save {
+		/* Its own width decides (a sheet's footer: full screen on a phone, a side sheet on a desktop). */
+		container: save-row / inline-size;
 		display: grid;
 		gap: 0.5rem;
 		width: 100%;
@@ -135,5 +139,30 @@
 	}
 	.small {
 		font-size: 0.85rem;
+	}
+	/* A phone: one row of three equal buttons, nothing above it while there is nothing to save (issue #521 round 5:
+	   it was three rows, 144 px of a 844 px screen). The reason and the problems show once there are changes. */
+	@container save-row (max-width: 560px) {
+		.buttons {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+		.buttons .btn {
+			justify-content: center;
+			padding-inline: 0.4rem;
+		}
+		.long,
+		.quiet {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		.reason input {
+			width: 100%;
+			min-height: var(--tap);
+		}
 	}
 </style>

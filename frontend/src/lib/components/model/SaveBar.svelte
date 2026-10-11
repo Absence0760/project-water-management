@@ -68,13 +68,13 @@
 	]);
 	const blocking = $derived(problems.length);
 	/** What the unsaved edits are to, as the line says it. */
-	const what = $derived(listAnd([...(editor.dirty ? ['the model'] : []), ...dirtyDrafts.map((d) => d.what)]) || 'numbers that need fixing');
+	const what = $derived(listAnd([...(editor.dirty ? ['the model'] : []), ...dirtyDrafts.map((d) => d.what)]) || 'fields that need fixing');
 	/** The same, naming the model's areas: the Discard question's words. */
 	const lost = $derived(
 		listAnd([
 			...(editor.dirty ? (areas.length ? areas.map((a) => AREA_WORDS[a]) : ['the model']) : []),
 			...dirtyDrafts.map((d) => d.what),
-			...(invalid.length ? [invalid.length === 1 ? 'the number that needs fixing' : 'the numbers that need fixing'] : [])
+			...(invalid.length ? [invalid.length === 1 ? 'the field that needs fixing' : 'the fields that need fixing'] : [])
 		])
 	);
 	/** Whether a reason field shows: a model or settings change keeps one. */
@@ -84,7 +84,7 @@
 	const previewDrafts = $derived(dirtyDrafts.filter((d) => d.previewable));
 	const canPreview = $derived(!!onpreview && (editor.dirty || previewDrafts.length > 0));
 	const previewReady = $derived((editor.dirty && editor.issues.length === 0) || previewDrafts.some((d) => d.problems.length === 0));
-	// Named for what is unsaved: the model, else the first draft, else only numbers that need fixing (on any page).
+	// Named for what is unsaved: the model, else the first draft, else only fields that need fixing (on any page).
 	const region = $derived(editor.dirty ? 'Unsaved model changes' : dirtyDrafts.length ? dirtyDrafts[0]!.region : 'Unsaved changes');
 
 	let bar: HTMLDivElement | undefined = $state();
@@ -129,15 +129,18 @@
 	<div class="savebar" role="region" aria-label={region} bind:offsetHeight={measured} bind:this={bar}>
 		<div class="inner">
 			<span class="dot" aria-hidden="true"></span>
-			<span class="status" aria-live="polite">
+			<span class="status" class:failed={!saving && !!saveError} aria-live="polite">
 				{#if saving}
 					Saving…
 				{:else if saveError}
 					<span class="err">Save failed: {saveError}</span>
 				{:else if blocking}
-					Unsaved changes · <span class="err">{blocking} problem{blocking === 1 ? '' : 's'} to fix before saving</span>
+					<span class="long">Unsaved changes ·{' '}</span><span class="err">{blocking} problem{blocking === 1 ? '' : 's'}<span class="long">{' '}to fix before saving</span></span>
 				{:else}
-					Unsaved changes to {what}{#if editor.dirty && !dirtyDrafts.length && areas.length}{' '}<span class="muted where">({listAnd(areas)})</span>{/if}
+					<span class="long">Unsaved changes to {what}{#if editor.dirty && !dirtyDrafts.length && areas.length}{' '}<span class="muted where">({listAnd(areas)})</span>{/if}</span><span
+						class="short"
+						aria-hidden="true">Unsaved</span
+					>
 				{/if}
 			</span>
 			<div class="spacer"></div>
@@ -155,7 +158,7 @@
 					<button type="button" class="btn" onclick={onpreview} disabled={saving || !previewReady} aria-describedby={!previewReady && blocking ? 'savebar-problems' : undefined}>Preview</button>
 				{/if}
 				<button type="button" class="btn" onclick={discard} disabled={saving || !dirty}>Discard</button>
-				<button type="button" class="btn btn-primary" onclick={save} disabled={saving || blocking > 0 || !dirty} aria-describedby={blocking ? 'savebar-problems' : undefined}>Save changes</button>
+				<button type="button" class="btn btn-primary" onclick={save} disabled={saving || blocking > 0 || !dirty} aria-describedby={blocking ? 'savebar-problems' : undefined}>Save<span class="long">{' '}changes</span></button>
 			</div>
 		</div>
 		{#if blocking && !saving}
@@ -174,7 +177,7 @@
 		z-index: 30;
 		background: var(--surface);
 		border-top: 1px solid var(--border-strong);
-		box-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);
+		box-shadow: var(--bar-shadow);
 	}
 	.inner {
 		max-width: 1480px;
@@ -219,15 +222,50 @@
 		flex-wrap: nowrap;
 		margin-left: auto;
 	}
+.short {
+		display: none;
+	}
+	/* A phone (issue #521 round 5): the status as the dot and a short word ("Unsaved", "2 problems") in the buttons'
+	   row, the reason under it, so a dirty bar is two rows, not three (143 px). The whole sentence stays the live
+	   region's text; a failed save keeps its message, on a row of its own. */
 	@media (max-width: 640px) {
 		.btn {
 			min-height: 44px;
 		}
-		.where {
+		.long {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		.short {
+			display: inline;
+		}
+		.spacer {
 			display: none;
 		}
+		.status {
+			flex: 1 0 auto;
+		}
+		.status.failed {
+			flex-basis: calc(100% - 1.5rem);
+		}
+		.inner {
+			gap: 0.4rem 0.5rem;
+		}
+		.acts {
+			gap: 0.4rem;
+			margin-left: 0;
+		}
+		.acts .btn {
+			padding-inline: 0.6rem;
+		}
 		.reason {
-			flex-basis: 100%;
+			order: 3;
+			flex: 1 1 100%;
+			min-width: 0;
 		}
 		.reason input {
 			min-height: 44px;

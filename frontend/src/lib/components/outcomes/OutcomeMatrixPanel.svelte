@@ -282,7 +282,12 @@
 				<span class="err" data-testid="sweep-status">{shown.text}</span>
 			{/if}
 		</div>
-		{#if loadError}<div class="alert alert-error" role="alert">{loadError}</div>{/if}
+		{#if loadError}
+			<div class="alert alert-error" role="alert" data-testid="outcome-load-error">
+				Couldn’t look up this run’s demand sweep: {loadError}
+				<button type="button" class="btn btn-sm" onclick={() => load()}>Try again</button>
+			</div>
+		{/if}
 
 		{#if !loading && !sweep && !loadError}
 			<p class="muted" data-testid="outcome-empty">
@@ -373,14 +378,14 @@
 		max-width: 60ch;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 80ch;
 		margin: 0.3rem 0 0;
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.status {
 		margin: 0.5rem 0;
@@ -415,12 +420,12 @@
 	.bounds {
 		display: block;
 		font-weight: 400;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.cell {
 		min-width: 11rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		border-left-width: 4px;
 	}
 	.cell strong {
@@ -443,11 +448,11 @@
 		color: var(--text-muted);
 	}
 	.not-run {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.warnings {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin: 0.5rem 0 0;
 		padding-left: 1.2rem;
 	}

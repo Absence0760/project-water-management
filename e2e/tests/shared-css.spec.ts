@@ -5,7 +5,8 @@
 // (docs/architecture.md § Shared CSS). A scoped rule carries the component's
 // hash class and a global one doesn't, so the move could change which rule
 // wins: these are the computed styles the components rendered with their own
-// copies, and they must stay so.
+// copies, and they must stay so (on a phone, the shared small text's 12 px floor
+// since issue #521 round 5).
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
@@ -21,6 +22,8 @@ const COMBOS = [
 
 // html and body are 14px, so 0.8rem is 11.2px.
 const SMALL = '11.2px';
+/** On a phone the shared small text (and a table head, with its unit) has a floor of 12 px (app.css, issue #521 round 5). */
+const smallAt = (at: string) => (at.endsWith(' 390px') ? '12px' : SMALL);
 
 /** Runs `check` once per theme × viewport, on the page as it is (no reload). */
 async function eachCombo(page: Page, check: (label: string) => Promise<void>) {
@@ -68,17 +71,17 @@ test('Network tab: a small hint, and the node table’s units', async ({ page, o
 	const hint = page.getByText('Select a hydrological unit on the map or in the list to see it here.');
 	await expect(hint).toBeVisible();
 	await eachCombo(page, async (at) => {
-		expect(await styleOf(hint, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
+		expect(await styleOf(hint, TYPE), at).toEqual({ 'font-size': smallAt(at), 'font-weight': '400', color: await token(page, '--text-muted') });
 	});
 
 	const table = await openNodeTable(page);
 	await eachCombo(page, async (at) => {
 		// A column header's unit; on a phone the headers are gone and each node's card labels its
-		// fields ("Area km²", node-table.spec.ts), the unit at the label's 0.75rem.
+		// fields ("Area km²", node-table.spec.ts), the unit at the label's --font-xs (12 px on a phone, issue #521 round 6).
 		const phone = at.endsWith(' 390px');
 		const unit = table.locator(phone ? 'td .cell-label .u' : 'th .u').filter({ hasText: /^km²$/ }).first();
 		await expect(unit, at).toBeVisible();
-		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': phone ? '10.5px' : SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
+		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': phone ? '12px' : SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
 	});
 });
 
@@ -115,8 +118,8 @@ test('Crops grids: units in the table heads and the small captions', async ({ pa
 
 	await eachCombo(page, async (at) => {
 		const muted = await token(page, '--text-muted');
-		expect(await styleOf(caption, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: muted });
-		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: muted });
+		expect(await styleOf(caption, TYPE), at).toEqual({ 'font-size': smallAt(at), 'font-weight': '400', color: muted });
+		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': smallAt(at), 'font-weight': '400', color: muted });
 	});
 });
 
@@ -137,10 +140,10 @@ test('Runs tab: the flow-unit switch and a small link; Hydrological units: units
 	await expect(restoreHint).toBeVisible();
 
 	await eachCombo(page, async (at) => {
-		expect(await styleOf(restoreHint, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
+		expect(await styleOf(restoreHint, TYPE), at).toEqual({ 'font-size': smallAt(at), 'font-weight': '400', color: await token(page, '--text-muted') });
 		expect(await styleOf(units.getByRole('button', { name: 'm³/s' }), SEG), at).toEqual(FIRST);
 		expect(await styleOf(units.getByRole('button', { name: 'm³/day' }), SEG), at).toEqual(LAST);
-		expect(await styleOf(compare, ['font-size', 'color']), at).toEqual({ 'font-size': SMALL, color: await token(page, '--accent') });
+		expect(await styleOf(compare, ['font-size', 'color']), at).toEqual({ 'font-size': smallAt(at), color: await token(page, '--accent') });
 	});
 
 	// The unit results table (and its "% of demand" head) moved from Runs & results to Hydrological units.
@@ -149,7 +152,7 @@ test('Runs tab: the flow-unit switch and a small link; Hydrological units: units
 	const unit = page.locator('th .u').filter({ hasText: /^% of demand$/ }).first();
 	await expect(unit).toBeVisible();
 	await eachCombo(page, async (at) => {
-		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
+		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': smallAt(at), 'font-weight': '400', color: await token(page, '--text-muted') });
 	});
 });
 
@@ -166,8 +169,8 @@ test('the report: units and small notes, on screen and in print', async ({ page,
 
 	await eachCombo(page, async (at) => {
 		const muted = await token(page, '--text-muted');
-		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: muted });
-		expect(await styleOf(note, ['font-size']), at).toEqual({ 'font-size': SMALL });
+		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': smallAt(at), 'font-weight': '400', color: muted });
+		expect(await styleOf(note, ['font-size']), at).toEqual({ 'font-size': smallAt(at) });
 	});
 
 	// Print sets its own root size (the report's print styles), so .small is 0.8 of that; the unit takes its th's size.

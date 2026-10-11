@@ -18,6 +18,7 @@
 	// (AssessorQuestions.svelte, 164).
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, type Pack, type Scenario } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -41,6 +42,7 @@
 		filterApplications,
 		longestWaiting,
 		parseFilter,
+		parseSort,
 		sortApplications,
 		statusPill,
 		type ApplicationFilter,
@@ -55,7 +57,6 @@
 	let packs = $state.raw<Map<string | null, Pack[]> | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let sort = $state<ApplicationSort>('date');
 	/** When the list was loaded: "waiting N days" counts from here. */
 	let now = $state(Date.now());
 
@@ -79,6 +80,11 @@
 	});
 
 	const filter = $derived(parseFilter(page.url.searchParams.get('status')));
+	// In the URL like the filter, so a reload and Back keep it (issue #521); a new sort is a step in history.
+	const sort = $derived<ApplicationSort>(parseSort(page.url.searchParams.get('sort')));
+	function setSort(next: ApplicationSort) {
+		if (next !== sort) void goto(next === 'date' ? withoutParam(page.url, 'sort') : withParam(page.url, 'sort', next), { noScroll: true, keepFocus: true });
+	}
 	const assessView = $derived(page.url.searchParams.get('view') === 'assess');
 	const assessHref = $derived(withParam(page.url, 'view', 'assess'));
 	const listHref = $derived(withoutParam(page.url, 'view'));
@@ -161,7 +167,7 @@
 					</div>
 					<div class="field sort">
 						<label for="applications-sort">Sort by</label>
-						<select id="applications-sort" bind:value={sort}>
+						<select id="applications-sort" value={sort} onchange={(e) => setSort(e.currentTarget.value as ApplicationSort)}>
 							<option value="date">Newest first</option>
 							<option value="status">Status</option>
 						</select>
@@ -337,7 +343,7 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.wait {
@@ -361,7 +367,7 @@
 		padding: 0.05rem 0.5rem;
 		border-radius: var(--radius);
 		border: 1px solid var(--border);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		line-height: 1.4;
 		background: var(--surface-2);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SearchStep } from '$lib/nav/searchStep';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, tick, untrack } from 'svelte';
@@ -144,6 +145,9 @@
 		if (untrack(() => query.trim()) !== q) query = q;
 	});
 
+	// A search is one step in history: its first keystroke after the box takes the focus adds an entry (Back
+	// returns to the list before it), the rest replace it, so Back never steps letter by letter.
+	const searchStep = new SearchStep();
 	function setParams(next: { owner?: OwnerFilter; sort?: SortKey; dir?: SortDir; q?: string }) {
 		const u = new URL(page.url);
 		const set = (k: string, v: string, dflt: string) => (v === dflt ? u.searchParams.delete(k) : u.searchParams.set(k, v));
@@ -151,7 +155,8 @@
 		if (next.sort !== undefined) set('sort', next.sort, 'updated');
 		if (next.dir !== undefined) set('dir', next.dir, 'asc');
 		if (next.q !== undefined) set('q', next.q.trim(), '');
-		goto(u.pathname + u.search, { replaceState: next.q !== undefined, keepFocus: true, noScroll: true });
+		if (u.search === page.url.search) return;
+		goto(u.pathname + u.search, { replaceState: next.q !== undefined && searchStep.replace(), keepFocus: true, noScroll: true });
 	}
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -471,6 +476,7 @@
 							placeholder="Search by name, description or team"
 							autocomplete="off"
 							bind:value={query}
+							onfocus={searchStep.focus}
 							oninput={() => setParams({ q: query })}
 						/>
 					</div>
@@ -702,7 +708,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: var(--shadow), 0 6px 18px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 	}
 	.item {
 		display: block;
@@ -769,7 +775,7 @@
 		font-weight: 600;
 	}
 	.count {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
@@ -841,7 +847,7 @@
 	}
 	.team-link {
 		margin-left: auto;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 500;
 	}
 	.team-link + .team-link {

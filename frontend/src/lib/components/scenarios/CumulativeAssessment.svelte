@@ -382,7 +382,7 @@
 	}
 	.chg {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.chg.tone-worse {

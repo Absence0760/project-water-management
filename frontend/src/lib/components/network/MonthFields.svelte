@@ -138,7 +138,7 @@
 		min-width: 0;
 	}
 	.m {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		color: var(--text-2);
 	}

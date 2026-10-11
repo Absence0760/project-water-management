@@ -293,7 +293,7 @@
 		font-weight: 600;
 	}
 	.k {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -305,7 +305,7 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		font-weight: 400;
 		color: var(--text-muted);
 	}

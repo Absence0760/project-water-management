@@ -152,13 +152,13 @@
 		text-decoration-color: currentColor;
 	}
 	.opt {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 500;
 		color: var(--text-muted);
 	}
 	.step p {
 		margin: 0.2rem 0 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	@media (max-width: 1200px) {

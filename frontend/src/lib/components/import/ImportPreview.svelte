@@ -135,7 +135,7 @@
 		min-width: 0;
 	}
 	dt {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	dd {
@@ -162,7 +162,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.check {
 		margin-top: 0.75rem;

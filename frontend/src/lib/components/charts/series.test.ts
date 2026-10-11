@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import uPlot from 'uplot';
-import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, TIME_TICKS } from './series';
+import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS } from './series';
 
 describe('printScale', () => {
 	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
@@ -167,5 +167,25 @@ describe('TIME_TICKS', () => {
 	it('goes from the largest step to the smallest, as uPlot reads the table', () => {
 		const steps = TIME_TICKS.map((r) => r[0] as number);
 		expect([...steps].sort((a, b) => b - a)).toEqual(steps);
+	});
+});
+
+describe('log axis (issue #521)', () => {
+	it('logFloor keeps the least value within six decades of the top, and cuts float noise at six', () => {
+		expect(logFloor(0.02, 12)).toBe(0.02);
+		expect(logFloor(1e-19, 12)).toBeCloseTo(12e-6, 12);
+		expect(logFloor(1e-19, 12, 3)).toBeCloseTo(0.012, 12);
+		// Nothing positive at the top: left as it is.
+		expect(logFloor(1, 0)).toBe(1);
+	});
+
+	it('decadeTicks labels only decades, thinned on the exponent to fit the room', () => {
+		const splits = [0.001, 0.002, 0.005, 0.01, 0.1, 1, 2, 10, 100, 1000];
+		expect(decadeTicks(splits, 20)).toEqual([0.001, null, null, 0.01, 0.1, 1, null, 10, 100, 1000]);
+		// Seven decades in room for three: every third exponent (10^-3, 10^0, 10^3).
+		expect(decadeTicks(splits, 3)).toEqual([0.001, null, null, null, null, 1, null, null, null, 1000]);
+		// Twenty decades never draw more than the room allows.
+		const wide = Array.from({ length: 21 }, (_, i) => 10 ** (i - 19));
+		expect(decadeTicks(wide, 8).filter((v) => v !== null).length).toBeLessThanOrEqual(8);
 	});
 });

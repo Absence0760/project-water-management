@@ -167,7 +167,7 @@
 		color: var(--text-2);
 	}
 	.tag {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		white-space: nowrap;
 	}
 	.sources {

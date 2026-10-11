@@ -222,7 +222,7 @@
 
 <style>
 	dialog {
-		border: 1px solid var(--border);
+		border: 1px solid var(--overlay-border);
 		border-radius: var(--radius);
 		background: var(--surface);
 		color: var(--text);
@@ -238,7 +238,7 @@
 		/* The visible height on a phone, whose 100vh runs under the browser's toolbar and hid the action row. */
 		max-height: calc(100dvh - 2rem);
 		overflow-y: auto;
-		box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+		box-shadow: var(--overlay-shadow);
 	}
 	/* Beside its anchor (see place()): the inline left/top do the positioning. */
 	dialog.anchored {
@@ -346,7 +346,8 @@
 		}
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.35);
+		/* The fallback is for browsers whose ::backdrop doesn't inherit custom properties. */
+		background: var(--overlay-backdrop, rgb(0 0 0 / 0.35));
 	}
 	/* Text fields fill the dialog; checkboxes and radios keep their own size, or a
 	   stretched box pushes its label across the row (the series preview's column picker). */

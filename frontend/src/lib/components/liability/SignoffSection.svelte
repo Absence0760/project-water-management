@@ -112,7 +112,7 @@
 		grid-column: 1 / -1;
 	}
 	dt {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	dd {

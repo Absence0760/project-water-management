@@ -215,7 +215,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+		box-shadow: var(--popover-shadow);
 	}
 	.list[hidden] {
 		display: none;
@@ -257,7 +257,7 @@
 		opacity: 0.7;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.msg {

@@ -241,9 +241,6 @@
 	.note {
 		margin: 0 0 0.6rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.sub-h {
 		margin: 0.9rem 0 0.4rem;
 		font-size: 1rem;
@@ -307,7 +304,7 @@
 		border: 2px solid var(--text);
 		border-radius: 999px;
 		background: var(--sw);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;

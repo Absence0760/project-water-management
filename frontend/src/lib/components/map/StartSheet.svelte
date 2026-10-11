@@ -498,7 +498,7 @@
 		height: 1.4rem;
 		border-radius: 50%;
 		border: 1px solid var(--border);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.steps li[aria-current='step'] .n {
 		background: var(--accent);

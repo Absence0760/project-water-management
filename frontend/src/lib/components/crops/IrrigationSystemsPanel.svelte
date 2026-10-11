@@ -215,7 +215,7 @@
 	}
 	.range {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		text-align: right;
 	}
 	.use {
@@ -234,7 +234,7 @@
 			min-width: 0;
 		}
 		.use {
-			font-size: 0.8rem;
+			font-size: var(--font-sm);
 		}
 	}
 </style>

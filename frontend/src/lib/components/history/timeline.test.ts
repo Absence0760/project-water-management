@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { HistoryEvent, HistoryRevision } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
@@ -330,6 +331,25 @@ describe('what an item says', () => {
 		expect(eventLine(ev('team_member.mfa_reset', { ...who, teamRole: 'member' }))).toBe('Removed two-step sign-in from Ben (a member of the team “Upper WUA”) after a lost phone');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true, accountDeleted: true }))).toBe('Ben deleted their account and left the team “Upper WUA”');
 		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
+	});
+
+	it('writes a change of the alert rules as a sentence, never its key (issue #521)', () => {
+		expect(eventLine(ev('alert_rules.changed', { rules: 3, kinds: ['dam_below', 'data_stale'], on: 2, off: 1 }))).toBe(
+			'Changed the alert rules: Dam low, Data feed behind (3 rules, 2 on, 1 off)'
+		);
+		expect(eventLine(ev('outlook.published', { level: { id: '0', label: '85 %' }, farms: 2 }))).toBe('Published the seasonal outlook at its 85 % level to 2 farms');
+		expect(eventLine(ev('outlook.unpublished', { level: { id: '0', label: '85 %' } }))).toBe('Withdrew the seasonal outlook at its 85 % level from the farm pages');
+		expect(eventLine(ev('note.deleted', { own: true, nodeName: 'Upper farm' }))).toBe('Deleted a note they wrote on Upper farm');
+		expect(eventLine(ev('note.deleted', { own: false, author: 'Ben' }))).toBe('Deleted a note by Ben');
+		expect(eventLine(ev('alert_rules.changed', { rules: 1, kinds: ['job_dead'], on: 1, off: 0 }))).toBe('Changed the alert rules: Background jobs failed (1 rule, 1 on)');
+	});
+
+	it('has a sentence for every kind of event the server records, never the raw key', () => {
+		const src = readFileSync(new URL('../../../../../backend/src/history/record.ts', import.meta.url), 'utf8');
+		const union = /export type AuditKind =([\s\S]*?)\n\n/.exec(src)![1]!;
+		const kinds = [...union.matchAll(/^\s*\|\s*'([a-z_.]+)'/gm)].map((m) => m[1]!);
+		expect(kinds.length).toBeGreaterThan(50);
+		expect(kinds.filter((k) => eventLine(ev(k)) === k)).toEqual([]);
 	});
 
 	it('gives an event one line and a revision its changes', () => {

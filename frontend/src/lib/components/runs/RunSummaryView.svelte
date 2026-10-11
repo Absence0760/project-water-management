@@ -256,7 +256,7 @@
 		}
 	}
 	.stat dd.sub {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 		margin-top: 0.15rem;

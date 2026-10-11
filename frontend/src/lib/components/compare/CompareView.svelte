@@ -828,7 +828,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 	}
 	.export-pop a {
 		display: flex;
@@ -936,7 +936,7 @@
 	}
 	.outcomes-table .d {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.key {
 		display: inline-block;
@@ -950,7 +950,7 @@
 		display: block;
 		color: var(--text-muted);
 		font-weight: 400;
-		font-size: 0.8em;
+		font-size: var(--font-sm);
 	}
 	.takeaways {
 		margin-top: auto;

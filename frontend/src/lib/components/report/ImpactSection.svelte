@@ -108,7 +108,7 @@
 		display: block;
 		color: var(--text-muted);
 		font-weight: 400;
-		font-size: 0.8em;
+		font-size: var(--font-sm);
 	}
 	.notes {
 		margin: 0;

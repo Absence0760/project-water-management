@@ -9,7 +9,8 @@
 // One watcher for the whole app (started by the root layout), so the dozen
 // table wrappers don't each need wiring. A box names itself with
 // `data-scroll-label`; otherwise the name comes from its table's caption or
-// the labelled section it sits in.
+// the labelled section it sits in. Every box that scrolls sideways also
+// carries `data-scrolls-x` (app.css fixes its row names at the left on a phone).
 
 const SELECTOR = '.table-wrap, [data-scroll-region]';
 /** Marks attributes we set, so we only ever undo our own. */
@@ -46,7 +47,13 @@ export function scrollRegionLabel(el: HTMLElement): string {
 export const overflows = (el: Pick<HTMLElement, 'scrollWidth' | 'clientWidth' | 'scrollHeight' | 'clientHeight'>) =>
 	el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight;
 
+/** Set on a box whose content is wider than it, so app.css can fix its row names at the left (issue #521 round 5). */
+export const SCROLLS_X = 'data-scrolls-x';
+/** Does the box scroll sideways (its content wider than it, by any amount)? */
+export const scrollsSideways = (el: Pick<HTMLElement, 'scrollWidth' | 'clientWidth'>) => el.scrollWidth > el.clientWidth;
+
 function update(el: HTMLElement) {
+	el.toggleAttribute(SCROLLS_X, scrollsSideways(el));
 	const managed = el.hasAttribute(MANAGED);
 	if (overflows(el)) {
 		// Leave boxes that already have their own role or tab stop alone.

@@ -113,22 +113,9 @@
 			--heat-ink-4: #121312;
 		}
 	}
-	:global(:root[data-theme='dark']) .node-assurance {
-		--heat-1: #184f95;
-		--heat-2: #256abf;
-		--heat-3: #3987e5;
-		--heat-4: #86b6ef;
-		--heat-ink-1: #ffffff;
-		--heat-ink-2: #ffffff;
-		--heat-ink-3: #121312;
-		--heat-ink-4: #121312;
-	}
 	h3 {
 		font-size: 0.95rem;
 		margin: 0 0 0.25rem;
-	}
-	.small {
-		font-size: 0.8rem;
 	}
 	.lead,
 	.facts,
@@ -146,7 +133,7 @@
 		gap: 2px;
 		padding: 0;
 		margin: 0.2rem 0;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-variant-numeric: tabular-nums;
 	}
 	.strip li {
@@ -173,7 +160,7 @@
 		gap: 0.15rem 0.7rem;
 		padding: 0;
 		margin: 0.2rem 0 0.25rem;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.legend li {

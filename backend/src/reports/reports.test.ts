@@ -1,7 +1,7 @@
 // The pure parts of server-side reports: object keys and download names,
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal, targetPath } from './render.js';
+import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, RenderError, renderOptionsFromEnv, renderTimeZone, reportQuery, sessionRefusal, targetPath } from './render.js';
 import { applicantPackFileName, applicantPackPdfKey, packFileName, packPdfKey, packsBucket, reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
@@ -167,6 +167,20 @@ describe('confinementArgs', () => {
 // In production the render-session request goes through CloudFront and the
 // WAF (infra/waf.tf), whose rate rules answer a plain 403 with an HTML body.
 // Only the API's own coded refusal is final; everything else is retried.
+describe('renderTimeZone', () => {
+	it('takes the project zone the render session answers with (issue #521)', () => {
+		expect(renderTimeZone({ ok: true, timeZone: 'Africa/Johannesburg' })).toBe('Africa/Johannesburg');
+		expect(renderTimeZone({ ok: true, timeZone: 'Pacific/Kiritimati' })).toBe('Pacific/Kiritimati');
+		expect(renderTimeZone({ ok: true, timeZone: 'UTC' })).toBe('UTC');
+	});
+
+	it('prints in the default zone for an answer without a usable one: an older API, no member, a name Intl does not know, not a string', () => {
+		for (const body of [null, undefined, 'ok', {}, { ok: true }, { ok: true, timeZone: null }, { timeZone: '' }, { timeZone: 'Not/AZone' }, { timeZone: 'Africa/Johannesburg; x' }, { timeZone: 'A'.repeat(65) }, { timeZone: 2 }, { timeZone: ['UTC'] }]) {
+			expect(renderTimeZone(body)).toBe('Africa/Johannesburg');
+		}
+	});
+});
+
 describe('sessionRefusal', () => {
 	const refused = { error: 'this render token is invalid, used or expired', code: 'render_token_refused' };
 

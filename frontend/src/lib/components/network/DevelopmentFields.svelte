@@ -5,6 +5,7 @@
 	// `part="abstraction"`: the day a farm or water user starts to abstract.
 	// Empty is null: the field is off, as on a model from before 1.30.0. The
 	// model check's message (engine developmentProblem) shows under the fields.
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import type { NetworkNode } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -33,14 +34,13 @@
 		<div class="grid">
 			<div class="field">
 				<span class="lbl"><label for={id('survey')}>Survey date</label><HelpTip key="node.damSurveyDate" /></span>
-				<input
+				<DayInput
 					id={id('survey')}
-					type="date"
 					{readonly}
 					value={node.damSurveyDate ?? ''}
 					aria-describedby={describe('survey')}
 					aria-invalid={invalid('survey')}
-					onchange={(e) => (node.damSurveyDate = dateOf(e.currentTarget.value))}
+					onchange={(v) => (node.damSurveyDate = dateOf(v))}
 				/>
 				<span class="hint explain" id="{id('survey')}-h">The day the capacity above was measured. Empty: not recorded.</span>
 				<FieldHistoryLine field="node:{node.id}:damSurveyDate" {unit} />
@@ -65,14 +65,13 @@
 			</div>
 			<div class="field">
 				<span class="lbl"><label for={id('in-service')}>In service from</label><HelpTip key="node.damInServiceFrom" /></span>
-				<input
+				<DayInput
 					id={id('in-service')}
-					type="date"
 					{readonly}
 					value={node.damInServiceFrom ?? ''}
 					aria-describedby={describe('in-service')}
 					aria-invalid={invalid('in-service')}
-					onchange={(e) => (node.damInServiceFrom = dateOf(e.currentTarget.value))}
+					onchange={(v) => (node.damInServiceFrom = dateOf(v))}
 				/>
 				<span class="hint explain" id="{id('in-service')}-h">The first day the dam holds water; before it the unit has no dam. Empty: the whole run.</span>
 				<FieldHistoryLine field="node:{node.id}:damInServiceFrom" {unit} />
@@ -81,14 +80,13 @@
 	{:else}
 		<div class="field">
 			<span class="lbl"><label for={id('abstraction')}>Abstraction starts</label><HelpTip key="node.abstractionFrom" /></span>
-			<input
+			<DayInput
 				id={id('abstraction')}
-				type="date"
 				{readonly}
 				value={node.abstractionFrom ?? ''}
 				aria-describedby={describe('abstraction')}
 					aria-invalid={invalid('abstraction')}
-				onchange={(e) => (node.abstractionFrom = dateOf(e.currentTarget.value))}
+				onchange={(v) => (node.abstractionFrom = dateOf(v))}
 			/>
 			<span class="hint explain" id="{id('abstraction')}-h">
 				{node.kind === 'user' ? 'The first day this user takes water; before it its demand is 0.' : 'The first day this unit takes water; before it its crops and demand objects take nothing.'} Empty: the whole run.

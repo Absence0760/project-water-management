@@ -9,6 +9,7 @@ import { expect, type APIRequestContext, type Locator, type Page } from '@playwr
 import { createProject, node, putModel } from './api.ts';
 import { withSetupLock } from './db.ts';
 import { API_URL, OWNER_E2E_URL } from './env.ts';
+import { headerControl } from './sectionHeader.ts';
 
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 /** Advisory lock key for loading the dataset (distinct from the examples' seed). */
@@ -128,7 +129,7 @@ export const geoFile = (name: string, text: string) => ({ name, mimeType: 'appli
 export async function openUploadSheet(page: Page): Promise<Locator> {
 	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
 	if (new URL(page.url()).searchParams.get('upload') !== '1') {
-		await page.getByTestId('section-header').getByRole('link', { name: 'Upload GeoJSON' }).click();
+		await (await headerControl(page, 'link', 'Upload GeoJSON')).click();
 		await expect(page).toHaveURL(/[?&]upload=1/);
 	}
 	await expect(sheet).toBeVisible();
@@ -147,7 +148,10 @@ export async function uploadThroughSheet(page: Page, kind: string | null, name: 
 	if (await another.isVisible()) await another.click();
 	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
 	await sheet.getByRole('button', { name: 'Review', exact: true }).click();
-	await expect(sheet.getByTestId('map-review-table')).toBeVisible();
+	// The review: its summary always, the table only when something in the file can be imported (a refused file
+	// shows its problems once, in the alert).
+	await expect(sheet.getByTestId('map-review-summary')).toBeVisible();
+	if (expectImported) await expect(sheet.getByTestId('map-review-table')).toBeVisible();
 	if (kind) await sheet.getByLabel('Set every row’s kind').selectOption(kind);
 	if (expectImported) {
 		await sheet.getByRole('button', { name: /^Import \d+ features?$/ }).click();

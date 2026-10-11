@@ -295,7 +295,7 @@
 		font-weight: 700;
 	}
 	.tag {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.verify-main {
@@ -328,7 +328,7 @@
 	}
 	.eyebrow {
 		margin: 0;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -375,7 +375,7 @@
 		padding-top: 0.75rem;
 	}
 	dt {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	dd {
@@ -384,14 +384,14 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.mono {
 		font-family: var(--font-mono);
 	}
 	.hash {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		word-break: break-all;
 	}
 	.errata {

@@ -148,7 +148,7 @@
 		container: sparkline / inline-size;
 	}
 	.cap {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		line-height: 1.3;
 		margin-bottom: 0.15rem;
@@ -201,7 +201,7 @@
 		justify-content: space-between;
 		gap: 0.3rem;
 		margin-top: 0.1rem;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		line-height: 1.2;
 		color: var(--text-muted);
 		white-space: nowrap;
@@ -218,8 +218,9 @@
 		flex: none;
 	}
 	/* A mark with its date ("low 15% · 19 Dec 2023") doesn't fit between two dates in a narrow card (a phone's two
-	   columns): the dates stay at the ends and the mark takes its own line under them. 20rem = 280 px at the 14 px root. */
-	@container sparkline (max-width: 20rem) {
+	   columns): the dates stay at the ends and the mark takes its own line under them. 21.5rem = 301 px at the 14 px
+	   root, room for the line at --font-xs (10.5 px; 20rem when the ticks were 9.8 px). */
+	@container sparkline (max-width: 21.5rem) {
 		.long .ticks {
 			flex-wrap: wrap;
 			row-gap: 0;
@@ -227,6 +228,40 @@
 		.long .read {
 			order: 3;
 			flex-basis: 100%;
+		}
+	}
+	/* A phone's 12 px floor (issue #521 round 6) needs more room: the dated mark takes its own line in a card under
+	   24.5rem (343 px), and any mark in a column under 10rem (140 px, a crop row's), rather than being cut off; on
+	   its own line it wraps rather than cut "low 100% · 28 Feb 2022" short. Where the two dates don't fit one line
+	   either (a phone's two columns of dam cards), the last keeps to the right edge, so they still read as a span. */
+	@media screen and (max-width: 640px) {
+		@container sparkline (max-width: 24.5rem) {
+			.long .ticks {
+				flex-wrap: wrap;
+				row-gap: 0;
+			}
+			.long .read {
+				order: 3;
+				flex-basis: 100%;
+				white-space: normal;
+			}
+			.long .end:last-child {
+				margin-left: auto;
+			}
+		}
+		@container sparkline (max-width: 10rem) {
+			.ticks {
+				flex-wrap: wrap;
+				row-gap: 0;
+			}
+			.read {
+				order: 3;
+				flex-basis: 100%;
+				white-space: normal;
+			}
+			.end:last-child {
+				margin-left: auto;
+			}
 		}
 	}
 </style>

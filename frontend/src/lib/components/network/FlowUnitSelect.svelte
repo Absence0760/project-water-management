@@ -13,13 +13,20 @@
 
 <style>
 	.flow-unit {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		padding: 0 0.2rem;
 		min-height: 24px;
 		width: auto;
 		color: var(--text-muted);
 		background: transparent;
-		border: 1px solid var(--border);
+		/* The input border token: --border was 1.3–1.5:1, too faint to read as a control (WCAG 1.4.11, issue #521). */
+		border: 1px solid var(--border-input);
 		border-radius: var(--radius-sm);
+	}
+	/* It stands alone beside its label on a phone ("Rates in"): the tap size there (issue #521 round 5: 24 px). */
+	@media (pointer: coarse), (max-width: 640px) {
+		.flow-unit {
+			min-height: var(--tap);
+		}
 	}
 </style>

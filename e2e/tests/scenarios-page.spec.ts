@@ -15,6 +15,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { createScenario, header, newDialog, openScenarios, rail, scenarioList, seedManyScenarios } from '../support/scenarios.ts';
+import { headerControl } from '../support/sectionHeader.ts';
 
 test('the header counts the scenarios; + New scenario opens a dialog that Back and Esc close, and creating picks the new one', async ({ page, owner }) => {
 	void owner;
@@ -146,7 +147,8 @@ test('on a phone the list stacks above the scenario, a few rows high, scrolling 
 	expect(inner.sh).toBeGreaterThan(inner.ch);
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
-	await header(page).getByRole('link', { name: '+ New scenario', exact: true }).click();
+	// The header's own controls are in its More actions list on a phone.
+	await (await headerControl(page, 'link', '+ New scenario')).click();
 	await expect(newDialog(page)).toBeVisible();
 	await expectNoViolations(page);
 });

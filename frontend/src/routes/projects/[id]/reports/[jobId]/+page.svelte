@@ -162,7 +162,7 @@
 		border: 1px solid var(--border);
 		background: var(--surface-2);
 		color: var(--text-2);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 	}
 	.pill-done {

@@ -39,6 +39,37 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('AutoCalibrationFollower', () => {
+	it('a failed load says so and retry() reads the runs again; a failed start is not a load failure', async () => {
+		let fail = true;
+		const api = stubApi({
+			list: async () => {
+				if (fail) throw new Error('Could not reach the API');
+				return [run('a1', 2, 'complete')];
+			},
+			start: async () => {
+				throw new Error('rules not saved');
+			}
+		});
+		const f = new AutoCalibrationFollower(api);
+		f.open('A');
+		await settle();
+		expect(f.error).toBe('Could not reach the API');
+		expect(f.loadFailed).toBe(true);
+		fail = false;
+		f.retry();
+		expect(f.error).toBeNull();
+		await settle();
+		expect(f.latest?.id).toBe('a1');
+		expect(f.loadFailed).toBe(false);
+		expect(api.list).toHaveBeenCalledTimes(2);
+		// A start that fails is an action error: the button is its retry, not Try again.
+		await f.start();
+		expect(f.error).toBe('rules not saved');
+		expect(f.loadFailed).toBe(false);
+		f.retry();
+		expect(api.list).toHaveBeenCalledTimes(2);
+	});
+
 	it('shows the latest run, and polls a running one until it completes', async () => {
 		let n = 0;
 		const api = stubApi({

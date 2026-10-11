@@ -12,6 +12,7 @@
 	focus once loaded). Close closes the card (`onclose`). Helpers in ./unitRain.ts.
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
 	import { foldList } from '$lib/components/common/fold';
@@ -105,6 +106,12 @@
 
 	async function apply() {
 		if (!proposal || applying || reloading) return;
+		// Text the start date field can't read as a day: it says so under itself (DayInput); go there.
+		const box = document.getElementById(`${uid}-start`) as HTMLInputElement | null;
+		if (box?.validity.customError) {
+			box.focus();
+			return;
+		}
 		const parsed = unitRainBody(product, startDate);
 		if ('error' in parsed) {
 			startError = parsed.error;
@@ -229,12 +236,10 @@
 				</div>
 				<div class="field">
 					<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
-					<input
+					<DayInput
 						id="{uid}-start"
-						type="date"
-						min={CHIRPS_PRODUCT_FIRST_DAY[product]}
 						bind:value={startDate}
-						oninput={() => (startError = null)}
+						onchange={() => (startError = null)}
 						aria-invalid={startError ? true : undefined}
 						aria-describedby="{uid}-product-h{startError ? ` ${uid}-start-err` : ''}"
 					/>
@@ -292,7 +297,7 @@
 		max-width: 75ch;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.table-wrap {
 		overflow-x: auto;
@@ -306,7 +311,7 @@
 		vertical-align: top;
 	}
 	.state {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.45rem;
 		border-radius: 999px;

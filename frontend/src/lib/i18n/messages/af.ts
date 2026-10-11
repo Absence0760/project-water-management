@@ -95,6 +95,14 @@ export const af: Catalogue = {
 	'6476ae31': 'Vee tans uit…',
 	// {n} recovery code left. / {n} recovery codes left.
 	'4aaaac52': { one: '{n} herstelkode oor.', other: '{n} herstelkodes oor.' },
+	// On (both)
+	'0c836e0a': 'Aan (albei)',
+	// On (app)
+	'5296025e': 'Aan (app)',
+	// On (email)
+	'653eb31b': 'Aan (e-pos)',
+	// Off
+	'0dc6b4aa': 'Af',
 	// We emailed you a code. It works for 10 minutes.
 	'd8c6fbd5': 'Ons het vir jou ’n kode ge-e-pos. Dit bly 10 minute geldig.',
 	// Enter your current password.
@@ -157,8 +165,8 @@ export const af: Catalogue = {
 	'0d2472d6': 'Gekopieer. Plak hulle êrens veilig, soos in ’n wagwoordbestuurder.',
 	// Copying didn’t work here. Download them, or write them down.
 	'3e7d8f8f': 'Kon nie hier kopieer nie. Laai hulle af, of skryf hulle neer.',
-	// After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.
-	'b6f90a9c': 'Ná jou wagwoord kom ’n tweede stap: ’n 6-syferkode. Iemand wat jou wagwoord uitvind, kan steeds nie inkom nie. Kies hoe jy die kode kry; jy kan albei aanskakel.',
+	// A 6-digit code after your password. Turn on one or both.
+	'da7cd1d9': '’n 6-syferkode ná jou wagwoord. Skakel een of albei aan.',
 	// Someone asked to remove two-step sign-in from your account, saying they can’t get a code. It will be removed at {when}, unless it’s cancelled.
 	'7842bac5': 'Iemand het gevra om tweestap-intekening van jou rekening te verwyder, en gesê hulle kan nie ’n kode kry nie. Dit word om {when} verwyder, tensy dit gekanselleer word.',
 	// If that wasn’t you, cancel it now with a code from your authenticator app or your email, then change your password.
@@ -167,30 +175,40 @@ export const af: Catalogue = {
 	'c08216a1': 'Hierdie blaaier het ingeteken voordat tweestap-intekening opgestel is. Teken uit en weer in voordat jy iets doen wat dit nodig het.',
 	// Authenticator app
 	'744f34d3': 'Verifikasie-app',
-	// On
-	'60e47df0': 'Aan',
-	// Off
-	'0dc6b4aa': 'Af',
 	// Stronger
 	'3b06b3cd': 'Sterker',
-	// A code from an app on your phone, such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.
-	'1b137731': '’n Kode van ’n app op jou foon, soos Google Authenticator, Microsoft Authenticator of Aegis. Net jou foon kan die kodes maak.',
+	// On
+	'60e47df0': 'Aan',
 	// Remove
 	'21a5901d': 'Verwyder',
 	// Set up the app
 	'179105cc': 'Stel die app op',
+	// Codes from an app on your phone.
+	'c020406d': 'Kodes van ’n app op jou foon.',
 	// Code by email
 	'6d0090d9': 'Kode per e-pos',
 	// Easier
 	'8e289988': 'Makliker',
-	// We email a code to {email} each time. Easier, but less safe: whoever can read your email can also reset your password, so with codes by email your inbox guards your account. Keep your email account secure.
-	'7af10615': 'Ons e-pos elke keer ’n kode na {email}. Makliker, maar minder veilig: wie jou e-pos kan lees, kan ook jou wagwoord terugstel, so met kodes per e-pos hang jou rekening se veiligheid van jou inkassie af. Hou jou e-posrekening veilig.',
 	// Turn off
 	'cd03e04b': 'Skakel af',
 	// Finish turning on
 	'31453bc4': 'Voltooi aanskakeling',
 	// Turn on
 	'65a0c5a7': 'Skakel aan',
+	// Codes sent to {email}: only as safe as your inbox.
+	'2e3540b4': 'Kodes word na {email} gestuur: hulle is nie veiliger as jou inkassie nie.',
+	// How the two ways differ
+	'91c05db4': 'Hoe die twee maniere verskil',
+	// Show (fold)
+	'1d84417f': 'Wys',
+	// Hide (fold)
+	'13d2773a': 'Versteek',
+	// After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.
+	'b6f90a9c': 'Ná jou wagwoord kom ’n tweede stap: ’n 6-syferkode. Iemand wat jou wagwoord uitvind, kan steeds nie inkom nie. Kies hoe jy die kode kry; jy kan albei aanskakel.',
+	// A code from an app on your phone, such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.
+	'1b137731': '’n Kode van ’n app op jou foon, soos Google Authenticator, Microsoft Authenticator of Aegis. Net jou foon kan die kodes maak.',
+	// We email a code to {email} each time. Easier, but less safe: whoever can read your email can also reset your password, so with codes by email your inbox guards your account. Keep your email account secure.
+	'7af10615': 'Ons e-pos elke keer ’n kode na {email}. Makliker, maar minder veilig: wie jou e-pos kan lees, kan ook jou wagwoord terugstel, so met kodes per e-pos hang jou rekening se veiligheid van jou inkassie af. Hou jou e-posrekening veilig.',
 	// Turn on codes by email
 	'7baf539a': 'Skakel kodes per e-pos aan',
 	// Set up the authenticator app
@@ -415,6 +433,8 @@ export const af: Catalogue = {
 	'213e90fa': 'Probeer weer',
 	// Your hydrological unit
 	'318d6463': 'Jou hidrologiese eenheid',
+	// Your hydrological units in this catchment
+	'3cf9b306': 'Jou hidrologiese eenhede in hierdie opvanggebied',
 	// Forecast
 	'5f3a8bf0': 'Voorspelling',
 	// Last 12 months, in ML
@@ -661,6 +681,10 @@ export const af: Catalogue = {
 	'47121206': 'Vrae? Kontak {wua}.',
 	// You no longer have access to this hydrological unit. Contact {wua}.
 	'd85b785b': 'Jy het nie meer toegang tot hierdie hidrologiese eenheid nie. Kontak {wua}.',
+	// This hydrological unit isn’t linked to your account. If it should be, contact your WUA.
+	'9dc9f377': 'Hierdie hidrologiese eenheid is nie aan jou rekening gekoppel nie. As dit wel gekoppel moet wees, kontak jou WGV.',
+	// This hydrological unit isn’t linked to your account. If it should be, contact {wua}.
+	'fae072d4': 'Hierdie hidrologiese eenheid is nie aan jou rekening gekoppel nie. As dit wel gekoppel moet wees, kontak {wua}.',
 	// Charts, “Why?” and downloads need a connection.
 	'b3bbbaf7': 'Grafieke, “Hoekom?” en aflaaie het ’n verbinding nodig.',
 	// Updating…
@@ -1871,8 +1895,6 @@ export const af: Catalogue = {
 	'1ec4a724': 'Jou projekte',
 	// Not published yet
 	'b17ad0ae': 'Nog nie gepubliseer nie',
-	// Your hydrological units in this catchment
-	'3cf9b306': 'Jou hidrologiese eenhede in hierdie opvanggebied',
 	// WUA notice · {level}
 	'5849b249': 'WGV-kennisgewing · {level}',
 	// At a glance
