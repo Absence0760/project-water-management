@@ -1,6 +1,6 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { openFold, saveChanges, saveSettings } from '../support/settings.ts';
 
 // Audit B4 (engine ≥ 0.20.0): a multi-day accumulation in the catchment rain.
 // Synthetic records only: CHIRPS reads 4 mm every third day April–September
@@ -51,6 +51,8 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	const section = page.getByTestId('zero-rain-settings');
 	const mode = section.getByLabel('Accumulated readings');
 	await expect(mode).toHaveValue('spread');
+	// At the defaults Rain gaps is one line of them (ui-playbook.md § 2).
+	await openFold(page, 'rain-defaults');
 	const keep = section.getByRole('group', { name: /^Keep as recorded/ });
 	await expect(keep.getByText('None: every flagged accumulation is spread.')).toBeVisible();
 	await keep.getByRole('button', { name: "Keep a date range's readings" }).click();
@@ -72,7 +74,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	// A window listed by hand is validated the same way and spread again.
 	await tab('Settings & calibration').click();
 	const add = section.getByRole('group', { name: /^Also spread/ });
-	await add.getByRole('button', { name: 'Add a date range' }).click();
+	await add.getByRole('button', { name: 'Spread a date range' }).click();
 	await add.getByLabel('From').fill('2012-06-10');
 	await add.getByLabel('To').fill('2012-06-21');
 	await expect(add.getByRole('alert')).toHaveText('Listed accumulation 1: needs a reason.');

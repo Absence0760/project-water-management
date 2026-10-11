@@ -92,3 +92,35 @@ export function describeRainChecks(rc: Partial<RainCheckLimits> | undefined): st
 	const same = RAIN_CHECK_KEYS.every((k) => r[k] === d[k]);
 	return `${zero}${r.zeroRunChirpsCheck ? ', checked against CHIRPS' : ''}; ${low}${same ? ' (the defaults)' : ''}`;
 }
+
+/**
+ * Settings → Data quality's folded line (ui-playbook.md § 2, "Settings at their defaults are one line"):
+ * every limit at its default, and the limits as one line of values. A limit the stored settings don't have
+ * is its default.
+ */
+export function dataQualityAtDefaults(dq: Partial<DataQualitySettings> | null | undefined): boolean {
+	const d = defaultDataQualitySettings() as unknown as Record<string, unknown>;
+	const v = (dq ?? {}) as Record<string, unknown>;
+	return Object.keys(d).every((k) => !(k in v) || JSON.stringify(v[k]) === JSON.stringify(d[k]));
+}
+
+const pct = (r: number) => `${Math.round(r * 1000) / 10} %`;
+
+/** "gauge/logger 66.7–150 % · outliers × 5 / × 10 · flat stretches 5–90 days · zero runs 60 wet-season days". */
+export function dataQualityLine(dq: Partial<DataQualitySettings> | null | undefined): string {
+	const q = { ...defaultDataQualitySettings(), ...(dq ?? {}) };
+	const flat = [q.flatlineRainDays, q.flatlineEvapDays, q.flatlineFlowMinDays, q.flatlineFlowMaxDays].filter(num);
+	const zero =
+		q.zeroRunRule === 'usualRain'
+			? `zero runs under ${pct(q.zeroRunUsualShare)} of the usual rain over ${q.zeroRunMinDays} days`
+			: `zero runs ${q.zeroRunMinWetDays} wet-season days`;
+	return [
+		`gauge/logger ${pct(q.agreementMinRatio).replace(' %', '')}–${pct(q.agreementMaxRatio)}`,
+		`outliers × ${q.outlierFactorRain} / × ${q.outlierFactorFlow}`,
+		flat.length ? `flat stretches ${Math.min(...flat)}–${Math.max(...flat)} days` : null,
+		zero + (q.zeroRunChirpsCheck ? ', checked against CHIRPS' : ''),
+		`low vs CHIRPS below ${pct(q.lowVsChirpsRatio)}`
+	]
+		.filter(Boolean)
+		.join(' · ');
+}

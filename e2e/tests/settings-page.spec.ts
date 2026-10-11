@@ -383,14 +383,14 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	expect((await names('set-flow')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
 	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Areal rainfall correction' })).toBeVisible();
 	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Rain for each unit' })).toBeVisible();
-	expect(await names('set-rain')).toEqual([
-		'Rain gaps',
-		'CHIRPS bias correction and quantile map',
-		'CHIRPS fit period',
-		'Zero-rain runs in the catchment rain',
-		'Multi-day accumulations',
-		'Rain source periods'
-	]);
+	// Rain gaps: two cards, the second's three topics under it (h4).
+	expect(await names('set-rain')).toEqual(['Rain gaps', 'CHIRPS gap filling', 'Flagged rain']);
+	expect(
+		await page
+			.getByTestId('flagged-rain-card')
+			.locator('h4')
+			.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()))
+	).toEqual(['Zero-rain runs in the catchment rain', 'Multi-day accumulations', 'Rain source periods']);
 	const record = await names('set-record');
 	expect(record[0]).toBe('Calibration record');
 	expect(record).toContain('Quality flags for Fit automatically');

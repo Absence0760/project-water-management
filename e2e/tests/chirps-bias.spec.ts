@@ -3,7 +3,7 @@
 // catchment rain throughout, so the pooled factor is exactly 2.
 import { putSeries, seedRunnableProject, syntheticRain } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveSettings } from '../support/settings.ts';
+import { openFold, saveSettings } from '../support/settings.ts';
 
 const START = '2021-10-01';
 const DAYS = 120;
@@ -34,6 +34,7 @@ test('a run lists the CHIRPS factors it applied, and Settings can turn the corre
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const mode = page.getByLabel('CHIRPS bias correction', { exact: true });
 	await expect(mode).toHaveValue('monthly');
+	await openFold(page, 'rain-defaults');
 	await mode.selectOption('none');
 	// Its explanation is the select's description (shown under it with Settings' Explain switch, issue #468).
 	await expect(mode).toHaveAccessibleDescription(/^CHIRPS is used as stored/);
@@ -52,6 +53,7 @@ test('Settings turns the CHIRPS quantile map on with its wet-day threshold, and 
 	void owner;
 	const project = await seedRunnableProject(page.request, 'CHIRPS quantile map');
 	await page.goto(`/projects/${project.id}?tab=settings`);
+	await openFold(page, 'rain-defaults');
 	const map = page.getByTestId('chirps-quantile-map');
 	const on = map.getByRole('checkbox', { name: /Quantile-map the CHIRPS that fills gaps/ });
 	// Off by default (engine ≥ 1.53.0): no threshold until it is turned on.

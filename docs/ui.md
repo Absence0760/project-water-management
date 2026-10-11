@@ -5464,9 +5464,10 @@ section header, which it fills (`fillHeader`) like the other sections.
   an `h3` in the order shown (in its fieldset's legend where it has one), so
   heading navigation reaches them: under Flow calibration the areal rainfall
   correction, GR4J potential evaporation and Evaporation from the map; under
-  Rain gaps the CHIRPS bias correction and quantile map, the CHIRPS fit
-  period, zero-rain runs, multi-day accumulations and the rain source
-  periods; under the Calibration record the quality flags and flow gaps.
+  Rain gaps its two cards, CHIRPS gap filling and Flagged rain, with the
+  Flagged rain card's zero-rain runs, multi-day accumulations and rain
+  source periods as `h4`s (issue #521); under the Calibration record the
+  quality flags and flow gaps.
   Fit the parameters (`#set-fit`) is a panel with its own `h2` over two
   cards: Fit automatically, then the fit record, then the calibration rules
   with automated calibration under them (2026-10-10). Each help tip has a name of its own (the three GR4J
@@ -5698,7 +5699,24 @@ two.
     the Map; a boundary the grid can't stand for (no value inside, under
     half covered) says why. Synthetic data carries the "Synthetic test data"
     warning. With more than one grid loaded, a **Grid** picker.
-- **Rain gaps** (`#set-rain`, CHIRPS and the rest): the **CHIRPS bias correction**
+- **Rain gaps** (`#set-rain`, CHIRPS and the rest; issue #521): two cards,
+  **CHIRPS gap filling** (the bias correction, the quantile map and the fit
+  period, with **Propose from the double-mass breaks** in the card's head;
+  the card is `ChirpsFitPeriodSection.svelte`, the first two coming in as
+  its children) and **Flagged rain** (zero-rain runs, multi-day
+  accumulations and the rain source periods, each under a rule). Each list's
+  add buttons sit in its own head row beside its name, and no two share a
+  name: *Keep a water year dry* / *Keep a date range dry*, *Add a missing
+  water year* / *Add a missing date range* (Also treat as missing), *Keep a
+  water year's readings* / *… date range's readings*, *Spread a water year* /
+  *Spread a date range* (Also spread), *Add a rain-source period*. While
+  every choice is its default (`rain.ts` `rainGapsAtDefaults`), both cards
+  fold into one line, "All defaults: bias-corrected per month, whole record,
+  zero runs missing, accumulations spread" with **Change** (`rainGapsLine`;
+  "Now: …" once something is set, when it starts open;
+  `common/DefaultsFold.svelte`). The cards stay in the page while folded, so
+  Find a setting opens the fold, and its line says **needs fixing** while a
+  list inside is invalid. The **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to the runoff model and to
   demand, [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction)).
@@ -6082,14 +6100,22 @@ two.
     fit** once they change.
 - **WR2012 check** (`settings/Wr2012Section.svelte`, helpers in
   `settings/wr2012.ts`; model.md §2.10c). Off until "Compare runs with WR2012
-  naturalised flow" is ticked. Then: quaternary code, area (km²), MAP (mm,
-  optional), naturalised MAR (Mm³/a), the reference period (first and last
+  naturalised flow" is ticked. Then **Propose from the map** in the panel's
+  head, and: quaternary code, area (km²), MAP (mm,
+  optional; its help line is an explanation, so the grid's rows stay even),
+  naturalised MAR (Mm³/a), the reference period (first and last
   water year), the source, and a 12-month row of mean naturalised flow in
   **Mm³ per month** with its sum and an m³/s equivalent row, so a unit slip
-  shows. Then the scaling (area, or area and rainfall; the current area ratio
-  is shown), the dry-season months (from each run, or chosen), the four
-  deviation thresholds (%), and the calibration penalty (off; weight 0.5).
-  Ticking it shows the weight, then **Use a MAR band instead of one target**:
+  shows. Then **How the check judges** (issue #521), one line of its values
+  ("area ratio · dry season from each run · note 10 % / query 25 % (15 %
+  wetter) / unusable 50 %", `wr2012JudgingLine`) that opens, closed while
+  they are the defaults (`common/DefaultsFold.svelte`): the scaling (area,
+  or area and rainfall; the current area ratio is shown), the dry-season
+  months (from each run, or chosen) and the four deviation thresholds (%).
+  The soft MAR penalty for automatic fitting (off; weight 0.5) is switched
+  on in Fit the parameters → Fit automatically (issue #521, the operator's
+  OK); while it is off this panel has only an explanation linking there.
+  While it is on, the panel shows its weight, then **Use a MAR band instead of one target**:
   unticked (default), the penalty pulls towards the scaled WR2012 MAR above;
   ticked, two fields (**Band low** / **Band high**, Mm³/a, already at the
   modelled catchment's scale — not the quaternary's) replace it, for when two
@@ -6299,7 +6325,15 @@ two.
   [§ Drought restrictions](#drought-restrictions).
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
 - **Data quality** (`DataQualitySection.svelte`), "Input checks, and the
-  zero-rain and low-vs-CHIRPS limits runs use": three groups. Its messages
+  zero-rain and low-vs-CHIRPS limits runs use": three groups. While every
+  limit is its default (`dataQuality.ts` `dataQualityAtDefaults`) they fold
+  into one line, "Default limits: gauge/logger 66.7–150 % · outliers × 5 /
+  × 10 · flat stretches 5–90 days · zero runs 60 wet-season days · low vs
+  CHIRPS below 50 %" (`dataQualityLine`), with **Change the limits**
+  (`common/DefaultsFold.svelte`; issue #521). **Check each zero-rain run
+  against CHIRPS** heads a group of its own, named by the box, with what it
+  decides indented under it; the low-vs-CHIRPS limits, which don't depend
+  on it, follow under *Catchment rain against CHIRPS*. Its messages
   use the labels' words ("flat stretch"), and its note links to **Rain gaps**
   (`#set-rain`) for the zero-rain runs.
   *Gauge vs logger*: the lowest and highest ratio in %, shown to one

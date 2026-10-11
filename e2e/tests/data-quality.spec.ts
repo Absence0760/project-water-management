@@ -1,6 +1,6 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings, showExplanations } from '../support/settings.ts';
+import { openFold, saveChanges, saveSettings, showExplanations } from '../support/settings.ts';
 
 // Synthetic records only. The gauge reads 80 % of the logger for 120 days of
 // one water year; the logger has one negative reading.
@@ -31,6 +31,8 @@ test('gauge-vs-logger thresholds are a project setting the Time series tab appli
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const min = page.getByLabel('Lowest gauge/logger ratio (%)');
 	await expect(min).toHaveValue('66.7');
+	// At the defaults the limits are one line of their values (ui-playbook.md § 2).
+	await openFold(page, 'quality-limits');
 	const save = saveChanges(page);
 	// Out of the input's range: marked invalid and not taken.
 	await min.fill('0');
@@ -113,6 +115,7 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await tab('Settings & calibration').click();
 	const mode = page.getByLabel('Flagged zero runs');
 	await expect(mode).toHaveValue('missing');
+	await openFold(page, 'rain-defaults');
 	const keepDry = page.getByRole('group', { name: /^Keep dry/ });
 	await expect(keepDry.getByText('None: every flagged zero run is treated as missing.')).toBeVisible();
 	await keepDry.getByRole('button', { name: 'Keep a date range dry' }).click();
@@ -153,6 +156,7 @@ test('the zero-rain and low-vs-CHIRPS limits are settings the Data tab applies',
 	const section = page.getByTestId('data-quality-settings');
 	const wet = section.getByLabel('Days in the wet season (days)');
 	await expect(wet).toHaveValue('60');
+	await openFold(section, 'quality-limits');
 	await expect(section.getByLabel('Check each zero-rain run against CHIRPS')).not.toBeChecked();
 	// The other rule shows its own two limits instead.
 	const rule = section.getByLabel('Judge a zero-rain run by');
@@ -172,6 +176,8 @@ test('the zero-rain and low-vs-CHIRPS limits are settings the Data tab applies',
 
 	// A cap below the floor blocks Save with a message.
 	await page.goto(`/projects/${projectId}?tab=settings`);
+	// No longer at the defaults: the limits open by themselves.
+	await expect(section.getByTestId('quality-limits')).toHaveAttribute('open', '');
 	await section.getByLabel('Shortest flow flat stretch (days)').fill('100');
 	await expect(section.getByRole('alert')).toHaveText('The longest flow flat stretch can’t be shorter than the shortest.');
 	await expect(save).toBeDisabled();
@@ -185,6 +191,7 @@ test('the Data quality panel says it holds limits runs use, and its Rain gaps li
 	// The panel's words are explanations: shown with the page's switch (issue #468).
 	await showExplanations(page);
 	await expect(section).toContainText('Input checks, and the zero-rain and low-vs-CHIRPS limits runs use');
+	await openFold(section, 'quality-limits');
 	await section.getByRole('link', { name: 'Rain gaps' }).click();
 	await expect(page).toHaveURL(/#set-rain$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Rain gaps', exact: true })).toBeInViewport();

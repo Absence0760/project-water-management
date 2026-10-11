@@ -5,6 +5,7 @@
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
+import { openFold } from '../support/settings.ts';
 
 test('the dry-season month toggles are at least 24 px and the All button names its months', async ({ page, owner }) => {
 	void owner;
@@ -14,6 +15,7 @@ test('the dry-season month toggles are at least 24 px and the All button names i
 
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
 	await section.getByLabel('Compare runs with WR2012 naturalised flow').check();
+	await openFold(section, 'wr2012-judging');
 	await section.getByLabel('Choose the dry-season months').check();
 	const picker = section.getByRole('group', { name: 'Dry-season months', exact: true });
 	const toggles = picker.getByRole('checkbox');

@@ -851,7 +851,7 @@ export const GUIDES: Guide[] = [
 							'On **Settings & calibration → WR2012 check**, tick **Compare runs with WR2012 naturalised flow**.',
 							'Enter the quaternary code, its area, MAP (optional), MAR in Mm³/a, the period and the source.',
 							'Enter the monthly means in **Mm³ per month**. Their sum should match the MAR within 5 %; the m³/s row shows a unit slip.',
-							'Choose the scaling (area, or area and rainfall) and save. Every run from now on has a **WR2012 check** panel.'
+							'Under **How the check judges**, choose the scaling (area, or area and rainfall) and save. Every run from now on has a **WR2012 check** panel.'
 						]
 					}
 				]

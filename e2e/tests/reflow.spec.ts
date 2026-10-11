@@ -6,6 +6,7 @@ import { createProject, createRun, putModel, sampleModel } from '../support/api.
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll, squashedChecks } from '../support/reflow.ts';
 import { seedRiverProject } from '../support/river.ts';
+import { openFold } from '../support/settings.ts';
 
 const NARROW = { width: 320, height: 640 };
 
@@ -25,9 +26,10 @@ test.describe('320 px reflow', () => {
 		expect(await squashedChecks(page)).toEqual([]);
 
 		// The zero-rain period lists with a water-year row and a date-range row.
+		await openFold(page, 'rain-defaults');
 		const zeroRain = page.getByTestId('zero-rain-settings');
-		await zeroRain.getByRole('button', { name: 'Add a water year' }).first().click();
-		await zeroRain.getByRole('button', { name: 'Add a date range' }).first().click();
+		await zeroRain.getByRole('button', { name: 'Add a missing water year' }).click();
+		await zeroRain.getByRole('button', { name: 'Add a missing date range' }).click();
 		await expect(zeroRain.getByRole('button', { name: /^Remove / })).toHaveCount(2);
 		await expectNoSidewaysScroll(page);
 	});
