@@ -19,6 +19,7 @@
 //  POST /projects/:id/runs/:runId/authorised-impact   editor
 import {
 	authorisedMix,
+	foldedMix,
 	authorisedUnavailable,
 	ENGINE_VERSION,
 	licenceImpactBoard,
@@ -117,18 +118,20 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 		[projectId, allocations.map((a) => a.id)]
 	);
 	const byId = new Map(held.map((h) => [h.id, h]));
-	const mix = authorisedMix(
-		allocations.map((a) => ({
+	const entries = allocations.map((a) => ({
 			volumeM3PerYear: a.volumeM3PerYear,
 			waterUse: a.waterUse ?? null,
 			authorisation: byId.get(a.id)?.authorisation ?? null,
 			// A row gone since the run: the run's own unit, else the entry, holds it.
 			holder: byId.get(a.id)?.holder ?? (a.nodeId ? `n:${a.nodeId}` : `a:${a.id}`),
 			waterSource: a.waterSource
-		}))
-	);
+		}));
+	// Both frozen (evidence-17): the full mix for editors, owners, the authority and the PDF; the folded one for a
+	// viewer kept from each registered volume (allocations/viewerUnits.ts redactReportAllocations).
+	const mix = authorisedMix(entries);
+	const mixFolded = foldedMix(entries);
 	const builtAt = new Date().toISOString();
-	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, builtAt, engineVersion: ENGINE_VERSION };
+	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, mixFolded, builtAt, engineVersion: ENGINE_VERSION };
 
 	// Newest wins: the run's older boards go (on any engine or settings), so one row per run is kept.
 	await db.query('DELETE FROM authorised_impact WHERE project_id = $1 AND application_run_id = $2', [projectId, runId]);

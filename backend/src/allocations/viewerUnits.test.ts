@@ -121,13 +121,16 @@ describe('the ops a viewer kept from each volume doesn’t get (#523 G1)', () =>
 			appendix: { baselineInputs: { model: { allocations: [] } } },
 			summaries: { baseline: null, application: null },
 			ops: ops.map((op, index) => ({ index, class: 'baseline', op })),
-			licenceImpactAuthorised: { status: 'ok', mix: { rows: [], folded: undefined } }
+			licenceImpactAuthorised: { status: 'ok', mix: { rows: [{ authorisation: 'licence', volumeM3PerYear: 70 }] } }
 		};
 		const r = redactReportAllocations(report as never, ['n1']) as typeof report;
 		expect(r.ops.map((o) => o.index)).toEqual([0, 1, 3]);
+		// A board built before evidence-17 has no folded mix: none.
 		expect(r.licenceImpactAuthorised.mix).toBeNull();
-		const folded = { ...report, licenceImpactAuthorised: { status: 'ok', mix: { rows: [], folded: true } } };
-		expect((redactReportAllocations(folded as never) as typeof folded).licenceImpactAuthorised.mix).toEqual({ rows: [], folded: true });
+		// Since: the folded one in the full one's place, and no second copy.
+		const both = { ...report, licenceImpactAuthorised: { status: 'ok', mix: report.licenceImpactAuthorised.mix, mixFolded: { rows: [], folded: true } } };
+		const got = (redactReportAllocations(both as never) as typeof both).licenceImpactAuthorised;
+		expect(got).toEqual({ status: 'ok', mix: { rows: [], folded: true } });
 	});
 });
 

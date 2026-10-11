@@ -178,9 +178,11 @@ test('an application’s evidence report leads with the board against full autho
 	await page.getByTestId('evidence-authorised-run').getByRole('button', { name: 'Run at full authorised use' }).click();
 	await expect(authorised.getByTestId('evidence-impact-authorised-na')).toHaveCount(0);
 	const mix = authorised.getByTestId('evidence-authorised-mix');
-	// Two registered users: fewer than 5, so no line gives their volume (evidence-17, #523 G1); the mix's 5-holder rule is unit-tested.
-	await expect(mix.getByRole('rowheader')).toHaveText([/^All the lines above/]);
-	await expect(authorised.getByTestId('evidence-authorised-mix-left-out')).toHaveText('2 registered users’ volumes are left out: no line gives fewer than 5 registered users’ volume.');
+	// The owner reads the full mix (a viewer kept from each volume reads the folded one: evidence-17, #523 G1, unit- and DB-tested).
+	await expect(mix.getByRole('rowheader')).toHaveText(['Licence', 'Registration (WARMS)', /^All of it/]);
+	await expect(mix.getByRole('row', { name: /^Licence/ })).toContainText('Yes');
+	await expect(mix.getByRole('row', { name: /^Registration/ })).toContainText('No');
+	await expect(authorised.getByTestId('evidence-authorised-mix-left-out')).toHaveCount(0);
 	await expect(page.getByTestId('evidence-authorised-run')).toHaveCount(0);
 	await expectNoViolations(page);
 });

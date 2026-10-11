@@ -328,14 +328,19 @@ existing lawful use beside the application's numbers.
   registered volume, and the volume it held them to is printed by how it is
   held (`authorisation`: licence and verified existing lawful use as
   entitlements, the rest not), totals only: no holder, registration
-  number or unit is named. Since `evidence-17` (issue #523 G1) no line
-  gives fewer than 5 registered users' volume: a water source held by
-  fewer is left out whole, the ways of holding held by fewer are pooled in
-  one *Other ways of holding* line (itself left out below 5), the totals
-  are the lines', and the table says how many users were left out
-  (engine `authorisedMix`, holders counted as `app_allocation_volumes`
-  counts them). A board built before has no such rule: a viewer kept from
-  each volume reads it without the mix. The mix reads the allocations'
+  number or unit is named. Editors, owners, the authority and the PDF read
+  the full mix (engine `authorisedMix`). Since `evidence-17` (issue #523
+  G1) a folded mix is kept beside it (`mixFolded`, `foldedMix`) and served
+  to a viewer kept from each volume in its place: a water source held by
+  fewer than 5 registered users is left out whole (so the total is the sum
+  of the per-source totals that viewer already reads), a way of holding
+  held by 5 or more is a line, the others are pooled in one *Other ways of
+  holding* line when 5 or more hold them and otherwise merged into the
+  smallest line that isn't an entitlement (*…, with the ways of holding too
+  few hold to show*), so no difference gives them; how many users were left
+  out is said only at 5 or more, else only that some were (holders counted
+  as `app_allocation_volumes` counts them). A board built before has no
+  folded mix: such a viewer reads it without one. The mix reads the allocations'
   rows when an editor runs the pair (a later change shows only when it is
   run again).
 - **Each run's own volumes, not today's.** The backend

@@ -113,16 +113,27 @@ describe('the board against full authorised use', () => {
 		const a = res.body.authorised as EvidenceAuthorisedImpact;
 		expect(a.status).toBe('ok');
 		expect(a.board?.result.status).toBe('ok');
-		// Two registered users hold the surface water: fewer than 5, so the mix gives neither's volume (evidence-17, #523 G1).
-		expect(a.mix).toEqual({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, leftOutHolders: 2 });
+		expect(a.mix).toEqual({
+			rows: [
+				{ authorisation: 'licence', volumeM3PerYear: 150_000, entitlement: true },
+				{ authorisation: 'registration', volumeM3PerYear: 400_000, entitlement: false }
+			],
+			entitlementM3PerYear: 150_000,
+			totalM3PerYear: 550_000
+		});
+		// Frozen beside it, folded for a viewer kept from each volume (evidence-17, #523 G1): two registered users
+		// hold the surface water, fewer than 5, so no line, and no count of them.
+		expect(a.mixFolded).toEqual({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, someLeftOut: true });
 		// Existing use is authorised use now: not the use the baseline modelled.
 		const modelled = (await report(viewer, appRun)).licenceImpact!;
 		if (a.board?.result.status !== 'ok' || modelled.result.status !== 'ok') throw new Error('boards');
 		const existing = (b: typeof a.board) => (b!.result.status === 'ok' ? b!.result.impact.classes.map((c) => c.waterfall?.existingUseM3 ?? null) : []);
 		expect(existing(a.board)).not.toEqual(existing(modelled));
-		// The report carries it as the headline; a viewer reads it.
-		const r = await report(viewer, appRun);
-		expect(r.licenceImpactAuthorised).toEqual(a);
+		// The report carries it as the headline: the owner reads it as built; a viewer kept from each volume reads
+		// the folded mix in the full one's place.
+		expect((await report(owner, appRun)).licenceImpactAuthorised).toEqual(a);
+		const { mixFolded, ...rest } = a;
+		expect((await report(viewer, appRun)).licenceImpactAuthorised).toEqual({ ...rest, mix: mixFolded });
 	});
 
 	it('keeps one board per run: running it again replaces it', async () => {

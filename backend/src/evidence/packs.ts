@@ -390,8 +390,8 @@ async function packOwnUnits(db: Db, projectId: string, pack: Pick<PackMeta, 'sce
  * scenario's pack (or one whose scenario the caller can't read) whose § 5
  * lists a unit one by one (before evidence-17) or whose changes touch a
  * registered volume (Appendix A.2 prints the old one); `pdf` for one whose
- * page-1 authorised volume mix wasn't built under the 5-holder rule (the
- * manifest is served without it). Null: the redacted manifest and the PDF
+ * page-1 prints the full authorised volume mix (the manifest is served with
+ * the folded one instead, or none). Null: the redacted manifest and the PDF
  * hold nothing more.
  */
 export function packWithheldPart(reportVersion: string, report: PackManifest['report'], origin: ScenarioOrigin | null): 'pack' | 'pdf' | null {
@@ -400,6 +400,7 @@ export function packWithheldPart(reportVersion: string, report: PackManifest['re
 		if ((report.allocations?.units ?? []).some((u) => u.aggregate === undefined)) return 'pack';
 		if ((report.ops ?? []).some((o) => o.op.op.startsWith('allocation.'))) return 'pack';
 	}
+	// The PDF prints the full mix (evidence-17 freezes a folded one too, for the redacted manifest).
 	const mix = report.licenceImpactAuthorised?.mix;
 	if (mix && !mix.folded && mix.rows.length) return 'pdf';
 	return null;

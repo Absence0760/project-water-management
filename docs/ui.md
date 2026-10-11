@@ -9953,11 +9953,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     `licenceImpactAuthorised`, and under it the authorised volumes' mix
     (held as licence, verified existing lawful use, registration, claimed
     existing lawful use, general authorisation or Schedule 1, the volume,
-    whether it is an entitlement, and the totals; since `evidence-17` no
-    line gives fewer than 5 registered users' volume: the kinds held by
-    fewer are one *Other ways of holding* line, the total row reads *All
-    the lines above* and a note (`evidence-authorised-mix-left-out`) says
-    how many users were left out) and when and on which
+    whether it is an entitlement, and the totals; a viewer kept from each
+    registered volume reads the folded mix since `evidence-17`: the kinds
+    held by fewer than 5 are one *Other ways of holding* line or merged
+    into the smallest line (*…, with the ways of holding too few hold to
+    show*), the total row reads *All the lines above* and a note
+    (`evidence-authorised-mix-left-out`) says how many users were left out,
+    at 5 or more, else that some were) and when and on which
     engine it was run; without one, a fixed *Not assessed* row says why
     (not run for this application run, no registered volumes, or out of
     date); a pack drafted before `evidence-14` says it isn't part of it.

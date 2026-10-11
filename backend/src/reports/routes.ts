@@ -350,6 +350,6 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 		);
 		if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this report');
 	});
-	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}) });
+	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}), ...(t.redact ? { redact: true as const } : {}) });
 	return c.json({ ok: true });
 });

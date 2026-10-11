@@ -20,11 +20,14 @@ import {
 	type AllocationWaterSource,
 	type ScenarioOp
 } from '@water-management/engine';
+import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
 
 /** A viewer on a project whose owners haven't let viewers read each registered volume. */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
+	// A report render queued without registered volumes (214, #523 G1): every project, whatever the role.
+	if (requestAuth.getStore()?.redactAllocations) return true;
 	if (role !== 'viewer') return false;
 	const { rows } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [projectId]);
 	return !rows[0]?.on;
@@ -197,7 +200,7 @@ type ReportLike = {
 	appendix: { baselineInputs: { model?: { allocations?: unknown } | null } | null };
 	summaries: { baseline: { allocations?: { nodes?: unknown[] } | null } | null; application: { allocations?: { nodes?: unknown[] } | null } | null };
 	ops?: { op: ScenarioOp }[];
-	licenceImpactAuthorised?: { mix?: { folded?: true } | null } | null;
+	licenceImpactAuthorised?: { mix?: { folded?: true } | null; mixFolded?: unknown } | null;
 };
 
 /**
@@ -206,8 +209,8 @@ type ReportLike = {
  * rows, each run summary's allocations without the per-unit part, as
  * redactRunAllocations leaves a run, the ops that set a volume on a unit
  * that isn't `own` (an applicant's application's own units; none for a team
- * scenario) left out, and page 1's authorised volume mix left out unless it
- * was built under the 5-holder rule (`folded`, evidence-17). § 5 stays:
+ * scenario) left out, and page 1's authorised volume mix replaced by its
+ * folded one (`mixFolded`, evidence-17; none for a board built before). § 5 stays:
  * since `evidence-15` it lists only the applicant's own units, the rest as
  * totals at 5 or more units (and since `evidence-17` none of a team
  * scenario's). A frozen pack manifest redacted this way no longer hashes to
@@ -225,7 +228,8 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 	return {
 		...report,
 		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
-		...(lia?.mix && !lia.mix.folded ? { licenceImpactAuthorised: { ...lia, mix: null } } : {}),
+		// The folded mix in the full one's place (evidence-17), or none: a board built before has no folded one.
+		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: (mixFolded ?? null) as typeof lia.mix }))(lia) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) }
 	};

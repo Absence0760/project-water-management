@@ -414,7 +414,10 @@ the application twice, both labelled:
   (s40) and an existing lawful use verified under s35 are entitlements; a
   WARMS registration, a claimed existing lawful use, a general authorisation
   and Schedule 1 use are not, and the table says which. Since
-  `evidence-17` no line gives fewer than 5 registered users' volume
+  `evidence-17` the pack freezes the mix twice: in full (editors, owners,
+  the authority and the PDF read it) and folded, which a viewer kept from
+  each registered volume reads in its place and which gives no fewer than 5
+  registered users' volume, alone or by difference
   ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
 - **Against modelled current use** (`licenceImpact`, as before): the
   baseline as it ran, so "existing use" is what the model found holders

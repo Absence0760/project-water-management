@@ -25,9 +25,23 @@
 --       Existing rows are true: who printed them, and with what, isn't
 --       recorded, so they fail closed (the requester still downloads their
 --       own; reports are deleted after 8 days).
+--       An impact report against another project's baseline is never true:
+--       the report project's readers mustn't read the baseline project's
+--       volumes, and the reverse, so it is printed without any (below), and
+--       anyone who reads the report project may download it.
+--   render_token.redact_allocations
+--       The visibility a report prints at, fixed when it was queued: the
+--       report job issues its token with `NOT report.with_volumes`, and a
+--       render session opened with such a token reads every project as a
+--       viewer kept from the volumes (the session's `x` claim;
+--       allocationUnitsHidden). So a requester promoted, or the switch turned
+--       on, between queue and render can't print volumes into a PDF flagged
+--       without them; one demoted prints fewer than the flag allows, never
+--       more. app_consume_render_token returns it.
 --
 -- No grant changes: report's INSERT is table-wide and the trigger overwrites
--- the column; there is no UPDATE grant on it.
+-- with_volumes; there is no UPDATE grant on it. render_token's INSERT is
+-- table-wide (023); only the report job sets the new column.
 
 ALTER TABLE report ADD COLUMN with_volumes boolean NOT NULL DEFAULT true;
 
@@ -76,9 +90,11 @@ CREATE OR REPLACE FUNCTION report_enqueue() RETURNS trigger
 				RAISE EXCEPTION 'the baseline is the run itself' USING ERRCODE = 'check_violation';
 			END IF;
 		END IF;
-		-- 214: printed with each farm's registered volume? The requester reads each one (D3, 162), and a run they can
-		-- read of this project, or the baseline, carries one. Under their RLS, as the render will read.
+		-- 214: printed with each farm's registered volume? The requester reads each one (D3, 162), the report isn't
+		-- against another project's baseline (printed without any volumes), and a run they can read of this project,
+		-- or the baseline, carries one. Under their RLS, as the render will read.
 		NEW.with_volumes := (app_has_role(NEW.project_id, 'editor') OR app_allocations_viewer_units(NEW.project_id))
+			AND (NEW.against_run_id IS NULL OR EXISTS (SELECT 1 FROM model_run b WHERE b.id = NEW.against_run_id AND b.project_id = NEW.project_id))
 			AND EXISTS (
 				SELECT 1 FROM model_run r
 				WHERE (r.project_id = NEW.project_id OR r.id = NEW.against_run_id)
@@ -88,3 +104,39 @@ CREATE OR REPLACE FUNCTION report_enqueue() RETURNS trigger
 		RETURN NEW;
 	END
 	$$;
+
+-- ---------------------------------------------------------------------------
+-- The render's visibility, fixed at queue time
+-- ---------------------------------------------------------------------------
+ALTER TABLE render_token ADD COLUMN redact_allocations boolean NOT NULL DEFAULT false;
+COMMENT ON COLUMN render_token.redact_allocations IS
+	'214, #523 G1: the render session reads every project as a viewer kept from each registered volume (a report queued without them, report.with_volumes false). Set by the report job.';
+
+-- Latest definition: 165_applicant_copy.sql. Returns redact_allocations too.
+DROP FUNCTION app_consume_render_token(bytea);
+CREATE FUNCTION app_consume_render_token(p_hash bytea)
+	RETURNS TABLE (user_id uuid, project_id uuid, run_id uuid, against_project_id uuid, against_run_id uuid, pack_id uuid, purpose text, redact_allocations boolean)
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		v_user uuid;
+		v_project uuid;
+		v_run uuid;
+		v_against uuid;
+		v_pack uuid;
+		v_purpose text;
+		v_expires timestamptz;
+		v_redact boolean;
+	BEGIN
+		DELETE FROM render_token t WHERE t.token_hash = p_hash
+			RETURNING t.user_id, t.project_id, t.run_id, t.against_run_id, t.pack_id, t.purpose, t.expires_at, t.redact_allocations
+			INTO v_user, v_project, v_run, v_against, v_pack, v_purpose, v_expires, v_redact;
+		DELETE FROM render_token t WHERE t.expires_at < now() - interval '1 day';
+		IF v_user IS NULL OR v_expires <= now() THEN
+			RETURN;
+		END IF;
+		RETURN QUERY SELECT v_user, v_project, v_run, (SELECT r.project_id FROM model_run r WHERE r.id = v_against), v_against, v_pack, v_purpose, v_redact;
+	END
+	$$;
+REVOKE ALL ON FUNCTION app_consume_render_token(bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_consume_render_token(bytea) TO water_app;

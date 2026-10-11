@@ -31,19 +31,24 @@ describe('the board against full authorised use (evidence-14)', () => {
 		expect(m.leftOut).toBeNull();
 	});
 
-	it('words the pooled row and the registered users left out (evidence-17, #523 G1)', () => {
+	it('words a folded mix: the pooled row, a row with the others merged in, and who is left out, counted only at 5 or more (evidence-17, #523 G1)', () => {
 		const m = mixLines({
 			rows: [
 				{ authorisation: 'registration', volumeM3PerYear: 500, entitlement: false },
+				{ authorisation: 'existing_lawful_use_claimed', volumeM3PerYear: 160, entitlement: false, withOthers: true },
 				{ authorisation: 'other', volumeM3PerYear: 108, entitlement: false }
 			],
 			entitlementM3PerYear: 0,
-			totalM3PerYear: 608,
+			totalM3PerYear: 768,
 			folded: true,
-			leftOutHolders: 2
+			leftOutHolders: 6
 		});
-		expect(m.lines.map((l) => l.label)).toEqual(['Registration (WARMS)', 'Other ways of holding (each held by fewer than 5 registered users)']);
-		expect(m.leftOut).toBe('2 registered users’ volumes are left out: no line gives fewer than 5 registered users’ volume.');
-		expect(mixLines({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, leftOutHolders: 1 }).leftOut).toMatch(/^1 registered user’s volume is left out/);
+		expect(m.lines.map((l) => l.label)).toEqual([
+			'Registration (WARMS)',
+			'Existing lawful use (claimed, not verified), with the ways of holding too few hold to show',
+			'Other ways of holding (each held by fewer than 5 registered users)'
+		]);
+		expect(m.leftOut).toBe('6 registered users’ volumes are left out: no line gives fewer than 5 registered users’ volume.');
+		expect(mixLines({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, someLeftOut: true }).leftOut).toMatch(/^Some registered users’ volumes are left out/);
 	});
 });

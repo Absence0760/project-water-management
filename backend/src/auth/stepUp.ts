@@ -66,6 +66,11 @@ export interface RequestAuth {
 	amr: Amr;
 	/** When the session last gave a code (epoch ms), or null. */
 	otpAt?: number | null;
+	/**
+	 * A report render session queued without registered volumes (214, issue #523 G1): every project reads as for a
+	 * viewer kept from them (allocations/viewerUnits.ts allocationUnitsHidden), whatever the requester's role now.
+	 */
+	redactAllocations?: boolean;
 }
 
 export const requestAuth = new AsyncLocalStorage<RequestAuth>();
@@ -202,4 +207,3 @@ export function freshCode(otpAt: number | null, now = Date.now()): boolean {
 export async function requireProjectFreshCode(db: Db, projectId: string, now = Date.now()): Promise<void> {
 	if (await projectRequiresMfa(db, projectId)) await requireFreshCode(db, now);
 }
-

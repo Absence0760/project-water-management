@@ -104,7 +104,8 @@ export const reportRenderHandler = defineHandler({
 			against = { projectId: rows[0].projectId, runId: report.againstRunId! };
 		}
 		// Committed now, on its own connection: the renderer uses it before this job commits.
-		const token = await withUser(job.actingUserId, (tx) => issueRenderToken(tx, job.projectId, runId, against?.runId));
+		// At the visibility the report was queued at (214, #523 G1): without volumes, the session prints none.
+		const token = await withUser(job.actingUserId, (tx) => issueRenderToken(tx, job.projectId, runId, against?.runId, { redact: !report.withVolumes }));
 
 		if (reportRenderer() === 'sqs') {
 			const message: RenderRequestMessage = { v: 1, type: 'render', reportId: report.id, projectId: job.projectId, runId, ...(against ? { against } : {}), token };
