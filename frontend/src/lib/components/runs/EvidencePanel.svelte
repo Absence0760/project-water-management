@@ -9,7 +9,7 @@
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, NOMINATION_REASON_MAX, type Nomination, type RunMeta } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtStamp } from '$lib/format/number';
 	import { currentNomination, evidenceLine, historyEntries, nominateBlocker } from './evidence';
 
 	let {
@@ -28,7 +28,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const fmt = (iso: string) => fmtDate(iso, true);
+	const fmt = fmtStamp;
 	let reason = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
@@ -111,9 +111,12 @@
 					A nomination can't be edited or removed. Nominating another run later replaces it, and both stay in the history below.
 					<span class:over={tooLong}>{trimmed.length} / {NOMINATION_REASON_MAX} characters</span>
 				</p>
-				<button class="btn btn-primary btn-sm" type="submit" disabled={saving || !trimmed || tooLong}>
-					{saving ? 'Nominating…' : current ? 'Nominate this run instead' : 'Nominate as evidence'}
-				</button>
+				<!-- The panel's forms end in one action row, as Run notes' Save above (ui-playbook § 2). -->
+				<div class="action-row">
+					<button class="btn btn-primary" type="submit" disabled={saving || !trimmed || tooLong}>
+						{saving ? 'Nominating…' : current ? 'Nominate this run instead' : 'Nominate as evidence'}
+					</button>
+				</div>
 				{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 			</form>
 		{/if}
@@ -134,10 +137,12 @@
 						“{current.runLabel || 'Untitled run'}” stays kept for good.
 						<span class:over={withdrawTooLong}>{withdrawTrimmed.length} / {NOMINATION_REASON_MAX} characters</span>
 					</p>
-					<button class="btn btn-danger btn-sm" type="submit" disabled={saving || !withdrawTrimmed || withdrawTooLong}>
-						{saving ? 'Withdrawing…' : 'Withdraw the nomination'}
-					</button>
-					<button class="btn btn-sm" type="button" onclick={() => ((withdrawing = false), (withdrawError = null))}>Cancel</button>
+					<div class="action-row">
+						<button class="btn btn-danger" type="submit" disabled={saving || !withdrawTrimmed || withdrawTooLong}>
+							{saving ? 'Withdrawing…' : 'Withdraw the nomination'}
+						</button>
+						<button class="btn" type="button" onclick={() => ((withdrawing = false), (withdrawError = null))}>Cancel</button>
+					</div>
 					{#if withdrawError}<div class="alert alert-error" role="alert">{withdrawError}</div>{/if}
 				</form>
 			{:else}

@@ -50,7 +50,7 @@ describe('planAreaPaste', () => {
 	});
 
 	it('stops on a negative area', () => {
-		expect(planAreaPaste('Upper farm\t-2', farms, crops, areas())).toEqual({ error: 'Upper farm, Citrus: -2 ha is below 0.' });
+		expect(planAreaPaste('Upper farm\t-2', farms, crops, areas())).toEqual({ error: 'Upper farm, Citrus: −2 ha is below 0.' });
 	});
 });
 
@@ -146,7 +146,7 @@ describe('planFactorPaste', () => {
 	});
 
 	it('stops on a negative factor and on a row longer than the months left', () => {
-		expect(planFactorPaste('Citrus\t-0.1', factors())).toEqual({ error: 'Citrus, Oct: a crop factor of -0.1 is below 0.' });
+		expect(planFactorPaste('Citrus\t-0.1', factors())).toEqual({ error: 'Citrus, Oct: a crop factor of −0.1 is below 0.' });
 		expect(planFactorPaste('1\t2\t3', factors(), { row: 0, col: 10 })).toHaveProperty('error');
 	});
 });

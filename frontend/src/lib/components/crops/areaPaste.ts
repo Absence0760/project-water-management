@@ -6,6 +6,7 @@
 // stores and checks each value is 0 or more.
 import type { Crop, CropArea, NetworkNode } from '@water-management/engine';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
+import { fmtNum } from '$lib/format/number';
 import { mapPaste, sameValue, toCsv, type GridFormat, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 import { MONTH_COLS } from '$lib/spreadsheet/paste/monthlyRows';
 
@@ -34,7 +35,7 @@ export function planAreaPaste(text: string, farms: readonly Farm[], crops: reado
 	for (const v of mapped.values) {
 		const farm = farms.find((f) => f.id === v.rowId)!;
 		const crop = crops.find((c) => c.id === v.key)!;
-		if (v.value < 0) return { error: `${farm.name || '(unnamed)'}, ${crop.name || '(unnamed)'}: ${v.value} ha is below 0.` };
+		if (v.value < 0) return { error: `${farm.name || '(unnamed)'}, ${crop.name || '(unnamed)'}: ${fmtNum(v.value, 4, true)} ha is below 0.` };
 		const from = areaHa(areas, farm.id, crop.id);
 		if (sameValue(from, v.value)) plan.unchanged++;
 		else plan.changes.push({ rowId: farm.id, rowName: farm.name || '(unnamed)', key: crop.id, column: crop.name || '(unnamed)', unit: 'ha', from, to: v.value });
@@ -80,7 +81,7 @@ export function planFactorPaste(text: string, crops: readonly FactorCrop[], anch
 		const name = (isNew ? mapped.added.find((a) => a.id === v.rowId)!.name : crops.find((c) => c.id === v.rowId)!.name) || '(unnamed)';
 		const m = Number(v.key);
 		const month = WATER_YEAR_MONTHS[m]!;
-		if (v.value < 0) return { error: `${name}, ${month}: a crop factor of ${v.value} is below 0.` };
+		if (v.value < 0) return { error: `${name}, ${month}: a crop factor of ${fmtNum(v.value, 4, true)} is below 0.` };
 		const from = isNew ? null : (crops.find((c) => c.id === v.rowId)!.cropFactor[m] ?? 0);
 		if (sameValue(from, v.value)) plan.unchanged++;
 		else plan.changes.push({ rowId: v.rowId, rowName: isNew ? `${name} (new crop)` : name, key: v.key, column: month, unit: '', from, to: v.value });

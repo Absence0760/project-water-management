@@ -307,7 +307,7 @@ export function fmtSig(v: number | null, signed = false): string {
 	if (v == null || !Number.isFinite(v)) return '–';
 	const a = Math.abs(v);
 	const digits = a === 0 ? 0 : Math.min(12, Math.max(0, 2 - Math.floor(Math.log10(a))));
-	const s = fmtNum(v, digits, true).replace('-', '−');
+	const s = fmtNum(v, digits, true);
 	return signed && v > 0 ? `+${s}` : s;
 }
 

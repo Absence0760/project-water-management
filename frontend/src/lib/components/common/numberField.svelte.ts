@@ -25,7 +25,8 @@ export interface NumberBounds {
  * `parseNum`'s grouping pattern would read it as 125.
  */
 export function readNumber(text: string): number | null {
-	const s = text.replace(/\s/g, '');
+	// The true minus the app displays (fmtNum's U+2212) reads as a minus.
+	const s = text.replace(/\s/g, '').replace(/^\u2212/, '-');
 	if (/^-?0,\d+$/.test(s)) return parseNum(s.replace(',', '.'));
 	return parseNum(s);
 }

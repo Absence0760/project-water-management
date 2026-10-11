@@ -787,11 +787,14 @@
 		<details class="fresh" class:stale={fresh.stale} bind:this={freshEl} bind:open={freshOpen} onkeydown={freshKeydown}>
 			<summary>
 				<span class="dot" aria-hidden="true"></span>
-				{#if fresh.latest !== null && fresh.age !== null}
-					Rain up to <strong>{fmtDay(fresh.latest)}</strong> ({agoText(fresh.age)}){#if fresh.stale}<span class="visually-hidden">{`, older than ${STALE_DAYS} days`}</span>{/if}
-				{:else}
-					No recorded rain yet
-				{/if}
+				<!-- One box for the words, so on a phone they wrap as a line of text inside the pill (SectionHeader). -->
+				<span class="fresh-text">
+					{#if fresh.latest !== null && fresh.age !== null}
+						Rain up to <strong class="nw">{fmtDay(fresh.latest)}</strong> <span class="nw">({agoText(fresh.age)})</span>{#if fresh.stale}<span class="visually-hidden">{`, older than ${STALE_DAYS} days`}</span>{/if}
+					{:else}
+						No recorded rain yet
+					{/if}
+				</span>
 			</summary>
 			<div class="fresh-pop">
 				<table class="data compact">
@@ -1190,8 +1193,25 @@
 		border-radius: var(--radius);
 		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
 	}
-	/* In a narrow header the pill starts its own row at the left (SectionHeader), so the list opens rightwards. */
+	/* In a narrow header the pills share a row that starts at the left (SectionHeader), the rain pill
+	   after the Summary's Setup complete: its words wrap inside it, and its list opens rightwards from
+	   the row's left edge (the row is positioned), so it stays on the screen whichever pill comes first. */
 	@container section-header (max-width: 640px) {
+		.fresh {
+			position: static;
+		}
+		.fresh summary {
+			display: flex;
+			height: 100%;
+			min-height: 44px;
+		}
+		.fresh .dot {
+			flex: none;
+		}
+		/* The date and the age each stay whole: the words break between them, not inside "(4 years ago)". */
+		.fresh-text .nw {
+			white-space: nowrap;
+		}
 		.fresh-pop {
 			left: 0;
 			right: auto;

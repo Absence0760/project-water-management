@@ -11,7 +11,7 @@
 <script lang="ts">
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { fmtDay, fmtStamp } from '$lib/format/number';
 	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, noticeLanguages, noticeTextFields, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
 
 	let {
@@ -35,7 +35,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const fmt = (iso: string) => fmtDate(iso, true);
+	const fmt = fmtStamp;
 	const isCurrent = $derived(current?.runId === run.id);
 	const blocker = $derived(publishBlocker(run));
 	const noStop = $derived(damsWithoutStopLevel(run.model?.nodes as { kind?: string; damCapacityM3?: number; damMinPct?: number }[] | undefined));

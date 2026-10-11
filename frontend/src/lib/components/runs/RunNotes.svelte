@@ -3,12 +3,17 @@
 	reason next to a WR2012 query or not-usable flag, or anything else a reviewer
 	should read with the run. The one thing about a run that changes after it
 	is made. Editors write it; viewers read it.
+
+	The team's discussion of the run (the notes thread, WP-2.7) is a different
+	thing with a similar name: the page passes its Notes button as `aside`,
+	drawn at the heading's right as every Settings panel does, and the intro
+	line says which is which (docs/ui.md § Runs & results).
 -->
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import type { Wr2012FlagLevel } from '@water-management/engine';
 	import { api, RUN_NOTES_MAX, type RunMeta } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtWhen } from '$lib/format/number';
 	import { explanationPrompt, normaliseNotes, notesDirty } from './notes';
 
 	let {
@@ -16,7 +21,8 @@
 		run,
 		canEdit,
 		flagLevel = null,
-		onSaved
+		onSaved,
+		aside
 	}: {
 		projectId: string;
 		run: RunMeta;
@@ -24,6 +30,8 @@
 		/** The run's WR2012 flag, if it has a check: a query or not-usable flag asks for the reason. */
 		flagLevel?: Wr2012FlagLevel | null;
 		onSaved?: (run: RunMeta) => void;
+		/** The team's notes on the run (NotesDrawer), at the heading's right. */
+		aside?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -58,7 +66,13 @@
 </script>
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Run notes</h3>
+	<div class="panel-head">
+		<h3 id="{uid}-h">Run notes</h3>
+		{#if aside}<div class="aside">{@render aside()}</div>{/if}
+	</div>
+	<p class="muted small intro">
+		The run’s own explanation, kept with it and read in run comparison and the summary CSV{#if aside}; the team’s discussion of the run is under Notes{/if}.
+	</p>
 	{#if prompt}<p class="prompt" role="note">{prompt}</p>{/if}
 	{#if canEdit}
 		<form onsubmit={save}>
@@ -73,11 +87,10 @@
 				placeholder="Why this run's results stand, e.g. the quaternary includes an irrigated tributary outside the model."
 			></textarea>
 			<p id="{uid}-help" class="muted small">
-				Read by everyone who can see the project, in run comparison and the summary CSV.
-				<span class:over={tooLong}>{normaliseNotes(draft).length} / {RUN_NOTES_MAX} characters</span>
+				Everyone who can see the project reads it. <span class:over={tooLong}>{normaliseNotes(draft).length} / {RUN_NOTES_MAX} characters</span>
 			</p>
-			<div class="form-row">
-				<button class="btn btn-primary btn-sm" type="submit" disabled={saving || !dirty || tooLong}>{saving ? 'Saving…' : 'Save notes'}</button>
+			<div class="action-row">
+				<button class="btn btn-primary" type="submit" disabled={saving || !dirty || tooLong}>{saving ? 'Saving…' : 'Save notes'}</button>
 				{#if saved && !dirty}<span class="muted small" role="status">Saved.</span>{/if}
 			</div>
 			{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
@@ -88,7 +101,7 @@
 		<p class="muted">No notes on this run.</p>
 	{/if}
 	{#if stored && run.notesUpdatedAt}
-		<p class="muted small">Last changed {fmtDate(run.notesUpdatedAt, true)}{run.notesUpdatedBy ? ` by ${run.notesUpdatedBy}` : ''}.</p>
+		<p class="muted small">Last changed {fmtWhen(run.notesUpdatedAt)}{run.notesUpdatedBy ? ` by ${run.notesUpdatedBy}` : ''}.</p>
 	{/if}
 </section>
 
@@ -115,9 +128,15 @@
 		background: var(--surface-2);
 		max-width: 90ch;
 	}
-	.form-row {
-		display: flex;
+	.panel-head {
 		align-items: center;
-		gap: 0.75rem;
+		margin-bottom: 0.25rem;
+	}
+	.intro {
+		margin: 0 0 0.6rem;
+		max-width: 90ch;
+	}
+	textarea + p {
+		margin: 0.25rem 0 0;
 	}
 </style>

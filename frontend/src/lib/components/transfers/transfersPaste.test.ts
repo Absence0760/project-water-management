@@ -45,7 +45,7 @@ describe('transfers paste (issue #477)', () => {
 	});
 
 	it('stops on a negative rate', () => {
-		expect(planTransferPaste('Transfer 1\t-1', transferRows(rules(), name, 1, 'm³/s'))).toEqual({ error: 'Transfer 1, Oct: -1 m³/s is below 0 m³/s.' });
+		expect(planTransferPaste('Transfer 1\t-1', transferRows(rules(), name, 1, 'm³/s'))).toEqual({ error: 'Transfer 1, Oct: −1 m³/s is below 0 m³/s.' });
 	});
 
 	it('its CSV has the route and pastes back as no change', () => {

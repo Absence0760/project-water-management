@@ -35,8 +35,8 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	const picked = list.getByRole('button', { name: /^Next fortnight/ });
 	await expect(picked).toHaveAttribute('aria-current', 'true');
 	await expect(picked).toContainText('Forecast');
-	await expect(page.locator('#res-h').locator('..')).toContainText('2021-10-01 → 2022-02-11');
-	await expect(page.getByRole('link', { name: `Forecast from ${FROM}` })).toBeVisible();
+	await expect(page.locator('#res-h').locator('..')).toContainText('1 Oct 2021 – 11 Feb 2022');
+	await expect(page.getByRole('link', { name: 'Forecast from 29 Jan 2022' })).toBeVisible();
 
 	// The forecast panel: the days, per farm, the outlet, all worded as expectations.
 	const panel = page.getByTestId('forecast-panel');
@@ -87,7 +87,7 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await page.getByLabel(/^Run label/).fill('Record only');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(list.getByRole('button', { name: /^Record only/ })).toHaveAttribute('aria-current', 'true');
-	await expect(page.locator('#res-h').locator('..')).toContainText('2021-10-01 → 2022-01-28');
+	await expect(page.locator('#res-h').locator('..')).toContainText('1 Oct 2021 – 28 Jan 2022');
 	await expect(page.locator('#res-hydrograph figure')).toHaveAttribute('data-ready', 'true');
 	await expect(page.locator('#res-hydrograph figure')).not.toHaveAttribute('data-band-from');
 	await expect(page.getByTestId('forecast-panel')).toHaveCount(0);

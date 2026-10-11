@@ -31,7 +31,7 @@ test('an editor nominates a run as evidence, replaces it, and the history keeps 
 	const rowA = list.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^GR4J A/ }) });
 	await expect(rowA.getByText('Evidence', { exact: true })).toBeVisible();
 	await expect(rowA.getByRole('button', { name: /^Delete run/ })).toHaveCount(0);
-	await expect(page.getByRole('link', { name: /^Nominated as evidence on \d{4}-\d\d-\d\d \d\d:\d\d by Owner \d+\.$/ })).toBeVisible();
+	await expect(page.getByRole('link', { name: /^Nominated as evidence on \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d by Owner \d+\.$/ })).toBeVisible();
 	await expect(evidence.getByRole('button', { name: /^Nominate/ })).toHaveCount(0);
 	await expect(evidence.getByText('This run is the nominated evidence run.')).toBeVisible();
 
@@ -116,7 +116,7 @@ test('an editor withdraws the nomination with a reason; the history keeps it and
 	await expect(history.getByRole('listitem').nth(0)).not.toContainText('Current');
 	const rowA = list.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^GR4J A/ }) });
 	await expect(rowA.getByText('Former evidence', { exact: true })).toBeVisible();
-	await expect(page.getByRole('link', { name: /; withdrawn on \d{4}-\d\d-\d\d \d\d:\d\d by Owner \d+\.$/ })).toBeVisible();
+	await expect(page.getByRole('link', { name: /; withdrawn on \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d by Owner \d+\.$/ })).toBeVisible();
 
 	// The same run may be nominated again, and is current once more.
 	await evidence.getByRole('textbox', { name: /^Why this run is the evidence/ }).fill('Reinstated for the new application.');

@@ -45,15 +45,15 @@ const summary = (farms: CurtailmentFarm[]): CurtailmentSummary => ({
 describe('fmtSigned', () => {
 	it('prefixes gains with + and keeps the minus on cuts', () => {
 		expect(fmtSigned(33.3)).toBe('+33.3');
-		expect(fmtSigned(-38.3)).toBe('-38.3');
-		expect(fmtSigned(-1234.5)).toBe('-1\u202f234.5');
+		expect(fmtSigned(-38.3)).toBe('−38.3');
+		expect(fmtSigned(-1234.5)).toBe('−1\u202f234.5');
 	});
 	it('trims a trailing .0 and never shows a signed zero', () => {
 		expect(fmtSigned(12)).toBe('+12');
 		expect(fmtSigned(0)).toBe('0');
 		expect(fmtSigned(-0)).toBe('0');
 		expect(fmtSigned(-0.04)).toBe('0'); // rounds to 0 at 1 dp
-		expect(fmtSigned(-12.4, 0)).toBe('-12');
+		expect(fmtSigned(-12.4, 0)).toBe('−12');
 	});
 	it('shows a dash for missing values', () => {
 		expect(fmtSigned(null)).toBe('–');
@@ -105,11 +105,11 @@ describe('curtailmentRows', () => {
 		expect(a).toMatchObject({
 			name: 'Renamed',
 			action: 'cut',
-			reduceGain: '-33.3',
-			reduceGainLs: '-0.3',
+			reduceGain: '−33.3',
+			reduceGainLs: '−0.3',
 			ewrShortfall: '5',
-			totalChange: '-38.3',
-			totalChangeLs: '-0.4',
+			totalChange: '−38.3',
+			totalChangeLs: '−0.4',
 			demandLeftPct: '62%',
 			verdict: 'cut 38.3 m³/day'
 		});
@@ -168,7 +168,7 @@ describe('EWR attribution columns and sites (Q17, engine 0.17.0)', () => {
 	it('splits the charge into irrigate less and store less, with the supply cut and the binding site', () => {
 		const [a, b] = curtailmentRows(c, { g: 'Weir (renamed)' });
 		// The charge and its parts are volumes charged (positive, issue #45); the supply cut is a change (negative).
-		expect(a).toMatchObject({ ewrShortfall: '30', ewrIrrigation: '12', ewrStorage: '18', supplyCut: '-16', supplyCutLs: '-0.2', bindingSite: 'Weir (renamed)' });
+		expect(a).toMatchObject({ ewrShortfall: '30', ewrIrrigation: '12', ewrStorage: '18', supplyCut: '−16', supplyCutLs: '−0.2', bindingSite: 'Weir (renamed)' });
 		expect(b).toMatchObject({ ewrIrrigation: '0', ewrStorage: '0', supplyCut: '0', bindingSite: '' });
 	});
 
@@ -230,7 +230,7 @@ describe('the EWR charge reads the same in the Farms table and the curtailment t
 				expect(f.avgEwrShortfallM3Day).toBeGreaterThan(0);
 				expect(0 - c.farms[i]!.ewrShortfallM3Day).toBeCloseTo(f.avgEwrShortfallM3Day, 6);
 				expect(rows[i]!.ewrShortfall).toBe(fmtNum(f.avgEwrShortfallM3Day, 0, true));
-				expect(rows[i]!.ewrShortfall.startsWith('-')).toBe(false);
+				expect(/^[-−]/.test(rows[i]!.ewrShortfall)).toBe(false);
 			}
 		}
 		// Positive control: some seeded farms were charged.

@@ -181,6 +181,26 @@ space, and a comma in a valid grouping (1,500), as a separator (`parseNum`).
 Exports don't group: a CSV is plain numbers, and the workbook's format codes
 draw the reader's own locale.
 
+A negative figure carries a **true minus** (U+2212, `MINUS`): −2.26, not
+-2.26. The app's font (Inter) sets a hyphen-minus a digit wide under tabular
+figures, so tables and tiles read "- 2.26"; the minus is drawn to fill that
+width, as the farm pages already wrote it. A value that rounds to zero loses
+its sign ("0.00", never "−0.00"). It is display only: exports write raw
+numbers, `parseNum` and the number fields read either sign back (a grouped
+field's own text, or a minus pasted from a report or a word processor), and
+text that is saved and leaves in exports (the quaternary lookup's source
+note) writes plain decimals. The stat tiles (`.stat dd`) use proportional
+figures: a tile's figure stands alone, so tabular ones only widened its
+hyphens ("2021 - 10 - 01", "under - estimates"); table cells keep tabular
+figures so their columns line up.
+
+Dates a person reads are **day first**: a calendar day is `fmtDay` ("1 Oct
+2021"), a period "1 Oct 2021 – 28 Jan 2022"; a moment is `fmtStamp` ("11 Oct
+2026 14:05", the viewer's time zone) or, in a list or a status line,
+`fmtWhen` ("today 14:05", "yesterday 09:30", else as `fmtStamp`; never after
+"on" in a sentence). `fmtDate`'s ISO form ("2026-10-11 14:05") is for file
+names and codes. Runs & results, the Summary and History use them.
+
 ### Number fields
 
 Every number a user types goes through `common/NumberInput.svelte`, and every
@@ -1156,8 +1176,12 @@ role, freshness, Add data) and each tab's own header:
   header as it was. `section-header.spec.ts` pins at most 2 context lines at
   1440/1280/1024, and 1 whenever the controls are beside it.
 - **Phones (a header 640 px wide or less, a container query):** the same
-  header after the Sections button. The pill is a line of its own (its list
-  opens rightwards, on the screen); a picker (a run select) takes a full row;
+  header after the Sections button. The pills are a line of their own: the
+  Summary's **Setup complete** (or the Map's **Getting started**) and the
+  rain pill share it, the rain pill's words wrapping inside it (its date and
+  its age each whole) rather than each pill taking a half-empty row; a
+  pill's list opens rightwards from the row's left edge, on the screen
+  (`overview.spec.ts`); a picker (a run select) takes a full row;
   the tab's buttons and the main box then fill full rows, every control
   growing to fill its row, and Add data and Run model always end the
   header (the main box never splits; Run model's form is nudged to stay on
@@ -6947,7 +6971,12 @@ read it before.
   line at 1440 and 1280). With no runs the list says "No runs yet. Run the
   model to see results." only while a run can start; while the status line
   says what a run still needs, "No runs yet. A run can start once the note
-  above is dealt with."
+  above is dealt with." Under it, one line says what a run's results hold
+  (flows at the outflow gauge, calibration, EWR compliance, each unit's
+  supply and dam storage). With no runs the Runs card is the page's one empty
+  state, across the page's width with no results column beside or under it:
+  a second "Results appear here" card had left a mostly empty box beside it
+  at 1440 and a screen of it on a phone (`runs-page.spec.ts`).
 - **Outcomes for this run.** The run header has one line, "For this run:
   River & reserve → · Hydrological units →" (a navigation landmark, *Outcomes
   for this run*; the links are named "River & reserve for this run" and
@@ -7060,7 +7089,13 @@ read it before.
      hydrologist hands a client first, its own section since issue #137;
      described under [Self-checks](#self-checks); a line under its equation
      links to River & reserve's **Water account** for the same run, the
-     catchment's own), runoff model, WR2012
+     catchment's own; it fits its column at 1440 and 1280 rather than scrolling
+     sideways: its headings wrap, its cells use a dense table's padding, the
+     unit column is **Unit runoff**, and two pairs share a column, each year's
+     rain over its runoff coefficient and the balance's residual (m³) over the
+     runoff model's (mm); a run with the optional terms, too wide for any
+     column, scrolls inside its box with the water year held at its left edge,
+     as on a phone), runoff model, WR2012
      check, EWR vs observed, plausibility checks.
      The **calibration check** (issue #444, `calibration/CalibrationCheck.svelte`,
      sums in `calibration/calibrationCheck.ts`), inside `#res-calibration`
@@ -7149,7 +7184,8 @@ read it before.
   (issue #77). Rows are compact so several fit
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
-  ("2026-09-23 15:06 · 1979–2024", `runs/runList.ts`), then small tags
+  ("today 15:06 · 1979–2024", or "23 Sep 2026 15:06 · …" before
+  yesterday, `fmtWhen`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
   base, **Inputs not stored** for a run from before stored inputs, which
   can't be re-run from them, **May be affected** for a run whose engine (or
@@ -7157,7 +7193,9 @@ read it before.
   the other tags; the header badge says it in words), Workbook
   comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
-  engine version are in the results header. From 7 runs up
+  engine version are in the results header, day first as on the Summary
+  ("1 Oct 2021 – 28 Jan 2022 (120 days) · ran today 01:13 by Ann · engine
+  1.81.0"; a forecast's badge "Forecast from 29 Jan 2022"). From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
   whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
   runs** (the Compare runs tab, `?tab=compare`, [run-comparison.md](./run-comparison.md)).
@@ -7663,6 +7701,12 @@ read it before.
   note, a prompt asks for the reason. "Last changed … by …" shows under a
   note. Saving updates the shown run, its cached detail and its row in the
   runs list; the note also appears on the compare page and in the summary CSV.
+  The team's **Notes** on the run (comments from anyone, [§ Notes](#notes))
+  sit at the right of the *Run notes* heading, as on every Settings panel,
+  and a line under the heading says which is which ("The run’s own
+  explanation, kept with it …; the team’s discussion of the run is under
+  Notes"); **Save notes**, like the Evidence form's **Nominate as evidence**,
+  is a default-size button in an action row under its field.
   The same panel then holds the **Evidence** section
   (`runs/EvidencePanel.svelte`, `#res-evidence`, helpers in
   `runs/evidence.ts`; the menu entry is **Notes & evidence**, one entry for
@@ -9131,9 +9175,9 @@ March") is kept against what it is about.
   - on each **Network** node row, beside its name (icon and number; only on a
     node the server has, not one added since the last save:
     `ModelEditor.savedNodeIds`);
-  - in a run's **Record** group, under the run's own written explanation
+  - in a run's **Record** group, at the right of the *Run notes* heading
     (the run notes stay the modeller's one explanation; these are comments
-    from anyone on the team);
+    from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
     gaps, Calibration record, WR2012 check, Flow share, EWR, Reserve rule
     tables, Drought restrictions, Simulation period, Data quality,

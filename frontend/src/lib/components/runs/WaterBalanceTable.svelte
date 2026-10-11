@@ -9,7 +9,7 @@
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import { fmtNum, fmtQty } from '$lib/format/number';
+	import { fmtNum, fmtQty, MINUS } from '$lib/format/number';
 	import { balanceColumns, balanceEquation, balanceTableRows, residualIsNoise, waterYearLabel } from './checks';
 
 	let {
@@ -25,9 +25,14 @@
 	const balance = $derived(balanceTableRows(summary.waterBalance));
 	const hasStores = $derived(balance.some((r) => r.runoff !== null));
 	const cols = $derived(balanceColumns(balance));
+	// Two pairs share a column, one over the other (ui-playbook § 2, "Fit a wide table by stacking"): the
+	// year's rain over its runoff coefficient, and the balance's residual over the runoff model's own.
+	const coef = $derived(cols.find((c) => c.key === 'runoffCoef'));
+	const shown = $derived(cols.filter((c) => c.key !== 'runoffCoef'));
+	const RUNOFF_RESIDUAL_TITLE = 'the runoff model’s residual: rain − evaporation − flow + exchange − change in storage (mm)';
 
 	/** Enough digits to see float noise without drowning the volumes. */
-	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2) : fmtNum(x, 3, true));
+	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2).replace(/^-/, MINUS) : fmtNum(x, 3, true));
 </script>
 
 <section aria-labelledby="{uid}-wb">
@@ -36,7 +41,7 @@
 		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
 	{:else}
 		<p class="muted small">
-			{balanceEquation(cols)}. Volumes in Mm³; the residual, in m³, should be 0.
+			{balanceEquation(cols)}. Volumes in Mm³; the residual, in m³{#if hasStores}{' '}(the runoff model’s under it, in mm){/if}, should be 0.
 			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
 		</p>
 		{#if accountHref}
@@ -46,25 +51,37 @@
 			</p>
 		{/if}
 		<div class="table-wrap">
-			<table class="data compact">
+			<table class="data compact balance">
 				<thead>
 					<tr>
 						<th scope="col">Water year</th>
-						{#each cols as col (col.key)}<th scope="col" class="num" title={col.title}>{col.label}</th>{/each}
-						{#if hasStores}<th scope="col" class="num" title="Runoff model: rain − evaporation − flow + exchange − change in storage">Runoff-model residual (mm)</th>{/if}
+						{#each shown as col (col.key)}
+							{#if col.key === 'rain' && coef}
+								<th scope="col" class="num" title="{col.title}; under it, {coef.title.toLowerCase()}">{col.label}{' '}<span class="under">{coef.label.toLowerCase()}</span></th>
+							{:else if col.key === 'residual' && hasStores}
+								<th scope="col" class="num" title="{col.title}; under it, {RUNOFF_RESIDUAL_TITLE}">{col.label}{' '}<span class="under">runoff model (mm)</span></th>
+							{:else}
+								<th scope="col" class="num" title={col.title}>{col.label}</th>
+							{/if}
+						{/each}
 					</tr>
 				</thead>
 				<tbody>
 					{#each balance as r (r.waterYear ?? 'total')}
 						<tr class:total={r.waterYear === null}>
 							<th scope="row">{waterYearLabel(r.waterYear)}</th>
-							{#each cols as col (col.key)}
+							{#each shown as col (col.key)}
 								{@const x = col.value(r)}
-								<td class="num" class:off={col.key === 'residual' && !residualIsNoise(r)}>
-									{col.key === 'residual' ? fmtValue(x) : col.key === 'rain' ? fmtNum(x, 0) : fmtQty(x, 3, true)}
-								</td>
+								{#if col.key === 'rain'}
+									<td class="num">{fmtNum(x, 0)}{#if coef}{' '}<span class="under">{fmtQty(coef.value(r), 3, true)}</span>{/if}</td>
+								{:else if col.key === 'residual'}
+									<td class="num"
+										><span class:off={!residualIsNoise(r)}>{fmtValue(x)}</span>{#if hasStores}{' '}<span class="under">{fmtValue(r.runoff?.residualMm ?? null)}</span>{/if}</td
+									>
+								{:else}
+									<td class="num">{fmtQty(x, 3, true)}</td>
+								{/if}
 							{/each}
-							{#if hasStores}<td class="num">{fmtValue(r.runoff?.residualMm ?? null)}</td>{/if}
 						</tr>
 					{/each}
 				</tbody>
@@ -74,13 +91,47 @@
 </section>
 
 <style>
+	/* Fit by wrapping the headings, not by scrolling sideways (ui-playbook § 2,
+	   "Table headings wrap"): app.css keeps table headings on one line, and with
+	   thirteen or more columns of two-word names the table ran 535 px past its
+	   column at 1440. Each heading wraps at its spaces, bottom-aligned so the
+	   last line sits on the rule; the year column and the figures never wrap. */
+	.balance thead th {
+		white-space: normal;
+		vertical-align: bottom;
+	}
+	.balance tbody th {
+		white-space: nowrap;
+	}
+	/* Eleven columns of figures: the narrower cell padding of a dense table. */
+	.balance :is(th, td) {
+		padding-inline: 0.35rem;
+	}
+	/* A run with the optional terms (groundwater, other users, losses: up to
+	   twenty-one columns) can't fit any column; it scrolls inside its box, with
+	   the water year held at the left edge so every row stays named. */
+	.balance :is(thead th:first-child, tbody th) {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: var(--surface);
+	}
+	.balance thead th:first-child {
+		background: var(--surface-2);
+	}
 	tr.total th,
 	tr.total td {
 		font-weight: 600;
 		border-top: 2px solid var(--border);
 	}
-	td.off {
+	.off {
 		color: var(--danger);
 		font-weight: 600;
+	}
+	/* The second of a stacked pair: its own line, lighter, so the pair reads as two figures. */
+	.under {
+		display: block;
+		font-weight: 400;
+		color: var(--text-muted);
 	}
 </style>
