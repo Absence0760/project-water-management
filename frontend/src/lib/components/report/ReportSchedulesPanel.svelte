@@ -116,7 +116,7 @@
 	}
 </script>
 
-<section class="panel" id="set-report-schedules" aria-labelledby="{uid}-h">
+<section class="panel" aria-labelledby="{uid}-h">
 	<h2 id="{uid}-h">Scheduled reports</h2>
 	<p class="hint muted">
 		Email a PDF of the latest run’s report to project members every week or month. The link needs the member to sign in, and the PDF is kept
