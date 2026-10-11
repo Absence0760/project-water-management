@@ -675,6 +675,13 @@ describe('a scenario on a base run that still keeps the EWR (issue #523 B4)', ()
 		const base = await run(u, c.projectId, 'base');
 		const sid = await create(u, c.projectId, { name: 'Raise Rooikloof', baseRunId: base, ops: [damRaise(c.farm.id, 120_000)] });
 		expect((await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`)).body.check.baseEwrRules).toEqual([]);
+		// A contributor (an applicant) on the published base, with their own application on it.
+		expect((await u.call('POST', `/projects/${c.projectId}/publication`, { runId: base })).status).toBe(201);
+		const applicant = await signUp('BaseEwrApplicant');
+		expect((await u.call('POST', `/projects/${c.projectId}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await u.call('PUT', `/projects/${c.projectId}/farmers/${applicant.id}`, { nodeIds: [c.other.id] })).status).toBe(200);
+		const app = await applicant.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'Raise Kalkoenkrans', baseRunId: base, ops: [damRaise(c.other.id, 60_000)] });
+		expect(app.status, JSON.stringify(app.body)).toBe(201);
 
 		// As a run recorded before 216 would hold it: Rooikloof's hands-off flow keeps the EWR.
 		await asOwner(
@@ -683,6 +690,10 @@ describe('a scenario on a base run that still keeps the EWR (issue #523 B4)', ()
 		);
 		const check = (await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`)).body.check;
 		expect(check.baseEwrRules).toEqual([expect.stringMatching(/^unit "Rooikloof": hands-off flow at a unit keeps the EWR, which only a scenario may do/)]);
+		// The contributor learns there is one, never where: the generic line, no unit named.
+		const theirs = (await applicant.call('GET', `/projects/${c.projectId}/scenarios/${app.body.scenario.id}`)).body.check;
+		expect(theirs.baseEwrRules).toEqual(['a rule in the base run keeps water for the EWR']);
+		expect(JSON.stringify(theirs.baseEwrRules)).not.toContain('Rooikloof');
 		// Reproducibility: the base input is the run's own, rules and all (nothing strips a recorded run).
 		const input = await withUser(u.id, (db) => loadRunInput(db, base));
 		expect(input.model.nodes.find((n: NetworkNode) => n.id === c.farm.id)!.handsOffEwr).toBe(true);
