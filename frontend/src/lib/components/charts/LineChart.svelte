@@ -157,8 +157,11 @@
 		return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 	}
 
+	/** A series' colour: its token, else the next of --series-1…4, resolved for the canvas. */
+	const strokeOf = (s: ChartSeries, i: number) => token(s.color ?? `--series-${(i % 4) + 1}`, '#2a78d6');
+
 	function seriesOpts(s: ChartSeries, i: number): uPlot.Series {
-		const stroke = token(s.color ?? `--series-${(i % 4) + 1}`, '#2a78d6');
+		const stroke = strokeOf(s, i);
 		const base: uPlot.Series = {
 			label: unit ? `${s.label} (${unit})` : s.label,
 			stroke,
@@ -193,6 +196,7 @@
 		const gridColor = token('--chart-grid', '#e4e6e3');
 		const font = `${12 * k}px ${token('--font-sans', 'system-ui')}`;
 		const narrow = w < 520;
+		const strokes = series.map(strokeOf);
 		const opts: uPlot.Options = {
 			width: w * k,
 			height: height * k,
@@ -230,7 +234,19 @@
 				// A log axis spans at most LOG_DECADES decades under its top (series.ts logFloor).
 				y: log ? { distr: 3, log: 10, range: (_u: uPlot, lo: number | null, hi: number | null) => (lo == null || hi == null ? [lo, hi] : uPlot.rangeLog(logFloor(lo, hi), hi, 10, true)) } : {}
 			},
-			legend: { show: !print, live: true },
+			legend: {
+				show: !print,
+				live: true,
+				// Each swatch in its series' own colour and line style. uPlot's default takes a
+				// stroke only from a drawn line, so a points-only series (recessions, double mass)
+				// had an empty swatch; a dashed or stepped line gets a dashed swatch, so the key
+				// doesn't rest on colour alone.
+				markers: {
+					stroke: (_u: uPlot, i: number) => strokes[i - 1] ?? '',
+					fill: (_u: uPlot, i: number) => (series[i - 1]?.style === 'points' ? (strokes[i - 1] ?? '') : ''),
+					dash: (_u: uPlot, i: number) => (series[i - 1]?.style === 'dashed' || series[i - 1]?.style === 'step' ? 'dashed' : 'solid')
+				}
+			},
 			series: [
 				isTime
 					? { label: 'Date', value: (_u, v) => (v == null ? '–' : fmtDay(isoDay(v))) }
@@ -355,7 +371,8 @@
 		const top = bbox.top + bbox.height - lanes.length * h;
 		ctx.save();
 		lanes.forEach((lane, i) => {
-			ctx.fillStyle = withAlpha(token(lane.color, '#6c706c'), 0.75);
+			// Full strength, as keyed: a strip is a mark (3:1, WCAG 1.4.11), and at 75 % even the red fell under.
+			ctx.fillStyle = token(lane.color, '#6c706c');
 			const y = top + i * h;
 			for (const r of lane.ranges) {
 				const x0 = Math.max(bbox.left, u.valToPos(epochSec(r.start), 'x', true));
@@ -560,7 +577,7 @@
 		<div class="lane-key">
 			<p><strong>{lanesLabel}</strong> (strips along the foot of the plot, top to bottom)</p>
 			<ul>
-				{#each lanes as lane (lane.label)}<li><i aria-hidden="true" style:background="var({lane.color})"></i>{lane.text}</li>{/each}
+				{#each lanes as lane (lane.label)}<li data-color={lane.color}><i aria-hidden="true" style:background="var({lane.color})"></i>{lane.text}</li>{/each}
 			</ul>
 		</div>
 	{/if}

@@ -5,6 +5,23 @@
 // themes (issue #521, round 4's dark-mode audit). Reusable from any spec:
 // call it in light and in dark (`test.use({ colorScheme })` or
 // `page.emulateMedia({ colorScheme })`) on a screen that has loaded.
+//
+// Canvas charts (uPlot, charts/LineChart.svelte) have no marks in the DOM
+// (issue #521, round 6). A series is judged by the colour uPlot was configured
+// with: uPlot paints each legend swatch from the series' own resolved stroke
+// (or fill), alpha included, so the swatch is the config, read where uPlot
+// put it. Sampling the canvas can't judge a series: one line drawn over
+// another hides it (Supplied over Abstraction demand, when they agree, left
+// the demand's strongest pixels at 5 %; run B over run A, 75 %), and
+// anti-aliasing leaves a thin line no pixel at full strength at 1×. What the
+// chart draws itself, outside uPlot's config, is measured from the pixels:
+// the lane strips (keyed under the plot; a strip drawn fainter than its key fails), and
+// the axis labels (the `--chart-axis` the chart read, text, so 4.5:1). Each
+// is looked for in the canvas, and the most opaque it is drawn is what is
+// compared. Run canvas checks at `deviceScaleFactor: 2`. Gridlines and ticks
+// are decoration (as in SVG charts); the tints LineChart draws under the lines
+// (`shade`, a `band`) are keyed in words beside a full-strength edge and are
+// not checked (docs/design/ui-playbook.md § 3).
 import { expect, type Page } from '@playwright/test';
 
 export interface ContrastOptions {
@@ -18,10 +35,12 @@ export interface ContrastOptions {
 	except?: string;
 	/** The least ratio (default 3, WCAG 1.4.11). */
 	min?: number;
+	/** Check uPlot canvas charts too (default true). */
+	canvas?: boolean;
 }
 
 export interface ContrastFailure {
-	/** "control" or "mark". */
+	/** "control", "mark", or for a canvas chart "series", "swatch", "lane" or "axis". */
 	kind: string;
 	/** The element, as a short selector-like name. */
 	what: string;
@@ -40,7 +59,7 @@ export interface ContrastFailure {
  * no colour is skipped, as is anything disabled (WCAG exempts it).
  */
 export async function nonTextContrast(page: Page, options: ContrastOptions = {}): Promise<ContrastFailure[]> {
-	return page.evaluate(({ within, marks, except, min }) => {
+	return page.evaluate(({ within, marks, except, min, canvas }) => {
 		type RGBA = [number, number, number, number];
 		const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
 		/** Any CSS colour (rgb(), color(srgb …), oklch, a name) as 0–255 sRGB plus alpha, via a canvas. */
@@ -139,8 +158,84 @@ export async function nonTextContrast(page: Page, options: ContrastOptions = {})
 			if (best < 1.02) continue;
 			if (best < min) failures.push({ kind: 'mark', what: name(el), ratio: Math.round(best * 100) / 100, detail: `fill ${hasFill ? hex(fill) : 'none'}, stroke ${drawn ? hex(stroke) : 'none'}, on ${hex(base)}` });
 		}
+
+		// Canvas charts: every uPlot chart in scope that is on screen.
+		const charts = canvas ? scope.flatMap((s) => [...s.querySelectorAll('.uplot')]).filter((el) => el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) : [];
+		for (const root of charts) {
+			const cv = root.querySelector('canvas');
+			if (!cv || cv.width < 2 || cv.height < 2) continue;
+			const figure = root.closest('figure') ?? root.parentElement!;
+			const title = figure.querySelector('.ttl')?.textContent?.trim() ?? root.parentElement?.getAttribute('aria-label')?.slice(0, 40) ?? 'chart';
+			const px = cv.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, cv.width, cv.height).data;
+			/** The highest alpha (0–1, in 1/20 steps) at which at least three pixels are drawn in `c`'s colour; 0 if none is. */
+			const drawnAlpha = (c: RGBA): number => {
+				const bins = new Array<number>(21).fill(0);
+				for (let i = 0; i < px.length; i += 4) {
+					const a = px[i + 3]!;
+					if (a < 13) continue;
+					// getImageData un-premultiplies, which rounds harder the fainter the pixel.
+					const tol = a > 200 ? 6 : 14;
+					if (Math.abs(px[i]! - c[0]) <= tol && Math.abs(px[i + 1]! - c[1]) <= tol && Math.abs(px[i + 2]! - c[2]) <= tol) bins[Math.round((a / 255) * 20)]!++;
+				}
+				for (let b = 20; b > 0; b--) if (bins[b]! >= 3) return b / 20;
+				return 0;
+			};
+			const g = ground(cv);
+			/** One colour the chart draws itself: found on the canvas, and at `least` against the plot's ground at the strength it is drawn. */
+			const drawn = (kind: string, what: string, css: string, least: number) => {
+				const c = parse(css);
+				if (c[3] === 0) {
+					failures.push({ kind, what, ratio: 0, detail: `drawn in no colour (${css || 'none'})` });
+					return;
+				}
+				const a = drawnAlpha(c);
+				if (a === 0) {
+					failures.push({ kind, what, ratio: 0, detail: `${hex(c)} is not on the canvas` });
+					return;
+				}
+				// Anti-aliasing tops a line out a little under full strength; past 85 % it is drawn whole.
+				const shown = over([c[0], c[1], c[2], c[3] * (a >= 0.85 ? 1 : a)], g);
+				const r = ratio(shown, g);
+				if (r < least) failures.push({ kind, what, ratio: Math.round(r * 100) / 100, detail: `${hex(c)} drawn at ${Math.round((a >= 0.85 ? 1 : a) * 100)} % (${hex(shown)}) on ${hex(g)}` });
+			};
+
+			// Series: uPlot paints each legend swatch from the series' resolved stroke (or, with no stroke, its fill).
+			// A live legend (LineChart's) leads with the x row; a switched-off series is not drawn (inactive, like a disabled control).
+			const rows = [...figure.querySelectorAll('.u-legend tr.u-series')].filter((r, i) => i > 0 && r.querySelector('.u-marker') && !r.classList.contains('u-off'));
+			for (const row of rows) {
+				const marker = row.querySelector('.u-marker')!;
+				const label = `${title}: ${row.querySelector('.u-label')?.textContent?.trim() ?? '?'}`;
+				const ms = getComputedStyle(marker);
+				const edged = parseFloat(ms.borderTopWidth) > 0 && ms.borderTopStyle !== 'none' && parse(ms.borderTopColor)[3] > 0;
+				const c = parse(edged ? ms.borderTopColor : ms.backgroundColor);
+				if (c[3] === 0) {
+					failures.push({ kind: 'swatch', what: label, ratio: 0, detail: 'the legend swatch is drawn in no colour' });
+					continue;
+				}
+				const line = over(c, g);
+				const lr = ratio(line, g);
+				if (lr < min) failures.push({ kind: 'series', what: label, ratio: Math.round(lr * 100) / 100, detail: `${hex(line)} on ${hex(g)}` });
+				// The swatch against the legend it sits in (a legend on another ground).
+				const sg = ground(marker);
+				if (sg.some((v, i) => Math.abs(v - g[i]!) > 1)) {
+					const sr = ratio(over(c, sg), sg);
+					if (sr < min) failures.push({ kind: 'swatch', what: label, ratio: Math.round(sr * 100) / 100, detail: `${hex(over(c, sg))} on ${hex(sg)}` });
+				}
+			}
+			// The printable chart's plain key.
+			for (const key of figure.querySelectorAll('.key > span')) {
+				const c = parse(getComputedStyle(key.querySelector('i')!).borderTopColor);
+				const r = ratio(over(c, g), g);
+				if (r < min) failures.push({ kind: 'series', what: `${title}: ${key.textContent?.trim()}`, ratio: Math.round(r * 100) / 100, detail: `${hex(over(c, g))} on ${hex(g)}` });
+			}
+			// Lanes: thin strips along the plot's foot, keyed under it.
+			for (const li of [...figure.querySelectorAll('.lane-key li')].filter((el) => !(except && el.matches(except)))) drawn('lane', `${title}: ${li.textContent?.trim().slice(0, 60)}`, getComputedStyle(li.querySelector('i')!).backgroundColor, min);
+			// The axis labels: text on the canvas, so 4.5:1 (axe can't read it).
+			const axis = getComputedStyle(root).getPropertyValue('--chart-axis').trim();
+			if (axis) drawn('axis', `${title}: axis labels`, axis, Math.max(min, 4.5));
+		}
 		return failures;
-	}, { within: options.within ?? null, marks: options.marks ?? null, except: options.except ?? null, min: options.min ?? 3 });
+	}, { within: options.within ?? null, marks: options.marks ?? null, except: options.except ?? null, min: options.min ?? 3, canvas: options.canvas ?? true });
 }
 
 /** Fails with every control and chart mark under 3:1 (or `min`), named, with its colours. */

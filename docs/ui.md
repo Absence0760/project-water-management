@@ -8000,7 +8000,8 @@ read it before.
   are thin strips along the foot of the plot, behind the lines, one strip
   per flagged class (above the highest gauging, below the lowest, suspect,
   infilled; top to bottom in that order, each in its own `--series-*`
-  colour), so a class reads by its place as well as its colour. A key under
+  colour at full strength, as its key swatch), so a class reads by its place
+  as well as its colour. A key under
   the chart (`LineChart`'s `lanes`, `lane-key`) lists each strip in words
   with its days and what Fit automatically does with them under the run's
   own settings snapshot: "Above the highest gauging: 14 days; Fit
@@ -8021,7 +8022,10 @@ read it before.
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
   demand, Explore outputs, the model stores, the Data tab's series chart and
-  the run comparison's daily series overlay. The m³/s ↔ m³/day switch sits on every flow chart
+  the run comparison's daily series overlay. Every chart's legend swatch is
+  its series' colour and line style: a dashed or stepped line has a dashed
+  swatch, a points-only series (recessions, double mass) a filled one, where
+  uPlot's default left it empty. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them (Explore's **Series**
   picker names each daily volume in the unit the switch shows, "Simulated
