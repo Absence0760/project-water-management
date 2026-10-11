@@ -40,7 +40,7 @@ describe('restrictionRuleFromTriggers', () => {
 
 	it('carries a part’s own factor, and says what it can’t carry', () => {
 		const levels = [
-			{ id: 'a', label: 'A', ops: [...scale(0.8, { part: 'crops' }), ...scale(0.9, { part: 'municipal' })] },
+			{ id: 'a', label: 'A', ops: [...scale(0.8, { part: 'crops' }), ...scale(0.9, { part: 'municipal' }), ...scale(0.6, { from: '2020-10-01', to: '2021-09-30' })] },
 			{ id: 'b', label: 'B', ops: [...scale(0.5, { part: 'crops' }), ...scale(0.7, { part: 'municipal' }), ...scale(0.5, { nodeIds: ['x'] }), ...scale(0.9, { category: 'user' })] }
 		];
 		const { rule, notes } = restrictionRuleFromTriggers({ ...table([]), rows: [{ band: { fromM3: 150_000, toM3: 300_000 }, level: { id: 'a', label: 'A' } }, { band: { fromM3: 0, toM3: 150_000 }, level: { id: 'b', label: 'B' } }] }, levels);
@@ -49,7 +49,9 @@ describe('restrictionRuleFromTriggers', () => {
 		expect(rule!.levels[0]!.cuts).toEqual({ crops: expect.closeTo(0.2, 12), municipal: expect.closeTo(0.1, 12) });
 		expect(rule!.levels[1]!.cuts).toEqual({ crops: 0.5, municipal: expect.closeTo(0.3, 12) });
 		expect(notes.join('\n')).toMatch(/fullest band's level \(A\) cuts demand too/);
-		expect(notes.join('\n')).toMatch(/B: a demand change limited to some hydrological units or months isn't carried/);
+		expect(notes.join('\n')).toMatch(/B: a demand change limited to some hydrological units, months or dates isn't carried/);
+		// A dated change (engine 1.82.0) holds only in its years, so the rule doesn't carry it either.
+		expect(notes.join('\n')).toMatch(/A: a demand change limited to some hydrological units, months or dates isn't carried/);
 		expect(notes.join('\n')).toMatch(/B: a demand change on the other water users isn't carried/);
 		expect(droughtRestrictionIssues(rule)).toEqual([]);
 	});

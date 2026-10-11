@@ -3,7 +3,7 @@
 // chart's marks and the table's words. Pure, unit-tested in
 // registeredUse.test.ts. The words describe arithmetic against a registered
 // volume, never a finding on lawfulness, and name the unit, never a holder.
-import type { EvidenceAllocationCounts, EvidenceAllocations, EvidenceAllocationSource, EvidenceAllocationUnit } from '@water-management/engine';
+import type { EvidenceAllocationCounts, EvidenceAllocations, EvidenceAllocationSource, EvidenceAllocationUnit, EvidenceAllocationYear } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 import { SOURCE_LABEL } from '$lib/components/allocations/allocations';
 import { useAxis, type UseMark, type UseRow } from '$lib/components/allocations/usePlot';
@@ -65,4 +65,20 @@ export function partNote(y: { days: number; yearDays: number; partialA: boolean 
 	if (!a && !b) return null;
 	const who = application && a !== b ? (a ? ' in the baseline' : ' in the application') : '';
 	return `part${who} (${y.days} of ${y.yearDays} days), not counted`;
+}
+
+/**
+ * evidence-16 (issue #516, #507 item 7): what one run reports beside a
+ * year's modelled use, in the Allocations page's words: a dam beside the
+ * river's take at the intake and its draws from the dam, not added; a dam on
+ * the river's losses, not counted. null when there is nothing to say (an
+ * older pack's document, a total of other units, groundwater).
+ */
+export function measuredNote(src: Pick<EvidenceAllocationSource, 'measuredAtA' | 'measuredAtB'>, y: Pick<EvidenceAllocationYear, 'damDrawA' | 'damDrawB' | 'damLossesA' | 'damLossesB'>, run: 'A' | 'B'): string | null {
+	const at = run === 'A' ? src.measuredAtA : src.measuredAtB;
+	const draw = run === 'A' ? y.damDrawA : y.damDrawB;
+	const losses = run === 'A' ? y.damLossesA : y.damLossesB;
+	if (at === 'intake') return `taken at the intake${draw !== null && draw !== undefined ? `; drawn from the dam ${m3(draw)}, not added` : ''}`;
+	if (losses !== null && losses !== undefined) return `dam losses ${m3(losses)}, not counted`;
+	return null;
 }

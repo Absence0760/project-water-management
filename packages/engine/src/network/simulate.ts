@@ -106,12 +106,6 @@ export interface PlanNode {
 	/** Surface and groundwater use so far this water year, the day before (a resumed run, engine ≥ 1.18.0); absent = 0. */
 	initialAllocationUsedM3?: readonly [number, number];
 	/**
-	 * The share of the dam's storage the day before that is river water it
-	 * diverted (River to dam, a top-up off-take; engine ≥ 1.79.0, a resumed
-	 * run); absent = divertedShareAtStart.
-	 */
-	initialDivertedShare?: number;
-	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
 	 * 0.16.0, audit Q5). Irrigation draws only the storage above it, and
 	 * transfers keep at least this much in the source dam.
@@ -389,15 +383,6 @@ export interface NodeResult {
 	remoteIn?: Float64Array;
 	/** Given from this unit's dam to other units' crops (engine ≥ 1.73.0), out of its storage; absent on a unit no remote share draws on. */
 	remoteOut?: Float64Array;
-	/**
-	 * The river water this unit diverted into its dam (River to dam, a top-up
-	 * off-take) that the dam lost to evaporation and to seepage that doesn't
-	 * return (engine ≥ 1.79.0, docs/model.md §2.12): taken from the river and
-	 * never used or given back, so it counts as surface use. The dam's water
-	 * is taken as mixed: each loss carries the diverted share of what the dam
-	 * held. Absent on a unit that can't divert into a dam.
-	 */
-	divertedLoss?: Float64Array;
 	/** Delivered by river off-takes into this unit (engine ≥ 1.14.0), after conveyance losses; absent on a unit no off-take reaches. */
 	offtakeIn?: Float64Array;
 	/** Taken by river off-takes from the flow leaving this unit (engine ≥ 1.14.0), before losses; absent on a unit no off-take draws on. */
@@ -515,8 +500,6 @@ export interface NetworkState {
 	boreholeUsedM3: (number[] | null)[];
 	/** Surface and groundwater use so far this water year under an allocation cap (before a 1 October clears it); null without a cap. */
 	allocationUsedM3: ([number, number] | null)[];
-	/** The diverted share of each dam's storage the day before (engine ≥ 1.79.0); null on a unit that can't divert into a dam. */
-	divertedShare: (number | null)[];
 	/** The drought restriction level each node held the day before (engine ≥ 1.54.0); all 0 without the rule. */
 	restrictionLevels: number[];
 	/** Whether the rule's EWR trigger site failed the day before (engine ≥ 1.54.0); false without one. */
@@ -751,25 +734,6 @@ const damShareOf = (n: PlanNode): number => (n.cropDamShare !== undefined ? n.cr
 /** The share `s` of a unit's crop abstraction demand F / e: exactly F / e at 1 and 0 at 0, so a unit without a table runs to the bit as before. */
 const cropAskOf = (n: PlanNode, s: number, F: number): number => (s === 1 ? F / n.irrigationEfficiency : s === 0 ? 0 : (s * F) / n.irrigationEfficiency);
 
-/**
- * Whether unit i can divert river water into a dam (engine ≥ 1.79.0, docs/model.md
- * §2.12): it has a dam and River to dam or a top-up off-take into it. Only such a
- * unit tracks the diverted share of its storage and counts that share's losses.
- */
-export function divertsIntoDam(plan: NetworkPlan, i: number): boolean {
-	const n = plan.nodes[i]!;
-	if (n.kind !== 'farm' || !(n.damCapacityM3 > 0) || n.supply?.rule === 3) return false;
-	if (n.divertCapacityM3Day > 0 || n.divertM3DayByMonth?.some((v) => v > 0)) return true;
-	return plan.offtakes?.some((o) => o.to === i && o.topUpDam) ?? false;
-}
-
-/**
- * The diverted share of a fresh run's starting storage (engine ≥ 1.79.0): 1 for a
- * dam that takes none of the upstream inflow nor its own runoff, so only diverted
- * water fills it; otherwise 0, the share then following the day's inflows.
- */
-export const divertedShareAtStart = (n: PlanNode): number => (n.pctUpstreamToDam === 0 && n.pctRunoffToDam === 0 ? 1 : 0);
-
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; captureAt?: number } = {}): NetworkResult {
 	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map((n, i) => {
@@ -794,7 +758,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 		if (n.remote) r.remoteIn = new Float64Array(days);
 		if (nodes.some((m) => m.remote?.from === i)) r.remoteOut = new Float64Array(days);
-		if (divertsIntoDam(plan, i)) r.divertedLoss = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.lossReturn > 0 && o.returnAt === i)) r.offtakeReturn = new Float64Array(days);
@@ -830,11 +793,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	});
 	// Each capped node's surface and groundwater use so far this water year (allocationMode 'cap', engine ≥ 1.18.0).
 	const allocUsed = nodes.map((n) => (n.allocationCap ? Float64Array.from(n.initialAllocationUsedM3 ?? [0, 0]) : null));
-	// The diverted share of each dam's storage at the end of the day before (engine ≥ 1.79.0); NaN = not tracked.
-	const divShare = Float64Array.from(nodes, (n, i) => (res[i]!.divertedLoss ? (n.initialDivertedShare ?? divertedShareAtStart(n)) : NaN));
-	// The units that track it, and the diverted water each dam still holds today after its losses.
-	const dvUnits = Int32Array.from(nodes.flatMap((_, i) => (res[i]!.divertedLoss ? [i] : [])));
-	const dvHeld = new Float64Array(nodes.length);
 	// River abstractions (engine ≥ 1.65.0, ./riverSource.ts, docs/model.md §2.7j): each pool's storage (full at the
 	// start of a fresh run), and the dam side's view of the unit's objects, the river-sourced ones' demand zeroed, so
 	// splitSupply shares the dam side's supply among the dam-sourced demands only. The view's total is the dam side's.
@@ -973,7 +931,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		poolStorageM3: poolQ.map((q) => (q ? Array.from(q) : null)),
 		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null)),
 		allocationUsedM3: allocUsed.map((u) => (u ? [u[0]!, u[1]!] : null)),
-		divertedShare: Array.from(divShare, (s) => (Number.isNaN(s) ? null : s)),
 		// Captured before the day's decision: the levels the day before held, and whether the trigger's site failed that day.
 		restrictionLevels: lv ? Array.from(lv) : [],
 		restrictionEwrFailed: ewrFailedBefore(t),
@@ -1111,6 +1068,20 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (startsYear(t)) {
 			for (const u of bhUsed) u?.fill(0);
 			for (const u of allocUsed) u?.fill(0);
+		}
+		// What each unit asks of another unit's dam today (engine ≥ 1.73.0, docs/model.md §2.7k): the remote share of
+		// its crop demand after the restriction's cut, up to the pipe's capacity and, under an allocation cap, the
+		// unit's surface room at the start of the day (the remote water is the unit's first surface use, as off-take
+		// water is), all known before any unit runs.
+		for (let i = 0; i < nodes.length; i++) {
+			const n = nodes[i]!;
+			const x = n.remote;
+			if (!x) continue;
+			let ask = Math.min(cropAskOf(n, x.share, rF ? rF[i]! : n.demand[t]!), x.capM3Day);
+			const c = n.allocationCap;
+			if (c?.surface) ask = Math.min(ask, capRoom(c.surface, c.surfaceLimit, allocUsed[i]![0]!, t));
+			rmAsk[i] = ask > 0 ? ask : 0;
+			rmGot[i] = 0;
 		}
 		// [Transfers] "Draw from dam": uses the storage at the end of the
 		// previous day (Q, row N-1), so all transfers are settled before any farm
@@ -1267,52 +1238,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				jToday[tr.to]! += v;
 				jToday[tr.from]! -= v;
 			}
-		}
-
-		// Diverted river water each dam that can divert loses today (engine ≥ 1.79.0, docs/model.md §2.12): the
-		// diverted share of what it held (yesterday's storage less what a transfer took, pro rata; rain on it and
-		// water a transfer brought aren't diverted) × its evaporation and the seepage that doesn't return. It was
-		// taken from the river and never used, so it is surface use, counted before anything else the unit takes
-		// today (the remote share and off-take water below included): it takes from the water year's volume, never
-		// from the licence's daily rate. Known once the transfers are settled, from yesterday's storage alone.
-		if (dvUnits.length) {
-			for (let a = 0; a < dvUnits.length; a++) {
-				const i = dvUnits[a]!;
-				const node = nodes[i]!;
-				const qPrev = startStorage(i, t);
-				const day = damDay(node, qPrev, t, lakeEvapMmDay, damRainMm);
-				const J = jToday[i]!;
-				const there = Math.max(qPrev + day.Pd + J, 0);
-				const E = Math.min(day.E, there);
-				const Sp = Math.min(day.Sp, there - E);
-				const own = qPrev + day.Pd;
-				// A storage reset (startStorage) sets the volume, not what the water is: the dam is mixed, so its diverted
-				// share carries over (setting each dam to the storage it had is then the plain run, to the bit).
-				let held = divShare[i]! * (J < 0 && own > 0 ? (qPrev * Math.max(0, own + J)) / own : qPrev);
-				let loss = 0;
-				if (there > 0 && held > 0) {
-					const sh = Math.min(held / there, 1);
-					loss = sh * (E + (node.seepageReturn === undefined ? 0 : Sp * (1 - node.seepageReturn)));
-					held = Math.max(0, held - sh * (E + Sp));
-				}
-				dvHeld[i] = held;
-				res[i]!.divertedLoss![t] = loss;
-				if (loss > 0 && allocUsed[i]) countUse(node.allocationCap!, allocUsed[i]!, t, loss, 0);
-			}
-		}
-		// What each unit asks of another unit's dam today (engine ≥ 1.73.0, docs/model.md §2.7k): the remote share of
-		// its crop demand after the restriction's cut, up to the pipe's capacity and, under an allocation cap, the
-		// unit's surface room before any unit runs (the remote water is the unit's first draw, as off-take water is;
-		// engine ≥ 1.79.0: after its dam's diverted loss), all known before any unit runs.
-		for (let i = 0; i < nodes.length; i++) {
-			const n = nodes[i]!;
-			const x = n.remote;
-			if (!x) continue;
-			let ask = Math.min(cropAskOf(n, x.share, rF ? rF[i]! : n.demand[t]!), x.capM3Day);
-			const c = n.allocationCap;
-			if (c?.surface) ask = Math.min(ask, capRoom(c.surface, c.surfaceLimit, allocUsed[i]![0]!, t));
-			rmAsk[i] = ask > 0 ? ask : 0;
-			rmGot[i] = 0;
 		}
 
 		// River off-takes sized to their destination's need (sizing 'demand'): its demand today, plus its
@@ -1581,9 +1506,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const E = Math.min(day.E, there);
 			const Sp = Math.min(day.Sp, there - E);
 			const qStart = qPrev + Pd - E - Sp;
-			// A dam that can divert lost its diverted share of E and of the seepage that doesn't return above, before
-			// the transfers' step settled (engine ≥ 1.79.0): dvHeld is the diverted water it still holds.
-			const dl = r.divertedLoss;
 			// River off-take water delivered here (engine ≥ 1.14.0): it meets the demand first, then tops up the
 			// dam (the rules that say so, their share of what is left), and the rest flows on below the unit.
 			// The use left under an allocation cap (engine ≥ 1.18.0); Infinity when uncapped.
@@ -1615,9 +1537,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			}
 			let avail0 = qStart + M + O + K + J;
 			if (XtoDam > 0) avail0 += XtoDam;
-			// Everything the dam holds today before any water leaves it (with groundwater pumped in, below): its diverted
-			// share is the share each outflow carries, so it is the share of what is left tonight (engine ≥ 1.79.0).
-			const mix0 = avail0;
 			const S = L + N - O;
 			// Release below the dam before irrigation (WP-3.5): pass today's inflow
 			// up to what the river below still needs, or a fixed amount from the
@@ -1884,10 +1803,6 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			r.runoff[t] = I;
 			r.transfer[t] = J;
 			r.storage[t] = Q;
-			if (dl) {
-				const mix = mix0 + Gd;
-				if (mix > 0) divShare[i] = Math.min(Math.max((dvHeld[i]! + O + XtoDam) / mix, 0), 1);
-			}
 			r.spill[t] = Rr;
 			r.outflow[t] = U;
 			r.deficit[t] = D - Gall;

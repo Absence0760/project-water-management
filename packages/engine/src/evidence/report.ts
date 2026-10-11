@@ -1444,6 +1444,9 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 			const years = [...new Set([...byYearA.keys(), ...byYearB.keys()])].sort((x, y) => x - y);
 			sources.push({
 				waterSource: src,
+				// evidence-16: how the surface use was measured, and what is reported beside it, never in it.
+				measuredAtA: sa?.measuredAt ?? null,
+				measuredAtB: sb?.measuredAt ?? null,
 				years: years.map((wy): EvidenceAllocationYear => {
 					const ya = byYearA.get(wy) ?? null;
 					const yb = byYearB.get(wy) ?? null;
@@ -1459,7 +1462,11 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 						statusA: ya ? ya.status : null,
 						registeredB: yb ? yb.registeredM3 : null,
 						modelledB: yb ? yb.modelledM3 : null,
-						statusB: yb ? yb.status : null
+						statusB: yb ? yb.status : null,
+						damDrawA: ya?.damDrawM3 ?? null,
+						damDrawB: yb?.damDrawM3 ?? null,
+						damLossesA: ya?.damLossesM3 ?? null,
+						damLossesB: yb?.damLossesM3 ?? null
 					};
 				}),
 				countsA: sa?.allocationIds.length ? countsOf(sa) : null,

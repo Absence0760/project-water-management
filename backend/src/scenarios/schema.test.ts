@@ -90,6 +90,12 @@ describe('checkOps', () => {
 		expect(checkOps('nope').errors).toEqual(['ops: must be a list']);
 		expect(checkOps([{ op: 'node.set', nodeId: a, field: 'damMinPct', value: 2 }]).errors).toEqual(['ops[0].value: must be at most 1']);
 		expect(checkOps([{ op: 'demand.scale', factor: 2.5, nodeIds: ['x'] }]).errors).toEqual(['ops[0].factor: must be at most 2']);
+		// demand.scale's dates (engine 1.82.0, issue #514), checked as series.scale's are and kept as sent (they are hashed).
+		expect(checkOps([{ op: 'demand.scale', factor: 1.3, from: '2015-10-31', to: '2015-02-30' }]).errors).toEqual(['ops[0].to: must be an ISO date (YYYY-MM-DD)']);
+		expect(checkOps([{ op: 'demand.scale', factor: 1.3, from: '2016-10-01', to: '2016-09-30' }]).errors).toEqual(['ops[0]: from 2016-10-01 is after to 2016-09-30']);
+		const dated = checkOps([{ op: 'demand.scale', factor: 1.3, nodeIds: [a], months: [12, 1], from: '2015-10-01', to: '2016-09-30', extra: 1 }]);
+		expect(dated.errors).toEqual([]);
+		expect(dated.ops).toEqual([{ op: 'demand.scale', factor: 1.3, nodeIds: [a], months: [12, 1], from: '2015-10-01', to: '2016-09-30' }]);
 		// A rule table Settings wouldn't save, in the Settings form's words.
 		expect(checkOps([{ op: 'ewrRule.set', table: { ...blankEwrRuleTable('x'), source: '' } }]).errors).toEqual([
 			'ops[0].table.source: Say where the table comes from (Reserve determination, gazette notice, table).'

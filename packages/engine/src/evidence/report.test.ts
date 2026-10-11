@@ -331,7 +331,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-15');
+		expect(r.version).toBe('evidence-16');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -852,7 +852,16 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 			allocations,
 			nodes: inp.model.nodes
 				.filter((n) => n.kind === 'farm' || n.kind === 'user')
-				.map((n) => ({ nodeId: n.id, name: n.name, kind: n.kind as 'farm' | 'user', supplied: get(n.id, 'supplied')!, groundwater: get(n.id, 'groundwater_used'), riverAbstraction: get(n.id, 'river_abstraction') }))
+				.map((n) => ({
+					nodeId: n.id,
+					name: n.name,
+					kind: n.kind as 'farm' | 'user',
+					supplied: get(n.id, 'supplied')!,
+					groundwater: get(n.id, 'groundwater_used'),
+					riverAbstraction: get(n.id, 'river_abstraction'),
+					// As runUseNodes reads them: a unit with a dam carries its losses (engine ≥ 1.83.0).
+					...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get(n.id, 'dam_evaporation'), damSeepageLost: get(n.id, 'dam_seepage_lost') } : {})
+				}))
 		});
 	};
 	const meanUse = (out: ModelOutput, id: string) => {
@@ -911,6 +920,36 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notMatchedA).toBe(0);
 	});
 
+	it('says how the surface use was measured, per run: a dam on the river\'s losses beside the use, a dam beside the river\'s take at the intake with its draws (evidence-16, #516)', () => {
+		const s = r.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!;
+		const yb = comparisonOf(app, appOut, allocations).nodes.find((n) => n.nodeId === 'F2')!.surface.years;
+		// The application's dam on the river: its losses per year; the baseline has no dam, so none.
+		expect(yb.every((y) => y.damLossesM3! > 0)).toBe(true);
+		expect(s.years.map((y) => y.damLossesB)).toEqual(yb.map((y) => y.damLossesM3));
+		expect(s.years.every((y) => y.damLossesA === null && y.damDrawA === null && y.damDrawB === null)).toBe(true);
+		expect([s.measuredAtA, s.measuredAtB]).toEqual([null, null]);
+		// A dam beside the river in the application (its take at the intake given): measured there, the draws reported.
+		const cb = comparisonOf(app, appOut, allocations);
+		const days = appOut.series.find((x) => x.nodeId === 'F2' && x.key === 'supplied')!.values.length;
+		const atIntake = compareAllocations({
+			startDate: START,
+			tolerance: 0.1,
+			allocations,
+			nodes: cb.nodes.map((n) => ({
+				nodeId: n.nodeId,
+				name: n.name,
+				kind: n.kind,
+				supplied: appOut.series.find((x) => x.nodeId === n.nodeId && x.key === 'supplied')!.values,
+				...(n.nodeId === 'F2' ? { intakeTake: new Array(days).fill(100) } : {})
+			}))
+		});
+		const t = evidenceReport(withAllocations(allocations, { b: { allocations: atIntake } })).allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!;
+		expect([t.measuredAtA, t.measuredAtB]).toEqual([null, 'intake']);
+		const ti = atIntake.nodes.find((n) => n.nodeId === 'F2')!.surface.years;
+		expect(t.years.map((y) => y.damDrawB)).toEqual(ti.map((y) => y.damDrawM3));
+		expect(t.years.every((y) => y.damLossesB === null && y.damDrawB! > 0)).toBe(true);
+	});
+
 	it('the page-1 row sums every unit’s years above the volume, both runs, with no band, the units § 5 leaves out included (evidence-15)', () => {
 		const row = r.rows.find((x) => x.id === 'registeredUse')!;
 		// Farm one (left out of § 5) is under its volume every year, so the sums are Farm two's; its 5 whole years count as judged.
@@ -964,7 +1003,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-15');
+		expect(got.version).toBe('evidence-16');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1525,7 +1564,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-15');
+		expect(r.version).toBe('evidence-16');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1581,7 +1620,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-15');
+		expect(r.version).toBe('evidence-16');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
