@@ -1301,6 +1301,22 @@ Interaction details that bit:
   the page still open, and a removed `<dialog>` restores nothing: the focus
   fell to `<body>`. `Dialog.svelte` now refocuses what opened it when it is
   unmounted open (`signoff.spec.ts` checks `toBeFocused()`).
+- **A sheet a link opens through the URL hands the focus back to the link.**
+  A plain link to `?settings=1`, `?grid=…` or `?new=1` navigates, and
+  SvelteKit puts the focus on `<body>` before the sheet opens, so closing it
+  left the focus at the top of the page (and inside the closed dialog for a
+  moment). `Dialog.svelte` remembers the last element that had the focus and
+  takes it as the opener when the focus is on `<body>` at opening; nothing
+  to add at the link (`focus-after-actions.spec.ts`).
+- **A delete puts the focus on what took the row's place.** The delete
+  button goes with its row, and the confirm dialog hands the focus back to
+  nothing. `focusAfterRemove(index, selector, fallback)`
+  (`lib/a11y/focusAfterRemove.ts`) focuses the same control on the row now
+  at that index (else the last row), or the fallback (the list's heading,
+  its add field) once it is empty. Runs, Data, the project list, the team's
+  and the project's members, the pending invitations and the farmers use it;
+  Crops' `removed()` and the Network's `remove()` did the same by hand, and
+  Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling

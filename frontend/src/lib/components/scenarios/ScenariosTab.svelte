@@ -20,7 +20,7 @@
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { navigating, page } from '$app/state';
-	import { api, type Run, type RunMeta, type Scenario, type ScenarioWithCheck } from '$lib/api';
+	import { api, ApiError, type Run, type RunMeta, type Scenario, type ScenarioWithCheck } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -86,18 +86,22 @@
 	let detail = $state<ScenarioWithCheck | null>(null);
 	let detailLoading = $state(false);
 	let detailError = $state<string | null>(null);
+	/** The scenario the URL names isn't there (404: deleted, or never yours): Try again can't bring it back. */
+	let detailGone = $state(false);
 	let wanted = '';
 	async function loadDetail(id: string) {
 		wanted = id;
 		detailLoading = true;
 		detailError = null;
+		detailGone = false;
 		try {
 			const d = await api.scenarios.get(projectId, id);
 			if (wanted === id) detail = d;
 		} catch (e) {
 			if (wanted === id) {
 				detail = null;
-				detailError = msg(e);
+				detailGone = e instanceof ApiError && e.status === 404;
+				detailError = detailGone ? `This ${applicant ? 'application' : 'scenario'} no longer exists: it was deleted, or you no longer have access to it.` : msg(e);
 			}
 		} finally {
 			if (wanted === id) detailLoading = false;
@@ -111,6 +115,7 @@
 				wanted = '';
 				detail = null;
 				detailError = null;
+				detailGone = false;
 			}
 		});
 	});
@@ -166,6 +171,14 @@
 		detail = null;
 		select(null);
 		refreshRuns();
+		// The editor, and its Delete button that had the focus, have gone: the list's heading takes it,
+		// so it doesn't fall to the top of the page.
+		await tick();
+		const h = document.getElementById('scenarios-h');
+		if (h) {
+			h.tabIndex = -1;
+			h.focus();
+		}
 	}
 	async function ran(run: Run, removedRunIds: string[]) {
 		const { summary: _s, ...meta } = run;
@@ -306,11 +319,19 @@
 
 	<div class="detail">
 		{#if selectedId}
+			{@const others = (scenarios ?? []).filter((x) => x.id !== selectedId)}
+			{#if detailGone && !detailLoading}
+				<div class="alert alert-error" role="alert" data-testid="scenario-gone">
+					{detailError}
+					{#if others.length}<button type="button" class="btn btn-sm" onclick={() => select(others[0]!.id, true)}>Open the newest</button>{/if}
+				</div>
+			{:else}
 			<LoadState loading={detailLoading && !detail} error={detailError} retry={() => selectedId && loadDetail(selectedId)}>
 				{#if detail}
 					<ScenarioEditor {projectId} data={detail} runs={runs ?? []} {canEdit} {actsForAuthority} {applicant} onchange={changed} ondeleted={deleted} onran={ran} />
 				{/if}
 			</LoadState>
+			{/if}
 		{/if}
 	</div>
 </div>

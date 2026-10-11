@@ -18,6 +18,7 @@
 	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -418,10 +419,13 @@
 		actionError = null;
 		try {
 			await api.series.remove(projectId, s.id);
+			const at = rows.findIndex((x) => x.id === s.id);
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
 			if (seriesParam === s.id) void goto(withoutParam(page.url, 'series'), { noScroll: true, keepFocus: true, replaceState: true });
+			// Its row, and the Delete that had the focus, have gone: the View of the series now in its place takes it.
+			await focusAfterRemove(at, '#series-rows button[aria-pressed]', 'ser-h');
 		} catch (e) {
 			actionError = msg(e);
 		}

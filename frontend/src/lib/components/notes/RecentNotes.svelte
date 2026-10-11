@@ -18,9 +18,12 @@
 	let notes = $state<Note[] | null>(null);
 	let error = $state<string | null>(null);
 	const counts = $derived(noteCounts(projectId));
+	/** Bumped by Try again after a failed load. */
+	let attempt = $state(0);
 
 	$effect(() => {
 		void counts.counts; // reload after any change the counts pick up
+		void attempt;
 		api.notes
 			.list(projectId, { limit: RECENT })
 			.then((n) => {
@@ -37,7 +40,10 @@
 		<NotesDrawer {projectId} target={{ kind: 'project' }} />
 	</div>
 	{#if error}
-		<div class="alert alert-error" role="alert">Couldn’t load the notes: {error}</div>
+		<div class="alert alert-error" role="alert">
+			Couldn’t load the notes: {error}
+			<button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
+		</div>
 	{:else if notes === null}
 		<p class="muted" aria-busy="true">Loading notes…</p>
 	{:else if notes.length === 0}

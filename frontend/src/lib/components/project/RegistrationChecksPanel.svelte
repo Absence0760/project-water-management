@@ -132,7 +132,13 @@
 		<p class="small">{required ? 'Issuing an evidence pack waits until each specialist signer has a check from the last year.' : 'Issuing an evidence pack doesn’t wait for a check.'}</p>
 	{/if}
 
-	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	{#if error}
+		<div class="alert alert-error" role="alert">
+			{error}
+			<!-- The list never loaded: a way to ask again, not only a reload. -->
+			{#if checks === null}<button type="button" class="btn btn-sm" onclick={load}>Try again</button>{/if}
+		</div>
+	{/if}
 	{#if checks === null && !error}
 		<p class="muted" role="status">Loading…</p>
 	{:else if checks?.length}

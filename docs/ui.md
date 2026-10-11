@@ -1870,7 +1870,8 @@ it scrolls, and isn't fitted to the window.
   (member, register, category, number, name on the register, found, the
   checking organisation, the date, a note; the register's address to look it
   up) with focus on Member; **Cancel**, or recording the check, closes it and
-  returns focus to the button. Closed at first since issue #521 § 13: a
+  returns focus to the button. A list that fails to load says why with
+  **Try again**. Closed at first since issue #521 § 13: a
   check is recorded about once a year a signer. The owner the tick box "Issuing an
   evidence pack waits until each specialist signer has a check from the
   last year" (on by default). `registration-checks.spec.ts` pins it with
@@ -7449,7 +7450,9 @@ read it before.
   run shown; editors delete one with its ✕ (a run already gone, deleted
   elsewhere or trimmed, just leaves the list; a run that can't be opened
   because it's gone says so in words, `runs/runList.ts` `runErrorText`, never
-  the API's "not found"). A list read that a change (a run made, deleted,
+  the API's "not found", with **Show the newest run** in place of a Try
+  again that can't bring it back). After a delete the focus goes to the run
+  now in its place (else the last). A list read that a change (a run made, deleted,
   pinned) overtakes is read again, so a deleted run never comes back
   (issue #77). Rows are compact so several fit
   the narrow rail: the label (two lines at most; the full label is the row's
@@ -8685,7 +8688,11 @@ them scenarios).
   Empty: "No scenarios yet. A scenario changes the published baseline
   without copying it.", with **Start a scenario** for editors, or, with no
   runs, that the model must be run first. The chosen scenario is
-  `&scenario=<id>` in the URL.
+  `&scenario=<id>` in the URL. A link to one that has gone says "This
+  scenario no longer exists: it was deleted, or you no longer have access
+  to it." with **Open the newest** (when another is left), never a Try
+  again that can't bring it back. Deleting the open scenario puts the focus
+  on the list's heading.
 - **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
   it, dropping `new` in place, and each opening starts with an empty name): a name and a base run, the published run by
   default, else the latest; scenario runs aren't offered (a scenario run
@@ -9538,7 +9545,8 @@ March") is kept against what it is about.
     Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes
-    button.
+    button. A failed load says "Couldn’t load the notes: …" with **Try
+    again**.
   One `GET /notes/counts` per project feeds every badge
   (`counts.svelte.ts`), refreshed after any change. Only the open project's
   counts are kept: opening another project drops them (coming back loads

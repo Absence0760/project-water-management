@@ -41,6 +41,7 @@
 	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '$lib/components/river/links';
@@ -134,6 +135,8 @@
 	);
 	let detailLoading = $state(false);
 	let detailError = $state<string | null>(null);
+	/** The run the URL names is no longer stored (404): Try again can't bring it back. */
+	let detailGone = $state(false);
 
 	// Display order and names come from the current model (nodes deleted since
 	// the run fall back to the run's own names).
@@ -230,6 +233,7 @@
 		}
 		detailLoading = true;
 		detailError = null;
+		detailGone = false;
 		try {
 			const d = await api.runs.get(projectId, id);
 			// The first charts' flows go out now, before the results page renders (cache.ts prefetchSeries).
@@ -240,6 +244,7 @@
 			if (detailFor === id) {
 				detail = null;
 				detailError = runErrorText(e);
+				detailGone = isRunGone(e);
 			}
 		} finally {
 			if (detailFor === id) detailLoading = false;
@@ -379,6 +384,7 @@
 				return;
 			}
 		}
+		const at = shownRuns.findIndex((x) => x.id === r.id);
 		forgetRun(r.id);
 		commit(runs.filter((x) => x.id !== r.id));
 		if (selectedId === r.id) {
@@ -386,6 +392,8 @@
 			detailFor = '';
 			select(runs[0]?.id ?? null);
 		}
+		// Its row, and the ✕ that had the focus, have gone: the run now in its place takes it.
+		await focusAfterRemove(at, 'ul.runs button.pick', 'runs-h');
 	}
 
 	// Inputs changed since the newest run? Settings/model saves bump the
@@ -624,7 +632,11 @@
 		{#if detailError && !detail}
 			<div class="alert alert-error" role="alert">
 				{detailError}
-				<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+				{#if !detailGone}
+					<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+				{:else if latest && latest.id !== selectedId}
+					<button type="button" class="btn btn-sm" onclick={() => select(latest.id)}>Show the newest run</button>
+				{/if}
 			</div>
 		{:else if detail}
 			{@const summary = detail.run.summary}

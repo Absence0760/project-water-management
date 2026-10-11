@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -334,7 +335,12 @@
 		actionError = null;
 		try {
 			await api.projects.remove(p.id);
+			const at = [...document.querySelectorAll('.groups a.name')].findIndex((a) => a.getAttribute('href') === `${base}/projects/${p.id}`);
 			projects = projects.filter((x) => x.id !== p.id);
+			// Its row, and the menu that asked, have gone: the project now in its place takes the focus, or
+			// the search once none is shown, or the heading once the list has made way for Get started.
+			await tick();
+			await focusAfterRemove(at, '.groups a.name', document.getElementById('pj-q') ?? document.querySelector<HTMLElement>('main h1'));
 		} catch (err) {
 			const refusal = evidenceRefusal(err);
 			if (refusal) {

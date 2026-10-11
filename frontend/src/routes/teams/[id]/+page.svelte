@@ -9,6 +9,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -77,6 +78,7 @@
 	let addError = $state<string | null>(null);
 	let added = $state<string | null>(null);
 	let emailInput: HTMLInputElement | undefined = $state();
+	let settingsLink: HTMLAnchorElement | undefined = $state();
 
 	const invitesApi = emailAuthApi(api).teamInvites;
 	let invites = $state<Invite[]>([]);
@@ -203,8 +205,11 @@
 		try {
 			await api.teams.removeMember(teamId, m.userId);
 			if (self) return void (await goto(`${base}/teams`));
+			const at = members.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
 			if (team) team.memberCount -= 1;
+			// Its row, and the Remove button that had the focus, have gone: the member now in its place takes it, on their role.
+			await focusAfterRemove(at, 'tr[data-member] select', emailInput);
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -252,6 +257,8 @@
 			danger: true
 		});
 		if (ok) await deleteTeam();
+		// Cancelled: the sheet that asked has closed, so the focus goes back to the button that opens it.
+		else settingsLink?.focus();
 	}
 
 	async function deleteTeam() {
@@ -333,7 +340,7 @@
 				</div>
 				<div class="head-actions">
 					<a class="btn" href="{base}/?owner=team:{team.id}&sort=status">Project list</a>
-					<a class="btn" href={settingsHref} data-sveltekit-noscroll>Team settings</a>
+					<a class="btn" href={settingsHref} data-sveltekit-noscroll bind:this={settingsLink}>Team settings</a>
 					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}
 					{#if canAddProjects}<a class="btn btn-primary" href="{base}/?owner=team:{team.id}&new=1">New project</a>{/if}
 				</div>

@@ -7,6 +7,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { api, type Farmer, type FarmerEntry, type InvitedFarmer } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -107,7 +108,10 @@
 		error = null;
 		try {
 			await api.members.remove(projectId, f.userId);
+			const at = farmers.findIndex((x) => x.userId === f.userId);
 			entries = entries.filter((x) => keyOf(x) !== f.userId);
+			// Its row, and the Remove that had the focus, have gone: the farmer now in its place takes it.
+			await focusAfterRemove(at, 'button[data-farmer-change]', 'farmers-h');
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -138,8 +142,11 @@
 		error = message = null;
 		try {
 			await emailAuthApi(api).projectInvites.revoke(projectId, inv.inviteId);
+			const at = invites.findIndex((x) => x.inviteId === inv.inviteId);
 			entries = entries.filter((x) => keyOf(x) !== inv.inviteId);
 			message = `Invitation to ${inv.email} revoked.`;
+			// The invitation's row, and its Revoke that had the focus, have gone: the next invitation's takes it.
+			await focusAfterRemove(at, '[aria-labelledby="farmer-inv-h"] button[aria-label^="Revoke invitation to"]', 'farmers-h');
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -210,7 +217,7 @@
 											<button type="button" class="btn btn-sm btn-primary" disabled={busy === f.userId || draft.length === 0} onclick={() => save(f)}>Save</button>
 											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => (editing = null)}>Cancel</button>
 										{:else}
-											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => edit(f)}>Change hydrological units</button>
+											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => edit(f)} data-farmer-change>Change hydrological units</button>
 											{#if f.role !== 'contributor'}
 												<button type="button" class="btn btn-sm btn-danger" disabled={busy === f.userId} onclick={() => remove(f)}>Remove</button>
 											{/if}
