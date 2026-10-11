@@ -89,7 +89,7 @@
 		<dt>Mean simulated outflow</dt>
 		<dd>{fmtQty(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
 		<dd class="sub">
-			{fmtQty(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
+			{fmtQty(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0}{' '}·
 				{fmtPct(c.meanSimulatedOutflowM3Day / c.meanNaturalFlowM3Day, 0)} of natural{/if}
 		</dd>
 	</div>
@@ -98,8 +98,8 @@
 			<dt>Reserve rules met <HelpTip key="reserve-compliance" /></dt>
 			<dd>{reserve.overall.rate === null ? '–' : fmtPct(reserve.overall.rate)}<small>of months</small></dd>
 			<dd class="sub">
-				{fmtNum(reserve.overall.met)} of {fmtNum(reserve.overall.months)} months at {reserve.isOutlet ? 'the outlet' : reserve.name}{#if reserve.overall.longestNotMetRun > 1}
-					· up to {fmtNum(reserve.overall.longestNotMetRun)} in a row not met{/if}
+				{fmtNum(reserve.overall.met)} of {fmtNum(reserve.overall.months)} months at {reserve.isOutlet ? 'the outlet' : reserve.name}{#if reserve.overall.longestNotMetRun > 1}{' '}·
+					up to {fmtNum(reserve.overall.longestNotMetRun)} in a row not met{/if}
 			</dd>
 			<dd class="sub"><a href={reserveHref}>by month of the year</a></dd>
 		</div>

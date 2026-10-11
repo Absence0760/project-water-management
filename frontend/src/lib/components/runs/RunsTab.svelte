@@ -549,7 +549,8 @@
 					{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
 				</div>
 			{:else if runs.length === 0}
-				<p class="empty">{canRun ? 'No runs yet. Run the model to see results.' : 'No runs yet.'}</p>
+				<!-- "Run the model" only while it can start: otherwise the status line under the header says what a run needs. -->
+				<p class="empty">{!canRun ? 'No runs yet.' : missing.length || overAllocated ? 'No runs yet. A run can start once the note above is dealt with.' : 'No runs yet. Run the model to see results.'}</p>
 			{:else}
 				{#if runs.length >= RUN_FILTER_FROM}
 					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} />
@@ -563,7 +564,8 @@
 						<li class:active={r.id === selectedId}>
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
-								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
+								<!-- Each part on one line: "2021–2022" broke after its dash, a third line on every row. -->
+								<span class="meta"><span class="nw">{fmtDate(r.createdAt, true)}</span> · <span class="nw">{runYears(r.startDate, r.endDate)}</span></span>
 								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast' || r.errata?.length}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
@@ -889,9 +891,11 @@
 		gap: 0 0.9rem;
 		margin-top: 0.2rem;
 	}
+	/* A flex item drops the space before the arrow ("River & reserve→"), so the gap puts it back. */
 	.outcomes a {
 		display: inline-flex;
 		align-items: center;
+		gap: 0.25em;
 		min-height: 24px;
 	}
 	.head-acts {
@@ -1093,10 +1097,14 @@
 		line-clamp: 2;
 		overflow: hidden;
 	}
+	/* Proportional figures: Inter's tabular ones set each hyphen a digit wide, and "2026-10-11 01:01 ·
+	   2021–2022" then missed the rail's line by a few px, a third line on every row. */
 	.meta {
 		font-size: 0.75rem;
 		color: var(--text-muted);
-		font-variant-numeric: tabular-nums;
+	}
+	.meta .nw {
+		white-space: nowrap;
 	}
 	.tags {
 		display: flex;
