@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SearchStep } from '$lib/nav/searchStep';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, tick, untrack } from 'svelte';
@@ -146,7 +147,7 @@
 
 	// A search is one step in history: its first keystroke after the box takes the focus adds an entry (Back
 	// returns to the list before it), the rest replace it, so Back never steps letter by letter.
-	let searchStep = false;
+	const searchStep = new SearchStep();
 	function setParams(next: { owner?: OwnerFilter; sort?: SortKey; dir?: SortDir; q?: string }) {
 		const u = new URL(page.url);
 		const set = (k: string, v: string, dflt: string) => (v === dflt ? u.searchParams.delete(k) : u.searchParams.set(k, v));
@@ -155,9 +156,7 @@
 		if (next.dir !== undefined) set('dir', next.dir, 'asc');
 		if (next.q !== undefined) set('q', next.q.trim(), '');
 		if (u.search === page.url.search) return;
-		const replaceState = next.q !== undefined && searchStep;
-		if (next.q !== undefined) searchStep = true;
-		goto(u.pathname + u.search, { replaceState, keepFocus: true, noScroll: true });
+		goto(u.pathname + u.search, { replaceState: next.q !== undefined && searchStep.replace(), keepFocus: true, noScroll: true });
 	}
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -477,7 +476,7 @@
 							placeholder="Search by name, description or team"
 							autocomplete="off"
 							bind:value={query}
-							onfocus={() => (searchStep = false)}
+							onfocus={searchStep.focus}
 							oninput={() => setParams({ q: query })}
 						/>
 					</div>

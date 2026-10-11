@@ -155,6 +155,28 @@ test('the filters are in the URL: Back steps through them, the parameter filter 
 	await expect(filters.getByLabel('Kind of change')).toHaveValue('');
 });
 
+test('the parameter search is one step in history: a reload keeps it, Back undoes the whole search', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const p = await seedLongHistory(page.request, 'History page search step', 6);
+	await openHistory(page, p.id);
+	const before = page.url();
+	const search = historyCard(page).getByRole('group', { name: 'Filter the history' }).getByLabel('Parameter');
+	await search.click();
+	await search.pressSequentially('irrigation');
+	await expect(page).toHaveURL(/[?&]q=irrigation(?:&|$)/);
+	// More words in the same search replace its entry rather than adding one per pause.
+	await search.pressSequentially(' efficiency');
+	await expect(page).toHaveURL(/[?&]q=irrigation(?:\+|%20)efficiency(?:&|$)/);
+	await expect(historyEntries(page).filter({ hasText: 'Upper farm: dam capacity' })).toHaveCount(0);
+	await page.reload();
+	await expect(search).toHaveValue('irrigation efficiency');
+	await page.goBack();
+	await expect(page).toHaveURL(before);
+	await expect(search).toHaveValue('');
+	await expect(historyEntries(page).filter({ hasText: 'Upper farm: dam capacity' })).not.toHaveCount(0);
+});
+
 test('a restore from the detail picks the restore itself; nothing recorded says since when', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });

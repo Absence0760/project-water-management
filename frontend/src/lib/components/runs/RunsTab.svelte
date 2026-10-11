@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SearchStep } from '$lib/nav/searchStep';
 	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
@@ -412,7 +413,7 @@
 	let runQuery = $state(untrack(() => page.url.searchParams.get('q') ?? ''));
 	// Only while the box shows: an old link's q= never hides runs behind a filter that isn't on screen.
 	const shownRuns = $derived(runs.length >= RUN_FILTER_FROM ? filterRuns(runs, runQuery) : runs);
-	let queryStep = false;
+	const queryStep = new SearchStep();
 	let queryTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		const q = page.url.searchParams.get('q') ?? '';
@@ -426,9 +427,7 @@
 			if (words) url.searchParams.set('q', words);
 			else url.searchParams.delete('q');
 			if (url.search === page.url.search) return;
-			const replaceState = queryStep;
-			queryStep = true;
-			void goto(url, { replaceState, noScroll: true, keepFocus: true });
+			void goto(url, { replaceState: queryStep.replace(), noScroll: true, keepFocus: true });
 		}, 300);
 	}
 	$effect(() => () => clearTimeout(queryTimer));
@@ -599,7 +598,7 @@
 				</div>
 			{:else}
 				{#if runs.length >= RUN_FILTER_FROM}
-					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={() => (queryStep = false)} oninput={writeQuery} />
+					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={queryStep.focus} oninput={writeQuery} />
 					{#if runQuery.trim()}<p class="muted small filter-count" role="status">{shownRuns.length ? `${shownRuns.length} of ${runs.length} runs` : 'No run label matches.'}</p>{/if}
 				{/if}
 				<!-- Compact rows: the label (two lines at most, the full label on
@@ -932,10 +931,6 @@
 {/if}
 
 <style>
-	/* The site badge capitalises each word; this one is a sentence (issue #103). */
-	.errata-badge {
-		text-transform: none;
-	}
 	.runs-page {
 		container: runs-page / inline-size;
 	}

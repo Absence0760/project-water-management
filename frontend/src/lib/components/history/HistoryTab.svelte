@@ -12,6 +12,7 @@
 	(the workspace sends them to their farm page, and the API refuses them).
 -->
 <script lang="ts">
+	import { SearchStep } from '$lib/nav/searchStep';
 	import { untrack } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { goto } from '$app/navigation';
@@ -91,6 +92,8 @@
 		const q = urlQuery;
 		if (q !== untrack(() => written)) query = written = q;
 	});
+	// A typed search is one step in history: Back undoes it whole, never letter by letter.
+	const queryStep = new SearchStep();
 	let queryTimer: ReturnType<typeof setTimeout> | undefined;
 	function onQueryInput() {
 		clearTimeout(queryTimer);
@@ -102,7 +105,7 @@
 			if (words) q.set('q', words);
 			else q.delete('q');
 			q.delete('entry');
-			void goto(`?${q}`, { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(`?${q}`, { replaceState: queryStep.replace(), noScroll: true, keepFocus: true });
 		}, 400);
 	}
 	$effect(() => () => clearTimeout(queryTimer));
@@ -453,7 +456,7 @@
 				</div>
 				<div class="field grow">
 					<label for="{uid}-q">Parameter</label>
-					<input id="{uid}-q" type="search" placeholder="e.g. dam capacity" bind:value={query} oninput={onQueryInput} autocomplete="off" />
+					<input id="{uid}-q" type="search" placeholder="e.g. dam capacity" bind:value={query} onfocus={queryStep.focus} oninput={onQueryInput} autocomplete="off" />
 				</div>
 			</div>
 		</div>
