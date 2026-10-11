@@ -100,7 +100,9 @@ test('1. turn codes by email on from the Account page: the password, the emailed
 	await page.goto('/account');
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
 	const row = panel.locator('[data-method="email"]');
-	await expect(row).toContainText('whoever can read your email can also reset your password');
+	// The warning in the way's own line; the full sentence in "How the two ways differ" (issue #521, as two-step-signin.spec.ts).
+	await expect(row).toContainText(`Codes sent to ${owner.email}: only as safe as your inbox.`);
+	await expect(panel.getByTestId('two-step-differ')).toContainText('whoever can read your email can also reset your password');
 	await row.getByRole('button', { name: 'Turn on', exact: true }).click();
 	await panel.getByLabel('Current password').fill(PASSWORD);
 	const seen = (await mailIds(owner.email)).length;

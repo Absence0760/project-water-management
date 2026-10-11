@@ -298,9 +298,13 @@
 	.badge {
 		margin-left: 0.35rem;
 	}
-	/* Room for the name and its badge, so "below its equitable share by 25.8 m³/day" takes two lines, not five. */
-	tbody th[scope='row'] {
-		min-width: 11rem;
+	/* Room for the name and its badge, so "below its equitable share by 25.8 m³/day" takes two lines, not five.
+	   On screen only: on paper a fixed minimum can make the table wider than the page, and Chromium then shrinks
+	   the whole report to fit (the printed schematic's names fell under 7 pt; report-schematic-print.spec.ts). */
+	@media screen {
+		tbody th[scope='row'] {
+			min-width: 11rem;
+		}
 	}
 	.badge-gain {
 		background: var(--success-soft);

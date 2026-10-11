@@ -2422,6 +2422,11 @@ reviewed by the `af-checker` agent ([ui.md § Language](./ui.md#language)).
 The plumbing is built (catalogues, switch, `app_user.locale` /
 `volume_unit`, locale-aware numbers; [ui.md § Language](./ui.md#language)).
 
+- [ ] **A native speaker's look at row `2e3540b4`** (issue #521, 2026-10-11): the
+      inbox warning on the two-step page, "Kodes word na {email} gestuur: hulle
+      is nie veiliger as jou inkassie nie." The i18n-checker corrected the
+      translator's "net so veilig soos", which softened the warning; confirm
+      the corrected wording reads naturally. Do it with the catalogue review.
 - [x] **Translation turnaround.** All 607 rows of
       `docs/i18n/af-translation-sheet.md` (505 site messages, some with a
       row per plural form; 70 email strings; 8 glossary entries of three
@@ -3661,6 +3666,13 @@ role and not before it.
 
 ## Change history (WP-2.4, issue #28)
 
+- [ ] **Day-first change sentences** (from issue #521, 2026-10-11): History's
+      "Edited 2021-10-02 … by hand" and the run comparison's "Fit record: … →
+      …" lines still show ISO dates, because they are stored or hashed text
+      (`diffInputs`, evidence-pack reproduction compares them). The durable fix
+      is structured change data that the UI formats day first, with an
+      `ENGINE_VERSION` bump. Trigger: the next engine change that touches
+      `diffInputs`.
 - [x] **Field-level history affordance** (roadmap WP-2.4 UI, issue #17):
       "Changed 3× · last by Ann, 12 Aug 2026: 40% → 60%" under the node
       sheet's fields, the farm drawer's planted areas and Settings &
