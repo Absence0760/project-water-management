@@ -2,8 +2,8 @@
 	// The map itself is a chunk of its own, and MapLibre one more below it
 	// (CatchmentMap.svelte imports it when it mounts): the list and card here
 	// load with the tab; the map library only once the map is drawn. The
-	// small sheets stay in the tab's chunk (a chunk of their own costs more
-	// in overhead than it saves, ui-playbook § 6); Start from the map, the
+	// small tool sheets share one chunk (below: one chunk each would cost
+	// more in overhead than it saves, ui-playbook § 6); Start from the map, the
 	// largest, opened on few visits (an empty model), loads when opened,
 	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
 	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
@@ -16,6 +16,17 @@
 	// Divide the model's sheet too, opened from the header on few visits (2026-10-02: the tools moving onto the map took the
 	// tab past its 60 KB, 62 KB; this brings it to 57 KB).
 	const loadDivideSheet = () => import('./DivideSheet.svelte');
+	// The sheets a tool opens once its point, shape or cut is on the map (Place, Delineate, Save a drawing, Split,
+	// Trace, Paste coordinates): one chunk for all six (sheets.ts), so they cost one request, warmed when a tool
+	// starts (the sheet opens a click or more later). 2026-10-11, issue #521: the tab was at its 60 KB ceiling;
+	// this takes ~8 KB out of it.
+	const loadPlaceSheet = () => import('./sheets').then((m) => ({ default: m.PlaceSheet }));
+	const loadDelineateSheet = () => import('./sheets').then((m) => ({ default: m.DelineateSheet }));
+	const loadDraftSheet = () => import('./sheets').then((m) => ({ default: m.DraftSheet }));
+	const loadSplitSheet = () => import('./sheets').then((m) => ({ default: m.SplitSheet }));
+	const loadTraceSheet = () => import('./sheets').then((m) => ({ default: m.TraceSheet }));
+	const loadPasteSheet = () => import('./sheets').then((m) => ({ default: m.PasteSheet }));
+	const SHEETS = [loadPlaceSheet, loadDelineateSheet, loadDraftSheet, loadSplitSheet, loadTraceSheet, loadPasteSheet];
 </script>
 
 <script lang="ts">
@@ -59,6 +70,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { prefetch } from '$lib/components/common/lazy';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { saveBlob } from '$lib/export/download';
 	import { fmtNum, localIsoDate } from '$lib/format/number';
@@ -85,8 +97,6 @@
 	import { featureResult, viewLabel } from './mapResults';
 	import { MapResults } from './mapResults.svelte';
 	import { BAND_WORD } from './mapStatus';
-	import PlaceSheet from './PlaceSheet.svelte';
-	import DelineateSheet from './DelineateSheet.svelte';
 	import ClickBar from './ClickBar.svelte';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
 	import { ChannelLayer } from './channelLayer.svelte';
@@ -98,11 +108,7 @@
 	import type { MapAreaBasis, MapGeometry, MapPosition } from '$lib/api/types';
 	import { basisNote, basisOptions, offersEffective, takenAreaM2 } from './areaBasis';
 	import { Draft } from './draw/draft.svelte';
-	import DraftSheet from './draw/DraftSheet.svelte';
 	import DrawBar from './draw/DrawBar.svelte';
-	import PasteSheet from './draw/PasteSheet.svelte';
-	import SplitSheet from './draw/SplitSheet.svelte';
-	import TraceSheet from './draw/TraceSheet.svelte';
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
 	import MapSetupPill from './MapSetupPill.svelte';
@@ -335,6 +341,10 @@
 	}
 	$effect(() => {
 		if (!draft.active) delineating = false;
+	});
+	// Warm the sheets' chunk as a tool starts, or as a sheet opens from a link, so the sheet is there when it opens.
+	$effect(() => {
+		if (draft.active || place.open || delineateSheet.open || traceSheet.open) for (const l of SHEETS) prefetch(l);
 	});
 	/** Where the delineation's point was clicked, kept for the sheet once the draft is gone. */
 	let delineateAt = $state<MapPosition | null>(null);
@@ -1564,10 +1574,12 @@
 				</Lazy>
 			{/if}
 			{#if delineateSheet.open && delineation}
+				<Lazy load={loadDelineateSheet}>
+					{#snippet children(DelineateSheet)}
 				<DelineateSheet
 					bind:open={delineateSheet.open}
 					{projectId}
-					info={delineation}
+					info={delineation!}
 					at={delineateAt}
 					step={delineateStep}
 					{boundary}
@@ -1575,6 +1587,8 @@
 					onaccepted={delineationAccepted}
 					onrejected={delineationRejected}
 				/>
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if startSheet.open && startInfo}
 				<Lazy load={loadStartSheet}>
@@ -1619,6 +1633,8 @@
 				</Lazy>
 			{/if}
 			{#if place.open}
+				<Lazy load={loadPlaceSheet}>
+					{#snippet children(PlaceSheet)}
 				<PlaceSheet
 					bind:open={place.open}
 					{projectId}
@@ -1627,27 +1643,41 @@
 					kind={draft.mode === 'place' ? draft.kind : 'gauge'}
 					onplaced={placed}
 				/>
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if draftSheetOpen && draft.geometry}
+				<Lazy load={loadDraftSheet}>
+					{#snippet children(DraftSheet)}
 				<DraftSheet
 					bind:open={draftSheetOpen}
 					{projectId}
 					{nodes}
-					geometry={draft.geometry}
+					geometry={draft.geometry!}
 					kind={draft.kind}
 					hasBoundary={!!boundary}
 					traced={draft.traced ? { lon: draft.traced.click[0], lat: draft.traced.click[1], minOccurrence: draft.traced.minOccurrence, edited: draft.tracedEdited } : null}
 					onsaved={drafted}
 				/>
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if splitOpen && draft.mode === 'split' && draft.feature && draft.splitResult && 'parts' in draft.splitResult}
-				<SplitSheet bind:open={splitOpen} {projectId} feature={draft.feature} parts={draft.splitResult.parts} onsaved={splitDone} />
+				{@const parts = draft.splitResult.parts}
+				{@const feature = draft.feature}
+				<Lazy load={loadSplitSheet}>
+					{#snippet children(SplitSheet)}<SplitSheet bind:open={splitOpen} {projectId} {feature} {parts} onsaved={splitDone} />{/snippet}
+				</Lazy>
 			{/if}
 			{#if traceSheet.open && damTrace}
-				<TraceSheet bind:open={traceSheet.open} {projectId} info={damTrace} at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null} bind:minOccurrence ontraced={traced} />
+				<Lazy load={loadTraceSheet}>
+					{#snippet children(TraceSheet)}<TraceSheet bind:open={traceSheet.open} {projectId} info={damTrace!} at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null} bind:minOccurrence ontraced={traced} />{/snippet}
+				</Lazy>
 			{/if}
 			{#if pasteOpen && draft.active}
-				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />
+				<Lazy load={loadPasteSheet}>
+					{#snippet children(PasteSheet)}<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />{/snippet}
+				</Lazy>
 			{/if}
 			{#if grid.open}
 				<Dialog bind:open={grid.open} title={TAB_GRIDS[GRID_ID].title} full>

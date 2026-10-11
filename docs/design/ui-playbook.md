@@ -1341,6 +1341,22 @@ Interaction details that bit:
   the page still open, and a removed `<dialog>` restores nothing: the focus
   fell to `<body>`. `Dialog.svelte` now refocuses what opened it when it is
   unmounted open (`signoff.spec.ts` checks `toBeFocused()`).
+- **A sheet a link opens through the URL hands the focus back to the link.**
+  A plain link to `?settings=1`, `?grid=…` or `?new=1` navigates, and
+  SvelteKit puts the focus on `<body>` before the sheet opens, so closing it
+  left the focus at the top of the page (and inside the closed dialog for a
+  moment). `Dialog.svelte` remembers the last element that had the focus and
+  takes it as the opener when the focus is on `<body>` at opening; nothing
+  to add at the link (`focus-after-actions.spec.ts`).
+- **A delete puts the focus on what took the row's place.** The delete
+  button goes with its row, and the confirm dialog hands the focus back to
+  nothing. `focusAfterRemove(index, selector, fallback)`
+  (`lib/a11y/focusAfterRemove.ts`) focuses the same control on the row now
+  at that index (else the last row), or the fallback (the list's heading,
+  its add field) once it is empty. Runs, Data, the project list, the team's
+  and the project's members, the pending invitations and the farmers use it;
+  Crops' `removed()` and the Network's `remove()` did the same by hand, and
+  Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
@@ -1633,6 +1649,15 @@ Interaction details that bit:
   always renders belongs in the tab's chunk: workspace tabs (the page's
   `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
   pages, routes and shared chunks.
+- Lazy panels that load together share one chunk: a module that re-exports
+  them, each loader picking its export
+  (`() => import('./lazySections').then((m) => ({ default: m.X }))`). Settings'
+  sections that draw on every visit (`settings/lazySections.ts`) and the Map
+  tab's tool sheets (`map/sheets.ts`) do this; seven chunks of their own had
+  cost ~6 KB of gzip overhead in the total (issue #521). Leave out a panel
+  another tab also loads lazily, or the chunk follows it there. A tool sheet
+  that opens a click after its tool starts is warmed (`prefetch`) when the
+  tool starts, so it never shows the loading state.
 - Every ceiling change gets a dated entry with the measured numbers and
   what grew. A raise of the total is a new entry file,
   `pnpm gen:bundle-budget <slug> <kb> "<why>"`, never an edit of

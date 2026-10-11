@@ -1,3 +1,19 @@
+<script module lang="ts">
+	// The last element that had the focus, <body> aside. A link that opens a dialog through the URL
+	// (`?settings=1`, `?grid=…`, `?new=1`) loses the focus to <body> when SvelteKit's navigation resets
+	// it, before the dialog opens, so the dialog had nothing to hand it back to and closing it left the
+	// focus at the top of the page.
+	let lastFocused: HTMLElement | null = null;
+	if (typeof document !== 'undefined')
+		document.addEventListener(
+			'focusin',
+			(e) => {
+				if (e.target instanceof HTMLElement && e.target !== document.body) lastFocused = e.target;
+			},
+			true
+		);
+</script>
+
 <script lang="ts">
 	// Thin wrapper over the native <dialog> (focus trap, Esc to close, backdrop).
 	import type { Snippet } from 'svelte';
@@ -54,13 +70,20 @@
 	const titleId = `dlg-${Math.random().toString(36).slice(2, 9)}`;
 	const bodyId = `${titleId}-body`;
 
-	// What had the focus when it opened: the native dialog hands it back on close().
+	// What had the focus when it opened: the native dialog hands it back on close(). When that was
+	// <body> (a link's navigation reset it, see lastFocused), the element that had it before.
 	let opener: HTMLElement | null = null;
 
 	$effect(() => {
 		if (!el) return;
 		if (open && !el.open) {
-			opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			const active = document.activeElement;
+			opener =
+				active instanceof HTMLElement && active !== document.body
+					? active
+					: lastFocused?.isConnected && !el.contains(lastFocused) && !lastFocused.closest('dialog:not([open])')
+						? lastFocused
+						: null;
 			el.showModal();
 			place(el);
 			// Chromium makes a scrolling container keyboard-focusable, and showModal() then focuses the
@@ -126,7 +149,13 @@
 	// Back again), the stale event would set `open = false` and shut the new one. Only a dialog
 	// that really is closed follows it.
 	function onclose() {
-		if (!el?.open) open = false;
+		if (el?.open) return;
+		open = false;
+		// The native dialog hands the focus back to what had it when it opened; with nothing to hand it to
+		// (<body> after a link's navigation) it stays on the closed dialog's control: the opener instead,
+		// unless something outside took the focus meanwhile.
+		const active = document.activeElement;
+		if ((!active || active === document.body || el?.contains(active)) && opener?.isConnected) opener.focus();
 	}
 
 	/** Close unless `beforeclose` says no. */

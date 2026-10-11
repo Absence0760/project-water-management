@@ -1,14 +1,17 @@
 <script module lang="ts">
-	// Settings → Calibration record's quality flags and flow gaps (issue #66): each its own chunk,
+	// Every lazy section below that draws on each visit shares one chunk, lazySections.ts (issue #521): they all
+	// load as the tab opens, so one request and one gzip stream instead of seven.
+	const loadSections = () => import('./lazySections');
+	// Settings → Calibration record's quality flags and flow gaps (issue #66): out of the tab's chunk,
 	// loaded when the section draws, so the Settings tab chunk stays under its size ceiling. The
 	// quality flags' Save blocker (`error`) is set once its fields load: nothing can be edited before.
-	const loadQualityFlags = () => import('./QualityFlagsFields.svelte');
-	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
+	const loadQualityFlags = () => loadSections().then((m) => ({ default: m.QualityFlagsFields }));
+	const loadFlowGapFill = () => loadSections().then((m) => ({ default: m.FlowGapFillFields }));
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
-	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
-	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
+	// Settings → Evidence, the declared uncertainty rule (issue #71): out of the tab's chunk, for the same reason.
+	const loadEvidenceRule = () => loadSections().then((m) => ({ default: m.EvidenceRuleFields }));
 	// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8): its own chunk, for the same reason.
 	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
 	// The daily EWR at the outlet (engine ≥ 1.77.0, issue #455): its own chunk, for the same reason.
@@ -17,18 +20,21 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
-	// Scheduled reports: their own chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
-	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
-	// Evaporation from the map (issue #326 B-evap): its own chunk, for the same reason as the panels above; it loads its proposal on mount.
-	const loadEvaporationProposal = () => import('./EvaporationProposal.svelte');
+	// Scheduled reports: out of the tab's chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
+	const loadReportSchedules = () => loadSections().then((m) => ({ default: m.ReportSchedulesPanel }));
+	// Evaporation from the map (issue #326 B-evap): out of the tab's chunk, for the same reason as the panels above; it loads its proposal on mount.
+	const loadEvaporationProposal = () => loadSections().then((m) => ({ default: m.EvaporationProposal }));
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
 	// project never draws it; its own chunk keeps the tab under its ceiling (the side index, issue #468, grew it).
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
-	// Rain for each unit (settings.unitRain, issue #482): its own chunk, for the same reason.
-	const loadUnitRain = () => import('./UnitRainFields.svelte');
+	// Rain for each unit (settings.unitRain, issue #482): out of the tab's chunk, for the same reason; its areal body its own.
+	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
 	const loadArealRain = () => import('./ArealRainBody.svelte');
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
+	// Rain gaps' two cards, CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
+	// line at the defaults (most projects): out of the tab's chunk for the same reason, with its three sections.
+	const loadRainGaps = () => loadSections().then((m) => ({ default: m }));
 </script>
 
 <script lang="ts">
@@ -107,12 +113,9 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
-	import ZeroRainSection from './ZeroRainSection.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
 	import { explainSwitch } from '$lib/components/common/explain.svelte';
-	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
-	import RainSourceSection from './RainSourceSection.svelte';
 	import Fold from '$lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
@@ -552,10 +555,12 @@
 		<p class="hint explain">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge.</p>
 		<!-- Two cards, CHIRPS gap filling and Flagged rain, each list with its add actions in its own head row; at the
 		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
-		     are one line"). Always mounted, like the other sections that feed the Save blocker: a list left invalid
+		     are one line"). Always mounted (once its chunk loads, loadRainGaps), like the other sections that feed the Save blocker: a list left invalid
 		     after turning bias correction off must stay in the page, where the fold's line says it needs fixing. -->
 		<Fold testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
-			<ChirpsFitPeriodSection
+			<Lazy load={loadRainGaps}>
+				{#snippet children(R)}
+			<R.ChirpsFitPeriodSection
 				bind:value={s.chirpsFitPeriod}
 				bind:error={draft.errors.fitPeriod}
 				{readonly}
@@ -610,12 +615,14 @@
 					</span>
 					<FieldHistoryLine field="settings:chirpsQuantileMap" />
 				</fieldset>
-			</ChirpsFitPeriodSection>
+			</R.ChirpsFitPeriodSection>
 			<div class="sub-card" data-testid="flagged-rain-card">
 				<h3 class="card-title">Flagged rain</h3>
-				<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
-				<RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
+				<R.ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
+				<R.RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
 			</div>
+				{/snippet}
+			</Lazy>
 		</Fold>
 	</section>
 

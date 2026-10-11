@@ -66,6 +66,26 @@ test('the find box narrows the index to the settings that match, and a match jum
 	await expectNoViolations(page);
 });
 
+test('a reload straight onto Rain gaps lands it, and the find box finds a field in its lazy fold and opens the fold', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Settings find lazy');
+	// Rain gaps' cards and the record's quality flags are their own chunk (lazySections.ts, issue #521), inside folds
+	// that start closed at the defaults: a load of the fragment still lands the section, and Find still reaches them.
+	await page.goto(`/projects/${project.id}?tab=settings#set-rain`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Rain gaps' })).toBeFocused();
+	await expect(page.getByTestId('rain-defaults')).not.toHaveAttribute('open', '');
+	// The find box reads the page when the query changes: the fold's fields are drawn once its chunk is in.
+	await expect(page.getByRole('combobox', { name: 'CHIRPS bias correction', includeHidden: true })).toBeAttached();
+	const box = findBox(page);
+	await box.fill('chirps bias');
+	const matches = settingsMenu(page).getByRole('list', { name: 'Matches' });
+	await expect(matches.getByRole('button')).toHaveText(['CHIRPS bias correction, in Rain gaps']);
+	await matches.getByRole('button').click();
+	await expect(page.getByRole('combobox', { name: 'CHIRPS bias correction' })).toBeFocused();
+	await expect(page.getByTestId('rain-defaults')).toHaveAttribute('open', '');
+});
+
 test('the index moves with the arrow keys, and a panel with a Save blocker is marked in it and linked from the save bar', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
