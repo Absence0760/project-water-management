@@ -676,7 +676,10 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     project) is scored as the river stopping; any other zero stretch, or
     with no months one longer than 30 days, is suspect ("check with the
     client") and left out of the fit by default; an exclusion period stays
-    the manual override ([model.md §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1220-calibration-research-cr-181922), engine-audit C3).*
+    the manual override. Revised 2026-10-11 (issue #90 R5-4, engine 1.84.0):
+    a zero stretch that overlaps the months is trusted as long as it runs no
+    more than 30 days beyond them on each side, and one wholly outside them
+    is suspect whatever its length ([model.md §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1220-calibration-research-cr-181922), engine-audit C3).*
 11. **Fit rating.** Moriasi thresholds were set for monthly flows. Rate daily
     fits against them, or also score monthly totals? *Decided (calibration
     research CR-6): daily fits carry no rating words; monthly scoring is the

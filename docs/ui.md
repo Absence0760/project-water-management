@@ -5965,8 +5965,9 @@ two.
   toggle named by its month, Oct … Sep, as Allocations' licence-condition
   months, with **All months** straight after them (issue #521); each keeps
   a 24 px target, 44 px on a phone): the months a
-  zero-flow stretch is trusted in, none by default, with a hint on the
-  river-stops rule (model.md §2.10h) and the months in words under them
+  zero-flow stretch is trusted over (up to 30 days beyond them on each
+  side, engine 1.84.0), none by default, with a hint on the river-stops
+  rule (model.md §2.10h) and the months in words under them
   ("None: a zero stretch is judged by its length alone" when none). The
   section's summary line adds "river stops Feb, Mar, Apr" once months are
   set. The data-quality panel's suspect row reads "Suspect (outlier, flat

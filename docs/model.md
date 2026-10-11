@@ -7296,9 +7296,9 @@ r / (0.01·Q) days, and a run is flagged once it lasts three such steps
 and gets the cap, so 90 days of a dry riverbed warn (expected in ephemeral
 rivers; the check never changes results). The per-day flags for calibration
 don't follow it there: a zero-flow stretch is judged by its own rule
-instead, trusted inside the months the river is known to stop and up to 30
-days otherwise (engine ≥ 1.81.0; 1.62.0 – 1.80.0 trusted every one, §2.10h,
-QF-3). With fewer than two distinct values
+instead, trusted over the months the river is known to stop (up to 30 days
+beyond them on each side, engine 1.84.0) and up to 30 days with no months
+listed (engine ≥ 1.81.0; 1.62.0 – 1.80.0 trusted every one, §2.10h, QF-3). With fewer than two distinct values
 the resolution is unknown and a non-zero run needs 14 days. Every number here
 is judgement. The Data tab's per-day flags use the same rule.
 
@@ -8354,8 +8354,8 @@ information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters.
 
-**Zero flow: the river-stops rule (engine ≥ 1.81.0, issue #507 item 2,
-engine-audit C3, QF-3).** A zero-flow reading is either the river stopping
+**Zero flow: the river-stops rule (engine ≥ 1.81.0, issue #507 item 2;
+revised engine 1.84.0, issue #523 A1; engine-audit C3, QF-3).** A zero-flow reading is either the river stopping
 or a logger that failed (a broken or blocked logger also reads zero; the
 client's has been known to fail). `settings.qualityFlags.zeroFlowMonths`
 lists the calendar months (1–12) the river is known to stop in (default
@@ -8364,10 +8364,22 @@ none; Settings → *Calibration record* → *Months the river stops*). A
 (a blank, NaN or negative day ends it), found over the **whole stored
 record**, so its length doesn't depend on the run window
 (`zeroFlowSuspect` in `dayFlags.ts`):
-- a stretch whose every day falls in one of the listed months is **trusted**
-  as the river stopping and scored, however long;
-- with months listed, any other stretch (one that runs outside them, even
-  for a day or two, judged whole) is **suspect**;
+- a stretch that **overlaps** the listed months is **trusted** as the river
+  stopping and scored, however long, as long as it runs **no more than 30
+  days beyond them on each side** (`ZERO_FLOW_TRUST_MAX_DAYS`): at most 30
+  days before its first day in the months and at most 30 after its last,
+  counted per side, not in total. With Feb–Apr, mid-January to mid-May (17
+  days before, 15 after) is trusted, and so is 2 January to 30 May (30 and
+  30); 1 January to anything (31 days before) is suspect. Every other day
+  of the stretch outside the months must likewise lie within 30 days of one
+  of its days inside them, so a stretch that bridges two dry seasons (a year
+  at zero) is suspect, while a gap of up to 60 days between two listed
+  months is not. Months are read day by day, so a list that wraps the year
+  end (Dec, Jan, Feb) works the same way;
+- with months listed, a stretch **wholly outside** them is **suspect**
+  whatever its length, even a day or two (for a river that stops in summer,
+  zero in winter points to the logger), and so is one that runs more than
+  30 days beyond them; a stretch is always judged whole;
 - with no months listed, a stretch longer than 30 days
   (`ZERO_FLOW_TRUST_MAX_DAYS`) is suspect and a shorter one is trusted (a
   30-day stretch is trusted, 31 days is suspect).
@@ -8398,7 +8410,13 @@ logger has been known to fail, so a zero stretch inside Feb–Apr is trusted
 and any other one longer than 30 days, or running outside those months, is
 "check with the client". Set `zeroFlowMonths` to [2, 3, 4] for the client
 catchment (project data, through Settings). This also answers plan.md
-question 10.
+question 10. Engine 1.81.0 – 1.83.x built it as "wholly inside the months".
+**Revised 2026-10-11 (issue #90 R5-4, built in engine 1.84.0, issue #523
+A1):** a drought year's dry season can start early or end late, so a
+stretch that overlaps Feb–Apr is trusted as long as it runs no more than 30
+days beyond them (before and after each counted on its own); one wholly
+outside them is flagged whatever its length; with no months listed the
+30-day limit stays.
 
 The defaults (censor above the rating; leave out below-rating, suspect and
 infilled days) are a *provisional decision 2026-10-01, to be confirmed by
