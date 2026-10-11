@@ -65,8 +65,9 @@ export async function nonTextContrast(page: Page, options: ContrastOptions = {})
 		/** Any CSS colour (rgb(), color(srgb …), oklch, a name) as 0–255 sRGB plus alpha, via a canvas. */
 		const parse = (css: string): RGBA => {
 			if (!css || css === 'none' || css === 'transparent') return [0, 0, 0, 0];
-			probe.clearRect(0, 0, 1, 1);
-			probe.fillStyle = '#000';
+			// reset() clears the pixel and puts fillStyle back to its default black, so a colour the canvas
+			// can't parse (the assignment is ignored) reads as black, not as the previous colour.
+			probe.reset();
 			probe.fillStyle = css;
 			probe.fillRect(0, 0, 1, 1);
 			const d = probe.getImageData(0, 0, 1, 1).data;
