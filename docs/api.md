@@ -363,7 +363,9 @@ the frontend catalogue (same contract: add, never rename):
 - `allocation_series_withheld` (`403` from `GET …/runs/:runId/series`,
   `…/series/bulk`, `…/day`, `…/export/daily.csv` and `…/export/farms.csv`):
   such a viewer asked for a run series worked out from a registered volume
-  (an allocation series, or any of a bound unit: below, [§ Runs](#runs)).
+  (an allocation series, or one a cap or full-allocation run doesn't give
+  them: below, [§ Runs](#runs)), or previewed a farm while such a run is
+  published.
   The run pages don't ask: the run lists them in `withheldSeries`
   (issue #523 finding I).
   An editor or owner can give it to them.
@@ -1950,26 +1952,41 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 
 - **What a viewer kept from each registered volume gets of a run** (D3,
   issue #523 finding I, `runs/withheldSeries.ts`,
-  `allocations/boundUnits.ts`). No allocation series on any unit
+  `allocations/riverOutcomes.ts`). No allocation series on any run
   (`allocation_room_*`, `allocation_left_*`, `allocation_demand_factor`).
-  In a cap or full-allocation run (a scenario's, or a baseline from before
-  213), every unit with an allocation is **bound** to its volume: a cap's
-  room on a licence's first day is the volume, a year the cap binds adds up
-  to it, and a full allocation scales the unit's demand to it. A bound
-  unit's series are all withheld, and its entries are left out of the
-  run's summary wherever it is served (`GET …/runs/:runId`, compare, the
-  summary CSV, the evidence report's summaries, History, sweep members,
-  uncertainty ensembles' per-unit metrics), with
-  `summary.allocations.withheldUnits` naming them. `GET …/runs/:runId`
-  leaves them out of `series` and lists them in
-  `withheldSeries: { nodeId, key }[]` (empty for anyone else). Asked for
-  by name, `…/series` is `403 allocation_series_withheld`; `…/series/bulk`
-  and `…/day` answer without them and name them in `withheld` (keys), or
-  refuse a bound unit outright with that code; the daily and all-farms
-  CSVs leave the columns out with a `# withheld=…` line under the
-  provenance (a bound unit's daily file, or an allocation key in
-  `farms.csv`, is refused), and the summary CSV names the units left out.
-  A compare-only run binds nothing: its figures don't depend on the volumes.
+  Of a cap or full-allocation run (a scenario's, or a baseline from before
+  213) only its **river outcomes**, an allowlist: the catchment's natural
+  flow, outflow, EWR and its shortfall and the rain, records and runoff
+  model behind them; at each gauge its flows, EWR and shortfall; nothing of
+  any unit and no use total. The summary keeps `historyDays`, `runoff`,
+  `catchment`, `calibration`, `ewrAssurance`, `ewrCompliance` (no
+  `farms`), `servedWhileEwrFails` (no `units`), `wr2012`, `dataQuality`
+  (no `areaMismatches`), `forecast` (no `perFarm`) and the input-handling
+  fields; `farms`, `users` and `warnings` are empty;
+  `allocations` keeps the mode, band and counts with
+  `riverOutcomesOnly: true`, and `withheld` names every field left out.
+  This summary is what the run, compare, History, the summary CSV, sweep
+  members and the evidence report serve such a viewer.
+  `GET …/runs/:runId` leaves the other series out of `series` and lists
+  them in `withheldSeries: { nodeId, key }[]` (empty for anyone else).
+  Asked for by name, `…/series` is `403 allocation_series_withheld`;
+  `…/series/bulk` and `…/day` answer without them and name them in
+  `withheld` (keys), or refuse a unit outright with that code; the daily
+  and all-farms CSVs leave the columns out with a `# withheld=…` line
+  under the provenance (a unit's daily file, and `farms.csv`, are refused),
+  and the summary CSV names the fields left out. An uncertainty ensemble
+  of such a run keeps each member's river metrics only and no unit list.
+  The evidence report on such a run (either side) keeps page 1's river rows
+  and the flags that name no unit's figure, the EWR sites and months, the
+  cumulative and licence-impact boards, the identity, checks and appendix;
+  `users`, `questions`, § 5's units, `demandObjects`, served-while-failing
+  units and the run warnings are empty, and `withheld` names them; a pack's
+  PDF is refused (`pack_volumes_withheld`). An outlook on such a base comes
+  with `result` and `triggers` null and `withheld: ["result", "triggers"]`;
+  a farm preview while such a run is published is `403
+  allocation_series_withheld`, and its history leaves those publications
+  out (a linked farmer reads their own farm). A compare-only run gives
+  that viewer everything but the allocation series.
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
   with the engine's reason, and nothing is stored: no rainfall series, a
   simulation end before its start, (engine ≥ 0.11.1) a GR4J run with no
@@ -4044,7 +4061,7 @@ farmer view E3, migration 106).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued. `409` for a base run that caps use at, or scales demand to, the registered volumes (only one from before 213 can be; issue #523 finding I); publishing an older outlook on such a base is `409` too | editor |
 | GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` or `triggers` | viewer |
 | GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` and `triggers` (null while pending). `404` for one that isn't this project's | viewer |
 | POST | `/projects/:id/outlooks/:outlookId/publish` | `{ levelId }` | `201 { publication: OutlookPublication }`: that level published to farmers, ending the current publication. Audit `outlook.published` | editor |

@@ -3702,9 +3702,8 @@ from the WP:
       model.md §2.12a: demand is scaled per water year to the registered
       volume, so a unit's demand and supply in `summary.farms`, `users[]` and
       its daily series are its volume). Done 2026-10-11 with finding I
-      (below): for a viewer kept from the volumes every unit with an
-      allocation in a cap or full-allocation run is bound, and its series
-      and summary entries are withheld everywhere they are served
+      (below): for a viewer kept from the volumes a cap or full-allocation
+      run serves its river outcomes only, everywhere it is served
       ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
@@ -3793,30 +3792,35 @@ from the WP:
       cap scenario with a viewer while the switch was off gave every capped
       unit's volume through `…/series`, `…/series/bulk`, `…/day`, the CSV and
       `.xlsx` exports. Done 2026-10-11: for that viewer no allocation series
-      on any run, and in a cap or full-allocation run none of a bound unit's
-      series or summary entries, on every route that serves them, with the
-      withheld ones named (`withheldSeries`, `withheld`,
-      `summary.allocations.withheldUnits`, `403 allocation_series_withheld`)
-      and the run pages saying so; such a run can't be published; the canary
-      sweep runs a capped and a full-allocation scenario run
+      on any run, and of a cap or full-allocation run its river outcomes
+      only (next item), with the withheld ones named (`withheldSeries`,
+      `withheld`, `summary.allocations.riverOutcomesOnly`,
+      `403 allocation_series_withheld`) and the run pages saying so; such a
+      run can't be published; the canary sweep runs a capped and a
+      full-allocation scenario run
       ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql),
       [api.md § Runs](./api.md#runs)). A viewer's project `model-input`
       still omits the volumes (RLS), so a fit they run in a cap project runs
       uncapped: by design.
-- [ ] **A cap or full-allocation run's catchment totals less the units
-      shown** (D3; issue #523 finding I, the residual). With the bound units
-      withheld, the run's water balance and curtailment totals still sum
-      every unit, so a viewer kept from the volumes can subtract the units
-      still shown and get the bound units' use together (their volumes, in a
-      full allocation), one unit's when only one unit holds a volume; the
-      outflow and the EWR results carry the same through the model. Durable
-      fix: serve those totals to that viewer only when 5 or more registered
-      users hold the bound units' volumes (the `app_allocation_volumes`
-      rule), else withhold them as the units are; the flows stay (the EWR
-      result is the point of such a run). Trigger: a cap or full-allocation
-      scenario on a project with outside viewers and fewer than 5 licence
-      holders, or counsel reading the catchment totals as personal
-      information.
+- [x] **A cap or full-allocation run's catchment totals less the units
+      shown** (D3; issue #523 finding I, round 4, High). The water balance
+      less the units still shown gave a bound unit's volume exactly, and the
+      evidence report's per-unit sections, a pre-213 published cap run's
+      farm view and an outlook on such a base gave the same. Done
+      2026-10-11, the operator's durable option: of a cap or full-allocation
+      run a viewer kept from the volumes reads an allowlist of river
+      outcomes only (EWR results, outflow, the EWR and gauge sites, natural
+      flow), no unit's figure and no use total, on every route that serves
+      runs; such a run can't be published or start an outlook, and an older
+      one's farm preview and outlook are withheld from that viewer
+      ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
+      Accepted, documented there: natural flow less outflow approximates
+      the units' consumptive use together. Still to do by the operator: run
+      the read-only check for cap or full-allocation publications in
+      production (`SELECT p.project_id, p.id, p.superseded_at FROM
+      run_publication p JOIN model_run r ON r.id = p.run_id WHERE
+      r.summary->'allocations'->>'mode' IN ('cap','fullAllocation')`, and
+      the same on `seasonal_outlook` by `base_run_id`); supersede any found.
 - [x] **Registration numbers in History** (2026-10-03): viewers read
       `allocation.created/changed/deleted` with `registrationNo` (a "unique
       identifier", POPIA s1) and `allocation.created` with the volume. Done:

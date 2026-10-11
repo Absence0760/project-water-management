@@ -8936,17 +8936,15 @@ or more registered users, the holders, the volume registered today and the
 storage (`totalsSentence`), and the run's modelled use against the
 registered volumes summed per water year; "No total is shown" when no
 source has 5 holders. No unit, number, name or Download CSV. On a cap or
-full-allocation scenario run such a viewer doesn't get the units the run
-bound to their volume (issue #523 finding I, [api.md § Runs](./api.md#runs)):
-they are left out of the run's results, its unit cards and tables, its
-charts and the `.xlsx` workbook (the run's series list doesn't offer them),
-and the run's summary (Runs & results) and Hydrological units each say so
-in one line above the results, `WithheldUnitsNote.svelte`
-(`data-testid="withheld-units"`, `runs/withheld.ts`): *N hydrological
-units are left out of these results and their daily series: this run caps
-each one's use at (or scales each one's demand to) its registered water
-volume, and this project shows those volumes to its editors and owners
-only.* Owners get a
+full-allocation scenario run such a viewer gets only the river outcomes
+(issue #523 finding I, [api.md § Runs](./api.md#runs)): no unit cards,
+tables or unit charts, no use totals, and the `.xlsx` workbook has the
+catchment and gauge sheets only. The run's summary (Runs & results) and
+Hydrological units each say so in one line above the results,
+`WithheldUnitsNote.svelte` (`data-testid="river-outcomes-only"`,
+`runs/withheld.ts`); the evidence report says it under its first heading
+(`evidence-river-outcomes-only`), and an outlook on such a base says its
+results are withheld (`outlook-withheld`). Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every
 viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
