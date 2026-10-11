@@ -428,7 +428,8 @@ existing lawful use beside the application's numbers.
   gate is also the dominance rule: no year's total is shown where one
   holder has more than 80 % of it, or two more than 90 % (provisional,
   #92). A viewer kept from each volume reads these totals with no
-  registered m³ at all, only their status and modelled use (#523 K/L/M,
+  registered m³ and no status or count against the band, only their
+  modelled use (#523 K/L/M and round 6,
   [Who sees what](#who-sees-what)).
 
 ### What the comparison is not
@@ -517,7 +518,7 @@ reasoning is in [security.md § Allocations](./security.md#allocations-popia-min
 | Reader | Volumes, numbers, dates | Registered user's name | Writes |
 | --- | --- | --- | --- |
 | Owner, editor | all | all | yes |
-| Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise today's total per water source (volume and storage in force today) at 5 or more registered users in force, none holding more than 80 % of it nor two more than 90 % (provisional, #92); a run's use by water year and the evidence report's totals of other units as modelled use and status only, never a registered m³ (#523 G–O), at the run's own band; nothing by year for a cap or full-allocation run, whose use is the volume | none | no |
+| Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise today's total per water source (volume and storage in force today) at 5 or more registered users in force, none holding more than 80 % of it nor two more than 90 % (provisional, #92); a run's use by water year and the evidence report's totals of other units as modelled use only, never a registered m³ nor a status per year (#523 G–O, round 6, provisional, #92), with at most one judgement for a whole run whose rows are today's total's all through it, at the run's own band; nothing by year for a cap or full-allocation run, whose use is the volume | none | no |
 | Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
 | Share links, pack links, the verify page | none (any later total at 5 or more holders, never per unit) | none | no |
 | An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-15`), at 5 or more registered users in force each water year with the dominance rule (`evidence-18`); a viewer kept from each volume reads the totals' status and modelled use only, and gets no PDF that prints them; an applicant's own pack view has no § 5 | none | no |

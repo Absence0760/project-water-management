@@ -307,6 +307,16 @@ export function totalsSentence(t: AllocationTotal): string {
 	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${volume}${storage}${why}.`;
 }
 
+/**
+ * A viewer's one judgement of a run against the registered volumes (#523
+ * round 6): "Of 30 whole water years, 24 within ±10 % of the registered
+ * volumes and 6 outside", or why there is none.
+ */
+export function judgementSentence(j: { wholeYears: number; within: number; outside: number } | null, tolerance: number): string {
+	if (!j) return 'Not judged against the registered volumes: they changed during the run, or too few registered users (or mostly one or two) held them.';
+	return `Of ${fmtNum(j.wholeYears)} whole water years, ${fmtNum(j.within)} within ±${fmtNum(tolerance * 100, 0)} % of the registered volumes and ${fmtNum(j.outside)} outside.`;
+}
+
 /** The note an owner reads before letting viewers see each farm's registered volumes (162, D3). */
 export const VIEWER_UNITS_NOTE =
 	'Only switch this on if every viewer of this catchment works for, or was appointed by, your organisation. Otherwise viewers see totals per water source, at 5 or more registered users.';

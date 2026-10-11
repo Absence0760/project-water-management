@@ -78,7 +78,12 @@ CREATE TRIGGER allocation_holder_salt_new AFTER INSERT ON project
 CREATE FUNCTION allocation_holder_norm(p_name text) RETURNS text
 	LANGUAGE sql IMMUTABLE SET search_path = public
 	AS $$ SELECT nullif(lower(regexp_replace(btrim(p_name), '\s+', ' ', 'g')), '') $$;
-REVOKE ALL ON FUNCTION allocation_holder_norm(text) FROM PUBLIC, water_app;
+-- Pure and invoker: water_app evaluates it when it writes allocation_holder (the index below).
+REVOKE ALL ON FUNCTION allocation_holder_norm(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION allocation_holder_norm(text) TO water_app;
+-- The erasure trigger (6) asks per deleted row whether the name is still on another row of the project: indexed, so
+-- undoing a large import stays O(n log n) rather than a regex over every holder row per deleted row.
+CREATE INDEX allocation_holder_norm_idx ON allocation_holder (project_id, allocation_holder_norm(user_display));
 
 -- One pass over the project's rows (a window, not a subquery per row), so the backfill below is linear.
 CREATE FUNCTION app_allocation_holder_keys(p_project uuid)

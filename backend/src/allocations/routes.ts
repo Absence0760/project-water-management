@@ -633,7 +633,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					run: runOut,
 					comparison: null,
 					capYears: [],
-					totals: comparisonTotals({ startDate: r.startDate, nodes, tolerance: own, rows: await loadVolumes(db, id) }),
+					totals: comparisonTotals({ startDate: r.startDate, nodes, tolerance: own, rows: await loadVolumes(db, id), today: new Date().toISOString().slice(0, 10) }),
 					totalsWithheld: null
 				});
 			}

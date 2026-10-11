@@ -633,7 +633,7 @@
 							source, “Other registered users”, when enough registered users hold that source; a year’s registered volume in that total is “not shown” when fewer
 							than 5 registered users hold one in force that year, or one or two hold most of it.{#if al.othersRegisteredWithheld}
 								{' '}<span data-testid="evidence-allocations-others-withheld">This project shows registered volumes to its editors and owners only: in these totals you read each year’s
-									modelled use and how it compares, not the registered volume.</span>{/if}{#if al.othersUseWithheld}
+									modelled use, not the registered volume nor how the use compares with it.</span>{/if}{#if al.othersUseWithheld}
 								{' '}<span data-testid="evidence-allocations-others-use-withheld">A capped or full-allocation run holds use to the registered volume, so its modelled use in
 									these totals isn’t shown either.</span>{/if}{#if al.othersLeftOut}
 								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: too few registered

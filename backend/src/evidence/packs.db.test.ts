@@ -1675,7 +1675,8 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		const read = await viewer.call('GET', packPath(now));
 		expect(read.status, JSON.stringify(read.body)).toBe(200);
 		const al = read.body.manifest.report.allocations;
-		expect([al.units[0].aggregate, al.othersRegisteredWithheld, al.units[0].sources[0].years[0].registeredA, al.units[0].sources[0].years[0].statusA]).toEqual([5, true, null, 'under']);
+		// Nor its status per year (#523 round 6); the modelled use stays.
+		expect([al.units[0].aggregate, al.othersRegisteredWithheld, al.units[0].sources[0].years[0].registeredA, al.units[0].sources[0].years[0].statusA, al.units[0].sources[0].years[0].modelledA]).toEqual([5, true, null, null, 1]);
 		expect(JSON.stringify(read.body)).not.toContain(String(VOLUME));
 		withheld(await viewer.call('GET', `${packPath(now)}/pdf`));
 		// Positive control: the editor reads the figure, and passes the PDF check (a draft: 409).

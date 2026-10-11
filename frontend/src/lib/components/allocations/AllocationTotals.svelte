@@ -8,7 +8,7 @@
 	import type { AllocationComparisonTotals, AllocationTotal } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { SOURCE_LABEL, STATUS_LABEL, totalsSentence, waterYearLabel } from './allocations';
+	import { judgementSentence, SOURCE_LABEL, totalsSentence, waterYearLabel } from './allocations';
 
 	let {
 		totals,
@@ -36,18 +36,14 @@
 	{/if}
 
 	{#if runLabel && years?.sources.length}
-		<h3 class="sub-h">Modelled use against the registered volumes, run “{runLabel}”</h3>
+		<h3 class="sub-h">Modelled use by the units with a registered volume, run “{runLabel}”</h3>
 		<p class="small muted">
-			Summed over the units with a registered volume, each water year (October–September), and how it compares with the volumes registered for them. Modelled, not metered:
-			arithmetic, not a finding about anyone’s use. The registered volume itself is shown only as today’s total above: two totals over different years would give the
-			volumes that changed between them.
+			Summed over the units with a registered volume, each water year (October–September). Modelled, not metered: arithmetic, not a finding about anyone’s use. The
+			registered volume is shown only as today’s total above, and how the use compares with it only once for the whole run, when the same registered users held the same
+			volumes all through it: figures for each year would give the volumes away.
 		</p>
-		{#if years.sources.some((s) => s.years.some((y) => y.withheld))}
-			<p class="small muted" data-testid="allocation-totals-years-withheld">
-				“Not judged”: the volumes in force that year were fewer than 5 registered users’, or mostly one or two users’.
-			</p>
-		{/if}
 		{#each years.sources as s (s.waterSource)}
+			<p class="small" data-testid="allocation-totals-judgement-{s.waterSource}">{judgementSentence(s.judgement, years.tolerance)}</p>
 			<div class="table-wrap">
 				<table class="data compact" data-testid="allocation-totals-years-{s.waterSource}">
 					<caption>{SOURCE_LABEL[s.waterSource]}: {fmtNum(s.units)} units, {fmtNum(s.holders)} registered users</caption>
@@ -55,7 +51,6 @@
 						<tr>
 							<th scope="col">Water year</th>
 							<th scope="col" class="num">Modelled use (m³)</th>
-							<th scope="col">Compared</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -63,14 +58,12 @@
 							<tr>
 								<th scope="row">{waterYearLabel(y.waterYear)}{y.partial ? ' (part)' : ''}</th>
 								<td class="num">{fmtNum(y.modelledM3)}</td>
-								<td>{y.partial ? 'Part year, not judged' : y.status === null ? 'Not judged' : STATUS_LABEL[y.status]}</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
 			</div>
 		{/each}
-		<p class="hint muted">“Within band” is within ±{fmtNum(years.tolerance * 100, 0)} % of the registered volume.</p>
 	{:else if runLabel && yearsWithheld}
 		<p class="small muted" data-testid="allocation-totals-years-mode">
 			The run “{runLabel}” holds each unit’s use to its registered volume (capped or full allocation), so its modelled use would show the volumes: it isn’t shown here.

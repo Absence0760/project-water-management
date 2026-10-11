@@ -3716,6 +3716,11 @@ from the WP:
       release, and coarsen the mix's shares to 5 %. Trigger: before a
       project with outside viewers issues a second pack version, or counsel
       asks for k-anonymity across releases.
+- [ ] **Confirm the viewer's status rule** (#523 round 6, provisional:
+      a viewer kept from each volume gets no status per water year, only
+      one judgement per run whose rows are today's total's all through it).
+      Pending the CISO and the D3 privacy review (#92). Trigger: that
+      review, or a client asking viewers to see the comparison by year.
 - [ ] **Confirm the dominance rule's limits** (#523 O, provisional: no
       holder above 80 % of a total a restricted reader sees, no two above
       90 %; `DOMINANCE_TOP1` / `DOMINANCE_TOP2`, engine

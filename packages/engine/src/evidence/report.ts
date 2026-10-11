@@ -1734,7 +1734,7 @@ function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
 }
 
 /** The "read these first" line when the reported run's use is above a registered volume; null when it never is. */
-function allocationsOverFlag(al: EvidenceAllocations, app: boolean): string | null {
+export function allocationsOverFlag(al: EvidenceAllocations, app: boolean): string | null {
 	const items = al.units.flatMap((u) =>
 		u.sources.flatMap((s) => {
 			const c = app ? s.countsB : s.countsA;

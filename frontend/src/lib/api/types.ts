@@ -2274,11 +2274,10 @@ export interface AllocationComparisonTotals {
 		waterSource: 'surface' | 'groundwater';
 		holders: number;
 		units: number;
-		/**
-		 * No registered m³: only today's totals carry it (#523 K/L/M). `withheld`: the volumes in force that year are fewer
-		 * than 5 registered users', or one or two dominate them, so `status` is null too (#523 G/O).
-		 */
-		years: { waterYear: number; partial: boolean; modelledM3: number; status: import('@water-management/engine').AllocationStatus | null; withheld?: true }[];
+		/** No registered m³ (only today's totals carry it, #523 K/L/M) and no status per year (#523 round 6): the modelled use. */
+		years: { waterYear: number; partial: boolean; modelledM3: number }[];
+		/** One judgement for the whole run, when the same rows were in force all through and pass the 5-holder and dominance rules; else null. */
+		judgement: { wholeYears: number; within: number; outside: number } | null;
 	}[];
 }
 

@@ -12,7 +12,7 @@
 //  - a WARMS extract needs its reference (how it was obtained, 162);
 //  - a run's comparison sums the run's own supplied series per water year;
 //  - the export guards formula-looking cells and hides names from viewers.
-import { compareAllocations } from '@water-management/engine';
+import { allocationStatus, compareAllocations, type AllocationComparison, type AllocationStatus } from '@water-management/engine';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -542,10 +542,30 @@ describe('the allocations export', () => {
 // them the modelled use and the status only. Each test is the review's repro, which failed before, with an editor
 // positive control.
 
-/** A figure's digits, with or without a separator between any two, not inside an id or a longer number. */
-const figureRe = (v: number) => new RegExp(`(?<![\\w.])${String(Math.trunc(v)).split('').join("[\\s,.'\\u00a0\\u202f]?")}(?![\\d])`);
-/** v in m³ a year, a day's share and a leap or common year's day: any of them in `text`. */
-const holdsFigure = (text: string, v: number) => [v, v / 365, v / 366].some((x) => figureRe(x).test(text));
+/** A whole number token in text (digits, maybe grouped by spaces or commas, maybe decimals), never part of an id, a word or a hex run. */
+const NUMBER_TOKEN = /(?<![\w.\-])(\d{1,3}(?:[ ,  ]\d{3})+|\d+)(?:\.\d+)?(?![\w\-])/g;
+/**
+ * Where a JSON answer carries v as a figure: a number within 0.5 of v m³ a year, or, for v of 365 000 or more, of its
+ * share of a day (smaller day shares are too short to tell from any other number); in a JSON number, or a whole
+ * number token in a string. Each match as "path = value", so a failure says what matched (#523 round 6: the old
+ * pattern matched 3-digit day shares inside uuids).
+ */
+function figuresAt(text: string, v: number): string[] {
+	const targets = v >= 365_000 ? [v, v / 365, v / 366] : [v];
+	const hit = (n: number) => targets.some((t) => Math.abs(n - t) < 0.5);
+	const out: string[] = [];
+	const walk = (x: unknown, at: string) => {
+		if (typeof x === 'number') {
+			if (hit(x)) out.push(`${at} = ${x}`);
+		} else if (typeof x === 'string') {
+			for (const m of x.matchAll(NUMBER_TOKEN)) if (hit(Number(m[0].replace(/[ ,  ]/g, '')))) out.push(`${at} ~ "${m[0]}" in "${x.slice(0, 120)}"`);
+		} else if (Array.isArray(x)) x.forEach((y, i) => walk(y, `${at}[${i}]`));
+		else if (x && typeof x === 'object') for (const [k, y] of Object.entries(x)) walk(y, `${at}.${k}`);
+	};
+	walk(JSON.parse(text), '$');
+	return out;
+}
+const holdsFigure = (text: string, v: number) => figuresAt(text, v).length > 0;
 
 /** A project with units `names` under a weir, rain from `start` for `days`, the editor and viewer as members. */
 async function volumesProject(name: string, names: string[], start: string, days: number) {
@@ -607,14 +627,11 @@ describe('#523 G: staggered dates (one holder since 2005, four from 2018 to 2024
 		expect(holdsFigure(JSON.stringify(res.body), VOL)).toBe(false);
 	});
 
-	it('GET …/runs/:runId/allocations: no registered m³ in any year, 2016 and 2017 not even judged; the editor’s comparison holds VOL (positive control)', async () => {
+	it('GET …/runs/:runId/allocations: modelled use per year only, no status, and no judgement (the rows change in 2018); the editor’s comparison holds VOL (positive control)', async () => {
 		const res = await viewer.call('GET', `/projects/${pid}/runs/${run}/allocations`);
-		const years = res.body.totals.sources[0].years as { waterYear: number; status: string | null; withheld?: true }[];
-		expect(years.map((y) => [y.waterYear, y.withheld ?? false, y.status !== null])).toEqual([
-			[2016, true, false],
-			[2017, true, false],
-			[2018, false, true]
-		]);
+		const src = res.body.totals.sources[0];
+		expect(src.years.map((y: object) => Object.keys(y).sort())).toEqual(new Array(3).fill(['modelledM3', 'partial', 'waterYear']));
+		expect(src.judgement).toBeNull();
 		expect(JSON.stringify(res.body)).not.toMatch(/registered/i);
 		expect(holdsFigure(JSON.stringify(res.body), VOL)).toBe(false);
 		expect(holdsFigure(JSON.stringify((await editor.call('GET', `/projects/${pid}/runs/${run}/allocations`)).body.comparison), VOL)).toBe(true);
@@ -633,7 +650,7 @@ describe('#523 G: staggered dates (one holder since 2005, four from 2018 to 2024
 		const asViewer = (await viewer.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
 		expect(asViewer.allocations.othersRegisteredWithheld).toBe(true);
 		expect(others(asViewer.allocations)!.every((y) => y.registeredA === null && y.registeredB === null)).toBe(true);
-		for (const v of [VOL, VOL + 4 * OTHER]) expect(holdsFigure(JSON.stringify(asViewer), v)).toBe(false);
+		for (const v of [VOL, VOL + 4 * OTHER]) expect(figuresAt(JSON.stringify(asViewer), v), String(v)).toEqual([]);
 	});
 });
 
@@ -675,7 +692,7 @@ describe('#523 K, L, M: no two figures a viewer reads at the same time differ by
 		const today = (await viewer.call('GET', `/projects/${pid}/allocations`)).body.totals[0];
 		expect(today.registeredM3PerYear).toBe(TODAY);
 		const text = JSON.stringify((await viewer.call('GET', `/projects/${pid}/runs/${base}/allocations`)).body);
-		for (const v of [UNMATCHED, LATER, TODAY - UNMATCHED - LATER, TODAY - UNMATCHED]) expect(holdsFigure(text, v), String(v)).toBe(false);
+		for (const v of [UNMATCHED, LATER, TODAY - UNMATCHED - LATER, TODAY - UNMATCHED]) expect(figuresAt(text, v), String(v)).toEqual([]);
 		expect(text).not.toMatch(/registered/i);
 	});
 
@@ -686,7 +703,7 @@ describe('#523 K, L, M: no two figures a viewer reads at the same time differ by
 		expect(ys.every((y) => y.registeredA === null && y.registeredB === null)).toBe(true);
 		expect(r.allocations.units.every((u: Section5['units'][number]) => u.sources.every((s) => s.meanRegisteredA === null))).toBe(true);
 		const text = JSON.stringify(r);
-		for (const v of [V[0]!, LATER, UNMATCHED, V.reduce((s, x) => s + x, 0), V.reduce((s, x) => s + x, 0) + LATER]) expect(holdsFigure(text, v), String(v)).toBe(false);
+		for (const v of [V[0]!, LATER, UNMATCHED, V.reduce((s, x) => s + x, 0), V.reduce((s, x) => s + x, 0) + LATER]) expect(figuresAt(text, v), String(v)).toEqual([]);
 	});
 });
 
@@ -796,6 +813,92 @@ describe('#523 round 5: the band, cap and full-allocation runs, run visibility, 
 		// The extra row deleted: holder 2's name leaves too.
 		expect((await editor.call('DELETE', `/projects/${pid}/allocations/${extra.body.allocation.id}`)).status).toBe(204);
 		expect(await key(ids[1]!)).toBe('gone');
+	});
+});
+
+// Round 6: a status per water year at a fixed band, pooled over the years of several runs, pins the registered total
+// (and so, by L and M, one holder's volume) to a few percent. The review's probe as a fixture: three 30-year runs
+// whose use varies with the weather and the crop area. A viewer kept from each volume gets no status per year (and no
+// judgement for a run whose rows change), so the interval they could derive is unbounded; the editor's figures give
+// a narrow one (the positive control: the attack works on what the old route served).
+describe('#523 round 6: statuses pooled over several runs give no interval for the registered volume', () => {
+	const START = '1995-10-01';
+	const YEARS = 30;
+	let pid: string;
+	const runs: string[] = [];
+	let perHolder = 0;
+
+	/** [lo, hi] for a registered total R, from (modelled use, status) pairs of years with the same R in force; null when nothing bounds it. */
+	const pooled = (pairs: { m: number; status: AllocationStatus }[], t: number): [number, number] | null => {
+		let lo = 0;
+		let hi = Infinity;
+		for (const { m, status } of pairs) {
+			if (status === 'within') ((lo = Math.max(lo, m / (1 + t))), (hi = Math.min(hi, m / (1 - t))));
+			else if (status === 'over') hi = Math.min(hi, m / (1 + t));
+			else if (status === 'under') lo = Math.max(lo, m / (1 - t));
+		}
+		return lo > 0 && Number.isFinite(hi) ? [lo, hi] : null;
+	};
+
+	beforeAll(async () => {
+		// A wet-and-dry rain series, seeded: each year's use differs.
+		let seed = 7;
+		const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+		const days = YEARS * 365 + 8;
+		const wet = Array.from({ length: YEARS + 1 }, () => 0.4 + 1.2 * rnd());
+		const p = await volumesProject('Pooled statuses', ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'], START, days);
+		pid = p.pid;
+		const rain = Array.from({ length: days }, (_, i) => (rnd() < 0.12 ? 18 * wet[Math.floor(i / 365)]! : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: START, values: rain })).status).toBe(200);
+		const model = (await owner.call('GET', `/projects/${pid}/model`)).body;
+		for (const factor of [0.8, 1, 1.25]) {
+			const scaled = { nodes: model.nodes, crops: model.crops, transfers: model.transfers ?? [], cropAreas: model.cropAreas.map((a: { areaM2: number }) => ({ ...a, areaM2: 60_000 * factor })) };
+			expect((await owner.call('PUT', `/projects/${pid}/model`, scaled)).status).toBe(200);
+			runs.push(await p.run(`area × ${factor}`));
+		}
+		// Volumes set near the middle run's mean use, so years fall either side of the band.
+		const probe = await p.add(p.units[0]!.id, 'Pooled Probe', 1);
+		const c = (await editor.call('GET', `/projects/${pid}/runs/${runs[1]}/allocations`)).body.comparison as AllocationComparison;
+		const unit = c.nodes.find((n) => n.nodeId === p.units[0]!.id)!.surface.years.filter((y) => !y.partial);
+		perHolder = Math.round(unit.reduce((s, y) => s + y.modelledM3, 0) / unit.length);
+		expect((await editor.call('DELETE', `/projects/${pid}/allocations/${probe}`)).status).toBe(204);
+		for (let i = 0; i < 5; i++) await p.add(p.units[i]!.id, `Pooled Holder ${i + 1}`, perHolder);
+		await p.add(p.units[5]!.id, 'Pooled Later', 123_457, { validFrom: '2018-10-01' });
+		await p.add(null, 'Pooled Unmatched', 77_777);
+	}, 600_000);
+
+	it('positive control: the old route’s statuses (the editor’s sums, at the band) pin the five holders’ total to a few percent', async () => {
+		const pairs: { m: number; status: AllocationStatus }[] = [];
+		for (const run of runs) {
+			const c = (await editor.call('GET', `/projects/${pid}/runs/${run}/allocations`)).body.comparison as AllocationComparison;
+			const held = c.nodes.filter((n) => n.surface.allocationIds.length > 0);
+			for (const y of held[0]!.surface.years) {
+				if (y.partial || y.waterYear >= 2018) continue;
+				const sum = (k: 'modelledM3' | 'registeredM3') => held.reduce((s, n) => s + n.surface.years.find((x) => x.waterYear === y.waterYear)![k], 0);
+				pairs.push({ m: sum('modelledM3'), status: allocationStatus(sum('modelledM3'), sum('registeredM3'), 0.1) });
+			}
+		}
+		const R = 5 * perHolder;
+		const box = pooled(pairs, 0.1);
+		expect(box).not.toBeNull();
+		expect(box![0]).toBeLessThanOrEqual(R + 1);
+		expect(box![1]).toBeGreaterThanOrEqual(R - 1);
+		expect((box![1] - box![0]) / R).toBeLessThan(0.1);
+	});
+
+	it('the viewer gets no status for any year of any run, and no judgement, so pooling bounds nothing', async () => {
+		const pairs: { m: number; status: AllocationStatus }[] = [];
+		for (const run of runs) {
+			const body = (await viewer.call('GET', `/projects/${pid}/runs/${run}/allocations`)).body;
+			const src = body.totals.sources[0];
+			expect(src.judgement).toBeNull();
+			for (const y of src.years as { modelledM3: number; status?: AllocationStatus }[]) {
+				expect(y.status).toBeUndefined();
+				if (y.status) pairs.push({ m: y.modelledM3, status: y.status });
+			}
+			expect(JSON.stringify(body)).not.toMatch(/"(within|over|under)"/);
+		}
+		expect(pooled(pairs, 0.1)).toBeNull();
 	});
 });
 

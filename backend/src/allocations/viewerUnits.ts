@@ -21,8 +21,10 @@ import {
 	type AllocationUseNode,
 	type AllocationWaterSource,
 	type ScenarioOp,
+	allocationsOverFlag,
 	mixShares,
 	shownWithin,
+	takesWithin,
 	totalShown,
 	waterYearWithin,
 	type AuthorisedMix,
@@ -125,19 +127,31 @@ export function volumeTotals(rows: readonly VolumeRow[], day: string): Allocatio
 
 /**
  * One water year of a source's use, summed over the units with a volume on
- * it: the modelled use and how it compares with the registered volume, never
- * the registered volume itself (#523 K/L/M: consecutive years, or a year and
- * today's total, differ by one holder's volume).
+ * it: the modelled use only. Neither the registered volume (#523 K/L/M:
+ * consecutive years, or a year and today's total, differ by one holder's
+ * volume) nor the year's status: a status per year at a fixed band, pooled
+ * over the years of several runs, pins the registered volume to well under
+ * 1 % and one holder's to a few percent (#523 round 6; operator's decision
+ * 2026-10-11, provisional pending the D3 review, #92).
  */
 export interface AllocationYearTotal {
 	waterYear: number;
-	/** A part of the year only (the run's edge): listed, not judged. */
+	/** A part of the year only (the run's edge). */
 	partial: boolean;
 	modelledM3: number;
-	/** Null when the registered volume in force that year fails the 5-holder or dominance rule (`withheld`). */
-	status: AllocationStatus | null;
-	/** The year's registered volume is fewer than 5 registered users', or dominated, so not even its status is given. */
-	withheld?: true;
+}
+
+/**
+ * The run's whole water years within the band and outside it (over or
+ * under), one count for the whole run: given only when the takes in force on
+ * the run's units are the same rows on every day of the run, are exactly the
+ * rows of today's total, and pass the 5-holder and dominance rules over it.
+ * Otherwise null.
+ */
+export interface AllocationRunJudgement {
+	wholeYears: number;
+	within: number;
+	outside: number;
 }
 
 export interface AllocationSourceTotals {
@@ -146,6 +160,7 @@ export interface AllocationSourceTotals {
 	/** Units with a registered volume on this source in the run. */
 	units: number;
 	years: AllocationYearTotal[];
+	judgement: AllocationRunJudgement | null;
 }
 
 export interface AllocationComparisonTotals {
@@ -153,15 +168,25 @@ export interface AllocationComparisonTotals {
 	sources: AllocationSourceTotals[];
 }
 
+/** Whether `rows`' takes in force over [from, to] are the same rows on every day of it (none starts or ends inside). */
+const steadyWithin = (rows: readonly VolumeRow[], from: string, to: string) =>
+	rows.every((r) => !takesWithin(r, from, to) || ((!r.validFrom || r.validFrom <= from) && (!r.validTo || r.validTo >= to)));
+
 /**
- * The run's modelled use against the registered volumes, summed per water
- * source and water year over the units that hold one (compareAllocations,
- * then the sum): the modelled use and the status, no registered m³. A source
- * with fewer than 5 holders isn't in `rows`, so it isn't here; a year whose
- * takes in force on the run's units fail the 5-holder or dominance rule gives
- * its modelled use only (#523 G).
+ * The run's modelled use summed per water source and water year over the
+ * units that hold a registered volume (compareAllocations, then the sum),
+ * with at most one judgement for the whole run (AllocationRunJudgement): no
+ * registered m³ and no status per year. A source with fewer than 5 holders
+ * isn't in `rows`, so it isn't here.
  */
-export function comparisonTotals(input: { startDate: string; nodes: readonly AllocationUseNode[]; tolerance: number; rows: readonly VolumeRow[] }): AllocationComparisonTotals {
+export function comparisonTotals(input: {
+	startDate: string;
+	nodes: readonly AllocationUseNode[];
+	tolerance: number;
+	rows: readonly VolumeRow[];
+	/** Today (ISO): the judgement is given only over the rows of today's total, which the viewer reads anyway. */
+	today: string;
+}): AllocationComparisonTotals {
 	const holders = new Map(input.rows.map((r) => [r.waterSource, r.holders]));
 	const allocations: AllocationEntry[] = input.rows.map((r, i) => ({
 		id: `v${i}`,
@@ -189,14 +214,19 @@ export function comparisonTotals(input: { startDate: string; nodes: readonly All
 				t.partial ||= y.partial;
 				byYear.set(y.waterYear, t);
 			}
-		const years = [...byYear.values()]
-			.sort((a, b) => a.waterYear - b.waterYear)
-			.map((y): AllocationYearTotal => {
-				const span = waterYearWithin(y.waterYear, c.startDate, c.endDate);
-				if (span && !shownWithin(summed, span.from, span.to)) return { waterYear: y.waterYear, partial: y.partial, modelledM3: y.modelledM3, status: null, withheld: true };
-				return { waterYear: y.waterYear, partial: y.partial, modelledM3: y.modelledM3, status: allocationStatus(y.modelledM3, y.registeredM3, input.tolerance) };
-			});
-		return [{ waterSource: src, holders: holders.get(src)!, units: held.length, years }];
+		const all = [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear);
+		const years = all.map((y): AllocationYearTotal => ({ waterYear: y.waterYear, partial: y.partial, modelledM3: y.modelledM3 }));
+		const whole = all.filter((y) => !y.partial);
+		// The rows judged against must be exactly today's total's (every take of the source in force today, matched or
+		// not), in force all through the run: then the run's registered total is the one the viewer reads today, and a
+		// judgement pooled over runs narrows nothing they don't already read. Any other set would difference against it (L, M).
+		const inRun = new Set(summed.filter((r) => takesWithin(r, c.startDate, c.endDate)));
+		const today = input.rows.filter((r) => r.waterSource === src && takesWithin(r, input.today, input.today));
+		const sameAsToday = today.length === inRun.size && today.every((r) => inRun.has(r));
+		const judged = whole.length > 0 && sameAsToday && steadyWithin(summed, c.startDate, c.endDate) && shownWithin(summed, c.startDate, c.endDate);
+		const within = whole.filter((y) => allocationStatus(y.modelledM3, y.registeredM3, input.tolerance) === 'within').length;
+		const judgement = judged ? { wholeYears: whole.length, within, outside: whole.length - within } : null;
+		return [{ waterSource: src, holders: holders.get(src)!, units: held.length, years, judgement }];
 	});
 	return { tolerance: input.tolerance, sources };
 }
@@ -258,6 +288,8 @@ type ReportLike = {
 	licenceImpactAuthorised?: { mix?: AuthorisedMix | AuthorisedMixShares | null; mixFolded?: AuthorisedMix | AuthorisedMixShares | null } | null;
 	/** § 5 (EvidenceAllocations); typed loosely so a frozen manifest of any format passes. */
 	allocations?: unknown;
+	mode?: string;
+	flags?: { id: string; text: string }[];
 };
 
 /** A run mode that holds use to the registered volume: its modelled use is the volume wherever supply meets demand (#523 R5-2). */
@@ -269,10 +301,12 @@ const holdsToVolume = (mode: string | null | undefined) => mode === 'cap' || mod
  * only as today's per-source totals. Two sums over different rows read at
  * the same time (the baseline's and the application's year, two consecutive
  * years, a year and today's total) give the rows between them, often one
- * holder's. The status and modelled use stay, except on a side whose run is
- * in cap or full-allocation mode (`modeA` / `modeB`): there the modelled use
- * is the registered volume wherever supply met demand, so its modelled use,
- * means, status and counts go too (#523 R5-2). The applicant's own units stay.
+ * holder's. Nor their status per year or count of years over the band: at a
+ * fixed band, pooled over the years of several runs, they pin the volume
+ * (#523 round 6, operator's decision, provisional, #92). The modelled use
+ * stays, except on a side whose run is in cap or full-allocation mode
+ * (`modeA` / `modeB`), where it is the registered volume wherever supply met
+ * demand (#523 R5-2). The applicant's own units stay.
  */
 export function withoutOthersRegistered(al: EvidenceAllocations): EvidenceAllocations {
 	if (!Array.isArray(al.units) || !al.units.some((u) => u.aggregate !== undefined)) return al;
@@ -293,19 +327,36 @@ export function withoutOthersRegistered(al: EvidenceAllocations): EvidenceAlloca
 							meanRegisteredB: null,
 							capA: null,
 							capB: null,
-							...(hideA ? { meanModelledA: null, countsA: null } : {}),
-							...(hideB ? { meanModelledB: null, countsB: null } : {}),
+							// No status per year nor count of them (#523 round 6): pooled over runs at a fixed band, they pin the volume.
+							countsA: null,
+							countsB: null,
+							...(hideA ? { meanModelledA: null } : {}),
+							...(hideB ? { meanModelledB: null } : {}),
 							years: src.years.map((y) => ({
 								...y,
 								registeredA: null,
 								registeredB: null,
-								...(hideA ? { modelledA: null, statusA: null } : {}),
-								...(hideB ? { modelledB: null, statusB: null } : {})
+								statusA: null,
+								statusB: null,
+								...(hideA ? { modelledA: null } : {}),
+								...(hideB ? { modelledB: null } : {})
 							}))
 						}))
 					}
 		)
 	};
+}
+
+/**
+ * Page 1's "above the registered volume" flag without the totals of other
+ * units: it counts their whole years over the band, the same count § 5 leaves
+ * out for such a viewer (#523 round 6). Rebuilt from the units listed one by
+ * one; gone when none is over.
+ */
+function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], al: EvidenceAllocations | undefined, app: boolean): F[] {
+	if (!al || !Array.isArray(al.units) || !al.units.some((u) => u.aggregate !== undefined)) return flags;
+	const text = allocationsOverFlag({ ...al, units: al.units.filter((u) => u.aggregate === undefined) }, app);
+	return flags.flatMap((f) => (f.id !== 'allocationsOver' ? [f] : text ? [{ ...f, text }] : []));
 }
 
 /**
@@ -339,7 +390,8 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
-		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {})
+		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {}),
+		...(report.flags ? { flags: withoutOthersOver(report.flags, report.allocations as EvidenceAllocations | undefined, report.mode === 'application') } : {})
 	};
 }
 

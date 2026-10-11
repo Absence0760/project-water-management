@@ -8939,9 +8939,9 @@ source has 5 holders. A sum whose rows in force today are fewer than 5
 registered users', or mostly one or two users' (the dominance rule,
 provisional), isn't given: the sentence says the volume (or storage) in
 force today "isn't shown". The run's table by water year has the modelled
-use and how it compares, no registered column (#523 K/L/M), and *Not
-judged* for a year whose rows fail the same rule, with a note
-(`allocation-totals-years-withheld`). For a cap or full-allocation run it
+use only (#523 K/L/M, round 6), and above it one sentence for the whole
+run, *Of n whole water years, k within ±t % … and m outside*, or why it
+isn't judged (`allocation-totals-judgement-<source>`, `judgementSentence`). For a cap or full-allocation run it
 says the run's use would show the volumes, and shows no table
 (`allocation-totals-years-mode`).
 No unit, number, name or Download CSV. Owners get a
@@ -10072,8 +10072,8 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     users', or mostly one or two users', reads *not shown* (`evidence-18`,
     #523 G/O), its modelled use kept, and the whole years count it as *not
     shown*. A viewer kept from each volume reads every year of these totals
-    as *not shown*, with a note (`evidence-allocations-others-withheld`,
-    #523 K/L/M). *Not assessed* when the runs carry no volumes, or
+    as *not shown*, with no status or count of years, with a note
+    (`evidence-allocations-others-withheld`, #523 K/L/M, round 6). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units

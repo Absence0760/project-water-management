@@ -1646,7 +1646,9 @@ water-use volumes per farm or water user.
   (`model_run_select`'s rule, #523 N/P). When a holder's name leaves the
   project (its last `allocation_holder` row with that name deleted or
   renamed), trigger `allocation_holder_erased` resets the runs' frozen keys
-  of it to `gone` (POPIA erasure). All read `app_allocation_holder_keys`
+  of it to `gone` (POPIA erasure; the lookup is indexed,
+  `allocation_holder_norm_idx` on `(project_id, allocation_holder_norm(user_display))`,
+  about 70 ms locally to undo 2 500 rows of a 5 000-row project). All read `app_allocation_holder_keys`
   (215, internal, not granted; one window pass per project), and 215's
   backfill computes each project's keys once and joins them to the runs, so
   its cost is the runs' allocation rows plus the projects' rows (not runs ×

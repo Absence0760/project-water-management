@@ -220,8 +220,9 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await expect(totals.getByTestId('allocation-total-surface')).toContainText('Surface water: 34 registered users');
 	await expect(totals.getByTestId('allocation-total-groundwater')).toContainText('Groundwater: 6 registered users');
 	await expect(totals.getByTestId('allocation-totals-years-surface')).toBeVisible();
-	// No registered m³ by water year: only today's totals carry one (#523 K/L/M).
-	await expect(totals.getByTestId('allocation-totals-years-surface').getByRole('columnheader')).toHaveText(['Water year', 'Modelled use (m³)', 'Compared']);
+	// No registered m³ by water year, nor a status per year: only today's totals carry one, and one judgement for the run (#523 K/L/M, round 6).
+	await expect(totals.getByTestId('allocation-totals-years-surface').getByRole('columnheader')).toHaveText(['Water year', 'Modelled use (m³)']);
+	await expect(totals.getByTestId('allocation-totals-judgement-surface')).toBeVisible();
 	await expect(totals).not.toContainText('SYN-G1000');
 	await expect(totals).not.toContainText('farm 1');
 	await expect(detail(v)).toHaveCount(0);
