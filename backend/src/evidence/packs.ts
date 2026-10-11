@@ -38,6 +38,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
+import { reportRiverOutcomesOnly } from '../allocations/riverOutcomes.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
@@ -400,6 +401,8 @@ export function packWithheldPart(reportVersion: string, report: PackManifest['re
 		if ((report.allocations?.units ?? []).some((u) => u.aggregate === undefined)) return 'pack';
 		if ((report.ops ?? []).some((o) => o.op.op.startsWith('allocation.'))) return 'pack';
 	}
+	// A cap or full-allocation run: the PDF prints every unit's figures, the manifest is served its river outcomes only (#523 I).
+	if (reportRiverOutcomesOnly(report as unknown as Parameters<typeof reportRiverOutcomesOnly>[0])) return 'pdf';
 	// The PDF prints the full mix (evidence-17 freezes a folded one too, for the redacted manifest).
 	const mix = report.licenceImpactAuthorised?.mix;
 	if (mix && !mix.folded && mix.rows.length) return 'pdf';

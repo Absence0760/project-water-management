@@ -1086,4 +1086,10 @@ export interface EvidenceReport {
 	} | null;
 	/** Both runs' summaries, for the sections that reuse the run views (calibration, WR2012, data quality). */
 	summaries: { baseline: RunSummary; application: RunSummary | null };
+	/**
+	 * Never written by the engine: the sections the API left out or emptied for
+	 * a viewer kept from each registered volume, on a report that rests on a cap
+	 * or full-allocation run (river outcomes only, issue #523 finding I).
+	 */
+	withheld?: string[];
 }

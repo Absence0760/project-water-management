@@ -23,7 +23,7 @@ import {
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
-import { warningWithoutVolume, withoutBoundUnits } from './boundUnits.js';
+import { riverOutcomesReport, riverOutcomesSummary } from './riverOutcomes.js';
 
 /** A viewer on a project whose owners haven't let viewers read each registered volume. */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
@@ -177,8 +177,8 @@ export const withoutPositions = <T>(list: readonly T[], drop: ReadonlySet<number
  * A run as a viewer who can't read each registered volume gets it: no
  * allocation rows in its model (or inputs' model), its summary's
  * allocations without the per-unit part (the mode, band and counts stay),
- * a cap or full-allocation run's summary without its bound units
- * (withoutBoundUnits), and its recorded scenario without the ops that carry a volume
+ * a cap or full-allocation run's summary its river outcomes only
+ * (riverOutcomesSummary, #523 I), and its recorded scenario without the ops that carry a volume
  * (withheldAllocationOps, with their classes).
  */
 export function redactRunAllocations<T extends RunLike>(run: T): T {
@@ -194,14 +194,14 @@ export function redactRunAllocations<T extends RunLike>(run: T): T {
 				scenario: { ...sc, ops: withoutPositions(sc.ops, drop), ...(sc.classified ? { classified: withoutPositions(sc.classified, drop) } : {}) }
 			};
 	}
-	// A cap or full-allocation run's bound units, left out first (#523 I, ./boundUnits.ts): it reads the per-unit part.
-	if (out.summary) out.summary = withoutBoundUnits(out.summary);
+	// A cap or full-allocation run: its river outcomes only (#523 I, ./riverOutcomes.ts).
+	if (out.summary) out.summary = riverOutcomesSummary(out.summary);
 	if (out.summary?.allocations) out.summary = { ...out.summary, allocations: { ...out.summary.allocations, nodes: [] } };
 	return out;
 }
 
 type ReportLike = {
-	appendix: { baselineInputs: { model?: { allocations?: unknown } | null } | null; warnings?: { baseline: string[]; application: string[] | null } };
+	appendix: { baselineInputs: { model?: { allocations?: unknown } | null } | null };
 	summaries: { baseline: { allocations?: { nodes?: unknown[] } | null } | null; application: { allocations?: { nodes?: unknown[] } | null } | null };
 	ops?: { op: ScenarioOp }[];
 	licenceImpactAuthorised?: { mix?: { folded?: true } | null; mixFolded?: unknown } | null;
@@ -214,8 +214,9 @@ type ReportLike = {
  * redactRunAllocations leaves a run, the ops that set a volume on a unit
  * that isn't `own` (an applicant's application's own units; none for a team
  * scenario) left out, and page 1's authorised volume mix replaced by its
- * folded one (`mixFolded`, evidence-17; none for a board built before), and
- * Appendix A.5's run warnings without a volume (warningWithoutVolume, #523 I). § 5 stays:
+ * folded one (`mixFolded`, evidence-17; none for a board built before). A
+ * report on a cap or full-allocation run is then its river outcomes only
+ * (riverOutcomesReport, #523 I). § 5 stays:
  * since `evidence-15` it lists only the applicant's own units, the rest as
  * totals at 5 or more units (and since `evidence-17` none of a team
  * scenario's). A frozen pack manifest redacted this way no longer hashes to
@@ -230,21 +231,16 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 	const summary = <S extends ReportLike['summaries']['baseline']>(s: S): S => (s ? redactRunAllocations({ summary: s }).summary! : s);
 	const drop = report.ops ? withheldAllocationOps(report.ops.map((o) => o.op), own) : new Set<number>();
 	const lia = report.licenceImpactAuthorised;
-	return {
+	const out = {
 		...report,
 		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
 		// The folded mix in the full one's place (evidence-17), or none: a board built before has no folded one.
 		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: (mixFolded ?? null) as typeof lia.mix }))(lia) } : {}),
-		appendix: {
-			...report.appendix,
-			baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi,
-			// Appendix A.5's verbatim run warnings, without a cap's licence-rate warning's volume (#523 I).
-			...(report.appendix.warnings
-				? { warnings: { baseline: report.appendix.warnings.baseline.map(warningWithoutVolume), application: report.appendix.warnings.application?.map(warningWithoutVolume) ?? null } }
-				: {})
-		},
+		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) }
 	};
+	// A report on a cap or full-allocation run: its river outcomes only (#523 I).
+	return riverOutcomesReport(out as unknown as Parameters<typeof riverOutcomesReport>[0]) as unknown as R;
 }
 
 /** The allocation events' fields about the registered user's allocation, not about whoever made the change. */

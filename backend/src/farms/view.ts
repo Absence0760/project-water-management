@@ -22,6 +22,7 @@ import { localDate } from '../projects/timeZone.js';
 import { isStale } from '../portfolio/status.js';
 import { projectPrivacyContact } from '../teams/privacyContact.js';
 import type { StoredCatchmentView } from '../publish/publish.js';
+import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 
 const isoDate = z
 	.string()
@@ -86,8 +87,37 @@ async function reachableFarms(db: Db, projectId: string, role: Role): Promise<{ 
 	return rows;
 }
 
-/** 404 unless the caller may open this farm: linked to it (a farmer), or it is a farm of the project (viewer and above). */
-async function requireFarm(db: Db, projectId: string, nodeId: string): Promise<Role> {
+/** A run's allocation mode that caps use at or scales demand to the registered volumes (SQL, on model_run `r`). */
+const CAP_OR_FULL_SQL = `r.summary->'allocations'->>'mode' IN ('cap', 'fullAllocation')`;
+
+/**
+ * Whether the caller is previewing a farm they aren't linked to while the
+ * project keeps them from each registered volume (D3, allocationUnitsHidden;
+ * issue #523 finding I). A cap or full-allocation run's figures per farm are
+ * worked out from its volume, so such a preview gets none of them; a linked
+ * farmer reads their own farm's whatever the run.
+ */
+async function previewKeptFromVolumes(db: Db, projectId: string, nodeId: string, role: Role): Promise<boolean> {
+	if (!(await allocationUnitsHidden(db, projectId, role))) return false;
+	const { rows } = await db.query<{ linked: boolean }>('SELECT $2::uuid IN (SELECT app_farm_nodes($1)) AS linked', [projectId, nodeId]);
+	return !rows[0]?.linked;
+}
+
+/** 403 for a preview of a farm whose current publication caps or fully allocates (#523 I). */
+const farmFiguresWithheld = () =>
+	ApiError.coded(
+		403,
+		'allocation_series_withheld',
+		'this farm’s published figures are worked out from a registered water volume, which this project shows to its editors and owners only'
+	);
+
+/**
+ * 404 unless the caller may open this farm: linked to it (a farmer), or it is
+ * a farm of the project (viewer and above). 403 for a viewer kept from the
+ * volumes previewing a farm while the current publication is of a cap or
+ * full-allocation run (only one from before 213 can be, #523 I).
+ */
+async function requireFarm(db: Db, projectId: string, nodeId: string): Promise<{ role: Role; keptFromVolumes: boolean }> {
 	const role = await requireRole(db, projectId, 'farmer');
 	if (!UUID.test(nodeId)) throw notFound();
 	const farmerOnly = rank[role] < rank.viewer;
@@ -96,7 +126,15 @@ async function requireFarm(db: Db, projectId: string, nodeId: string): Promise<R
 		[projectId, nodeId]
 	);
 	if (!rows[0]) throw notFound();
-	return role;
+	const keptFromVolumes = await previewKeptFromVolumes(db, projectId, nodeId, role);
+	if (keptFromVolumes) {
+		const { rows: cap } = await db.query(
+			`SELECT 1 FROM run_publication p JOIN model_run r ON r.id = p.run_id WHERE p.project_id = $1 AND p.superseded_at IS NULL AND ${CAP_OR_FULL_SQL}`,
+			[projectId]
+		);
+		if (cap[0]) throw farmFiguresWithheld();
+	}
+	return { role, keptFromVolumes };
 }
 
 interface CurrentFarmRow {
@@ -247,7 +285,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 	.get('/:id/farm/:nodeId', async (c) => {
 		const { id, nodeId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireFarm(db, id, nodeId);
+			const { keptFromVolumes } = await requireFarm(db, id, nodeId);
 			const cur = await currentFor(db, id, nodeId);
 			if (!cur?.view) throw notPublished();
 			const { rows: p } = await db.query<{ name: string; timeZone: string; wuaName: string | null }>(
@@ -284,7 +322,8 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
 				stale: isStale(farm.dataUntil, today),
 				// The seasonal outlook the WUA published, this farm's own figures (issue #53 R5, E3), until its season ends there.
-				outlook: await farmOutlook(db, id, nodeId, today),
+				// Not an outlook on a cap or full-allocation base to a preview kept from the volumes (#523 I).
+				outlook: await farmOutlook(db, id, nodeId, today, keptFromVolumes),
 				// The farm's own registered volumes and storage (issue #72): not an entitlement, the page says so.
 				registered: await farmRegistered(db, id, nodeId, today)
 			};
@@ -348,13 +387,15 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 	.get('/:id/farm/:nodeId/history', async (c) => {
 		const { id, nodeId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireFarm(db, id, nodeId);
+			const { keptFromVolumes } = await requireFarm(db, id, nodeId);
+			// A preview kept from the volumes: without the publications of a cap or full-allocation run (#523 I).
 			const { rows } = await db.query<{ published_at: Date; superseded_at: Date | null; restriction_level: RestrictionLevel; restriction_pct: string | null; view: FarmProjection }>(
 				`SELECT p.published_at, p.superseded_at, p.restriction_level, p.restriction_pct, f.view
 				 FROM publication_farm f JOIN run_publication p ON p.id = f.publication_id
 				 WHERE f.project_id = $1 AND f.node_id = $2
+				   AND NOT ($4::boolean AND EXISTS (SELECT 1 FROM model_run r WHERE r.id = p.run_id AND ${CAP_OR_FULL_SQL}))
 				 ORDER BY p.published_at DESC LIMIT $3`,
-				[id, nodeId, FARM_HISTORY_LIMIT]
+				[id, nodeId, FARM_HISTORY_LIMIT, keptFromVolumes]
 			);
 			const publications: FarmHistoryEntry[] = rows.map((r) => ({
 				publishedAt: r.published_at.toISOString(),

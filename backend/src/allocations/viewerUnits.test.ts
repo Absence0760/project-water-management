@@ -67,8 +67,8 @@ describe('redactRunAllocations', () => {
 		const out = redactRunAllocations(run);
 		expect(out.model.allocations).toEqual([]);
 		expect(out.inputs.model.allocations).toEqual([]);
-		// A cap run's units with an allocation are bound to it: named, not shown (#523 I, boundUnits.test.ts).
-		expect(out.summary.allocations).toEqual({ mode: 'cap', tolerance: 0.1, used: 1, notMatched: 0, nodes: [], withheldUnits: ['n1'] });
+		// A cap run: its river outcomes only (#523 I, riverOutcomes.test.ts).
+		expect(out.summary.allocations).toEqual({ mode: 'cap', tolerance: 0.1, used: 1, notMatched: 0, nodes: [], riverOutcomesOnly: true });
 		expect(out.id).toBe('r');
 		// The original isn't changed (it may be cached or reused).
 		expect(run.model.allocations).toHaveLength(1);

@@ -246,7 +246,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				[runId, q.nodeId, r.index]
 			);
 			if (!rows.length || !r.node) throw new ApiError(404, 'not found');
-			// Without the columns worked out from a registered volume, named in `withheld`; a bound unit's day is refused (#523 I).
+			// Without the columns worked out from a registered volume, named in `withheld`; a unit's day of a cap or full-allocation run is refused (#523 I).
 			const { kept: columns, withheld } = keepVisible(await seriesWithholding(db, id, role, runId), q.nodeId, rows, "this unit's day");
 			const node = r.node as { name: string; kind: 'farm' | 'gauge'; damCapacityM3?: number; damInitialPct?: number };
 			const storage = rows.find((x) => x.key === 'dam_storage');

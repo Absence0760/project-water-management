@@ -30,7 +30,7 @@ interface BulkResponse {
 	count: number;
 	next: number | null;
 	series: { key: string; header: string; unit: string | null; values: (number | null)[] }[];
-	/** Keys left out for a viewer kept from each registered volume (#523 I); a bound unit isn't in the run's series list, so isn't asked for. */
+	/** Keys left out for a viewer kept from each registered volume (#523 I); a unit of a cap or full-allocation run isn't in the run's series list, so isn't asked for. */
 	withheld?: string[];
 }
 

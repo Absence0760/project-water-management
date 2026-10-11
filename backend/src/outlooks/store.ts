@@ -135,8 +135,18 @@ const outlookSelect = (withResult: boolean) => `SELECT o.id, o.name, o.base_run_
  * the decision date on its first day) is a 422 here, not a dead job later.
  * Wake the worker after the commit.
  */
+/** Why an outlook can't start from a cap or full-allocation run (createOutlook; only one from before 213 can be, #523 I). */
+export const OUTLOOK_ALLOCATION_MODE_REFUSED =
+	'an outlook can’t start from a run that caps use at, or scales demand to, the registered volumes: licence data never drives the baseline; pick a run that compares only';
+
 export async function createOutlook(db: Db, projectId: string, body: CreateOutlookBody): Promise<{ outlook: OutlookRow; job: JobMeta }> {
 	const base = await loadBaseInput(db, projectId, body.baseRunId);
+	// Each farm's figures in such an outlook would be worked out from its registered volume (#523 I), as publishRun refuses.
+	const { rows: mode } = await db.query<{ mode: string | null }>(`SELECT summary->'allocations'->>'mode' AS mode FROM model_run WHERE project_id = $1 AND id = $2`, [
+		projectId,
+		body.baseRunId
+	]);
+	if (mode[0]?.mode === 'cap' || mode[0]?.mode === 'fullAllocation') throw new ApiError(409, OUTLOOK_ALLOCATION_MODE_REFUSED);
 	const { rows } = await db.query<{ start: string; end: string; settings: unknown }>(
 		`SELECT r.start_date AS start, r.end_date AS "end", p.settings FROM model_run r JOIN project p ON p.id = r.project_id WHERE r.project_id = $1 AND r.id = $2`,
 		[projectId, body.baseRunId]

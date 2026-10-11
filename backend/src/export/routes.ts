@@ -243,7 +243,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const { name, timeZone } = await projectInfo(db, id);
 			const loaded = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
 			if (!loaded) throw new ApiError(404, 'not found');
-			// Without the series worked out from a registered volume (#523 I): said in a comment; a bound unit's file is refused.
+			// Without the series worked out from a registered volume (#523 I): said in a comment; a unit's file of a cap or full-allocation run is refused.
 			const { kept, withheld } = keepVisible(await seriesWithholding(db, id, role, runId), q.nodeId ?? null, loaded.series, "this unit's daily series");
 			const daily = { ...loaded, series: kept };
 			const scope = daily.name;
@@ -274,7 +274,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
 			const { name, timeZone } = await projectInfo(db, id);
-			// An allocation series is refused by name; a bound unit's column is left out, and said (#523 I).
+			// An allocation series is refused by name; a unit's column of a cap or full-allocation run is left out, and said (#523 I).
 			const w = await seriesWithholding(db, id, role, runId);
 			if (w?.withheld(null, q.key)) throw allocationSeriesWithheld('this series');
 			const { rows } = await db.query<{ nodeId: string; nodeName: string | null; unit: string | null; values: (number | null)[] }>(
@@ -337,11 +337,10 @@ export const exportRoutes = new Hono<AuthEnv>()
 				},
 				run.summary
 			);
-			// A cap or full-allocation run's bound units, left out for that viewer (#523 I): named in a comment.
-			const left = run.summary.allocations?.withheldUnits ?? [];
-			const names = left.length ? await loadNodeNames(db, id) : {};
+			// A cap or full-allocation run, for that viewer: its river outcomes only (#523 I), the parts left out named in a comment.
+			const left = (run.summary as { withheld?: string[] }).withheld ?? [];
 			// A few hundred lines: kept, since the download walks them twice (csvDownload).
-			const rows = [...withResultComments(run.legacy, withWithheldNote(left.map((u) => names[u] ?? u), lines))];
+			const rows = [...withResultComments(run.legacy, withWithheldNote(left, lines))];
 			return csvDownload(
 				c,
 				() => rows,

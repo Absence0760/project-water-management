@@ -3527,11 +3527,11 @@ export interface RunAllocations {
 	nodes: RunAllocationNode[];
 	/**
 	 * Never written by the engine: the API sets it on a cap or full-allocation
-	 * run read by a viewer kept from each registered volume, naming the units it
-	 * left out of the summary and the series (issue #523 finding I,
-	 * backend allocations/boundUnits.ts).
+	 * run read by a viewer kept from each registered volume, which reads that
+	 * run's river outcomes only (issue #523 finding I, backend
+	 * allocations/riverOutcomes.ts); the summary's `withheld` names the rest.
 	 */
-	withheldUnits?: string[];
+	riverOutcomesOnly?: true;
 }
 
 export interface RunAllocationNode {
@@ -3896,6 +3896,12 @@ export interface RunSummary {
 	supplyAssurance?: SupplyAssurance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
+	/**
+	 * Never written by the engine: the summary fields the API left out for a
+	 * viewer kept from each registered volume, on a cap or full-allocation run
+	 * (`allocations.riverOutcomesOnly`, issue #523 finding I).
+	 */
+	withheld?: string[];
 }
 
 export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations' | 'operatingRules' | 'droughtRestriction' | 'assurance';

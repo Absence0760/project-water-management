@@ -616,10 +616,11 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		'/projects/:id/alert-feedback': { status: 403, why: 'editor' }
 	};
 
-	/** The refusals on the capped and full-allocation runs only (#523 I): the sweep's sample day is the bound unit's. */
+	/** The refusals on the capped and full-allocation runs only (#523 I): river outcomes only, so a unit's day or file is refused. */
 	const EXPECTED_BOUND: Record<string, { status: number; why: string }> = {
 		'/projects/:id/runs/:runId/day': { status: 403, why: 'allocation_series_withheld: the unit is bound to its registered volume' },
-		'/projects/:id/runs/:runId/model-input': { status: 403, why: 'a cap or full-allocation run’s input holds the volumes (uncertainty.ts)' }
+		'/projects/:id/runs/:runId/model-input': { status: 403, why: 'a cap or full-allocation run’s input holds the volumes (uncertainty.ts)' },
+		'/projects/:id/runs/:runId/export/farms.csv': { status: 403, why: 'allocation_series_withheld: river outcomes only, no unit’s column' }
 	};
 
 	/** The ids a route names differently from the ladder's (its :jobId a report's, its :aid an assessment's …). */
@@ -746,6 +747,8 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 				const expected = (runId === capRun || runId === fullRun ? EXPECTED_BOUND[route] : undefined) ?? EXPECTED[route];
 				if ((r.status < 200 || r.status >= 400) && r.status !== expected?.status) refused.push(`${path} answered ${r.status}`);
 				for (const n of CANARIES) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+				// A capped or full-allocation run: nor as the difference of two of its numbers (#523 I, round 4).
+				if ((runId === capRun || runId === fullRun) && differenceOf(r.text, CANARY)) leaks.push(`${path} (${r.status}) gives ${CANARY} as a difference`);
 			}
 		}
 		expect(leaks).toEqual([]);
@@ -774,14 +777,17 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		const cap = await ctx.viewer.call('GET', `${at}/runs/${capRun}`);
 		expect(cap.body.series.some((s: { key: string }) => s.key.startsWith('allocation_'))).toBe(false);
 		expect(cap.body.withheldSeries).toContainEqual({ nodeId: unit, key: 'allocation_room_surface' });
-		// The bound unit's whole day is refused, with the reason; the outlet's is served.
+		// The unit's whole day is refused, with the reason; the outlet gauge's is served.
 		const day = await ctx.viewer.call('GET', `${at}/runs/${capRun}/day?nodeId=${unit}&date=2021-10-01`);
 		expect([day.status, day.body.code]).toEqual([403, 'allocation_series_withheld']);
 		const outlet = (await ctx.viewer.call('GET', `${at}/runs/${capRun}`)).body.series.find((s: { nodeId: string | null; key: string }) => s.nodeId && s.key === 'outflow').nodeId;
 		const outletDay = await ctx.viewer.call('GET', `${at}/runs/${capRun}/day?nodeId=${outlet}&date=2021-10-01`);
-		expect([outletDay.status, outletDay.body.withheld]).toEqual([200, []]);
-		expect((await ctx.viewer.call('GET', `${at}/runs/${capRun}`)).body.run.summary.allocations.withheldUnits).toContain(unit);
-		expect((await get(ctx.viewer, `${at}/runs/${capRun}/export/summary.csv`)).text).toMatch(/^# withheld=[^\n]*Farm A/m);
+		expect(outletDay.status).toBe(200);
+		expect(outletDay.body.columns.map((c: { key: string }) => c.key)).toContain('outflow');
+		const capSummary = (await ctx.viewer.call('GET', `${at}/runs/${capRun}`)).body.run.summary;
+		expect([capSummary.allocations.riverOutcomesOnly, capSummary.farms, capSummary.waterBalance]).toEqual([true, [], undefined]);
+		expect(capSummary.withheld).toContain('waterBalance');
+		expect((await get(ctx.viewer, `${at}/runs/${capRun}/export/summary.csv`)).text).toMatch(/^# withheld=[^\n]*waterBalance/m);
 		const full = await ctx.viewer.call('GET', `${at}/runs/${fullRun}`);
 		expect(full.body.series.some((s: { nodeId: string | null }) => s.nodeId === unit)).toBe(false);
 		expect(full.body.withheldSeries).toContainEqual({ nodeId: unit, key: 'demand' });
@@ -799,6 +805,43 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 			expect((await ctx.owner.call('PUT', `${at}/allocations/viewer-units`, { on: false })).status).toBe(200);
 		}
 	}, 120_000);
+
+	// Round 4 (I): the catchment water balance less the units still shown gave a bound unit's volume exactly. The probe,
+	// as the reviewer ran it: each water year's demand in the balance, less every other unit's demand that year.
+	it('the round-4 probe: the full allocation’s water balance less the units shown doesn’t give the volume to that viewer; it does to the editor (positive control)', async () => {
+		const at = `/projects/${ctx.projectId}/runs/${fullRun}`;
+		const probe = async (u: LadderCtx['viewer']) => {
+			const { run, series } = (await u.call('GET', at)).body as { run: { startDate: string; summary: { waterBalance?: { years: { waterYear: number; demandM3: number }[] } } }; series: { nodeId: string | null; key: string }[] };
+			const others = series.filter((s) => s.nodeId && s.nodeId !== ctx.farmId && s.key === 'demand').map((s) => s.nodeId!);
+			const demand = await Promise.all(others.map(async (n) => (await u.call('GET', `${at}/series?key=demand&nodeId=${n}`)).body.values as number[]));
+			const yearOf = (t: number) => {
+				const d = new Date(Date.parse(`${run.startDate}T00:00:00Z`) + t * 86_400_000);
+				return d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+			};
+			return (run.summary.waterBalance?.years ?? []).map((y) => y.demandM3 - demand.reduce((s, v) => s + v.reduce((a, x, t) => a + (yearOf(t) === y.waterYear ? x : 0), 0), 0));
+		};
+		expect((await probe(ctx.editor)).some((d) => Math.abs(d - CANARY) < 1)).toBe(true);
+		expect(await probe(ctx.viewer)).toEqual([]);
+		// Nor any difference of two numbers the viewer reads of the run (the derived canary, as the sweep checks it).
+		expect(differenceOf((await get(ctx.viewer, at)).text, CANARY)).toBe(false);
+		expect(differenceOf((await get(ctx.editor, at)).text, CANARY)).toBe(true);
+	});
+
+	it('the evidence report on the capped and full-allocation runs: no unit’s section for that viewer, the sections named; the editor’s has them', async () => {
+		for (const runId of [capRun, fullRun]) {
+			const at = `/projects/${ctx.projectId}/runs/${runId}/evidence-report`;
+			const mine = (await ctx.viewer.call('GET', at)).body.report;
+			expect(mine.users).toEqual([]);
+			expect(mine.rows.map((r: { id: string }) => r.id)).not.toContain('userSupply');
+			expect(mine.allocations.units).toEqual([]);
+			expect(mine.servedWhileFailing.sites.every((s: { units: unknown[] }) => s.units.length === 0)).toBe(true);
+			expect(mine.summaries.application.farms).toEqual([]);
+			expect(mine.withheld).toContain('users');
+			const theirs = (await ctx.editor.call('GET', at)).body.report;
+			expect(theirs.users.length).toBeGreaterThan(0);
+			expect(theirs.withheld).toBeUndefined();
+		}
+	});
 
 	it('the scenario, as that viewer reads it: without the op that sets another farm’s volume, the check renumbered to the ops left', async () => {
 		const read = await ctx.viewer.call('GET', `/projects/${ctx.projectId}/scenarios/${sid}`);
@@ -953,3 +996,31 @@ const unitSeriesPaths = (run: string, unit: string, day: string): string[] => [
 	`${run}/export/daily.csv?nodeId=${unit}`,
 	...['allocation_room_surface', 'demand'].map((key) => `${run}/export/farms.csv?key=${key}`)
 ];
+
+/**
+ * Whether two numbers in a response differ by `n` in m³ a year, or by its daily mean (n ÷ 365) or megalitres (n ÷ 1000),
+ * within a part in a million: a figure got by subtraction (#523 I, round 4: the water balance less the units shown).
+ */
+function differenceOf(text: string, n: number): boolean {
+	// The figures it serves (JSON numbers, or a CSV's cells), not the digits inside ids, hashes or dates.
+	const values = (v: unknown): number[] => (typeof v === 'number' ? [v] : v && typeof v === 'object' ? Object.values(v).flatMap(values) : []);
+	let parsed: number[];
+	try {
+		parsed = values(JSON.parse(text));
+	} catch {
+		parsed = text.split(/[,\r\n]/).map((c) => (/^\s*-?\d+(\.\d+)?(e[+-]?\d+)?\s*$/i.test(c) ? Number(c) : NaN));
+	}
+	const all = [...new Set(parsed.filter(Number.isFinite))].sort((a, b) => a - b);
+	const has = (target: number, tol: number) => {
+		let lo = 0;
+		let hi = all.length - 1;
+		while (lo <= hi) {
+			const mid = (lo + hi) >> 1;
+			if (Math.abs(all[mid]! - target) <= tol) return true;
+			if (all[mid]! < target) lo = mid + 1;
+			else hi = mid - 1;
+		}
+		return false;
+	};
+	return [n, n / 365, n / 1000].some((d) => all.some((a) => has(a + d, d * 1e-6)));
+}
