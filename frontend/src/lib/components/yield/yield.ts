@@ -64,10 +64,13 @@ export type CurveResult = YieldResult & { points: { baseCapacityM3: number; assu
 /** Newest firm yield and newest curve among a node's results (the API lists newest first). */
 export function latestResults(results: readonly YieldResult[]): { firm: FirmResult | null; curve: CurveResult | null } {
 	return {
-		firm: (results.find((r) => r.kind === 'firm' && 'point' in r.points) as FirmResult | undefined) ?? null,
-		curve: (results.find((r) => r.kind === 'curve' && 'points' in r.points) as CurveResult | undefined) ?? null
+		firm: (results.find((r) => r.kind === 'firm' && r.points && 'point' in r.points) as FirmResult | undefined) ?? null,
+		curve: (results.find((r) => r.kind === 'curve' && r.points && 'points' in r.points) as CurveResult | undefined) ?? null
 	};
 }
+
+/** Whether a result's figures were withheld from this reader: a yield on a cap or full-allocation run, for a viewer kept from the volumes (#523 I). */
+export const yieldWithheld = (results: readonly YieldResult[]): boolean => results.some((r) => r.points === null);
 
 /** "Constant", "This farm's demand shape" or "Custom monthly shape". */
 export function patternLabel(p: YieldResult['params']['pattern']): string {

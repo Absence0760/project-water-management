@@ -32,6 +32,7 @@
 		jobStatus,
 		jobToFollow,
 		latestResults,
+		yieldWithheld,
 		modelRuns,
 		patternLabel,
 		PREVIEW_TOLERANCE,
@@ -318,6 +319,13 @@
 	{:else if !latest.firm && !latest.curve}
 		{#if target}<p class="muted" data-testid="yield-empty">No yield worked out for this dam on this {scenarioId ? 'scenario' : 'run'} yet.</p>{/if}
 	{:else}
+		{#if yieldWithheld(results)}
+			<!-- A yield on a cap or full-allocation run, for a viewer kept from each registered volume (#523 I). -->
+			<p class="alert alert-info" role="note" data-testid="yield-withheld">
+				A yield worked out on a run that caps use at, or scales demand to, the registered water volumes is withheld: this project shows those volumes to
+				its editors and owners only.
+			</p>
+		{/if}
 		{#if latest.firm}
 			{@const p = latest.firm.points.point}
 			<dl class="firm" data-testid="yield-firm">

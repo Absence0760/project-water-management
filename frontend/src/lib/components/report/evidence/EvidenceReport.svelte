@@ -189,8 +189,8 @@
 			{#if s.id === 'summary'}
 				{#if report.withheld?.length}
 					<!-- A report on a cap or full-allocation run, read by a viewer kept from each registered volume (#523 I). -->
-					<p class="alert alert-info" role="note" data-testid="evidence-river-outcomes-only">
-						Only this report’s river outcomes are shown: it rests on a run that caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only. No unit’s supply, registered-use comparison, demand object or run warning is given.
+					<p class="alert alert-info" role="note" data-testid="evidence-verdicts-only">
+						Only this report’s EWR verdicts and counts are shown: it rests on a run that caps use at, or scales demand to, the registered water volumes, which this project shows to its editors and owners only. No flow, volume, unit’s supply, registered-use comparison or run warning is given.
 					</p>
 				{/if}
 				<EvidenceSummary {report} {board} {boardNotFrozen} {authorisedBoard} {frozen} signoffs={signoffs?.signoffs ?? []} {verify} />

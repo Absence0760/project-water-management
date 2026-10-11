@@ -2629,7 +2629,9 @@ export interface YieldResult {
 	jobId: string | null;
 	kind: 'firm' | 'curve';
 	params: YieldParams;
-	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean };
+	/** Null for a viewer kept from each registered volume, on a yield computed on a cap or full-allocation run (`withheld`, #523 I). */
+	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean } | null;
+	withheld?: string[];
 	engineVersion: string;
 	createdBy: string | null;
 	createdAt: string;
