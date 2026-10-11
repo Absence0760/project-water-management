@@ -1582,7 +1582,7 @@ Interaction details that bit:
   them, each loader picking its export
   (`() => import('./lazySections').then((m) => ({ default: m.X }))`). Settings'
   sections that draw on every visit (`settings/lazySections.ts`) and the Map
-  tab's tool sheets (`map/sheets.ts`) do this; nine chunks of their own had
+  tab's tool sheets (`map/sheets.ts`) do this; seven chunks of their own had
   cost ~6 KB of gzip overhead in the total (issue #521). Leave out a panel
   another tab also loads lazily, or the chunk follows it there. A tool sheet
   that opens a click after its tool starts is warmed (`prefetch`) when the

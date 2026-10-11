@@ -1,6 +1,6 @@
 <script module lang="ts">
 	// Every lazy section below that draws on each visit shares one chunk, lazySections.ts (issue #521): they all
-	// load as the tab opens, so one request and one gzip stream instead of nine.
+	// load as the tab opens, so one request and one gzip stream instead of seven.
 	const loadSections = () => import('./lazySections');
 	// Settings → Calibration record's quality flags and flow gaps (issue #66): out of the tab's chunk,
 	// loaded when the section draws, so the Settings tab chunk stays under its size ceiling. The
