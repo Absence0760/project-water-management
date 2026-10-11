@@ -26,12 +26,12 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	await rules.getByLabel('Starts per fit').fill('1');
 	await rules.getByLabel('After a kept fit is applied, run the model and the uncertainty ensemble around it').uncheck();
 	await expect(auto.getByTestId('auto-rules-unsaved')).toBeVisible();
-	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
+	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
 	await saveSettings(page);
 	await expect(rules.getByTestId('rules-status')).toContainText('Revision 2');
 	await expect(auto.getByTestId('auto-rules')).toContainText('seed 1, 1 start per fit, 50 model runs per optimisation');
 
-	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
+	await page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ })).toBeVisible();
 	await runJobsTick({ projects: [project.id], schedule: false });
 
@@ -45,10 +45,10 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 
 	// Keep by the split-sample test instead: saved first, then run again.
 	await rules.getByLabel('on the held-out test').selectOption({ label: 'split-sample test (other half)' });
-	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
+	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeDisabled();
 	await saveSettings(page);
 	await expect(auto.getByTestId('auto-rules')).toContainText('Revision 3');
-	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
+	await page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ })).toBeVisible();
 	await runJobsTick({ projects: [project.id], schedule: false });
 	await expect(fits.getByRole('cell', { name: 'Kept', exact: true })).toHaveCount(1);
@@ -97,7 +97,7 @@ test('a sign-off is a typed signature the server dates, and a viewer can read th
 	await expect(seen.getByTestId('rules-status')).toContainText('signed off by A. Hydrologist');
 	await expect(seen.getByLabel('on the held-out test')).toBeDisabled();
 	await expect(seen.getByTestId('rules-sign-off')).toHaveCount(0);
-	await expect(viewer.page.getByRole('region', { name: /^Automated calibration/ }).getByRole('button', { name: 'Run the calibration rules' })).toHaveCount(0);
+	await expect(viewer.page.getByRole('button', { name: 'Run the calibration rules' })).toHaveCount(0);
 });
 
 test('the flagged-days rule: its checkbox sits beside its words, and off and on again keeps the share typed', async ({ page, owner }) => {
@@ -146,7 +146,7 @@ test('a running run of the rules stays with its project: another project never s
 	const auto = page.getByRole('region', { name: /^Automated calibration/ });
 	const sections = page.getByRole('navigation', { name: 'Project sections' });
 	const fitting = auto.getByRole('status').filter({ hasText: /^Fitting 1 of 2 on the server/ });
-	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
+	await page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(fitting).toBeVisible();
 	await page.clock.runFor(1_600);
 	await expect.poll(() => polls.length).toBeGreaterThan(0);
@@ -155,7 +155,7 @@ test('a running run of the rules stays with its project: another project never s
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 	await page.getByRole('link', { name: 'Rules not run here', exact: true }).click();
 	await sections.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
-	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
+	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
 	const seen = polls.length;
 	await page.clock.runFor(6_000);
 	await expect(auto.getByTestId('auto-result')).toHaveCount(0);
@@ -187,7 +187,7 @@ test('a running run of the rules stays with its project: another project never s
 	await page.evaluate(() => history.go(3));
 	await (await bLoaded).finished();
 	await expect(page).toHaveURL(new RegExp(`/projects/${b.id}\\?tab=settings`));
-	await expect(auto.getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
+	await expect(page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeEnabled();
 	const seenAgain = polls.length;
 	const stale = page.waitForResponse((r) => r.url().includes(`/projects/${a.id}/auto-calibrations/`));
 	release();
@@ -200,7 +200,7 @@ test('a running run of the rules stays with its project: another project never s
 	await expect(auto.getByRole('alert')).toHaveCount(0);
 	expect(polls.length).toBe(seenAgain);
 	// One run at a time per person: B says where the running one is, rather than seeming to run here too.
-	await auto.getByRole('button', { name: 'Run the calibration rules' }).click();
+	await page.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' }).click();
 	await expect(auto.getByRole('alert')).toHaveText(
 		'you already have an automated calibration queued or running in the project “Rules run here”, and only one at a time is allowed; wait for it to finish, then start this one'
 	);

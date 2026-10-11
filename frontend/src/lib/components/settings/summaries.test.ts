@@ -68,6 +68,8 @@ describe('settingsSummaries', () => {
 		expect(s['set-period']).toBe('1 Oct 2015 – 30 Sep 2020');
 		expect(s['set-rain']).toBe('Raw CHIRPS fills gaps · zero runs treated as missing');
 		expect(s['set-demand']).toMatch(/^A-pan 1\s?230 mm a year · effective rain/);
+		// The rain threshold for demand lives in Demand (issue #521), so its line names it.
+		expect(s['set-demand']).toMatch(/ · rain threshold \d+(\.\d)? mm · /);
 		expect(s['set-share']).toBe('High/low MAP split, 60% / 40%');
 		expect(s['set-record']).toBe('from 1 Oct 2001 · at Melkhout Gauge · 1 period left out · river stops Feb, Mar, Apr');
 		expect(s['set-auto']).toBe('On: 30 minutes after new data, never publishes');

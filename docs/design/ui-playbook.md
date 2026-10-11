@@ -652,6 +652,16 @@ section it belongs to, with the example that taught it.
   covers controls"). Make the card short enough instead, and pin it in e2e
   (the head's sign-off, the fit count and the last group's line all in the
   window with the head at its top). Save stays the page's save bar.
+- **An action that saves at once, among fields that wait for the save bar,
+  sits in its card's heading row and says so.** Flow calibration's
+  Evaporation from the map had its **Use as GR4J's monthly PE** at the foot
+  of a 2,000 px panel whose every other field waited for the save bar, with
+  nothing marking the difference (issue #521). Now it is a card of its own,
+  the button in the heading's row (`proposals/ProposalPanel.svelte`
+  `actions`) beside a **Saves now** tag that is also the button's
+  description. The same for the rules' **Run the calibration rules**: the
+  card's main action goes in its head (`CalibrationRulesFields` `headAction`),
+  beside the count it acts on, not under the result list.
 - **One short line under a field; the rest behind ⓘ or the explain switch.**
   Fit automatically's starts and seed hints were four-line paragraphs that
   made every row of the grid a different height. A hint that states a value
@@ -1414,6 +1424,16 @@ Interaction details that bit:
   `getByRole('group', { name })` on a fieldset inside it finds nothing until
   it opens; `getByLabel` on its fields still resolves (and `fill` waits for
   them to be visible, so open the fold first: `openFold`).
+- **A `grouped` `NumberInput` swaps its text on focus, so it must keep the
+  selection.** It shows "1 500" at rest and "1500" to edit. The swap used to
+  land on the next render, after Tab's (or Playwright's `fill`'s) select-all,
+  so typing appended: `fill('60')` gave "150060", which is over the field's
+  maximum, and every spec that set Fit automatically's model runs failed once
+  the field was grouped. It now swaps in place in its focus handler and
+  selects the text unless a press (pointer) gave the focus.
+- **A fold can hold another `<details>`.** The pan row's fill tools hold the
+  FAO-56 helper, so `fold.locator('summary')` matched two; `openFold` takes
+  the fold's own (`:scope > summary`).
 - **A `NumberInput` that isn't `nullable` never reaches `null`.** Cleared or
   given text it can't read, it keeps the last number and marks itself
   `aria-invalid` with its own message, so a check written against `null`

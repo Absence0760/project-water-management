@@ -1,5 +1,5 @@
 <!--
-	Settings → Flow generation → Rain for each unit (settings.unitRain, issue
+	Settings → Flow calibration → Rain into GR4J → Rain for each unit (settings.unitRain, issue
 	#482, docs/model.md §2.4h, docs/ui.md § Settings & calibration): the switch
 	that runs GR4J once per unit with land on its own rain, the catchment rain
 	gauge's MAP with its source, the MAP period the CHIRPS factors compare
@@ -69,7 +69,7 @@
 </script>
 
 <fieldset class="plain unit-rain" data-testid="unit-rain-settings">
-	<legend><h3 class="sub">Rain for each unit <HelpTip key="settings.unitRain" /></h3></legend>
+	<legend><h4 class="sub">Rain for each unit <HelpTip key="settings.unitRain" /></h4></legend>
 	<label class="check">
 		<input type="checkbox" disabled={readonly} checked={on} onchange={(e) => setOn(e.currentTarget.checked)} aria-describedby="{uid}-h" />
 		Runoff from each unit’s own rain
@@ -86,7 +86,7 @@
 		{#if coverage.without.length}
 			<p class="hint coverage" data-testid="unit-rain-without-map">
 				Without a MAP:
-				{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
+				{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}&section=area">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
 			</p>
 		{/if}
 		<div class="fields">
@@ -107,7 +107,7 @@
 						if (value) value = withGaugeMap(value, v);
 					}}
 				/>
-				<span class="hint" id="{uid}-gmap-h">The catchment rain gauge’s own mean annual rain. With it, a unit with a MAP runs on the gauge’s rain × unit MAP ÷ this.</span>
+				<span class="hint explain" id="{uid}-gmap-h">The catchment rain gauge’s own mean annual rain. With it, a unit with a MAP runs on the gauge’s rain × unit MAP ÷ this.</span>
 				{#if problem?.field === 'gaugeMap'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
 			</div>
 			{#if value.gaugeMapMm !== null && value.gaugeMapMm !== undefined}
@@ -169,7 +169,7 @@
 					/>
 				</div>
 			</div>
-			<span class="hint" id="{uid}-per-h">
+			<span class="hint explain" id="{uid}-per-h">
 				The calendar years a unit’s CHIRPS mean annual rain is taken over, to compare with its MAP. Default {DEFAULT_UNIT_MAP_PERIOD.start.slice(0, 4)}–{DEFAULT_UNIT_MAP_PERIOD.end.slice(0, 4)},
 				the years CHIRPS’s own climatology uses; take the years the MAPs were made for.
 			</span>
@@ -211,13 +211,13 @@
 							<option value="" disabled>Pick the unit the gauge stands in</option>
 							{#each land as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 						</select>
-						<span class="hint" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with, and every unit’s MAP is divided by this unit’s MAP.</span>
+						<span class="hint explain" id="{uid}-runit-h">The CHIRPS cell at this unit’s centre is what the gauge is compared with, and every unit’s MAP is divided by this unit’s MAP.</span>
 						{#if problem?.field === 'reference'}<span class="err" id={errId} data-testid="unit-rain-error">{problem.message}</span>{/if}
 						{#if refGone}<span class="err" data-testid="unit-rain-reference-gone">The reference unit is no longer a unit with land: runs ignore the reference until another is picked.</span>{/if}
 					</div>
 				{/if}
 			</div>
-			<span class="hint" id="{uid}-ref-h">
+			<span class="hint explain" id="{uid}-ref-h">
 				With a reference gauge, every unit’s CHIRPS is scaled by 12 monthly factors, the gauge’s rain ÷ the CHIRPS at the reference unit’s cell on the days
 				both have a reading, then by the unit’s MAP ÷ the reference unit’s MAP. A month with fewer than 90 shared days, or under 50 mm of CHIRPS, keeps a
 				factor of 1. The MAP period above then no longer applies.
@@ -279,7 +279,9 @@
 		font-size: 0.85rem;
 		color: var(--text-2);
 	}
+	/* A block of its own: inline, the switch's explanation ran on after its label (issue #521). */
 	.hint {
+		display: block;
 		font-size: 0.8rem;
 		max-width: 75ch;
 	}

@@ -1,7 +1,8 @@
 // Settings → Fit the parameters (2026-10-10): two cards, each with its main action where it is seen.
 // Fit automatically: the choices that decide the fit (objective, parameters, validation), the search folded
 // into one line of its values, and the button straight under them, on the first screen once the section is
-// open. Calibration rules: the revision, sign-off state, fit count and the sign-off in the card's head, the
+// open, and the fit record at the card's foot. Calibration rules: the revision, sign-off state, fit count, the
+// sign-off and the run in the card's head, the
 // fields in four named groups, its search budget folded the same way. Synthetic data.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -55,6 +56,8 @@ for (const size of [
 		await rules.getByTestId('rules-head').evaluate((el) => el.scrollIntoView({ block: 'start' }));
 		await layoutSettled(page);
 		await expect(rules.getByRole('button', { name: 'Sign off these rules' })).toBeInViewport({ ratio: 1 });
+		// The rules' run is the card's main action, in its head beside the sign-off (issue #521, Fit follow-up 2).
+		await expect(rules.getByTestId('rules-run').getByRole('button', { name: 'Run the calibration rules' })).toBeInViewport({ ratio: 1 });
 		await expect(rules.getByTestId('rules-fits')).toBeInViewport({ ratio: 1 });
 		await expect(rules.getByTestId('rules-search').locator('summary')).toBeInViewport({ ratio: 1 });
 		// The four groups, in order, each named.

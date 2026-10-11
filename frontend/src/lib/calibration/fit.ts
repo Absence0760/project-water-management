@@ -69,7 +69,7 @@ export function searchSummary(s: { bounds?: CalibrationBounds; budget: number | 
 	const parts: string[] = [];
 	if (s.bounds) parts.push(`${BOUNDS_LABEL[s.bounds].replace(' (default)', '')} bounds`);
 	parts.push(`${fmtNum(s.budget)} runs × ${fmtNum(s.starts)} start${s.starts === 1 ? '' : 's'}`);
-	parts.push(`seed ${s.seed ?? '–'}`);
+	parts.push(`seed ${s.seed === null ? '–' : fmtNum(s.seed)}`);
 	return parts.join(' · ');
 }
 
@@ -325,10 +325,12 @@ export function applyReport<S extends Pick<ProjectSettings, 'gr4j'>>(settings: S
 /** Largest seed: the engine's generator takes a 32-bit integer. */
 export const SEED_MAX = 2 ** 31 - 1;
 
-/** Why a seed can't be used, or null. */
+/**
+ * Why a seed can't be used, or null. The seed field is a NumberInput that never empties (cleared, it keeps its last
+ * number and says so itself), so there is no "Enter a seed." case; a null that reaches here is simply not a whole number.
+ */
 export function seedError(seed: number | null): string | null {
-	if (seed === null) return 'Enter a seed.';
-	return Number.isInteger(seed) && seed >= 0 && seed <= SEED_MAX ? null : `The seed must be a whole number from 0 to ${fmtNum(SEED_MAX)}.`;
+	return seed !== null && Number.isInteger(seed) && seed >= 0 && seed <= SEED_MAX ? null : `The seed must be a whole number from 0 to ${fmtNum(SEED_MAX)}.`;
 }
 
 /**

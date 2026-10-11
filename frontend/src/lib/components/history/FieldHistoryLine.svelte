@@ -25,7 +25,7 @@
 </script>
 
 {#if f}
-	<a class="field-history" href={fieldHistoryHref(f, unit)} data-testid="field-history">{fieldHistoryText(f)}</a>
+	<a class="field-history" href={fieldHistoryHref(f, unit)} title={fieldHistoryText(f)} data-testid="field-history">{fieldHistoryText(f)}</a>
 {/if}
 
 <style>

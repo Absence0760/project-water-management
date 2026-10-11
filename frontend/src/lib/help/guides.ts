@@ -387,7 +387,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, press **+ Add crop**: its sheet opens over the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors (Oct to Sep, the highest marked with its value; point at it to read a month); **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
 							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: what the catchment abstracts for its crops per month (the gross demand ÷ each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], so an efficiency below 100 % raises it), stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain, which a run takes off day by day. It uses the monthly A-pan means: with a daily [[apan|A-pan]] series on the **Data** tab, runs use that on the days it has a value, so their demand differs, and a line under the heading says so.',
-							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or use them from the map, when an A-pan grid is loaded), the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
+							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or use them from the map, when an A-pan grid is loaded), the [[effective-rainfall|effective-rain fraction]], the [[soil-water-store|soil-water store]] and the [[rain-threshold]].',
 							'To bring in a list kept in a spreadsheet (a scheme’s register, a farm survey; hundreds of rows at once), press **Import plantings…** and load a CSV file or paste the rows: a heading row, then one row per farm and crop with its area in hectares (Farm, Crop, Area (ha), and optionally Irrigation system; **Download the template** under **Expected format** has the layout). Farms and crops are matched by name, whatever the capitals and spacing. A crop the project doesn’t have is added with crop factors of 0 and marked **needs crop factors** until you fill them in; a farm it doesn’t have is listed, and with **Add them as new hydrological units** ticked it becomes a new unit draining into the outlet, marked **Needs placing** on the Network until you set its area and where it drains. The preview counts what changes and lists every row it can’t read by its line; nothing changes until **Apply**, and then you save as after any edit.',
 							'Give each crop its [[irrigation-system|irrigation system]] in its sheet (a unit can override it per crop in **Edit areas**); the systems and their efficiencies are under **Tables** › **Irrigation systems**. Each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] is its crops’ systems combined.',
 							'Press **Save changes** on the save bar.'
@@ -730,7 +730,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On **Settings & calibration → Calibration record**, choose the calibration flow series (gauge or logger) and the [[calibration-window]]: a period with a record you trust.',
 							'Add [[calibration-exclusions]] for periods you can’t trust, each with its reason.',
-							'Enter each record’s gauged range (its highest and lowest field gauging) under [[quality-flags|Quality flags]], so days read off the extrapolated rating curve are flagged.',
+							'Enter each record’s gauged range (its highest and lowest field gauging) under [[quality-flags|Quality flags]] (the line under the exclusions: **Change** opens it), so days read off the extrapolated rating curve are flagged.',
 							'The [[runoff-model]] is GR4J: its parameters are under **Flow calibration**. (The workbook’s legacy model was removed in engine 1.0.0.)'
 						]
 					}
@@ -865,7 +865,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The optional [[wr2012-penalty|MAR penalty]] makes Fit automatically pull the natural MAR towards WR2012, and shows the fit with and without it.'
+						text: 'The optional [[wr2012-penalty|MAR penalty]], switched on in **Fit the parameters → Fit automatically**, makes the fit pull the natural MAR towards WR2012, and shows the fit with and without it.'
 					}
 				]
 			}

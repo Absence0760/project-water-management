@@ -69,3 +69,4 @@ export function ratingProblem(q: QualityFlagSettings | null | undefined, kind: C
 	const field: RatingField = !ok(hi) || hi === 0 ? 'max' : !ok(lo) || (hi !== null && lo !== null && lo >= hi) ? 'min' : 'source';
 	return { field, message: `${RECORD_NAME[kind]} gauged range: ${err.charAt(0).toUpperCase()}${err.slice(1)}.` };
 }
+

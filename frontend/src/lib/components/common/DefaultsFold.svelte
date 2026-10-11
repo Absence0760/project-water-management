@@ -5,7 +5,8 @@
 	when it mounts, so a value changed while it is open never shuts it), and its closed line ends with a
 	named action ("Change the limits"). A native <details>: the fields stay in the page, so Find a setting
 	finds them and opens it (SectionNav `jump`), and "needs fixing" shows on the line while a field inside
-	is aria-invalid. Callers: Settings → Rain gaps, Data quality and the WR2012 check's judging.
+	is aria-invalid. Callers: Settings → Rain gaps, Data quality, the WR2012 check's judging, Flow calibration's
+	warm-up and the Calibration record's quality flags.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -17,6 +18,7 @@
 		change = 'Change',
 		stack = false,
 		testid,
+		lineTestid,
 		children
 	}: {
 		/** The group's name, ending in a colon: "Default limits:". */
@@ -30,6 +32,8 @@
 		/** The body stacks its children (headed groups, cards) instead of the fold's field grid. */
 		stack?: boolean;
 		testid?: string;
+		/** A test id for the line of values, for a spec to read it. */
+		lineTestid?: string;
 		children: Snippet;
 	} = $props();
 
@@ -42,7 +46,7 @@
 <details class="fold defaults-fold" data-testid={testid} bind:open>
 	<summary>
 		<span class="fold-name">{name}</span>
-		<span>{line}</span>
+		<span data-testid={lineTestid}>{line}</span>
 		<span class="fold-problem">needs fixing</span>
 		<span class="fold-change" aria-hidden="true">{open ? 'Hide' : change}</span>
 	</summary>

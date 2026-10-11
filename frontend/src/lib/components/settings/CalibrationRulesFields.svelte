@@ -29,6 +29,7 @@
 		type CalibrationRules,
 		type ObjectiveId
 	} from '@water-management/engine';
+	import type { Snippet } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { BOUNDS_LABEL, searchSummary } from '$lib/calibration/fit';
@@ -40,13 +41,16 @@
 		value = $bindable(),
 		error = $bindable(null),
 		lastShare = $bindable(),
-		readonly = false
+		readonly = false,
+		headAction
 	}: {
 		value: CalibrationRules;
 		error?: string | null;
 		/** The share unticking "Leave out a water year…" turned off. */
 		lastShare?: unknown;
 		readonly?: boolean;
+		/** The card's main action, in the head beside the fit count: Run the calibration rules (AutoFitPanel's); not for a viewer. */
+		headAction?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -82,7 +86,11 @@
 				<span class="badge" class:draft={!value.signedOff}>{value.signedOff ? 'Signed off' : 'Draft'}</span>
 				{rulesStatusText(value)}
 			</p>
-			<p class="hint fits" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}).</p>
+			<!-- The run beside the fit count, so the head stays the sign-off's height (issue #521, Fit follow-up 2). -->
+			<div class="state-row">
+				{#if headAction && !readonly}<div class="run" data-testid="rules-run">{@render headAction()}</div>{/if}
+				<p class="hint fits" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}).</p>
+			</div>
 		</div>
 		{#if !readonly}
 			<div class="sign" data-testid="rules-sign-off">
@@ -240,15 +248,15 @@
 				<div class="fold-body">
 					<div class="field">
 						<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
-						<NumberInput id="{uid}-budget" min={RULE_BUDGET_MIN} max={RULE_BUDGET_MAX} step={50} disabled={readonly} bind:value={() => value.run.budget, (v) => (value.run = { ...value.run, budget: v ?? RULE_BUDGET_MIN })} />
+						<NumberInput id="{uid}-budget" grouped min={RULE_BUDGET_MIN} max={RULE_BUDGET_MAX} step={50} disabled={readonly} bind:value={() => value.run.budget, (v) => (value.run = { ...value.run, budget: v ?? RULE_BUDGET_MIN })} />
 					</div>
 					<div class="field">
 						<label for="{uid}-starts">Starts per fit</label>
-						<NumberInput id="{uid}-starts" min={1} max={MAX_STARTS} step={1} disabled={readonly} bind:value={() => value.run.starts, (v) => (value.run = { ...value.run, starts: v ?? 1 })} />
+						<NumberInput id="{uid}-starts" grouped min={1} max={MAX_STARTS} step={1} disabled={readonly} bind:value={() => value.run.starts, (v) => (value.run = { ...value.run, starts: v ?? 1 })} />
 					</div>
 					<div class="field">
 						<label for="{uid}-seed">Seed</label>
-						<NumberInput id="{uid}-seed" min={0} max={RULE_SEED_MAX} step={1} disabled={readonly} bind:value={() => value.run.seed, (v) => (value.run = { ...value.run, seed: v ?? 0 })} />
+						<NumberInput id="{uid}-seed" grouped min={0} max={RULE_SEED_MAX} step={1} disabled={readonly} bind:value={() => value.run.seed, (v) => (value.run = { ...value.run, seed: v ?? 0 })} />
 					</div>
 				</div>
 				<p class="hint" data-testid="rules-search-note">The seed, starts and model runs are rules too: trying another seed after a result is a rule change, with its own revision.</p>
@@ -296,8 +304,11 @@
 		padding: 0.25rem 0 0.6rem;
 		border-bottom: 1px solid var(--border);
 	}
+	/* A small basis, so the run and the fit count share the row with the sign-off rather than pushing it under them
+	   (the head stays one row at 1280 px); the count wraps beside the button. */
 	.state {
-		flex: 1 1 auto;
+		flex: 1 1 18rem;
+		min-width: 0;
 	}
 	.status {
 		display: flex;
@@ -318,6 +329,15 @@
 	}
 	.badge.draft {
 		background: var(--warning-soft);
+	}
+	.state-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+	}
+	.state-row .fits {
+		flex: 1 1 12rem;
 	}
 	.sign {
 		display: flex;

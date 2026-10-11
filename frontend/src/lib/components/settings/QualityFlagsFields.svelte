@@ -38,64 +38,84 @@
 
 <fieldset class="plain qf" aria-describedby="{uid}-hint">
 	<legend><h3 class="title">Quality flags for Fit automatically <HelpTip key="settings.qualityFlags" /></h3></legend>
-	<p class="hint" id="{uid}-hint">
+	<p class="hint explain" id="{uid}-hint">
 		A flow above the highest field gauging, or below the lowest, comes from an extrapolated rating curve. Enter the gauged range where you know it,
 		with where it comes from. Days the Data checks call suspect (outliers, flat stretches) are flagged too. The fit leaves flagged days out by default
 		and shows its score on all days beside it; the run’s calibration statistics still score every observed day.
 	</p>
-	{#each kinds as kind (kind)}
-		{@const r = ratingField(value, kind)}
-		<!-- The record's problem sits under the field it is fixed in, which names it (aria-describedby). -->
-		{@const p = ratingProblem(value, kind)}
-		{@const errId = `${uid}-${kind}-err`}
-		<div class="rating" data-testid="rating-{kind}">
-			<div class="field">
-				<label for="{uid}-{kind}-max">{RECORD_NAME[kind]}: highest gauging <span class="u">(m³/s)</span></label>
-				<NumberInput
-					id="{uid}-{kind}-max"
-					nullable
-					min={0}
-					step="any"
-					disabled={readonly}
-					bind:value={() => r.gaugedMaxM3s, (v) => set(kind, { gaugedMaxM3s: v })}
-					placeholder="not known"
-					aria-invalid={p?.field === 'max' ? 'true' : undefined}
-					aria-describedby={p?.field === 'max' ? errId : undefined}
-				/>
-				{#if p?.field === 'max'}<span class="err" id={errId}>{p.message}</span>{/if}
-			</div>
-			<div class="field">
-				<label for="{uid}-{kind}-min"><span class="visually-hidden">{RECORD_NAME[kind]}: </span>Lowest gauging <span class="u">(m³/s)</span></label>
-				<NumberInput
-					id="{uid}-{kind}-min"
-					nullable
-					min={0}
-					step="any"
-					disabled={readonly}
-					bind:value={() => r.gaugedMinM3s, (v) => set(kind, { gaugedMinM3s: v })}
-					placeholder="not known"
-					aria-invalid={p?.field === 'min' ? 'true' : undefined}
-					aria-describedby={p?.field === 'min' ? errId : undefined}
-				/>
-				{#if p?.field === 'min'}<span class="err" id={errId}>{p.message}</span>{/if}
-			</div>
-			<div class="field source">
-				<label for="{uid}-{kind}-src">Source<span class="visually-hidden"> of the {RECORD_NAME[kind].toLowerCase()} gauged range</span></label>
-				<input
-					id="{uid}-{kind}-src"
-					type="text"
-					maxlength={RATING_SOURCE_MAX}
-					readonly={readonly}
-					value={r.source}
-					oninput={(e) => set(kind, { source: e.currentTarget.value })}
-					placeholder="e.g. DWS gauging list, rating table 2019"
-					aria-invalid={p?.field === 'source' ? 'true' : undefined}
-					aria-describedby={p?.field === 'source' ? errId : undefined}
-				/>
-				{#if p?.field === 'source'}<span class="err" id={errId}>{p.message}</span>{/if}
-			</div>
+	<!-- One row per record, the same three columns (issue #521): a 2-row table, not a ragged grid. -->
+	{#if kinds.length}
+		<div class="table-wrap">
+			<table class="data compact ranges" data-testid="gauged-ranges">
+				<caption>Gauged range of each record</caption>
+				<thead>
+					<tr>
+						<th scope="col">Record</th>
+						<th scope="col">Highest gauging <span class="u">(m³/s)</span></th>
+						<th scope="col">Lowest gauging <span class="u">(m³/s)</span></th>
+						<th scope="col">Source</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each kinds as kind (kind)}
+						{@const r = ratingField(value, kind)}
+						<!-- The record's problem sits under the field it is fixed in, which names it (aria-describedby). -->
+						{@const p = ratingProblem(value, kind)}
+						{@const errId = `${uid}-${kind}-err`}
+						<tr data-testid="rating-{kind}">
+							<th scope="row">{RECORD_NAME[kind]}</th>
+							<td>
+								<label class="visually-hidden" for="{uid}-{kind}-max">{RECORD_NAME[kind]}: highest gauging (m³/s)</label>
+								<NumberInput
+									id="{uid}-{kind}-max"
+									nullable
+									min={0}
+									step="any"
+									disabled={readonly}
+									bind:value={() => r.gaugedMaxM3s, (v) => set(kind, { gaugedMaxM3s: v })}
+									placeholder="not known"
+									aria-invalid={p?.field === 'max' ? 'true' : undefined}
+									aria-describedby={p?.field === 'max' ? errId : undefined}
+								/>
+								{#if p?.field === 'max'}<span class="err" id={errId}>{p.message}</span>{/if}
+							</td>
+							<td>
+								<label class="visually-hidden" for="{uid}-{kind}-min">{RECORD_NAME[kind]}: Lowest gauging (m³/s)</label>
+								<NumberInput
+									id="{uid}-{kind}-min"
+									nullable
+									min={0}
+									step="any"
+									disabled={readonly}
+									bind:value={() => r.gaugedMinM3s, (v) => set(kind, { gaugedMinM3s: v })}
+									placeholder="not known"
+									aria-invalid={p?.field === 'min' ? 'true' : undefined}
+									aria-describedby={p?.field === 'min' ? errId : undefined}
+								/>
+								{#if p?.field === 'min'}<span class="err" id={errId}>{p.message}</span>{/if}
+							</td>
+							<td class="source">
+								<label class="visually-hidden" for="{uid}-{kind}-src">Source of the {RECORD_NAME[kind].toLowerCase()} gauged range</label>
+								<input
+									id="{uid}-{kind}-src"
+									type="text"
+									maxlength={RATING_SOURCE_MAX}
+									readonly={readonly}
+									value={r.source}
+									oninput={(e) => set(kind, { source: e.currentTarget.value })}
+									placeholder="e.g. DWS gauging list, rating table 2019"
+									aria-invalid={p?.field === 'source' ? 'true' : undefined}
+									aria-describedby={p?.field === 'source' ? errId : undefined}
+								/>
+								{#if p?.field === 'source'}<span class="err" id={errId}>{p.message}</span>{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		</div>
-	{/each}
+	{/if}
+	<div class="uses-wrap">
 	<div class="uses">
 		<div class="field">
 			<label for="{uid}-above">Days above the highest gauging <HelpTip key="quality-flags" label="About how flagged days are treated" /></label>
@@ -122,10 +142,11 @@
 			</select>
 		</div>
 	</div>
+	</div>
 	<!-- Engine ≥ 1.81.0 (issue #507 item 2): absent on settings saved before it, read as none. -->
 	<div class="months" data-testid="zero-flow-months">
 		<p class="months-title" aria-hidden="true">Months the river stops</p>
-		<p class="hint" id="{uid}-months-hint">
+		<p class="hint explain" id="{uid}-months-hint">
 			A broken or blocked logger also reads zero flow. A zero-flow stretch wholly inside the months ticked here is trusted as the river stopping and
 			scored. With months ticked, any other zero stretch is suspect; with none, only a stretch longer than {ZERO_FLOW_TRUST_MAX_DAYS} days is. Suspect days
 			follow “Suspect days” above: check them with the client, and record a logger failure as an exclusion period.
@@ -163,12 +184,49 @@
 		color: var(--text-muted);
 		margin: 0 0 0.4rem;
 	}
-	.rating,
+	/* Two rules a row, the first column wider, so the longest choice ("Censor: only ask the model to reach the highest gauging (default)")
+	   shows whole at 1440 px instead of being cut. */
 	.uses {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0.25rem 1rem;
-		margin-bottom: 0.4rem;
+		margin: 0.5rem 0 0.4rem;
+	}
+	.uses-wrap {
+		container: qf / inline-size;
+	}
+	@container qf (min-width: 44rem) {
+		.uses {
+			grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+		}
+	}
+	.ranges {
+		width: 100%;
+	}
+	.ranges caption {
+		caption-side: top;
+		text-align: left;
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+		padding: 0 0 0.25rem;
+	}
+	.ranges th[scope='row'] {
+		white-space: nowrap;
+	}
+	.ranges td {
+		vertical-align: top;
+		min-width: 9rem;
+	}
+	.ranges td.source {
+		width: 45%;
+		min-width: 14rem;
+	}
+	.ranges td :global(input) {
+		width: 100%;
+	}
+	.ranges .err {
+		display: block;
 	}
 	.field {
 		display: flex;

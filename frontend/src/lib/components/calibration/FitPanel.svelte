@@ -20,7 +20,7 @@
 		type ProjectModel,
 		type ProjectSettings
 	} from '@water-management/engine';
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import {
@@ -70,7 +70,8 @@
 		calibrationFlowKind = null,
 		readonly,
 		onApply,
-		session
+		session,
+		penaltyFields
 	}: {
 		projectId: string;
 		x2Open: boolean;
@@ -88,6 +89,8 @@
 		onApply: (report: CalibrationReport, record: FitRecord) => void;
 		/** The workspace's fit: choices, progress and result, kept across tab changes. */
 		session: FitSession;
+		/** The WR2012 MAR penalty's fields (a saved setting, Settings' form), beside the fit's own choices. */
+		penaltyFields?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -114,7 +117,7 @@
 		session.picked = Object.fromEntries(params.map((p) => [p.key, prev[p.key] ?? p.checked]));
 	});
 	const free = $derived(params.filter((p) => session.picked[p.key]).map((p) => p.key));
-	// The WR2012 MAR penalty (Settings → WR2012 check) adds a fit without it, for comparison.
+	// The WR2012 MAR penalty (its fields beside the choices, penaltyFields) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
 	const runs = $derived(totalRuns(session.budget ?? 0, session.validate, penalty, startsOk ? session.starts! : 1));
 	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && startsOk && !session.busy);
@@ -178,6 +181,8 @@
 	<h3 id="{uid}-h">Fit automatically <HelpTip key="auto-calibration" /></h3>
 	{#if !hasObserved}
 		<p class="muted small">Upload an observed or logger flow record (Data) to fit the parameters to it.</p>
+		<!-- A saved setting, so it shows (and can be read) before there is a record to fit to. -->
+		{@render penaltyFields?.()}
 	{:else}
 		<p class="muted small explain">
 			Searches the GR4J parameters for the best match between the run and the observed record, over the
@@ -219,6 +224,7 @@
 					</div>
 				{/if}
 			</fieldset>
+			{@render penaltyFields?.()}
 		</div>
 		<details class="fold" data-testid="fit-search" bind:open={searchOpen}>
 			<summary>
@@ -237,12 +243,12 @@
 				</div>
 				<div class="field">
 					<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
-					<NumberInput id="{uid}-budget" min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
+					<NumberInput id="{uid}-budget" grouped min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
 					<span class="hint" id="{uid}-budget-h">Default 1 500.</span>
 				</div>
 				<div class="field">
 					<label for="{uid}-starts">Starts</label>
-					<NumberInput id="{uid}-starts" min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
+					<NumberInput id="{uid}-starts" grouped min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
 					<span class="hint" class:explain={startsOk} id="{uid}-starts-h">
 						{startsOk
 							? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
@@ -251,14 +257,14 @@
 				</div>
 				<div class="field">
 					<label for="{uid}-seed">Seed</label>
-					<NumberInput id="{uid}-seed" min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
+					<NumberInput id="{uid}-seed" grouped min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
 					<span class="hint" class:explain={!seedProblem} id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
 				</div>
 			</div>
 		</details>
 		{#if penalty}
 			<p class="muted small">
-				The WR2012 MAR penalty is on (Settings → WR2012 check), so the fit also runs once without it for comparison.
+				The WR2012 MAR penalty is on (above), so the fit also runs once without it for comparison.
 			</p>
 		{/if}
 		<div class="action-row">

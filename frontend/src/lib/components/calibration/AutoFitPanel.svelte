@@ -5,7 +5,9 @@
 	New data can queue a run too (the rules' "after" group). Applying the kept
 	fit is the server's: it saves the parameters with a fit record it builds,
 	makes a run and, when the rules say so, queues the uncertainty ensemble
-	around it. The page only asks, shows and follows.
+	around it. The page only asks, shows and follows. Its Run button sits in
+	the rules card's head (CalibrationRulesFields `headAction`), which calls
+	`start()` and asks `canRun()`.
 -->
 <script lang="ts">
 	import { rulesLines, waterYearLabel, type CalibrationRules } from '@water-management/engine';
@@ -56,8 +58,13 @@
 	const kept = $derived(latest && latest.chosen !== null ? latest.cases[latest.chosen]! : null);
 	const blocker = $derived(latest ? applyBlocker(latest, { rulesUnsaved: unsaved, formDirty, readonly }) : null);
 
-	function start() {
+	/** Runs the saved rules. The button is the rules card's, in its head beside the sign-off (issue #521), so the page calls this. */
+	export function start() {
 		if (canStart) void follower.start();
+	}
+	/** Whether the rules can run now: a record, an editor, the rules saved, no run going. */
+	export function canRun(): boolean {
+		return canStart;
 	}
 
 	function apply() {
@@ -94,11 +101,6 @@
 		<p class="muted small" data-testid="auto-runs">{fmtNum(autoRunsTotal(savedRules, penalty))} model runs in all, by the rules’ search.</p>
 		{#if unsaved}
 			<p class="alert alert-info small" data-testid="auto-rules-unsaved">The calibration rules have unsaved changes. Save them first: the server only runs, and applies fits under, saved rules.</p>
-		{/if}
-		{#if !readonly}
-			<div class="row">
-				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart}>Run the calibration rules</button>
-			</div>
 		{/if}
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 

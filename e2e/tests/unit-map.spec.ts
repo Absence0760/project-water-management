@@ -75,7 +75,7 @@ test('an editor uses each unit’s MAP from the grid, written to the units with 
 
 	// The unit's form holds it, with the grid and the method as its source.
 	await rows.first().getByRole('link', { name: 'Upper farm' }).click();
-	await expect(page).toHaveURL(/[?&]tab=network&edit=/);
+	await expect(page).toHaveURL(/[?&]tab=network&edit=[^&]+&section=area/);
 	const form = await openNodeForm(page, 'Upper farm');
 	await expect(form.getByLabel(/^MAP/)).toHaveValue(upperMm);
 	await expect(form.getByLabel('Source of the MAP')).toHaveValue(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel, \d+ cells$/);
@@ -122,7 +122,7 @@ test('unsaved model edits hold Use, saying why, and once saved it works again', 
 
 	// An unsaved edit to a unit's form (not its MAP), then back to Settings within the workspace.
 	await panel.getByTestId('unit-map-rows').getByRole('link', { name: 'Upper farm' }).click();
-	await expect(page).toHaveURL(/[?&]tab=network&edit=/);
+	await expect(page).toHaveURL(/[?&]tab=network&edit=[^&]+&section=area/);
 	const form = await openNodeForm(page, 'Upper farm');
 	await form.getByLabel('Return flow (% of supply)').fill('5');
 	await form.getByLabel('Return flow (% of supply)').press('Tab');
@@ -142,7 +142,7 @@ test('unsaved model edits hold Use, saying why, and once saved it works again', 
 	await expect(panel.getByTestId('unit-map-notice')).toContainText('2 units now have their MAP from synthetic synthetic 1');
 	// The saved edit survived the apply's reload, beside the new MAP.
 	await panel.getByTestId('unit-map-rows').getByRole('link', { name: 'Upper farm' }).click();
-	await expect(page).toHaveURL(/[?&]tab=network&edit=/);
+	await expect(page).toHaveURL(/[?&]tab=network&edit=[^&]+&section=area/);
 	const after = await openNodeForm(page, 'Upper farm');
 	await expect(after.getByLabel('Return flow (% of supply)')).toHaveValue('5');
 	await expect(after.getByLabel('Source of the MAP')).toHaveValue(/^synthetic synthetic 1, area-weighted mean over the unit’s parcel/);

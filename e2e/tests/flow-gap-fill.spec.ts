@@ -1,6 +1,6 @@
 import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveSettings } from '../support/settings.ts';
+import { openFold, saveSettings } from '../support/settings.ts';
 import { openAddData, uploadedNote } from '../support/addData.ts';
 
 // Issue #66: a series' source and given unit (107_series_source.sql), and gap
@@ -57,6 +57,9 @@ test('the Data tab shades the gap days a run fills, and Settings turns the filli
 
 	// Settings: the record's spec as saved, and switching it off clears the shading.
 	await page.getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	// Gap filling is folded with the quality flags (issue #521); the line says the gauge's gaps are filled.
+	await expect(page.getByTestId('record-flags-summary')).toContainText('gaps filled in the observed gauge flow');
+	await openFold(page, 'record-flags');
 	const gauge = page.getByTestId('gap-fill-flow_observed_m3s');
 	const fill = gauge.getByRole('checkbox', { name: 'Fill gaps in a run' });
 	await expect(fill).toBeChecked();

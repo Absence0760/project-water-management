@@ -61,3 +61,4 @@ describe('ratingProblem', () => {
 		expect(p?.message).toBe(qualityFlagsError(rating({ gaugedMaxM3s: 40 })));
 	});
 });
+

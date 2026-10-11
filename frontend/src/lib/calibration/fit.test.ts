@@ -392,7 +392,8 @@ describe('applyReport', () => {
 describe('seedError', () => {
 	it('takes whole numbers 0 … 2³¹ − 1', () => {
 		for (const ok of [0, 1, 42, SEED_MAX]) expect(seedError(ok), String(ok)).toBeNull();
-		expect(seedError(null)).toBe('Enter a seed.');
+		// The field never empties, so there is no "Enter a seed.": a null is just not a whole number.
+		expect(seedError(null)).toMatch(/whole number/);
 		for (const bad of [-1, 1.5, SEED_MAX + 1, NaN]) expect(seedError(bad), String(bad)).toMatch(/whole number/);
 	});
 });
@@ -566,5 +567,7 @@ describe('searchSummary', () => {
 	});
 	it('leaves bounds out for the rules, and reads a cleared field as a dash', () => {
 		expect(searchSummary({ budget: null, starts: null, seed: null })).toBe('– runs × – starts · seed –');
+		// Grouped as the seed field shows it (NumberInput's grouped), not 20000.
+		expect(searchSummary({ budget: 1500, starts: 5, seed: 20000 })).toBe(`${fmtNum(1500)} runs × 5 starts · seed ${fmtNum(20000)}`);
 	});
 });

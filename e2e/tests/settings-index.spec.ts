@@ -8,7 +8,7 @@ import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { openSettings, settingsBar, settingsMenu } from '../support/settings.ts';
+import { openSettings, settingsBar, settingsMenu, showExplanations } from '../support/settings.ts';
 
 const findBox = (page: import('@playwright/test').Page) => page.getByRole('searchbox', { name: 'Find a setting' });
 
@@ -132,6 +132,8 @@ test('the Scored at choice says where a gauge’s record is placed, with a link 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()) as { series: { id: string; kind: string }[] };
 	const series = list.series.find((x) => x.kind === 'flow_observed_m3s')!;
 	await openSettings(page, project.id);
+	// An explanation (issue #521): shown under the field with the page's explain switch on.
+	await showExplanations(page);
 	const how = page.getByTestId('calibration-site-how');
 	await expect(how).toContainText(
 		"To score at a gauge inside the network, set its flow record's Measured at in Series details on the Data tab (the gauge has to be in the network, above the outlet)."

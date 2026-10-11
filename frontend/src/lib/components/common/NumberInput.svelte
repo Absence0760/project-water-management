@@ -72,6 +72,8 @@
 		}
 	);
 	let el: HTMLInputElement | undefined = $state();
+	/** The focus came from a press (mouse, touch, pen), not the keyboard: see onfocus. */
+	let pointerFocus = false;
 
 	// Follow external changes (load, discard, undo) while the user isn't typing,
 	// even over invalid text: the stored value moved, so the typed text is stale.
@@ -129,7 +131,19 @@
 		if (e.defaultPrevented || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
 		if (field.step(e.key === 'ArrowUp' ? 1 : -1)) e.preventDefault();
 	}}
-	onfocus={() => field.focus()}
+	onpointerdown={() => (pointerFocus = true)}
+	onfocus={(e) => {
+		// A grouped field turns "1 500" into "1500" to edit. Swap the text in place, now, and select it all when the
+		// focus came from the keyboard (or a script): left to the next render, the swap dropped the selection Tab
+		// makes, so typing appended ("150060"). A click keeps the caret where it lands, at the end.
+		const box = e.currentTarget;
+		field.focus();
+		if (box.value !== field.text) {
+			box.value = field.text;
+			if (!pointerFocus) box.select();
+		}
+		pointerFocus = false;
+	}}
 	onblur={() => field.blur()}
 />
 {#if field.invalid}<span class="num-err" id={errId}>{message}</span>{/if}
