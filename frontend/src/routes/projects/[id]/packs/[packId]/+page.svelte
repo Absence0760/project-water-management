@@ -88,6 +88,7 @@
 		const current = latest.begin();
 		if (!quiet) status = 'loading';
 		reloadError = null;
+		forbiddenReason = null;
 		try {
 			// The project only gives the caller's role (the editor's moves); a render session doesn't read it.
 			const role = session.user?.renderSession ? Promise.resolve(null) : api.projects.get(id).catch(() => null);
@@ -110,12 +111,12 @@
 				reloadError = e instanceof Error ? e.message : String(e);
 				return;
 			}
-			if (e instanceof ApiError && e.status === 404) status = 'not-found';
-			else if (e instanceof ApiError && e.status === 403) {
+			if (e instanceof ApiError && e.status === 404) {
+				status = 'not-found';
+			} else if (e instanceof ApiError && e.status === 403) {
 				forbiddenReason = e.code === 'pack_volumes_withheld' ? e.message : null;
 				status = 'forbidden';
-			}
-			else {
+			} else {
 				error = e instanceof Error ? e.message : String(e);
 				status = 'error';
 			}

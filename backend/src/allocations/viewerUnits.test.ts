@@ -3,7 +3,7 @@
 // refusal) is in allocations.db.test.ts.
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { comparisonTotals, redactReportAllocations, redactRunAllocations, volumeTotals, withoutAllocationIdentifiers, type VolumeRow } from './viewerUnits.js';
+import { comparisonTotals, redactReportAllocations, redactRunAllocations, volumeTotals, withheldAllocationOps, withoutAllocationIdentifiers, type VolumeRow } from './viewerUnits.js';
 
 const row = (o: Partial<VolumeRow>): VolumeRow => ({
 	waterSource: 'surface',
@@ -99,6 +99,35 @@ describe('redactReportAllocations (issue #523 G1)', () => {
 		expect(report.summaries.baseline.allocations.nodes).toHaveLength(1);
 		// Baseline evidence: no application summary.
 		expect(redactReportAllocations({ ...report, summaries: { ...report.summaries, application: null } }).summaries.application).toBeNull();
+	});
+});
+
+describe('the ops a viewer kept from each volume doesn’t get (#523 G1)', () => {
+	const set = (nodeId: string | null, v = 7) => ({ op: 'allocation.set', allocation: { id: `a-${nodeId}`, nodeId, waterSource: 'surface', volumeM3PerYear: v } }) as never;
+	const ops = [{ op: 'node.set', nodeId: 'n1', field: 'damCapacityM3', value: 1 } as never, set('n1'), set('n2'), { op: 'allocation.remove', allocationId: 'a' } as never, set(null)];
+
+	it('every allocation.set on a unit that isn’t `own` (none by default); a removal carries no volume and stays', () => {
+		expect([...withheldAllocationOps(ops)]).toEqual([1, 2, 4]);
+		expect([...withheldAllocationOps(ops, ['n1'])]).toEqual([2, 4]);
+	});
+
+	it('leaves them, and their classes, out of a run’s recorded scenario; the report’s ops and an unfolded mix too', () => {
+		const run = { inputs: { model: { allocations: [] }, scenario: { ops, classified: ['proposal', 'baseline', 'baseline', 'baseline', 'baseline'] } } };
+		const out = redactRunAllocations(run).inputs.scenario;
+		expect(out.ops.map((o: { op: string }) => o.op)).toEqual(['node.set', 'allocation.remove']);
+		expect(out.classified).toEqual(['proposal', 'baseline']);
+		expect(run.inputs.scenario.ops).toHaveLength(5);
+		const report = {
+			appendix: { baselineInputs: { model: { allocations: [] } } },
+			summaries: { baseline: null, application: null },
+			ops: ops.map((op, index) => ({ index, class: 'baseline', op })),
+			licenceImpactAuthorised: { status: 'ok', mix: { rows: [], folded: undefined } }
+		};
+		const r = redactReportAllocations(report as never, ['n1']) as typeof report;
+		expect(r.ops.map((o) => o.index)).toEqual([0, 1, 3]);
+		expect(r.licenceImpactAuthorised.mix).toBeNull();
+		const folded = { ...report, licenceImpactAuthorised: { status: 'ok', mix: { rows: [], folded: true } } };
+		expect((redactReportAllocations(folded as never) as typeof folded).licenceImpactAuthorised.mix).toEqual({ rows: [], folded: true });
 	});
 });
 

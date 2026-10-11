@@ -59,7 +59,8 @@ import { toVerify } from '../share/links.js';
 import { issuePackBundle } from './bundle.js';
 import { packReproductionState, queuePackReproduce, requestPackReproduce } from './packReproduce.js';
 import { errataFoundSince, type PackErratum, type PackRunEngines } from './errata.js';
-import { buildEvidenceReport } from './report.js';
+import { buildEvidenceReport, ownUnitsForD3 } from './report.js';
+import type { ScenarioOrigin } from '../scenarios/execute.js';
 import { queuePackNotices } from './notices.js';
 import { packPdfState, queuePackRender } from './packPdf.js';
 
@@ -351,7 +352,7 @@ export function namesEveryUnit(reportVersion: string): boolean {
  * refused, as a pre-`evidence-15` pack's manifest and PDF are. A run the
  * caller can't read counts as carrying them.
  */
-async function packVolumesWithheld(db: Db, projectId: string, pack: Pick<PackMeta, 'baselineRunId' | 'scenarioRunId'>, role: Role): Promise<boolean> {
+export async function packVolumesWithheld(db: Db, projectId: string, pack: Pick<PackMeta, 'baselineRunId' | 'scenarioRunId'>, role: Role): Promise<boolean> {
 	if (!(await allocationUnitsHidden(db, projectId, role))) return false;
 	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : [])];
 	const { rows } = await db.query<{ seen: number; volumes: boolean }>(
@@ -363,12 +364,53 @@ async function packVolumesWithheld(db: Db, projectId: string, pack: Pick<PackMet
 	return rows[0]!.seen < ids.length || rows[0]!.volumes;
 }
 
-/** 403 for what packVolumesWithheld keeps from the caller: `what` is the file, worded. */
+/**
+ * Whose a pack's application is, and its own units for D3 (an applicant's
+ * farms as its scenario run recorded them; none for a team scenario or
+ * baseline evidence). A scenario the caller can't read counts as the team's.
+ */
+async function packOwnUnits(db: Db, projectId: string, pack: Pick<PackMeta, 'scenarioId' | 'scenarioRunId'>): Promise<{ origin: ScenarioOrigin | null; own: string[] }> {
+	if (!pack.scenarioId) return { origin: null, own: [] };
+	const { rows } = await db.query<{ origin: ScenarioOrigin; owned: unknown }>(
+		`SELECT s.origin, r.inputs->'scenario'->'ownedNodeIds' AS owned
+		 FROM scenario s LEFT JOIN model_run r ON r.project_id = s.project_id AND r.id = $3
+		 WHERE s.project_id = $1 AND s.id = $2`,
+		[projectId, pack.scenarioId, pack.scenarioRunId]
+	);
+	const origin = rows[0]?.origin ?? 'team';
+	const owned = Array.isArray(rows[0]?.owned) ? (rows[0]!.owned as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+	return { origin, own: ownUnitsForD3(origin, owned) };
+}
+
+/**
+ * What of a pack a viewer kept from each farm's volume can't be given even
+ * redacted, since its frozen text names other farms' volumes (#523 G1):
+ * `pack` (its manifest, and so its PDF too) for a pack drafted before
+ * evidence-15, whose § 5 and page-1 flag name every farm, and for a team
+ * scenario's pack (or one whose scenario the caller can't read) whose § 5
+ * lists a unit one by one (before evidence-17) or whose changes touch a
+ * registered volume (Appendix A.2 prints the old one); `pdf` for one whose
+ * page-1 authorised volume mix wasn't built under the 5-holder rule (the
+ * manifest is served without it). Null: the redacted manifest and the PDF
+ * hold nothing more.
+ */
+export function packWithheldPart(reportVersion: string, report: PackManifest['report'], origin: ScenarioOrigin | null): 'pack' | 'pdf' | null {
+	if (namesEveryUnit(reportVersion)) return 'pack';
+	if (origin !== 'applicant' && origin !== null) {
+		if ((report.allocations?.units ?? []).some((u) => u.aggregate === undefined)) return 'pack';
+		if ((report.ops ?? []).some((o) => o.op.op.startsWith('allocation.'))) return 'pack';
+	}
+	const mix = report.licenceImpactAuthorised?.mix;
+	if (mix && !mix.folded && mix.rows.length) return 'pdf';
+	return null;
+}
+
+/** 403 for what packVolumesWithheld keeps from the caller: `what` says what the file holds. */
 const volumesWithheld = (what: string) =>
 	ApiError.coded(
 		403,
 		'pack_volumes_withheld',
-		`${what} holds each farm’s registered volume, which this project shows to its editors and owners only: ask one of them for it, or check the pack on its verify page`
+		`${what}, which this project shows to its editors and owners only: ask one of them for it, or check the pack on its verify page`
 	);
 
 /** Issue refuses a draft whose manifest misses an erratum that applies to its runs now: it would be issued without it, for good. */
@@ -462,15 +504,17 @@ export const packRoutes = new Hono<AuthEnv>()
 				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
 				const { manifest, matches } = await storedManifest(db, packId);
-				// A viewer kept from each farm's volume (D3, #523 G1): an older pack's § 5 and flags name every farm, so it is refused;
-				// a newer one is served without Appendix A.1's allocation rows and the summaries' per-unit part (no longer its hash's text).
+				// A viewer kept from each farm's volume (D3, #523 G1): a pack whose frozen text names other farms' volumes is refused
+				// (packWithheldPart); any other is served redacted (redactReportAllocations: no longer its hash's text).
 				const withheld = await packVolumesWithheld(db, id, pack, role);
-				if (withheld && namesEveryUnit(pack.reportVersion)) throw volumesWithheld('this pack, drafted before its § 5 listed only the applicant’s own units,');
+				const scope = withheld ? await packOwnUnits(db, id, pack) : null;
+				if (scope && packWithheldPart(pack.reportVersion, manifest.report, scope.origin) === 'pack')
+					throw volumesWithheld('this pack names other farms with their registered volume (it was drafted before its § 5 listed only an applicant’s own units, or is a team scenario’s)');
 				const { rows: signoffs } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE project_id = $1 AND pack_id = $2 ORDER BY signed_at, id`, [id, packId]);
 				const errataFoundSince = await packErrataFoundSince(db, pack, manifest);
 				return c.json({
 					pack,
-					manifest: withheld ? { ...manifest, report: redactReportAllocations(manifest.report) } : manifest,
+					manifest: scope ? { ...manifest, report: redactReportAllocations(manifest.report, scope.own) } : manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					// The manifest above is redacted (it no longer hashes to manifestSha256), and the bundle is refused (#523 G1).
@@ -650,9 +694,12 @@ export const packRoutes = new Hono<AuthEnv>()
 			async (db) => {
 				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
-				// An older pack's PDF prints every farm with its volume in § 5 (#523 G1); a newer one, only the applicant's own.
-				if (namesEveryUnit(pack.reportVersion) && (await packVolumesWithheld(db, id, pack, role)))
-					throw volumesWithheld('this pack’s PDF, drafted before its § 5 listed only the applicant’s own units,');
+				// The PDF prints the frozen manifest unredacted: refused where packWithheldPart finds anything (#523 G1).
+				if (await packVolumesWithheld(db, id, pack, role)) {
+					const { manifest } = await storedManifest(db, packId);
+					if (packWithheldPart(pack.reportVersion, manifest.report, (await packOwnUnits(db, id, pack)).origin))
+						throw volumesWithheld('this pack’s PDF prints other farms’ registered volumes');
+				}
 				const { rows } = await db.query<{ key: string | null; name: string }>(
 					`SELECT p.pdf_key AS key, pr.name FROM evidence_pack p JOIN project pr ON pr.id = p.project_id WHERE p.id = $1`,
 					[packId]
@@ -703,7 +750,7 @@ export const packRoutes = new Hono<AuthEnv>()
 				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
 				// Its runs' inputs and results, every farm's volume in them (#523 G1): redacting would break its hash, so refused.
-				if (await packVolumesWithheld(db, id, pack, role)) throw volumesWithheld('the reproduction bundle');
+				if (await packVolumesWithheld(db, id, pack, role)) throw volumesWithheld('the reproduction bundle holds each farm’s registered volume');
 				const { rows } = await db.query<{ key: string | null }>('SELECT bundle_key AS key FROM evidence_pack WHERE project_id = $1 AND id = $2', [id, packId]);
 				return { pack, key: rows[0]?.key ?? null };
 			},

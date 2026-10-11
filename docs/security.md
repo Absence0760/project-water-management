@@ -2850,7 +2850,25 @@ database:
   manifest and PDF of a pack drafted before `evidence-15`, whose § 5 names
   every farm (issue #523 G1, `evidence/packs.ts` `packVolumesWithheld`;
   `packs.db.test.ts` holds the refusals, with editors, owners and a viewer
-  allowed by the switch as positive controls).
+  allowed by the switch as positive controls). Also (#523 G1, round 2): a
+  scenario's base (`GET …/scenarios/:sid/base`) comes without the
+  allocations; a scenario, its check, a run's recorded scenario and the
+  compare route come without the ops that set a volume on a unit that
+  isn't an applicant's own (every one of a team scenario's;
+  `scenarios/viewerOps.ts`, `withheldAllocationOps`), with `withheldOps`
+  saying how many; the live evidence report's Appendix A.2 is diffed
+  without other units' volumes; and a server report PDF printed for
+  someone who reads each volume (`report.with_volumes`, 214) is refused to
+  such a viewer (`403 pack_volumes_withheld`, unless they asked for it)
+  and its link isn't emailed to them: a scheduled report goes only to the
+  recipients who may read it, and a viewer prints their own. Every viewer
+  GET is swept for a canary volume in `allocations.db.test.ts` (the route
+  list is `app.routes`, so a new route is swept the day it lands). Left,
+  tracked: § 5's *Other registered users* total is gated at 5 units, not 5
+  holders (one holder with 5 units gets a total that is theirs), and
+  totals in successive pack versions can be differenced; a full-allocation
+  scenario run scales each unit's demand to its volume, so its per-unit
+  figures give the volume as a capped run's do.
   Left: a capped run's per-unit daily series still bound use by the volume
   ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
   extract must say how it was obtained (`allocation_source.reference`,

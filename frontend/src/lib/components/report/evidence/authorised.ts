@@ -31,11 +31,16 @@ export interface MixLine {
 }
 
 /** The mix's lines in its order (entitlements first), and the totals line. */
-export function mixLines(mix: AuthorisedMix): { lines: MixLine[]; total: string; entitlement: string } {
+export function mixLines(mix: AuthorisedMix): { lines: MixLine[]; total: string; entitlement: string; leftOut: string | null } {
 	const m3 = (v: number) => `${fmtNum(Math.round(v))} m³/a`;
+	const label = (k: AuthorisedMix['rows'][number]['authorisation']) =>
+		k === 'unknown' ? 'Not recorded (the volume’s row is gone)' : k === 'other' ? 'Other ways of holding (each held by fewer than 5 registered users)' : AUTHORISATION_LABEL[k];
+	const n = mix.leftOutHolders ?? 0;
 	return {
-		lines: mix.rows.map((r) => ({ label: r.authorisation === 'unknown' ? 'Not recorded (the volume’s row is gone)' : AUTHORISATION_LABEL[r.authorisation], volume: m3(r.volumeM3PerYear), entitlement: r.entitlement })),
+		lines: mix.rows.map((r) => ({ label: label(r.authorisation), volume: m3(r.volumeM3PerYear), entitlement: r.entitlement })),
 		total: m3(mix.totalM3PerYear),
-		entitlement: m3(mix.entitlementM3PerYear)
+		entitlement: m3(mix.entitlementM3PerYear),
+		// evidence-17 (#523 G1, D3): no line gives fewer than 5 registered users' volume.
+		leftOut: n > 0 ? `${n} registered ${n === 1 ? 'user’s volume is' : 'users’ volumes are'} left out: no line gives fewer than 5 registered users’ volume.` : null
 	};
 }

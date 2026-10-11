@@ -88,7 +88,7 @@ beforeAll(async () => {
 describe('the board against full authorised use', () => {
 	it('is a fixed row until an editor runs the pair, and none for baseline evidence', async () => {
 		const r = await report(viewer, appRun);
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-17');
 		expect(r.licenceImpactAuthorised).toEqual({ status: 'notBuilt', detail: null, board: null, mix: null, builtAt: null, engineVersion: null });
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect((await report(viewer, base)).licenceImpactAuthorised).toBeNull();
@@ -113,14 +113,8 @@ describe('the board against full authorised use', () => {
 		const a = res.body.authorised as EvidenceAuthorisedImpact;
 		expect(a.status).toBe('ok');
 		expect(a.board?.result.status).toBe('ok');
-		expect(a.mix).toEqual({
-			rows: [
-				{ authorisation: 'licence', volumeM3PerYear: 150_000, entitlement: true },
-				{ authorisation: 'registration', volumeM3PerYear: 400_000, entitlement: false }
-			],
-			entitlementM3PerYear: 150_000,
-			totalM3PerYear: 550_000
-		});
+		// Two registered users hold the surface water: fewer than 5, so the mix gives neither's volume (evidence-17, #523 G1).
+		expect(a.mix).toEqual({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, leftOutHolders: 2 });
 		// Existing use is authorised use now: not the use the baseline modelled.
 		const modelled = (await report(viewer, appRun)).licenceImpact!;
 		if (a.board?.result.status !== 'ok' || modelled.result.status !== 'ok') throw new Error('boards');

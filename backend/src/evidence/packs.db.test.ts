@@ -54,6 +54,7 @@ import { runTick } from '../jobs/runner.js';
 import { PackRenderRequestMessage, type PackRenderResult } from '../jobs/transport.js';
 import { outbox } from '../mail/transport.js';
 import { sendPackNotices } from './notices.js';
+import { packVolumesWithheld } from './packs.js';
 import { acceptPackRenderResult } from '../reports/schedule.js';
 import { packBundleKey, packPdfKey, packsBucket, putPackBundle, putPackPdf, resetStorageClient } from '../reports/storage.js';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -282,7 +283,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-16');
+		expect(manifest.report.version).toBe('evidence-17');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -1458,23 +1459,38 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 	let current: string;
 	let older: string;
 
-	/** A draft pack of `volumesRun` as `reportVersion` froze it, planted past the route (the run isn't the nominated one). */
-	async function plant(reportVersion: string) {
-		const report = (await owner.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report;
+	/**
+	 * A draft pack of a run's report as `reportVersion` froze it, planted past the route (the run isn't the nominated
+	 * one): `volumesRun`'s by default, or a scenario run's (`scenario`), with `edit` applied to the report.
+	 */
+	async function plant(reportVersion: string, o: { scenario?: { id: string; runId: string }; edit?: (r: PackManifest['report']) => PackManifest['report'] } = {}) {
+		const runId = o.scenario?.runId ?? volumesRun;
+		const report = (await owner.call('GET', `${runPath(runId)}/evidence-report`)).body.report as PackManifest['report'];
 		const id = crypto.randomUUID();
-		const manifest = buildPackManifest({ pack: { id, version: 1, supersedes: null }, project: report.identity.project, report: { ...report, version: reportVersion }, engine: { version: ENGINE_VERSION, build: null } });
+		const frozen = (o.edit ?? ((r) => r))({ ...report, version: reportVersion } as PackManifest['report']);
+		const manifest = buildPackManifest({ pack: { id, version: 1, supersedes: null }, project: report.identity.project, report: frozen, engine: { version: ENGINE_VERSION, build: null } });
 		await asOwner(
-			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
-			 VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8)`,
-			[id, projectId, volumesRun, JSON.stringify(manifest), sha256(packManifestText(manifest)), reportVersion, ENGINE_VERSION, editor.id]
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10)`,
+			[id, projectId, report.identity.baseline.runId, o.scenario?.id ?? null, o.scenario?.runId ?? null, JSON.stringify(manifest), sha256(packManifestText(manifest)), reportVersion, ENGINE_VERSION, editor.id]
 		);
+		planted.push(id);
 		return id;
+	}
+	const planted: string[] = [];
+	/** A team scenario on `base` with `ops` (farm-scoped ops on Upper), run; owning Upper. */
+	async function teamScenario(name: string, base: string, ops: Record<string, unknown>[]) {
+		const created = await owner.call('POST', `${at()}/scenarios`, { name, baseRunId: base, ops, ownedNodeIds: [farmId] });
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		const ran = await owner.call('POST', `${at()}/scenarios/${created.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		return { id: created.body.scenario.id as string, runId: ran.body.run.id as string };
 	}
 	const viewerUnits = async (on: boolean) => expect((await owner.call('PUT', `${at()}/allocations/viewer-units`, { on })).status).toBe(200);
 	const withheld = (res: { status: number; body: { code?: string; error?: string } }) => {
 		expect(res.status, JSON.stringify(res.body)).toBe(403);
 		expect(res.body.code).toBe('pack_volumes_withheld');
-		expect(res.body.error).toMatch(/registered volume, which this project shows to its editors and owners only/);
+		expect(res.body.error).toMatch(/registered volume.*, which this project shows to its editors and owners only/);
 	};
 
 	beforeAll(async () => {
@@ -1489,12 +1505,12 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		expect(created.status, JSON.stringify(created.body)).toBe(201);
 		allocationId = created.body.allocation.id;
 		volumesRun = await newRun('With a registered volume');
-		current = await plant('evidence-16');
+		current = await plant('evidence-17');
 		older = await plant('evidence-14');
 	}, 120_000);
 	afterAll(async () => {
 		await viewerUnits(false);
-		for (const id of [current, older]) expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		for (const id of planted) expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
 		expect((await owner.call('DELETE', `${at()}/allocations/${allocationId}`)).status).toBe(204);
 	});
 
@@ -1580,5 +1596,75 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		} finally {
 			await viewerUnits(false);
 		}
+	});
+
+	it('refuses the bundle of an application pack whose scenario run carries a volume though its baseline doesn’t (both runs are checked)', async () => {
+		// The pack's baseline (the nominated run, from before any volume) carries none; the team's scenario sets one on Upper.
+		expect((await asOwner(`SELECT inputs->'model'->'allocations' AS a FROM model_run WHERE id = $1`, [baseRun]))[0]!.a ?? []).toEqual([]);
+		const sc = await teamScenario('G1 volume on Upper', baseRun, [
+			{ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: farmId, waterSource: 'surface', volumeM3PerYear: 4242 } }
+		]);
+		const pack = await plant('evidence-17', { scenario: sc });
+		withheld(await viewer.call('GET', `${packPath(pack)}/bundle`));
+		// Positive control: the editor passes the check (a draft: 409).
+		expect((await editor.call('GET', `${packPath(pack)}/bundle`)).status).toBe(409);
+	});
+
+	it('counts a run the viewer can’t read as carrying volumes (fail closed)', async () => {
+		const asViewer = (scenarioRunId: string | null) =>
+			withUser(viewer.id, (db) => packVolumesWithheld(db, projectId, { baselineRunId: baseRun, scenarioRunId }, 'viewer'));
+		// The baseline alone carries none: nothing withheld (the positive control) …
+		expect(await asViewer(null)).toBe(false);
+		// … but a run RLS doesn't show them (here one that isn't there at all) might.
+		expect(await asViewer(crypto.randomUUID())).toBe(true);
+	});
+
+	it('refuses a team scenario’s pack whose § 5 lists a unit one by one (before evidence-17), or whose changes touch a registered volume; serves one that does neither, redacted', async () => {
+		const sc = await teamScenario('G1 dam on Upper', volumesRun, [{ op: 'node.set', nodeId: farmId, field: 'damCapacityM3', value: 1000 }]);
+		// evidence-17: a team scenario's own units aren't listed (positive control: served, redacted).
+		const clean = await plant('evidence-17', { scenario: sc });
+		const read = await viewer.call('GET', packPath(clean));
+		expect(read.status, JSON.stringify(read.body)).toBe(200);
+		expect(read.body.volumesWithheld).toBe(true);
+		expect(read.body.manifest.report.identity.application.origin).toBe('team');
+		expect(read.body.manifest.report.allocations.units).toEqual([]);
+		// As an evidence-16 team pack froze it: its owned unit listed with its volume.
+		const listed = await plant('evidence-16', {
+			scenario: sc,
+			edit: (r) => ({ ...r, allocations: { ...r.allocations, units: [{ nodeId: farmId, name: 'Upper', kind: 'farm', own: true, onlyIn: null, sources: [] }] } })
+		});
+		withheld(await viewer.call('GET', packPath(listed)));
+		withheld(await viewer.call('GET', `${packPath(listed)}/pdf`));
+		expect((await editor.call('GET', packPath(listed))).status).toBe(200);
+		// A team scenario's change to a registered volume: Appendix A.2 prints the old one.
+		const changed = await teamScenario('G1 volume cut', volumesRun, [
+			{ op: 'allocation.set', allocation: { id: allocationId, nodeId: farmId, waterSource: 'surface', volumeM3PerYear: 1 } }
+		]);
+		withheld(await viewer.call('GET', packPath(await plant('evidence-17', { scenario: changed }))));
+	});
+
+	it('leaves out page 1’s authorised volume mix unless it was built under the 5-holder rule, and refuses that PDF; a folded mix stays (evidence-17)', async () => {
+		const board = (folded: boolean) => (r: PackManifest['report']) =>
+			({
+				...r,
+				licenceImpactAuthorised: {
+					status: 'ok',
+					detail: null,
+					board: null,
+					builtAt: '2026-10-01T00:00:00.000Z',
+					engineVersion: ENGINE_VERSION,
+					mix: { rows: [{ authorisation: 'licence', volumeM3PerYear: VOLUME, entitlement: true }], entitlementM3PerYear: VOLUME, totalM3PerYear: VOLUME, ...(folded ? { folded: true } : {}) }
+				}
+			}) as PackManifest['report'];
+		const unfolded = await plant('evidence-17', { edit: board(false) });
+		const read = await viewer.call('GET', packPath(unfolded));
+		expect(read.status).toBe(200);
+		expect(read.body.manifest.report.licenceImpactAuthorised.mix).toBeNull();
+		expect(JSON.stringify(read.body)).not.toContain(String(VOLUME));
+		withheld(await viewer.call('GET', `${packPath(unfolded)}/pdf`));
+		expect((await editor.call('GET', packPath(unfolded))).body.manifest.report.licenceImpactAuthorised.mix.totalM3PerYear).toBe(VOLUME);
+		const folded = await plant('evidence-17', { edit: board(true) });
+		expect((await viewer.call('GET', packPath(folded))).body.manifest.report.licenceImpactAuthorised.mix.folded).toBe(true);
+		expect((await viewer.call('GET', `${packPath(folded)}/pdf`)).status).toBe(409);
 	});
 });

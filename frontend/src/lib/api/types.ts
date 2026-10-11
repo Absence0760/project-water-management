@@ -1047,6 +1047,12 @@ export interface Scenario {
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
 	ops: ScenarioOp[];
+	/**
+	 * How many of its changes a viewer the project keeps from each farm's
+	 * registered volume doesn't get (a registered volume set on a unit that isn't
+	 * an applicant's own; issue #523 G1): left out of `ops` and the check. Absent otherwise.
+	 */
+	withheldOps?: number;
 	/** SHA-256 of the ops as canonical JSON; a run of the scenario records the same hash. */
 	opsSha256: string;
 	/** The proposer's own nodes: ops on them are proposals, the rest baseline assumptions. */

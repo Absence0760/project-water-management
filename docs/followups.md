@@ -3685,6 +3685,27 @@ from the WP:
       per water year to them, keeping its own seasonal shape (not the
       licence's months, which only the cap applies, below). Warm starts carry
       both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+- [ ] **§ 5's other-units total counts units, not holders** (issue #523
+      G1 security review, finding 6; confirmed in the engine's
+      `otherUnitTotals`: `holding.length < FARMER_K` over units). One holder
+      with 5 or more units on a source gets an *Other registered users*
+      total that is their own volume; and two pack versions' totals can be
+      differenced (one unit added between them gives its volume). Durable
+      fix: pass a holder count per source from the server (as
+      `app_allocation_volumes` counts holders) into the report input and gate
+      on it (a report format bump); document the differencing as residual or
+      round the totals. Trigger: before a pack is issued on a catchment where
+      one holder has several units.
+- [ ] **A full-allocation run's per-unit figures give the volume** (issue
+      #523 G1 security review, finding 7; real by the model's definition,
+      model.md §2.12a: demand is scaled per water year to the registered
+      volume, so a unit's demand and supply in `summary.farms`, `users[]` and
+      its daily series are its volume, more exactly than a capped run's).
+      The model-input route already refuses such runs to a viewer kept from
+      the volumes; their results aren't. Durable fix: redact per-unit
+      figures of a cap or full-allocation run for that viewer (or refuse the
+      run as model-input does). Trigger: with the capped-run item below,
+      before a scenario that caps or fully allocates is shared with viewers.
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
       dam and drawn out uses both volumes, where the comparison nets it

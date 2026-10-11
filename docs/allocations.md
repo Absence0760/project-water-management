@@ -328,9 +328,16 @@ existing lawful use beside the application's numbers.
   registered volume, and the volume it held them to is printed by how it is
   held (`authorisation`: licence and verified existing lawful use as
   entitlements, the rest not), totals only: no holder, registration
-  number or unit is named, so a viewer reads nothing the Allocations tab
-  wouldn't show them. The mix reads the allocations' rows when an editor
-  runs the pair (a later change shows only when it is run again).
+  number or unit is named. Since `evidence-17` (issue #523 G1) no line
+  gives fewer than 5 registered users' volume: a water source held by
+  fewer is left out whole, the ways of holding held by fewer are pooled in
+  one *Other ways of holding* line (itself left out below 5), the totals
+  are the lines', and the table says how many users were left out
+  (engine `authorisedMix`, holders counted as `app_allocation_volumes`
+  counts them). A board built before has no such rule: a viewer kept from
+  each volume reads it without the mix. The mix reads the allocations'
+  rows when an editor runs the pair (a later change shows only when it is
+  run again).
 - **Each run's own volumes, not today's.** The backend
   (`backend/src/allocations/runUse.ts`, `runAllocationComparison`) runs
   `compareAllocations` over the run's stored series, the allocations stored
@@ -384,7 +391,10 @@ existing lawful use beside the application's numbers.
   users (n units)* total per water source and water year (the volumes and
   use summed, judged against the band as a whole), left out when fewer than
   5 units hold that source; the section says how many were left out. Baseline
-  evidence has no applicant, so every unit is in the totals. The page-1 row
+  evidence has no applicant, so every unit is in the totals, and since
+  `evidence-17` (issue #523 G1) so is every unit of a team scenario: its
+  own units are an editor's choice, not an applicant's farms
+  (`identity.application.origin`). The page-1 row
   still counts unit-years over the band unit by unit (`unitYears`, counts
   only), and the flag names the applicant's units or the total. The
   project's editors see every unit on the Allocations tab. The engine counts

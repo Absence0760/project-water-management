@@ -110,6 +110,11 @@
 					<a class="btn btn-primary" href={current.url} rel="noopener">Download the PDF</a>
 					<span class="muted small">PDFs are kept for 7 days.</span>
 				</p>
+			{:else if current.report.volumesWithheld}
+				<p class="small" data-testid="report-volumes-withheld">
+					This PDF was printed with each farm’s registered volume, which this project shows to its editors and owners only. Open the report in the app and
+					make your own PDF of it.
+				</p>
 			{:else if jobState === 'failed'}
 				<p class="small">Open the report to make the PDF again, or print it from your browser.</p>
 			{/if}

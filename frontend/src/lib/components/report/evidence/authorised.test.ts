@@ -28,5 +28,22 @@ describe('the board against full authorised use (evidence-14)', () => {
 		expect(m.lines[1]!.volume).toMatch(/^400.000 m³\/a$/);
 		expect(m.total).toMatch(/^550.010 m³\/a$/);
 		expect(m.entitlement).toMatch(/^150.000 m³\/a$/);
+		expect(m.leftOut).toBeNull();
+	});
+
+	it('words the pooled row and the registered users left out (evidence-17, #523 G1)', () => {
+		const m = mixLines({
+			rows: [
+				{ authorisation: 'registration', volumeM3PerYear: 500, entitlement: false },
+				{ authorisation: 'other', volumeM3PerYear: 108, entitlement: false }
+			],
+			entitlementM3PerYear: 0,
+			totalM3PerYear: 608,
+			folded: true,
+			leftOutHolders: 2
+		});
+		expect(m.lines.map((l) => l.label)).toEqual(['Registration (WARMS)', 'Other ways of holding (each held by fewer than 5 registered users)']);
+		expect(m.leftOut).toBe('2 registered users’ volumes are left out: no line gives fewer than 5 registered users’ volume.');
+		expect(mixLines({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, leftOutHolders: 1 }).leftOut).toMatch(/^1 registered user’s volume is left out/);
 	});
 });

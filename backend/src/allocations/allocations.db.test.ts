@@ -14,9 +14,11 @@
 //  - the export guards formula-looking cells and hides names from viewers.
 import { compareAllocations } from '@water-management/engine';
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx } from '../__tests__/routeSamples.js';
+import { membersAmong } from '../reports/store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -516,5 +518,157 @@ describe('the allocations export', () => {
 		expect(asViewer.text.split('\r\n')[0]).not.toContain('holder');
 		expect(asViewer.text).not.toContain('Invented Holdings');
 		expect(asViewer.text).toContain('warms-synthetic.csv');
+	});
+});
+
+// The canary sweep (issue #523 G1): the redaction of a viewer's copy of the
+// volumes is opt-in per route, which is how the scenario base, the report PDFs
+// and the evidence report's changes were missed. So every GET a viewer can
+// call (from app.routes: a new one is swept the day it lands) is called as a
+// viewer the project keeps from each volume, on a project whose runs carry a
+// registered volume and a team scenario that sets another farm's, and no
+// answer may hold either number, in figures or in words ("987 654 321").
+// An editor reads both on the routes that carry them (the positive control).
+describe('no viewer GET carries a registered volume while the owners keep them from viewers (#523 G1)', () => {
+	const ctx = {} as LadderCtx;
+	const CANARY = 987_654_321;
+	const SCENARIO_CANARY = 876_543_219;
+	/** The number in figures, with or without a thousands separator (fmtValue's thin space, a comma, a dot). */
+	const seen = (text: string, n: number) => new RegExp(String(n).replace(/(\d{3})(?=\d)/g, '$1\\D?')).test(text);
+	const ZERO = '00000000-0000-4000-8000-000000000000';
+	const routes = [
+		...new Set(
+			app.routes
+				.filter((r) => r.method === 'GET' && (r.path === '/projects/:id' || r.path.startsWith('/projects/:id/') || r.path === '/me/alerts/:projectId'))
+				.map((r) => r.path)
+		)
+	];
+	let ids: Record<string, string>;
+	let baseRun: string;
+	let scenarioRun: string;
+	let sid: string;
+
+	const get = async (u: LadderCtx['viewer'], path: string) => {
+		const r = await app.request(path, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' }, redirect: 'manual' });
+		return { status: r.status, text: await r.text() };
+	};
+	const pathOf = (pattern: string, over: Record<string, string>) => {
+		const s = SAMPLE[`GET ${pattern}`]?.(ctx) ?? {};
+		const all = { ...ids, ...s.params, ...over };
+		let path = pattern.replace(/:([A-Za-z]+)/g, (_, name: string) => all[name] ?? ZERO);
+		if (s.query) path += `?${new URLSearchParams(s.query)}`;
+		return path;
+	};
+
+	afterAll(() => clearLadderJobs(ctx));
+	beforeAll(async () => {
+		Object.assign(ctx, await buildLadder('Canary'));
+		const at = `/projects/${ctx.projectId}`;
+		const made = await ctx.owner.call('POST', `${at}/allocations`, {
+			nodeId: ctx.farmId,
+			holder: 'Canary Holder',
+			registrationNo: 'REG-CANARY',
+			authorisation: 'licence',
+			waterSource: 'surface',
+			volumeM3PerYear: CANARY
+		});
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const run = await ctx.owner.call('POST', `${at}/runs`, { label: 'With the canary' });
+		expect(run.status).toBe(201);
+		baseRun = run.body.run.id;
+		// Published after the ladder's run: its changes since the previous publication add the canary.
+		expect((await ctx.owner.call('POST', `${at}/publication`, { runId: baseRun })).status).toBeLessThan(300);
+		// An editor's "what if farm B held this" team scenario: an op that sets another farm's volume, after one that doesn't.
+		const sc = await ctx.owner.call('POST', `${at}/scenarios`, {
+			name: 'Canary scenario',
+			baseRunId: baseRun,
+			ops: [
+				{ op: 'node.set', nodeId: ctx.otherFarmId, field: 'damCapacityM3', value: 1000 },
+				{ op: 'allocation.set', allocation: { id: crypto.randomUUID(), nodeId: ctx.otherFarmId, waterSource: 'surface', volumeM3PerYear: SCENARIO_CANARY } }
+			]
+		});
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		sid = sc.body.scenario.id;
+		const ran = await ctx.owner.call('POST', `${at}/scenarios/${sid}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		scenarioRun = ran.body.run.id;
+		ids = { ...ctx.ids, sid };
+	}, 180_000);
+
+	it('positive control: an editor reads both numbers where they are (the base, the scenario, its run and its evidence report)', async () => {
+		const at = `/projects/${ctx.projectId}`;
+		expect(seen((await get(ctx.editor, `${at}/scenarios/${sid}/base`)).text, CANARY)).toBe(true);
+		expect(seen((await get(ctx.editor, `${at}/scenarios/${sid}`)).text, SCENARIO_CANARY)).toBe(true);
+		expect(seen((await get(ctx.editor, `${at}/runs/${scenarioRun}`)).text, SCENARIO_CANARY)).toBe(true);
+		const report = (await get(ctx.editor, `${at}/runs/${scenarioRun}/evidence-report`)).text;
+		expect(seen(report, CANARY) && seen(report, SCENARIO_CANARY)).toBe(true);
+		expect(seen((await get(ctx.editor, `${at}/runs/${baseRun}/publication`)).text, CANARY)).toBe(true);
+	});
+
+	it('every viewer GET of the project, on the base run and on the scenario run, holds neither number', async () => {
+		const leaks: string[] = [];
+		let ok = 0;
+		for (const runId of [baseRun, scenarioRun]) {
+			const paths = [
+				...routes.map((r) => pathOf(r, { runId })),
+				`/compare/runs?a=${ctx.projectId}:${baseRun}&b=${ctx.projectId}:${scenarioRun}`,
+				`/compare/runs?a=${ctx.projectId}:${ctx.runId}&b=${ctx.projectId}:${runId}`
+			];
+			for (const path of paths) {
+				const r = await get(ctx.viewer, path);
+				if (r.status < 300) ok++;
+				for (const n of [CANARY, SCENARIO_CANARY]) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+			}
+		}
+		expect(leaks).toEqual([]);
+		// Not a sweep of refusals: most of them answer.
+		expect(ok).toBeGreaterThan(routes.length);
+	}, 300_000);
+
+	it('the scenario, as that viewer reads it: without the op that sets another farm’s volume, the check renumbered to the ops left', async () => {
+		const read = await ctx.viewer.call('GET', `/projects/${ctx.projectId}/scenarios/${sid}`);
+		expect(read.status).toBe(200);
+		expect(read.body.scenario.ops.map((o: { op: string }) => o.op)).toEqual(['node.set']);
+		expect(read.body.scenario.withheldOps).toBe(1);
+		expect(read.body.check.classified).toHaveLength(1);
+		expect(read.body.check.applied.map((a: { index: number }) => a.index)).toEqual([0]);
+		// Positive control: the editor reads both, the check over both.
+		const full = await ctx.editor.call('GET', `/projects/${ctx.projectId}/scenarios/${sid}`);
+		expect(full.body.scenario.ops).toHaveLength(2);
+		expect(full.body.scenario.withheldOps).toBeUndefined();
+		expect(full.body.check.classified).toHaveLength(2);
+		// Allowed by the owner, the viewer reads it whole.
+		expect((await ctx.owner.call('PUT', `/projects/${ctx.projectId}/allocations/viewer-units`, { on: true })).status).toBe(200);
+		try {
+			expect((await ctx.viewer.call('GET', `/projects/${ctx.projectId}/scenarios/${sid}`)).body.scenario.ops).toHaveLength(2);
+			expect(seen((await get(ctx.viewer, `/projects/${ctx.projectId}/scenarios/${sid}/base`)).text, CANARY)).toBe(true);
+		} finally {
+			expect((await ctx.owner.call('PUT', `/projects/${ctx.projectId}/allocations/viewer-units`, { on: false })).status).toBe(200);
+		}
+	});
+
+	it('a report PDF printed for an editor is refused to that viewer (403), and its link isn’t emailed to them; their own PDF and the editor are positive controls (214)', async () => {
+		const at = `/projects/${ctx.projectId}`;
+		const asked = await ctx.editor.call('POST', `${at}/reports`, { runId: baseRun });
+		expect(asked.status, JSON.stringify(asked.body)).toBe(202);
+		const job = asked.body.jobId as string;
+		expect((await asOwner('SELECT with_volumes FROM report WHERE job_id = $1', [job]))[0]!.with_volumes).toBe(true);
+		const refused = await ctx.viewer.call('GET', `${at}/reports/${job}/pdf`);
+		expect(refused.status).toBe(403);
+		expect(refused.body.code).toBe('pack_volumes_withheld');
+		expect((await ctx.viewer.call('GET', `${at}/reports/${job}`)).body.report.volumesWithheld).toBe(true);
+		// The editor passes the check (the PDF isn't printed in this test: 409).
+		expect((await ctx.editor.call('GET', `${at}/reports/${job}/pdf`)).status).toBe(409);
+		expect((await ctx.editor.call('GET', `${at}/reports/${job}`)).body.report.volumesWithheld).toBe(false);
+		// The viewer's own PDF is printed as them, so without the volumes.
+		const own = await ctx.viewer.call('POST', `${at}/reports`, { runId: baseRun });
+		expect(own.status).toBe(202);
+		expect((await asOwner('SELECT with_volumes FROM report WHERE job_id = $1', [own.body.jobId]))[0]!.with_volumes).toBe(false);
+		expect((await ctx.viewer.call('GET', `${at}/reports/${own.body.jobId}/pdf`)).status).toBe(409);
+		// Whom the link of a report printed with them goes to: not the viewer; without them, the viewer too.
+		const to = async (withVolumes: boolean) =>
+			(await withUser(ctx.owner.id, (db) => membersAmong(db, ctx.projectId, [ctx.viewer.id, ctx.editor.id], { withVolumes }))).map((m) => m.id).sort();
+		expect(await to(true)).toEqual([ctx.editor.id]);
+		expect(await to(false)).toEqual([ctx.viewer.id, ctx.editor.id].sort());
 	});
 });

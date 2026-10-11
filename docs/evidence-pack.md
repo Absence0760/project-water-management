@@ -50,7 +50,10 @@ totals at 5 or more units (report format `evidence-15`, decision D3,
 "dam losses N, not counted" (report format `evidence-16`, issue #516 and #507
 item 7, 2026-10-10; the new fields change the manifest hash, so a pack
 issued before keeps its `evidence-15` document, which the report page still
-reads, without the words). What is left is
+reads, without the words); and § 5 listing units one by one only for an
+applicant's application, a team scenario's all in the totals, and page 1's
+authorised volume mix giving no fewer than 5 registered users' volume
+(report format `evidence-17`, issue #523 G1, 2026-10-11). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -410,7 +413,9 @@ the application twice, both labelled:
   Beside it, the authorised volume's mix by how it is held: a licence
   (s40) and an existing lawful use verified under s35 are entitlements; a
   WARMS registration, a claimed existing lawful use, a general authorisation
-  and Schedule 1 use are not, and the table says which.
+  and Schedule 1 use are not, and the table says which. Since
+  `evidence-17` no line gives fewer than 5 registered users' volume
+  ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
 - **Against modelled current use** (`licenceImpact`, as before): the
   baseline as it ran, so "existing use" is what the model found holders
   use; it answers what changes tomorrow.
@@ -803,9 +808,16 @@ the pack's manifest on `GET …/packs/:packId` without Appendix A.1's
 allocation rows and the run summaries' per-unit part (`volumesWithheld:
 true`; it no longer hashes to `manifestSha256`, which the server still
 checks against the stored manifest), and is refused (`403`, the same code)
-the manifest and the PDF of a pack drafted before `evidence-15`, whose § 5
-and page-1 flag name every farm with its volume. The live evidence report
-leaves the same parts out for them. Contributors and farmers get `403`, a
+the manifest and the PDF of a pack whose frozen text names other farms'
+volumes: one drafted before `evidence-15`, whose § 5 and page-1 flag name
+every farm; a team scenario's whose § 5 lists a unit one by one (before
+`evidence-17`) or whose changes touch a registered volume (Appendix A.2
+prints the old one). Its redacted manifest also leaves out the ops that set
+a volume on a unit that isn't an applicant's own and an authorised volume
+mix built before the 5-holder rule, and such a pack's PDF is refused
+(`packWithheldPart`). The live evidence report leaves the same parts out
+for them, and builds Appendix A.2's input diff without the registered
+volumes of units that aren't the application's own. Contributors and farmers get `403`, a
 non-member `404`, as for every pack route; share links, the verify page and
 the applicant's view never offer the bundle, the manifest or the PDF.
 

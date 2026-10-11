@@ -17,7 +17,8 @@ import {
 	type AllocationEntry,
 	type AllocationStatus,
 	type AllocationUseNode,
-	type AllocationWaterSource
+	type AllocationWaterSource,
+	type ScenarioOp
 } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
@@ -142,17 +143,52 @@ export function comparisonTotals(input: { startDate: string; nodes: readonly All
 	return { tolerance: input.tolerance, sources };
 }
 
-type RunLike = { model?: { allocations?: unknown } | null; summary?: { allocations?: { nodes?: unknown[] } | null } | null; inputs?: { model?: { allocations?: unknown } | null } | null };
+type RunLike = {
+	model?: { allocations?: unknown } | null;
+	summary?: { allocations?: { nodes?: unknown[] } | null } | null;
+	inputs?: { model?: { allocations?: unknown } | null; scenario?: { ops?: ScenarioOp[]; classified?: unknown[] } | null } | null;
+};
+
+/**
+ * The positions of the ops a viewer who can't read each registered volume
+ * doesn't get (issue #523 G1): every `allocation.set` (it carries a volume)
+ * on a unit that isn't `own`. `own` is an application's own units, and none
+ * for a team scenario or a run's recorded scenario (whose origin it doesn't
+ * record): an editor's "what if farm X's licence is cut" quotes farm X's
+ * volume. An `allocation.remove` carries only an id, so it stays.
+ */
+export function withheldAllocationOps(ops: readonly ScenarioOp[], own: readonly string[] = []): Set<number> {
+	const mine = new Set(own);
+	const out = new Set<number>();
+	ops.forEach((op, i) => {
+		if (op.op === 'allocation.set' && !(op.allocation.nodeId && mine.has(op.allocation.nodeId))) out.add(i);
+	});
+	return out;
+}
+
+/** `list` without the positions in `drop` (a scenario's ops, or its per-op classes). */
+export const withoutPositions = <T>(list: readonly T[], drop: ReadonlySet<number>): T[] => list.filter((_, i) => !drop.has(i));
 
 /**
  * A run as a viewer who can't read each registered volume gets it: no
- * allocation rows in its model (or inputs' model), and its summary's
- * allocations without the per-unit part (the mode, band and counts stay).
+ * allocation rows in its model (or inputs' model), its summary's
+ * allocations without the per-unit part (the mode, band and counts stay),
+ * and its recorded scenario without the ops that carry a volume
+ * (withheldAllocationOps, with their classes).
  */
 export function redactRunAllocations<T extends RunLike>(run: T): T {
 	const out = { ...run };
 	if (out.model && 'allocations' in out.model) out.model = { ...out.model, allocations: [] };
 	if (out.inputs?.model && 'allocations' in out.inputs.model) out.inputs = { ...out.inputs, model: { ...out.inputs.model, allocations: [] } };
+	const sc = out.inputs?.scenario;
+	if (sc?.ops) {
+		const drop = withheldAllocationOps(sc.ops);
+		if (drop.size)
+			out.inputs = {
+				...out.inputs!,
+				scenario: { ...sc, ops: withoutPositions(sc.ops, drop), ...(sc.classified ? { classified: withoutPositions(sc.classified, drop) } : {}) }
+			};
+	}
 	if (out.summary?.allocations) out.summary = { ...out.summary, allocations: { ...out.summary.allocations, nodes: [] } };
 	return out;
 }
@@ -160,22 +196,36 @@ export function redactRunAllocations<T extends RunLike>(run: T): T {
 type ReportLike = {
 	appendix: { baselineInputs: { model?: { allocations?: unknown } | null } | null };
 	summaries: { baseline: { allocations?: { nodes?: unknown[] } | null } | null; application: { allocations?: { nodes?: unknown[] } | null } | null };
+	ops?: { op: ScenarioOp }[];
+	licenceImpactAuthorised?: { mix?: { folded?: true } | null } | null;
 };
 
 /**
  * An evidence report as a viewer who can't read each registered volume gets
  * it (issue #523 G1): Appendix A.1's baseline model without its allocation
- * rows, and each run summary's allocations without the per-unit part, as
- * redactRunAllocations leaves a run. § 5 stays: since `evidence-15` it lists
- * only the applicant's own units, the rest as totals at 5 or more units. A
- * frozen pack manifest redacted this way no longer hashes to its
- * manifestSha256, so the caller says so (packs.ts `volumesWithheld`).
+ * rows, each run summary's allocations without the per-unit part, as
+ * redactRunAllocations leaves a run, the ops that set a volume on a unit
+ * that isn't `own` (an applicant's application's own units; none for a team
+ * scenario) left out, and page 1's authorised volume mix left out unless it
+ * was built under the 5-holder rule (`folded`, evidence-17). § 5 stays:
+ * since `evidence-15` it lists only the applicant's own units, the rest as
+ * totals at 5 or more units (and since `evidence-17` none of a team
+ * scenario's). A frozen pack manifest redacted this way no longer hashes to
+ * its manifestSha256, so the caller says so (packs.ts `volumesWithheld`).
+ * Appendix A.2's input diff is the caller's: the live report builds it
+ * without other units' volumes (evidence/report.ts), and an issuable pack's
+ * can only change the applicant's own (any other is a baseline assumption,
+ * which blocks a draft).
  */
-export function redactReportAllocations<R extends ReportLike>(report: R): R {
+export function redactReportAllocations<R extends ReportLike>(report: R, own: readonly string[] = []): R {
 	const bi = report.appendix.baselineInputs;
 	const summary = <S extends ReportLike['summaries']['baseline']>(s: S): S => (s ? redactRunAllocations({ summary: s }).summary! : s);
+	const drop = report.ops ? withheldAllocationOps(report.ops.map((o) => o.op), own) : new Set<number>();
+	const lia = report.licenceImpactAuthorised;
 	return {
 		...report,
+		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
+		...(lia?.mix && !lia.mix.folded ? { licenceImpactAuthorised: { ...lia, mix: null } } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) }
 	};

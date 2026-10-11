@@ -31,6 +31,8 @@ import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
 import { runUnverified, unverifiedScenarioRuns } from '../runs/stamp.js';
 import { projectBaseForApplicant } from './applicant.js';
+import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
+import { checkWithout, viewerScenario } from './viewerOps.js';
 import {
 	checkScenario,
 	hiddenHolders,
@@ -67,14 +69,15 @@ function checkView(c: ScenarioCheck, role: Role) {
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
 async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) {
-	const scenario = applicantOpNames(s, role);
+	const hidden = await allocationUnitsHidden(db, projectId, role);
+	const { scenario, drop } = hidden ? viewerScenario(applicantOpNames(s, role)) : { scenario: applicantOpNames(s, role), drop: new Set<number>() };
 	// An application's runs whose server stamp is missing or wrong (077,
 	// runs/stamp.ts), for the assessors: its decision waits until none remain.
 	// null for a team scenario and for anyone below editor.
 	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), checkError: null, unverifiedRunIds };
+		return { scenario, check: checkWithout(checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), drop), checkError: null, unverifiedRunIds };
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
 		throw err;
@@ -171,7 +174,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			// RLS lists what the caller reads: a contributor, their own applications and those shared with them.
 			const role = await requireRole(db, id, 'contributor');
 			const { rows } = await db.query<ScenarioRow>(`${SCENARIO_SELECT} WHERE s.project_id = $1 ORDER BY s.created_at DESC, s.id DESC`, [id]);
-			return c.json({ scenarios: rows.map((s) => applicantOpNames(s, role)) });
+			// A viewer kept from each farm's volume (D3, #523 G1): without the ops that carry one.
+			const hidden = await allocationUnitsHidden(db, id, role);
+			return c.json({ scenarios: rows.map((s) => (hidden ? viewerScenario(applicantOpNames(s, role)).scenario : applicantOpNames(s, role))) });
 		});
 	})
 	.post('/:id/scenarios', async (c) => {
@@ -243,7 +248,9 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'contributor');
 			const s = await loadScenario(db, id, scenarioId(sid));
 			const base = await loadBaseInput(db, id, s.baseRunId, role);
-			const view = role === 'contributor' ? projectBaseForApplicant(base, s.ownedNodeIds) : { settings: base.settings, model: base.model, anonymisedNodeIds: [] };
+			// A viewer kept from each farm's volume (D3, #523 G1) gets the model without its registered volumes.
+			const model = role !== 'contributor' && (await allocationUnitsHidden(db, id, role)) ? redactRunAllocations({ model: base.model }).model : base.model;
+			const view = role === 'contributor' ? projectBaseForApplicant(base, s.ownedNodeIds) : { settings: base.settings, model, anonymisedNodeIds: [] };
 			return c.json({ baseRunId: s.baseRunId, ...view });
 		});
 	})
