@@ -7,6 +7,7 @@ import { requireRole } from '../projects/access.js';
 import { loadModel, saveModel } from './store.js';
 import { ModelBody, modelProblems } from './validate.js';
 import { readJson } from '../http/body.js';
+import { baselineModelEwrRefusal } from '../projects/ewrRules.js';
 
 export const modelRoutes = new Hono<AuthEnv>()
 	.get('/:id/model', async (c) =>
@@ -23,6 +24,9 @@ export const modelRoutes = new Hono<AuthEnv>()
 		const reason = Reason.parse((raw as { reason?: unknown } | null)?.reason);
 		const problems = modelProblems(model);
 		if (problems.length) throw new ApiError(400, 'invalid model', problems);
+		// The EWR is assessed in the baseline, never applied (issue #523 B4): its keeping rules are a scenario's.
+		const ewr = baselineModelEwrRefusal(model);
+		if (ewr) throw ewr;
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');

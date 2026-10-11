@@ -329,16 +329,16 @@ describe('projects', () => {
 });
 
 describe('a copied project’s drought restriction rule (engine 1.54.0, WP-3.8)', () => {
-	it('points the rule’s dams, units and EWR site at the copy’s nodes, and leaves the original’s alone', async () => {
+	// Its EWR trigger is a scenario's (issue #523 B4): a copy of one stored before 216 comes without it (baselineEwrRules.db.test.ts).
+	it('points the rule’s dams and units at the copy’s nodes, and leaves the original’s alone', async () => {
 		const a = await signUp('CopyRestriction');
-		const { projectId, outlet, farm } = await projectWithModel(a);
+		const { projectId, farm } = await projectWithModel(a);
 		const rule = {
 			reviewDates: ['10-01'],
 			levels: [{ belowPct: 0.5, cuts: { crops: 0.5 } }],
 			basis: 'dams',
 			damNodeIds: [farm.id],
-			nodeIds: [farm.id],
-			ewrTrigger: { siteNodeId: outlet.id, level: 1 }
+			nodeIds: [farm.id]
 		};
 		expect((await a.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: rule } })).status).toBe(200);
 
@@ -346,7 +346,7 @@ describe('a copied project’s drought restriction rule (engine 1.54.0, WP-3.8)'
 		expect(copy.status).toBe(201);
 		const dup = (await a.call('GET', `/projects/${copy.body.project.id}/model`)).body;
 		const ids = (name: string) => dup.nodes.find((n: { name: string }) => n.name === name).id as string;
-		expect(copy.body.project.settings.droughtRestriction).toEqual({ ...rule, damNodeIds: [ids('Farm 1')], nodeIds: [ids('Farm 1')], ewrTrigger: { siteNodeId: ids('Gauge'), level: 1 } });
+		expect(copy.body.project.settings.droughtRestriction).toEqual({ ...rule, damNodeIds: [ids('Farm 1')], nodeIds: [ids('Farm 1')] });
 		const orig = (await a.call('GET', `/projects/${projectId}`)).body.project;
 		expect(orig.settings.droughtRestriction).toEqual(rule);
 	});

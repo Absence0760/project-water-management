@@ -130,6 +130,13 @@ export const ERROR_CODES = [
  *     the manifest or PDF of a pack drafted before evidence-15, which name
  *     every farm with its volume, on a pack whose runs carry them (issue
  *     #523 G1; evidence/packs.ts). The pack page is an English workspace page.
+ *   ewr_rule_scenario_only (400): a save of the project's own model (PUT
+ *     …/model) or settings (PATCH /projects/:id) switched on a rule that keeps
+ *     water for the EWR (a pass-inflow release without amounts, a unit's or
+ *     an off-take's handsOffEwr, the drought restriction's ewrTrigger): in
+ *     the baseline the EWR is assessed and reported, never applied, so they
+ *     run only in a scenario (issue #523 B4; projects/ewrRules.ts).
+ *     `details` is one line per rule. The forms are English workspace pages.
  */
 export const MACHINE_ERROR_CODES = [
 	'render_token_refused',
@@ -138,7 +145,8 @@ export const MACHINE_ERROR_CODES = [
 	'mfa_fresh_code',
 	'role_conflict',
 	'job_collision',
-	'pack_volumes_withheld'
+	'pack_volumes_withheld',
+	'ewr_rule_scenario_only'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 

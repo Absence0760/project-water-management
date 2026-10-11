@@ -19,7 +19,12 @@ describe('list:ewr-rules', () => {
 		const doc = { model: { nodes: [{ ...nodes()[0], damReleaseRule: 'passInflow' }, nodes()[1]] } };
 		const rules = rulesOf(doc);
 		expect(rules.map((r) => r.kind)).toEqual(['damPassInflow']);
-		expect(toText(rules, 'p.json')).toBe('p.json: 1 rule switched on, 1 of 1 runs as stored:\n- unit "Upper": dam release: pass inflow, keeps the EWR required there\n');
+		expect(toText(rules, 'p.json')).toBe(
+			'p.json: 1 rule switched on, 1 of 1 runs as stored; 1 keeps the EWR, which only a scenario does (a baseline run drops it):\n- unit "Upper": dam release: pass inflow, keeps the EWR required there [scenario only]\n'
+		);
+		// A set flow is the baseline's own: no mark (issue #523 B4).
+		const setFlow = rulesOf({ model: { nodes: [{ ...nodes()[0], damReleaseRule: 'passInflow', damReleaseM3Day: new Array(12).fill(5) }, nodes()[1]] } });
+		expect(toText(setFlow, 'p.json')).toMatch(/^p\.json: 1 rule switched on, 1 of 1 runs as stored:\n- unit "Upper": dam release: pass inflow, keeps a set flow of [^\n]*m³\/day \(Oct–Sep\)\n$/);
 	});
 
 	it('refuses a file that is not a project document', () => {

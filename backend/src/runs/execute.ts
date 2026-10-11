@@ -22,6 +22,7 @@ import {
 	type UnitRainKind,
 	type UnitRainSettings,
 	unitRainSeriesKey,
+	withoutEwrKeepingRules,
 	withoutForecastTail
 } from '@water-management/engine';
 import { isUnitRainKind } from '../series/site.js';
@@ -110,7 +111,11 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// stored series, so it has no series id; only when settings.unitRain names a reference, so other inputs are as before.
 	const cell = await referenceCellInput(db, projectId, (settings as { unitRain?: UnitRainSettings | null }).unitRain);
 	if (cell) (series as Record<string, DailySeries>)[cell.key] = cell.series;
-	return { input: { settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model, series }, seriesIds };
+	// The EWR is assessed and reported in the baseline, never applied (issue #523 B4, projects/ewrRules.ts): the
+	// rules that keep water for it are a scenario's, so whatever the store holds, the baseline runs without them.
+	// A save refuses them and 216 switched the stored ones off, so this normally changes nothing.
+	const baseline = withoutEwrKeepingRules({ settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model }).project;
+	return { input: { settings: baseline.settings, model: baseline.model, series }, seriesIds };
 }
 
 /**

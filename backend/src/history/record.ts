@@ -227,6 +227,8 @@ export type AuditKind =
 	| 'calibration_rules.sign_off_withdrawn'
 	// 213 (issue #507): a stored baseline that capped or fully allocated moved to compare only, { from, to }; no actor (the migration wrote it).
 	| 'settings.allocation_mode_reset'
+	// 216 (issue #523 B4): the stored rules that kept water for the EWR were switched off (a scenario's), { rules: [...] }; no actor.
+	| 'model.ewr_rules_reset'
 	| 'allocation.created'
 	| 'allocation.changed'
 	| 'allocation.deleted'

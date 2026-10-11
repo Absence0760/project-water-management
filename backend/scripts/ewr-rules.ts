@@ -1,8 +1,11 @@
 // Which rules in a project move water for the EWR (issue #507): a dam's
 // pass-inflow release, a unit's hands-off flow, a river off-take's hands-off
 // flow and the drought restriction's EWR trigger. All four are off by default
-// and no importer switches one on, so a baseline run keeps nothing in the
-// river for the EWR unless someone has. This lists the ones a project has.
+// and no importer switches one on. Those that keep the EWR (rather than a set
+// flow) run only in a scenario (issue #523 B4): a save refuses them and a
+// baseline run drops them, so a line marked [scenario only] is one a project
+// from before 216 held, or a scenario run's input. This lists the ones a
+// project has.
 //
 //   pnpm list:ewr-rules <project.json> [--json]
 //
@@ -14,7 +17,7 @@
 // the EWR). Exit 0 whether or not any rule is on; 1 on a file it can't read.
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { ewrReleaseRules, type EwrReleaseRule, type EwrReleaseRulesInput } from '@water-management/engine';
+import { ewrReleaseRules, keepsEwr, type EwrReleaseRule, type EwrReleaseRulesInput } from '@water-management/engine';
 import { cliPath } from './pan-sensitivity.js';
 
 /** The rules switched on in a project document (export.json or project.json); throws on a file without a model. */
@@ -30,8 +33,11 @@ export function toText(rules: EwrReleaseRule[], file: string): string {
 	if (!rules.length)
 		return `${file}: no rule moves water for the EWR (no dam pass-inflow release, unit or off-take hands-off flow, or drought restriction EWR trigger is switched on); a run keeps nothing in the river for the EWR.\n`;
 	const live = rules.filter((r) => !r.inert).length;
-	const head = `${file}: ${rules.length} rule${rules.length === 1 ? '' : 's'} switched on, ${live} of ${rules.length} run${live === 1 ? 's' : ''} as stored:`;
-	return [head, ...rules.map((r) => `- ${r.text}`), ''].join('\n');
+	// Keeping the EWR is a scenario's (issue #523 B4): the baseline drops those, whatever the file holds.
+	const keep = rules.filter(keepsEwr).length;
+	const scenarioOnly = keep ? `; ${keep} keep${keep === 1 ? 's' : ''} the EWR, which only a scenario does (a baseline run drops ${keep === 1 ? 'it' : 'them'})` : '';
+	const head = `${file}: ${rules.length} rule${rules.length === 1 ? '' : 's'} switched on, ${live} of ${rules.length} run${live === 1 ? 's' : ''} as stored${scenarioOnly}:`;
+	return [head, ...rules.map((r) => `- ${r.text}${keepsEwr(r) ? ' [scenario only]' : ''}`), ''].join('\n');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -3,7 +3,7 @@
 // read them, and that RLS keeps them to the project's members. Every "cannot
 // see" has its positive control. Synthetic data only.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { fieldHistory } from './fields.js';
 
@@ -108,12 +108,14 @@ describe('GET /projects/:id/history/fields', () => {
 			expect((await editor.call('PUT', `/projects/${pid}/model`, { nodes: [w, { ...f4, ...o }], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
 		const winter = [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800];
 		await put({});
-		await put({ supplyRule: 'riverFirst', pumpCapacityM3Day: 1200, handsOffM3Day: monthly(300), handsOffEwr: true, divertMonthlyM3Day: winter });
+		// Keeping the EWR is a scenario's (issue #523 B4): a stored one (before 216) is switched off by a save, and that is keyed.
+		await asOwner('UPDATE node SET hands_off_ewr = true WHERE id = $1', [f4.id]);
+		await put({ supplyRule: 'riverFirst', pumpCapacityM3Day: 1200, handsOffM3Day: monthly(300), handsOffEwr: false, divertMonthlyM3Day: winter });
 		const f = (await fields(editor, pid)).body.fields;
 		const key = (k: string) => `node:${f4.id}:${k}`;
 		expect(f[key('supplyRule')]).toMatchObject({ count: 1, change: 'dam only → river first', filter: 'Vlei: supply rule' });
 		expect(f[key('pumpCapacityM3Day')]).toMatchObject({ count: 1, change: 'no limit → 1\u202f200 m³/day' });
-		expect(f[key('handsOffEwr')]).toMatchObject({ count: 1, change: 'no → yes', filter: 'Vlei: hands-off keeps the EWR' });
+		expect(f[key('handsOffEwr')]).toMatchObject({ count: 1, change: 'yes → no', filter: 'Vlei: hands-off keeps the EWR' });
 		// The monthly rows are keyed by their own labels, never as the one River to dam value (diversion capacity).
 		expect(f[key('handsOffM3Day')]).toMatchObject({ count: 1, change: `none → ${new Array(12).fill('300').join(', ')} m³/day (Oct–Sep)`, filter: 'Vlei: hands-off flow' });
 		expect(f[key('divertMonthlyM3Day')]).toMatchObject({
