@@ -12,6 +12,7 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-demand',
 			'set-share',
 			'set-restrict',
+			'set-reporting',
 			'set-flow',
 			'set-record',
 			'set-fit',

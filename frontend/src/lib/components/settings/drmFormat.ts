@@ -17,7 +17,7 @@ export function drmFormat(target: DrmTarget): FileFormat {
 		title: table ? 'A Reserve rule table (DRM .rul, .tab or CSV)' : 'The daily EWR at the outlet (DRM .tab or .rul)',
 		where: table ? 'Settings & calibration → Reserve rule tables' : 'Settings & calibration → EWR → Daily EWR at the outlet',
 		accepts: table
-			? 'A Desktop Reserve Model rule-curve file (.rul) or summary (.tab), plain text; or a CSV (.csv, .tsv, .txt) of the 12 month rows, which goes into the paste box below the table.'
+			? 'A Desktop Reserve Model rule-curve file (.rul) or summary (.tab), plain text; or a CSV (.csv, .tsv, .txt) of the 12 month rows, which opens the paste dialog to pick the grid it fills.'
 			: 'A Desktop Reserve Model summary (.tab) or rule-curve file (.rul), plain text. A CSV isn’t loaded here: paste its rows into the box below the tables.',
 		rules: [
 			'**Rule curves (.rul)**: the header (`Ecological Category = B`), a unit line (`Data are given in m^3/s mean monthly flow`, or `… m^3 * 10^6 monthly flow volume` for Mm³ a month), the `% Points` line (10% … 99%), then three blocks of 12 month rows, a month name and one number per point: the total Reserve (right after the points), `Reserve Flows without High Flows` and `Natural Duration curves`. ' +

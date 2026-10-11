@@ -8,6 +8,7 @@
 import {
 	DEMAND_OBJECT_CATEGORY_LABEL,
 	droughtRestrictionIssues,
+	monthDayText,
 	RESTRICTION_DATES_MAX,
 	RESTRICTION_LEVELS_MAX,
 	type DemandPart,
@@ -112,4 +113,21 @@ export function withCut(level: DroughtRestrictionLevel, part: DemandPart, cut: n
  */
 export function noticeDay(publishedAt: string, timeZone: string | null | undefined): string {
 	return projectToday(timeZone, new Date(publishedAt));
+}
+
+/**
+ * The rule in one short line (issue #521), above its full wording: how many
+ * levels and where each starts, the review dates and the lift dates
+ * ("3 levels, below 60 / 40 / 25 % · reviewed 1 Oct, 1 Jan · lifted 1 May").
+ */
+export function restrictionShortSummary(rule: DroughtRestrictionRule): string {
+	const n = rule.levels.length;
+	const below = rule.levels.map((l) => String(Math.round(l.belowPct * 1000) / 10)).join(' / ');
+	return [
+		`${n} level${n === 1 ? '' : 's'}, below ${below} %`,
+		`reviewed ${rule.reviewDates.map(monthDayText).join(', ')}`,
+		rule.liftDates?.length ? `lifted ${rule.liftDates.map(monthDayText).join(', ')}` : null
+	]
+		.filter(Boolean)
+		.join(' · ');
 }

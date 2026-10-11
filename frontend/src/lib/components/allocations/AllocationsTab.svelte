@@ -24,13 +24,21 @@
 	// Viewers never see holder names (decision D3; the API leaves them out, RLS
 	// enforces it), and see each volume only when an owner allows it (162):
 	// otherwise totals per water source (AllocationTotals). Owners switch that
-	// here. Farmers never reach the workspace.
+	// here, under "What viewers see". Beside it, the comparison band
+	// (settings.allocationTolerance, issue #521, moved here from Settings → EWR)
+	// with the baseline's allocation mode (always compare only): editors save it
+	// with its own Save, the same settings PATCH the Settings save bar sends, and
+	// the page's settings draft takes the change in (onProjectChange). Farmers
+	// never reach the workspace.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
-	import { api, type Allocation, type AllocationCapYears, type AllocationList, type RunMeta } from '$lib/api';
+	import { api, type Allocation, type AllocationCapYears, type AllocationList, type Project, type RunMeta } from '$lib/api';
+	import { ALLOCATION_MODE_LABEL, type ProjectSettings } from '@water-management/engine';
+	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -66,7 +74,23 @@
 		waterYearLabel
 	} from './allocations';
 
-	let { projectId, runs, canEdit, isOwner = false }: { projectId: string; runs: RunMeta[] | null; canEdit: boolean; isOwner?: boolean } = $props();
+	let {
+		projectId,
+		runs,
+		canEdit,
+		isOwner = false,
+		settings = null,
+		onProjectChange
+	}: {
+		projectId: string;
+		runs: RunMeta[] | null;
+		canEdit: boolean;
+		isOwner?: boolean;
+		/** The saved settings, for the comparison band (none: the band card waits). */
+		settings?: Pick<ProjectSettings, 'allocationTolerance'> | null;
+		/** The saved project after the band's save, so the page (and its settings draft) takes it in. */
+		onProjectChange?: (p: Project) => void;
+	} = $props();
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const runList = $derived(runs ?? []);
@@ -285,6 +309,31 @@
 	}
 
 	// --- whether viewers read each registered volume (162, D3): owners ---
+	// --- the comparison band (settings.allocationTolerance, issue #521): typed here, saved with its own Save ---
+	const savedBand = $derived(settings?.allocationTolerance ?? 0.1);
+	let bandTyped = $state<number | null>(null);
+	const band = $derived(bandTyped ?? savedBand);
+	const bandDirty = $derived(bandTyped !== null && bandTyped !== savedBand);
+	let bandSaving = $state(false);
+	let bandStatus = $state<{ ok: boolean; text: string } | null>(null);
+	async function saveBand() {
+		if (!bandDirty || bandSaving) return;
+		const sent = bandTyped!;
+		bandSaving = true;
+		bandStatus = null;
+		try {
+			const p = await api.projects.update(projectId, { settings: { allocationTolerance: sent } });
+			onProjectChange?.(p);
+			if (bandTyped === sent) bandTyped = null;
+			bandStatus = { ok: true, text: 'Saved. The comparison reads with the new band.' };
+			version++;
+		} catch (err) {
+			bandStatus = { ok: false, text: msg(err) };
+		} finally {
+			bandSaving = false;
+		}
+	}
+
 	let unitsSaving = $state(false);
 	async function setViewerUnits(on: boolean) {
 		unitsSaving = true;
@@ -603,15 +652,58 @@
 	{/if}
 	{/if}
 
-	{#if isOwner && data}
-		<section class="panel" aria-labelledby="alloc-viewers-h" data-testid="allocation-viewer-units">
-			<h2 id="alloc-viewers-h">What viewers see <HelpTip key="allocation-viewer-access" label="About what viewers see" /></h2>
-			<label class="check">
-				<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget.checked)} />
-				Viewers see each farm’s registered volumes
-			</label>
-			<p class="small muted">{VIEWER_UNITS_NOTE} Names of registered users are never shown to viewers.</p>
-		</section>
+	{#if data}
+		<!-- How the comparison reads, and (owners) what viewers see: side by side where there is room. -->
+		<div class="foot">
+			<section class="panel" id="alloc-band" aria-labelledby="alloc-band-h" data-testid="allocation-band">
+				<div class="band-head">
+					<h2 id="alloc-band-h">Comparison band</h2>
+					{#if canEdit}
+						<button type="button" class="btn btn-sm btn-primary" disabled={!bandDirty || bandSaving || band === null} onclick={saveBand}>{bandSaving ? 'Saving…' : 'Save'}</button>
+					{/if}
+				</div>
+				<div class="band-row">
+					<div class="band-field">
+						<span class="lbl"><span class="lbl-text">Allocation mode</span><HelpTip key="settings.allocationMode" /></span>
+						<span class="alloc-mode" data-testid="settings-allocation-mode">{ALLOCATION_MODE_LABEL.none}</span>
+					</div>
+					<div class="band-field">
+						<span class="lbl"><label for="alloc-band-tol">Comparison band <span class="u">(± %)</span></label><HelpTip key="settings.allocationTolerance" /></span>
+						<NumberInput
+							id="alloc-band-tol"
+							min={0}
+							max={99}
+							scale={100}
+							disabled={!canEdit}
+							value={band}
+							onchange={(v) => (bandTyped = v ?? null)}
+							aria-describedby="alloc-band-h1 alloc-band-h2"
+						/>
+					</div>
+				</div>
+				<p class="small" class:err={bandStatus && !bandStatus.ok} role="status" data-testid="allocation-band-status">{bandStatus?.text ?? ''}</p>
+				<p class="small muted" id="alloc-band-h1">
+					Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, a provisional default not yet confirmed by the catchment’s hydrologist.
+				</p>
+				<p class="small muted" id="alloc-band-h2">
+					The baseline compares each unit’s modelled use with its registered volumes and changes nothing: licence data never drives the baseline, whose use comes from the
+					crops, demands, pumps and boreholes you enter. To cap use at the volumes, or to see “if every registered or licensed volume were taken in full”, make a scenario
+					that sets the allocation mode.
+				</p>
+				<FieldHistoryLine field="settings:allocationTolerance" />
+				<FieldHistoryLine field="settings:allocationMode" />
+			</section>
+			{#if isOwner}
+				<section class="panel" aria-labelledby="alloc-viewers-h" data-testid="allocation-viewer-units">
+					<h2 id="alloc-viewers-h">What viewers see <HelpTip key="allocation-viewer-access" label="About what viewers see" /></h2>
+					<label class="check">
+						<input type="checkbox" checked={data.viewerUnits} disabled={unitsSaving} onchange={(e) => setViewerUnits(e.currentTarget.checked)} />
+						Viewers see each farm’s registered volumes
+					</label>
+					<p class="small muted">{VIEWER_UNITS_NOTE} Names of registered users are never shown to viewers.</p>
+				</section>
+			{/if}
+		</div>
 	{/if}
 
 	{#if canEdit && data}
@@ -621,6 +713,68 @@
 </div>
 
 <style>
+	/* The band and what viewers see, side by side where there is room (issue #521). */
+	.foot {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+		gap: 1rem;
+		align-items: start;
+	}
+	.foot .panel {
+		margin: 0;
+	}
+	.band-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 0.75rem;
+	}
+	.band-head h2 {
+		margin: 0 auto 0 0;
+	}
+	.band-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.5rem 1.5rem;
+		margin-top: 0.5rem;
+	}
+	.band-field {
+		display: grid;
+		gap: 0.2rem;
+	}
+	.band-field :global(input) {
+		width: 8rem;
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		min-height: 24px;
+	}
+	.lbl label,
+	.lbl-text {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.u {
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	/* Read, not chosen (issue #507): as tall as the field beside it, so the two sit on one line. */
+	.alloc-mode {
+		display: flex;
+		align-items: center;
+		min-height: 36px;
+	}
+	.foot p {
+		margin: 0.35rem 0 0;
+		max-width: 75ch;
+	}
+	.err {
+		color: var(--danger);
+	}
 	.allocations {
 		container: alloc-page / inline-size;
 		display: flex;

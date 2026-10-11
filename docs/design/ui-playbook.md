@@ -1180,6 +1180,27 @@ Interaction details that bit:
   its one-line intro and its first row; pin it with `expectAbove`
   (`e2e/support/reflow.ts`: above on screen and first in the focus order).
   Notes about what's in the table (totals, a CSV's unit) stay under it.
+- **A paste box that replaces a whole table is the shared paste dialog.**
+  The EWR's TAB flows and percentile tables and each Reserve rule table had
+  an always-open textarea under the grids with one "Fill …" button per grid
+  (issue #521). They open `model/GridPasteDialog.svelte` now, from a
+  **Paste…** beside the file load: `wholeTable` drops the start-cell and
+  blank-cell rules (the block replaces every cell, so the caller's layout
+  line says how it is read), a `target` snippet holds the choice of grid
+  (radios) when there is more than one, and the plan is the old parser's
+  result diffed against the grid (`settings/ewrPaste.ts`), so the values are
+  the same. The preview (Now and Pasted) is the check before values are
+  replaced: drop the confirm the Fill button asked, don't stack a second one.
+- **Line up a table of fieldsets with fixed row heights, not subgrid.** The
+  drought levels became one table (a column per level, a row per part of
+  demand) while each level stays a `<fieldset>` named by its legend, so the
+  errors and tests that name a level keep working. `grid-template-rows:
+  subgrid` on a fieldset is unreliable (its grid is on an anonymous box), so
+  each column is a stack of cells of one fixed height (`2.6rem`, room for two
+  lines of a row name) beside one column of row names, switched on by a
+  container query; on a phone the same markup is a card per level with its
+  own row labels. A flex cell trims the leading space of a child's text, so
+  wrap a name and its " (floor kept)" in one inline span.
 - **Don't disable a control while its own change saves.** The alert emails
   page disabled each catchment's fieldset during a save, so an arrow key on
   a radio moved the choice and then threw the keyboard's focus to the page.

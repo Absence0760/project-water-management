@@ -5,8 +5,12 @@
 	restriction policies. On each review date the model reads the total farm
 	dam storage at the start of the day and picks the deepest level whose
 	threshold it is below; the level's cuts hold until the next review or
-	lift date. One card per level, side by side where there is room and one
-	under the other on a phone. From engine 1.54.0 also which storage it reads
+	lift date. The levels are one table where there is room (issue #521):
+	a column per level, its name and "Starts below %" as the header rows and
+	a row per part of demand, with Add a deeper level above it; on a phone one
+	card per level, one under the other. The review and lift dates are chips,
+	each with its own remove button; the rule's full wording sits behind its
+	one-line summary. From engine 1.54.0 also which storage it reads
 	(every farm dam, some dams, or each unit's own), which units it cuts, an
 	EWR-failure trigger, and a start from the WUA's published notice. Bind the
 	rule (null = off); `error` is set while it can't be saved, so the parent
@@ -35,7 +39,8 @@
 	import { api } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { monthName } from '$lib/format/months';
-	import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+	import { monthDayText } from '@water-management/engine';
+	import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, restrictionShortSummary, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 	let {
 		value = $bindable(),
@@ -155,6 +160,8 @@
 		if (value) edit({ levels: value.levels.map((l, k) => (k === i ? withCut(l, part, cut) : l)) });
 	}
 	const words = $derived(rule ? describeDroughtRestriction(rule, nodeName) : null);
+	const short = $derived(rule ? restrictionShortSummary(rule) : null);
+	let wordsOpen = $state(false);
 </script>
 
 <div class="restrict" data-testid="drought-restriction">
@@ -176,7 +183,17 @@
 		</div>
 	{/if}
 	{#if rule}
-		{#if words}<p class="rule" data-testid="restriction-words">The rule: {words}.</p>{/if}
+		{#if words}
+			<!-- One line; the full wording (every level's cuts, the storage, units and EWR trigger) behind it (issue #521). -->
+			<details class="fold words" data-testid="restriction-rule-fold" bind:open={wordsOpen}>
+				<summary>
+					<span class="fold-name">The rule:</span>
+					<span data-testid="restriction-short">{short}</span>
+					<span class="fold-change" aria-hidden="true">{wordsOpen ? 'Hide' : 'In words'}</span>
+				</summary>
+				<p class="rule" data-testid="restriction-words">The rule: {words}.</p>
+			</details>
+		{/if}
 		{#if fromTemplate}
 			<p class="hint" data-testid="restriction-template">
 				A starting template in the shape of DWS restriction schedules, pending the hydrologist: set the dates, thresholds and cuts the WUA uses.
@@ -186,75 +203,90 @@
 			{@const list = rule[which] ?? []}
 			<fieldset class="plain dates" data-testid="restriction-{which}" aria-describedby={at === which ? errId : undefined}>
 				<legend>{which === 'reviewDates' ? 'Review dates (the level is decided)' : 'Lift dates (any restriction ends)'}</legend>
-				{#each list as md, i (i)}
-					{@const p = splitMonthDay(md)}
-					<div class="date">
-						<select aria-label="{which === 'reviewDates' ? 'Review' : 'Lift'} date {i + 1}: month" disabled={readonly} value={p.month} onchange={(e) => setDate(which, i, Number(e.currentTarget.value), p.day)}>
-							{#each DAYS as _, m (m)}<option value={m + 1}>{monthName(m + 1)}</option>{/each}
-						</select>
-						<input
-							type="number"
-							min="1"
-							max={DAYS[p.month - 1]}
-							aria-label="{which === 'reviewDates' ? 'Review' : 'Lift'} date {i + 1}: day"
-							readonly={readonly}
-							value={p.day}
-							onchange={(e) => setDate(which, i, p.month, Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))}
-						/>
-						{#if !readonly && (which === 'liftDates' || list.length > 1)}
-							<button type="button" class="btn btn-sm btn-ghost" onclick={() => removeDate(which, i)}>Remove<span class="visually-hidden"> {which === 'reviewDates' ? 'review' : 'lift'} date {i + 1}</span></button>
-						{/if}
-					</div>
-				{/each}
-				{#if !readonly && list.length < RESTRICTION_DATES_MAX}
-					<button type="button" class="btn btn-sm" onclick={() => edit({ [which]: withDateAdded(list) })}>Add a {which === 'reviewDates' ? 'review' : 'lift'} date</button>
-				{/if}
+				<div class="chips">
+					{#each list as md, i (i)}
+						{@const p = splitMonthDay(md)}
+						{@const kind = which === 'reviewDates' ? 'Review' : 'Lift'}
+						<span class="chip" data-testid="restriction-date">
+							<input
+								type="number"
+								min="1"
+								max={DAYS[p.month - 1]}
+								aria-label="{kind} date {i + 1}: day"
+								readonly={readonly}
+								value={p.day}
+								onchange={(e) => setDate(which, i, p.month, Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))}
+							/>
+							<select aria-label="{kind} date {i + 1}: month" disabled={readonly} value={p.month} onchange={(e) => setDate(which, i, Number(e.currentTarget.value), p.day)}>
+								{#each DAYS as _, m (m)}<option value={m + 1}>{monthName(m + 1).slice(0, 3)}</option>{/each}
+							</select>
+							{#if !readonly && (which === 'liftDates' || list.length > 1)}
+								<button type="button" class="chip-x" aria-label="Remove {kind.toLowerCase()} date {i + 1}, {monthDayText(md)}" title="Remove {monthDayText(md)}" onclick={() => removeDate(which, i)}>×</button>
+							{/if}
+						</span>
+					{/each}
+					{#if !readonly && list.length < RESTRICTION_DATES_MAX}
+						<button type="button" class="btn btn-sm" onclick={() => edit({ [which]: withDateAdded(list) })}><span aria-hidden="true">{'+ '}</span>Add a {which === 'reviewDates' ? 'review' : 'lift'} date</button>
+					{/if}
+				</div>
 				{#if at === which}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
 			</fieldset>
 		{/each}
 
+		<!-- The levels: one table where there is room, a column per level (issue #521); a card per level on a phone. -->
+		<div class="levels-head">
+			<h3 class="levels-title" id="{uid}-levels-h">Levels, mildest first</h3>
+			{#if !readonly}
+				{#if rule.levels.length < RESTRICTION_LEVELS_MAX}<button type="button" class="btn btn-sm" onclick={() => edit({ levels: withLevelAdded(rule.levels) })}><span aria-hidden="true">{'+ '}</span>Add a deeper level</button>{/if}
+				{#if rule.levels.length > 1}<button type="button" class="btn btn-sm btn-ghost" onclick={() => edit({ levels: rule.levels.slice(0, -1), ...(rule.ewrTrigger && rule.ewrTrigger.level >= rule.levels.length ? { ewrTrigger: { ...rule.ewrTrigger, level: rule.levels.length - 1 } } : {}) })}>Remove the deepest level</button>{/if}
+			{/if}
+		</div>
 		<p class="hint explain">
-			Levels, mildest first: each starts below a share of the farm dams’ capacity and cuts each part of demand by its own %. Blank is not cut.
+			Each level starts below a share of the farm dams’ capacity and cuts each part of demand by its own %. Blank is not cut.
 			Domestic and municipal demand objects keep their basic-needs floor of {DEMAND_NORMS.basicLitresPerPersonDay} litres a person a day.
 		</p>
-		<div class="levels" data-testid="restriction-levels">
-			{#each rule.levels as l, i (i)}
-				<fieldset class="level" data-testid="restriction-level" aria-describedby={at === `level-${i}` ? errId : undefined}>
-					<legend>{l.label?.trim() || `Level ${i + 1}`}</legend>
-					<div class="row">
-						<label for="{uid}-l{i}-name">Name</label>
-						<input id="{uid}-l{i}-name" type="text" maxlength={RESTRICTION_LABEL_MAX} aria-label="Level {i + 1}: name" readonly={readonly} value={l.label ?? ''} onchange={(e) => setLevel(i, { label: e.currentTarget.value })} />
-					</div>
-					<div class="row">
-						<span class="lbl" aria-hidden="true">Starts below (% of capacity)</span>
-						<NumberInput label="Level {i + 1}: starts below, % of capacity" min={0} max={100} scale={100} disabled={readonly} value={l.belowPct} onchange={(v) => v !== null && setLevel(i, { belowPct: v })} />
-					</div>
+		<div class="levels-wrap">
+			<div class="levels" data-testid="restriction-levels" role="group" aria-labelledby="{uid}-levels-h">
+				<!-- The row names, once, for the table layout (each field names itself; hidden on a phone, where each card labels its rows). -->
+				<div class="row-names" aria-hidden="true">
+					<span class="cell head">Level</span>
+					<span class="cell head">Starts below (% of capacity)</span>
 					{#each DEMAND_PARTS as part (part)}
-						<div class="row">
-							<span class="lbl" aria-hidden="true">{PART_LABEL[part]} cut (%){#if floored(part)}<span class="muted"> (floor kept)</span>{/if}</span>
-							<NumberInput
-								label="Level {i + 1}: cut on {PART_LABEL[part]}, %{floored(part) ? ', basic-needs floor kept' : ''}"
-								nullable
-								min={0}
-								max={100}
-								scale={100}
-								placeholder="Not cut"
-								disabled={readonly}
-								value={l.cuts[part] ?? null}
-								onchange={(v) => setCut(i, part, v)}
-							/>
-						</div>
+						<span class="cell"><span>{PART_LABEL[part]}{#if floored(part)}<span class="muted">{' (floor kept)'}</span>{/if}</span></span>
 					{/each}
-					{#if at === `level-${i}`}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
-				</fieldset>
-			{/each}
-		</div>
-		{#if !readonly}
-			<div class="level-actions">
-				{#if rule.levels.length < RESTRICTION_LEVELS_MAX}<button type="button" class="btn btn-sm" onclick={() => edit({ levels: withLevelAdded(rule.levels) })}>Add a deeper level</button>{/if}
-				{#if rule.levels.length > 1}<button type="button" class="btn btn-sm btn-ghost" onclick={() => edit({ levels: rule.levels.slice(0, -1), ...(rule.ewrTrigger && rule.ewrTrigger.level >= rule.levels.length ? { ewrTrigger: { ...rule.ewrTrigger, level: rule.levels.length - 1 } } : {}) })}>Remove the deepest level</button>{/if}
+				</div>
+				{#each rule.levels as l, i (i)}
+					<fieldset class="level" data-testid="restriction-level" aria-describedby={at === `level-${i}` ? errId : undefined}>
+						<legend>{l.label?.trim() || `Level ${i + 1}`}</legend>
+						<div class="row cell head">
+							<label for="{uid}-l{i}-name">Name</label>
+							<input id="{uid}-l{i}-name" type="text" maxlength={RESTRICTION_LABEL_MAX} aria-label="Level {i + 1}: name" readonly={readonly} value={l.label ?? ''} onchange={(e) => setLevel(i, { label: e.currentTarget.value })} />
+						</div>
+						<div class="row cell head">
+							<span class="lbl" aria-hidden="true">Starts below (% of capacity)</span>
+							<NumberInput label="Level {i + 1}: starts below, % of capacity" min={0} max={100} scale={100} disabled={readonly} value={l.belowPct} onchange={(v) => v !== null && setLevel(i, { belowPct: v })} />
+						</div>
+						{#each DEMAND_PARTS as part (part)}
+							<div class="row cell">
+								<span class="lbl" aria-hidden="true">{PART_LABEL[part]} cut (%){#if floored(part)}<span class="muted">{' (floor kept)'}</span>{/if}</span>
+								<NumberInput
+									label="Level {i + 1}: cut on {PART_LABEL[part]}, %{floored(part) ? ', basic-needs floor kept' : ''}"
+									nullable
+									min={0}
+									max={100}
+									scale={100}
+									placeholder="Not cut"
+									disabled={readonly}
+									value={l.cuts[part] ?? null}
+									onchange={(v) => setCut(i, part, v)}
+								/>
+							</div>
+						{/each}
+						{#if at === `level-${i}`}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
+					</fieldset>
+				{/each}
 			</div>
-		{/if}
+		</div>
 		{#if nodes.length}
 			<fieldset class="plain choice" data-testid="restriction-basis">
 				<legend>Storage the level reads</legend>
@@ -351,24 +383,82 @@
 		font-weight: 500;
 	}
 	.dates {
+		display: grid;
+		gap: 0.3rem;
+	}
+	/* Each date a chip: day, month and its own remove button (issue #521). */
+	.chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
+		gap: 0.4rem;
 		align-items: center;
+	}
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0.15rem 0.2rem 0.15rem 0.35rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface-2);
+	}
+	.chip input {
+		width: 3.4rem;
+	}
+	.chip select {
+		width: auto;
+	}
+	.chip-x {
+		min-width: 28px;
+		min-height: 28px;
+		border: 0;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--text-2);
+		font-size: 1.1rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.chip-x:hover {
+		background: var(--surface);
+		color: var(--danger);
 	}
 	.date {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.35rem;
 		align-items: center;
 	}
-	.date input {
-		width: 4.5rem;
+	.words .rule {
+		padding: 0 0 0.4rem;
 	}
-	/* One card per level: side by side where there is room, one under the other on a phone (ui-playbook § 2). */
+	.levels-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem 0.6rem;
+	}
+	/* On a phone the title takes its own line and the two buttons share the next (ui-playbook § 2). */
+	.levels-title {
+		flex: 1 0 100%;
+		margin: 0;
+		font-size: 0.9rem;
+		font-weight: 500;
+	}
+	.levels-head > .btn {
+		flex: 1 1 auto;
+	}
+	/* A phone: one card per level, one under the other (ui-playbook § 2); each card labels its rows. */
+	.restrict {
+		container: restrict / inline-size;
+	}
 	.levels {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
 		gap: 0.75rem;
+	}
+	.row-names {
+		display: none;
 	}
 	.level {
 		margin: 0;
@@ -389,10 +479,76 @@
 	.row :global(input) {
 		width: 100%;
 	}
-	.level-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
+	/* Room for a table: a column per level beside one column of row names, every row the same fixed height so
+	   the columns line up; the level's name and threshold are its header rows (issue #521). */
+	@container restrict (min-width: 40rem) {
+		.levels-title {
+			flex: 0 1 auto;
+			margin-right: auto;
+		}
+		.levels-head > .btn {
+			flex: 0 0 auto;
+		}
+		.levels-wrap {
+			overflow-x: auto;
+		}
+		.levels {
+			display: flex;
+			gap: 0;
+			width: max-content;
+			max-width: 100%;
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+		}
+		.row-names {
+			display: grid;
+			flex: 0 1 19rem;
+			min-width: 12rem;
+		}
+		.level {
+			flex: 0 0 7.5rem;
+			padding: 0;
+			border: 0;
+			border-left: 1px solid var(--border);
+			border-radius: 0;
+			gap: 0;
+			align-content: start;
+		}
+		.level > legend {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		.cell {
+			height: 2.6rem;
+			display: flex;
+			align-items: center;
+			padding: 0 0.5rem;
+			border-bottom: 1px solid var(--border);
+			font-size: 0.8rem;
+			line-height: 1.2;
+		}
+		.cell:last-child {
+			border-bottom: 0;
+		}
+		.cell.head {
+			background: var(--surface-2);
+			font-weight: 500;
+		}
+		.row {
+			grid-template-columns: 1fr;
+		}
+		.row > label,
+		.row > .lbl {
+			display: none;
+		}
+		.level > .err {
+			padding: 0.3rem 0.5rem;
+			font-size: 0.8rem;
+		}
 	}
 	.field {
 		display: flex;

@@ -7,7 +7,12 @@
 	// (network/nodePaste.ts, crops/areaPaste.ts). A grid that takes new rows
 	// (crops, irrigation systems: `PastePlan.added`) says how many it adds, and
 	// a grid given a `format` shows the shared Expected format note with its
-	// example file (issue #477, common/FormatHelp.svelte).
+	// example file (issue #477, common/FormatHelp.svelte). A grid whose paste
+	// replaces a whole table (the EWR settings' TAB flows and percentile tables,
+	// the Reserve rule tables: `wholeTable`) says only its own layout, and a
+	// grid that can take the paste in more than one table puts the choice in
+	// `target`, above the box (issue #521).
+	import type { Snippet } from 'svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import FormatHelp from '$lib/components/common/FormatHelp.svelte';
 	import { latestFileText } from '$lib/files/latest';
@@ -25,7 +30,9 @@
 		csv,
 		csvName,
 		format = null,
-		rowNoun = ['row', 'rows']
+		rowNoun = ['row', 'rows'],
+		wholeTable = false,
+		target
 	}: {
 		open?: boolean;
 		/** The pasted block (set by the grid when the paste was into a cell). */
@@ -44,6 +51,10 @@
 		format?: GridFormat | null;
 		/** What a new row is, for "Adds 2 crops" (singular, plural). */
 		rowNoun?: readonly [string, string];
+		/** The paste replaces a whole table: no blank-cell or start-cell rule, the layout line says how it is read. */
+		wholeTable?: boolean;
+		/** Which table the paste fills, when there is a choice (radios), above the box. */
+		target?: Snippet;
 	} = $props();
 
 	const uid = `gp-${Math.random().toString(36).slice(2, 8)}`;
@@ -99,11 +110,18 @@
 
 <Dialog bind:open {title} wide>
 	<div class="paste">
-		<p class="small muted">{layout} A blank cell or a dash leaves a value as it is. Commas in numbers are read as the block shows them: 12,5 as a decimal comma, 1,500,000 as thousands.</p>
+		{#if wholeTable}
+			<p class="small muted">{layout}</p>
+		{:else}
+			<p class="small muted">{layout} A blank cell or a dash leaves a value as it is. Commas in numbers are read as the block shows them: 12,5 as a decimal comma, 1,500,000 as thousands.</p>
+		{/if}
 		{#if format}<FormatHelp format={gridFileFormat(format)} context={title} />{/if}
-		<p class="small" data-testid="paste-where">
-			{#if where}Pasted into <strong>{where}</strong>: a block without names or headings starts there.{:else}A block without names or headings starts at the table's first row and column.{/if}
-		</p>
+		{#if !wholeTable}
+			<p class="small" data-testid="paste-where">
+				{#if where}Pasted into <strong>{where}</strong>: a block without names or headings starts there.{:else}A block without names or headings starts at the table's first row and column.{/if}
+			</p>
+		{/if}
+		{#if target}{@render target()}{/if}
 		<label for="{uid}-text">Cells copied from a spreadsheet</label>
 		<textarea id="{uid}-text" rows="6" spellcheck="false" bind:value={text} oninput={() => (fileNote = '')}></textarea>
 		<div class="row">

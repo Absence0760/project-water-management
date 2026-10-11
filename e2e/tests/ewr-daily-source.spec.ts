@@ -173,9 +173,10 @@ test('a Reserve rule table is filled from a .rul (grids, unit, REC, source) and 
 	await section.getByRole('button', { name: 'Add a rule table' }).click();
 	const table = section.getByRole('group', { name: 'Rule table at Outlet (Outflow gauge)' });
 	// The file load opens the table, above its fields, with the shared Expected format.
-	const load = table.getByLabel('Load a DRM file (.rul / .tab) or a CSV');
+	// Load file… sits in the table card's head (issue #521), above its fields.
+	const load = table.getByLabel('Load file: a DRM .rul / .tab or a CSV, into the rule table at Outlet (Outflow gauge)');
 	const status = table.getByRole('status', { name: 'File result', exact: true });
-	const loadBox = (await table.getByText('Load a DRM file (.rul / .tab) or a CSV').boundingBox())!;
+	const loadBox = (await table.getByText('Load file…').boundingBox())!;
 	const siteBox = (await table.getByLabel('EWR site').boundingBox())!;
 	expect(loadBox.y + loadBox.height).toBeLessThan(siteBox.y);
 	await table.getByTestId('format-help').getByText('Expected format').click();

@@ -50,3 +50,19 @@ describe('GridPasteDialog (issue #477)', () => {
 		expect(bare).toMatch(/Add 1 crop/);
 	});
 });
+
+describe('GridPasteDialog for a whole table (issue #521)', () => {
+	const plan = (): PastePlan => ({ changes: [{ rowId: '0', rowName: 'Oct', key: '0', column: '10 %', unit: 'm³/s', from: 1, to: 2 }], unchanged: 0, notes: [] });
+	it('says only its own layout, with no start-cell or blank-cell rule', () => {
+		const html = render(GridPasteDialog, { props: { ...base, layout: 'The 12 month rows.', wholeTable: true, text: 'x', plan } }).body;
+		expect(html).toContain('The 12 month rows.');
+		expect(html).not.toContain('data-testid="paste-where"');
+		expect(html).not.toContain('A blank cell or a dash');
+		expect(html).toMatch(/Apply 1 change/);
+	});
+	it('keeps both rules for a grid that takes part of a block', () => {
+		const html = render(GridPasteDialog, { props: { ...base, text: '', plan } }).body;
+		expect(html).toContain('data-testid="paste-where"');
+		expect(html).toContain('A blank cell or a dash');
+	});
+});
