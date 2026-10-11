@@ -63,6 +63,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id (FarmShell: its own projectId prop and a ?node= it encodes); NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/farm/FarmShell.svelte', 'lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
+	evidenceRunHref: { why: 'EvidencePanel: a literal "?tab=runs&run=" + encodeURIComponent(the current evidence run id from the API) + "#res-evidence", or null (issue #521)', in: ['lib/components/runs/EvidencePanel.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
 	packHref: {
 		why: 'BUILDER: "{base}/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
