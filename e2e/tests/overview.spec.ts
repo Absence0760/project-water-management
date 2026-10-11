@@ -26,6 +26,38 @@ test('a fresh project: nothing loaded, every step to do', async ({ page, owner }
 	await expect(page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ })).toHaveAttribute('href', '?tab=project');
 });
 
+test('on a phone the Setup complete and rain pills share one row, and the rain pill’s list opens on the screen', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Overview phone pills');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/projects/${project.id}`);
+	await summaryReady(page);
+	const status = page.getByTestId('header-status');
+	const setupPill = status.getByRole('button', { name: 'Setup complete' });
+	const rain = status.locator('summary', { hasText: 'Rain up to' });
+	// Each took a half-empty row of its own (they need ~385 px of a 358 px row); the rain pill's words wrap inside it.
+	const a = (await setupPill.boundingBox())!;
+	const b = (await rain.boundingBox())!;
+	expect(Math.abs(a.y - b.y)).toBeLessThan(2);
+	expect(b.x).toBeGreaterThan(a.x + a.width);
+	expect(b.x + b.width).toBeLessThanOrEqual(390 - 16 + 1);
+	// The date and the age each stay whole.
+	for (const part of await rain.locator('.nw').all()) {
+		expect(await part.evaluate((el) => new Set([...el.getClientRects()].map((r) => Math.round(r.top))).size)).toBe(1);
+	}
+	await rain.click();
+	const pop = status.locator('.fresh-pop');
+	await expect(pop.getByRole('table')).toBeVisible();
+	const p = (await pop.boundingBox())!;
+	expect(p.x).toBeGreaterThanOrEqual(0);
+	expect(p.x + p.width).toBeLessThanOrEqual(390);
+	await page.keyboard.press('Escape');
+	await expect(pop).toBeHidden();
+	await expect(rain).toBeFocused();
+	await expectNoViolations(page);
+});
+
 test('setup complete: the checklist leaves the page for a header pill whose popover lists the steps over the page', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Overview ready');
@@ -59,7 +91,7 @@ test('setup complete: the checklist leaves the page for a header pill whose popo
 		await expect(pop.getByRole('listitem')).toHaveCount(5);
 		await expect(pop.getByRole('link')).toHaveText(['River network', 'Crops & irrigated areas', 'Rainfall & flow data', 'Evaporation, calibration & EWR', 'Run the model']);
 		await expect(pop).toContainText('Rainfall and observed flow loaded.');
-		await expect(pop).toContainText(/1 run, latest \d{4}-\d{2}-\d{2}\./);
+		await expect(pop).toContainText(/1 run, latest \d{1,2} [A-Z][a-z]{2} \d{4}\./);
 		// Opening it never makes the page taller, and it stays inside the window.
 		expect(await height()).toBe(before);
 		const box = (await pop.boundingBox())!;
