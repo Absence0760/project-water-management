@@ -80,7 +80,14 @@ touched (CLAUDE.md rule 12, `docs/testing.md`). Never the full
 
 Watch CI (`gh pr checks <pr>`). A failure is this PR's to root-cause unless
 it's red on `main` too; `/fix-ci` is the loop. Answer review comments with a
-fix or a reason. When it's green, say so once, with the link and anything
+fix or a reason. Read the code-scanning review too (the
+`github-advanced-security` bot's CodeQL comments): list the PR's open alerts
+with `gh api "repos/{owner}/{repo}/code-scanning/alerts?ref=refs/pull/<pr>/merge&state=open"`.
+Fix a real one at its source; for a false positive, say why on the alert
+and ask the operator to dismiss it. Don't commit CodeQL's suggested change
+without checking it: it can be wrong. The "Code scanning must be clean
+before merge" ruleset blocks the merge while any warning, error or medium+
+security alert is open (docs/contributing.md § Before merge). When it's green, say so once, with the link and anything
 the operator needs to decide.
 
 ## 8. Clean up

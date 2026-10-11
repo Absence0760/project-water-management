@@ -14,6 +14,13 @@ More than one Claude session may run in **this one checkout at the same time** �
 - **HEAD moves under you.** Other sessions commit mid-task (and `origin/main` moves as PRs merge); your path-scoped commits still stack cleanly, and a PR branch that falls behind is updated by merging `origin/main` into it (not rebasing a shared branch). A PR that adds a migration re-checks its number against `origin/main` before it merges, since another PR may have taken a later one (`pnpm check:migrations`, [data-model.md § Migrations](./data-model.md#migrations)). Don't be alarmed if `git log` shows commits you didn't make, or files you didn't change show as modified — leave those alone.
 - **Worktrees are the default, not only for large work:** a PR branch always gets its own worktree, so switching branches never disturbs another session's tree. Subagents doing parallel file edits should pass `isolation: "worktree"`; merge their branches into your PR branch, not into `main`. Remove a worktree once its PR is merged (`git worktree remove ../wm-<slug>`).
 
+### Before merge
+
+What has to be true before a PR merges, besides a passing `CI gate` (a required check on `main`):
+
+- **Every review conversation is resolved** (branch protection: conversation resolution). That includes the code-scanning bot's comments.
+- **No open code-scanning alert on the PR.** The repository ruleset *Code scanning must be clean before merge* (Settings → Rules) blocks the merge while the PR has a CodeQL alert at warning or error, or a security alert at medium or above. CodeQL runs on every PR to `main`, drafts included (`.github/workflows/security.yml`). List a PR's alerts with `gh api "repos/{owner}/{repo}/code-scanning/alerts?ref=refs/pull/<pr>/merge&state=open"`. Fix a real alert at its source. A false positive is dismissed on the alert with its reason, by the operator. Never commit CodeQL's suggested change unchecked: on PR #525 it would have deleted a deliberate canvas `fillStyle` reset, because an unparsable colour leaves `fillStyle` unchanged.
+
 ## Code organization
 
 - **Group `src/lib` (and equivalents) by topic, not by type.** Loose modules piling up at the `lib/` root is a smell — once there are more than a handful, move them into topical subfolders (`auth/`, `billing/`, `<domain>/`, …). Keep only generated/shared type files (`database.types.ts`, `types.ts`) at the root. **Co-locate each module's test beside it**; cross-cutting guard tests may stay at the root.
