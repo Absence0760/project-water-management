@@ -41,7 +41,7 @@
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { glossaryPath } from '$lib/help/glossaryLinks';
-	import { SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
+	import { DUSK_MEDIA, SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
 
 	let { key, label }: { key: string; label?: string } = $props();
 
@@ -150,12 +150,15 @@
 				<span class="bubble" class:pictured={shot} popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
 					{#if shot}
 						<span class="pic">
-							<img
-								src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
-								width={SHOTS[shot].width / 2}
-								height={SHOTS[shot].height / 2}
-								alt=""
-							/>
+							<picture>
+								<source media={DUSK_MEDIA} srcset="{base}{pictureSrc(shot, SHOTS[shot].width / 2, 'dusk')}" />
+								<img
+									src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
+									width={SHOTS[shot].width / 2}
+									height={SHOTS[shot].height / 2}
+									alt=""
+								/>
+							</picture>
 							{#if ring}<span class="ring" aria-hidden="true" style:left="{ring.x}%" style:top="{ring.y}%"></span>{/if}
 						</span>
 					{/if}
@@ -208,7 +211,7 @@
 		color: var(--text);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 		font-size: 0.85rem;
 		font-weight: 400;
 		line-height: 1.4;
@@ -269,10 +272,10 @@
 	}
 	.units {
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.more {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		text-decoration: underline;
 	}
 </style>

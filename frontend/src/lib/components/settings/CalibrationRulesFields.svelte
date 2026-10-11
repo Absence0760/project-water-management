@@ -284,7 +284,7 @@
 		color: var(--text-2);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		margin: 0 0 0.4rem;
 	}
@@ -315,7 +315,7 @@
 		margin: 0;
 	}
 	.badge {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.45rem;
 		border-radius: 999px;
@@ -323,6 +323,12 @@
 	}
 	.badge.draft {
 		background: var(--warning-soft);
+	}
+	/* The phone floor for the shared small text (app.css, issue #521 round 5). */
+	@media screen and (max-width: 640px) {
+		.badge {
+			font-size: max(0.75rem, 12px);
+		}
 	}
 	.state-row {
 		display: flex;
@@ -358,7 +364,7 @@
 		margin-top: 0.6rem;
 	}
 	.group-name {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;

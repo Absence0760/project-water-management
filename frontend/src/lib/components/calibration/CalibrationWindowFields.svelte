@@ -7,6 +7,7 @@
 	saving.
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import type { CalibrationFlowKind, CalibrationSite } from '@water-management/engine';
 	import { FLOW_KIND_LABEL, windowError } from './metrics';
 
@@ -57,24 +58,22 @@
 	<div class="form-row">
 		<div class="field">
 			<label for="{uid}-start">From</label>
-			<input
+			<DayInput
 				id="{uid}-start"
-				type="date"
 				{readonly}
 				value={start ?? ''}
 				aria-invalid={error ? 'true' : undefined}
-				onchange={(e) => (start = e.currentTarget.value || null)}
+				onchange={(v) => (start = v || null)}
 			/>
 		</div>
 		<div class="field">
 			<label for="{uid}-end">To</label>
-			<input
+			<DayInput
 				id="{uid}-end"
-				type="date"
 				{readonly}
 				value={end ?? ''}
 				aria-invalid={error ? 'true' : undefined}
-				onchange={(e) => (end = e.currentTarget.value || null)}
+				onchange={(v) => (end = v || null)}
 			/>
 		</div>
 		{#if sites.length || siteNodeId}
@@ -136,7 +135,7 @@
 		padding: 0;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 		margin: 0 0 0.5rem;
 	}

@@ -179,7 +179,7 @@
 		gap: 4px 0.6rem;
 	}
 	.bar-label {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		line-height: 1.2;
 		color: var(--text-muted);
 	}

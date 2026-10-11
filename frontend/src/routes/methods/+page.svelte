@@ -195,7 +195,7 @@
 		.stack td::before {
 			content: attr(data-label);
 			display: block;
-			font-size: 0.8rem;
+			font-size: var(--font-sm);
 			font-weight: 600;
 			color: var(--text-muted);
 		}

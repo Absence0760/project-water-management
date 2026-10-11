@@ -222,11 +222,15 @@
 {/snippet}
 {#snippet headerActions()}
 	{#if pick}
-		<!-- Laid out like the other sections' run pickers (Units & supply, Allocations): the name is for screen readers,
-		     so on a phone the select fills a row of its own instead of sitting under a "Run" line. -->
-		<select class="run-pick" aria-label="Run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
-			{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
-		</select>
+		<!-- Laid out like the other sections' run pickers (Units & supply, Allocations): the name is for screen readers
+		     beside the title, and shows over the select in a phone's More actions list (SectionHeader). -->
+		<label class="run-pick">
+			<span class="visually-hidden">Run</span>
+			<!-- Named "Run" itself too: a label round a select would add its chosen option to the name. -->
+			<select aria-label="Run" value={pick.run.id} onchange={(e) => choose(e.currentTarget.value)}>
+				{#each ordered as r, i (r.id)}<option value={r.id}>{runOptionLabel(r, (iso) => fmtDate(iso, true), i === 0)}</option>{/each}
+			</select>
+		</label>
 		<a class="btn" href={runHref(pick.run.id)}>Open in Runs &amp; results</a>
 	{/if}
 {/snippet}
@@ -441,7 +445,7 @@
 		margin: 0.1rem 0;
 	}
 	.stat dd.sub {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 		margin-top: 0.15rem;
@@ -527,13 +531,13 @@
 		margin: 1.5rem 0 0.75rem;
 		font-size: 1.05rem;
 	}
-	.run-pick {
+	.run-pick select {
 		max-width: min(34rem, 60vw);
 		min-height: 36px;
 	}
-	/* The section header gives the picker a full row on a phone (workspace/SectionHeader). */
+	/* On a phone the picker is in the header's More actions list, named over its select (workspace/SectionHeader). */
 	@media (max-width: 640px) {
-		.run-pick {
+		.run-pick select {
 			min-height: 44px;
 		}
 	}

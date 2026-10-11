@@ -187,7 +187,7 @@
 		color: var(--text-2);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 </style>

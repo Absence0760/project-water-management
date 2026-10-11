@@ -377,7 +377,7 @@
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
 	}
 	.stat dd.sub {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 		margin-top: 0.15rem;
@@ -445,12 +445,6 @@
 			--rh-low: #86b6ef;
 			--rh-low-ink: #121312;
 		}
-	}
-	:global(:root[data-theme='dark']) .reserve-heat {
-		--rh-high: #256abf;
-		--rh-high-ink: #ffffff;
-		--rh-low: #86b6ef;
-		--rh-low-ink: #121312;
 	}
 	.heat td.cell {
 		min-width: 2.6rem;

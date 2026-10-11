@@ -382,7 +382,7 @@
 		font-family: var(--font-mono);
 	}
 	.hash {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 	}
 	@media print {
 		:global(body:has(main.pack-page) .verify-banner),

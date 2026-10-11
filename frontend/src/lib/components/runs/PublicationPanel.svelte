@@ -11,6 +11,7 @@
 	it, the action to endorse it, once (163_licensing_authority).
 -->
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { tick } from 'svelte';
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -183,7 +184,7 @@
 			</div>
 			<div class="field">
 				<label for="{prefix}-next">Next update expected <span class="muted">(optional)</span></label>
-				<input id="{prefix}-next" type="date" bind:value={d.nextExpectedOn} />
+				<DayInput id="{prefix}-next" bind:value={d.nextExpectedOn} />
 			</div>
 		</div>
 		{#each noticeTextFields() as f (f.code)}

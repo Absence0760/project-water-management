@@ -5,6 +5,7 @@
 	// year, a one-off date range or days around Easter, optionally on some
 	// weekdays only; the later of two windows covering a day wins. Set by date
 	// only. The object is the editor's own, so edits land in the model.
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { tick } from 'svelte';
 	import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_MAX_EASTER_OFFSET, scheduleWindowProblem, type DemandObject, type DemandScheduleSpan } from '@water-management/engine';
 	import { moveWindow, newWindow, problemFields, SPAN_LABEL, toggleWeekday, withSpan } from './demandSchedule';
@@ -88,11 +89,11 @@
 						{:else if w.span === 'range'}
 							<div class="field">
 								<label for="ds-from-{o.id}-{i}">From</label>
-								<input aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-from-{o.id}-{i}" type="date" readonly={readonly} value={w.from ?? ''} onchange={(e) => (w.from = e.currentTarget.value)} />
+								<DayInput aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-from-{o.id}-{i}" readonly={readonly} value={w.from ?? ''} onchange={(v) => (w.from = v)} />
 							</div>
 							<div class="field">
 								<label for="ds-to-{o.id}-{i}">To</label>
-								<input aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-to-{o.id}-{i}" type="date" readonly={readonly} value={w.to ?? ''} onchange={(e) => (w.to = e.currentTarget.value)} />
+								<DayInput aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-to-{o.id}-{i}" readonly={readonly} value={w.to ?? ''} onchange={(v) => (w.to = v)} />
 							</div>
 						{:else if w.span === 'easter'}
 							<div class="field">

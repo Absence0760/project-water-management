@@ -30,4 +30,19 @@
 		margin-top: 2px;
 		color: var(--accent);
 	}
+	/* A phone: the same words at the same 16 px, in less height (issue #521: the supply card had slipped below
+	   the fold). The icon sits in the first line and the text runs under it, the full width of the box. */
+	@media (max-width: 399.98px) {
+		.estimate {
+			display: block;
+			padding: 8px 12px;
+			line-height: 1.35;
+		}
+		.estimate svg {
+			float: left;
+			width: 16px;
+			height: 16px;
+			margin: 3px 6px 0 0;
+		}
+	}
 </style>

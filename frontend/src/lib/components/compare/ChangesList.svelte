@@ -54,7 +54,8 @@
 <style>
 	.groups {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		/* Never wider than the box: a 320 px column overflowed a 240 px panel on a 320 px phone. */
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
 		gap: 0.5rem 1.5rem;
 	}
 	h3 {
@@ -80,7 +81,7 @@
 	.kind {
 		display: inline-block;
 		min-width: 4.6rem;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
@@ -89,7 +90,7 @@
 	.by {
 		display: block;
 		margin-left: 4.6rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.added {

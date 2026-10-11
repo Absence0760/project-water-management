@@ -172,7 +172,7 @@
 		font-size: 0.85rem;
 	}
 	.firing {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		border: 1.5px solid var(--warning);
 		border-radius: 4px;

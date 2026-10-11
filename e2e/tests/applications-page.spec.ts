@@ -67,7 +67,7 @@ test('the status filter is in the URL: Back steps through it, a reload keeps it,
 	await page.setViewportSize({ width: 1280, height: 800 });
 	const applicant = await signIn('Filter applicant');
 	const { project, runId, upper } = await seedApplicantProject(page, 'Applications page filter', applicant.user);
-	await seedManyApplications(page.request, applicant.context.request, project.id, runId, upper, 12);
+	const seeded = await seedManyApplications(page.request, applicant.context.request, project.id, runId, upper, 12);
 	// 12: decided 3, 7, 11; withdrawn 6; the other 8 awaiting.
 	await openApplications(page, project.id);
 	await expect(filter(page, /^All 12$/)).toHaveAttribute('aria-current', 'true');
@@ -88,6 +88,19 @@ test('the status filter is in the URL: Back steps through it, a reload keeps it,
 	await expect(page).not.toHaveURL(/status=/);
 	await expect(rows(page)).toHaveCount(12);
 	await expect(page.getByRole('heading', { level: 1, name: 'Applications' })).toBeVisible();
+
+	// The sort is in the URL too (issue #521): a reload keeps it, and Back undoes it.
+	await expect(rows(page).first().getByRole('rowheader')).toHaveText(seeded[11]!.name);
+	await applicationsCard(page).getByLabel('Sort by').selectOption('status');
+	await expect(page).toHaveURL(/[?&]sort=status(?:&|$)/);
+	await expect(rows(page).first().getByRole('rowheader')).toHaveText(seeded[0]!.name);
+	await page.reload();
+	await expect(applicationsCard(page).getByLabel('Sort by')).toHaveValue('status');
+	await expect(rows(page).first().getByRole('rowheader')).toHaveText(seeded[0]!.name);
+	await page.goBack();
+	await expect(page).not.toHaveURL(/sort=/);
+	await expect(applicationsCard(page).getByLabel('Sort by')).toHaveValue('date');
+	await expect(rows(page).first().getByRole('rowheader')).toHaveText(seeded[11]!.name);
 
 	await openApplications(page, project.id, '&status=withdrawn');
 	await expect(rows(page)).toHaveCount(1);

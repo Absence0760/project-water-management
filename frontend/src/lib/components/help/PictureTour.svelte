@@ -13,7 +13,7 @@
 	import Diagram from '$lib/components/help/Diagram.svelte';
 	import RichText from '$lib/components/help/RichText.svelte';
 	import { guideFor, type PictureStop } from '$lib/help/guides';
-	import { SHOTS, SHOT_ALT, pictureSrc, pictureSrcset, type ShotId } from '$lib/help/pictures';
+	import { DUSK_MEDIA, SHOTS, SHOT_ALT, pictureSrc, pictureSrcset, type ShotId } from '$lib/help/pictures';
 
 	let {
 		shot,
@@ -34,15 +34,19 @@
 </script>
 
 <div class="tour">
-	<div class="picture">
-		<img
-			src="{base}{pictureSrc(shot)}"
-			srcset={pictureSrcset(shot, base)}
-			{sizes}
-			width={pic.width}
-			height={pic.height}
-			alt={SHOT_ALT[shot]}
-		/>
+	<div class="picture" class:framed={!pic.cutout}>
+		<!-- By day in light mode, at dusk in dark mode: one camera, so one set of markers. -->
+		<picture>
+			<source media={DUSK_MEDIA} srcset={pictureSrcset(shot, base, 'dusk')} {sizes} />
+			<img
+				src="{base}{pictureSrc(shot)}"
+				srcset={pictureSrcset(shot, base)}
+				{sizes}
+				width={pic.width}
+				height={pic.height}
+				alt={SHOT_ALT[shot]}
+			/>
+		</picture>
 		<div class="markers" aria-hidden="true">
 			{#each stops as stop, i (stop.spot)}
 				{@const at = pic.spots[stop.spot]}
@@ -81,16 +85,19 @@
 						<div id="{uid}-{stop.spot}-more" class="more" hidden={!open}>
 							<div class="more-grid" class:with-pic={stop.more.shot}>
 								{#if stop.more.shot}
-									<img
-										class="closeup"
-										src="{base}{pictureSrc(stop.more.shot, SHOTS[stop.more.shot].width / 2)}"
-										srcset={pictureSrcset(stop.more.shot, base)}
-										sizes="(min-width: 64rem) 22rem, 100vw"
-										width={SHOTS[stop.more.shot].width}
-										height={SHOTS[stop.more.shot].height}
-										alt={SHOT_ALT[stop.more.shot]}
-										loading="lazy"
-									/>
+									<picture>
+										<source media={DUSK_MEDIA} srcset={pictureSrcset(stop.more.shot, base, 'dusk')} sizes="(min-width: 64rem) 22rem, 100vw" />
+										<img
+											class="closeup"
+											src="{base}{pictureSrc(stop.more.shot, SHOTS[stop.more.shot].width / 2)}"
+											srcset={pictureSrcset(stop.more.shot, base)}
+											sizes="(min-width: 64rem) 22rem, 100vw"
+											width={SHOTS[stop.more.shot].width}
+											height={SHOTS[stop.more.shot].height}
+											alt={SHOT_ALT[stop.more.shot]}
+											loading="lazy"
+										/>
+									</picture>
 								{/if}
 								<ul class="points">
 									{#each stop.more.points as point, j (j)}<li><RichText text={point} /></li>{/each}
@@ -132,6 +139,15 @@
 		height: auto;
 		border-radius: var(--radius);
 	}
+	/* Dark mode gets the dusk render (the <source> above). A picture that fills
+	   its frame keeps a hairline, since its evening sky meets the dark page
+	   with little contrast; the cut-out block needs none (issue #521). */
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) .framed img,
+		:global(:root:not([data-theme='light'])) .closeup {
+			outline: 1px solid var(--border);
+		}
+	}
 	.marker {
 		position: absolute;
 		display: grid;
@@ -146,7 +162,7 @@
 		background: #102a43;
 		box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
 		color: #fff;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 700;
 		cursor: pointer;
 		transition: transform 0.15s ease;
@@ -163,7 +179,7 @@
 		.marker {
 			width: 22px;
 			height: 22px;
-			font-size: 0.7rem;
+			font-size: var(--font-xs);
 		}
 	}
 	/* The stops, numbered like the markers. Two columns on wide screens,
@@ -213,7 +229,7 @@
 		border-radius: 50%;
 		background: var(--text);
 		color: var(--bg);
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		font-weight: 700;
 	}
 	.on .num {

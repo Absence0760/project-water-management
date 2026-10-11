@@ -22,7 +22,7 @@ running or building the app needs none of it. `bin/gen-landing-art.sh` runs:
 
 | Step | Tool | Source | Output |
 |---|---|---|---|
-| render | Blender 5 (Cycles) | `scripts/landing-art/diorama.py`, which runs the help pictures' scene (`scripts/help-art/catchment.py`) and relights it | the hero for day (light mode) and dusk (dark mode); the social card's backdrop; `overlay.json`, where the rivers, dams, clouds, gauge and farms fall in the hero (projected through its camera); `heights.json`, the terrain |
+| render | Blender 5 (Cycles) | `scripts/landing-art/diorama.py`, which runs the help pictures' scene (`scripts/help-art/catchment.py`) and lights it with that scene's `light()` (the help pictures' dusk rig, which renders their dark-mode set too; the hero hides its cut-face fill and turns the sun into a pale moon) | the hero for day (light mode) and dusk (dark mode); the social card's backdrop; `overlay.json`, where the rivers, dams, clouds, gauge and farms fall in the hero (projected through its camera); `heights.json`, the terrain |
 | render | python3 (stdlib) | `scripts/landing-art/contours.py` | `static/landing/contours.svg`, marching-squares contours of the same terrain |
 | render | ImageMagick 7, avifenc | the renders | `hero-{day,dusk}-{800,1200,1600}.{avif,webp}` (the hero is never wider than ~800 CSS px, so 1600 covers 2× screens and keeps each file under the 100 KB asset ceiling), 24 px blur-up placeholders (inlined) |
 | render | FontForge, ImageMagick | `static/fonts/outfit-600.woff2` | `og.jpg`: the dusk backdrop with the headline set in the display font (FontForge makes the TTF ImageMagick needs) |

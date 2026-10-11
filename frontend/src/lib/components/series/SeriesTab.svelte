@@ -922,12 +922,12 @@
 		display: block;
 		font-weight: 400;
 		color: var(--text-2);
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 	}
 	.rebuilding {
 		display: inline-block;
 		margin-top: 0.15rem;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
 		border-radius: 999px;
@@ -937,7 +937,7 @@
 	.prov {
 		display: block;
 		margin-top: 0.15rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		max-width: 100%;
 	}
 	/* Series details (issue #464): the charted series' product, where measured, source and upload unit, one labelled
@@ -973,7 +973,7 @@
 		}
 	}
 	.detail dt {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 	}
@@ -995,7 +995,7 @@
 	}
 	.role {
 		display: inline-block;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
 		border-radius: 999px;
@@ -1009,7 +1009,7 @@
 	/* Saved / not saved, beside a control that saves on change. */
 	.save-st {
 		display: block;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 	}
@@ -1028,7 +1028,7 @@
 		color: var(--text-muted);
 	}
 	.period {
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		text-align: left;
 	}
 	.upto .num {
@@ -1036,14 +1036,14 @@
 		text-align: left;
 	}
 	.age {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	/* "Behind": the Data badge's rule (freshness.ts), in words as well as colour. */
 	.behind {
 		display: inline-block;
 		margin-left: 0.3rem;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
 		border-radius: 999px;
@@ -1083,7 +1083,7 @@
 		}
 		.from-inline {
 			display: block;
-			font-size: 0.75rem;
+			font-size: var(--font-xs);
 			color: var(--text-muted);
 		}
 		.act {
@@ -1141,7 +1141,7 @@
 	.range {
 		display: flex;
 		justify-content: space-between;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
@@ -1211,7 +1211,6 @@
 		font-size: 0.85rem;
 	}
 	.checks .badge {
-		text-transform: none;
 		margin-right: 0.25rem;
 	}
 	/* A phone-width column: each series row becomes a card, so nothing hides behind a sideways scroll. */
@@ -1273,7 +1272,7 @@
 		.series td[data-label]::before {
 			content: attr(data-label) / '';
 			display: block;
-			font-size: 0.7rem;
+			font-size: var(--font-xs);
 			font-weight: 600;
 			color: var(--text-muted);
 		}
@@ -1310,11 +1309,11 @@
 	}
 	.roles dd {
 		margin: 0.1rem 0 0;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-2);
 	}
 	.have {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		color: var(--success);
 		margin-left: 0.3rem;

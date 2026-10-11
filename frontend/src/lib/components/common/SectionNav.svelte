@@ -626,7 +626,7 @@
 	}
 	.nav-h {
 		line-height: 30px;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -649,7 +649,7 @@
 	}
 	.grp-h {
 		margin-inline-end: var(--gap);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		line-height: 30px;
 		color: var(--text-muted);
@@ -669,7 +669,7 @@
 		border-radius: 999px;
 		background: var(--surface);
 		font: inherit;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		line-height: 1.2;
 		color: var(--text-2);
 		text-decoration: none;
@@ -716,7 +716,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 		font-size: 0.9rem;
 		line-height: 1.3;
 	}
@@ -732,7 +732,7 @@
 	}
 	.pop-h {
 		margin: 0.4rem 0.6rem 0.15rem;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -810,7 +810,7 @@
 	.rail-h {
 		margin: 0.85rem 0 0.2rem;
 		padding: 0 0.6rem;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -849,14 +849,14 @@
 	}
 	.ext {
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.find {
 		display: grid;
 		gap: 0.25rem;
 	}
 	.find-l {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 	}
@@ -868,7 +868,7 @@
 	.find-n {
 		margin: 0;
 		min-height: 1em;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.results {
@@ -883,7 +883,7 @@
 		gap: 0;
 	}
 	.results .in {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 

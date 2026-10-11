@@ -14,6 +14,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { anySaveBar, fitSummary, header, isProjectPatch, openFold, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
+import { headerControl } from '../support/sectionHeader.ts';
 
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const SETTINGS_INDEX: [string, string[]][] = [
@@ -133,7 +134,8 @@ test('Vary it by month sits beside its box, and the page reflows at 1280 and on 
 
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openSettings(page, project.id);
-	await expect(header(page).getByRole('link', { name: 'Fit the parameters', exact: true })).toBeVisible();
+	// In the header's More actions list on a phone.
+	await expect(await headerControl(page, 'link', 'Fit the parameters')).toBeVisible();
 	await expect(fitSummary(page)).toBeVisible();
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);

@@ -35,7 +35,8 @@
     "x": 28.7,
     "y": 74.3
    }
-  }
+  },
+  "cutout": true
  },
  "dam": {
   "width": 800,
@@ -53,7 +54,8 @@
     "x": 38.0,
     "y": 34.5
    }
-  }
+  },
+  "cutout": false
  },
  "farm": {
   "width": 1200,
@@ -91,7 +93,8 @@
     "x": 78.0,
     "y": 96.4
    }
-  }
+  },
+  "cutout": false
  },
  "gauge": {
   "width": 800,
@@ -105,7 +108,8 @@
     "x": 24.9,
     "y": 67.3
    }
-  }
+  },
+  "cutout": false
  },
  "inflow": {
   "width": 800,
@@ -119,7 +123,8 @@
     "x": 83.7,
     "y": 84.4
    }
-  }
+  },
+  "cutout": false
  },
  "irrigation": {
   "width": 800,
@@ -137,7 +142,8 @@
     "x": 20.0,
     "y": 58.7
    }
-  }
+  },
+  "cutout": false
  },
  "orchard": {
   "width": 800,
@@ -147,7 +153,8 @@
     "x": 50.0,
     "y": 39.1
    }
-  }
+  },
+  "cutout": false
  },
  "river": {
   "width": 800,
@@ -157,7 +164,8 @@
     "x": 50.0,
     "y": 48.5
    }
-  }
+  },
+  "cutout": false
  },
  "soil": {
   "width": 1200,
@@ -183,7 +191,8 @@
     "x": 34.1,
     "y": 35.7
    }
-  }
+  },
+  "cutout": false
  },
  "spillway": {
   "width": 800,
@@ -197,7 +206,8 @@
     "x": 74.8,
     "y": 91.6
    }
-  }
+  },
+  "cutout": false
  },
  "transfer": {
   "width": 800,
@@ -207,7 +217,8 @@
     "x": 50.0,
     "y": 50.0
    }
-  }
+  },
+  "cutout": false
  },
  "weir": {
   "width": 1200,
@@ -225,6 +236,7 @@
     "x": 68.9,
     "y": 28.3
    }
-  }
+  },
+  "cutout": false
  }
 }

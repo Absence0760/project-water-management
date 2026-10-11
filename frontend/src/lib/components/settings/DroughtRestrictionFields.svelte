@@ -373,7 +373,7 @@
 		min-height: 32px;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		margin: 0;
 		max-width: 75ch;
@@ -539,7 +539,7 @@
 			align-items: center;
 			padding: 0 0.5rem;
 			border-bottom: 1px solid var(--border);
-			font-size: 0.8rem;
+			font-size: var(--font-sm);
 			line-height: 1.2;
 		}
 		.cell:last-child {
@@ -558,7 +558,7 @@
 		}
 		.level > .err {
 			padding: 0.3rem 0.5rem;
-			font-size: 0.8rem;
+			font-size: var(--font-sm);
 		}
 	}
 	.field {

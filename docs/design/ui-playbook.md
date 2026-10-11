@@ -437,7 +437,25 @@ section it belongs to, with the example that taught it.
   out at 11.4 px. Size in `px` inside such a frame, lift a borrowed piece in
   the frame's own copy (`farm/FarmNotes.svelte`), and pin the floor by
   walking the page's text (`farm-view.spec.ts` fails on any visible text
-  under 13 px).
+  under 13 px; `smallText` in `e2e/support/reflow.ts`). The account pages a
+  farmer opens from the farm Menu sit in the same frame and are walked too:
+  their labels, hints and badges were 10.5–12.6 px from the 14 px root until
+  round 5 lifted them in px (`routes/account/+page.svelte`), and a long
+  Afrikaans button label poked 11 px out of its card while the page still
+  fit, so the same specs check that no control leaves its card's padding box
+  (`outOfPanel`).
+- **A legal line before the figures still leaves the first figure on the
+  first screen.** The farm page's estimate line (issue #47) went in before
+  the supply card and pushed its heading to 796 px on a 360 × 740 phone with
+  a notice, 866 px in Afrikaans. Its words are legal wording, so the space
+  came from around it, under 400 px only: the estimate box's icon sits in its
+  first line (`float`) so the text takes the box's width, its padding and
+  line height tighten (still 16 px type), the notice's byline ends its last
+  line, the dates line's clock sits in its first line, the cards sit 10 px
+  apart and the header's title gives way below 380 px as it did below 360.
+  The heading now starts at 646 px (669 in Afrikaans). `farm-view.spec.ts`
+  pins it at 360 × 740 in both languages, and at 320 × 640 the notice whole
+  and the estimate line begun on the first screen.
 - **A frame's header lines up with its column.** The farm pages' header
   spanned the window at 1440 (the title at the left edge, Menu at the right)
   over a centred 560 px column, so the eye jumped 440 px between the title
@@ -472,7 +490,11 @@ section it belongs to, with the example that taught it.
   than a page is sliced wherever the break falls, through a row of names if
   that's where it is. Split it into page-high SVGs at clean boundaries, each
   `break-inside: avoid` (the schematic's `paperBands`), and check in the PDF
-  that every name lands whole on exactly one page.
+  that every name lands whole on exactly one page. One element wider than the
+  page shrinks the whole PDF to fit: a curtailment table's `min-width: 11rem`
+  name column (issue #521) took every printed word down ~3 %, and the
+  schematic's names fell under 7 pt. A fixed minimum width on anything the
+  report prints belongs in `@media screen`.
 - **An absolutely positioned bit inside a scrolling table escapes it**
   unless the box is its containing block: the visually-hidden words in
   `/compare`'s delta cells and the report's EWR grid gave both pages 185 px of
@@ -763,6 +785,19 @@ section it belongs to, with the example that taught it.
   (the scenario editor's rebase line).
   Give a field's label the height of a label with a tip (`min-height: 24px`),
   or the inputs of a row without tips sit 6 px higher than their neighbours.
+- **A field's error line grows its own field and moves nothing beside it.**
+  Rows align their fields to the bottom (`.form-row`, and many a screen's own
+  grid with `align-items: end`), so a label that wraps keeps the inputs in
+  line; a day or number field's error line then made its field the tallest
+  and pushed every neighbour down by the error's height (issue #521, round
+  6). app.css's rule after `.form-row` handles every row at once: while a
+  field in a row shows its `.num-err` (NumberInput's and DayInput's line),
+  the row's fields stretch to the row's height with label and input at the
+  top, and a `.form-row`'s buttons hold the inputs' line. It is `align-self:
+  stretch`, not `flex-start`, so a column of fields (where align-self is
+  horizontal) keeps its width. A field that draws its own error line under
+  its input names it `.num-err` to get the same. `day-input.spec.ts` and
+  `node-sheet-layout.spec.ts` pin a neighbour's input in place.
 - **An index names each panel as the page does, and a page beside a rail
   reads its width from its own column.** Runs & results, River & reserve,
   Hydrological units and Data kept the two-row bar after Settings got its
@@ -800,6 +835,33 @@ section it belongs to, with the example that taught it.
 
 - **Colours are tokens** in `frontend/src/app.css` with dark-theme values
   (`--series-*`, `--accent`, `--warning`…); no raw hex in components.
+- **Type scale: small text is a token, and a phone's floor is 12 px.**
+  Small text takes `--font-xs` (0.75rem: badges, units, tags, a table's
+  card labels, counts, kickers) or `--font-sm` (0.8rem: hints, captions,
+  `.small` lines, table heads, tile labels); under 640 px on screen both are
+  `max(<rem>, 12px)`, so a phone never draws text under 12 px and a larger
+  root still scales them. Anything bigger is a literal rem (0.85rem and up,
+  11.9 px counts as the floor). Never write a literal size under 0.85rem:
+  about 400 component sizes from 0.6rem to 0.83rem (8.4–11.6 px on a phone,
+  the unit table's card labels 10.5 px) each wrote their own until issue
+  #521 round 6 moved them onto the two tokens. `uiPatterns.test.ts` refuses
+  a new one; `text-floor.spec.ts` measures every tab at 390 px (12 px) and
+  1440 px (10.5 px), the app frame included. The decided exceptions, listed
+  by file and rule in `uiPatterns.test.ts`:
+  - print styles (`@media print`): paper has its own sizes;
+  - text in an svg (chart axes and labels, diagrams, a step icon's digit):
+    sized in the drawing's units, so its drawn size follows the drawing's
+    scale, and `checkDiagramLabels` measures that;
+  - a glyph a screen reader skips (`aria-hidden`): a menu's ▾, a delta's
+    ▲▼, a sorted column's arrow;
+  - a count bubble on an icon button whose name carries the count (the
+    sidebar's hidden sections, the compact notes button, the account
+    menu's "i"), in a fixed 14 px dot.
+  Text that grows can stop fitting where it used to: a sparkline's "max
+  0.80" between "Oct" and "Sep" fit a 100 px crop column at 9.8 px and was
+  cut off at 12 px, so on a phone the mark takes its own line under the two
+  ends there. Run `clippedText` and `expectNoSidewaysScroll` at 320 and 390
+  px after raising a size.
 - **No two named things share a colour.** A palette runs out: give colours
   to the items that matter most (largest area, most demand) and group the
   tail as one labelled "Other" that names its members. The Crops page's
@@ -821,7 +883,11 @@ section it belongs to, with the example that taught it.
   follows these", "River network: mapped rivers, for reference only; …")
   and the key's Lines lead with the same words from one helper
   (`map/mapList.ts` `delineationLines`). Don't name a thing by its colour
-  in text: colours change with the theme. And keep what a decision is
+  in text: colours change with the theme ("Darker cells are months of higher
+  demand" read backwards in dark, where a higher demand is a brighter teal;
+  now "The stronger a cell's shade…"). `frontend/src/lib/darkTheme.test.ts`
+  refuses "the red lines", "darker cells", "green = better" and the like in
+  any copy. And keep what a decision is
   checked against on screen while it is decided: the channels went with the
   click step, so the proposal couldn't be checked against them; they stay,
   dimmed, until it is accepted or rejected.
@@ -831,6 +897,61 @@ section it belongs to, with the example that taught it.
   says "It isn’t in the model yet." with the next step as a button (Divide
   the model, or Start from the map), and the boundary's card keeps it while
   it applies (`mapList.ts` `boundaryNextStep`).
+- **Overlays take their edge from tokens.** A dialog, sheet or popover's
+  backdrop, border and shadow are `--overlay-backdrop`, `--overlay-border`,
+  `--overlay-shadow` and `--popover-shadow` (`app.css`), which deepen in dark:
+  the literal 20 % black shadow and `--border` edge left a dark sheet at
+  1.1:1 against the page it covered, so on a phone the two read as one
+  (issue #521). `::backdrop` only inherits custom properties in recent
+  browsers, so give it the light value as the `var()` fallback.
+  A bar docked at the window's foot (the save bar) casts `--bar-shadow`
+  upward. `darkTheme.test.ts` refuses any black shadow literal in a
+  workspace component (the help pictures' fixed-colour markers aside): its
+  first pattern named two popover sizes and missed a third and the save bar.
+- **Hold non-text parts to 3:1.** A control's outline (or its fill, where it
+  stands off the ground) and a chart's marks need 3:1 against the ground
+  (WCAG 1.4.11), and axe checks neither: the flow unit picker's `--border`
+  outline (1.3–1.5:1) and the reserve chart's faded part years (1.9:1) passed
+  every scan in both themes. A control's outline is `--border-input`; a mark
+  drawn "lighter" keeps a full-strength outline and fades only its fill
+  (`fill-opacity`, never `opacity`), and its note says "outlined", not
+  "faded". `e2e/support/contrast.ts` checks both (§ 5).
+  **Canvas charts too.** A uPlot line is a mark: the light theme's
+  `--series-3` (#1baf7a, 2.8:1) failed as the calibration check's upstream
+  demand and the comparison's B − A, so it is #15996b (3.6:1; no palette
+  neighbour moved closer for colour-blind readers), and the hydrograph's
+  quality-flag strips were drawn at 75 %, which put even the red under 3:1;
+  they are drawn at full strength, as keyed. A strip or line that is drawn
+  must not be fainter than its key. Axis labels drawn on the canvas are text
+  (4.5:1; axe can't read a canvas).
+  **Faint on purpose, and why that's allowed:** gridlines and ticks
+  (decoration, as in SVG); `LineChart`'s `shade` tint (`--warning` at 16 %)
+  and a `band`'s tint and hatching, each keyed in words under the plot with a
+  full-strength edge (the band's dashed `--series-4` start line is a mark and
+  passes); and, in the light theme only, the yellow and pink lane strips
+  (`--series-5`, `-6`, 2.1–2.7:1), which sit in their own keyed row with the
+  class named and its days counted. The spec passes those two lanes as an
+  explicit `except`; anything else faint fails.
+- **A disabled main button is plainly off.** `.btn:disabled`'s fade turned
+  the dark theme's accent into a mid teal that read as a live secondary
+  button; `.btn-primary:disabled` is the plain surface, the strong border and
+  muted text in both themes (`app.css`).
+- **A picture gets a dark-mode render, not a filter.** The help pictures
+  were bright daylight renders that glared on the dark page, and dimming them
+  (`filter: brightness`) only greyed them. Render the scene again at dusk
+  from the same camera (so markers placed on it fit both) and serve it as a
+  `<picture>` whose `<source media="(prefers-color-scheme: dark)">` holds the
+  dusk set (`DUSK_MEDIA` in `lib/help/pictures.ts`; the landing hero does the
+  same). Keep what a picture labels true at dusk: the help scene's sun stays
+  a sun, since a stop calls it evaporation. A dark render that fills its
+  frame takes a 1 px `--border` outline; a cut-out on transparency takes none
+  (`help.spec.ts`; ui.md § Help).
+- **A badge is sentence case and a rounded box.** `text-transform:
+  capitalize` gave "Dam Settings Changed Since The Run"; a badge capitalises
+  its first letter only (`::first-letter`). Its corners are half a one-line
+  badge's height (0.7rem), so a long badge that wraps in a narrow cell is a
+  rounded box, not the tall blob `999px` made; give the cell room
+  (Curtailment targets' names are at least 11rem).
 - **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
@@ -1013,13 +1134,13 @@ section it belongs to, with the example that taught it.
 | Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
 | A group that usually stays at its defaults, as one line that opens | `common/Fold.svelte` with `atDefaults` (and `body="stack"`, `spaced`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
 | A paste dialog | `model/GridPasteDialog.svelte` for a grid of numbers (Now/Pasted preview); a list of rows uses its frame, `model/PasteDialogFrame.svelte`, with its own preview table (§ 4 "A paste box that replaces a whole table is the shared paste dialog") |
-| A typed date | a text field read by `parseDay`, shown back with `tidyDay` on blur (`format/number.ts`; § 2 "A typed date is day first too"), never `<input type="date">` |
+| A typed date | `common/DayInput.svelte`: a text field read by `parseDay`, shown back day first, with `min`/`max`, its message at the field and its place in the save bar's invalid list (§ 2 "A typed date is day first too"), never `<input type="date">` |
 | Two forms in one panel | a bordered card each (`settings/SettingsTab.svelte` `.sub-card`), the state and actions in the card's head (§ 2) |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
 | Saying what a file or paste box takes | `common/FormatHelp.svelte` (`accepts`, the structure as its children, `example`, `exampleFile` or several `exampleFiles` to download, `context` to tell two on a page apart for a screen reader): one per box, beside its file picker, which comes before the fields a file fills, its words checked against the box's parser, its example fed back through it in a test (ui.md § Expected format) |
 | A number field | `common/NumberInput.svelte` (`min`/`max` in displayed units, `scale`, `nullable`, `grouped`, `invalidMessage`): reads a decimal comma everywhere, keeps invalid text with its message and counts it in `common/invalidFields.svelte.ts` (ui.md § Number fields); prefer it to a bare `<input type="number">`, which leaves a decimal comma to the browser |
-| Picking months | `common/MonthPicker.svelte` (twelve toggles in water-year order, 24 px or more, rows of six in a narrow column; *All months* / *No months*) |
+| Picking months | `common/MonthPicker.svelte` (twelve toggles in water-year order, 24 px or more, rows of six at 44 px in a narrow column or on a touch screen; *All months* / *No months*; Allocations' licence months since issue #521 round 5, which had forked it with 21 px boxes) |
 | Grids inside a modal | the existing component unchanged (`CropsTab sections` → `CropGrids`, `NetworkTab only="table"`), never a fork |
 | A small chart in a row or card (sparkline) | `charts/Sparkline.svelte` (the compact pattern, § 3 "Label every chart"; `caption` required) |
 | Time-series charts | `charts/LineChart.svelte` (`windows` for 30 days / 1 year / All; Earlier/Later; units switch where the old chart had one) |
@@ -1155,10 +1276,33 @@ Interaction details that bit:
   round 4 (**From (day first)**, a registered volume's **Valid from**, a date
   setting; `tidyDay` shows "15 Nov 2021" once the field is left, and the
   form refuses "From: type a day, day first: …"; `scenario-demand-scale.spec.ts`).
-  `lib/uiPatterns.test.ts` refuses a new native date field; the 30 written
-  before the rule are counted per file there and may only go down (they
-  need a shared day field that joins the save blocker's invalid fields, as
-  `NumberInput` does, before they convert).
+  Every other form uses the shared field, `common/DayInput.svelte` (issue
+  #521 round 5; its rules in `common/dayField.svelte.ts`): bind it to the
+  YYYY-MM-DD value ('' for blank, `|| null` at a nullable setting), give it
+  `min`/`max` (YYYY-MM-DD), and it keeps text it can't read with its message
+  at the field, joins the owner's `invalidFields` (the save bar's list and
+  the leave guard, as `NumberInput` does), and sets the input's custom
+  validity, so a form without `novalidate` refuses to submit it. A form
+  with `novalidate` that checks its own dates looks for
+  `validity.customError` on the field before it submits
+  (`feeds/DataFeedsPanel.svelte`, `feeds/UnitRain.svelte`), and leaves the
+  bound to its own validator when that says more ("the sat product begins
+  on 1998-01-01; choose rnl"). A field whose change does work (a refetch, a
+  URL) passes `commit="change"`, so it stores once typing ends (Enter or
+  leaving the field) rather than on each keystroke (`runs/ReportWindowPanel.svelte`).
+  The value stored and sent never changes form; specs type day first or
+  ISO and read the field back as "15 Nov 2021" (`day-input.spec.ts`).
+  `lib/uiPatterns.test.ts` refuses any native date field.
+- **"Today" is the viewer's day, and a day that must have passed goes as a
+  moment.** `new Date().toISOString().slice(0, 10)` is the UTC day, a day
+  behind in South Africa until 02:00: Registration checks' latest allowed
+  day, the licence record's status, the API keys' example and two water-year
+  defaults used it until round 6 of issue #521. Use `localIsoDate()`
+  (`lib/format/number.ts`). A bare day reaches the server as UTC midnight,
+  still in the future just after local midnight, so a field the server holds
+  to "a date that has passed" sends today through `pastDayMoment(day)`, the
+  current moment (`registration-checks.spec.ts` runs in a zone on another
+  day than UTC).
 - **The printed evidence report keeps ISO dates, on purpose.** It is a
   signed document whose lines match the manifest's hashed text (evidence
   pack manifests, `docs/evidence-pack.md`), so its dates, the fit line
@@ -1357,6 +1501,28 @@ Interaction details that bit:
   and the project's members, the pending invitations and the farmers use it;
   Crops' `removed()` and the Network's `remove()` did the same by hand, and
   Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
+  A row with no control every row has (a note: only some have Delete) takes
+  the focus itself: the notes list's items carry `tabindex="-1"` and the
+  selector is the item (`notes/NotesList.svelte`, `history-steps.spec.ts`).
+- **A pick is a step in history; typing is one step; a default is none.**
+  Runs replaced the history entry on a run pick while River, Units, Dams and
+  Allocations added one, so Back did different things on neighbouring pages
+  (issue #521). The rule: a run, unit, dam or feature the user picks, and a
+  filter or sort chosen from a control, pushes (`goto` without
+  `replaceState`), so Back returns to the pick before. A search typed into a
+  box is one step: its first change after the box takes the focus pushes,
+  the rest replace (the project list, Runs' label filter, History's
+  Parameter filter, one `SearchStep` each from `lib/nav/searchStep.ts`:
+  `onfocus={step.focus}`, `replaceState: step.replace()`). A default pick, a redirect from an old link and closing an
+  overlay replace. Every sort and filter is in the URL, so a reload keeps it
+  (the Applications sort `sort=status`, Runs' `q=`).
+- **A failed load says what failed and offers Try again.** A panel that reads
+  on its own (Recent notes, Registration checks, the Outcome matrix's sweep,
+  the Seasonal outlook, Automated calibration's fits) shows "Couldn’t look
+  up …: <reason>" with **Try again** calling its load again, never the bare
+  server text with only a reload to retry. An action's failure (a start, an
+  apply) keeps its own message: the action's button is its retry
+  (`AutoCalibrationFollower.loadFailed`).
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
@@ -1410,6 +1576,45 @@ Interaction details that bit:
   opens the dialog with the focus on Import, so the dialog's Escape returns
   there. A row's two buttons (Add data, ⋯) sit side by side at tap height,
   not stacked two targets tall.
+  The workspace's section header does the same for every tab (issue #521
+  round 5: it took 48–78 % of a phone's first screen, Network's Map, Tables,
+  + Add hydrological unit and + Add other user a full row each): under a
+  640 px header the tab's own controls sit in one **⋯ More actions** list at
+  the end of the pills' row, the same elements rendered once (pickers named
+  over their selects there, menus opening in place), and the main box's
+  Add data and Run model share the last row. A pick closes the list and
+  leaves the focus on ⋯, so a dialog it opens returns there; a control
+  inside one of the list's own menus leaves it open. The header measures
+  its own width (`bind:clientWidth`, matching its container query) to
+  decide, and counts what the tab drew so an empty list draws no ⋯. Pin it
+  as a budget: the header's foot within the first half of a 360 × 740 screen
+  on every tab (`workspace-phone.spec.ts`). A spec that clicks a tab's own
+  control at any width goes through `headerControl` (`e2e/support/sectionHeader.ts`),
+  which opens the list first on a phone.
+- **On a phone a footer of actions is one row, with nothing above it until
+  it has something to say.** The model-edit sheets' save row was three rows
+  (144 px of an 844 px screen) with nothing to save: "No unsaved changes",
+  then Discard model changes and Done, then Save changes alone. It is now
+  Discard, Done and Save in three equal columns (the long words hidden but
+  still the names), the clean status for screen readers only, and the
+  reason only once there are changes; the page's save bar puts its status
+  in the buttons' row as the dot and a word ("Unsaved"), the reason under it.
+  Leave a failed save's message whole, on a row of its own.
+- **A table that scrolls sideways says so, and keeps its rows named.** On a
+  308 px box a table cut at a column edge looks finished. `.table-wrap`
+  draws edge shadows with CSS alone (two `local` covers over two `scroll`
+  shadows), and `lib/a11y/scrollRegions.ts` marks a box that scrolls
+  sideways `data-scrolls-x`, so on a phone its `th scope="row"` first column
+  is sticky. Gate the sticky column on the attribute, not on the table: a
+  table restyled as cards on a phone (Upload GeoJSON, the node table) would
+  otherwise give its card head a background and a border.
+- **The shared small text has a phone floor of 12 px**, through the two
+  type-scale tokens (§ 3 "Type scale"): badges, `.small`, `.field .hint`,
+  table column heads and tile labels were 10.5–11.2 px at the 14 px root.
+  A component's scoped rule for those classes wins over app.css (its hash),
+  so a redundant scoped copy (`.small { font-size: 0.8rem }`, the global
+  value) is deleted rather than kept, and a deliberate size of its own uses
+  a token or a size of 0.85rem and up.
 - **Line up a table of fieldsets with fixed row heights, not subgrid.** The
   drought levels became one table (a column per level, a row per part of
   demand) while each level stays a `<fieldset>` named by its legend, so the
@@ -1446,6 +1651,17 @@ Interaction details that bit:
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
   (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`,
   `scenarios.ts`, `allocations.ts`).
+- **Playwright counts a visually hidden box as visible.** `.visually-hidden`
+  leaves a 1 × 1 px box, which `toBeVisible()` passes and `toBeHidden()`
+  fails ("from the file" kept as a row's description in Upload GeoJSON):
+  check its box's width instead. The other way round, `getByRole` skips
+  `display: none` (a closed More actions list), so a control there needs
+  `includeHidden: true` to be found at all; `getByText` finds it anyway.
+- **A layout that measures itself settles after its first paint.** The
+  section header renders wide, measures its width, then folds the tab's
+  controls into ⋯; a check that reads boxes right after the title shows can
+  see the wide layout, and a control a tab adds late (Compare's export)
+  brings the ⋯ after it. Wait for the ⋯ itself before measuring.
 - **A closed `<details>` still lays out its content in Chromium.** Its
   children keep a `scrollHeight` (the panel is hidden with
   `content-visibility`), so a check for "nothing scrolls inside itself"
@@ -1637,6 +1853,33 @@ Interaction details that bit:
   (Fit automatically's "Enter a seed.") can't be reached from the page. Test
   the state the field really shows (`aria-invalid`), and key any summary of
   it on that.
+- **Check non-text contrast with `support/contrast.ts`.** axe reads text
+  only. `expectNonTextContrast(page, { within, marks, except })` checks every
+  visible, enabled text field, select and textarea (its weakest drawn border,
+  or its own fill, against the composited background of its ancestors) and
+  every SVG chart mark (fill and outline, each with its opacity and its
+  groups', against the chart's ground; `<line>`s are gridlines and skipped),
+  at 3:1. Call it in both themes (`test.use({ colorScheme })`) on a screen
+  that has loaded; `nonTextContrast` returns the failures with their
+  colours. `non-text-contrast.spec.ts` runs it on Transfers, the node sheet
+  and the reserve chart, with a positive control. It checks uPlot's canvas
+  charts too (`canvas: false` turns that off): a series by the colour uPlot
+  was configured with, read from its legend swatch (uPlot paints the swatch
+  from the series' resolved stroke), and what the chart draws itself (lane
+  strips, the axis labels' `--chart-axis`) from the canvas pixels, at the
+  most opaque it is drawn. Pixels alone can't judge a series: one line over
+  another hides it (Supplied over an equal demand read 5 %), and a thin line
+  has no full-strength pixel at 1×. Run canvas checks at
+  `deviceScaleFactor: 2`, and wait for each `figure.chart`'s `data-ready`
+  (scroll it into view first: lower groups draw as they near the window).
+  The spec covers Runs & results, Data, River & reserve, Compare and
+  Hydrological units in both themes, with a real-chart control (a faint
+  token) and a drawn-canvas control (a strip at 40 %, an empty swatch).
+- **To test a loading state, hold the chunk by what it holds.** Production
+  chunk names are bare hashes, so a route can't pick the Map's lazy chunk by
+  name: fetch every `_app/immutable/**/*.js`, and hold the one whose body has
+  the component's `data-testid` until the check is done
+  (`small-layout-fixes.spec.ts`; Svelte may drop the attribute's quotes).
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle

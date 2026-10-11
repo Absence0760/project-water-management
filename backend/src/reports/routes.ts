@@ -310,6 +310,11 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
  * gives reads one project and one run as the requester (reports/scope.ts),
  * who must still be able to see both (and an impact report's baseline), or,
  * for a pack token (119), one evidence pack that was issued.
+ *
+ * The answer carries the project's time zone (project.time_zone, 058;
+ * null for a requester who is no member, 217_project_time_zone_for_render):
+ * the renderer prints in it, so the page's dates are the catchment's day,
+ * as a browser there prints them, not UTC's (issue #521).
  */
 export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', async (c) => {
 	const body = z.object({ token: z.string().max(200) }).strict().parse(await readJson(c));
@@ -320,28 +325,29 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 	if (!t) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	if (t.kind === 'applicant_pack') {
 		// The pack, still one of the requester's application's (a party: app_applicant_pack_meta, issued) (165).
-		const scenarioId = await withUser(t.userId, async (db) => {
+		const { scenarioId, timeZone } = await withUser(t.userId, async (db) => {
 			const { rows } = await db.query<{ m: { scenarioId?: unknown } | null }>('SELECT app_applicant_pack_meta($1, $2) AS m', [t.projectId, t.packId]);
 			const sid = rows[0]?.m?.scenarioId;
 			if (typeof sid !== 'string') throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this evidence pack');
-			return sid;
+			return { scenarioId: sid, timeZone: await projectTimeZone(db, t.projectId) };
 		});
 		await issueSession(c, t.userId, { projectId: t.projectId, packId: t.packId, scenarioId });
-		return c.json({ ok: true });
+		return c.json({ ok: true, timeZone });
 	}
 	if (t.kind === 'pack') {
-		await withUser(t.userId, async (db) => {
+		const timeZone = await withUser(t.userId, async (db) => {
 			// The pack, still readable by the requester (RLS: evidence_pack is theirs) and issued.
 			const { rows } = await db.query<{ ok: boolean }>(
 				`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM evidence_pack WHERE id = $2 AND project_id = $1 AND issued_at IS NOT NULL) AS ok`,
 				[t.projectId, t.packId]
 			);
 			if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this evidence pack');
+			return projectTimeZone(db, t.projectId);
 		});
 		await issueSession(c, t.userId, { projectId: t.projectId, packId: t.packId });
-		return c.json({ ok: true });
+		return c.json({ ok: true, timeZone });
 	}
-	await withUser(t.userId, async (db) => {
+	const timeZone = await withUser(t.userId, async (db) => {
 		// The run, and an impact report's baseline, both still readable by the requester (RLS: model_run is theirs).
 		const { rows } = await db.query<{ ok: boolean }>(
 			`SELECT app_has_role($1, 'viewer') AND EXISTS (SELECT 1 FROM model_run WHERE id = $2 AND project_id = $1)
@@ -349,7 +355,14 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 			[t.projectId, t.runId, t.against?.projectId ?? null, t.against?.runId ?? null]
 		);
 		if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this report');
+		return projectTimeZone(db, t.projectId);
 	});
 	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}), ...(t.redact ? { redact: true as const } : {}) });
-	return c.json({ ok: true });
+	return c.json({ ok: true, timeZone });
 });
+
+/** The project's time zone for the renderer, as the requester (any member; an applicant's party is no viewer): null when it can't be read. */
+async function projectTimeZone(db: Db, projectId: string): Promise<string | null> {
+	const { rows } = await db.query<{ tz: string | null }>('SELECT app_project_time_zone($1) AS tz', [projectId]);
+	return rows[0]?.tz ?? null;
+}

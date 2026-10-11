@@ -583,14 +583,13 @@
 	.sub {
 		display: block;
 		margin-top: 0.15rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 400;
 		color: var(--text-muted);
 	}
 	.flag {
 		display: inline-block;
 		margin-top: 0.25rem;
-		text-transform: none;
 	}
 	/* The numbers across the top of the projects. */
 	.kpis {
@@ -606,7 +605,7 @@
 		padding: 0.55rem 0.75rem;
 	}
 	.kpi dt {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		margin-bottom: 0.2rem;
 	}
@@ -673,7 +672,7 @@
 		}
 	}
 	.p-facts dt {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.p-facts dd {
@@ -715,7 +714,7 @@
 	.sub-email {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.act {

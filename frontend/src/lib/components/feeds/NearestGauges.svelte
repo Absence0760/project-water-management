@@ -104,15 +104,12 @@
 	.src {
 		display: block;
 		font-weight: 400;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		max-width: 40ch;
 	}
 	.chosen {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		white-space: nowrap;
-	}
-	.small {
-		font-size: 0.8rem;
 	}
 </style>

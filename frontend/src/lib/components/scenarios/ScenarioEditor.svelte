@@ -689,7 +689,7 @@
 		justify-content: flex-start;
 	}
 	.status {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.5rem;
 		border-radius: 999px;
@@ -771,7 +771,7 @@
 		min-height: 32px;
 	}
 	.hint {
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-muted);
 		margin: 0.25rem 0 0.5rem;
 	}

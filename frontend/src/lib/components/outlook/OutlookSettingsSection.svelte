@@ -157,7 +157,7 @@
 	}
 	.hint {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.err {
 		color: var(--danger);

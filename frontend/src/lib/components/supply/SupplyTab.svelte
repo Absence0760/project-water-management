@@ -541,7 +541,7 @@
 		color: var(--text-muted);
 	}
 	.stat dd.sub {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 		margin-top: 0.15rem;
@@ -706,9 +706,6 @@
 		align-items: center;
 		min-height: 24px;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.chart-col {
 		min-width: 0;
 		display: flex;
@@ -740,7 +737,7 @@
 	/* A group of panels: a quiet label above them, as on Runs & results. */
 	.group-h {
 		margin: 1.25rem 0 0.6rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;

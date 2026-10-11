@@ -117,7 +117,7 @@
 		background: none;
 		color: var(--text);
 		font: inherit;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		letter-spacing: 0.06em;
 		text-align: left;

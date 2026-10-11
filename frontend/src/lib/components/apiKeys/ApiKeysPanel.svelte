@@ -6,6 +6,7 @@
 	// API answers anyone else 403. "Make a key" in the panel's head opens the
 	// make form as a card with its own action row (issue #521: it was always
 	// open above the list); the words under the heading are the (i)'s.
+	import { localIsoDate } from '$lib/format/number';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, tick } from 'svelte';
@@ -40,7 +41,7 @@
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const seriesKey = (s: ApiKeySeries) => `${s.kind}\u0000${s.name}`;
 	const rows = $derived(sortKeys(keys).map((k) => keyRow(k)));
-	const today = new Date().toISOString().slice(0, 10);
+	const today = localIsoDate();
 	const curl = $derived(curlExample(apiBase(PUBLIC_API_URL, typeof location === 'undefined' ? '' : location.origin), fresh?.series ?? null, today));
 
 	async function load() {
@@ -288,7 +289,7 @@
 		flex: 1 1 auto;
 		min-width: 0;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.example-h {
 		margin-top: 0.75rem !important;
@@ -297,7 +298,7 @@
 		margin: 0 0 0.5rem;
 		padding: 0.5rem;
 		overflow-x: auto;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
@@ -314,13 +315,13 @@
 		display: block;
 		font-weight: 400;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.state {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.state.live {

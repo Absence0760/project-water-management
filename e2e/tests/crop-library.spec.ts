@@ -12,6 +12,7 @@ import { openCropGrid } from '../support/crops.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
 import { expectAbove, expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
+import { headerControl } from '../support/sectionHeader.ts';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Load crop factors' });
 // The seeded Orchard, Oct … Sep, and the library's citrus (ARC Table 4.13 in water-year order).
@@ -386,7 +387,7 @@ test.describe('a big catchment', () => {
 		const project = await seedBig(page);
 		await resizeTo(page, { width: 390, height: 844 });
 		await page.goto(`/projects/${project.id}?tab=crops`);
-		await page.getByRole('button', { name: 'Load crop factors…' }).click();
+		await (await headerControl(page, 'button', 'Load crop factors…')).click();
 		const d = dialog(page);
 		const diff = d.getByRole('region', { name: 'Citrus: changes' });
 		await expect(diff.getByRole('row', { name: /^Current/ })).toHaveCount(2);

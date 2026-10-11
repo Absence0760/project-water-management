@@ -491,3 +491,55 @@ test('the glossary says which entries apply only in South Africa (issue #76)', a
 	await page.goto('/help/glossary/basics');
 	await expect(page.getByRole('article', { name: 'Water balance', exact: true }).getByRole('term').filter({ hasText: 'Applies in' })).toHaveCount(0);
 });
+
+// The help pictures are rendered twice from one camera (scripts/help-art/catchment.py):
+// by day for light mode and at dusk for dark mode (issue #521), each a <picture>
+// whose dusk source the dark theme picks. The markers fit both, so they stay put.
+for (const colorScheme of ['light', 'dark'] as const) {
+	test.describe(`help pictures, ${colorScheme}`, () => {
+		test.use({ colorScheme });
+		const lit = colorScheme === 'dark' ? /\/help\/[a-z]+-dusk-\d+\.webp$/ : /\/help\/[a-z]+-\d+\.webp$/;
+		const loaded = (img: Locator) => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0);
+		const current = (img: Locator) => img.evaluate((el: HTMLImageElement) => el.currentSrc);
+		const outline = (img: Locator) => img.evaluate((el) => getComputedStyle(el).outlineStyle);
+
+		test('the tour, its close-ups and a guide show the picture lit for the theme', async ({ page, owner }) => {
+			void owner;
+			await page.setViewportSize({ width: 1440, height: 960 });
+			await page.goto('/help');
+			const tour = page.getByRole('img', { name: /An illustrated catchment/ });
+			await expect.poll(() => loaded(tour)).toBe(true);
+			expect(await current(tour)).toMatch(lit);
+			// The cut-out block sits on the page with no frame in either theme.
+			expect(await outline(tour)).toBe('none');
+
+			await page.getByRole('button', { name: 'Show more: Dams catch part of it' }).click();
+			const closeup = page.getByRole('img', { name: /Close-up of one farm/ });
+			await expect.poll(() => loaded(closeup)).toBe(true);
+			expect(await current(closeup)).toMatch(lit);
+			// A picture that fills its frame gets a hairline in dark mode, where its evening sky meets the page.
+			expect(await outline(closeup)).toBe(colorScheme === 'dark' ? 'solid' : 'none');
+
+			await page.goto('/help/guides/a-day-on-a-farm');
+			const farm = page.getByRole('figure').getByRole('img', { name: /Close-up of one farm/ });
+			await expect.poll(() => loaded(farm)).toBe(true);
+			expect(await current(farm)).toMatch(lit);
+			expect(await outline(farm)).toBe(colorScheme === 'dark' ? 'solid' : 'none');
+			// No filter over the render: dark mode's picture is the dusk render itself.
+			expect(await farm.evaluate((el) => getComputedStyle(el).filter)).toBe('none');
+		});
+
+		test('a help tip shows its close-up lit for the theme', async ({ page, owner }) => {
+			void owner;
+			const project = await createProject(page.request, `Help tip picture ${colorScheme}`);
+			await putModel(page.request, project.id, sampleModel());
+			await page.setViewportSize({ width: 1440, height: 900 });
+			await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
+			await page.getByRole('button', { name: 'About capacity', exact: true }).first().click();
+			const pic = page.locator('.bubble:popover-open img');
+			await expect.poll(() => loaded(pic)).toBe(true);
+			expect(await current(pic)).toMatch(lit);
+			expect(await current(pic)).toContain('/help/dam-');
+		});
+	});
+}

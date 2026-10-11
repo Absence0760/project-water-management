@@ -87,7 +87,7 @@
 				{#each rows as r (r.cropId)}
 					<tr>
 						<th scope="row">{r.name || '(unnamed)'}<FieldHistoryLine field="crop:{nodeId}:{r.cropId}" unit={nodeId} /></th>
-						<td>
+						<td data-label="Area (ha)">
 							<!-- Cleared, an area is 0: nothing planted (the editor drops the row), never an empty field over a value the model keeps. -->
 							<NumberInput
 								label="{r.name || 'crop'} on {name}, ha"
@@ -99,7 +99,7 @@
 								bind:value={() => editor.cropArea(nodeId, r.cropId), (n) => editor.setCropArea(nodeId, r.cropId, n ?? 0)}
 							/>
 						</td>
-						<td class="sys">
+						<td class="sys" data-label="Irrigation system">
 							<!-- Only a planted crop has a system on the unit: plant it first. -->
 							<select
 								aria-label="Irrigation system of {r.name || 'crop'} on {name}"
@@ -172,5 +172,65 @@
 	}
 	.small {
 		font-size: 0.85rem;
+	}
+	/* A phone: one card per crop (as the crop grids, playbook § 2), the crop's name over its area and system side
+	   by side, each labelled and at the tap size (issue #521 round 5: 25 px fields in a three-column table). */
+	@media (max-width: 640px) {
+		.areas thead {
+			display: none;
+		}
+		.areas,
+		.areas tbody,
+		.areas tfoot {
+			display: block;
+		}
+		.areas tr {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+			gap: 0.35rem 0.75rem;
+			padding: 0.6rem 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.areas tbody tr:last-child {
+			border-bottom: 0;
+		}
+		.areas :is(th, td) {
+			display: block;
+			width: auto;
+			padding: 0;
+			border: 0;
+			min-width: 0;
+		}
+		.areas tbody th[scope='row'] {
+			grid-column: 1 / -1;
+		}
+		.areas td[data-label]::before {
+			content: attr(data-label);
+			display: block;
+			margin-bottom: 0.15rem;
+			font-size: 0.85rem;
+			color: var(--text-2);
+		}
+		.areas td :global(:is(input, select)) {
+			width: 100%;
+			min-height: var(--tap);
+		}
+		.areas tfoot tr {
+			grid-template-columns: auto 1fr;
+			padding-inline: 0.5rem;
+			border-top: 2px solid var(--border-strong);
+			border-bottom: 0;
+			background: var(--surface-2);
+		}
+		.areas tfoot :is(th, td) {
+			border: 0;
+			background: none;
+		}
+		.areas tfoot td {
+			text-align: right;
+		}
+		.areas tfoot td:empty {
+			display: none;
+		}
 	}
 </style>

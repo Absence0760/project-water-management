@@ -20,9 +20,12 @@ Run through bin/gen-help-art.sh (pnpm gen:help-art), or directly:
 
     blender -b --factory-startup --python-exit-code 1 \
         --python scripts/help-art/catchment.py -- --outdir /tmp/help-art \
-        [--only catchment,farm] [--samples 96] [--device OPTIX|CUDA|METAL|CPU]
+        [--only catchment,farm] [--samples 96] [--device OPTIX|CUDA|ONEAPI|METAL|CPU] \
+        [--light day,dusk]
 
-Writes <outdir>/<shot>.png and <outdir>/shots.json.
+Each shot is rendered twice from one camera: by day (<shot>.png, the help
+pages in light mode) and at dusk (<shot>-dusk.png, dark mode; light() below).
+Writes those and <outdir>/shots.json.
 """
 
 import argparse
@@ -47,7 +50,12 @@ ap.add_argument("--only", default="", help="comma-separated shot names; default 
 ap.add_argument("--samples", type=int, default=96)
 ap.add_argument("--preview", action="store_true", help="half size; warn about markers off the picture instead of failing")
 ap.add_argument("--device", default="OPTIX")
+ap.add_argument(
+    "--light", default="day,dusk", help="comma-separated lightings: day (<shot>.png, light mode), dusk (<shot>-dusk.png, dark mode)"
+)
 args = ap.parse_args(argv)
+LIGHTS = [m for m in args.light.split(",") if m]
+assert LIGHTS and set(LIGHTS) <= {"day", "dusk"}, f"--light: day and/or dusk, not {args.light!r}"
 
 random.seed(7)
 
@@ -562,6 +570,74 @@ sun = bpy.context.object
 sun.data.energy = 3.2
 sun.data.angle = math.radians(4)
 
+# ---- dusk: the same scene in the evening, for dark mode -------------------------
+# Lighting and world only, never a filter over the day render: a deep blue
+# sky, a cool key from high up, the last of the sunset low from the west, a lit
+# farmhouse window and a lamp over the gauging hut. Hidden by day. The landing
+# page's diorama (scripts/landing-art/diorama.py) uses this rig too and turns
+# the sun into a pale moon; here the sun stays a sun, low and warm, since the
+# pictures mark it as evaporation.
+glow = bpy.data.materials.new("window")
+glow.use_nodes = True
+gn = glow.node_tree.nodes
+gn.remove(gn["Principled BSDF"])
+ge = gn.new("ShaderNodeEmission")
+ge.inputs["Color"].default_value = (*srgb("#ffc56b"), 1)
+ge.inputs["Strength"].default_value = 6.0
+glow.node_tree.links.new(ge.outputs[0], gn["Material Output"].inputs["Surface"])
+windows = []
+for dx in (-0.08, 0.08):
+    bpy.ops.mesh.primitive_plane_add(size=1, location=(hx + dx, hy - 0.101, hz + 0.1))
+    w = bpy.context.object
+    w.scale = (0.045, 0.045, 1)
+    w.rotation_euler = (math.pi / 2, 0, 0)
+    w.data.materials.append(glow)
+    windows.append(w)
+bpy.ops.object.light_add(type="POINT", location=(gx0, gy0 - 0.3, height(gx0, gy0) + 0.45))
+hut_lamp = bpy.context.object
+hut_lamp.data.energy = 6
+hut_lamp.data.color = srgb("#ffc56b")
+bpy.ops.object.light_add(type="SUN", rotation=(math.radians(80), 0, math.radians(-100)))
+sunset = bpy.context.object
+sunset.data.energy = 0.9
+sunset.data.color = srgb("#ff9a5c")
+sunset.data.angle = math.radians(6)
+# Moonlight on the block's front cut face, which faces away from the key: the
+# soil layers stay apart from each other and from a dark page.
+bpy.ops.object.light_add(type="SUN", rotation=(math.radians(90), 0, 0))
+face_fill = bpy.context.object
+face_fill.data.energy = 1.5
+face_fill.data.color = srgb("#a9bfe4")
+
+
+def light(mode):
+    """Light the scene for `mode`: "day" (the help pictures in light mode) or "dusk"."""
+    dusk = mode == "dusk"
+    for w in windows:
+        w.hide_render = not dusk
+    hut_lamp.hide_render = not dusk
+    sunset.hide_render = not dusk
+    face_fill.hide_render = not dusk
+    if dusk:
+        bg.inputs["Color"].default_value = (*srgb("#2a4468"), 1)
+        bg.inputs["Strength"].default_value = 0.8
+        sun.rotation_euler = (math.radians(52), math.radians(12), math.radians(35))
+        sun.data.energy = 1.5
+        sun.data.color = srgb("#b9cdee")
+        se.inputs["Color"].default_value = (*srgb("#ff8a3d"), 1)
+        se.inputs["Strength"].default_value = 1.6
+    else:
+        bg.inputs["Color"].default_value = (*srgb("#cfe3f2"), 1)
+        bg.inputs["Strength"].default_value = 0.9
+        sun.rotation_euler = (math.radians(48), math.radians(12), math.radians(35))
+        sun.data.energy = 3.2
+        sun.data.color = (1, 1, 1)
+        se.inputs["Color"].default_value = (*srgb("#ff9f0a"), 1)
+        se.inputs["Strength"].default_value = 1.25
+
+
+light("day")
+
 bpy.ops.object.camera_add()
 cam = bpy.context.object
 target = bpy.data.objects.new("target", None)
@@ -786,10 +862,15 @@ for name, shot in SHOTS.items():
             assert args.preview, msg
             print("WARNING", msg)
         spots[key] = {"x": round(x * 100, 1), "y": round(y * 100, 1)}
-    report[name] = {"width": out_w, "height": out_h, "spots": spots}
-    scene.render.filepath = f"{args.outdir}/{name}.png"
-    bpy.ops.render.render(write_still=True)
-    print("rendered", name, out_w, "x", out_h)
+    # cutout: the block alone on a transparent background (the page frames only the others).
+    report[name] = {"width": out_w, "height": out_h, "spots": spots, "cutout": shot["crop"]}
+    # Both lightings share the camera, so one size and one set of markers.
+    for mode in LIGHTS:
+        light(mode)
+        scene.render.filepath = f"{args.outdir}/{name}{'' if mode == 'day' else '-dusk'}.png"
+        bpy.ops.render.render(write_still=True)
+        print("rendered", name, mode, out_w, "x", out_h)
+light("day")
 
 with open(f"{args.outdir}/shots.json", "w") as f:
     json.dump(report, f, indent=1)

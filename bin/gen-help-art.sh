@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Render the help illustrations (scripts/help-art/catchment.py: one scene,
-# several camera shots) and write what the pages read:
-#   frontend/static/help/<shot>-<width>.webp   each shot, full and half width
-#   frontend/src/lib/help/pictures.json         size + marker positions per shot
+# several camera shots, each lit by day and at dusk) and write what the pages read:
+#   frontend/static/help/<shot>-<width>.webp        each shot by day (light mode), full and half width
+#   frontend/static/help/<shot>-dusk-<width>.webp   the same at dusk (dark mode)
+#   frontend/src/lib/help/pictures.json              size + marker positions per shot
 #
-#   pnpm gen:help-art                  # GPU (OptiX); HELP_ART_DEVICE=CUDA|CPU to change
+#   pnpm gen:help-art                  # GPU (OptiX); HELP_ART_DEVICE=CUDA|ONEAPI|HIP|CPU to change
 #   HELP_ART_ONLY=farm,soil pnpm gen:help-art   # re-render some shots only
+#   HELP_ART_LIGHT=dusk pnpm gen:help-art       # one lighting only (day, dusk; default both)
 #
 # Optional tooling, not needed to run or build the app: needs Blender 5.x,
 # ImageMagick 7 (`magick`) and python3. The output is committed, so only re-run
@@ -21,7 +23,8 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 run=(blender -b --factory-startup --python-exit-code 1 --python scripts/help-art/catchment.py -- \
-	--outdir "$tmp" --samples "${HELP_ART_SAMPLES:-128}" --device "${HELP_ART_DEVICE:-OPTIX}" --only "${HELP_ART_ONLY:-}")
+	--outdir "$tmp" --samples "${HELP_ART_SAMPLES:-128}" --device "${HELP_ART_DEVICE:-OPTIX}" --only "${HELP_ART_ONLY:-}" \
+	--light "${HELP_ART_LIGHT:-day,dusk}")
 if command -v systemd-run >/dev/null; then
 	systemd-run --user --scope -q -p MemoryMax=3G -p MemorySwapMax=0 "${run[@]}"
 else
@@ -30,11 +33,12 @@ fi
 
 mkdir -p frontend/static/help
 for png in "$tmp"/*.png; do
-	shot=$(basename "$png" .png)
+	name=$(basename "$png" .png) # <shot> or <shot>-dusk
+	shot=${name%-dusk}
 	# The width the page asks for (a cropped render can be a pixel off it).
 	w=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]["width"])' "$tmp/shots.json" "$shot")
-	magick "$png" -strip -resize "${w}x" -quality 82 -define webp:alpha-quality=90 "frontend/static/help/$shot-$w.webp"
-	magick "$png" -strip -resize "$((w / 2))x" -quality 82 -define webp:alpha-quality=90 "frontend/static/help/$shot-$((w / 2)).webp"
+	magick "$png" -strip -resize "${w}x" -quality 82 -define webp:alpha-quality=90 "frontend/static/help/$name-$w.webp"
+	magick "$png" -strip -resize "$((w / 2))x" -quality 82 -define webp:alpha-quality=90 "frontend/static/help/$name-$((w / 2)).webp"
 done
 # Merge into the committed map, so a partial run (HELP_ART_ONLY) keeps the rest.
 python3 - "$tmp/shots.json" frontend/src/lib/help/pictures.json <<'PY'

@@ -792,7 +792,7 @@ export const TIPS: HelpTipText[] = [
 		id: 'dam-survey-date',
 		term: 'Dam survey date',
 		short: 'The day the capacity above was measured. With a sediment rate, the dam holds more before this date and less after it.',
-		units: 'date (YYYY-MM-DD)',
+		units: 'a day, typed day first (15 Nov 2021) or as 2021-11-15',
 		category: 'farm',
 		fields: ['node.damSurveyDate']
 	},
@@ -808,7 +808,7 @@ export const TIPS: HelpTipText[] = [
 		id: 'dam-in-service',
 		term: 'Dam in service from',
 		short: 'The first day the dam holds water. Before it the unit has no dam, and what would flow into it passes on down the river.',
-		units: 'date (YYYY-MM-DD)',
+		units: 'a day, typed day first (15 Nov 2021) or as 2021-11-15',
 		category: 'farm',
 		fields: ['node.damInServiceFrom']
 	},
@@ -816,7 +816,7 @@ export const TIPS: HelpTipText[] = [
 		id: 'abstraction-start',
 		term: 'Abstraction starts',
 		short: 'The first day this unit takes water. Before it its crops, demand objects and own demand take nothing, as before it was developed.',
-		units: 'date (YYYY-MM-DD)',
+		units: 'a day, typed day first (15 Nov 2021) or as 2021-11-15',
 		category: 'farm',
 		fields: ['node.abstractionFrom']
 	},
@@ -1781,7 +1781,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'outlet-placement',
 		term: 'Outlet placement on the channel',
-		short: 'A clicked outlet goes on the nearest terrain channel (the red lines) within 150 m; mapped rivers never move it.',
+		short: 'A clicked outlet goes on the nearest terrain channel (terrain channels in the map’s key) within 150 m; mapped rivers never move it.',
 		category: 'data'
 	},
 	{

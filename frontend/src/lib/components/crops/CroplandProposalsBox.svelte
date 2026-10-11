@@ -275,7 +275,7 @@
 	.src {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		overflow-wrap: anywhere;
 	}

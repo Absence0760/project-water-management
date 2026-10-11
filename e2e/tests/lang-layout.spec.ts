@@ -13,7 +13,7 @@ import { API_URL } from '../support/env.ts';
 import { FARMER1, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { languages, words as siteWords } from '../support/lang.ts';
-import { clippedText, expectNoSidewaysScroll } from '../support/reflow.ts';
+import { clippedText, expectNoSidewaysScroll, outOfPanel, smallText } from '../support/reflow.ts';
 
 const PHONE = { width: 360, height: 740 };
 
@@ -77,6 +77,34 @@ for (const lang of LANGS) {
 			await checkPage(page, '/account/alerts', async (p) => {
 				await expect(p.locator('main[data-ready="true"]')).toBeVisible();
 			});
+		});
+
+		// The account pages at 320 × 640 (issue #521): a button poked 11 px out of its card, each alert-email choice
+		// wrapped to 3 lines, and text sat at 10.5 to 12.6 px under the farm frame's 13 px floor.
+		test('the account pages fit 320 px: nothing out of its card, text at 13 px or more, each alert choice on one line', async ({ page, playwright }) => {
+			test.setTimeout(90_000);
+			await page.setViewportSize({ width: 320, height: 640 });
+			const api = await playwright.request.newContext();
+			await seedExamplesOnce(api);
+			await api.dispose();
+			const login = await page.request.post(`${API_URL}/auth/login`, { data: FARMER1 });
+			expect(login.status(), await login.text()).toBe(200);
+			await page.goto('/account');
+			await expect(page.locator('#two-step')).toHaveAttribute('data-two-step', 'off');
+			expect(await outOfPanel(page)).toEqual([]);
+			expect(await smallText(page)).toEqual([]);
+			await expectNoSidewaysScroll(page);
+			await page.goto('/account/alerts');
+			await expect(page.locator('main[data-ready="true"]')).toBeVisible();
+			expect(await outOfPanel(page)).toEqual([]);
+			expect(await smallText(page)).toEqual([]);
+			await expectNoSidewaysScroll(page);
+			// The three choices stack as full-width rows, each label on one line.
+			for (const seg of await page.locator('label.seg').all()) {
+				const lines = await seg.locator('span').evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+				expect(lines, (await seg.innerText()).trim()).toBe(1);
+				expect((await seg.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+			}
 		});
 
 		test('a share link fits a phone', async ({ page, owner, browser }) => {

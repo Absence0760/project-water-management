@@ -18,6 +18,7 @@
 	// for the applicant and the assessors the public-participation record
 	// (166_public_participation, the reg 19 report's material). The drafts the
 	// caller may sign as the application's appointed specialist (167_signers).
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { base } from '$app/paths';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -339,7 +340,7 @@
 				</div>
 				<div class="field">
 					<label for="notice-date">Closing date for objections</label>
-					<input id="notice-date" type="date" bind:value={closing} />
+					<DayInput id="notice-date" bind:value={closing} />
 				</div>
 				<div class="actions">
 					<button type="submit" class="btn btn-primary btn-sm" disabled={busy || locked}>Save</button>
@@ -416,7 +417,7 @@
 			<div class="form-row">
 				<div class="field">
 					<label for="decide-date">Date of the decision letter</label>
-					<input id="decide-date" type="date" required bind:value={decisionDate} />
+					<DayInput id="decide-date" required bind:value={decisionDate} />
 				</div>
 				<div class="field grow">
 					<label for="decide-ref">Licence or file reference <span class="muted">(optional)</span></label>
@@ -642,7 +643,7 @@
 		padding-left: 1.2rem;
 	}
 	.hint {
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-muted);
 		margin: 0.25rem 0 0.5rem;
 	}
@@ -667,7 +668,7 @@
 		overflow-wrap: anywhere;
 	}
 	.notice-form textarea,
-	.notice-form input {
+	.notice-form :global(input) {
 		width: 100%;
 		max-width: 60ch;
 		font: inherit;

@@ -7,6 +7,7 @@ import { roleLabel } from '$lib/api/roleLabels';
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
 import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
+import { KIND_NAME } from '$lib/components/alerts/alerts';
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
 export const KIND_FILTERS: { value: string; label: string }[] = [
@@ -203,6 +204,21 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const names: Record<string, string> = { note: 'note', restriction: 'restriction notice', nextExpectedOn: 'next publication date' };
 			const fields = (Array.isArray(s.fields) ? (s.fields as string[]) : []).map((f) => names[f] ?? f);
 			return `Changed the publication’s ${fields.join(' and ') || 'notice'}`;
+		}
+		// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).
+		case 'outlook.published': {
+			const label = str(rec(s.level).label);
+			const farms = num(s.farms);
+			return `Published the seasonal outlook${label ? ` at its ${label} level` : ''}${farms !== null ? ` to ${plural(farms, 'farm')}` : ''}`;
+		}
+		case 'outlook.unpublished': {
+			const label = str(rec(s.level).label);
+			return `Withdrew the seasonal outlook${label ? ` at its ${label} level` : ''} from the farm pages`;
+		}
+		// Never the note's words (notes/routes.ts): whose it was and what it was about.
+		case 'note.deleted': {
+			const about = str(s.nodeName) ? ` on ${str(s.nodeName)}` : '';
+			return s.own ? `Deleted a note they wrote${about}` : `Deleted a note${str(s.author) ? ` by ${str(s.author)}` : ''}${about}`;
 		}
 		case 'publication.endorsed':
 			return 'Endorsed a published baseline for the responsible authority';
@@ -477,6 +493,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		// A team admin removed a member's lost second factor (205_mfa_recovery): their access is unchanged.
 		case 'team_member.mfa_reset':
 			return `Removed two-step sign-in from ${who} (a member of the team “${str(s.team)}”) after a lost phone`;
+		// The alert rules saved from Overview → Active alerts (alerts/routes.ts): counts and kinds only.
+		case 'alert_rules.changed': {
+			const kinds = Array.isArray(s.kinds) ? s.kinds.map((k) => KIND_NAME[str(k) as keyof typeof KIND_NAME] ?? str(k).replaceAll('_', ' ')) : [];
+			const rules = num(s.rules) ?? 0;
+			const counts = [plural(rules, 'rule'), ...(num(s.on) != null ? [`${fmtNum(num(s.on)!)} on`] : []), ...(num(s.off) ? [`${fmtNum(num(s.off)!)} off`] : [])].join(', ');
+			return `Changed the alert rules${kinds.length ? `: ${kinds.join(', ')}` : ''} (${counts})`;
+		}
 		case 'team.deleted':
 			return `Deleted the team “${str(s.team)}”: its ${plural(num(s.members) ?? 0, 'member')} no longer reach this project through it`;
 		default:

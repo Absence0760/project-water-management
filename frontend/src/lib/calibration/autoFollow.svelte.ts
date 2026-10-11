@@ -25,6 +25,8 @@ export class AutoCalibrationFollower {
 	/** The project's latest run, or null for none (or not loaded yet). */
 	latest = $state.raw<AutoCalibration | null>(null);
 	error = $state<string | null>(null);
+	/** The error is from loading or following the runs (not a start or an apply): retry() reads them again. */
+	loadFailed = $state(false);
 	/** A start or an apply is waiting on the server. */
 	busy = $state(false);
 	/** An applied fit saved, but its run failed: why. */
@@ -49,8 +51,17 @@ export class AutoCalibrationFollower {
 		this.#projectId = projectId;
 		this.latest = null;
 		this.error = null;
+		this.loadFailed = false;
 		this.runError = null;
 		this.busy = false;
+		void this.#load(this.#gen);
+	}
+
+	/** Read the runs again after a failed load or poll (the panel's Try again); the latest one shown stays until it lands. */
+	retry(): void {
+		if (this.#projectId === null || !this.loadFailed) return;
+		this.error = null;
+		this.loadFailed = false;
 		void this.#load(this.#gen);
 	}
 
@@ -69,6 +80,7 @@ export class AutoCalibrationFollower {
 		if (id === null || this.busy) return;
 		this.busy = true;
 		this.error = null;
+		this.loadFailed = false;
 		this.runError = null;
 		try {
 			const res = await this.#api.start(id);
@@ -92,6 +104,7 @@ export class AutoCalibrationFollower {
 		if (id === null || run === null || this.busy) return;
 		this.busy = true;
 		this.error = null;
+		this.loadFailed = false;
 		try {
 			const res = await this.#api.apply(id, run.id);
 			if (gen !== this.#gen) return;
@@ -112,7 +125,7 @@ export class AutoCalibrationFollower {
 			if (gen !== this.#gen) return;
 			this.#show(gen, first ?? null);
 		} catch (e) {
-			if (gen === this.#gen) this.error = message(e);
+			if (gen === this.#gen) this.#failed(e);
 		}
 	}
 
@@ -132,7 +145,12 @@ export class AutoCalibrationFollower {
 			if (gen !== this.#gen) return;
 			this.#show(gen, run);
 		} catch (e) {
-			if (gen === this.#gen) this.error = message(e);
+			if (gen === this.#gen) this.#failed(e);
 		}
+	}
+
+	#failed(e: unknown): void {
+		this.error = message(e);
+		this.loadFailed = true;
 	}
 }

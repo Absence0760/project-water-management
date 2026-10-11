@@ -1237,7 +1237,7 @@ to a point on a river. The design, the method and its accuracy are in
 [ui.md § Map](./ui.md#map-tabmap), the API in
 [api.md § Delineation](./api.md#delineation).
 
-- **Where you click.** A **terrain channel** (the red lines, [§ The
+- **Where you click.** A **terrain channel** (the solid red lines, orange-red in dark, named in the key; [§ The
   elevation model's channels](#the-elevation-models-channels)) at the
   catchment's outlet, or just below a dam wall (the draw bar's point; or
   **Enter coordinates**). The server puts the point on the nearest cell
@@ -1247,7 +1247,7 @@ to a point on a river. The design, the method and its accuracy are in
   tributary beside the main river stays on the tributary. With no terrain
   channel within 150 m the click is refused (`off_channel`): "No terrain
   channel runs within 150 m of that point. Zoom in until the terrain
-  channels (the red lines) show, and click on one: they are the elevation
+  channels show (they're in the map's key), and click on one: they are the elevation
   model's rivers, which the outline follows." The mapped river network
   (HydroRIVERS, the basemap's waterways) never moves or chooses the
   outlet: the elevation model's rivers often run hundreds of metres from

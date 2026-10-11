@@ -578,7 +578,7 @@
 	}
 	.eyebrow {
 		margin: 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -603,7 +603,7 @@
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
 	}
 	dt {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	dd {

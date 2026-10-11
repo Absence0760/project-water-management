@@ -110,8 +110,16 @@ describe('FarmState', () => {
 		}
 	});
 
-	it('treats a ?node= that isn’t the user’s as removed', async () => {
+	it('treats a ?node= that isn’t the user’s, in a catchment they still see, as not theirs (not “no longer”)', async () => {
 		const s = new FarmState(fakeApi(), () => 'u1');
+		await s.load(P, 'someone-else');
+		expect(s.phase).toEqual({ kind: 'not-yours' });
+		// Their own units here are still listed, for the page to offer.
+		expect(s.index?.farms.length).toBeGreaterThan(0);
+	});
+
+	it('says access was removed when the catchment lists none of the user’s units', async () => {
+		const s = new FarmState(fakeApi({ index: async () => ({ ...index(null), farms: [] }) }), () => 'u1');
 		await s.load(P, 'someone-else');
 		expect(s.phase).toEqual({ kind: 'removed' });
 	});

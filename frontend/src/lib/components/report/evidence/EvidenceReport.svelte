@@ -973,7 +973,7 @@
 	}
 	.eyebrow {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -982,7 +982,7 @@
 	.verify-line {
 		margin: -0.35rem 0 0.75rem;
 		font-family: var(--font-mono);
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		overflow-wrap: anywhere;
 	}
@@ -994,7 +994,7 @@
 		border: 1.5px solid var(--text);
 		border-radius: var(--radius-sm);
 		padding: 0.1rem 0.45rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
@@ -1014,7 +1014,7 @@
 		margin: 0 0 0.9rem;
 	}
 	dt {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	dd {
@@ -1022,7 +1022,7 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.nowrap {
@@ -1075,7 +1075,7 @@
 	}
 	.pill {
 		display: inline-block;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		border: 1px solid var(--border-strong);
 		border-radius: 999px;
@@ -1089,7 +1089,7 @@
 		font-family: var(--font-mono);
 	}
 	.hash {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		word-break: break-all;
 	}
 	.prompts .q {

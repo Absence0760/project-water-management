@@ -54,7 +54,7 @@
 		min-width: 0;
 	}
 	.lab {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	select {
@@ -62,7 +62,7 @@
 		min-height: 2rem;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 </style>

@@ -7,6 +7,9 @@
 //   without one; a server failure the same, with Try again;
 // - 403/404 (the farm or the project is no longer this user's): the removed
 //   state, and the saved copy goes;
+// - a ?node= the index doesn't list while it lists others (a link to a unit
+//   that isn't, or is no longer, theirs, in a catchment they still see): the
+//   not-yours state, with their own units here; a saved copy of it goes;
 // - an index without a publication: the no-publication state.
 //
 // The index (the farms and whether anything is published) and the view go
@@ -24,6 +27,7 @@ export type FarmPhase =
 	| { kind: 'ready' }
 	| { kind: 'no-publication' }
 	| { kind: 'removed' }
+	| { kind: 'not-yours' }
 	| { kind: 'error'; offline: boolean; attempts: number };
 
 /** How long a fetched view is reused between the farm pages without asking again. */
@@ -149,7 +153,8 @@ export class FarmState {
 		this.index = index;
 
 		const nodeId = pickNode(index, asked, guess);
-		if (!nodeId) return this.#removed(projectId, asked);
+		// The catchment answered: an asked-for unit it doesn't list isn't theirs, but the units it does list are.
+		if (!nodeId) return this.#removed(projectId, asked, index.farms.length > 0);
 		this.nodeId = nodeId;
 		if (!index.publication) {
 			if (user) clearSaved(projectId, undefined);
@@ -189,12 +194,12 @@ export class FarmState {
 		this.phase = { kind: 'ready' };
 	}
 
-	#removed(projectId: string, nodeId: string | null) {
+	#removed(projectId: string, nodeId: string | null, notYours = false) {
 		clearSaved(projectId, nodeId ?? undefined);
 		for (const k of memo.keys()) if (k.includes(`|${projectId}/`)) memo.delete(k);
 		this.view = null;
 		this.updating = false;
-		this.phase = { kind: 'removed' };
+		this.phase = { kind: notYours ? 'not-yours' : 'removed' };
 	}
 
 	#fail(e: unknown, projectId: string, nodeId: string | null) {

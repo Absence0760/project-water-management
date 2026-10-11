@@ -205,6 +205,53 @@ test.describe('layout', () => {
 		expect(scrollW).toBeLessThanOrEqual(innerW);
 	});
 
+	// Two-step sign-in (issue #521, ui-playbook § 2: status and actions in the top row, one short line under each):
+	// the state beside the heading, each way's action on its name's row, one line under it, and the full wording
+	// in a closed fold.
+	test('two-step sign-in: the state in the heading row, each way’s action in its head row, the full wording folded', async ({ page, owner }) => {
+		await page.setViewportSize({ width: 1440, height: 960 });
+		await page.goto('/account');
+		const panel = page.locator('#two-step');
+		await expect(panel).toHaveAttribute('data-two-step', 'off');
+		const mid = (b: { y: number; height: number }) => b.y + b.height / 2;
+		const h2 = (await panel.getByRole('heading', { level: 2, name: 'Two-step sign-in' }).boundingBox())!;
+		const state = panel.getByTestId('two-step-state');
+		await expect(state).toHaveText('Off');
+		expect(Math.abs(mid((await state.boundingBox())!) - mid(h2))).toBeLessThan(8);
+		await expect(panel.locator('.intro')).toHaveText('A 6-digit code after your password. Turn on one or both.');
+		for (const [method, name, line] of [
+			['totp', 'Set up the app', 'Codes from an app on your phone.'],
+			['email', 'Turn on', `Codes sent to ${owner.email}: only as safe as your inbox.`]
+		] as const) {
+			const row = panel.locator(`[data-method="${method}"]`);
+			const h3 = (await row.getByRole('heading', { level: 3 }).boundingBox())!;
+			const button = (await row.getByRole('button', { name, exact: true }).boundingBox())!;
+			expect(Math.abs(mid(button) - mid(h3)), method).toBeLessThan(12);
+			await expect(row.locator('p')).toHaveText(line);
+			// One short line under the head: one line of text at 1440 (two for the email way, whose line holds the address).
+			const p = (await row.locator('p').boundingBox())!;
+			expect(p.height, method).toBeLessThan(method === 'totp' ? 26 : 46);
+		}
+		// The full sentences, unchanged, in the DOM of a fold that starts closed.
+		const differ = panel.getByTestId('two-step-differ');
+		await expect(differ).not.toHaveAttribute('open', '');
+		await expect(differ).toContainText('Someone who learns your password still can’t get in.');
+		await expect(differ).toContainText('such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.');
+		await expect(differ).toContainText('Keep your email account secure.');
+		await expect(differ.getByText(/Only your phone can make the codes/)).toBeHidden();
+		await differ.locator('summary').click();
+		await expect(differ).toHaveAttribute('open', '');
+		await expect(differ.getByText(/Only your phone can make the codes/)).toBeVisible();
+		await expectNoViolations(page, { include: '#two-step' });
+
+		// A phone: each action takes a full row under its way's head, inside the card.
+		await page.setViewportSize({ width: 320, height: 640 });
+		const row = panel.locator('[data-method="totp"]');
+		await expect.poll(async () => (await row.getByRole('button', { name: 'Set up the app' }).boundingBox())!.y).toBeGreaterThan((await row.getByRole('heading', { level: 3 }).boundingBox())!.y + 10);
+		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+		expect(overflow).toBeLessThanOrEqual(0);
+	});
+
 	test('one column on a phone, with no sideways scroll', async ({ page, owner }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/account');

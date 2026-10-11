@@ -118,7 +118,7 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	caption {
 		text-align: left;
@@ -147,7 +147,7 @@
 		background: var(--accent-soft);
 	}
 	.tag {
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 	}
 	.stats {
@@ -157,7 +157,7 @@
 		margin: 0.75rem 0 0;
 	}
 	.stat dt {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	/* Proportional figures, as app.css's .stat dd: tabular ones set a hyphen a digit wide. */
@@ -166,7 +166,7 @@
 		font-size: 1.1rem;
 	}
 	.stat dd.sub {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 </style>

@@ -830,7 +830,7 @@
 	.sub {
 		display: block;
 		font-weight: 400;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.chart-lead {
@@ -839,9 +839,6 @@
 	.sub-h {
 		margin: 0.75rem 0 0.4rem;
 		font-size: 1rem;
-	}
-	.small {
-		font-size: 0.8rem;
 	}
 	.panel-head .small {
 		overflow-wrap: anywhere;
@@ -853,7 +850,7 @@
 		white-space: nowrap;
 		padding: 0.05rem 0.45rem;
 		border-radius: 999px;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		border: 1px solid var(--border);
 		background: var(--surface-2);
@@ -950,7 +947,7 @@
 	}
 	.src,
 	.facts {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.figs {
@@ -1032,7 +1029,7 @@
 		grid-template-columns: 8.5rem minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-variant-numeric: tabular-nums;
 	}
 	/* Each bar's value beside it, so the bars read without the table (the table below holds both figures). */
@@ -1117,7 +1114,7 @@
 		white-space: nowrap;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin: 0.5rem 0 0;
 	}
 
@@ -1171,7 +1168,7 @@
 		.vol-table td[data-label]::before {
 			content: attr(data-label);
 			display: block;
-			font-size: 0.75rem;
+			font-size: var(--font-xs);
 			color: var(--text-2);
 		}
 	}

@@ -751,7 +751,7 @@
 		overflow-wrap: anywhere;
 	}
 	.area {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.from {
@@ -783,7 +783,7 @@
 		}
 	}
 	.lab {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.apply {
@@ -800,7 +800,7 @@
 	}
 	.tag {
 		display: inline-block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		white-space: nowrap;
 	}
@@ -821,7 +821,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.15rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.pf select {
@@ -901,7 +901,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.kpi-sub {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}

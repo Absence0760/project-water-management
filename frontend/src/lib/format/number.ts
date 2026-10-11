@@ -221,6 +221,17 @@ export function localIsoDate(now: Date = new Date()): string {
 	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+/**
+ * The moment to send for a day picked in a "when did this happen" field
+ * (YYYY-MM-DD, at most the viewer's today). A bare day reaches the server as
+ * UTC midnight, which is still in the future for the first hours of a day
+ * east of Greenwich (00:00–02:00 in South Africa), so today goes as the
+ * current moment; an earlier day goes as itself.
+ */
+export function pastDayMoment(day: string, now: Date = new Date()): string {
+	return day === localIsoDate(now) ? now.toISOString() : day;
+}
+
 const zoned = new Map<string, Intl.DateTimeFormat>();
 
 /**

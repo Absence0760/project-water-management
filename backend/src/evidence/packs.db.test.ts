@@ -885,6 +885,8 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 
 			const exchanged = await anon('POST', '/auth/render-session', { token: request.token });
 			expect(exchanged.status, JSON.stringify(exchanged.body)).toBe(200);
+			// The project's zone, which the renderer prints in (issue #521).
+			expect(exchanged.body.timeZone).toBe('Africa/Johannesburg');
 			const cookie = exchanged.headers.get('set-cookie')!.split(';')[0]!;
 			expect(await asCookie(cookie, packPath(v1.id))).toBe(200);
 			expect(await asCookie(cookie, `${packPath(v1.id)}/signoffs`)).toBe(200);

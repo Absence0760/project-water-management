@@ -150,3 +150,32 @@ export const TIME_TICKS: (string | number | null)[][] = [
 	[3600, '{HH}:{mm}', '\n{D} {MMM} {YYYY}', null, '\n{D} {MMM}', null, null, null, 1],
 	[60, '{HH}:{mm}', '\n{D} {MMM} {YYYY}', null, '\n{D} {MMM}', null, null, null, 1]
 ];
+
+/**
+ * The decades a log axis spans at most. A series that reaches float noise
+ * (a recession tailing off to 1e-19 m³/s) stretched the Flow duration curve's
+ * axis over twenty decades, whose labels piled into a block (issue #521).
+ * Six decades below the largest value keeps every real low flow on the chart;
+ * anything smaller runs off its foot, and the read-out still gives its value.
+ */
+export const LOG_DECADES = 6;
+
+/** The lower end of a log axis: the data's least positive value, but no more than LOG_DECADES decades under its largest. */
+export function logFloor(min: number, max: number, decades = LOG_DECADES): number {
+	if (!(max > 0)) return min;
+	const floor = max / 10 ** decades;
+	return min > floor ? min : floor;
+}
+
+/**
+ * Which ticks of a log axis get a label: only whole decades, and of those
+ * every second, third… so that at most `room` labels are drawn. The step is
+ * aligned on the exponent (1, 100, 10k, not 10, 1k), so panning keeps the
+ * same labels. Others are null (no label, no grid line).
+ */
+export function decadeTicks(splits: readonly number[], room: number): (number | null)[] {
+	const isDecade = (v: number) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
+	const decades = splits.filter(isDecade);
+	const step = Math.max(1, Math.ceil(decades.length / Math.max(1, Math.floor(room))));
+	return splits.map((v) => (isDecade(v) && ((Math.round(Math.log10(v)) % step) + step) % step === 0 ? v : null));
+}

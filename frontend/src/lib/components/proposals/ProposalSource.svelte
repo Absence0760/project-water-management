@@ -13,6 +13,13 @@
 	.small {
 		font-size: 0.85rem;
 	}
+	/* At least 24 px tall (WCAG 2.5.8), whatever the text's size. */
+	.method > summary {
+		box-sizing: border-box;
+		min-height: 24px;
+		padding-block: 0.2rem;
+		cursor: pointer;
+	}
 	.method p {
 		margin: 0.35rem 0 0;
 		overflow-wrap: anywhere;

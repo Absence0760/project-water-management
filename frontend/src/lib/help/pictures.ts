@@ -2,7 +2,9 @@
 // rendered by bin/gen-help-art.sh from scripts/help-art/catchment.py) and,
 // for each shot, where its labelled features sit on the picture
 // (./pictures.json, written by the same render, so markers always land on
-// their features). Each shot is served at its full width and half of it.
+// their features). Each shot is served at its full width and half of it, and
+// is rendered twice from one camera: by day for light mode and at dusk
+// (<shot>-dusk-<w>.webp) for dark mode, so the same markers fit both.
 
 import pictures from './pictures.json';
 
@@ -12,6 +14,8 @@ export interface Shot {
 	width: number;
 	height: number;
 	spots: Record<string, Spot>;
+	/** The block alone on a transparent background, rather than a picture filling its frame. */
+	cutout: boolean;
 }
 
 export const SHOTS = pictures as Record<ShotId, Shot>;
@@ -33,14 +37,24 @@ export const SHOT_ALT: Record<ShotId, string> = {
 	gauge: 'Close-up of the gauging hut beside the weir at the catchment outlet, where river flow is measured.'
 };
 
-export function pictureSrc(shot: ShotId, width: number = SHOTS[shot].width): string {
-	return `/help/${shot}-${width}.webp`;
+/** The scene's lighting: by day in light mode, at dusk in dark mode. */
+export type Light = 'day' | 'dusk';
+
+/**
+ * The media query a `<picture>`'s dusk `<source>` takes. Dark mode follows
+ * the OS (app.css), as the landing page's hero does; `data-theme="light"` is
+ * set only while a report prints, never on a help page.
+ */
+export const DUSK_MEDIA = '(prefers-color-scheme: dark)';
+
+export function pictureSrc(shot: ShotId, width: number = SHOTS[shot].width, light: Light = 'day'): string {
+	return `/help/${shot}${light === 'dusk' ? '-dusk' : ''}-${width}.webp`;
 }
 
 /** srcset for a shot: its half and full width. */
-export function pictureSrcset(shot: ShotId, base = ''): string {
+export function pictureSrcset(shot: ShotId, base = '', light: Light = 'day'): string {
 	const w = SHOTS[shot].width;
-	return `${base}${pictureSrc(shot, w / 2)} ${w / 2}w, ${base}${pictureSrc(shot, w)} ${w}w`;
+	return `${base}${pictureSrc(shot, w / 2, light)} ${w / 2}w, ${base}${pictureSrc(shot, w, light)} ${w}w`;
 }
 
 /** A help tip's picture: a close-up of the scene, with a ring on the feature the term is about. */

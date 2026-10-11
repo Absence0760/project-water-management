@@ -287,7 +287,7 @@
 	}
 	.note .tag {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}

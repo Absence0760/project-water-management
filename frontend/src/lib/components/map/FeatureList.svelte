@@ -88,7 +88,7 @@
 	.group-h {
 		margin: 0 0 0.15rem;
 		padding: 0 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 		text-transform: uppercase;
@@ -130,7 +130,7 @@
 		min-width: 0;
 	}
 	.meta {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		overflow-wrap: break-word;
 		min-width: 0;
 	}

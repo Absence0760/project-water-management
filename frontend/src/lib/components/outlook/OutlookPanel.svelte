@@ -319,7 +319,12 @@
 				<span class="err" data-testid="outlook-status">{shown.text}</span>
 			{/if}
 		</div>
-		{#if loadError}<div class="alert alert-error" role="alert">{loadError}</div>{/if}
+		{#if loadError}
+			<div class="alert alert-error" role="alert" data-testid="outlook-load-error">
+				Couldn’t look up this run’s seasonal outlook: {loadError}
+				<button type="button" class="btn btn-sm" onclick={() => load()}>Try again</button>
+			</div>
+		{/if}
 
 		{#if !loading && !outlook && !loadError}
 			<p class="muted" data-testid="outlook-empty">No seasonal outlook on this run yet.{canEdit ? '' : ' An editor can run one.'}</p>
@@ -596,14 +601,14 @@
 		width: 5rem;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 80ch;
 		margin: 0.3rem 0 0;
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.status {
 		margin: 0.5rem 0;
@@ -644,18 +649,18 @@
 	}
 	.band {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.not-run {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.years {
 		margin: 0.5rem 0;
 	}
 	.warnings {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin: 0.5rem 0 0;
 		padding-left: 1.2rem;
 	}

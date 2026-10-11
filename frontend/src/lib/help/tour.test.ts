@@ -1,13 +1,28 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HELP } from './content';
 import { NAV_SECTIONS, TAB_LABELS } from '$lib/workspace/tabs';
 import { DIAGRAM_IDS, GUIDES, OPTIONAL_MODEL_TABS, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline, plainText } from './guides';
-import { SHOTS, SHOT_ALT, TIP_PICTURES, pictureSrc, type ShotId } from './pictures';
+import { SHOTS, SHOT_ALT, TIP_PICTURES, pictureSrc, pictureSrcset, type Light, type ShotId } from './pictures';
 import { TOUR } from './tour';
 
 const shots = Object.keys(SHOTS) as ShotId[];
+const staticFile = (src: string) => fileURLToPath(new URL(`../../../static${src}`, import.meta.url));
+
+/** A WebP's pixel size, from its first chunk (VP8X, lossy VP8 or lossless VP8L). */
+function webpSize(file: string): { width: number; height: number } {
+	const b = readFileSync(file);
+	expect(b.toString('ascii', 0, 4) + b.toString('ascii', 8, 12), file).toBe('RIFFWEBP');
+	const chunk = b.toString('ascii', 12, 16);
+	if (chunk === 'VP8X') return { width: b.readUIntLE(24, 3) + 1, height: b.readUIntLE(27, 3) + 1 };
+	if (chunk === 'VP8 ') return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+	if (chunk === 'VP8L') {
+		const bits = b.readUInt32LE(21);
+		return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+	}
+	throw new Error(`${file}: unknown WebP chunk ${chunk}`);
+}
 const noBroken = (text: string) => inline(text).filter((p) => p.kind === 'broken');
 
 describe('help pictures', () => {
@@ -27,6 +42,29 @@ describe('help pictures', () => {
 				expect(p.y, `${shot}.${key}`).toBeLessThan(100);
 			}
 		}
+	});
+
+	it('ship every shot at dusk too, at the same sizes as by day, for dark mode (issue #521)', () => {
+		for (const shot of shots) {
+			const { width } = SHOTS[shot];
+			for (const w of [width, width / 2]) {
+				const day = staticFile(pictureSrc(shot, w));
+				const dusk = staticFile(pictureSrc(shot, w, 'dusk'));
+				expect(dusk, shot).toContain(`/help/${shot}-dusk-${w}.webp`);
+				expect(existsSync(dusk), dusk).toBe(true);
+				// One camera, so the same markers fit both: the two must be the same size.
+				expect(webpSize(day).width, day).toBe(w);
+				expect(webpSize(dusk), dusk).toEqual(webpSize(day));
+				// Under check:bundle's 100 KB per-asset ceiling (scripts/guards/check_web_bundle_budget.mjs).
+				expect(statSync(dusk).size, dusk).toBeLessThan(100 * 1024);
+			}
+		}
+	});
+
+	it('build a srcset for each lighting from the same widths', () => {
+		const light = (l: Light) => pictureSrcset('farm', '/base', l);
+		expect(light('day')).toBe('/base/help/farm-600.webp 600w, /base/help/farm-1200.webp 1200w');
+		expect(light('dusk')).toBe('/base/help/farm-dusk-600.webp 600w, /base/help/farm-dusk-1200.webp 1200w');
 	});
 
 	it('give help-tip pictures only to glossary entries that exist, ringing a feature their shot has', () => {

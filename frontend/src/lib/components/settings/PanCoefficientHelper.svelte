@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import { FAO56_REDUCTION_GUIDANCE, FAO56_RH_LABELS, FAO56_SITING_LABELS, FAO56_TABLE5_SOURCE, FAO56_WIND_LABELS } from '@water-management/engine';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -43,8 +44,8 @@
 	}
 </script>
 
-<details class="pan-helper" data-testid="pan-coefficient-helper">
-	<summary>Suggest from FAO-56 Table 5 (humidity, wind, siting)</summary>
+<!-- The app's fold (common/Fold, issue #521 round 5; it was its own <details>): closed, its line names what it reads. -->
+<Fold name="Suggest from FAO-56 Table 5:" line="humidity, wind, siting" change="Open" body="none" testid="pan-coefficient-helper">
 	<div class="body">
 		<p class="hint explain">
 			Looks up the Class A pan coefficient for each month from that month’s mean relative humidity and wind speed at 2 m, the pan’s siting and its windward
@@ -131,38 +132,25 @@
 			</div>
 		{/if}
 	</div>
-</details>
+</Fold>
 
 <style>
 	.hint.err {
 		color: var(--danger);
-	}
-	.pan-helper {
-		border-top: 1px solid var(--border);
-		padding-top: 0.6rem;
-		margin: 0.5rem 0;
-	}
-	summary {
-		cursor: pointer;
-		font-weight: 600;
-		color: var(--accent);
-		min-height: 36px;
-		display: flex;
-		align-items: center;
 	}
 	.body {
 		display: grid;
 		gap: 0.5rem;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 75ch;
 	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	legend {
 		font-weight: 500;
@@ -211,7 +199,7 @@
 		border-collapse: collapse;
 	}
 	.months th {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 500;
 		color: var(--text-muted);
 		text-align: left;

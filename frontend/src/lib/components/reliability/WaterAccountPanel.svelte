@@ -120,12 +120,13 @@
 
 <style>
 	.water-account {
-		--seg-0: #2a78d6;
-		--seg-1: #d67a2a;
-		--seg-2: #3a9a5b;
-		--seg-3: #8a5bd6;
-		--seg-4: #c24a6b;
-		--seg-5: #6b7c85;
+		/* The categorical palette in its order (ui-playbook § 3), with its dark values. */
+		--seg-0: var(--series-1);
+		--seg-1: var(--series-2);
+		--seg-2: var(--series-3);
+		--seg-3: var(--series-5);
+		--seg-4: var(--series-6);
+		--seg-5: var(--series-7);
 	}
 	.head {
 		display: flex;
@@ -150,7 +151,7 @@
 		margin-bottom: 0.75rem;
 	}
 	.bar-name {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 	}
@@ -173,7 +174,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.2rem 0.9rem;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}

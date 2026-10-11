@@ -71,7 +71,7 @@
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
 	import { FieldHistoryStore, setFieldHistory } from '$lib/components/history/fieldHistory.svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { fillSidebar } from '$lib/components/layout/sidebar.svelte';
+	import { fillPhoneTitle, fillSidebar } from '$lib/components/layout/sidebar.svelte';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import RunButton from '$lib/components/workspace/RunButton.svelte';
@@ -189,7 +189,7 @@
 	// tab (the field unmounts), so any change of page or of the URL's query asks; a #fragment doesn't.
 	guardUnsaved({
 		dirty: () => invalidFields.count > 0,
-		what: 'numbers that need fixing',
+		what: 'fields that need fixing',
 		leaves: (from, to) => from.pathname !== to.pathname || from.search !== to.search
 	});
 	// The save bar's other drafts besides the model (components/model/pageDraft.ts): the project
@@ -571,7 +571,7 @@
 			...(editor.dirty ? ['model edits'] : []),
 			...(details.dirty ? ['project details'] : []),
 			...(settings.dirty ? ['settings'] : []),
-			...(invalidFields.count ? ['numbers that need fixing'] : [])
+			...(invalidFields.count ? ['fields that need fixing'] : [])
 		])
 	);
 	const unsaved = $derived(editor.dirty || details.dirty || settings.dirty || invalidFields.count > 0);
@@ -689,6 +689,8 @@
 	// Wide screens: the sections go in the app sidebar (AppShell, issue #17's shell).
 	const wide = new MediaQuery('min-width: 900px');
 	$effect(() => fillSidebar(projectSidebar, wide.current && !!project && !applicantProject));
+	// On a phone the catchment's name and your role go in the app's bar (AppShell), not a line of their own here.
+	$effect(() => fillPhoneTitle(phoneProject, !wide.current && !!project && !applicantProject));
 
 	// Phones (< 900 px): the sections sit behind a "Sections" button, closed
 	// again by choosing a tab or Escape.
@@ -770,6 +772,11 @@
 	</div>
 {/snippet}
 
+<!-- The phone bar's title (AppShell): the name in at most two lines (whole in its title), then your role. -->
+{#snippet phoneProject()}
+	<p class="phone-project"><span class="phone-name" data-testid="project-name" title={project?.name}>{project?.name}</span>{@render roleBadge()}</p>
+{/snippet}
+
 {#snippet roleBadge()}
 	<span class="badge" class:badge-owner={isOwner} data-testid="project-role">{project?.role}</span>
 {/snippet}
@@ -842,6 +849,7 @@
 			problems={unsaved ? saveProblems.length : 0}
 			running={rerunning}
 			error={rerunError}
+			behind={!banner && behindRun.length > 0}
 			onrun={runModel}
 		/>
 	{/if}
@@ -858,8 +866,11 @@
 						<circle cx="10" cy="10" r="2.6" fill="currentColor" />
 					</svg>
 					<span>
-						<strong>View only.</strong> You have view-only access to this project. You can explore every input and
-						result; ask the project owner for editor access to change anything or run the model.
+						<strong>View only.</strong>
+						<span class="ro-long">You have view-only access to this project. You can explore every input and
+						result; ask the project owner for editor access to change anything or run the model.</span>
+						<!-- A phone's one line (the role badge in the bar says it too); a screen reader reads the sentence above. -->
+						<span class="ro-short" aria-hidden="true">Ask the owner to edit.</span>
 					</span>
 				</span>
 			{/if}
@@ -876,7 +887,7 @@
 			{:else if behind}
 				<span class="note note-info behind" role="status">
 					<span class="note-text">New data since the last run ({behindRun.map((s) => s.name || kindLabel(s.kind)).join(', ')}).</span>
-					{#if rerunQueued}<span data-testid="rerun-queued">{queuedSentence}</span>{:else if canEdit}<button type="button" class="btn btn-sm" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
+					{#if rerunQueued}<span data-testid="rerun-queued">{queuedSentence}</span>{:else if canEdit}<button type="button" class="btn btn-sm rerun" disabled={rerunning} onclick={rerun}>{rerunning ? 'Running model…' : 'Re-run model'}</button>{/if}
 				</span>
 			{/if}
 			{#if rerunError}<span class="note err" role="alert">The run didn’t start: {rerunError}</span>{/if}
@@ -909,7 +920,6 @@
 			<div class="workspace">
 			{#if !wide.current}
 			<div class="tab-row">
-				<p class="phone-project"><span class="phone-name" data-testid="project-name">{project.name}</span>{@render roleBadge()}</p>
 				<button type="button" class="nav-toggle" aria-expanded={navOpen} aria-controls="project-nav" bind:this={navToggle} onclick={() => (navOpen = !navOpen)}>
 					<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
 					<span class="nav-toggle-label"><span class="visually-hidden">Project sections: </span>{LABEL[tab]}</span>
@@ -1192,7 +1202,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 	}
 	/* In a narrow header the pills share a row that starts at the left (SectionHeader), the rain pill
 	   after the Summary's Setup complete: its words wrap inside it, and its list opens rightwards from
@@ -1220,7 +1230,7 @@
 	}
 	.fresh-pop p {
 		margin: 0.4rem 0 0;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 	}
 	.fresh-none {
 		font-size: 0.85rem;
@@ -1270,6 +1280,27 @@
 	}
 	.note .btn-sm {
 		min-height: 30px;
+	}
+	.ro-short {
+		display: none;
+	}
+	/* A phone (the header's container, SectionHeader): View only is one line, and the new-data line is words only,
+	   since the header's own button says Re-run model (RunButton's behind). */
+	@container section-header (max-width: 640px) {
+		.ro-long {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		.ro-short {
+			display: inline;
+		}
+		.behind .rerun {
+			display: none;
+		}
 	}
 	.err {
 		border-left-color: var(--danger);
@@ -1333,7 +1364,7 @@
 	.side-kicker,
 	.section-label {
 		color: var(--text);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -1368,18 +1399,28 @@
 	.project-side .tabs a {
 		min-height: 32px;
 	}
-	/* Phones: the catchment's name and your role, above the Sections button. */
+	/* Phones: the catchment's name and your role, in the app's bar (fillPhoneTitle): at most two lines of name
+	   (whole in its title), the role badge beside it. */
 	.phone-project {
 		display: flex;
 		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.25rem 0.5rem;
+		gap: 0.4rem;
 		margin: 0;
 		font-weight: 600;
+		min-width: 0;
 	}
 	.phone-name {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		min-width: 0;
+		overflow: hidden;
 		overflow-wrap: anywhere;
+		line-height: 1.2;
+	}
+	.phone-project .badge {
+		flex: none;
 	}
 	.tabs {
 		display: flex;
@@ -1433,7 +1474,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		margin-bottom: 1rem;
+		margin-bottom: 0.75rem;
+	}
+	/* Under the phone bar the Sections button starts close to it: the page's 1.25rem top was room the first
+	   screen needs (issue #521 round 5: the header's foot within the first half of a 360 × 740 screen). */
+	@media (max-width: 899px) {
+		.page {
+			padding-top: 0.75rem;
+		}
 	}
 	.nav-toggle {
 		display: flex;
@@ -1504,7 +1552,7 @@
 		background: var(--warning-soft);
 		color: var(--warning);
 		border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		line-height: 1.35;
 		text-align: center;

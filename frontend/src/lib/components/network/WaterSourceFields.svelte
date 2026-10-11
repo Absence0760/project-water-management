@@ -112,7 +112,7 @@
 		color: var(--text-muted);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	@media (max-width: 640px) {

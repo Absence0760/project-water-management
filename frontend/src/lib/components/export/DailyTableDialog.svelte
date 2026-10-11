@@ -165,7 +165,7 @@
 	}
 	.period {
 		margin: 0;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 	}
 	.scroll {
 		flex: 1;

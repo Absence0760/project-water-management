@@ -275,7 +275,7 @@
 		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 		gap: 0.25rem 1rem;
 		margin: 0.4rem 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.meta dt {
 		color: var(--text-muted);
@@ -295,7 +295,7 @@
 	}
 	.period {
 		font-weight: 400;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.badge {
