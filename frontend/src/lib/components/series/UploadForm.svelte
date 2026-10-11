@@ -353,7 +353,7 @@
 					meta,
 					added: p.added,
 					changed: p.changed,
-					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${dataEnd(meta)}.`
+					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${fmtDay(dataEnd(meta))}.`
 				};
 			} else {
 				const meta = await api.series.put(projectId, {
@@ -653,7 +653,7 @@
 						<thead><tr><th scope="col">Date</th><th scope="col">Stored ({target.unit})</th><th scope="col">{input === 'paste' ? 'Pasted' : 'From the file'} ({target.unit})</th></tr></thead>
 						<tbody>
 							{#each overwrite.changes.slice(0, CHANGES_SHOWN) as c (c.date)}
-								<tr><td>{c.date}</td><td>{fmtReading(c.from)}</td><td>{fmtReading(c.to)}</td></tr>
+								<tr><td>{fmtDay(c.date)}</td><td>{fmtReading(c.from)}</td><td>{fmtReading(c.to)}</td></tr>
 							{/each}
 						</tbody>
 					</table>

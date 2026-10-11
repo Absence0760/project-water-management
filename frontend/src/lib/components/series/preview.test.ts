@@ -291,6 +291,14 @@ describe('filterPreviewRows', () => {
 		]);
 	});
 
+	it('finds days as the table shows them, day first: a month or a whole day', () => {
+		const dates = (query: string) => filterPreviewRows(rows, { query, missingOnly: false, flaggedOnly: false, visibleSeriesIds: ['a'] }).map((r) => r.date);
+		expect(dates('Mar 2015')).toEqual(['2015-03-14', '2015-03-15']);
+		expect(dates('03/2015')).toEqual(['2015-03-14', '2015-03-15']);
+		expect(dates('14 Mar 2015')).toEqual(['2015-03-14']);
+		expect(dates('1/4/2015')).toEqual(['2015-04-01']);
+	});
+
 	it('Missing only looks only at the visible series’ columns', () => {
 		// Only 'a' visible: row 2015-04-01 (a=-1, not missing) is excluded even though b is missing there.
 		expect(filterPreviewRows(rows, { query: '', missingOnly: true, flaggedOnly: false, visibleSeriesIds: ['a'] }).map((r) => r.date)).toEqual(['2015-03-15']);

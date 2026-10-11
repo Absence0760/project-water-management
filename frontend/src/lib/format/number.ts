@@ -144,6 +144,32 @@ export function parseDay(input: string): string | null {
 	return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/**
+ * A date search box's query → the ISO prefix it names, so a table that shows
+ * its days day first ("15 Nov 2021") finds them as they read. A whole day as
+ * parseDay reads it ("15 Nov 2021", "15/11/2021", "2021-11-15"), a month day
+ * first or year first ("Nov 2021", "November 2021", "11/2021", "2021-11"), or
+ * a year ("2021"). Anything else is returned trimmed and unchanged, so a
+ * partly typed ISO prefix ("2021-1") still narrows as before. Read from the
+ * string, never through Date.
+ */
+export function dayPrefix(query: string): string {
+	const s = query.trim().replace(/\s+/g, ' ');
+	const day = parseDay(s);
+	if (day) return day;
+	const ym = (y: string, m: number) => (m >= 1 && m <= 12 ? `${y}-${String(m).padStart(2, '0')}` : null);
+	// Year first only with a two-digit month: "2021-1" is "2021-1…" half typed (Oct to Dec), never January.
+	let x = /^(\d{4})[-/.](\d{2})$/.exec(s);
+	if (x) return ym(x[1]!, Number(x[2])) ?? s;
+	if ((x = /^(\d{1,2})[-/.](\d{4})$/.exec(s))) return ym(x[2]!, Number(x[1])) ?? s;
+	if ((x = /^([A-Za-z]{3,9})\.?,? (\d{4})$/.exec(s))) {
+		const word = x[1]!.toLowerCase();
+		const n = MONTH_NUMBER.get(word.slice(0, 3));
+		if (n && (word.length === 3 || MONTHS_LONG[n - 1]!.startsWith(word))) return ym(x[2]!, n)!;
+	}
+	return s;
+}
+
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 /**

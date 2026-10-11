@@ -36,7 +36,7 @@ describe('the day edit', () => {
 		expect(isHandDay(null, '2021-10-05')).toBe(false);
 		expect(handDayCount(ranges)).toBe(4);
 		expect(handDayCount(null)).toBe(0);
-		expect(handRangesText(ranges)).toBe('2021-10-02, 2021-10-04 to 2021-10-06');
+		expect(handRangesText(ranges)).toBe('2 Oct 2021, 4 Oct 2021 to 6 Oct 2021');
 	});
 
 	it('draws the hand-edited days that hold a value as points, clipped to the series', () => {

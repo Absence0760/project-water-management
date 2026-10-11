@@ -110,7 +110,7 @@ test('a CSV dropped on the page opens the dialog with the file read; uploading i
 
 	await dialog.getByRole('button', { name: 'Upload and merge' }).click();
 	await expect(dialog).toBeHidden();
-	await expect(page.getByText('Updated “Rainfall — catchment”: 2 new days, 0 changed. Data now runs to 2021-11-01.')).toBeVisible();
+	await expect(page.getByText('Updated “Rainfall — catchment”: 2 new days, 0 changed. Data now runs to 1 Nov 2021.')).toBeVisible();
 });
 
 test('an upload that changes stored days asks in the dialog; Back returns to the upload button', async ({ page, owner }) => {

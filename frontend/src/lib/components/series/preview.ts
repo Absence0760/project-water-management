@@ -29,6 +29,7 @@ import {
 	type SeriesKind,
 	type SeriesMeta
 } from '@water-management/engine';
+import { dayPrefix } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import type { Daily } from './coverage';
 
@@ -303,19 +304,21 @@ export function parseValueComparison(query: string): ((v: number) => boolean) | 
 /**
  * Filters `rows` for the Preview dialog's search box + toggles. A query
  * starting with a comparison operator ("> 20", "= 0") tests the visible
- * series' values that day; anything else is a date prefix ("2015",
- * "2015-03", "2015-03-14"), which is never scoped to visible series (a date
+ * series' values that day; anything else is a date (dayPrefix: "2015",
+ * "Mar 2015", "14 Mar 2015", "2015-03-14"), which is never scoped to visible series (a date
  * is a property of the row, not of one series' column). Missing/flagged only
  * look at the visible series columns only, combined with the query by AND.
  */
 export function filterPreviewRows(rows: readonly PreviewRow[], { query, missingOnly, flaggedOnly, visibleSeriesIds }: PreviewFilterState): PreviewRow[] {
 	const q = query.trim();
 	const cmp = q ? parseValueComparison(q) : null;
+	// The rows show their days day first, so "Mar 2015" or "14 Mar 2015" finds them as well as an ISO prefix.
+	const date = dayPrefix(q);
 	return rows.filter((r) => {
 		if (missingOnly && !visibleSeriesIds.some((id) => r.series[id]?.value === null)) return false;
 		if (flaggedOnly && !visibleSeriesIds.some((id) => (r.series[id]?.flags.length ?? 0) > 0)) return false;
 		if (!q) return true;
 		if (cmp) return visibleSeriesIds.some((id) => r.series[id] && r.series[id]!.value !== null && cmp(r.series[id]!.value!));
-		return r.date.startsWith(q);
+		return r.date.startsWith(date);
 	});
 }

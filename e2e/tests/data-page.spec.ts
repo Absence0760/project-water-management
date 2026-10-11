@@ -8,6 +8,7 @@ import { csv } from '../support/addData.ts';
 import { API_URL } from '../support/env.ts';
 import { chartReady, openData, putEnding, sections, seedFreshnessMix, seriesChart, seriesRow, seriesRows, seriesTable } from '../support/data.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
@@ -52,7 +53,7 @@ test('the series behind come first and are marked, the same count as the sidebar
 	// Freshness first in the columns too: Data up to comes straight after the series.
 	await expect(seriesTable(page).getByRole('columnheader')).toHaveText(['Series', 'Data up to', 'From', /^Missing/, /^Typical/, 'Coverage by year', 'Actions']);
 	// From is the start date only: the end is Data up to's (issue #174).
-	await expect(seriesRows(page).nth(0).getByRole('cell').nth(1)).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
+	await expect(seriesRows(page).nth(0).getByRole('cell').nth(1)).toHaveText(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/); // day first (issue #521)
 });
 
 test('picking a series charts it through the URL: Back returns to the one before, a shared link opens it, a stale one falls back', async ({ page, owner }) => {
@@ -397,4 +398,33 @@ test('new data since the latest run is one notice, the page’s: after an upload
 	await expect(page.getByTestId('rerun-queued')).toContainText('An automatic re-run');
 	await expect(page.getByRole('button', { name: 'Re-run model' })).toHaveCount(0);
 	await expect(page.getByRole('link', { name: 'Re-run the model' })).toHaveCount(0);
+});
+
+// Dates a person reads are day first (issue #521): the table's Data up to and From, the CSV menu's period, the
+// chart's read-out and Edit a day all say "1 Oct 2021", and the longer text still fits a phone at 320 and 390 px.
+test('the series table, the CSV period and Edit a day read day first, and fit a phone', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Data day first');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] });
+	await openData(page, project.id);
+	const row = seriesRow(page, 'Rainfall — catchment');
+	await expect(row.getByRole('cell').first()).toContainText('10 Oct 2021');
+	await expect(row.getByRole('cell').nth(1)).toHaveText('1 Oct 2021');
+	await row.getByRole('button', { name: /^CSV/ }).click();
+	await expect(page.getByText('1 Oct 2021 → 10 Oct 2021')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await row.getByRole('button', { name: 'View', exact: true }).click();
+	await chartReady(page);
+	const edit = page.getByRole('group', { name: 'Edit a day' });
+	await expect(edit.getByTestId('edit-day-stored')).toHaveText('Pick a day from 1 Oct 2021 to 10 Oct 2021, day first. Leave the value blank to clear the day (no reading).');
+	await edit.getByLabel('Day', { exact: true }).fill('3/10/2021');
+	await expect(edit.getByLabel('Value (mm)', { exact: true })).toHaveValue('3');
+	await edit.getByLabel('Day', { exact: true }).fill('12 Oct 2021');
+	await expect(edit.getByTestId('edit-day-stored')).toContainText('12 Oct 2021 is outside the series (1 Oct 2021 to 10 Oct 2021).');
+	for (const width of [320, 390]) {
+		await page.setViewportSize({ width, height: 844 });
+		await layoutSettled(page);
+		await expectNoSidewaysScroll(page);
+	}
+	await expectNoViolations(page);
 });

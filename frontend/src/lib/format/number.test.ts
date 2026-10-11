@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, parseNum, zonedIsoDate } from './number';
+import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, parseNum, zonedIsoDate } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -205,5 +205,29 @@ describe('parseDay', () => {
 		expect(parseDay('29 Feb 2024')).toBe('2024-02-29');
 		expect(parseDay('29 Feb 2000')).toBe('2000-02-29');
 		expect(parseDay('29 Feb 1900')).toBeNull();
+	});
+});
+
+// A date search over a table shown day first (the Data page's previews, issue #521): read from the string, so
+// no time zone can move a day. Run under a far-off TZ to prove it.
+describe('dayPrefix', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('reads a day, a month or a year, day first or year first, as an ISO prefix', () => {
+		process.env.TZ = 'Pacific/Kiritimati';
+		for (const typed of ['15 Nov 2021', '15/11/2021', '2021-11-15', ' 15  nov 2021 ']) expect(dayPrefix(typed), typed).toBe('2021-11-15');
+		for (const typed of ['Nov 2021', 'november 2021', 'Nov. 2021', '11/2021', '11-2021', '2021-11', '2021/11', '2021-11 ']) expect(dayPrefix(typed), typed).toBe('2021-11');
+		expect(dayPrefix('3/2015')).toBe('2015-03');
+		expect(dayPrefix('Sept 2021')).toBe('2021-09');
+		expect(dayPrefix('2015')).toBe('2015');
+	});
+	it('leaves anything else as typed, so a partly typed ISO prefix still narrows', () => {
+		process.env.TZ = 'Pacific/Pago_Pago';
+		for (const typed of ['2021-1', '20', '13/2021', '2021-13', 'Novv 2021', 'yesterday', '']) expect(dayPrefix(typed), typed).toBe(typed);
+		expect(dayPrefix('  2021-1 ')).toBe('2021-1');
+		// Never month first.
+		expect(dayPrefix('11/15/2021')).toBe('11/15/2021');
 	});
 });

@@ -12,7 +12,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { fetchDownload, saveBlob } from '$lib/export/download';
 	import { parseDailyCsv, type DailyTable } from '$lib/export/dailyTable';
-	import { fmtNum, fmtReading } from '$lib/format/number';
+	import { dayPrefix, fmtDay, fmtNum, fmtReading } from '$lib/format/number';
 
 	let {
 		open = $bindable(false),
@@ -73,10 +73,10 @@
 	});
 
 	const shown = $derived(table && loadedUrl === url ? table : null);
-	/** Row indexes matching the date prefix (2015, 2015-03 or 2015-03-14). */
+	/** Row indexes matching the date typed: shown day first, so "Mar 2015" and "14 Mar 2015" as well as 2015-03-14 (dayPrefix). */
 	const rows = $derived.by(() => {
 		if (!shown) return [];
-		const q = query.trim();
+		const q = dayPrefix(query);
 		const all = shown.dates.map((_, i) => i);
 		return q ? all.filter((i) => shown.dates[i]!.startsWith(q)) : all;
 	});
@@ -108,9 +108,9 @@
 		{#if shown.legacy}<div class="alert alert-warning" role="note">This run used the legacy runoff model (removed in engine 1.0.0): a workbook comparison only, not evidence.</div>{/if}
 		<div class="controls">
 			<label for="{uid}-q" class="visually-hidden">Find a date</label>
-			<input id="{uid}-q" type="search" autocomplete="off" placeholder="Date prefix: 2015, 2015-03 or 2015-03-14" bind:value={query} />
+			<input id="{uid}-q" type="search" autocomplete="off" placeholder="Date: 2015, Mar 2015 or 14 Mar 2015" bind:value={query} />
 			<p class="muted period" role="status" aria-live="polite">
-				{#if shown.dates.length}{shown.dates[0]} → {shown.dates[shown.dates.length - 1]} ·{/if}
+				{#if shown.dates.length}{fmtDay(shown.dates[0]!)} → {fmtDay(shown.dates[shown.dates.length - 1]!)} ·{/if}
 				{fmtNum(rows.length)} of {fmtNum(shown.dates.length)} days · {shown.headers.length} hydrological unit{shown.headers.length === 1 ? '' : 's'}
 			</p>
 		</div>
@@ -129,7 +129,7 @@
 					{#if topH > 0}<tr class="spacer" aria-hidden="true" style="height: {topH}px"><td colspan={shown.headers.length + 1}></td></tr>{/if}
 					{#each visibleRows as r, i (r)}
 						<tr aria-rowindex={startIdx + i + 2}>
-							<td class="datecol">{shown.dates[r]}</td>
+							<td class="datecol">{fmtDay(shown.dates[r]!)}</td>
 							{#each shown.columns as col, c (c)}<td class="num">{fmtReading(col[r])}</td>{/each}
 						</tr>
 					{/each}

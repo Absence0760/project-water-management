@@ -59,8 +59,9 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(table.getByRole('row')).toHaveCount(3);
 	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge W7' });
 	await expect(flowRow).toContainText('Flow — observed gauge');
-	await expect(flowRow).toContainText('2021-10-01');
-	await expect(flowRow).toContainText('2021-12-31');
+	// Day first (issue #521).
+	await expect(flowRow).toContainText('1 Oct 2021');
+	await expect(flowRow).toContainText('31 Dec 2021');
 
 	// View re-draws a stored series.
 	await table.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View', exact: true }).click();
@@ -103,10 +104,10 @@ test('a later file appends to an existing series without erasing stored days', a
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	// 10-03 is overwritten, so the form asks first.
 	await form.getByRole('button', { name: 'Overwrite 1 day' }).click();
-	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 5 Oct 2021.');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — catchment' });
-	await expect(row).toContainText('2021-10-05');
+	await expect(row).toContainText('5 Oct 2021');
 	const stored = await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json();
 	const s = await (await page.request.get(`${API_URL}/projects/${project.id}/series/${stored.series[0].id}`)).json();
 	expect(s.values).toEqual([1, 2, 30, 4, 5]);
@@ -198,8 +199,8 @@ test('on a phone each series row is a card: every column and button fits without
 
 	// Still a table to assistive tech: header cells and data cells keep their roles.
 	await expect(table.getByRole('columnheader', { name: 'Coverage by year' })).toHaveCount(1);
-	await expect(flowRow.getByRole('cell').first()).toContainText('2021-10-03'); // Data up to comes first (freshness first)
-	await expect(flowRow.getByRole('cell').nth(1)).toContainText('2021-10-01');
+	await expect(flowRow.getByRole('cell').first()).toContainText('3 Oct 2021'); // Data up to comes first (freshness first)
+	await expect(flowRow.getByRole('cell').nth(1)).toContainText('1 Oct 2021');
 
 	// Nothing is hidden behind a sideways scroll, in the table's box or the page.
 	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
@@ -304,7 +305,7 @@ test('a merge that changes stored days says which and how many before it overwri
 	// Positive control: a file that only adds days uploads straight away.
 	await form.getByLabel('CSV file').setInputFiles(csvFile('new.csv', 'date,value\n2021-10-04,4\n2021-10-05,5\n'));
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
-	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 5 Oct 2021.');
 	await expect(form).toBeHidden();
 	form = await openAddData(page);
 
@@ -319,8 +320,8 @@ test('a merge that changes stored days says which and how many before it overwri
 	const rows = confirm.getByRole('row');
 	await expect(rows).toHaveCount(3);
 	await expect(rows.nth(0)).toHaveText(/Date\s*Stored \(mm\)\s*From the file \(mm\)/);
-	await expect(rows.nth(1)).toHaveText(/2021-10-02\s*2\.00\s*20\.00/);
-	await expect(rows.nth(2)).toHaveText(/2021-10-04\s*4\.00\s*40\.00/);
+	await expect(rows.nth(1)).toHaveText(/2 Oct 2021\s*2\.00\s*20\.00/);
+	await expect(rows.nth(2)).toHaveText(/4 Oct 2021\s*4\.00\s*40\.00/);
 	await expectNoViolations(page);
 
 	await form.getByRole('button', { name: 'Back' }).click();
@@ -337,7 +338,7 @@ test('a merge that changes stored days says which and how many before it overwri
 
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	await form.getByRole('button', { name: 'Overwrite 2 days' }).click();
-	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 5 Oct 2021.');
 	expect(await storedValues(page, project.id)).toEqual([1, 20, 3, 40, 5]);
 });
 

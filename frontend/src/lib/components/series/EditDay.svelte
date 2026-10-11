@@ -9,7 +9,7 @@
 	import { api } from '$lib/api';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtDay, fmtNum, parseDay } from '$lib/format/number';
 	import { feedMark } from '$lib/series/provenance';
 	import { isHandDay, lastDay, readTypedValue, valueOn, type DailyValues } from '$lib/series/editDay';
 	import { forgetValues } from './valuesCache';
@@ -33,6 +33,10 @@
 	const id = (s: string) => `${uid}-${s}`;
 	const end = $derived(lastDay(series));
 	let date = $state('');
+	// The day as typed, day first (parseDay, ui-playbook § 2 "A typed date is day first too"): a native date field
+	// showed the browser's own order (12/30/2021 in a US browser). "2 Oct 2021", "2/10/2021" and "2021-10-02" all read.
+	let dayText = $state('');
+	const dayUnread = $derived(dayText.trim() !== '' && !parseDay(dayText));
 	let text = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
@@ -46,6 +50,13 @@
 	const edited = $derived(isHandDay(series.handDays, date));
 	const fed = $derived(feedMark(series.feed));
 	const disabled = $derived(saving || !values || !inRange || !typed.ok || unchanged || !!series.rebuilding);
+
+	/** The day typed: once it reads as a day, that day is picked; until then none is. */
+	function typeDay(typedDay: string) {
+		dayText = typedDay;
+		const next = parseDay(typedDay) ?? '';
+		if (next !== date) pick(next);
+	}
 
 	/** A day picked: its stored value in the box, ready to correct (blank for a gap). */
 	function pick(next: string) {
@@ -65,7 +76,7 @@
 		try {
 			const meta = await api.series.setDay(projectId, series.id, date, typed.value);
 			forgetValues(projectId, series.id);
-			done = typed.value === null ? `Cleared ${date}.` : `Saved ${date}: ${exact(typed.value)} ${series.unit}.`;
+			done = typed.value === null ? `Cleared ${fmtDay(date)}.` : `Saved ${fmtDay(date)}: ${exact(typed.value)} ${series.unit}.`;
 			await onsaved?.(meta);
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
@@ -84,7 +95,21 @@
 			<div class="form-row">
 				<div class="field">
 					<label for={id('date')}>Day</label>
-					<input id={id('date')} type="date" min={series.startDate} max={end} value={date} oninput={(e) => pick(e.currentTarget.value)} aria-describedby={id('stored')} />
+					<input
+						id={id('date')}
+						type="text"
+						class="day"
+						value={dayText}
+						oninput={(e) => typeDay(e.currentTarget.value)}
+						onblur={() => {
+							if (date) dayText = fmtDay(date);
+						}}
+						placeholder="15 Nov 2021"
+						autocomplete="off"
+						spellcheck="false"
+						aria-invalid={dayUnread || (!!date && !inRange) ? 'true' : undefined}
+						aria-describedby={id('stored')}
+					/>
 				</div>
 				<div class="field value">
 					<label for={id('value')}>Value ({series.unit})</label>
@@ -101,10 +126,13 @@
 				<button type="submit" class="btn btn-sm btn-primary save" {disabled}>{saving ? 'Saving…' : typed.ok && typed.value === null ? 'Clear the day' : 'Save the day'}</button>
 			</div>
 			<p class="hint muted" id={id('stored')} data-testid="edit-day-stored">
-				{#if !date}
-					Pick a day from {series.startDate} to {end}. Leave the value blank to clear the day (no reading).
+				{#if dayUnread}
+					<span class="warn-text">Type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15.</span>
+					The series runs from {fmtDay(series.startDate)} to {fmtDay(end)}.
+				{:else if !date}
+					Pick a day from {fmtDay(series.startDate)} to {fmtDay(end)}, day first. Leave the value blank to clear the day (no reading).
 				{:else if !inRange}
-					<span class="warn-text">{date} is outside the series ({series.startDate} to {end}). Add days outside it from Add data, as a file or pasted rows.</span>
+					<span class="warn-text">{fmtDay(date)} is outside the series ({fmtDay(series.startDate)} to {fmtDay(end)}). Add days outside it from Add data, as a file or pasted rows.</span>
 				{:else if !values}
 					Loading the stored values…
 				{:else}
@@ -148,6 +176,10 @@
 	.value input {
 		width: 9rem;
 	}
+	/* Wide enough for "30 Sep 2021" and the placeholder, as the native date field was. */
+	.day {
+		width: 9.5rem;
+	}
 	.save {
 		min-height: 32px;
 	}
@@ -165,6 +197,7 @@
 	@media (max-width: 640px) {
 		.field,
 		.value input,
+		.day,
 		.save {
 			width: 100%;
 		}

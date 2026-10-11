@@ -3,7 +3,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { seedSupplyProject } from '../support/supply.ts';
-import { ungroup } from '../support/format.ts';
+import { dayFirst, ungroup } from '../support/format.ts';
 
 // Download menu → Preview beside an all-farms table (Fragmented flow /
 // Fragmented EWR): the table the file holds, in a dialog, before saving it.
@@ -36,9 +36,11 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 
 	// The first day's values are the file's, to the shown precision; numbers line up right under their headers.
 	const [date, ...values] = body[0]!.split(',');
-	const first = dialog.getByRole('row').filter({ hasText: date! });
+	// The file keeps ISO dates; the dialog shows them day first (issue #521).
+	expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+	const first = dialog.getByRole('row').filter({ has: page.getByRole('cell', { name: dayFirst(date!), exact: true }) });
 	const cells = first.getByRole('cell');
-	await expect(cells.first()).toHaveText(date!);
+	await expect(cells.first()).toHaveText(dayFirst(date!));
 	for (let c = 0; c < values.length; c++) {
 		const shown = ungroup((await cells.nth(c + 1).textContent())!);
 		const v = Number(values[c]);
@@ -52,6 +54,11 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 	const inMonth = body.filter((r) => r.startsWith(month)).length;
 	await dialog.getByLabel('Find a date').fill(month);
 	await expect(dialog).toContainText(`${inMonth} of ${body.length} days`);
+	// The month as the table reads it finds the same days, and a whole day the one.
+	await dialog.getByLabel('Find a date').fill(dayFirst(`${month}-01`).replace(/^1 /, ''));
+	await expect(dialog).toContainText(`${inMonth} of ${body.length} days`);
+	await dialog.getByLabel('Find a date').fill(dayFirst(date!));
+	await expect(dialog).toContainText(`1 of ${body.length} days`);
 
 	// Download CSV saves the same file, under the server's name.
 	const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Download CSV' }).click()]);
@@ -85,7 +92,7 @@ for (const size of [
 		await page.getByRole('button', { name: 'Download' }).click();
 		await page.getByRole('button', { name: 'Preview Fragmented flow — all hydrological units (CSV)' }).click();
 		const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all hydrological units' });
-		await expect(dialog).toContainText('2019-10-01 → 2021-09-29 · 730 of 730 days · 30 hydrological units');
+		await expect(dialog).toContainText('1 Oct 2019 → 29 Sep 2021 · 730 of 730 days · 30 hydrological units');
 		await expect(dialog.locator('thead th')).toHaveCount(31);
 
 		// Inside the window, Download CSV in view; nothing scrolls sideways but the table.
@@ -106,12 +113,12 @@ for (const size of [
 		// Scrolled to the end, the last day is the last row, at the foot of the scroll box.
 		await scroll.evaluate((d) => (d.scrollTop = d.scrollHeight));
 		const last = rows.last();
-		await expect(last.getByRole('cell').first()).toHaveText('2021-09-29');
+		await expect(last.getByRole('cell').first()).toHaveText('29 Sep 2021');
 		const end = (await scroll.boundingBox())!;
 		expect(Math.abs((await last.boundingBox())!.y + 28 - (end.y + end.height))).toBeLessThan(3);
 		// Halfway, the row at the top of the box is the day that far in.
 		await scroll.evaluate((d) => (d.scrollTop = 365 * 28));
-		await expect(dialog.getByRole('row', { name: /^2020-09-30 / })).toBeInViewport();
+		await expect(dialog.getByRole('row', { name: /^30 Sep 2020 / })).toBeInViewport();
 
 		await scroll.evaluate((d) => (d.scrollTop = 0));
 		await expectNoViolations(page, { include: 'dialog[open]' });

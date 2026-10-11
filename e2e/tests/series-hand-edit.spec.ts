@@ -26,9 +26,10 @@ test('a day set by hand is saved through the API, marked on the row and in the d
 	const { project, row, edit } = await onData(page, 'Hand edit');
 	await expect(edit).toBeVisible();
 	const day = edit.getByLabel('Day', { exact: true });
-	await expect(day).toHaveAttribute('min', '2021-10-01');
-	await expect(day).toHaveAttribute('max', '2021-10-10');
-	await day.fill('2021-10-02');
+	// A text field read day first (not a native date field, which shows the browser's own order), with the span in words.
+	await expect(day).toHaveAttribute('type', 'text');
+	await expect(edit.getByTestId('edit-day-stored')).toContainText('Pick a day from 1 Oct 2021 to 10 Oct 2021, day first.');
+	await day.fill('2 Oct 2021');
 	// The stored value is put in the box to correct, and said beside it.
 	await expect(edit.getByLabel('Value (mm)', { exact: true })).toHaveValue('12.4');
 	await expect(edit.getByTestId('edit-day-stored')).toContainText('Stored: 12.4 mm.');
@@ -40,9 +41,9 @@ test('a day set by hand is saved through the API, marked on the row and in the d
 	const res = await saved;
 	expect(res.status()).toBe(200);
 	expect(res.request().postDataJSON()).toEqual({ value: 14.2 });
-	await expect(edit.getByTestId('edit-day-done')).toContainText('Saved 2021-10-02: 14.2 mm.');
+	await expect(edit.getByTestId('edit-day-done')).toContainText('Saved 2 Oct 2021: 14.2 mm.');
 	await expect(row.getByTestId('series-hand')).toHaveText('1 day edited by hand');
-	await expect(page.getByTestId('series-hand-days')).toHaveText('2021-10-02');
+	await expect(page.getByTestId('series-hand-days')).toHaveText('2 Oct 2021');
 	await expect(edit.getByTestId('edit-day-stored')).toContainText('Stored: 14.2 mm, edited by hand.');
 
 	// History names the edit.
@@ -53,7 +54,14 @@ test('a day set by hand is saved through the API, marked on the row and in the d
 test('a blank value clears the day; a negative or text is refused before it is sent', async ({ page, owner }) => {
 	void owner;
 	const { row, edit } = await onData(page, 'Hand clear');
-	await edit.getByLabel('Day', { exact: true }).fill('2021-10-04');
+	// Year first reads too; a day it can't read, or month first, says so at the field.
+	const day = edit.getByLabel('Day', { exact: true });
+	await day.fill('10/15/2021');
+	await expect(edit.getByTestId('edit-day-stored')).toContainText('Type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15.');
+	await expect(day).toHaveAttribute('aria-invalid', 'true');
+	await day.fill('2021-10-04');
+	await day.blur();
+	await expect(day).toHaveValue('4 Oct 2021');
 	await edit.getByLabel('Value (mm)', { exact: true }).fill('-1');
 	await expect(edit.getByTestId('edit-day-invalid')).toContainText('never below zero');
 	await expect(edit.getByRole('button', { name: 'Save the day' })).toBeDisabled();
@@ -63,7 +71,7 @@ test('a blank value clears the day; a negative or text is refused before it is s
 	const cleared = page.waitForResponse((r) => r.request().method() === 'PUT' && r.url().endsWith(`/days/2021-10-04`));
 	await edit.getByRole('button', { name: 'Clear the day' }).click();
 	expect((await cleared).request().postDataJSON()).toEqual({ value: null });
-	await expect(edit.getByTestId('edit-day-done')).toContainText('Cleared 2021-10-04.');
+	await expect(edit.getByTestId('edit-day-done')).toContainText('Cleared 4 Oct 2021.');
 	await expect(row.getByTestId('series-hand')).toHaveText('1 day edited by hand');
 	await expect(edit.getByTestId('edit-day-stored')).toContainText('Stored: no reading, edited by hand.');
 });
@@ -83,7 +91,7 @@ test('a viewer sees the hand-edit mark but no Edit a day', async ({ page, owner,
 	const row = viewer.page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — catchment' });
 	await expect(row.getByTestId('series-hand')).toHaveText('1 day edited by hand');
 	await row.getByRole('button', { name: 'View', exact: true }).click();
-	await expect(viewer.page.getByTestId('series-hand-days')).toHaveText('2021-10-03');
+	await expect(viewer.page.getByTestId('series-hand-days')).toHaveText('3 Oct 2021');
 	await expect(viewer.page.getByRole('group', { name: 'Edit a day' })).toHaveCount(0);
 });
 
@@ -110,7 +118,7 @@ test('rows pasted from a spreadsheet are read like a file, previewed, and asked 
 	await dialog.getByRole('button', { name: 'Overwrite 1 day' }).click();
 	expect((await merged).status()).toBe(200);
 	await expect(dialog).toBeHidden();
-	await expect(page.getByText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-12.')).toBeVisible();
+	await expect(page.getByText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 12 Oct 2021.')).toBeVisible();
 	// A paste is data from elsewhere, like a file: no day of it is marked as edited by hand.
 	await expect(row.getByTestId('series-hand')).toHaveCount(0);
 });
