@@ -4,7 +4,7 @@
 import type { InputChange } from '@water-management/engine';
 import type { CompareAttribution, HistoryRevision } from '$lib/api/types';
 import { FORMER_MEMBER } from '$lib/format/maker';
-import { fmtDate } from '$lib/format/number';
+import { fmtStamp } from '$lib/format/number';
 
 /** The project's History tab, from the compare page (standalone or in the workspace). */
 export const historyHref = (projectId: string) => `/projects/${encodeURIComponent(projectId)}?tab=history`;
@@ -19,9 +19,9 @@ export function lineAuthors(changes: readonly InputChange[], attribution: Compar
 	});
 }
 
-/** "Changed by Ann on 2026-09-26 14:02" (the viewer's clock), for one line. */
+/** "Changed by Ann on 26 Sep 2026 14:02" (day first, the viewer's clock), for one line. */
 export function byline(r: HistoryRevision): string {
-	return `Changed by ${r.actor ?? FORMER_MEMBER} on ${fmtDate(r.createdAt, true)}`;
+	return `Changed by ${r.actor ?? FORMER_MEMBER} on ${fmtStamp(r.createdAt)}`;
 }
 
 /** "Ann, Bob and Cat": each person once, in the order given. */

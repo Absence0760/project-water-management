@@ -37,7 +37,7 @@ describe('forecastRows', () => {
 
 describe('the panel wording', () => {
 	it('says which days, from how much forecast rain, after which recorded day', () => {
-		expect(forecastHeading(summary)).toBe('Next 14 days: 2026-09-27 to 2026-10-10, modelled on 12.3 mm of forecast rain after the last recorded rain on 2026-09-26.');
+		expect(forecastHeading(summary)).toBe('Next 14 days: 27 Sep 2026 to 10 Oct 2026, modelled on 12.3 mm of forecast rain after the last recorded rain on 26 Sep 2026.');
 		expect(forecastHeading({ ...summary, days: 1 })).toMatch(/^Next 1 day:/);
 	});
 

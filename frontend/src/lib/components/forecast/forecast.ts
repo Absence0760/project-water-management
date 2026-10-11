@@ -4,7 +4,7 @@
 // "expected", "about", never a promise, and never mixed into the historical
 // figures (the engine keeps them out of every other summary).
 import type { ForecastSummary } from '@water-management/engine';
-import { fmtNum } from '$lib/format/number';
+import { fmtDay, fmtNum } from '$lib/format/number';
 
 /** The band's label on every daily chart of a forecast run. */
 export const FORECAST_BAND_LABEL = 'Forecast';
@@ -55,5 +55,5 @@ export function outletLine(f: ForecastSummary): string {
 
 /** The panel's heading line: which days, and from what. */
 export function forecastHeading(f: ForecastSummary): string {
-	return `Next ${f.days} ${f.days === 1 ? 'day' : 'days'}: ${f.from} to ${f.to}, modelled on ${fmtNum(f.rainMm, 1)} mm of forecast rain after the last recorded rain on ${f.lastObserved}.`;
+	return `Next ${f.days} ${f.days === 1 ? 'day' : 'days'}: ${fmtDay(f.from)} to ${fmtDay(f.to)}, modelled on ${fmtNum(f.rainMm, 1)} mm of forecast rain after the last recorded rain on ${fmtDay(f.lastObserved)}.`;
 }

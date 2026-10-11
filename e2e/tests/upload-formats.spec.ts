@@ -48,7 +48,7 @@ test('Add data: the expected format, and its example file reads as a week with t
 	expect(example.name).toBe('example-daily-rainfall.csv');
 	await dialog.getByLabel('CSV file or DWS export', { exact: true }).setInputFiles(file(example.name, example.text));
 	const summary = dialog.getByLabel('File summary');
-	await expect(summary).toContainText('2025-04-01 → 2025-04-07');
+	await expect(summary).toContainText('1 Apr 2025 → 7 Apr 2025');
 	await expect(summary).toContainText(/Gaps\s*3/);
 	await expect(dialog.getByTestId('negative-gaps')).toContainText('1 read as gaps');
 	await expect(dialog.getByRole('alert')).toHaveCount(0);

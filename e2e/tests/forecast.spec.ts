@@ -41,7 +41,7 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	// The forecast panel: the days, per farm, the outlet, all worded as expectations.
 	const panel = page.getByTestId('forecast-panel');
 	await expect(panel.getByRole('heading', { name: 'Forecast' })).toBeVisible();
-	await expect(panel).toContainText(`Next 14 days: ${FROM} to ${TO}, modelled on`);
+	await expect(panel).toContainText('Next 14 days: 29 Jan 2022 to 11 Feb 2022, modelled on');
 	await expect(panel.getByText('Modelled on forecast rain, not measured')).toBeVisible();
 	await expect(panel.getByRole('rowheader', { name: 'Upper farm' })).toBeVisible();
 	await expect(panel.getByRole('rowheader', { name: 'Lower farm' })).toBeVisible();

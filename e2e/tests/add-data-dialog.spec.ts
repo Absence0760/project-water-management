@@ -104,7 +104,7 @@ test('a CSV dropped on the page opens the dialog with the file read; uploading i
 	await dropCsv(page, 'Rainfall — catchment.csv', NEW_DAYS);
 	await expect(dialog).toBeVisible();
 	await expect(dialog).toContainText('Looks like Rainfall — catchment');
-	const summary = dialog.getByRole('definition').filter({ hasText: '2021-10-31 → 2021-11-01' });
+	const summary = dialog.getByRole('definition').filter({ hasText: '31 Oct 2021 → 1 Nov 2021' });
 	await expect(summary).toBeVisible();
 	await expect(dialog.getByText('File preview', { exact: true })).toBeVisible();
 
@@ -284,13 +284,13 @@ test('a second file dropped on a read one asks before replacing it', async ({ pa
 	await seeded(page, 'Add data drop twice');
 	const dialog = addDataDialog(page);
 	await dropCsv(page, 'Rainfall — catchment.csv', NEW_DAYS);
-	await expect(dialog.getByRole('definition').filter({ hasText: '2021-10-31 → 2021-11-01' })).toBeVisible();
+	await expect(dialog.getByRole('definition').filter({ hasText: '31 Oct 2021 → 1 Nov 2021' })).toBeVisible();
 
 	await dropCsv(page, 'other.csv', 'date,value\n2021-11-05,2\n');
 	await answerConfirm(page, false, 'Replace the file?');
-	await expect(dialog.getByRole('definition').filter({ hasText: '2021-10-31 → 2021-11-01' })).toBeVisible();
+	await expect(dialog.getByRole('definition').filter({ hasText: '31 Oct 2021 → 1 Nov 2021' })).toBeVisible();
 
 	await dropCsv(page, 'other.csv', 'date,value\n2021-11-05,2\n');
 	await answerConfirm(page, true, 'Replace the file?');
-	await expect(dialog.getByRole('definition').filter({ hasText: '2021-11-05 → 2021-11-05' })).toBeVisible();
+	await expect(dialog.getByRole('definition').filter({ hasText: '5 Nov 2021 → 5 Nov 2021' })).toBeVisible();
 });

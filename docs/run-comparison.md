@@ -203,8 +203,9 @@ bottom:
    settings changes between the runs and names who made them ("2 saved
    changes to the model or settings between the runs, by Ann and Bob", with
    a link to the project's History tab), and each model or settings line
-   says which save set its final value: "Changed by Ann on 2026-09-26
-   14:02 · “Licence application”" (the save's reason, when it has one).
+   says which save set its final value: "Changed by Ann on 26 Sep 2026
+   14:02 · “Licence application”" (day first, the viewer's clock; the save's
+   reason, when it has one).
    The saves are the project's `model_revision` rows made after the
    baseline ran and up to when the what-if ran; the matching rule is in
    [api.md § Compare runs](./api.md#compare-runs) (`attribution`). A

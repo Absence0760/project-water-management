@@ -101,7 +101,7 @@ test('rows pasted from a spreadsheet are read like a file, previewed, and asked 
 
 	// A block as a spreadsheet copies it: tab-separated, a header, a decimal comma, a blank cell.
 	await dialog.getByLabel('Dates and values').fill('Date\tRain\n2021-10-02\t9,5\n2021-10-03\t\n2021-10-11\t4\n2021-10-12\t1');
-	await expect(dialog.getByLabel('Pasted rows summary')).toContainText('2021-10-02 → 2021-10-12');
+	await expect(dialog.getByLabel('Pasted rows summary')).toContainText('2 Oct 2021 → 12 Oct 2021');
 	await expect(dialog.getByText('Pasted rows preview', { exact: true })).toBeVisible();
 	await dialog.getByRole('button', { name: 'Save and merge' }).click();
 	const confirm = dialog.getByTestId('overwrite-confirm');
