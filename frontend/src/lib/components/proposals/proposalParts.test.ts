@@ -37,7 +37,7 @@ describe('the map-proposal panels’ shared pieces', () => {
 
 	it('source and method: collapsed, the citation under its test id', () => {
 		const html = render(ProposalSource, { props: { testid: 'x-source', citation: 'dPET (v3). CC BY 4.0', method: 'Summed by month.' } }).body;
-		expect(html).toMatch(/<details[^>]*>\s*<summary>Source and method<\/summary>/);
+		expect(html).toMatch(/<details[^>]*>\s*<summary[^>]*>Source and method<\/summary>/);
 		expect(html).not.toMatch(/<details[^>]*\bopen\b/);
 		expect(html).toMatch(/data-testid="x-source"[^>]*>dPET \(v3\)\. CC BY 4\.0</);
 		expect(text(html)).toContain('Summed by month.');

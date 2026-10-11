@@ -298,7 +298,7 @@
 			background: var(--surface);
 			border: 1px solid var(--border-strong);
 			border-radius: var(--radius);
-			box-shadow: var(--shadow), 0 6px 18px rgb(0 0 0 / 0.14);
+			box-shadow: var(--shadow), var(--popover-shadow);
 		}
 		.pop[hidden] {
 			display: none;
