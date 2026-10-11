@@ -13,6 +13,16 @@
 	// (the farm view's comes from the catalogue, /share's is English).
 	let { notice, noneText, pageLang }: { notice: NoticeVm | null; noneText: string; pageLang: string } = $props();
 	const lang = $derived(notice?.lang && notice.lang !== pageLang ? notice.lang : undefined);
+	// The card's lines under the heading, in order. On a phone the byline ends the last of them rather than taking
+	// a row of its own (issue #521: with the estimate line, the supply card had slipped below the fold).
+	type Line = { text: string; lang?: string; note?: boolean };
+	const lines = $derived.by((): Line[] => {
+		if (!notice) return [];
+		const out: Line[] = (notice.body?.split('\n') ?? []).map((text) => ({ text, lang }));
+		if (notice.langNote) out.push({ text: notice.langNote, note: true });
+		if (notice.pctLine) out.push({ text: notice.pctLine });
+		return out;
+	});
 </script>
 
 {#if notice}
@@ -35,12 +45,13 @@
 			{/if}
 			{notice.heading}
 		</h2>
-		{#if notice.body}
-			{#each notice.body.split('\n') as para, i (i)}<p {lang}>{para}</p>{/each}
-		{/if}
-		{#if notice.langNote}<p class="lang-note">{notice.langNote}</p>{/if}
-		{#if notice.pctLine}<p>{notice.pctLine}</p>{/if}
-		<p class="by">{notice.byline}</p>
+		{#each lines as line, i (i)}
+			<p lang={line.lang} class:lang-note={line.note}>
+				{line.text}{#if i === lines.length - 1}{' '}<span class="by" lang={line.lang ? pageLang : undefined}>{notice.byline}</span>{/if}
+			</p>
+		{:else}
+			<p class="by">{notice.byline}</p>
+		{/each}
 	</section>
 {:else}
 	<section id="notice" class="notice none" aria-labelledby="notice-h">
@@ -91,6 +102,21 @@
 	.lang-note {
 		font-size: 14px;
 		color: var(--text-2);
+	}
+	span.by {
+		display: block;
+		margin-top: 8px;
+	}
+	/* A phone: a tighter card, and the byline after the last line's words. */
+	@media (max-width: 399.98px) {
+		.notice {
+			padding: 12px;
+			gap: 6px;
+		}
+		span.by {
+			display: inline;
+			margin: 0;
+		}
 	}
 	.none {
 		padding: 12px 16px;

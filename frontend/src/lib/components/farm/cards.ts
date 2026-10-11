@@ -477,20 +477,23 @@ const STATE_KEYS = {
 	removed: msg('You no longer have access to this hydrological unit. Contact your WUA.'),
 	contactNamed: msg('Questions? Contact {wua}.'),
 	removedNamed: msg('You no longer have access to this hydrological unit. Contact {wua}.'),
+	// A link to a unit the farmer isn't linked to, in a catchment they still see (issue #521): it may never have been theirs.
+	notYours: msg('This hydrological unit isn’t linked to your account. If it should be, contact your WUA.'),
+	notYoursNamed: msg('This hydrological unit isn’t linked to your account. If it should be, contact {wua}.'),
 	needsConnection: msg('Charts, “Why?” and downloads need a connection.'),
 	updating: msg('Updating…')
 };
 
 /** One of the farm pages' state lines, in the active language. */
-export const stateText = (which: Exclude<keyof typeof STATE_KEYS, 'contactNamed' | 'removedNamed'>) => t(STATE_KEYS[which]);
+export const stateText = (which: Exclude<keyof typeof STATE_KEYS, 'contactNamed' | 'removedNamed' | 'notYoursNamed'>) => t(STATE_KEYS[which]);
 
 /**
  * A "Contact your WUA" line, naming the WUA when the project has its name
  * (project.wuaName, 095_wua_name; design §6.5 "Contact [WUA]").
  */
-export function contactText(which: 'contact' | 'removed', wuaName: string | null | undefined): string {
+export function contactText(which: 'contact' | 'removed' | 'notYours', wuaName: string | null | undefined): string {
 	if (!wuaName) return t(STATE_KEYS[which]);
-	const named = which === 'contact' ? STATE_KEYS.contactNamed : STATE_KEYS.removedNamed;
+	const named = which === 'contact' ? STATE_KEYS.contactNamed : which === 'removed' ? STATE_KEYS.removedNamed : STATE_KEYS.notYoursNamed;
 	return t(named, { wua: wuaName });
 }
 

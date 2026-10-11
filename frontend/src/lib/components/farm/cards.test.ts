@@ -475,5 +475,8 @@ describe('words picked by value', () => {
 		expect(contactText('removed', 'Vaalbank WUA')).toBe('You no longer have access to this hydrological unit. Contact Vaalbank WUA.');
 		expect(contactText('contact', null)).toBe('Questions? Contact your WUA.');
 		expect(contactText('removed', '')).toBe('You no longer have access to this hydrological unit. Contact your WUA.');
+		// A link to a unit that isn't theirs in a catchment they still see: never "no longer" (issue #521).
+		expect(contactText('notYours', 'Vaalbank WUA')).toBe('This hydrological unit isn’t linked to your account. If it should be, contact Vaalbank WUA.');
+		expect(contactText('notYours', null)).toBe('This hydrological unit isn’t linked to your account. If it should be, contact your WUA.');
 	});
 });

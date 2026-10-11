@@ -123,8 +123,9 @@ test('codes by email: turn them on with the password and an emailed code, then s
 	await page.goto('/account');
 	const panel = page.getByRole('region', { name: 'Two-step sign-in' });
 	const email = panel.locator('[data-method="email"]');
-	// The honest tradeoff, beside the button.
-	await expect(email).toContainText('whoever can read your email can also reset your password');
+	// The honest tradeoff: its warning in the way's own line, beside the button; the full sentence in "How the two ways differ".
+	await expect(email).toContainText(`Codes sent to ${owner.email}: only as safe as your inbox.`);
+	await expect(panel.getByTestId('two-step-differ')).toContainText('whoever can read your email can also reset your password');
 	await email.getByRole('button', { name: 'Turn on', exact: true }).click();
 	await panel.getByLabel('Current password').fill(PASSWORD);
 	await panel.getByRole('button', { name: 'Continue' }).click();

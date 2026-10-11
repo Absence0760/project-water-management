@@ -244,10 +244,12 @@
 		font-size: 17px;
 	}
 	/* At 320 px "My hydrological unit" (#90 Q6) needs three lines beside EN | AF
-	   and Menu, and the header grows past --header-h (WCAG 1.4.10, issue #51).
-	   Below 360 px the mark, and a back link's chevron, stand alone and the words
-	   stay for screen readers; the page's own heading names the unit just below. */
-	@media (max-width: 359.98px) {
+	   and Menu, and the header grows past --header-h (WCAG 1.4.10, issue #51);
+	   at 360 px still three (75 px), which pushed the supply card below the fold
+	   (issue #521). Below 380 px the mark, and a back link's chevron, stand alone
+	   and the words stay for screen readers; the page's own heading names the
+	   unit just below. */
+	@media (max-width: 379.98px) {
 		.back {
 			min-width: var(--tap);
 			justify-content: center;
@@ -472,6 +474,25 @@
 	.farm-main :global(.dates.stale svg) {
 		flex-shrink: 0;
 		margin-top: 2px;
+	}
+	/* A phone (issue #521): the first screen holds the WUA's notice, the estimate line and, from 360 px, the
+	   supply card's heading. The cards sit a little closer, and the dates line's clock sits in its first line so
+	   the words take the full width (one line fewer at 320 px). */
+	@media (max-width: 399.98px) {
+		.farm-main {
+			padding-top: 12px;
+			gap: 10px;
+		}
+		.farm-main :global(.dates) {
+			line-height: 1.35;
+		}
+		.farm-main :global(.dates.stale) {
+			display: block;
+		}
+		.farm-main :global(.dates.stale svg) {
+			float: left;
+			margin: 1px 6px 0 0;
+		}
 	}
 	/* A flex summary loses the browser's ▸ marker, so "Show the numbers" read
 	   as a link with nothing to say it opens in place. Every disclosure on the

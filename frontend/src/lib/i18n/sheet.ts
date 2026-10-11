@@ -155,6 +155,11 @@ export const NOTES: Record<string, string> = {
 	'This forecast is {age} old. Your WUA may publish a newer one.': '{age} is “5 days”.',
 	'Questions? Contact {wua}.': '{wua} is the WUA’s name as the WUA wrote it (“Vaalbank WUA”); never translated. Without a name the page says “your WUA”.',
 	'You no longer have access to this hydrological unit. Contact {wua}.': '{wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
+	'This hydrological unit isn’t linked to your account. If it should be, contact {wua}.': 'On a link to a unit the farmer isn’t linked to, in a catchment they can see. {wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
+	'Codes sent to {email}: only as safe as your inbox.': '{email} is the account’s email address. A warning: whoever reads that inbox can get the code.',
+	'On (both)': 'Two-step sign-in’s state: on, with both the authenticator app and codes by email.',
+	'On (app)': 'Two-step sign-in’s state: on, with the authenticator app.',
+	'On (email)': 'Two-step sign-in’s state: on, with codes by email.',
 	'Still no connection. If this keeps happening, contact {wua}.': '{wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
 	'Still not working. If this keeps happening, contact {wua}.': '{wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
 	'Not available: the model’s data starts on {date}.': 'Instead of “compared with last season” when the model’s figures don’t go back a year. {date} is a date with its year: “1 Jun 2023”.'

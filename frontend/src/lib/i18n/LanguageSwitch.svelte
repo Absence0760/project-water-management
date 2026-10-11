@@ -147,7 +147,7 @@
 	.lang.segmented button {
 		min-height: 2.25rem;
 		padding: 0 14px;
-		font-size: 0.9rem;
+		font-size: 13px;
 		color: var(--text);
 		border-radius: 0;
 	}
@@ -187,7 +187,7 @@
 	}
 	.lang-select.segmented {
 		min-height: 2.25rem;
-		font-size: 0.9rem;
+		font-size: 13px;
 	}
 	@media (pointer: coarse), (max-width: 640px) {
 		.lang-select.segmented {

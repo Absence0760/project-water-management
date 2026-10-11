@@ -283,8 +283,13 @@ roadmap's "desktop is the same column"). Cards, top to bottom:
 12. The disclaimer (D10).
 
 The official answer and the supply card are above the fold on a 360 × 740
-screen with no notice; with a notice, the supply card starts at the fold and
-the dam card is one scroll down. The model card sits below the farm's own
+screen with no notice; with a notice (and the estimate line, issue #47), the
+supply card's heading is still on the first screen of a 360 × 740 phone, in
+English and Afrikaans, and the dam card is one scroll down. On a 320 × 640
+phone the notice and the start of the estimate line are on the first screen
+and the supply card's heading within a quarter screen's scroll; reaching the
+fold there needs a shorter estimate line, which is legal wording
+(docs/followups.md). `farm-view.spec.ts` pins both (issue #521). The model card sits below the farm's own
 figures on purpose: it's the least certain thing on the page.
 
 ### 6.2 The model band

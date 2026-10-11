@@ -19,6 +19,7 @@
 	import { mfaStatusSeen } from '$lib/auth/mfaPrompt.svelte';
 	import { resendTimer } from '$lib/auth/resendTimer.svelte';
 	import { session } from '$lib/auth/session.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import { t, tn, plural } from '$lib/i18n/locale.svelte';
@@ -33,6 +34,12 @@
 	let status = $state<MfaStatus | null>(null);
 	let loadError = $state<string | null>(null);
 	const on = (m: MfaMethod) => status?.methods.includes(m) ?? false;
+	/** The state in the heading row: which ways are on, or Off. */
+	function stateWord(s: MfaStatus): string {
+		const app = s.methods.includes('totp');
+		const email = s.methods.includes('email');
+		return app && email ? t('On (both)') : app ? t('On (app)') : email ? t('On (email)') : t('Off');
+	}
 
 	async function load() {
 		try {
@@ -285,7 +292,12 @@
 </script>
 
 <section class="panel two-step" id="two-step" aria-labelledby="two-step-h" data-two-step={status ? (status.enrolled ? 'on' : 'off') : 'loading'}>
-	<h2 id="two-step-h">{t('Two-step sign-in')}</h2>
+	<!-- The state in the heading row; each way below gets one head row (name, tag, state, action) and one short
+	     line, and the full wording sits in "How the two ways differ" (issue #521). -->
+	<div class="panel-head">
+		<h2 id="two-step-h">{t('Two-step sign-in')}</h2>
+		{#if status}<span class="badge {status.enrolled ? 'badge-owner' : ''}" data-testid="two-step-state">{stateWord(status)}</span>{/if}
+	</div>
 	{#if loadError}
 		<div class="alert alert-error" role="alert">{loadError}</div>
 	{:else if status}
@@ -316,9 +328,7 @@
 			</div>
 		{/if}
 
-		<p class="muted intro">
-			{t('After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.')}
-		</p>
+		<p class="muted intro">{t('A 6-digit code after your password. Turn on one or both.')}</p>
 		{#if status.pendingReset}
 			<div class="alert alert-warning" role="alert" data-pending-reset>
 				<p>
@@ -340,44 +350,52 @@
 			<li class="method" data-method="totp" data-on={on('totp') ? 'true' : 'false'}>
 				<div class="method-head">
 					<h3>{t('Authenticator app')}</h3>
-					{#if on('totp')}<span class="badge badge-owner">{t('On')}</span>{:else}<span class="badge">{t('Off')}</span>{/if}
 					<span class="tag">{t('Stronger')}</span>
+					{#if on('totp')}<span class="badge badge-owner">{t('On')}</span>{:else}<span class="badge">{t('Off')}</span>{/if}
+					{#if !setup && !action}
+						<div class="actions">
+							{#if on('totp')}
+								<button type="button" class="btn" onclick={() => choose('disable-totp')}>{t('Remove')}</button>
+							{:else}
+								<button type="button" class="btn btn-primary" onclick={() => start('totp')}>{t('Set up the app')}</button>
+							{/if}
+						</div>
+					{/if}
 				</div>
-				<p class="muted">
-					{t('A code from an app on your phone, such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.')}
-				</p>
-				{#if !setup && !action}
-					<div class="actions">
-						{#if on('totp')}
-							<button type="button" class="btn" onclick={() => choose('disable-totp')}>{t('Remove')}</button>
-						{:else}
-							<button type="button" class="btn btn-primary" onclick={() => start('totp')}>{t('Set up the app')}</button>
-						{/if}
-					</div>
-				{/if}
+				<p class="muted line">{t('Codes from an app on your phone.')}</p>
 			</li>
 			<li class="method" data-method="email" data-on={on('email') ? 'true' : 'false'}>
 				<div class="method-head">
 					<h3>{t('Code by email')}</h3>
-					{#if on('email')}<span class="badge badge-owner">{t('On')}</span>{:else}<span class="badge">{t('Off')}</span>{/if}
 					<span class="tag">{t('Easier')}</span>
+					{#if on('email')}<span class="badge badge-owner">{t('On')}</span>{:else}<span class="badge">{t('Off')}</span>{/if}
+					{#if !setup && !action}
+						<div class="actions">
+							{#if on('email')}
+								<button type="button" class="btn" onclick={() => choose('disable-email')}>{t('Turn off')}</button>
+							{:else}
+								<button type="button" class="btn {on('totp') ? '' : 'btn-primary'}" onclick={() => start('email')}>
+									{status.emailPending ? t('Finish turning on') : t('Turn on')}
+								</button>
+							{/if}
+						</div>
+					{/if}
 				</div>
-				<p class="muted">
-					{t('We email a code to {email} each time. Easier, but less safe: whoever can read your email can also reset your password, so with codes by email your inbox guards your account. Keep your email account secure.', { email: session.user?.email ?? '' })}
-				</p>
-				{#if !setup && !action}
-					<div class="actions">
-						{#if on('email')}
-							<button type="button" class="btn" onclick={() => choose('disable-email')}>{t('Turn off')}</button>
-						{:else}
-							<button type="button" class="btn {on('totp') ? '' : 'btn-primary'}" onclick={() => start('email')}>
-								{status.emailPending ? t('Finish turning on') : t('Turn on')}
-							</button>
-						{/if}
-					</div>
-				{/if}
+				<!-- A warning, not an explanation: it stays visible. -->
+				<p class="muted line">{t('Codes sent to {email}: only as safe as your inbox.', { email: session.user?.email ?? '' })}</p>
 			</li>
 		</ul>
+		<!-- The full sentences, unchanged, in one closed fold (the account page has no explain switch). -->
+		<Fold class="differ" line={t('How the two ways differ')} change={t('Show', {}, 'fold')} hide={t('Hide', {}, 'fold')} problem={false} body="none" testid="two-step-differ">
+			<div class="differ-body">
+				<p>{t('After your password, a second step: a 6-digit code. Someone who learns your password still can’t get in. Choose how you get the code; you can turn on both.')}</p>
+				<p><strong>{t('Authenticator app')}:</strong> {t('A code from an app on your phone, such as Google Authenticator, Microsoft Authenticator or Aegis. Only your phone can make the codes.')}</p>
+				<p>
+					<strong>{t('Code by email')}:</strong>
+					{t('We email a code to {email} each time. Easier, but less safe: whoever can read your email can also reset your password, so with codes by email your inbox guards your account. Keep your email account secure.', { email: session.user?.email ?? '' })}
+				</p>
+			</div>
+		</Fold>
 
 		{#if setup?.stage === 'password'}
 			<form onsubmit={sendPassword} novalidate aria-label={setup.method === 'email' ? t('Turn on codes by email') : t('Set up the authenticator app')}>
@@ -509,8 +527,15 @@
 	.panel {
 		padding: 1rem 1.1rem 0.75rem;
 	}
+	.panel-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.6rem;
+		margin: 0 0 0.5rem;
+	}
 	h2 {
-		margin: 0 0 0.75rem;
+		margin: 0;
 		font-size: 1.05rem;
 	}
 	h3 {
@@ -533,25 +558,58 @@
 		list-style: none;
 	}
 	.method {
-		padding: 0.75rem 0.9rem 0;
+		padding: 0.6rem 0.9rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
+		container: method / inline-size;
 	}
 	.method[data-on='true'] {
 		border-left: 3px solid var(--accent);
 	}
-	.method .muted {
-		margin-top: 0.4rem;
+	.method .line {
+		margin: 0.25rem 0 0;
 	}
+	/* Name, tag and state, then the way's action at the row's right end. */
 	.method-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.4rem 0.6rem;
 	}
+	.method-head .actions {
+		margin: 0 0 0 auto;
+	}
+	/* A narrow card: the action takes a full row under the head, not after the line. */
+	@container method (max-width: 22rem) {
+		.method-head .actions {
+			flex: 1 1 100%;
+			margin: 0.25rem 0 0;
+		}
+		.method-head .actions .btn {
+			flex: 1 1 auto;
+		}
+	}
+	/* 13 px at least: the account page sits in the farm frame for a farmer (ui-playbook § 2). */
+	.tag,
+	.badge {
+		font-size: 13px;
+	}
 	.tag {
-		font-size: 0.9rem;
 		color: var(--text-2);
+	}
+	:global(.two-step .differ) {
+		margin: 0 0 0.75rem;
+	}
+	:global(.two-step .differ > summary) {
+		min-height: var(--tap);
+		font-size: 14px;
+	}
+	.differ-body {
+		padding: 0.25rem 0 0.5rem;
+	}
+	.differ-body p {
+		margin: 0 0 0.5rem;
+		max-width: 60ch;
 	}
 	.recovery {
 		margin: 0 0 0.75rem;
@@ -619,7 +677,7 @@
 	}
 	.status {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: 13px;
 		color: var(--text-2);
 	}
 	.status:empty,
@@ -628,7 +686,7 @@
 	}
 	.copied {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: 13px;
 	}
 	.alert p {
 		margin: 0 0 0.5rem;

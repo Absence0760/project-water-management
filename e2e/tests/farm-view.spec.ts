@@ -15,6 +15,8 @@ import { addAllocation } from '../support/allocations.ts';
 import { acceptInvites, createProject, createRun, putModel, putSeries, register, sampleModel, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { ANALYST, FARMER1, FARMER2, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { words as siteWords } from '../support/lang.ts';
+import { outOfPanel, smallText } from '../support/reflow.ts';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -238,18 +240,7 @@ test('the farm page keeps its 13 px text and 44 px targets, and its disclosures 
 		await expect(notes.locator('[data-notes-ready="true"]')).toBeVisible();
 
 		// No text on the page under 13 px (the notes card's help line and button were 11.9 px, from the workspace's 14 px root).
-		const small = await page.getByRole('main').evaluate((main) => {
-			const out: string[] = [];
-			const walk = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
-			for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-				const el = n.parentElement!;
-				if (!n.textContent!.trim() || !el.checkVisibility() || el.closest('.visually-hidden, svg')) continue;
-				const px = parseFloat(getComputedStyle(el).fontSize);
-				if (px < 13) out.push(`${px}px: ${n.textContent!.trim().slice(0, 40)}`);
-			}
-			return out;
-		});
-		expect(small, `${size.width}`).toEqual([]);
+		expect(await smallText(page), `${size.width}`).toEqual([]);
 		const add = (await notes.getByRole('button', { name: 'Add note' }).boundingBox())!;
 		expect(add.height, `${size.width}`).toBeGreaterThanOrEqual(44);
 
@@ -285,6 +276,17 @@ test('the farm page keeps its 13 px text and 44 px targets, and its disclosures 
 		for (let i = 1; i < rects.length; i++) expect(rects[i]!.top - rects[i - 1]!.bottom, `menu item ${i}`).toBeGreaterThanOrEqual(12);
 		for (const r of rects) expect(r.right).toBeLessThanOrEqual(size.width);
 		await page.keyboard.press('Escape');
+
+		// The account pages the Menu opens sit in the same frame, with the same floor (issue #521: labels, hints and
+		// badges at 10.5 to 12.6 px, from the app's 14 px root), and nothing pokes out of its card.
+		await page.goto('/account');
+		await expect(page.locator('#two-step')).toHaveAttribute('data-two-step', 'off');
+		expect(await smallText(page), `/account at ${size.width}`).toEqual([]);
+		expect(await outOfPanel(page), `/account at ${size.width}`).toEqual([]);
+		await page.goto('/account/alerts');
+		await expect(page.locator('main[data-ready="true"]')).toBeVisible();
+		expect(await smallText(page), `/account/alerts at ${size.width}`).toEqual([]);
+		expect(await outOfPanel(page), `/account/alerts at ${size.width}`).toEqual([]);
 	}
 });
 
@@ -921,4 +923,72 @@ test('the farms list puts the worst notice first, whatever the catchments’ ord
 	await expect(fp.getByRole('heading', { level: 1, name: 'Your hydrological units' })).toBeVisible();
 	await expect(fp.locator('ul.farms > li strong')).toHaveText(['Restricted farm', 'Unrestricted farm']);
 	await expect(fp.locator('ul.farms > li').first()).toContainText('Restriction');
+});
+
+// With a restriction notice, the first screen of a phone holds the WUA's notice, the estimate line and, from
+// 360 × 740, the supply card's heading (docs/design/farmer-view.md § 6.1, issue #521): the estimate line
+// (issue #47) had pushed it to 796 px in English and 866 px in Afrikaans. The words stay as they are (the
+// estimate line's are legal wording, docs/legal/disclaimer-review.md); the spacing gave way. At 320 × 640 the
+// notice and the start of the estimate line are on the first screen and the heading a short scroll down
+// (within 1.25 screens): reaching the fold there needs a shorter estimate line from legal (docs/followups.md).
+test('with a restriction notice, the supply card’s heading starts on a phone’s first screen, in English and Afrikaans', async ({ page, signIn }) => {
+	test.setTimeout(60_000);
+	const wua = await signIn('Fold WUA');
+	const project = await seedRunnableProject(wua.page.request, 'Sandspruit catchment');
+	const runId = await createRun(wua.page.request, project.id, 'Baseline');
+	// The Showcase's notice (invented), in both languages.
+	const notice = {
+		en: 'Dams are below half full: irrigate 20 % less until the next review. (Demo notice.)',
+		af: 'Damme is minder as half vol: besproei 20 % minder tot die volgende hersiening. (Demonstrasie-kennisgewing.)'
+	};
+	const pub = await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'restricted', pct: 20, notice } } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const farmer = await register(page.context().request, 'Fold Farmer');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } })).status()).toBe(201);
+	await acceptInvites(farmer.email, project.id);
+	const af = await siteWords('af');
+
+	for (const lang of ['en', 'af'] as const) {
+		expect((await page.request.patch(`${API_URL}/auth/me`, { data: { locale: lang } })).status()).toBe(200);
+		// Either language's words: until a new message is translated the page stays English (wordsLang).
+		const heading = page.locator('main section h2').filter({ hasText: new RegExp(`^(?:Water you received this season|${af('Water you received this season')})$`) });
+		for (const size of [{ width: 360, height: 740 }, { width: 320, height: 640 }]) {
+			await page.setViewportSize(size);
+			await page.goto(`/farm/${project.id}`);
+			await expect(heading).toBeVisible();
+			await expect(page.locator('main[aria-busy]')).toHaveCount(0);
+			const at = await page.evaluate(() => scrollY);
+			expect(at).toBe(0);
+			const notes = (await page.locator('#notice').boundingBox())!;
+			const estimate = (await page.locator('.estimate').boundingBox())!;
+			const h = (await heading.boundingBox())!;
+			const where = `${lang} at ${size.width} × ${size.height}`;
+			// The order holds: the notice, the estimate line, then the figures.
+			expect(estimate.y, where).toBeGreaterThan(notes.y + notes.height - 1);
+			expect(h.y, where).toBeGreaterThan(estimate.y + estimate.height - 1);
+			// The notice whole, and the estimate line begun, on the first screen.
+			expect(notes.y + notes.height, where).toBeLessThanOrEqual(size.height);
+			expect(estimate.y, where).toBeLessThan(size.height);
+			if (size.width === 360) expect(h.y + h.height, where).toBeLessThanOrEqual(size.height);
+			else expect(h.y, where).toBeLessThanOrEqual(size.height * 1.25);
+			await expectNoSidewaysScroll(page);
+		}
+	}
+});
+
+// A link to a unit the farmer isn't linked to, in a catchment they still see (issue #521): the page says so
+// without "no longer" (it may never have been theirs), and offers their own units here.
+test('a link to someone else’s unit says it isn’t linked to the account, and offers the farmer’s own', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER1);
+	const { projectId, index } = await farmOf(page.context());
+	await page.goto(`/farm/${projectId}?node=00000000-0000-4000-8000-000000000000`);
+	await expect(page.getByRole('alert')).toHaveText(/^This hydrological unit isn’t linked to your account\. If it should be, contact .+\.$/);
+	await expect(page.getByText(/no longer have access/)).toHaveCount(0);
+	const mine = page.getByRole('navigation', { name: 'Your hydrological units in this catchment' });
+	await expect(mine.getByRole('link')).toHaveText(index.farms.map((f) => f.name));
+	await expectNoViolations(page);
+	await mine.getByRole('link').first().click();
+	await expect(page.getByRole('heading', { level: 1 })).toContainText(index.farms[0]!.name);
 });

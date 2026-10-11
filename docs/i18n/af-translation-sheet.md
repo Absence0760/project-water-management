@@ -18,4 +18,31 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+11 strings: 11 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### account.two-step
+
+The account page’s “Two-step sign-in” box: after the password, a 6-digit code from an authenticator app on the phone (Google Authenticator, Microsoft Authenticator, Aegis: app names stay as they are) or sent by email. Setting each up (scan a QR code or type a key; or a code by email), the ten recovery codes (each signs in once if no code can be had), new codes, turning one off, and a waiting request to remove it, which a code cancels. “Two-step sign-in” is the feature’s name: one consistent term.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `0c836e0a` | On (both) | Two-step sign-in’s state: on, with both the authenticator app and codes by email. |  |
+| `5296025e` | On (app) | Two-step sign-in’s state: on, with the authenticator app. |  |
+| `653eb31b` | On (email) | Two-step sign-in’s state: on, with codes by email. |  |
+| `da7cd1d9` | A 6-digit code after your password. Turn on one or both. |  |  |
+| `c020406d` | Codes from an app on your phone. |  |  |
+| `2e3540b4` | Codes sent to {email}: only as safe as your inbox. | {email} is the account’s email address. A warning: whoever reads that inbox can get the code. Keep: {email} |  |
+| `91c05db4` | How the two ways differ |  |  |
+| `1d84417f` | Show | Meaning: fold. The same English elsewhere has its own row. |  |
+| `13d2773a` | Hide | Meaning: fold. The same English elsewhere has its own row. |  |
+
+### farm.state
+
+Farm view: loading, error and empty states.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `9dc9f377` | This hydrological unit isn’t linked to your account. If it should be, contact your WUA. |  |  |
+| `fae072d4` | This hydrological unit isn’t linked to your account. If it should be, contact {wua}. | On a link to a unit the farmer isn’t linked to, in a catchment they can see. {wua} is the WUA’s name (“Vaalbank WUA”); never translated. Keep: {wua} |  |
