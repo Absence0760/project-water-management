@@ -235,7 +235,9 @@ maps `null` to 0 in its `onchange`. A revision line saved before the change
 ### Flow units
 
 A flow rate has a small unit select beside its label (or, in the node
-table, in place of the column heading's unit), at least 24 px tall: **m³/s**, **l/s** or
+table, in place of the column heading's unit), at least 24 px tall, its
+outline the input border (`--border-input`, ≥ 3:1 in both themes; the faint
+`--border` it had was 1.3–1.5:1, issue #521): **m³/s**, **l/s** or
 **m³/day** (`network/FlowUnitSelect.svelte`, `network/flowUnit.svelte.ts`).
 One choice per kind of rate, each starting at the unit it always showed:
 **River to dam** (the node table column, the unit form and River to dam by
@@ -270,7 +272,13 @@ stored in its fixed unit is read.
 A chart's value axis writes its ticks short (`charts/series.ts`
 `fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
 decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float
-noise rather than a flow, does it fall back to an exponent.
+noise rather than a flow, does it fall back to an exponent. A log axis spans
+at most six decades under its largest value (`logFloor`, `LOG_DECADES`):
+smaller values run off its foot, the read-out still giving them, and it
+labels whole decades only, every second or third when more than fit one a
+label's height apart (`decadeTicks`). The Showcase's flow duration curve
+reached float noise and printed a label for every decade down to 1e-19, a
+solid block (issue #521).
 
 ## Expected format
 
@@ -1076,6 +1084,16 @@ unsaved input: while **Add data** holds a file that is read but not uploaded
 dialog above; Dialog's `beforeclose` may answer later). Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
+Dialogs, sheets and popovers take what sets them off the page from overlay
+tokens in `app.css` (`--overlay-backdrop`, `--overlay-border`,
+`--overlay-shadow`, `--popover-shadow`), deeper in dark mode (a 60 % backdrop,
+the strong border, a 70 % shadow), where the old literals left a sheet at
+1.1:1 against the page it covered (issue #521). A disabled main button turns
+to the plain surface with muted text in both themes, where a faded accent read
+as a live button on the dark page; a badge starts with a capital and leaves
+the rest as written ("Dam settings changed since the run", not Every Word
+Capitalised), and its corners are half a one-line badge's height, so a long
+one that wraps in a narrow cell is a rounded box, not a tall blob.
 Every `Dialog.svelte` dialog but the confirmation question also has a **✕** in its top-right corner
 (`aria-label="Close dialog"`, tooltip "Close (Esc)") for people who don't know
 Escape closes it. It is last in the DOM, so opening a dialog still focuses its
@@ -2083,7 +2101,11 @@ that hasn't run is not flagged.
 **Filter, search, sort, all in the URL.** The owner filter is a row of chips
 (All projects, Personal, each team, Shared with me, with counts, and
 **Manage teams**), or a select when the page is 600 px or narrower. Search
-matches name, description and team (`?q=`). Sort (`?sort=`): *Recently
+matches name, description and team (`?q=`); a search is one step in history:
+its first keystroke after the box takes the focus adds an entry, the rest
+replace it, so Back returns to the list before the search, not letter by
+letter (until issue #521 every keystroke replaced the entry the list came
+from, so Back left the page). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *EWR status* (worst
 first), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
 first; the Data heading), *Last run* (newest first), *Name*, from the Sort
@@ -3310,7 +3332,10 @@ map" card) stays the schematic; this is the geography.
   sits above or over the map; on a narrow page, where the column is below
   the map, it stays above the map. Pressed (`aria-pressed`) while on;
   a group, so Tab goes through them in order after the header and before the
-  map; each at least 46 × 62 px. Viewers get Measure alone. While a tool is
+  map; each at least 46 × 62 px. The map's box is never shorter than the
+  column and the Key row under it, so the column stays inside the card while
+  the map's chunk loads or when the map fails (at 390 px it ran over the
+  Features list, issue #521). Viewers get Measure alone. While a tool is
   on, a strip over the map's top middle names it and how to leave it
   (`mapTools.ts` `toolStrip`: "Delineating · Esc to stop", "Drawing a shape
   · Esc to cancel", "Editing “Upper farm” · Esc to cancel"; hidden from
@@ -3318,7 +3343,11 @@ map" card) stays the schematic; this is the geography.
   note or the busy line under it. The picked feature's name over the map's
   top-left corner sits right of the column (CatchmentMap's
   `--map-inset-left`). Over the map otherwise only small buttons: **Layers**
-  under the zoom buttons (below), **Show everything** (issue #374: frames
+  under the zoom buttons (MapLibre's, in the app's surface, input border and
+  focus ring, their icons turned light in dark mode: `map/maplibre-theme.css`,
+  loaded with MapLibre's own sheet, so the Map tab, the farm view and the
+  Allocations map match; issue #521, until then a white patch with the
+  library's #0096ff ring), **Show everything** (issue #374: frames
   every feature) and **Key** at the bottom left (below), each opening its
   panel in the side column on a wide page (below), and for owners and editors without
   a basemap configured a small "No basemap configured (docs/maps.md)" under
@@ -3570,11 +3599,12 @@ map" card) stays the schematic; this is the geography.
   Latitude and Longitude behind **Enter coordinates**), the dataset line
   (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
   (“Delineating…”). Under the clicked position: "The point goes on the
-  nearest terrain channel (the red lines), within 150 m; mapped rivers
-  never move it." A refusal shows its sentence in the sheet ("That point
+  nearest terrain channel (terrain channels in the map's key), within
+  150 m; mapped rivers never move it." (Named by the key, not a colour:
+  the channels are orange-red in the dark theme.) A refusal shows its sentence in the sheet ("That point
   is outside the elevation model …"; off the channels, "No terrain channel
-  runs within 150 m of that point. Zoom in until the terrain channels (the
-  red lines) show, and click on one …"). A point beside a much larger terrain channel shows a
+  runs within 150 m of that point. Zoom in until the terrain channels
+  show (they're in the map's key), and click on one …"). A point beside a much larger terrain channel shows a
   warning box instead: "A much larger terrain channel runs 504 m north of
   your point: at least 620 km² drains through it inside the 34 km routed
   around your point, and more from beyond (the mapped river here, reach …
@@ -6936,7 +6966,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   there), and step aside under *All*; Shift+drag moves the view too. It sits beside **Days
   below the reserve, each water year** (`#res-reserve-years`, Compare runs'
   `ReserveYearsChart` with this one run: the engine's
-  `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years faded,
+  `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years outlined with a light fill (a faded bar fell under 3:1),
   a table behind *Show as a table*; about six years labelled, always the
   last, and a label near an edge moved in so it is never cut off,
   `compare/yearAxis.ts`, issue #162: the narrow column clipped "2024/25" to
@@ -7447,7 +7477,11 @@ read it before.
   the total and links to Network and Settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
-  run shown; editors delete one with its ✕ (a run already gone, deleted
+  run shown; a run picked from the list (or **Show the newest run**, "go to
+  latest", a new run) is a step in history, so Back returns to the run before,
+  as a unit, dam or run pick does on River & reserve, Hydrological units, Dams
+  and Allocations; the default pick and the fallback after a delete replace
+  the entry (issue #521; until then a pick here replaced it); editors delete one with its ✕ (a run already gone, deleted
   elsewhere or trimmed, just leaves the list; a run that can't be opened
   because it's gone says so in words, `runs/runList.ts` `runErrorText`, never
   the API's "not found", with **Show the newest run** in place of a Try
@@ -7470,7 +7504,9 @@ read it before.
   ("1 Oct 2021 – 28 Jan 2022 (120 days) · ran today 01:13 by Ann · engine
   1.81.0"; a forecast's badge "Forecast from 29 Jan 2022"). From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
-  whose label contains every word typed (any case), with "N of M runs". Its header links to **Compare
+  whose label contains every word typed (any case), with "N of M runs". The
+  words are in the URL (`q=`), so a reload and Back keep them; one search is
+  one step in history, as on the project list (issue #521). Its header links to **Compare
   runs** (the Compare runs tab, `?tab=compare`, [run-comparison.md](./run-comparison.md)).
   Viewing an older run, the header offers "go to latest".
   **Which run opens** when the URL names none (`defaultRunId` in
@@ -7797,7 +7833,8 @@ read it before.
   demand, supply, the *equitable share volume* and *above (−) / below (+)
   equitable share* under "Equitable share (fairness benchmark, ex EWR)", then
   the EWR columns. No label or badge says "gain" (audit Q11): a farm below its
-  share reads "below its equitable share by X m³/day", and the table ends with
+  share reads "below its equitable share by X m³/day" (the name column is at
+  least 11rem, so that badge takes two lines rather than five, issue #521), and the table ends with
   the fixed footnote "Fairness benchmark only: … Not an allocation or licence
   condition." From engine 0.17.0 (audit Q17, [model.md §2.7b](./model.md)) the EWR
   column is the farm's **EWR charge**, followed by *Irrigate less*, *Store less /
@@ -8223,7 +8260,9 @@ read it before.
 - **Water account** (`#res-water-account`, last on River & reserve;
   `reliability/WaterAccountPanel.svelte`, in River & reserve's chunk; [model.md §2.11b](./model.md)):
   two bars for the chosen period (*Period*: the whole run or a water year),
-  what came in and where it went or was stored, each with a labelled key;
+  what came in and where it went or was stored, each with a labelled key
+  (segments in the categorical palette's order, `--series-1, -2, -3, -5, -6,
+  -7`, with their dark values; six raw hex colours until issue #521);
   then a table of every term per water year and the whole run (terms a
   network doesn't have are left out), the change in dam storage and the
   residual (to two significant figures, float noise). Runs before engine
@@ -8372,6 +8411,15 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 - **No recommendation.** The panel reports how past years went at each
   level ("Historical, not a forecast; the choice of level is the WUA's") and
   never picks one (a unit test holds the view model to that).
+
+When the lookup of the run's sweep fails (or a pending sweep can't be
+followed), the panel says so ("Couldn’t look up this run’s demand sweep:
+…") with **Try again**, which reads it again; the Seasonal outlook does the
+same ("Couldn’t look up this run’s seasonal outlook: …"), and so does
+Automated calibration in Settings ("Couldn’t load the calibration rules’
+fits: …"; a failed start or apply keeps its plain message, the button being
+its retry). Until issue #521 each showed the bare server text with no way
+to try again but a reload (`e2e/tests/history-steps.spec.ts`).
 
 Tests: `outcomes/matrix.test.ts` (the adapter, NaN mapping, n years, not
 enough years, default vs custom cut-offs, problem members; the site list,
@@ -8637,7 +8685,7 @@ gives it an `h1` and **Back to runs**). The full reference is
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
 - **Days below the reserve, each year** (right): grouped bars per water year
-  (`ReserveYearsChart.svelte`, a chunk shared with River & reserve; part years faded), a legend,
+  (`ReserveYearsChart.svelte`, a chunk shared with River & reserve; part years outlined), a legend,
   a note and **Show as a table**. Its value axis is labelled "days below";
   when every year is 0 the plot says "No day below the reserve in any
   year" rather than showing empty bars. It fills the height of its row.
@@ -9146,7 +9194,10 @@ finished import is still reported on the page.
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
 source, purpose, volume, storage, valid from/to, registration number,
 property, the registered user (editors), reference, and **Licence
-conditions** (issue #72; "a cap run keeps to the months and the rate"): the months
+conditions** (issue #72): a short legend, with "Optional; a cap run keeps to
+the months and the rate." as the line under it and the fieldset's
+description (until issue #521 it sat in the legend, which wrapped at 390 px
+with the border running through it): the months
 water may be taken (twelve boxes in water-year order, none ticked = none
 stated, each a 24 px target), the maximum rate (m³/s) and the other
 conditions one a line; Save and Cancel pinned.
@@ -9305,7 +9356,8 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   **Decided**, **Withdrawn**, each with its count; `&status=awaiting|decided|withdrawn`
   in the URL, so Back steps through the filters and a link keeps one; an
   unknown value shows all) and **Sort by** newest first or status (awaiting
-  a decision first, the longest-waiting on top).
+  a decision first, the longest-waiting on top; `&sort=status` in the URL,
+  so a reload and Back keep it, issue #521).
 - **The table:** name (a link to it in the Scenarios tab), applicant ("shared
   with N" under it), status as a pill in words (Awaiting a decision;
   the authority's outcome in the band colours: *Licence issued (see its
@@ -9427,7 +9479,10 @@ the viewer's day, with a request's change set folded into one entry.
   three ([§ Field history](#field-history)).
 - **Wide (the card's column from 840 px):** a list of compact rows beside the
   picked change. A row is a link: time and author, what it was (a revision's
-  title, or an event's sentence), its first line with "+N more", and its
+  title, or an event's sentence: every kind the server records has one, a
+  test reading `backend/src/history/record.ts` holds it so; "Changed the alert
+  rules: Dam low, Data feed behind (3 rules, 2 on, 1 off)" showed as
+  `alert_rules.changed` until issue #521), its first line with "+N more", and its
   reason, one line each. The pick is `&entry=<key>` (Back returns to the
   previous one; with none, or one no longer loaded, the newest shows,
   without writing the URL). The detail: a heading (the revision's title, or
@@ -9562,7 +9617,9 @@ March") is kept against what it is about.
   them again), and signing out forgets them.
 - **Writing.** Every member can add a note; the author edits theirs (marked
   *edited*); the author or an editor deletes (a confirm, then a soft delete:
-  hidden from everyone, kept for the audit trail). On a farm, *Also show to
+  hidden from everyone, kept for the audit trail). After a delete the focus
+  goes to the note now in its place (the next, else the last), and with none
+  left to the add field (issue #521; it fell to the page's start). On a farm, *Also show to
   this farm's farmers* makes a note farm-visible, marked *Shown to its farmers*;
   everything else is read by the project team only.
 - **On a scenario** (WP-3.15, the Application panel and each Applications
@@ -10334,7 +10391,9 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   readers, since the list says the same); clicking one lights its stop, and
   hovering or focusing a stop lights its marker. A stop with more to say has
   **Show more** (`aria-expanded`), which opens it in place across the full
-  width: key points beside a close-up shot, or a diagram.
+  width: key points beside a close-up shot, or a diagram. In dark mode the
+  shots (daylight renders) are dimmed a little and framed, the markers left
+  at full strength (issue #521).
 - **Overview** (`/help`): the catchment tour (eight stops from rain to the
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
   setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
