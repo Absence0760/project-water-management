@@ -206,7 +206,7 @@
 	}
 	.notice {
 		margin: 0;
-		font-size: 0.85rem;
+		font-size: 13px;
 		color: var(--text-2);
 	}
 	.suppressed {
@@ -221,7 +221,7 @@
 	}
 	.status {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: 13px;
 		color: var(--text-2);
 	}
 	.status:empty {
@@ -298,7 +298,7 @@
 	.level {
 		flex: 1 1 100%;
 		margin: 0;
-		font-size: 0.85rem;
+		font-size: 13px;
 		color: var(--text-2);
 		overflow-wrap: anywhere;
 	}
@@ -324,7 +324,7 @@
 		gap: 0.3rem;
 		min-height: 32px;
 		padding: 0.15rem 0.7rem;
-		font-size: 0.9rem;
+		font-size: 13px;
 		line-height: 1.2;
 		text-align: center;
 		color: var(--text);
@@ -396,7 +396,33 @@
 		margin: 0.35rem 0 0;
 		padding-top: 0.45rem;
 		border-top: 1px solid var(--border);
-		font-size: 0.85rem;
+		font-size: 13px;
 		color: var(--text-2);
+	}
+	/* A phone-width card: the three choices stack as full-width rows, one tap each, rather than three cells of
+	   ~80 px where "Een keer ’n dag (06:00)" wrapped to three lines (issue #521). Still one radio group. */
+	@container alert-card (max-width: 24rem) {
+		.modes {
+			flex-direction: column;
+		}
+		.seg {
+			flex: none;
+			justify-content: flex-start;
+			padding: 0.15rem 0.75rem;
+			text-align: start;
+		}
+		.seg + .seg {
+			margin: -1px 0 0;
+		}
+		.seg:first-child {
+			border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+		}
+		.seg:last-child {
+			border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+		}
+	}
+	/* The farm frame's 13 px floor (ui-playbook § 2): the header's context line is the shared SectionHeader's 0.9rem. */
+	.alerts-page :global(.section-header .context) {
+		font-size: 13px;
 	}
 </style>

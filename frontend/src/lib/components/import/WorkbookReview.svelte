@@ -5,6 +5,7 @@
 	// (ImportReportLists, shared with the Overview's import record).
 	// Everything here comes from the file (farm names, formula text), so it is
 	// rendered as text only: plain interpolation, never {@html}.
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_CHOICES } from '$lib/series/provenance';
 	import ImportReportLists from './ImportReportLists.svelte';
@@ -54,7 +55,7 @@
 			<div class="scaling">
 				<div class="field">
 					<label for="wb-scale-from">Scaling starts on (optional)</label>
-					<input id="wb-scale-from" type="date" bind:value={scalingFrom} onchange={onoptions} aria-describedby="wb-scale-hint" />
+					<DayInput id="wb-scale-from" bind:value={scalingFrom} commit="change" onchange={onoptions} aria-describedby="wb-scale-hint" />
 				</div>
 				<div class="field">
 					<label for="wb-scale-factor">Scale factor (optional)</label>

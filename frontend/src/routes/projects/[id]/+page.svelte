@@ -188,7 +188,7 @@
 	// tab (the field unmounts), so any change of page or of the URL's query asks; a #fragment doesn't.
 	guardUnsaved({
 		dirty: () => invalidFields.count > 0,
-		what: 'numbers that need fixing',
+		what: 'fields that need fixing',
 		leaves: (from, to) => from.pathname !== to.pathname || from.search !== to.search
 	});
 	// The save bar's other drafts besides the model (components/model/pageDraft.ts): the project
@@ -570,7 +570,7 @@
 			...(editor.dirty ? ['model edits'] : []),
 			...(details.dirty ? ['project details'] : []),
 			...(settings.dirty ? ['settings'] : []),
-			...(invalidFields.count ? ['numbers that need fixing'] : [])
+			...(invalidFields.count ? ['fields that need fixing'] : [])
 		])
 	);
 	const unsaved = $derived(editor.dirty || details.dirty || settings.dirty || invalidFields.count > 0);

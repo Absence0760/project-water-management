@@ -25,6 +25,7 @@
 		open = $bindable(),
 		atDefaults,
 		change = 'Change',
+		hide = 'Hide',
 		problem = true,
 		body = 'grid',
 		spaced = false,
@@ -46,6 +47,8 @@
 		atDefaults?: boolean;
 		/** The closed line's action. */
 		change?: string;
+		/** The open line's action (a translated page passes its own word). */
+		hide?: string;
 		/** Say "needs fixing" on the line while a field inside is aria-invalid. */
 		problem?: boolean;
 		body?: 'grid' | 'stack' | 'none';
@@ -75,7 +78,7 @@
 	<summary
 		>{#if name}<span class="fold-name">{name}</span>{' '}{/if}<span id={lineId} class={lineClass} data-testid={lineTestid}>{line}</span>{@render after?.()}{#if problem}<span
 				class="fold-problem">needs fixing</span
-			>{/if}<span class="fold-change" aria-hidden="true">{open ? 'Hide' : change}</span></summary
+			>{/if}<span class="fold-change" aria-hidden="true">{open ? hide : change}</span></summary
 	>
 	{#if body === 'none'}
 		{@render children()}

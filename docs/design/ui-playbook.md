@@ -437,7 +437,25 @@ section it belongs to, with the example that taught it.
   out at 11.4 px. Size in `px` inside such a frame, lift a borrowed piece in
   the frame's own copy (`farm/FarmNotes.svelte`), and pin the floor by
   walking the page's text (`farm-view.spec.ts` fails on any visible text
-  under 13 px).
+  under 13 px; `smallText` in `e2e/support/reflow.ts`). The account pages a
+  farmer opens from the farm Menu sit in the same frame and are walked too:
+  their labels, hints and badges were 10.5–12.6 px from the 14 px root until
+  round 5 lifted them in px (`routes/account/+page.svelte`), and a long
+  Afrikaans button label poked 11 px out of its card while the page still
+  fit, so the same specs check that no control leaves its card's padding box
+  (`outOfPanel`).
+- **A legal line before the figures still leaves the first figure on the
+  first screen.** The farm page's estimate line (issue #47) went in before
+  the supply card and pushed its heading to 796 px on a 360 × 740 phone with
+  a notice, 866 px in Afrikaans. Its words are legal wording, so the space
+  came from around it, under 400 px only: the estimate box's icon sits in its
+  first line (`float`) so the text takes the box's width, its padding and
+  line height tighten (still 16 px type), the notice's byline ends its last
+  line, the dates line's clock sits in its first line, the cards sit 10 px
+  apart and the header's title gives way below 380 px as it did below 360.
+  The heading now starts at 646 px (669 in Afrikaans). `farm-view.spec.ts`
+  pins it at 360 × 740 in both languages, and at 320 × 640 the notice whole
+  and the estimate line begun on the first screen.
 - **A frame's header lines up with its column.** The farm pages' header
   spanned the window at 1440 (the title at the left edge, Menu at the right)
   over a centred 560 px column, so the eye jumped 440 px between the title
@@ -1043,7 +1061,7 @@ section it belongs to, with the example that taught it.
 | Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
 | A group that usually stays at its defaults, as one line that opens | `common/Fold.svelte` with `atDefaults` (and `body="stack"`, `spaced`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
 | A paste dialog | `model/GridPasteDialog.svelte` for a grid of numbers (Now/Pasted preview); a list of rows uses its frame, `model/PasteDialogFrame.svelte`, with its own preview table (§ 4 "A paste box that replaces a whole table is the shared paste dialog") |
-| A typed date | a text field read by `parseDay`, shown back with `tidyDay` on blur (`format/number.ts`; § 2 "A typed date is day first too"), never `<input type="date">` |
+| A typed date | `common/DayInput.svelte`: a text field read by `parseDay`, shown back day first, with `min`/`max`, its message at the field and its place in the save bar's invalid list (§ 2 "A typed date is day first too"), never `<input type="date">` |
 | Two forms in one panel | a bordered card each (`settings/SettingsTab.svelte` `.sub-card`), the state and actions in the card's head (§ 2) |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
@@ -1185,10 +1203,23 @@ Interaction details that bit:
   round 4 (**From (day first)**, a registered volume's **Valid from**, a date
   setting; `tidyDay` shows "15 Nov 2021" once the field is left, and the
   form refuses "From: type a day, day first: …"; `scenario-demand-scale.spec.ts`).
-  `lib/uiPatterns.test.ts` refuses a new native date field; the 30 written
-  before the rule are counted per file there and may only go down (they
-  need a shared day field that joins the save blocker's invalid fields, as
-  `NumberInput` does, before they convert).
+  Every other form uses the shared field, `common/DayInput.svelte` (issue
+  #521 round 5; its rules in `common/dayField.svelte.ts`): bind it to the
+  YYYY-MM-DD value ('' for blank, `|| null` at a nullable setting), give it
+  `min`/`max` (YYYY-MM-DD), and it keeps text it can't read with its message
+  at the field, joins the owner's `invalidFields` (the save bar's list and
+  the leave guard, as `NumberInput` does), and sets the input's custom
+  validity, so a form without `novalidate` refuses to submit it. A form
+  with `novalidate` that checks its own dates looks for
+  `validity.customError` on the field before it submits
+  (`feeds/DataFeedsPanel.svelte`, `feeds/UnitRain.svelte`), and leaves the
+  bound to its own validator when that says more ("the sat product begins
+  on 1998-01-01; choose rnl"). A field whose change does work (a refetch, a
+  URL) passes `commit="change"`, so it stores once typing ends (Enter or
+  leaving the field) rather than on each keystroke (`runs/ReportWindowPanel.svelte`).
+  The value stored and sent never changes form; specs type day first or
+  ISO and read the field back as "15 Nov 2021" (`day-input.spec.ts`).
+  `lib/uiPatterns.test.ts` refuses any native date field.
 - **The printed evidence report keeps ISO dates, on purpose.** It is a
   signed document whose lines match the manifest's hashed text (evidence
   pack manifests, `docs/evidence-pack.md`), so its dates, the fit line

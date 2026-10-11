@@ -65,7 +65,7 @@
 	async function discard() {
 		const ok = await confirmDialog({
 			title: 'Discard all unsaved model changes?',
-			message: `Your unsaved changes to ${listAnd([...(areas.length ? areas.map((a) => AREA_WORDS[a]) : editor.dirty ? ['the model'] : []), ...(invalid.length ? ['the numbers that need fixing'] : [])])} will be lost, including any made on other pages before this one opened. This can’t be undone.`,
+			message: `Your unsaved changes to ${listAnd([...(areas.length ? areas.map((a) => AREA_WORDS[a]) : editor.dirty ? ['the model'] : []), ...(invalid.length ? ['the fields that need fixing'] : [])])} will be lost, including any made on other pages before this one opened. This can’t be undone.`,
 			confirmLabel: 'Discard changes',
 			danger: true
 		});

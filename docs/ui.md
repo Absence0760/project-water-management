@@ -79,7 +79,7 @@ capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
 window without scrolling (`account.spec.ts` › layout pins both widths). Form
 fields share one right edge (at most 36rem); Save name sits beside the
 display name; the new and repeated passwords sit side by side once the card
-is 30rem wide; the language switch is its compact joined form
+is 30rem wide (one column below that, never wider than the card); the language switch is its compact joined form
 (`LanguageSwitch segmented`); the m³ / ML radios sit in one row, 32 px
 tall with a mouse and 44 px on touch and phones. Submit buttons are the
 primary style; Choose your alert emails, Download my data and Turn alert
@@ -98,17 +98,29 @@ in an alert above the form, with the field it's about marked
 `aria-invalid`: *Your current password is wrong.* (the server's `403`, which
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
-characters.*, the two not matching).
+characters.*, the two not matching). For a farmer the page sits in the farm
+frame, so nothing on it is under 13 px (labels, hints, badges, the status
+lines and the language switch are sized in px), and a long button label
+wraps inside its button rather than leaving its card (*Kies jou
+waarskuwings-e-posse* at 320 px; `farm-view.spec.ts` and `lang-layout.spec.ts`
+walk the text and check every control against its card, issue #521).
 
 **Two-step sign-in** (`lib/components/account/TwoStepSignIn.svelte`, issue
 #282, codes by email 206, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
-`GET /auth/mfa`). One line on what it does ("choose how you get the code;
-you can turn on both"), then the two ways as rows, each with its name, an
-**On** / **Off** badge in words, and a word on its strength: **Authenticator
-app** (**Stronger**, first: only your phone can make the codes) and **Code
-by email** (**Easier**, with the honest tradeoff beside the button: whoever
-can read your email can also reset your password, so with codes by email
-your inbox guards your account). The app's **Set up the app** asks for the
+`GET /auth/mfa`). The heading row carries the state as a badge in words:
+**On (app)**, **On (email)**, **On (both)** or **Off**. One line under it
+("A 6-digit code after your password. Turn on one or both."), then the two
+ways as rows, each with one head row (its name, a word on its strength, an
+**On** / **Off** badge and its action at the row's right end; on a card
+narrower than 22rem the action takes a full row under the head) and one
+short line: **Authenticator app** (**Stronger**, first: "Codes from an app
+on your phone.") and **Code by email** (**Easier**: "Codes sent to
+*address*: only as safe as your inbox.", a warning, so it stays visible).
+The full sentences (what the second step does, the app names, and the
+honest tradeoff: whoever can read your email can also reset your password,
+so with codes by email your inbox guards your account) sit unchanged in a
+closed fold, **How the two ways differ** (`common/Fold`, Show / Hide;
+issue #521; `account.spec.ts` pins the rows and the fold). The app's **Set up the app** asks for the
 current password (**Continue**), then shows two numbered steps: the QR code
 for the authenticator app, drawn in the page (`account/qr.ts`, uqr; black on
 white in both themes, with its quiet zone, 220 px; the encoder loads only at
@@ -200,6 +212,35 @@ Dates a person reads are **day first**: a calendar day is `fmtDay` ("1 Oct
 `fmtWhen` ("today 14:05", "yesterday 09:30", else as `fmtStamp`; never after
 "on" in a sentence). `fmtDate`'s ISO form ("2026-10-11 14:05") is for file
 names and codes. Runs & results, the Summary and History use them.
+
+### Day fields
+
+Every day a user types goes through `common/DayInput.svelte` (issue #521
+round 5; there is no `<input type="date">` left, whose order is the
+browser's own: 12/30/2021 in a US browser, and `lib/uiPatterns.test.ts`
+refuses one). It is a text field read by `parseDay`: "15 Nov 2021", "15
+November 2021", "15/11/2021", "15.11.2021" and "2021-11-15" all read, never
+month first, and once typing ends it shows the day as "15 Nov 2021". The
+value kept, saved and sent stays YYYY-MM-DD ('' or null for none), so
+nothing on the server changed. `min` / `max` bound it (the reporting
+window's From / To to the run's days, a registration check to today). Text
+it can't read, or a day out of range, is kept with a message under the
+field ("Enter a day from 1 Jan 2021 to 31 Dec 2024, day first: 15 Nov
+2021, 15/11/2021 or 2021-11-15"), marked `aria-invalid` and described by
+it; it counts in the save bar's problems and the leave guard as a number
+that needs fixing does (they now say "fields that need fixing"), and it is
+the input's custom validity, so a form that validates refuses to submit it
+rather than send the last day it read. The fields: the simulation period
+and curtailment reporting window (Settings), rain-source periods and their
+fit period, calibration exclusions and the calibration window, a demand
+object's dated windows, a dam's survey and in-service dates and a unit's
+abstraction start, a registered volume's validity, a CHIRPS feed's start
+(the Data feeds form and Rain for every unit), the workbook import's
+scaling start, the licence record's dates, a registration check's day, a
+publication's next expected update, the reporting window's custom range
+(taken once typing ends, Enter or leaving the field, since each change
+recomputes), and an application's objection closing date and decision
+date (`day-input.spec.ts`).
 
 ### Number fields
 
@@ -916,7 +957,7 @@ settings", "… to the project details", and for the model alone the areas
 that changed: "… to the model (network and transfers)",
 `model/changedAreas.ts`); its region is named *Unsaved model changes* with
 model edits, else *Unsaved settings* or *Unsaved project details*, and
-*Unsaved changes* when only a number that needs fixing is. Anything that blocks
+*Unsaved changes* when only a field that needs fixing is (a number or a day). Anything that blocks
 the save is listed under the bar as links to where it is fixed
 (`model/ProblemLinks.svelte`: the first three, then **and N more**): a
 node's problem opens its sheet (`?tab=network&edit=<id>`), a crop's its
@@ -1015,7 +1056,7 @@ project details and the settings (the workspace page; the header's
 **Unsaved changes** badge counts all three), override mode's unrecorded edits, a
 half-filled **Add a change** form or a typed but unsaved scenario rename,
 a name typed into the **New scenario** dialog, and a number field holding
-text it can't take ("numbers that need fixing": any change of page or tab
+text it can't take ("fields that need fixing", a number or a day field: any change of page or tab
 drops it, since the field unmounts; a `#fragment` doesn't). A navigation that would
 drop any of it (another page for the page-level work; another tab or
 scenario for a scenario's) is cancelled and the app's own dialog asks,
@@ -3157,7 +3198,7 @@ itself.
   each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
   dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
   a label (**Window n**), **Days** (the span; changing it resets the bounds),
-  its bounds (**From** / **To**: MM-DD each year, date pickers once, days
+  its bounds (**From** / **To**: MM-DD each year, typed days once (day first, [§ Day fields](#day-fields)), days
   from Easter Sunday), **Factor** (0 = off, up to 10), **On** Mon–Sun
   checkboxes (all ticked = every day), **Move window n up / down** (order
   matters: the later window wins a day two cover; the focus stays with the
@@ -10637,7 +10678,14 @@ published.
   words, and its percentage as "Set by the WUA: a 20 % cut in registered
   water use." whenever it published one, beside its words as the alert email
   has it), or "No
-  restriction from the WUA", then the estimate line (below). The notice is in the language the reader
+  restriction from the WUA", then the estimate line (below). With a notice
+  the supply card's heading still starts on a 360 × 740 phone's first
+  screen, in English and Afrikaans: under 400 px the notice card is tighter
+  (12 px padding, its byline at the end of its last line), the estimate
+  line's icon sits in its first line with the text the box's full width
+  (same words, 16 px), the dates line's clock likewise, the cards 10 px
+  apart, and the header's title gives way to the mark below 380 px
+  (`farm-view.spec.ts`, issue #521). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
   English, else in the first other language the WUA wrote, with "The WUA
@@ -10783,8 +10831,13 @@ published.
 - **States.** Skeleton cards with a hidden status and "Slow signal?" after
   3 s; no publication; an error with Try again (a contact line after the
   second failure, never raw error text); access removed (403/404), which
-  also clears the saved copy. The contact lines ("Questions? Contact …",
-  the removed and second-failure lines) name the WUA when the project has
+  also clears the saved copy; and a link to a unit that isn't the farmer's
+  (`?node=` the catchment's list doesn't hold, while it holds others): "This
+  hydrological unit isn’t linked to your account. If it should be, contact
+  …", never "no longer" (it may never have been theirs), with **Your
+  hydrological units in this catchment** listing their own there
+  (`not-yours`, `farmState.svelte.ts`; issue #521). The contact lines ("Questions? Contact …",
+  the removed, not-linked and second-failure lines) name the WUA when the project has
   its name (`wuaName`, set on the Project page's details), else say "your
   WUA" (`contactText` in `farm/cards.ts`). "Compared with last season"
   without a year of figures says "Not available: the model's data starts

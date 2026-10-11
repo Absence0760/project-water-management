@@ -2353,6 +2353,17 @@ the suggested order (the IDs carry the detail):
 Left out of the first build because the contract or an API doesn't carry it
 yet; each lands with the work package named.
 
+- [ ] **A phone-length estimate line for 320 × 640** (issue #521 round 5):
+      with a restriction notice the supply card's heading now starts on the
+      first screen at 360 × 740 (646 px English, 669 px Afrikaans), but at
+      320 × 640 it starts at 687 / 755 px, a short scroll down: the estimate
+      line alone is about 230 px there at 16 px, and its words are legal
+      wording (docs/legal/disclaimer-review.md § 3), so layout can't take
+      more without making it fine print. Durable fix: ask legal for a shorter
+      phone wording (a new message through the i18n agents), then tighten
+      `farm-view.spec.ts`'s 320 × 640 check from 1.25 screens to the fold.
+      Trigger: the next disclaimer review with the client's counsel.
+
 - [x] **"Next 14 days"** (ForecastCard) on the main and dam pages: built
       with WP-2.12 (`farm.forecast` when the published run is a forecast run).
 - [x] **Afrikaans notice on the farm page**: `FarmView` carries both

@@ -68,13 +68,13 @@
 	]);
 	const blocking = $derived(problems.length);
 	/** What the unsaved edits are to, as the line says it. */
-	const what = $derived(listAnd([...(editor.dirty ? ['the model'] : []), ...dirtyDrafts.map((d) => d.what)]) || 'numbers that need fixing');
+	const what = $derived(listAnd([...(editor.dirty ? ['the model'] : []), ...dirtyDrafts.map((d) => d.what)]) || 'fields that need fixing');
 	/** The same, naming the model's areas: the Discard question's words. */
 	const lost = $derived(
 		listAnd([
 			...(editor.dirty ? (areas.length ? areas.map((a) => AREA_WORDS[a]) : ['the model']) : []),
 			...dirtyDrafts.map((d) => d.what),
-			...(invalid.length ? [invalid.length === 1 ? 'the number that needs fixing' : 'the numbers that need fixing'] : [])
+			...(invalid.length ? [invalid.length === 1 ? 'the field that needs fixing' : 'the fields that need fixing'] : [])
 		])
 	);
 	/** Whether a reason field shows: a model or settings change keeps one. */
@@ -84,7 +84,7 @@
 	const previewDrafts = $derived(dirtyDrafts.filter((d) => d.previewable));
 	const canPreview = $derived(!!onpreview && (editor.dirty || previewDrafts.length > 0));
 	const previewReady = $derived((editor.dirty && editor.issues.length === 0) || previewDrafts.some((d) => d.problems.length === 0));
-	// Named for what is unsaved: the model, else the first draft, else only numbers that need fixing (on any page).
+	// Named for what is unsaved: the model, else the first draft, else only fields that need fixing (on any page).
 	const region = $derived(editor.dirty ? 'Unsaved model changes' : dirtyDrafts.length ? dirtyDrafts[0]!.region : 'Unsaved changes');
 
 	let bar: HTMLDivElement | undefined = $state();

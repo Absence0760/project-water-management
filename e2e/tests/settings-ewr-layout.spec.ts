@@ -114,7 +114,7 @@ test.describe('at 1440×900', () => {
 		await jump(page, 'Reporting', '#set-reporting');
 		const panel = page.getByRole('region', { name: 'Reporting', exact: true });
 		await expect(panel.getByTestId('summary-reporting')).toHaveText(/^Reporting .+ · a water year is met at 85 % of demand$/);
-		await expect(panel.getByRole('group', { name: /^Curtailment reporting window/ }).getByLabel('From', { exact: true })).toHaveValue('2021-11-01');
+		await expect(panel.getByRole('group', { name: /^Curtailment reporting window/ }).getByLabel('From', { exact: true })).toHaveValue('1 Nov 2021');
 		await expect(panel.getByLabel(/^Annual assurance threshold/)).toBeInViewport({ ratio: 1 });
 		await expect(panel.getByLabel(/^Annual assurance threshold/)).toHaveValue('85');
 		// Right after Drought restrictions on the page.

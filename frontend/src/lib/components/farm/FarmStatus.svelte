@@ -6,6 +6,7 @@
 	import { base } from '$app/paths';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { contactText, stateText, stillFailing } from './cards';
+	import { farmHref } from './load';
 
 	let {
 		kind,
@@ -15,9 +16,11 @@
 		offline = false,
 		attempts = 1,
 		title = null,
-		retry
+		retry,
+		projectId = null,
+		farms = []
 	}: {
-		kind: 'no-publication' | 'removed' | 'error';
+		kind: 'no-publication' | 'removed' | 'not-yours' | 'error';
 		farmName?: string | null;
 		projectName?: string | null;
 		/** The WUA the contact lines name (project.wuaName); null says "your WUA". */
@@ -27,6 +30,9 @@
 		/** The error's title where the page isn't a farm's figures (who-decides); else "We couldn't load your hydrological unit". */
 		title?: string | null;
 		retry?: () => void;
+		/** not-yours: the catchment, and the farmer's own units in it, to go to instead. */
+		projectId?: string | null;
+		farms?: { nodeId: string; name: string }[];
 	} = $props();
 </script>
 
@@ -40,6 +46,17 @@
 {:else if kind === 'removed'}
 	<h1>{farmName ?? t('Your hydrological unit')}</h1>
 	<p role="alert">{contactText('removed', wuaName)}</p>
+	<a class="link" href="{base}/farm">{t('Your hydrological units')}</a>
+{:else if kind === 'not-yours'}
+	<!-- A link to a unit that isn't theirs, in a catchment they still see: say so without "no longer", and offer their own units here. -->
+	<h1>{t('Your hydrological unit')}</h1>
+	<p role="alert">{contactText('notYours', wuaName)}</p>
+	{#if projectId && farms.length}
+		<nav class="mine" aria-labelledby="mine-h">
+			<h2 id="mine-h">{t('Your hydrological units in this catchment')}</h2>
+			{#each farms as f (f.nodeId)}<a class="link" href={farmHref(base, projectId, f.nodeId, true)}>{f.name}</a>{/each}
+		</nav>
+	{/if}
 	<a class="link" href="{base}/farm">{t('Your hydrological units')}</a>
 {:else}
 	<div>
@@ -76,5 +93,10 @@
 	}
 	.empty h2 {
 		color: var(--text);
+	}
+	.mine {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
 	}
 </style>

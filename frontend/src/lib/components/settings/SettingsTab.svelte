@@ -38,6 +38,7 @@
 </script>
 
 <script lang="ts">
+	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { withParam } from '$lib/workspace/overlays';
@@ -513,24 +514,22 @@
 		<div class="form-row">
 			<div class="field">
 				<label for="st-start">Simulation start</label>
-				<input
+				<DayInput
 					id="st-start"
-					type="date"
 					readonly={readonly}
 					value={s.simulationStart ?? ''}
-					onchange={(e) => (s.simulationStart = e.currentTarget.value || null)}
+					onchange={(v) => (s.simulationStart = v || null)}
 					aria-invalid={dateError ? 'true' : undefined}
 					aria-describedby={dateError ? 'st-period-err' : undefined}
 				/>
 			</div>
 			<div class="field">
 				<label for="st-end">Simulation end</label>
-				<input
+				<DayInput
 					id="st-end"
-					type="date"
 					readonly={readonly}
 					value={s.simulationEnd ?? ''}
-					onchange={(e) => (s.simulationEnd = e.currentTarget.value || null)}
+					onchange={(v) => (s.simulationEnd = v || null)}
 					aria-invalid={dateError ? 'true' : undefined}
 					aria-describedby={dateError ? 'st-period-err' : undefined}
 				/>
@@ -860,24 +859,22 @@
 				<div class="form-row">
 					<div class="field">
 						<label for="st-rep-start">From</label>
-						<input
+						<DayInput
 							id="st-rep-start"
-							type="date"
 							readonly={readonly}
 							value={s.reportStart ?? ''}
-							onchange={(e) => (s.reportStart = e.currentTarget.value || null)}
+							onchange={(v) => (s.reportStart = v || null)}
 							aria-invalid={reportError ? 'true' : undefined}
 							aria-describedby={reportError ? 'st-rep-err' : undefined}
 						/>
 					</div>
 					<div class="field">
 						<label for="st-rep-end">To</label>
-						<input
+						<DayInput
 							id="st-rep-end"
-							type="date"
 							readonly={readonly}
 							value={s.reportEnd ?? ''}
-							onchange={(e) => (s.reportEnd = e.currentTarget.value || null)}
+							onchange={(v) => (s.reportEnd = v || null)}
 							aria-invalid={reportError ? 'true' : undefined}
 							aria-describedby={reportError ? 'st-rep-err' : undefined}
 						/>

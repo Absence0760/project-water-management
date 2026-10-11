@@ -429,7 +429,7 @@
 		align-items: center;
 		gap: 0.25rem 0.6rem;
 		margin: 0.1rem 0 0;
-		font-size: 0.9rem;
+		font-size: 13px;
 	}
 	.facts dd {
 		margin: 0;
@@ -440,7 +440,7 @@
 	}
 	.note {
 		margin: 0.25rem 0 0;
-		font-size: 0.85rem;
+		font-size: 13px;
 		max-width: 50ch;
 	}
 	.cols {
@@ -452,6 +452,12 @@
 		.cols {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
+	}
+	/* No text under 13 px (ui-playbook § 2 "A frame with its own base size checks what it borrows"): for a
+	   farmer this page sits in the farm frame, whose floor is 13 px, but the app's labels, hints and badges are
+	   sized in the 14 px root's rem (11.9, 11.2 and 10.5 px). Lifted here, in px; the card components size their own. */
+	.account :global(:is(.field label, .field .hint, .badge)) {
+		font-size: 13px;
 	}
 	/* Each card answers to its own width too (the password pair below). */
 	.panel {
@@ -481,13 +487,17 @@
 		flex: 1 1 14rem;
 	}
 	/* New and repeat side by side once the card is wide enough for both. */
+	/* One column on a narrow card that never grows past it: an input's own width (about 20 characters) made the
+	   column, and New and Repeat poked out of the card at 320 px. */
 	.pair {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0 1rem;
 		max-width: 36rem;
 	}
 	.pair .field {
 		max-width: none;
+		min-width: 0;
 	}
 	@container card (min-width: 30rem) {
 		.pair {
@@ -508,12 +518,12 @@
 		margin: 0;
 		padding: 0;
 		font-weight: 500;
-		font-size: 0.85rem;
+		font-size: 13px;
 		color: var(--text-2);
 	}
 	.pref .hint {
 		margin: 0;
-		font-size: 0.8rem;
+		font-size: 13px;
 		color: var(--text-muted);
 		max-width: 60ch;
 	}
@@ -544,12 +554,16 @@
 	.link-row {
 		margin: 0 0 0.25rem;
 	}
+	/* A long label ("Kies jou waarskuwings-e-posse" at 320 px) wraps inside the button rather than poking out of its card. */
 	.link-row .btn {
 		text-decoration: none;
+		white-space: normal;
+		text-align: center;
+		max-width: 100%;
 	}
 	.status {
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: 13px;
 		color: var(--text-2);
 	}
 	.status:empty {
