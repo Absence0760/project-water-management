@@ -584,14 +584,20 @@ describe('the re-check end to end, on the fixtures with a rewrite (FEED_FETCHER=
 			const before = (await asOwner(`SELECT count(*)::int AS n FROM audit_event WHERE project_id = $1 AND subject ? 'chirpsRevision'`, [pid]))[0].n;
 			expect(before).toBe(0);
 
-			// CHC rewrites; the next caught-up fetch HEADs the 40 oldest-checked files.
-			await asOwner(`UPDATE chirps_file SET checked_at = now() - interval '91 days' WHERE origin = 'chc'`);
+			// CHC rewrites; the next caught-up fetch HEADs the 40 oldest-checked files. Only this feed's days are made due:
+			// the test database keeps other tests' older files, which would otherwise be the 40 oldest.
+			await asOwner(
+				`UPDATE chirps_file SET checked_at = CASE WHEN day >= $1::date THEN now() - interval '91 days' ELSE now() END WHERE origin = 'chc'`,
+				[addDays(-(rw.fromDaysAgo + 10))]
+			);
 			await u.call('POST', `/projects/${pid}/feeds/${feed}/run-now`);
 			const heads = (await fetchJob())!;
 			expect(heads.request.recheck!.head).toHaveLength(40);
 			expect(heads.request.recheck!.read).toEqual([]);
 			await answer(heads, undefined, true);
 			const marked = (await stale()).length;
+			// More than one read's worth: the pattern repeats every 14 days with 7 wet, so the 30 rewritten days
+			// (chirps-rewrite.json, all among the 40 HEADed) hold at least 14 wet days whatever the date.
 			expect(marked).toBeGreaterThan(10);
 			// The stale days come back in a minute, ten at a time, read from the rewritten files.
 			let reads = 0;

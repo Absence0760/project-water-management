@@ -419,7 +419,7 @@ describe('file tags and the re-check of cached finals (210_chirps_final_recheck)
 		const plain = fixtureHttp(() => today);
 		const rewritten = fixtureHttp(() => today, { rewrite: true });
 		const p = [{ lat: -20.12, lon: 25.17 }];
-		// A rewritten day with rain (a dry day's file is the same bytes, scaled or not): chirps-rewrite.json is 100–120 days back.
+		// A rewritten day with rain (a dry day's file is the same bytes, scaled or not): chirps-rewrite.json is 91–120 days back.
 		let url = '';
 		for (let back = 100; back <= 120 && !url; back++) {
 			const u = chirpsFinalUrl(fromEpochDay(toEpochDay(today) - back));
