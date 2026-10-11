@@ -35,19 +35,23 @@ export interface QualityFlagSettings {
 	/**
 	 * Calendar months (1–12, ascending, no repeats) in which the river is known
 	 * to stop flowing (engine ≥ 1.81.0, issue #507 item 2, audit C3, QF-3). A
-	 * zero-flow stretch wholly inside them is trusted as the river stopping and
-	 * scored; with months listed, any zero stretch that runs outside them is
-	 * suspect, and with none (the default) only a stretch longer than
-	 * ZERO_FLOW_TRUST_MAX_DAYS is (./dayFlags.ts zeroFlowSuspect). Absent on
+	 * zero-flow stretch that overlaps them is trusted as the river stopping and
+	 * scored as long as it runs no more than ZERO_FLOW_TRUST_MAX_DAYS beyond
+	 * them on each side (engine 1.84.0, issue #523 A1; wholly inside them in
+	 * 1.81.0 – 1.83.x); with months listed, a zero stretch wholly outside them
+	 * is suspect at any length, and with none (the default) only a stretch
+	 * longer than ZERO_FLOW_TRUST_MAX_DAYS is (./dayFlags.ts zeroFlowSuspect). Absent on
 	 * settings saved before 1.81.0: none.
 	 */
 	zeroFlowMonths?: number[];
 }
 
 /**
- * A zero-flow stretch longer than this many days that is not wholly inside
- * settings.qualityFlags.zeroFlowMonths is suspect (engine ≥ 1.81.0, issue
- * #507 item 2): the hydrologist's "check with the client" length.
+ * With no settings.qualityFlags.zeroFlowMonths, a zero-flow stretch longer
+ * than this many days is suspect (engine ≥ 1.81.0, issue #507 item 2): the
+ * hydrologist's "check with the client" length. With months listed, the most
+ * days a stretch over them may run beyond them on each side and stay trusted
+ * (engine 1.84.0, issue #523 A1).
  */
 export const ZERO_FLOW_TRUST_MAX_DAYS = 30;
 
