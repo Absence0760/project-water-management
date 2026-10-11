@@ -108,7 +108,7 @@ describe('GET /projects/:id/history/fields', () => {
 			expect((await editor.call('PUT', `/projects/${pid}/model`, { nodes: [w, { ...f4, ...o }], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
 		const winter = [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800];
 		await put({});
-		// Keeping the EWR is a scenario's (issue #523 B4): a stored one (before 216) is switched off by a save, and that is keyed.
+		// Keeping the EWR is a scenario's (issue #523 B4): a stored one (before 220) is switched off by a save, and that is keyed.
 		await asOwner('UPDATE node SET hands_off_ewr = true WHERE id = $1', [f4.id]);
 		await put({ supplyRule: 'riverFirst', pumpCapacityM3Day: 1200, handsOffM3Day: monthly(300), handsOffEwr: false, divertMonthlyM3Day: winter });
 		const f = (await fields(editor, pid)).body.fields;

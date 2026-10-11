@@ -258,7 +258,7 @@ describe('losing the team revokes every team project, rows the user wrote includ
 				 ORDER BY 1`
 			)
 		).map((r) => r.table_name as string);
-		// The app role can't read these at all (owner-only, read through definer functions, migration 215): no member
+		// The app role can't read these at all (owner-only, read through definer functions, migration 219): no member
 		// can, so nothing to revoke. Any other table it can't read is a lost grant, not a pass.
 		const unreadable = (
 			await asOwner(

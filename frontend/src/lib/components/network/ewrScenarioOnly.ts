@@ -5,7 +5,7 @@
 // restriction) show the switch disabled with this note, as the Allocations
 // page shows the allocation mode; the API refuses a save that switches one on
 // (400 ewr_rule_scenario_only). A switch already on (a model from before
-// engine 1.84.0 never reaches the form: migration 216 switched them off) can
+// engine 1.84.0 never reaches the form: migration 220 switched them off) can
 // still be switched off, never on. A scenario's Override mode reuses these forms
 // without `baseline` (ModelEditor.baseline false), where the switches work.
 

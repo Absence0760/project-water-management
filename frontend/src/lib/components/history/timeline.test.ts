@@ -120,7 +120,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('settings.allocation_mode_reset', { from: 'cap', to: 'none' }))).toBe(
 			'The baseline’s allocation mode “Cap use at the registered volume” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)'
 		);
-		// 216 (issue #523 B4): no actor either; each rule switched off is named.
+		// 220 (issue #523 B4): no actor either; each rule switched off is named.
 		expect(
 			eventLine(
 				ev('model.ewr_rules_reset', {

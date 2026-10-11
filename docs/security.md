@@ -2865,7 +2865,7 @@ database:
   `scenarios/viewerOps.ts`, `withheldAllocationOps`), with `withheldOps`
   saying how many; the live evidence report's Appendix A.2 is diffed
   without other units' volumes; and a server report PDF printed for
-  someone who reads each volume (`report.with_volumes`, 214) is refused to
+  someone who reads each volume (`report.with_volumes`, 218) is refused to
   such a viewer (`403 pack_volumes_withheld`, unless they asked for it)
   and its link isn't emailed to them: a scheduled report goes only to the
   recipients who may read it, and a viewer prints their own. The render
@@ -2932,7 +2932,7 @@ database:
   owners and the authority read every figure.
 
   The holders behind each sum are counted from the rows actually in it,
-  by a salted key per row (215): `md5` of a random per-project salt
+  by a salted key per row (219): `md5` of a random per-project salt
   (`allocation_holder_salt`, owner-only, never leaves the database) and
   the holder as 162 counts them, so a member who knows the project and a
   list of names has nothing to match the keys against (#523 P). A run
@@ -3425,7 +3425,7 @@ PDF someone else asked for kept the person as a recipient
 | Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql); D3: editors, owners and the linked farmer only) | Not linked to an account | Deleted |
-| A pseudonym of each registered user's name, frozen with each run to count holders (215, #523): `md5` of a per-project salt and the name | `run_allocation_holder`, `allocation_holder_salt` (owner-only) | With the run; reset to `gone` in every run once the name leaves the project (`allocation_holder_erased`, indexed on the normalised name: undoing a 2 500-row import in a 5 000-row project takes about 70 ms locally) | Not linked to an account | Deleted |
+| A pseudonym of each registered user's name, frozen with each run to count holders (219, #523): `md5` of a per-project salt and the name | `run_allocation_holder`, `allocation_holder_salt` (owner-only) | With the run; reset to `gone` in every run once the name leaves the project (`allocation_holder_erased`, indexed on the normalised name: undoing a 2 500-row import in a 5 000-row project takes about 70 ms locally) | Not linked to an account | Deleted |
 | Registered users' names in issued evidence: none as a field. A run's input and the evidence report carry no holder name (§ 5 names units; Appendix A.1's model rows and A.2's diff have no holder field), so a frozen pack manifest has none either. A name can reach one only as text someone typed (a unit named after its owner, notes, the applicant statement) | `evidence_pack.manifest` (frozen, hashed) | With the pack: an issued pack is never edited (its hash is verified publicly); whether issued evidence is kept against an erasure request is a legal-hold question for counsel (#92) | Not linked to an account | Kept while the project is a licence record |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |

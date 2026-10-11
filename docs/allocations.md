@@ -340,7 +340,7 @@ existing lawful use beside the application's numbers.
   few hold to show*), so no difference gives them; how many users were left
   out is said only at 5 or more, else only that some were (holders counted
   as `app_allocation_volumes` counts them, by the keys frozen with the
-  baseline run, `app_run_allocation_holders`, 215). Since `evidence-18` (issue #523 H/J) the folded mix is frozen, and
+  baseline run, `app_run_allocation_holders`, 219). Since `evidence-18` (issue #523 H/J) the folded mix is frozen, and
   served, as each line's whole-percent share of the lines' sum (largest
   remainder, adding up to 100), with no m³ and no total: the mix sums every
   row of the baseline whatever its dates, while that viewer's live totals
@@ -423,7 +423,7 @@ existing lawful use beside the application's numbers.
   allocations carry no holder, so the backend hands the report each one's
   holder key as frozen when the run was stored
   (`EvidenceRunInput.allocationHolders`, from `app_run_allocation_holders`,
-  215, the same for every reader, whatever was deleted since; a row no
+  219, the same for every reader, whatever was deleted since; a row no
   living holder had, such as one a scenario op adds, shares one key). The
   gate is also the dominance rule: no year's total is shown where one
   holder has more than 80 % of it, or two more than 90 % (provisional,

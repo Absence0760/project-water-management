@@ -27,7 +27,7 @@ import { plantDelineationProposal, plantStartProposal } from '../__tests__/route
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 
-/** Project tables (with a project_id) the app role has no grant on: owner-only, read only through definer functions (migration 215; run_allocation_holder is keyed by run). */
+/** Project tables (with a project_id) the app role has no grant on: owner-only, read only through definer functions (migration 219; run_allocation_holder is keyed by run). */
 const OWNER_ONLY_TABLES = ['allocation_holder_salt'] as const;
 
 type User = Awaited<ReturnType<typeof signUp>>;

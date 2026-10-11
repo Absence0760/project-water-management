@@ -493,7 +493,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const copiedSettings = remapSettingNodeIds(src.settings ?? {}, ids) as Record<string, unknown>;
 			// A source stored before 213 may still cap or fully allocate its baseline: the copy compares only (issue #507).
 			const allocNote = normaliseBaselineAllocationMode(copiedSettings);
-			// And before 216 keep water for the EWR: the copy assesses it only (issue #523 B4).
+			// And before 220 keep water for the EWR: the copy assesses it only (issue #523 B4).
 			const { model: copied, note: ewrNote } = normaliseBaselineEwrRules(fresh, copiedSettings);
 			await db.query(
 				`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)

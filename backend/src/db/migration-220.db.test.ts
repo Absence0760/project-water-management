@@ -1,12 +1,12 @@
-// Migration 216 (issue #523 B4): in the baseline the EWR is assessed and
+// Migration 220 (issue #523 B4): in the baseline the EWR is assessed and
 // reported, never applied, so the stored rules that keep water for it (a
 // pass-inflow release without amounts, a unit's or an off-take's
 // hands_off_ewr, the drought restriction's ewrTrigger) are switched off, and
 // each project's History gets one model.ewr_rules_reset event listing what
 // was switched off. Set flows (a hands-off flow by month, a pass-inflow
 // release with amounts) and every other project stay as they were. This
-// builds a throwaway database at the schema before 216, stores rules the old
-// way, applies 216 and checks.
+// builds a throwaway database at the schema before 220, stores rules the old
+// way, applies 220 and checks.
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const OWNER_URL = process.env.TEST_MIGRATION_DATABASE_URL!;
 const DIR = join(import.meta.dirname, '..', '..', 'migrations');
-const dbName = `water_test_m216_${process.pid}_${Math.floor(Math.random() * 1e6)}`;
+const dbName = `water_test_m220_${process.pid}_${Math.floor(Math.random() * 1e6)}`;
 const scratchUrl = OWNER_URL.replace(/\/[^/]+$/, `/${dbName}`);
 
 let admin: pg.Client;
@@ -36,7 +36,7 @@ beforeAll(async () => {
 	db = new pg.Client({ connectionString: scratchUrl });
 	await db.connect();
 	const files = (await readdir(DIR)).filter((f) => /^\d+_.+\.sql$/.test(f)).sort();
-	for (const f of files.filter((x) => x < '216')) await db.query(await readFile(join(DIR, f), 'utf8'));
+	for (const f of files.filter((x) => x < '220')) await db.query(await readFile(join(DIR, f), 'utf8'));
 
 	const user = (await db.query<{ id: string }>(`INSERT INTO app_user (email, display_name, password_hash) VALUES ('o@example.com', 'O', 'x') RETURNING id`)).rows[0]!.id;
 	const project = (pid: string, settings: unknown) =>
@@ -60,7 +60,7 @@ beforeAll(async () => {
 	await node(PL_UP, PLAIN, 'Only', 'farm', null, { dam_release_rule: 'fixed', dam_release_m3_day: flat(5) });
 	await db.query(`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, source, hands_off_ewr) VALUES ($1, $2, $3, $4, 'river', true)`, [T_EWR, KEEPS, UP, DOWN]);
 	await db.query(`INSERT INTO transfer (id, project_id, from_node_id, to_node_id, source, hands_off_m3_day) VALUES ($1, $2, $3, $4, 'river', 40)`, [T_SET, SET_FLOWS, SF_UP, SF_DOWN]);
-	await db.query(await readFile(join(DIR, '216_baseline_ewr_rules_scenario_only.sql'), 'utf8'));
+	await db.query(await readFile(join(DIR, '220_baseline_ewr_rules_scenario_only.sql'), 'utf8'));
 });
 
 afterAll(async () => {
@@ -87,7 +87,7 @@ const eventsOf = async (pid: string) =>
 		)
 	).rows;
 
-describe('migration 216: the baseline keeps no water for the EWR', () => {
+describe('migration 220: the baseline keeps no water for the EWR', () => {
 	it('switches off the four rules, keeping the set flow beside a hands-off EWR and every other setting', async () => {
 		expect(await nodeOf(UP)).toMatchObject({ rule: 'none', release: null, ewr: false });
 		expect(await nodeOf(DOWN)).toMatchObject({ ewr: false, handsOff: new Array(12).fill(15) });
@@ -129,7 +129,7 @@ describe('migration 216: the baseline keeps no water for the EWR', () => {
 			events: (await db.query(`SELECT project_id, count(*)::int AS n FROM audit_event WHERE kind = 'model.ewr_rules_reset' GROUP BY project_id ORDER BY project_id`)).rows
 		});
 		const before = await state();
-		await db.query(await readFile(join(DIR, '216_baseline_ewr_rules_scenario_only.sql'), 'utf8'));
+		await db.query(await readFile(join(DIR, '220_baseline_ewr_rules_scenario_only.sql'), 'utf8'));
 		expect(await state()).toEqual(before);
 		expect(before.events).toEqual([{ project_id: KEEPS, n: 1 }]);
 	});

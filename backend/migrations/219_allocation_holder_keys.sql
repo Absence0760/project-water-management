@@ -1,4 +1,4 @@
--- 215_allocation_holder_keys — count the holders behind every "5 or more
+-- 219_allocation_holder_keys — count the holders behind every "5 or more
 -- registered users" total from the rows summed into it, with keys no reader
 -- can tie to a name, frozen with each run (issue #523 G/N/P, decision D3;
 -- docs/security.md § Allocations, docs/allocations.md § Who sees what).
@@ -56,7 +56,7 @@ CREATE TABLE allocation_holder_salt (
 ALTER TABLE allocation_holder_salt ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON allocation_holder_salt FROM PUBLIC, water_app;
 COMMENT ON TABLE allocation_holder_salt IS
-	'Owner-only (215, #523 P): each project''s salt for the allocation holder keys. Read only by the SECURITY DEFINER functions of 215; never leaves the database.';
+	'Owner-only (219, #523 P): each project''s salt for the allocation holder keys. Read only by the SECURITY DEFINER functions of 219; never leaves the database.';
 INSERT INTO allocation_holder_salt (project_id) SELECT id FROM project ON CONFLICT DO NOTHING;
 
 CREATE FUNCTION allocation_holder_salt_new() RETURNS trigger
@@ -103,7 +103,7 @@ CREATE FUNCTION app_allocation_holder_keys(p_project uuid)
 		FROM unit u JOIN allocation_holder_salt s ON s.project_id = p_project
 	$$;
 COMMENT ON FUNCTION app_allocation_holder_keys(uuid) IS
-	'Internal (215, #523 G/P): each allocation row of a project with its holder key, md5 of the project''s salt and the holder as 162 counts them. Called only by 215''s definer functions and trigger.';
+	'Internal (219, #523 G/P): each allocation row of a project with its holder key, md5 of the project''s salt and the holder as 162 counts them. Called only by 219''s definer functions and trigger.';
 REVOKE ALL ON FUNCTION app_allocation_holder_keys(uuid) FROM PUBLIC, water_app;
 
 -- ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ CREATE FUNCTION app_allocation_volumes(p_project uuid)
 	END
 	$$;
 COMMENT ON FUNCTION app_allocation_volumes(uuid) IS
-	'The volumes behind a viewer''s registered-water totals (162, D3; 215): each water source held by at least 5 registered users (FARMER_K), each row with its salted holder key so the API counts the holders (and their shares) of the rows it sums. No name, number or property. The API sums them; it never returns a row.';
+	'The volumes behind a viewer''s registered-water totals (162, D3; 219): each water source held by at least 5 registered users (FARMER_K), each row with its salted holder key so the API counts the holders (and their shares) of the rows it sums. No name, number or property. The API sums them; it never returns a row.';
 REVOKE ALL ON FUNCTION app_allocation_volumes(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_allocation_volumes(uuid) TO water_app;
 
@@ -152,7 +152,7 @@ CREATE TABLE run_allocation_holder (
 ALTER TABLE run_allocation_holder ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON run_allocation_holder FROM PUBLIC, water_app;
 COMMENT ON TABLE run_allocation_holder IS
-	'Owner-only (215, #523 N): the holder key of each allocation row in a run''s input, as the rows were when it was stored; ''gone'' for a row with no living key. Written by model_run_allocation_holders, read by app_run_allocation_holders.';
+	'Owner-only (219, #523 N): the holder key of each allocation row in a run''s input, as the rows were when it was stored; ''gone'' for a row with no living key. Written by model_run_allocation_holders, read by app_run_allocation_holders.';
 
 -- The keys of a run's rows: the living row's, else the one key 'gone'.
 CREATE FUNCTION run_allocation_holder_fill(p_project uuid, p_run uuid, p_inputs jsonb) RETURNS void
@@ -179,16 +179,16 @@ REVOKE ALL ON FUNCTION model_run_allocation_holders() FROM PUBLIC, water_app;
 CREATE TRIGGER model_run_allocation_holders AFTER INSERT ON model_run
 	FOR EACH ROW EXECUTE FUNCTION model_run_allocation_holders();
 
--- Existing runs, from the rows living now (a run stored before 215 has no other record of them): every project's keys
+-- Existing runs, from the rows living now (a run stored before 219 has no other record of them): every project's keys
 -- once, then one join, so the cost is the runs' rows, not runs × the project's rows.
-CREATE TEMP TABLE keys_215 ON COMMIT DROP AS
+CREATE TEMP TABLE keys_219 ON COMMIT DROP AS
 	SELECT k.id::text AS id, k.holder FROM project p CROSS JOIN LATERAL app_allocation_holder_keys(p.id) k;
-CREATE INDEX ON keys_215 (id);
+CREATE INDEX ON keys_219 (id);
 INSERT INTO run_allocation_holder (run_id, allocation_id, holder)
 SELECT r.id, e->>'id', coalesce(k.holder, 'gone')
 FROM model_run r
 CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(r.inputs->'model'->'allocations') = 'array' THEN r.inputs->'model'->'allocations' ELSE '[]'::jsonb END) e
-LEFT JOIN keys_215 k ON k.id = e->>'id'
+LEFT JOIN keys_219 k ON k.id = e->>'id'
 WHERE e->>'id' IS NOT NULL
 ON CONFLICT DO NOTHING;
 CREATE INDEX run_allocation_holder_holder_idx ON run_allocation_holder (holder);
@@ -217,7 +217,7 @@ CREATE FUNCTION app_run_allocation_holders(p_project uuid, p_run uuid, p_ids tex
 	END
 	$$;
 COMMENT ON FUNCTION app_run_allocation_holders(uuid, uuid, text[]) IS
-	'The holder keys of the given allocation rows of one run the caller can read (215, #523 G/N/P), as frozen when it was stored: the evidence report''s § 5 gate and the authorised mix count holders by them, the same for every reader. No volume; the API never returns them.';
+	'The holder keys of the given allocation rows of one run the caller can read (219, #523 G/N/P), as frozen when it was stored: the evidence report''s § 5 gate and the authorised mix count holders by them, the same for every reader. No volume; the API never returns them.';
 REVOKE ALL ON FUNCTION app_run_allocation_holders(uuid, uuid, text[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_run_allocation_holders(uuid, uuid, text[]) TO water_app;
 

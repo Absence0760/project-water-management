@@ -1268,8 +1268,8 @@ export interface ScenarioCheck {
 	assessorProblems?: string[];
 	/**
 	 * The rules keeping water for the EWR that the base run itself carries (issue #523 B4): a run from before
-	 * migration 216 kept them in its baseline, so the scenario runs with them without an op. One line each (a
-	 * contributor's name no unit). Absent from an older server; empty for a base from 216 on.
+	 * migration 220 kept them in its baseline, so the scenario runs with them without an op. One line each (a
+	 * contributor's name no unit). Absent from an older server; empty for a base from 220 on.
 	 */
 	baseEwrRules?: string[];
 }

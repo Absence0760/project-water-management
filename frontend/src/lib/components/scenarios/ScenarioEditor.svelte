@@ -438,7 +438,7 @@
 	{/if}
 	{#if data.check?.baseEwrRules?.length}
 		{@const lines = data.check.baseEwrRules}
-		<!-- Issue #523 B4: a base run from before 216 kept the EWR in its baseline; the comparison isn't this scenario's doing. -->
+		<!-- Issue #523 B4: a base run from before 220 kept the EWR in its baseline; the comparison isn't this scenario's doing. -->
 		<div class="alert alert-info" role="note" data-testid="scenario-base-ewr-rules">
 			{baseEwrRulesLead(lines.length)}
 			<ul>

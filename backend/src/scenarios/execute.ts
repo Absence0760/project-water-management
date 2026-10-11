@@ -132,9 +132,9 @@ export interface ScenarioCheck {
 	masked: boolean;
 	/**
 	 * The rules keeping water for the EWR that the **base run** already carries (issue #523 B4), one line each
-	 * (engine scenarioOnlyLine): a run from before 216 kept them in its baseline, and its recorded input is
+	 * (engine scenarioOnlyLine): a run from before 220 kept them in its baseline, and its recorded input is
 	 * reproduced as it is, so a scenario on it runs with them without an op. Said beside the comparison so it
-	 * isn't read as "the EWR kept by this scenario". Empty for a base from 216 on.
+	 * isn't read as "the EWR kept by this scenario". Empty for a base from 220 on.
 	 */
 	baseEwrRules: string[];
 }

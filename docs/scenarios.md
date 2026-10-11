@@ -546,7 +546,7 @@ scenario's input is a `ModelInput` like any other):
 - **Arriving from outside a save** (a project file, a copy, a restore of an
   older revision or of a run's inputs, which may be a scenario's): switched
   off, the revision's reason naming them (`backend/src/projects/ewrRules.ts`).
-- **Stored before.** Migration 216 switched every stored one off and recorded
+- **Stored before.** Migration 220 switched every stored one off and recorded
   what each was on the project's History (`model.ewr_rules_reset`,
   [data-model.md](./data-model.md)), so it can be rebuilt as a scenario.
   Earlier runs keep them in their recorded inputs, which are never stripped
@@ -556,7 +556,7 @@ scenario's input is a `ModelInput` like any other):
   contributor gets a line per rule without the unit's name), and the
   scenario page shows them in a note (*The base run carries … water for the
   EWR …*), so the comparison isn't read as the EWR kept by the scenario.
-  Rebasing onto a run from 216 on drops them unless the scenario's ops keep
+  Rebasing onto a run from 220 on drops them unless the scenario's ops keep
   them.
 
 `pnpm list:ewr-rules` marks each one `[scenario only]`

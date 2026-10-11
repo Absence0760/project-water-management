@@ -20,7 +20,7 @@ import { FARMER_K } from '../views/farmView';
 export const DOMINANCE_TOP1 = 0.8;
 export const DOMINANCE_TOP2 = 0.9;
 
-/** One registered volume with its holder (an opaque key: the backend's app_allocation_volumes / app_run_allocation_holders, 215). */
+/** One registered volume with its holder (an opaque key: the backend's app_allocation_volumes / app_run_allocation_holders, 219). */
 export interface HeldVolume {
 	holder: string | number;
 	volumeM3PerYear: number;

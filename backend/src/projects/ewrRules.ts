@@ -12,7 +12,7 @@
 //     switched off, and the revision's reason says which;
 //   - the input every baseline run reads drops them (runs/execute.ts
 //     loadLiveInput), so a baseline run is the same with or without them;
-//   - 216_baseline_ewr_rules_scenario_only.sql switched off the stored ones.
+//   - 220_baseline_ewr_rules_scenario_only.sql switched off the stored ones.
 // A set flow (a hands-off flow by month, a pass-inflow release with amounts)
 // is an operating rule the hydrologist enters, and stays.
 import {

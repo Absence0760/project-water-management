@@ -17,7 +17,7 @@ import type { Db } from '../db/tx.js';
  */
 export async function issueRenderToken(db: Db, projectId: string, runId: string, againstRunId?: string, o: { redact?: boolean } = {}): Promise<string> {
 	const { token, hash } = newToken();
-	// `redact`: the report was queued without registered volumes (214): its session prints without any.
+	// `redact`: the report was queued without registered volumes (218): its session prints without any.
 	await db.query(
 		'INSERT INTO render_token (token_hash, user_id, project_id, run_id, against_run_id, redact_allocations, expires_at) VALUES ($1, app_current_user_id(), $2, $3, $4, $5, now())',
 		[hash, projectId, runId, againstRunId ?? null, o.redact ?? false]
@@ -63,7 +63,7 @@ export type ConsumedRenderToken =
 			runId: string;
 			/** An impact report's baseline; null for the plain report (or a baseline since deleted: the token went with it). */
 			against: { projectId: string; runId: string } | null;
-			/** Print without any registered volume (214). */
+			/** Print without any registered volume (218). */
 			redact: boolean;
 	  }
 	| { kind: 'pack'; userId: string; projectId: string; packId: string }

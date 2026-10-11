@@ -4,7 +4,7 @@
 // and no importer switches one on. Those that keep the EWR (rather than a set
 // flow) run only in a scenario (issue #523 B4): a save refuses them and a
 // baseline run drops them, so a line marked [scenario only] is one a project
-// from before 216 held, or a scenario run's input. This lists the ones a
+// from before 220 held, or a scenario run's input. This lists the ones a
 // project has.
 //
 //   pnpm list:ewr-rules <project.json> [--json]

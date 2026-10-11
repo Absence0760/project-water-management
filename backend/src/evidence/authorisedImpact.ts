@@ -105,7 +105,7 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 	);
 	// How the volumes it held holders to are held (licence, verified ELU, registration, …), from the allocation rows as they are now.
 	const allocations = takes(full);
-	// Who held each when the baseline ran (215's keys frozen with the run, counted as app_allocation_volumes counts
+	// Who held each when the baseline ran (219's keys frozen with the run, counted as app_allocation_volumes counts
 	// holders: the name, normalised; else another row's on the same unit; else the unit; else the row; a row no living
 	// holder had, one shared key). The folded mix gives no line of fewer
 	// than 5 holders' volume, and only as shares (evidence-18, #523 G1/H/J).

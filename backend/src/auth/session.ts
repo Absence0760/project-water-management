@@ -222,7 +222,7 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 				scope = { projectId: s.p.toLowerCase(), packId: s.k.toLowerCase(), ...(typeof s.s === 'string' ? { scenarioId: s.s.toLowerCase() } : {}) };
 			} else {
 				if (typeof s.r !== 'string' || !UUID.test(s.r) || s.s !== undefined) return null;
-				// `x`: print without registered volumes (214); only `true`, or the token is invalid.
+				// `x`: print without registered volumes (218); only `true`, or the token is invalid.
 				if (s.x !== undefined && s.x !== true) return null;
 				const report: ReportScope = { projectId: s.p.toLowerCase(), runId: s.r.toLowerCase(), ...(s.x === true ? { redact: true as const } : {}) };
 				if (s.a !== undefined) {

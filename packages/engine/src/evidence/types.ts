@@ -167,11 +167,11 @@ export interface EvidenceRunInput {
 	allocations?: AllocationComparison | null;
 	/**
 	 * evidence-18: who holds each of the run's allocations (by id), as an
-	 * opaque key (backend app_run_allocation_holders, 215), never a name: § 5
+	 * opaque key (backend app_run_allocation_holders, 219), never a name: § 5
 	 * gives a total of other units' registered volume in a water year only
 	 * when the rows in force that year are held by FARMER_K (5) or more
 	 * registered users, none dominating it (#523 G/O). The keys are frozen
-	 * with the run (backend run_allocation_holder, 215). An allocation the
+	 * with the run (backend run_allocation_holder, 219). An allocation the
 	 * map lacks shares the key 'gone' (at most one holder, #523 N); with no
 	 * map at all, each counts as its unit's (`n:<nodeId>`).
 	 */

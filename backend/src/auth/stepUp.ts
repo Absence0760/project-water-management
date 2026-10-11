@@ -67,7 +67,7 @@ export interface RequestAuth {
 	/** When the session last gave a code (epoch ms), or null. */
 	otpAt?: number | null;
 	/**
-	 * A report render session queued without registered volumes (214, issue #523 G1): every project reads as for a
+	 * A report render session queued without registered volumes (218, issue #523 G1): every project reads as for a
 	 * viewer kept from them (allocations/viewerUnits.ts allocationUnitsHidden), whatever the requester's role now.
 	 */
 	redactAllocations?: boolean;

@@ -1333,7 +1333,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		}
 	});
 
-	it('a report PDF printed for an editor is refused to that viewer (403), and its link isn’t emailed to them; their own PDF and the editor are positive controls (214)', async () => {
+	it('a report PDF printed for an editor is refused to that viewer (403), and its link isn’t emailed to them; their own PDF and the editor are positive controls (218)', async () => {
 		const at = `/projects/${ctx.projectId}`;
 		const asked = await ctx.editor.call('POST', `${at}/reports`, { runId: baseRun });
 		expect(asked.status, JSON.stringify(asked.body)).toBe(202);
@@ -1358,7 +1358,7 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		expect(await to(false)).toEqual([ctx.viewer.id, ctx.editor.id].sort());
 	});
 
-	describe('a report prints at the visibility fixed when it was queued (214: the render token’s claim)', () => {
+	describe('a report prints at the visibility fixed when it was queued (218: the render token’s claim)', () => {
 		const at = () => `/projects/${ctx.projectId}`;
 		const Q_CANARY = 432_198_765;
 		/** Run the report job as its requester (REPORT_RENDERER=sqs: the request is captured), and open its render session: the cookie. */

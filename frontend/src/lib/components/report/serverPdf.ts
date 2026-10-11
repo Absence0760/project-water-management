@@ -20,7 +20,7 @@ export interface ReportView {
 	finishedAt: string | null;
 	error: string | null;
 	emailed: number;
-	/** Printed with each farm's registered volume, which this reader may not see (214, #523 G1): no download for them. */
+	/** Printed with each farm's registered volume, which this reader may not see (218, #523 G1): no download for them. */
 	volumesWithheld?: boolean;
 }
 

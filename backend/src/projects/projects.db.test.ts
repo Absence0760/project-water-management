@@ -329,7 +329,7 @@ describe('projects', () => {
 });
 
 describe('a copied project’s drought restriction rule (engine 1.54.0, WP-3.8)', () => {
-	// Its EWR trigger is a scenario's (issue #523 B4): a copy of one stored before 216 comes without it (baselineEwrRules.db.test.ts).
+	// Its EWR trigger is a scenario's (issue #523 B4): a copy of one stored before 220 comes without it (baselineEwrRules.db.test.ts).
 	it('points the rule’s dams and units at the copy’s nodes, and leaves the original’s alone', async () => {
 		const a = await signUp('CopyRestriction');
 		const { projectId, farm } = await projectWithModel(a);

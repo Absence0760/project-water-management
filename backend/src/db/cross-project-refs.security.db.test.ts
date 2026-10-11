@@ -288,7 +288,7 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		premise: 'not writable'
 	},
 	'run_allocation_holder.run_id': {
-		reason: 'no project_id of its own: the row is its run’s, written only by the model_run_allocation_holders trigger from that run’s own input; owner-only, water_app has no grant (215)',
+		reason: 'no project_id of its own: the row is its run’s, written only by the model_run_allocation_holders trigger from that run’s own input; owner-only, water_app has no grant (219)',
 		premise: 'no project_id'
 	},
 	'api_key_throttle.key_id': { reason: 'no project_id of its own: the row is its key’s, in the key’s project', premise: 'no project_id' },

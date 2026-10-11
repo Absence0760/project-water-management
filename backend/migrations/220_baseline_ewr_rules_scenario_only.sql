@@ -1,4 +1,4 @@
--- 216_baseline_ewr_rules_scenario_only — the EWR is assessed in the baseline, never applied (issue #523 B4).
+-- 220_baseline_ewr_rules_scenario_only — the EWR is assessed in the baseline, never applied (issue #523 B4).
 --
 -- Decided by the client's hydrologist and the operator (2026-10-11, issue #90
 -- R4 (b), #507 § Principle): in the baseline the EWR is assessed and

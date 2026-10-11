@@ -1,4 +1,4 @@
-// A scenario on a base run from before migration 216 (issue #523 B4): that
+// A scenario on a base run from before migration 220 (issue #523 B4): that
 // run kept water for the EWR in its baseline, and its recorded input is
 // reproduced as it is, so the scenario runs with those rules without an op of
 // its own. The scenario page lists them (ScenarioCheck.baseEwrRules) so the

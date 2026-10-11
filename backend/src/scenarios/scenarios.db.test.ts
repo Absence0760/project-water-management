@@ -665,11 +665,11 @@ describe('a scenario saved before issue #385 with a name over two lines', () => 
 	});
 });
 
-// A base run from before 216 kept water for the EWR in its baseline (issue #523 B4). Its recorded input is
+// A base run from before 220 kept water for the EWR in its baseline (issue #523 B4). Its recorded input is
 // reproduced as it is, so the scenario runs with those rules without an op; the check lists them so the
 // comparison isn't read as "the EWR kept by this scenario".
 describe('a scenario on a base run that still keeps the EWR (issue #523 B4)', () => {
-	it('lists the base run’s EWR-keeping rules in the check, and none on a base from 216 on (positive control)', async () => {
+	it('lists the base run’s EWR-keeping rules in the check, and none on a base from 220 on (positive control)', async () => {
 		const u = await signUp('BaseEwr');
 		const c = await catchment(u, 'Base EWR');
 		const base = await run(u, c.projectId, 'base');
@@ -683,7 +683,7 @@ describe('a scenario on a base run that still keeps the EWR (issue #523 B4)', ()
 		const app = await applicant.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'Raise Kalkoenkrans', baseRunId: base, ops: [damRaise(c.other.id, 60_000)] });
 		expect(app.status, JSON.stringify(app.body)).toBe(201);
 
-		// As a run recorded before 216 would hold it: Rooikloof's hands-off flow keeps the EWR.
+		// As a run recorded before 220 would hold it: Rooikloof's hands-off flow keeps the EWR.
 		await asOwner(
 			`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (SELECT jsonb_agg(CASE WHEN n ->> 'id' = $2 THEN n || '{"handsOffEwr": true}' ELSE n END) FROM jsonb_array_elements(inputs -> 'model' -> 'nodes') n)) WHERE id = $1`,
 			[base, c.farm.id]

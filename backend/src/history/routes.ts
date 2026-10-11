@@ -253,7 +253,7 @@ async function restoreInputs(
 	// A revision or a run's inputs from before 213 may cap or fully allocate: the baseline compares only (issue #507), and the restore's reason says so.
 	const settings: Record<string, unknown> = { ...((target.settings ?? {}) as Record<string, unknown>) };
 	const allocModeNote = normaliseBaselineAllocationMode(settings);
-	// One from before 216, or a scenario run's, may keep water for the EWR: the baseline assesses it only (issue #523 B4).
+	// One from before 220, or a scenario run's, may keep water for the EWR: the baseline assesses it only (issue #523 B4).
 	const { model, note: ewrNote } = normaliseBaselineEwrRules(parsed.data, settings);
 	const allocNote = [allocModeNote, ewrNote].filter((x): x is string => !!x).join(' ') || null;
 	await saveModel(db, projectId, model);

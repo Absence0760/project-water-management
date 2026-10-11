@@ -125,7 +125,7 @@ function runInput(r: RunRow): EvidenceRunInput {
 async function withAllocations(db: Db, projectId: string, run: EvidenceRunInput): Promise<EvidenceRunInput> {
 	const forecastFrom = run.summary.forecast?.from ?? null;
 	const allocations = await runAllocationComparison(db, { id: run.id, startDate: run.startDate, forecastFrom, inputs: run.inputs });
-	// Who held each when the run was stored (salted keys, 215): § 5 gives a total of other units' volume in a year only at 5 or more holders in force, none dominating (evidence-18, #523 G/N/O).
+	// Who held each when the run was stored (salted keys, 219): § 5 gives a total of other units' volume in a year only at 5 or more holders in force, none dominating (evidence-18, #523 G/N/O).
 	const allocationHolders = allocations ? await allocationHolderKeys(db, projectId, run.id, run.inputs.model.allocations ?? []) : null;
 	return { ...run, allocations, allocationHolders };
 }

@@ -1,4 +1,4 @@
--- 214_report_volumes — a server report PDF printed with each farm's
+-- 218_report_volumes — a server report PDF printed with each farm's
 -- registered volume isn't a viewer's to download (issue #523 G1, decision D3;
 -- docs/security.md § Allocations, docs/api.md § Reports).
 --
@@ -46,7 +46,7 @@
 ALTER TABLE report ADD COLUMN with_volumes boolean NOT NULL DEFAULT true;
 
 COMMENT ON COLUMN report.with_volumes IS
-	'Printed with each farm''s registered volume (214, #523 G1): the requester could read each one and a run of the project (or the baseline) carries one. Set by report_enqueue. A viewer kept from the volumes (162) is refused its PDF and not sent its link.';
+	'Printed with each farm''s registered volume (218, #523 G1): the requester could read each one and a run of the project (or the baseline) carries one. Set by report_enqueue. A viewer kept from the volumes (162) is refused its PDF and not sent its link.';
 
 -- Latest definition: 082_report_against.sql. Adds with_volumes.
 CREATE OR REPLACE FUNCTION report_enqueue() RETURNS trigger
@@ -90,7 +90,7 @@ CREATE OR REPLACE FUNCTION report_enqueue() RETURNS trigger
 				RAISE EXCEPTION 'the baseline is the run itself' USING ERRCODE = 'check_violation';
 			END IF;
 		END IF;
-		-- 214: printed with each farm's registered volume? The requester reads each one (D3, 162), the report isn't
+		-- 218: printed with each farm's registered volume? The requester reads each one (D3, 162), the report isn't
 		-- against another project's baseline (printed without any volumes), and a run they can read of this project,
 		-- or the baseline, carries one. Under their RLS, as the render will read.
 		NEW.with_volumes := (app_has_role(NEW.project_id, 'editor') OR app_allocations_viewer_units(NEW.project_id))
@@ -110,7 +110,7 @@ CREATE OR REPLACE FUNCTION report_enqueue() RETURNS trigger
 -- ---------------------------------------------------------------------------
 ALTER TABLE render_token ADD COLUMN redact_allocations boolean NOT NULL DEFAULT false;
 COMMENT ON COLUMN render_token.redact_allocations IS
-	'214, #523 G1: the render session reads every project as a viewer kept from each registered volume (a report queued without them, report.with_volumes false). Set by the report job.';
+	'218, #523 G1: the render session reads every project as a viewer kept from each registered volume (a report queued without them, report.with_volumes false). Set by the report job.';
 
 -- Latest definition: 165_applicant_copy.sql. Returns redact_allocations too.
 DROP FUNCTION app_consume_render_token(bytea);

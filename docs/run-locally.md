@@ -699,7 +699,7 @@ A run keeps water in the river for the EWR only through four rules, and all
 four are off by default; neither importer switches one on (issue #507). The
 ones that keep the EWR itself (not a set flow) run only in a scenario (issue
 #523 B4, [scenarios.md § The EWR-keeping rules](./scenarios.md#the-ewr-keeping-rules-are-a-scenarios-issue-523-b4)):
-a save refuses them, migration 216 switched off the stored ones and a
+a save refuses them, migration 220 switched off the stored ones and a
 baseline run drops them, so a baseline run *reports* the EWR and releases
 nothing for it. The rules:
 
@@ -733,7 +733,7 @@ as stored (on a unit without a dam, on a dam transfer, a switched-off
 transfer, 0 in every month, a trigger site that isn't an EWR gauge), why.
 A rule that keeps the EWR is marked `[scenario only]`, and the first line
 counts them: in a Download project (JSON) export there should be none (a
-baseline never holds one from 216); a scenario run's inputs can. With none
+baseline never holds one from 220); a scenario run's inputs can. With none
 on it says so: a run keeps nothing in the river for the EWR. Add
 `--json` for the list as data. The importer's `project.json` works the same
 way. It reads the file only (no DB, no server; the engine's

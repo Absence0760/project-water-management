@@ -7,7 +7,7 @@
 // on; otherwise RLS gives a viewer no allocation row, and the API serves
 // totals per water source instead, summed here from app_allocation_volumes
 // (which returns a source's rows only when 5 or more registered users hold
-// it, each with an opaque holder key, 215): each sum is given only when the
+// it, each with an opaque holder key, 219): each sum is given only when the
 // rows in it, in force that day or water year, are 5 or more holders'
 // (#523 G). The run's own copy of the rows (its model's `allocations`, the
 // per-unit part of its summary's `allocations`) is left out of what a viewer
@@ -38,7 +38,7 @@ import { boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.j
 
 /** A viewer on a project whose owners haven't let viewers read each registered volume. */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
-	// A report render queued without registered volumes (214, #523 G1): every project, whatever the role.
+	// A report render queued without registered volumes (218, #523 G1): every project, whatever the role.
 	if (requestAuth.getStore()?.redactAllocations) return true;
 	if (role !== 'viewer') return false;
 	const { rows } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [projectId]);
@@ -50,7 +50,7 @@ export interface VolumeRow {
 	waterSource: AllocationWaterSource;
 	/** Registered users holding this source over all its rows, whatever their dates (5 or more, or no row is returned). */
 	holders: number;
-	/** This row's holder: a salted key (215), only to count the holders, and their shares, of the rows a total sums. */
+	/** This row's holder: a salted key (219), only to count the holders, and their shares, of the rows a total sums. */
 	holder: string;
 	nodeId: string | null;
 	volumeM3PerYear: number;

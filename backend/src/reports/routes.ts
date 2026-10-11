@@ -212,7 +212,7 @@ export const reportRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'viewer');
 			const v = await reportByJob(db, id, jobId);
 			if (!v) throw new ApiError(404, 'not found');
-			// Printed with each farm's registered volume for someone who reads them (214, #523 G1): not a viewer kept from them.
+			// Printed with each farm's registered volume for someone who reads them (218, #523 G1): not a viewer kept from them.
 			if (v.withVolumes && v.requestedBy !== c.get('userId') && (await allocationUnitsHidden(db, id, role)))
 				throw ApiError.coded(
 					403,

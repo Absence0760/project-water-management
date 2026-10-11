@@ -75,7 +75,7 @@ const hereToo = (teamRole: unknown, projectRole: unknown): string =>
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
 
-/** One switched-off EWR rule of a model.ewr_rules_reset event (216), in words. */
+/** One switched-off EWR rule of a model.ewr_rules_reset event (220), in words. */
 function ewrRuleWords(r: Record<string, unknown>): string {
 	switch (r.kind) {
 		case 'damPassInflow':
@@ -356,7 +356,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const from = ALLOCATION_MODE_LABEL[str(s.from) as AllocationMode] ?? str(s.from);
 			return `The baseline’s allocation mode “${from}” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)`;
 		}
-		// 216 (issue #523 B4): the EWR is assessed in the baseline, never applied, so the stored rules that kept it were switched off.
+		// 220 (issue #523 B4): the EWR is assessed in the baseline, never applied, so the stored rules that kept it were switched off.
 		case 'model.ewr_rules_reset': {
 			const rules = Array.isArray(s.rules) ? (s.rules as Record<string, unknown>[]) : [];
 			const words = rules.map(ewrRuleWords).filter(Boolean);

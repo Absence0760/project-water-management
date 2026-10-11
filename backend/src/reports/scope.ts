@@ -67,7 +67,7 @@ export interface ReportScope {
 	runId: string;
 	/** An impact report's baseline (possibly another project's run); absent for the plain report. */
 	against?: { projectId: string; runId: string };
-	/** Print without any registered volume (214, #523 G1): the report was queued without them. */
+	/** Print without any registered volume (218, #523 G1): the report was queued without them. */
 	redact?: true;
 }
 

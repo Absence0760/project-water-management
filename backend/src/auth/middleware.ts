@@ -27,7 +27,7 @@ export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 	c.set('userId', session.userId);
 	c.set('renderSession', !!session.scope);
 	c.set('amr', session.amr);
-	// A report render queued without registered volumes prints without them, whatever the requester's role now (214).
+	// A report render queued without registered volumes prints without them, whatever the requester's role now (218).
 	const redactAllocations = !!session.scope && !isPackScope(session.scope) && session.scope.redact === true;
 	await requestAuth.run({ userId: session.userId, amr: session.amr, otpAt: session.otpAt, ...(redactAllocations ? { redactAllocations } : {}) }, () => next());
 });

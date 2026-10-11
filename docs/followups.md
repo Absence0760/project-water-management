@@ -3711,7 +3711,7 @@ from the WP:
       both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - [x] **§ 5's other-units total counts units, not holders** (issue #523
       G1 security review, finding 6; round 3 finding G, 2026-10-11, report
-      format `evidence-18`, migration 215). § 5's *Other registered users*
+      format `evidence-18`, migration 219). § 5's *Other registered users*
       total is now gated on registered users (opaque per-row holder keys,
       `app_allocation_holders`), and each water year's registered volume
       only at 5 or more holders whose rows are in force that year; the
@@ -3723,7 +3723,7 @@ from the WP:
       registered m³ only as today's per-source totals (dominance rule,
       provisional, #92); run years and § 5's other-unit totals carry status
       and modelled use only; each run freezes its rows' salted holder keys
-      (`run_allocation_holder`, 215).
+      (`run_allocation_holder`, 219).
 - [ ] **Totals read at different times can be differenced** (issue #523
       G1 review finding 6's second half, round 3's accepted residuals).
       Two pack versions' § 5 totals (a unit's rows added or ended between

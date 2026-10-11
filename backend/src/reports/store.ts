@@ -61,7 +61,7 @@ export interface ReportView {
 	error: string | null;
 	/** How many people the link was emailed to (asked for; members only). */
 	emailed: number;
-	/** Printed with each farm's registered volume (214, #523 G1): a viewer kept from them can't download it unless they asked for it. */
+	/** Printed with each farm's registered volume (218, #523 G1): a viewer kept from them can't download it unless they asked for it. */
 	withVolumes: boolean;
 }
 
@@ -82,7 +82,7 @@ export interface ReportRow {
 	error: string | null;
 	createdAt: string;
 	finishedAt: string | null;
-	/** Printed with each farm's registered volume (214, report_enqueue sets it). */
+	/** Printed with each farm's registered volume (218, report_enqueue sets it). */
 	withVolumes: boolean;
 }
 
@@ -164,7 +164,7 @@ export async function recentReportCount(db: Db, projectId: string): Promise<numb
  */
 export async function membersAmong(db: Db, projectId: string, userIds: string[], o: { withVolumes?: boolean } = {}): Promise<{ id: string; email: string }[]> {
 	if (!userIds.length) return [];
-	// A report printed with each farm's volume (214, #523 G1) goes only to members who may read them: an editor or
+	// A report printed with each farm's volume (218, #523 G1) goes only to members who may read them: an editor or
 	// owner, or a viewer while the project lets viewers read each volume (162).
 	const { rows } = await db.query<{ id: string; email: string }>(
 		`SELECT u.id, u.email FROM project_member m JOIN app_user u ON u.id = m.user_id
@@ -200,7 +200,7 @@ export async function finishReport(db: Db, report: ReportRow, r: { pages: number
 	);
 	const f = facts[0];
 	if (!f) return;
-	// Not a viewer kept from the volumes, for a report printed with them (214, #523 G1): its link wouldn't open for them.
+	// Not a viewer kept from the volumes, for a report printed with them (218, #523 G1): its link wouldn't open for them.
 	const to = await membersAmong(db, report.projectId, report.emailTo.filter((id) => id !== report.requestedBy), { withVolumes: report.withVolumes });
 	if (report.emailTo.includes(report.requestedBy)) to.unshift({ id: report.requestedBy, email: f.requesterEmail });
 	const link = sitePage(`/projects/${report.projectId}/reports/${report.jobId}`);

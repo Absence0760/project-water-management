@@ -55,7 +55,7 @@ async function stored(id: string) {
 	const { settings } = ((await asOwner('SELECT settings FROM project WHERE id = $1', [id])) as { settings: { droughtRestriction?: unknown } }[])[0]!;
 	return { nodes, transfers, restriction: settings.droughtRestriction };
 }
-/** Switch every rule on behind the API's back, as a project stored before 216 would hold them. */
+/** Switch every rule on behind the API's back, as a project stored before 220 would hold them. */
 async function storeRules(id: string) {
 	await asOwner(`UPDATE node SET dam_release_rule = 'passInflow', dam_release_m3_day = NULL WHERE project_id = $1 AND name = 'Farm A'`, [id]);
 	await asOwner(`UPDATE node SET hands_off_ewr = true WHERE project_id = $1 AND name = 'Farm B'`, [id]);
@@ -141,7 +141,7 @@ describe('rules from outside a save come in switched off, and the revision says 
 		expect((await revisions(id))[0]!.reason).toBeNull();
 	});
 
-	it('a copy of a project stored with them (before 216) comes without them', async () => {
+	it('a copy of a project stored with them (before 220) comes without them', async () => {
 		const id = await importDoc({});
 		await storeRules(id);
 		const copy = await owner.call('POST', `/projects/${id}/copy`, { name: 'The copy' });
@@ -155,7 +155,7 @@ describe('rules from outside a save come in switched off, and the revision says 
 		const id = await importDoc({});
 		expect((await owner.call('PATCH', `/projects/${id}`, { settings: { lakeEvapFactor: 0.6 } })).status).toBe(200);
 		const [target] = await revisions(id);
-		// A revision recorded before 216, when the baseline could keep the EWR.
+		// A revision recorded before 220, when the baseline could keep the EWR.
 		await asOwner(`UPDATE model_revision SET snapshot = jsonb_set(snapshot, '{settings,droughtRestriction}', $2::jsonb) WHERE id = $1`, [
 			target!.id,
 			JSON.stringify({ ...RESTRICTION, ewrTrigger: TRIGGER })
