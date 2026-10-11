@@ -45,7 +45,7 @@ args = ap.parse_args(argv)
 HERE = os.path.dirname(os.path.abspath(__file__))
 HELP = os.path.join(HERE, "..", "help-art", "catchment.py")
 saved_argv = sys.argv
-sys.argv = [HELP, "--", "--outdir", args.outdir, "--only", "__none__", "--samples", str(args.samples), "--device", args.device]
+sys.argv = [HELP, "--", "--outdir", args.outdir, "--only", "__none__", "--light", "day", "--samples", str(args.samples), "--device", args.device]
 try:
     S = runpy.run_path(HELP, run_name="__main__")
 finally:
@@ -66,64 +66,18 @@ cloud_spots, SUN_AT, sunball = S["cloud_spots"], S["SUN_AT"], S["sunball"]
 hx, hy, hz = S["hx"], S["hy"], S["hz"]
 np = S["np"]
 
-# ---- the dusk rig's extra pieces, hidden by day ---------------------------
-# A lit window on the farmhouse's downstream face.
-glow = bpy.data.materials.new("window")
-glow.use_nodes = True
-gn = glow.node_tree.nodes
-gn.remove(gn["Principled BSDF"])
-ge = gn.new("ShaderNodeEmission")
-ge.inputs["Color"].default_value = (*srgb("#ffc56b"), 1)
-ge.inputs["Strength"].default_value = 6.0
-glow.node_tree.links.new(ge.outputs[0], gn["Material Output"].inputs["Surface"])
-windows = []
-for dx in (-0.08, 0.08):
-    bpy.ops.mesh.primitive_plane_add(size=1, location=(hx + dx, hy - 0.101, hz + 0.1))
-    w = bpy.context.object
-    w.scale = (0.045, 0.045, 1)
-    w.rotation_euler = (math.pi / 2, 0, 0)
-    w.data.materials.append(glow)
-    windows.append(w)
-# A warm lamp over the gauging hut.
-bpy.ops.object.light_add(type="POINT", location=(gx0, gy0 - 0.3, height(gx0, gy0) + 0.45))
-hut_lamp = bpy.context.object
-hut_lamp.data.energy = 6
-hut_lamp.data.color = srgb("#ffc56b")
-
-sun = next(o for o in scene.objects if o.type == "LIGHT" and o.data.type == "SUN")
-# Dusk's second light: the last of the sunset, low from the west, warm.
-bpy.ops.object.light_add(type="SUN", rotation=(math.radians(80), 0, math.radians(-100)))
-sunset = bpy.context.object
-sunset.data.energy = 0.9
-sunset.data.color = srgb("#ff9a5c")
-sunset.data.angle = math.radians(6)
-bg = scene.world.node_tree.nodes["Background"]
+# ---- the dusk rig: the help scene's (catchment.py light()), the sun a moon --
 sun_emit = sunball.data.materials[0].node_tree.nodes["Emission"]
 
 
 def light(mode):
-    dusk = mode == "dusk"
-    for w in windows:
-        w.hide_render = not dusk
-    hut_lamp.hide_render = not dusk
-    sunset.hide_render = not dusk
-    if dusk:
-        # Moonlight as the key: cool, from where the day's sun is, a little lower.
-        bg.inputs["Color"].default_value = (*srgb("#2a4468"), 1)
-        bg.inputs["Strength"].default_value = 0.8
-        sun.rotation_euler = (math.radians(52), math.radians(12), math.radians(35))
-        sun.data.energy = 1.5
-        sun.data.color = srgb("#b9cdee")
+    S["light"](mode)
+    # The hero was lit without the help pictures' front-face fill.
+    S["face_fill"].hide_render = True
+    if mode == "dusk":
+        # Moonlight is the key at dusk, so the sun in the sky is a pale moon.
         sun_emit.inputs["Color"].default_value = (*srgb("#e8eef6"), 1)
         sun_emit.inputs["Strength"].default_value = 2.2
-    else:
-        bg.inputs["Color"].default_value = (*srgb("#cfe3f2"), 1)
-        bg.inputs["Strength"].default_value = 0.9
-        sun.rotation_euler = (math.radians(48), math.radians(12), math.radians(35))
-        sun.data.energy = 3.2
-        sun.data.color = (1, 1, 1)
-        sun_emit.inputs["Color"].default_value = (*srgb("#ff9f0a"), 1)
-        sun_emit.inputs["Strength"].default_value = 1.25
 
 
 # ---- the hero camera: the help landing shot, a little higher and wider ----

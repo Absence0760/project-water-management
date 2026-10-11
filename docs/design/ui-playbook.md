@@ -873,6 +873,16 @@ section it belongs to, with the example that taught it.
   the dark theme's accent into a mid teal that read as a live secondary
   button; `.btn-primary:disabled` is the plain surface, the strong border and
   muted text in both themes (`app.css`).
+- **A picture gets a dark-mode render, not a filter.** The help pictures
+  were bright daylight renders that glared on the dark page, and dimming them
+  (`filter: brightness`) only greyed them. Render the scene again at dusk
+  from the same camera (so markers placed on it fit both) and serve it as a
+  `<picture>` whose `<source media="(prefers-color-scheme: dark)">` holds the
+  dusk set (`DUSK_MEDIA` in `lib/help/pictures.ts`; the landing hero does the
+  same). Keep what a picture labels true at dusk: the help scene's sun stays
+  a sun, since a stop calls it evaporation. A dark render that fills its
+  frame takes a 1 px `--border` outline; a cut-out on transparency takes none
+  (`help.spec.ts`; ui.md § Help).
 - **A badge is sentence case and a rounded box.** `text-transform:
   capitalize` gave "Dam Settings Changed Since The Run"; a badge capitalises
   its first letter only (`::first-letter`). Its corners are half a one-line

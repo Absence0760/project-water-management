@@ -10495,18 +10495,35 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   `scripts/help-art/catchment.py`) renders every shot at its full and half
   width to `static/help/<shot>-<w>.webp`, and projects each labelled feature
   through that shot's camera into `lib/help/pictures.json`, so a marker always
-  sits on its feature. The output is committed; re-run it (needs Blender 5,
-  ImageMagick 7 and python3) only after changing the scene, or pass
-  `HELP_ART_ONLY=farm,soil` to re-render some shots.
+  sits on its feature. Each shot is rendered twice from one camera: by day
+  for light mode and at dusk for dark mode (`static/help/<shot>-dusk-<w>.webp`;
+  issue #521). Dusk is the scene relit, not a filter: a deep blue sky, a cool
+  key, the last of the sunset low from the west, a lit farmhouse window, a
+  lamp over the gauging hut and a cool fill on the block's cut face so the
+  soil layers stay apart on a dark page; the sun stays a sun, since the
+  catchment tour marks it as evaporation. The landing page's dusk hero is the
+  same rig with the sun as a moon (`scripts/landing-art/diorama.py`). The
+  output is committed; re-run it (needs Blender 5, ImageMagick 7 and python3)
+  only after changing the scene, or pass `HELP_ART_ONLY=farm,soil` to
+  re-render some shots and `HELP_ART_LIGHT=day` or `dusk` for one lighting.
+  `HELP_ART_DEVICE` picks Cycles' device (OptiX by default; `CPU` on a
+  machine without a working GPU backend: the dusk set was rendered on the
+  CPU, 128 samples, about 4½ minutes). `lib/help/tour.test.ts` fails if a
+  shot lacks either lighting at either width, if the two differ in size, or
+  if a file reaches check:bundle's 100 KB asset ceiling.
 - **Picture tours** (`help/PictureTour.svelte`): a shot with numbered markers
   and, under it, the numbered list of stops, which is the full text. The
   markers are a pointer shortcut (out of the tab order and hidden from screen
   readers, since the list says the same); clicking one lights its stop, and
   hovering or focusing a stop lights its marker. A stop with more to say has
   **Show more** (`aria-expanded`), which opens it in place across the full
-  width: key points beside a close-up shot, or a diagram. In dark mode the
-  shots (daylight renders) are dimmed a little and framed, the markers left
-  at full strength (issue #521).
+  width: key points beside a close-up shot, or a diagram. Every picture, here
+  and in a help tip, is a `<picture>` whose dusk source the dark theme picks
+  (`DUSK_MEDIA`, the OS preference app.css follows, as the landing hero
+  does); no filter goes over it. In dark mode a shot that fills its frame
+  keeps a 1 px border-coloured outline, since its evening sky meets the dark
+  page with little contrast; the cut-out catchment block (`cutout` in
+  `pictures.json`) gets none (`help.spec.ts`, both themes).
 - **Overview** (`/help`): the catchment tour (eight stops from rain to the
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
   setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
