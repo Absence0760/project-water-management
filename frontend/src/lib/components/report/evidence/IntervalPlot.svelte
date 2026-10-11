@@ -97,7 +97,7 @@
 		fill: var(--text-muted);
 	}
 	figcaption {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 72ch;
 	}

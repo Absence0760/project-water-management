@@ -234,12 +234,12 @@
 	}
 	.note {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.hash {
 		overflow-wrap: anywhere;

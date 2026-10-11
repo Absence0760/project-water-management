@@ -462,10 +462,10 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.fields {
@@ -566,7 +566,7 @@
 		margin: 0;
 	}
 	.check {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin-top: 0.35rem;
 	}
 	.check input {
@@ -579,6 +579,6 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 </style>

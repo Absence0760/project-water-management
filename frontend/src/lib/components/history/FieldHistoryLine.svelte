@@ -32,7 +32,7 @@
 	.field-history {
 		display: block;
 		margin-top: 0.15rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: normal;
 		color: var(--text-muted);
 		text-decoration: none;

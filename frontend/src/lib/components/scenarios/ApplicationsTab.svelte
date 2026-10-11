@@ -343,7 +343,7 @@
 	}
 	.sub {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.wait {
@@ -367,7 +367,7 @@
 		padding: 0.05rem 0.5rem;
 		border-radius: var(--radius);
 		border: 1px solid var(--border);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		line-height: 1.4;
 		background: var(--surface-2);

@@ -533,7 +533,7 @@
 	/* The column header: the same grid as a row, so the caption sits over the sparklines. */
 	.list-cols {
 		padding: 0 0 0.3rem;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		line-height: 1.25;
 		color: var(--text-muted);
 	}
@@ -579,7 +579,7 @@
 		overflow: hidden;
 	}
 	.facts {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.warn-flag {
@@ -626,7 +626,7 @@
 		border-radius: var(--radius-sm);
 		background: var(--text);
 		color: var(--surface);
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		line-height: 1.3;
 		text-align: left;
 		pointer-events: none;
@@ -730,7 +730,7 @@
 		padding: 0.5rem 0 0;
 		border-top: 1px solid var(--border);
 		list-style: none;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.legend li {

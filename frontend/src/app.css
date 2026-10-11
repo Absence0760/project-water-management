@@ -106,6 +106,11 @@
 	--header-h: 52px;
 	/* Minimum touch target on small / touch screens. */
 	--tap: 44px;
+	/* The two small text sizes (ui-playbook § 3, type scale): badges, units, tags and card labels take
+	   --font-xs, hints, captions, .small lines and table heads --font-sm. Nothing on screen is set smaller
+	   (uiPatterns.test.ts scans for it). A phone lifts both to 12 px, below. */
+	--font-xs: 0.75rem;
+	--font-sm: 0.8rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -426,7 +431,7 @@ textarea {
 	color: var(--text-2);
 }
 .field .hint {
-	font-size: 0.8rem;
+	font-size: var(--font-sm);
 	color: var(--text-muted);
 }
 .form-row {
@@ -599,7 +604,7 @@ table.data thead {
 table.data thead th {
 	background: var(--surface-2);
 	font-weight: 600;
-	font-size: 0.8rem;
+	font-size: var(--font-sm);
 	color: var(--text-2);
 	text-align: left;
 	white-space: nowrap;
@@ -701,7 +706,7 @@ table.data tr.flag {
 	/* Half a one-line badge's height: a pill on one line, a rounded box when a
 	   long one wraps in a narrow cell (999px turned that into a tall blob, issue #521). */
 	border-radius: 0.7rem;
-	font-size: 0.75rem;
+	font-size: var(--font-xs);
 	font-weight: 600;
 	background: var(--surface-2);
 	border: 1px solid var(--border);
@@ -737,7 +742,7 @@ table.data tr.flag {
 	margin: 0;
 }
 .stat dt {
-	font-size: 0.78rem;
+	font-size: var(--font-sm);
 	color: var(--text-muted);
 	margin-bottom: 0.15rem;
 }
@@ -750,7 +755,7 @@ table.data tr.flag {
 	font-weight: 600;
 }
 .stat dd small {
-	font-size: 0.75rem;
+	font-size: var(--font-xs);
 	font-weight: 400;
 	color: var(--text-muted);
 	margin-left: 0.2rem;
@@ -789,26 +794,16 @@ table.data tr.flag {
 
 /* Secondary text: hints, captions, notes. Usually with .muted. */
 .small {
-	font-size: 0.8rem;
+	font-size: var(--font-sm);
 }
-/* A phone's floor for the shared small text (issue #521 round 5): badges, .small lines, table column heads and
-   tile labels are at least 12 px under 640 px (10.5–11.2 px at the 14 px root), still in rem above it so a
-   larger root font scales them; on screen only (paper has its own sizes, even from a narrow window). A
-   component's own smaller size for these classes would win (its rule carries its hash), so
-   e2e/tests/phone-edit-controls.spec.ts walks them on the workspace's pages. */
+/* A phone's floor for small text (issue #521, rounds 5 and 6): under 640 px both small sizes are at least 12 px
+   (10.5 and 11.2 px at the 14 px root), still in rem above it so a larger root font scales them; on screen only
+   (paper keeps its sizes, even from a narrow window). Every component's small text takes these tokens, so the
+   floor holds app-wide; e2e/tests/text-floor.spec.ts measures every workspace tab. */
 @media screen and (max-width: 640px) {
-	.badge {
-		font-size: max(0.75rem, 12px);
-	}
-	.small,
-	table.data thead th {
-		font-size: max(0.8rem, 12px);
-	}
-	.stat dt {
-		font-size: max(0.78rem, 12px);
-	}
-	.stat dd small {
-		font-size: max(0.75rem, 12px);
+	:root {
+		--font-xs: max(0.75rem, 12px);
+		--font-sm: max(0.8rem, 12px);
 	}
 }
 /* A unit beside a label or in a table head: "Area <span class="u">ha</span>". */

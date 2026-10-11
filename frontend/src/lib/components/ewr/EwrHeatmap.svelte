@@ -310,7 +310,7 @@
 		gap: 0.35rem 0.9rem;
 		padding: 0;
 		margin: 0 0 0.4rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.legend li {
@@ -326,7 +326,7 @@
 	}
 	.readout {
 		min-height: 1.3em;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-2);
 		margin: 0 0 0.35rem;
 		font-variant-numeric: tabular-nums;
@@ -338,7 +338,7 @@
 	table.heat {
 		border-collapse: separate;
 		border-spacing: 2px;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-variant-numeric: tabular-nums;
 	}
 	.heat th {
@@ -424,7 +424,7 @@
 		background: repeating-linear-gradient(45deg, transparent 0 3px, var(--border) 3px 4px);
 	}
 	.note {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin-top: 0.4rem;
 	}
 	@media (forced-colors: active) {

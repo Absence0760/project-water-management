@@ -342,13 +342,13 @@
 		padding: 0 0.35rem;
 		border: 1px solid var(--border);
 		border-radius: 999px;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 	}
 	.sizing {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 	}
 	tr.off td,
@@ -372,7 +372,7 @@
 	}
 	.reg-status {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.reg-status.over {

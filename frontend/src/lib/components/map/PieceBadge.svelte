@@ -32,7 +32,7 @@
 		box-shadow: inset 0 -5px 0 var(--piece-tint, transparent);
 		color: var(--text);
 		font-weight: 700;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		line-height: 1;
 	}
 	.rest {

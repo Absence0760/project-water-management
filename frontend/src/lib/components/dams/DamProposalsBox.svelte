@@ -230,7 +230,7 @@
 	.detail {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		overflow-wrap: anywhere;
 	}
 	th[scope='row'] {

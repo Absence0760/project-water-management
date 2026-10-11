@@ -135,7 +135,7 @@
 		padding: 0;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 		margin: 0 0 0.5rem;
 	}

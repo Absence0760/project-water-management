@@ -406,7 +406,7 @@
 		margin-top: 0.15rem;
 		color: var(--text-muted);
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.meta-narrow,
 	.meta-mid {
@@ -431,12 +431,12 @@
 		max-width: 72ch;
 		color: var(--text-2);
 		font-weight: 400;
-		font-size: 0.83rem;
+		font-size: 0.85rem;
 	}
 	.sub {
 		display: block;
 		margin-top: 0.2rem;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.sub.warn {
@@ -459,7 +459,7 @@
 		margin-top: 0.25rem;
 	}
 	.run {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.short {

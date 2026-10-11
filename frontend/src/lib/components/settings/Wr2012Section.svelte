@@ -348,10 +348,10 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.panel > .hint {
@@ -455,7 +455,7 @@
 	.derived td,
 	.derived th {
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.check {
 		display: inline-flex;
@@ -464,7 +464,7 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.head-actions {
 		display: flex;

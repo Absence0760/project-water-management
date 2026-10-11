@@ -77,11 +77,11 @@ test('Network tab: a small hint, and the node table’s units', async ({ page, o
 	const table = await openNodeTable(page);
 	await eachCombo(page, async (at) => {
 		// A column header's unit; on a phone the headers are gone and each node's card labels its
-		// fields ("Area km²", node-table.spec.ts), the unit at the label's 0.75rem.
+		// fields ("Area km²", node-table.spec.ts), the unit at the label's --font-xs (12 px on a phone, issue #521 round 6).
 		const phone = at.endsWith(' 390px');
 		const unit = table.locator(phone ? 'td .cell-label .u' : 'th .u').filter({ hasText: /^km²$/ }).first();
 		await expect(unit, at).toBeVisible();
-		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': phone ? '10.5px' : SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
+		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': phone ? '12px' : SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
 	});
 });
 

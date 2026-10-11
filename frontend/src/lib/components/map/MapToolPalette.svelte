@@ -148,7 +148,7 @@
 		outline-offset: -1px;
 	}
 	.word {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		line-height: 1.1;
 		font-weight: 500;
 	}

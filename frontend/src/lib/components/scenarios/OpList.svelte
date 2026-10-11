@@ -123,7 +123,7 @@
 		color: var(--text);
 	}
 	.tag {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		line-height: 1.5;
 		padding: 0 0.4rem;
@@ -139,7 +139,7 @@
 	.problem,
 	.note {
 		flex-basis: 100%;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 	}
 	.problem {
 		color: var(--warning);

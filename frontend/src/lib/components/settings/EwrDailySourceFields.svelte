@@ -453,13 +453,13 @@
 		min-height: 32px;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.factor {
 		grid-column: 1 / -1;
@@ -524,7 +524,7 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.pending {
 		margin: 0.35rem 0 0;

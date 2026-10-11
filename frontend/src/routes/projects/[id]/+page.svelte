@@ -1229,7 +1229,7 @@
 	}
 	.fresh-pop p {
 		margin: 0.4rem 0 0;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 	}
 	.fresh-none {
 		font-size: 0.85rem;
@@ -1363,7 +1363,7 @@
 	.side-kicker,
 	.section-label {
 		color: var(--text);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -1551,7 +1551,7 @@
 		background: var(--warning-soft);
 		color: var(--warning);
 		border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		line-height: 1.35;
 		text-align: center;

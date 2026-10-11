@@ -83,7 +83,7 @@
 		margin: 0;
 	}
 	.count {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
@@ -138,7 +138,7 @@
 		list-style: none;
 		margin: 0.25rem 0 0;
 		padding: 0;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 	}
 	.reason + .reason {
 		margin-top: 0.1rem;

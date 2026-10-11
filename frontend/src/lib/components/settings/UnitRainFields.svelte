@@ -282,13 +282,13 @@
 	/* A block of its own: inline, the switch's explanation ran on after its label (issue #521). */
 	.hint {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.err {
 		display: block;
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.unit-rain {
 		margin-top: 0.75rem;

@@ -293,13 +293,13 @@
 		color: var(--text-2);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.periods {
 		list-style: none;
@@ -353,7 +353,7 @@
 		max-width: 100%;
 	}
 	.months th {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 500;
 		color: var(--text-muted);
 	}
@@ -365,7 +365,7 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	input.invalid {
 		border-color: var(--danger);

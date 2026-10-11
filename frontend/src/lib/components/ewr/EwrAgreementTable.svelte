@@ -180,7 +180,7 @@
 		padding: 0.4rem 0.6rem;
 	}
 	.scores dt {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.scores dd {
@@ -189,19 +189,19 @@
 		font-weight: 600;
 	}
 	.scores dd.sub {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 	}
 	.matrix caption {
 		text-align: left;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		padding-bottom: 0.25rem;
 	}
 	.tag {
 		display: block;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.bd-h {

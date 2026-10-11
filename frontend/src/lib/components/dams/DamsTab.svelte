@@ -517,7 +517,7 @@
 	}
 	.cap {
 		flex: none;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-variant-numeric: tabular-nums;
 	}
 	.level {

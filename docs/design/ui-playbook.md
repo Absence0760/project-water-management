@@ -818,6 +818,33 @@ section it belongs to, with the example that taught it.
 
 - **Colours are tokens** in `frontend/src/app.css` with dark-theme values
   (`--series-*`, `--accent`, `--warning`…); no raw hex in components.
+- **Type scale: small text is a token, and a phone's floor is 12 px.**
+  Small text takes `--font-xs` (0.75rem: badges, units, tags, a table's
+  card labels, counts, kickers) or `--font-sm` (0.8rem: hints, captions,
+  `.small` lines, table heads, tile labels); under 640 px on screen both are
+  `max(<rem>, 12px)`, so a phone never draws text under 12 px and a larger
+  root still scales them. Anything bigger is a literal rem (0.85rem and up,
+  11.9 px counts as the floor). Never write a literal size under 0.85rem:
+  about 400 component sizes from 0.6rem to 0.83rem (8.4–11.6 px on a phone,
+  the unit table's card labels 10.5 px) each wrote their own until issue
+  #521 round 6 moved them onto the two tokens. `uiPatterns.test.ts` refuses
+  a new one; `text-floor.spec.ts` measures every tab at 390 px (12 px) and
+  1440 px (10.5 px), the app frame included. The decided exceptions, listed
+  by file and rule in `uiPatterns.test.ts`:
+  - print styles (`@media print`): paper has its own sizes;
+  - text in an svg (chart axes and labels, diagrams, a step icon's digit):
+    sized in the drawing's units, so its drawn size follows the drawing's
+    scale, and `checkDiagramLabels` measures that;
+  - a glyph a screen reader skips (`aria-hidden`): a menu's ▾, a delta's
+    ▲▼, a sorted column's arrow;
+  - a count bubble on an icon button whose name carries the count (the
+    sidebar's hidden sections, the compact notes button, the account
+    menu's "i"), in a fixed 14 px dot.
+  Text that grows can stop fitting where it used to: a sparkline's "max
+  0.80" between "Oct" and "Sep" fit a 100 px crop column at 9.8 px and was
+  cut off at 12 px, so on a phone the mark takes its own line under the two
+  ends there. Run `clippedText` and `expectNoSidewaysScroll` at 320 and 390
+  px after raising a size.
 - **No two named things share a colour.** A palette runs out: give colours
   to the items that matter most (largest area, most demand) and group the
   tail as one labelled "Other" that names its members. The Crops page's
@@ -1524,14 +1551,13 @@ Interaction details that bit:
   is sticky. Gate the sticky column on the attribute, not on the table: a
   table restyled as cards on a phone (Upload GeoJSON, the node table) would
   otherwise give its card head a background and a border.
-- **The shared small text has a phone floor of 12 px.** Badges, `.small`,
-  table column heads and tile labels were 10.5–11.2 px at the 14 px root;
-  under 640 px they are `max(<their rem>, 12px)`, so a larger root still
-  scales them. A component's scoped rule for those classes wins over app.css
-  (its hash), so a redundant scoped copy (`.small { font-size: 0.8rem }`, the
-  global value) is deleted rather than kept, and a deliberate smaller size
-  gets its own phone rule; `phone-edit-controls.spec.ts` walks the classes
-  on nine tabs.
+- **The shared small text has a phone floor of 12 px**, through the two
+  type-scale tokens (§ 3 "Type scale"): badges, `.small`, `.field .hint`,
+  table column heads and tile labels were 10.5–11.2 px at the 14 px root.
+  A component's scoped rule for those classes wins over app.css (its hash),
+  so a redundant scoped copy (`.small { font-size: 0.8rem }`, the global
+  value) is deleted rather than kept, and a deliberate size of its own uses
+  a token or a size of 0.85rem and up.
 - **Line up a table of fieldsets with fixed row heights, not subgrid.** The
   drought levels became one table (a column per level, a row per part of
   demand) while each level stays a `<fieldset>` named by its legend, so the

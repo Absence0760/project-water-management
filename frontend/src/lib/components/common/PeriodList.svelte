@@ -158,7 +158,7 @@
 		color: var(--text-2);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 75ch;
 		margin: 0 0 0.4rem;
@@ -166,7 +166,7 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.rows {
 		list-style: none;
@@ -201,7 +201,7 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	input.invalid {
 		border-color: var(--danger);

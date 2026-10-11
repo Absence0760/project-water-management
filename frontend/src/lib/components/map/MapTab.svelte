@@ -1914,7 +1914,7 @@
 		border-radius: 999px;
 		background: var(--accent);
 		color: var(--accent-contrast);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 	}
 	/* A panel over the map: it scrolls in its own box, never the page. */
@@ -2028,7 +2028,7 @@
 		outline-offset: -3px;
 	}
 	.tab-count {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.4rem;
 		border-radius: 999px;

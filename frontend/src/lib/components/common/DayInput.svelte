@@ -135,7 +135,7 @@
 		display: block;
 		margin-top: 0.15rem;
 		color: var(--danger);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		line-height: 1.3;
 		font-weight: 400;
 		white-space: normal;

@@ -151,7 +151,7 @@
 		margin-bottom: 0.75rem;
 	}
 	.bar-name {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		color: var(--text-2);
 	}
@@ -174,7 +174,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.2rem 0.9rem;
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}

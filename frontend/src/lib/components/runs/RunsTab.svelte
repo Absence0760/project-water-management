@@ -1160,7 +1160,7 @@
 	/* Proportional figures: Inter's tabular ones set each hyphen a digit wide, and "2026-10-11 01:01 ·
 	   2021–2022" then missed the rail's line by a few px, a third line on every row. */
 	.meta {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.meta .nw {
@@ -1173,7 +1173,7 @@
 		margin-top: 0.15rem;
 	}
 	.tag {
-		font-size: 0.68rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		line-height: 1.5;
 		padding: 0 0.35rem;

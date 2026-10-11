@@ -479,7 +479,7 @@
 		margin: 0.75rem 0 0.25rem;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	/* The choices that decide the fit: one row where the panel is wide, top-aligned. */
@@ -573,11 +573,11 @@
 	}
 	.gist {
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.period {
 		font-weight: 400;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	@media (max-width: 640px) {

@@ -326,7 +326,7 @@
 	}
 	.from {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin-top: 0.15rem;
 	}
 	.alert p,

@@ -49,12 +49,12 @@
 	}
 	.rgrid {
 		border-collapse: collapse;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-variant-numeric: tabular-nums;
 	}
 	caption {
 		text-align: left;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		padding-bottom: 0.25rem;
 	}
@@ -106,7 +106,7 @@
 		border-color: transparent;
 	}
 	.cap {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 72ch;
 	}

@@ -317,7 +317,7 @@
 	.sub-email {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.invites {
@@ -363,7 +363,7 @@
 		font-weight: 500;
 	}
 	.meta {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.invites .act {

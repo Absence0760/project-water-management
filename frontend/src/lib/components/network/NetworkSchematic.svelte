@@ -667,7 +667,7 @@
 		align-items: center;
 		gap: 0.2rem 1rem;
 		margin-top: 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.legend-line .legend,
@@ -749,7 +749,7 @@
 	}
 	.drag-status {
 		margin: 0.5rem 0 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		min-height: 1.2em;
 	}
@@ -811,7 +811,7 @@
 	}
 	.supply-run {
 		margin: 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	/* Edited since the coloured run (issue #444): the drawing's ink, ringed in its ground, so it reads on every band
@@ -882,7 +882,7 @@
 		gap: 0.3rem 1rem;
 		margin: 0.6rem 0 0;
 		padding: 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.legend li {
@@ -928,7 +928,7 @@
 	}
 	.band-note {
 		margin: 0.2rem 0.5rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.alert {

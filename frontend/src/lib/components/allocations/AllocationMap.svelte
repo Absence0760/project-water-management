@@ -249,7 +249,7 @@
 		border-radius: 999px;
 		background: var(--band-fill);
 		color: var(--band-text);
-		font: 700 0.8rem/1.2 var(--font, system-ui, sans-serif);
+		font: 700 var(--font-sm)/1.2 var(--font, system-ui, sans-serif);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 		cursor: pointer;

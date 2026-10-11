@@ -367,7 +367,7 @@
 	/* A group of panels (sections.ts): a quiet label above them, not a panel title. */
 	.group-h {
 		margin: 1.25rem 0 0.6rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -391,6 +391,6 @@
 	}
 	.q {
 		margin-top: 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 </style>

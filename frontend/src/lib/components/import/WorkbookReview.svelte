@@ -147,6 +147,6 @@
 	}
 	.hint,
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 </style>

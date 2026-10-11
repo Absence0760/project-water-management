@@ -93,7 +93,7 @@
 	}
 	.what {
 		margin: 0 0 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.months {
@@ -109,7 +109,7 @@
 		flex-direction: column;
 		align-items: center;
 		min-width: 0;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		line-height: 1.2;
 	}
 	.n {
@@ -155,7 +155,7 @@
 		list-style: none;
 		margin: 0.35rem 0 0;
 		padding: 0;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.key .item {
@@ -173,7 +173,7 @@
 	}
 	.y {
 		min-height: 1.2em;
-		font-size: 0.7rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	/* A phone: two rows of six. */

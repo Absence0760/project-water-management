@@ -13,7 +13,7 @@
 
 <style>
 	.flow-unit {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		padding: 0 0.2rem;
 		min-height: 24px;
 		width: auto;

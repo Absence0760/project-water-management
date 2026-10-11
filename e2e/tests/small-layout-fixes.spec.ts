@@ -67,7 +67,7 @@ test('the Licence conditions legend stays on one line at 390 px, its note under 
 	const fieldset = sheet.getByRole('group', { name: /^Licence conditions/ });
 	await expect(fieldset).toBeVisible();
 	await expect(fieldset).toHaveAccessibleDescription('Optional; a cap run keeps to the months and the rate.');
-	const legend = fieldset.locator('legend');
+	const legend = fieldset.locator(':scope > legend'); // its own, not the month picker's hidden one inside it
 	// One line: no taller than its help button (a 24 px target) and a little; two lines of text are over 40 px.
 	expect((await legend.boundingBox())!.height).toBeLessThan(34);
 	for (const width of [320, 390]) {
