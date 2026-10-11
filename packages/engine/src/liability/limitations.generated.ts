@@ -53,6 +53,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Warned, engine 0.18.0 (CR-20)"
 	},
 	{
+		"id": "B4",
+		"source": "finding",
+		"severity": "Medium (catchments whose gauge was not read every day)",
+		"title": "Untagged multi-day accumulations put several days' rain on one day, and the zero-run fill counted it twice",
+		"status": "Fixed, engine 0.20.0 (issue #2)"
+	},
+	{
 		"id": "S1",
 		"source": "finding",
 		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
