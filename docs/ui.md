@@ -8603,7 +8603,9 @@ the band, with the registered volume as a line across it, and its modelled
 m³ written beside it; hidden from screen readers, the table under it
 carries the numbers); the same years as a table (registered
 m³, modelled use m³ "modelled, not metered", under it for a dam beside the
-river "taken at the intake; drawn from the dam N, not added", modelled ÷ registered, the
+river "taken at the intake; drawn from the dam N, not added", and for a dam on
+the river "dam losses N, not counted" (its evaporation plus the seepage that
+doesn't return, engine ≥ 1.83.0, issue #507 item 7), modelled ÷ registered, the
 status badge with its full sentence in the title, "part (N d)" for a part
 year); its registered storage beside the dam capacity in the run, with the
 difference and the band in words ("the dam is 50 000 m³ larger than the

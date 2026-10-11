@@ -67,6 +67,17 @@ describe('comparisonRows', () => {
 		expect(unitRows(c)[0]).toMatchObject({ atIntake: true, modelledM3: 36_500 });
 		expect(unitRows(comparison()).every((u) => !u.atIntake)).toBe(true);
 	});
+
+	it('carries a dam on the river\'s losses on its surface rows, beside the use and not in it (engine 1.83.0, #507 item 7)', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [{ nodeId: 'D', name: 'Farm D', kind: 'farm', supplied: new Array(365).fill(80), damEvaporation: new Array(365).fill(3), damSeepageLost: new Array(365).fill(1) }],
+			allocations: [{ id: 'd', nodeId: 'D', waterSource: 'surface', volumeM3PerYear: 29_200 }]
+		});
+		const [row] = comparisonRows(c);
+		expect(row).toMatchObject({ atIntake: false, year: { modelledM3: 29_200, damLossesM3: 1_460, status: 'within' } });
+		expect(unitRows(c)[0]).toMatchObject({ modelledM3: 29_200 });
+	});
 });
 
 describe('unitRows', () => {

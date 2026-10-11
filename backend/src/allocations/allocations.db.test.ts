@@ -420,6 +420,14 @@ describe('the run comparison', () => {
 		const y = (await compare())(g.id);
 		expect(y.surface.measuredAt).toBeUndefined();
 		expect(y.surface.years[0].modelledM3).toBeGreaterThan(0);
+		// Its dam losses (evaporation + seepage that doesn't return) are reported beside the use, not in it (engine 1.83.0, #507 item 7).
+		const gl = await asOwner(`SELECT key, "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key IN ('dam_evaporation', 'dam_seepage_lost')`, [run.body.run.id, g.id]);
+		const losses = gl.reduce((t, r) => t + sum(r.values as number[]), 0);
+		expect(losses).toBeGreaterThan(0);
+		expect(y.surface.years[0].damLossesM3).toBeCloseTo(losses, 3);
+		expect(y.groundwater.years[0].damLossesM3).toBeUndefined();
+		// The dam beside the river reports none: its take at the intake already holds what the dam later loses.
+		expect(x.surface.years[0].damLossesM3).toBeUndefined();
 
 		// An older run: no intake_take (a 1.79.0–1.81.0 run stored diverted_loss instead, which isn't read): the draws.
 		await asOwner(`UPDATE run_series SET key = 'diverted_loss' WHERE run_id = $1 AND node_id = $2 AND key = 'intake_take'`, [run.body.run.id, f.id]);

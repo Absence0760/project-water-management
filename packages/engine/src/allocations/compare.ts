@@ -107,6 +107,15 @@ export interface AllocationUseNode {
 	receivedAtIntake?: ArrayLike<number | null> | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
+	/**
+	 * The unit's dam losses (m³/day, engine ≥ 1.83.0, issue #507 item 7): the
+	 * run's `dam_evaporation` and `dam_seepage_lost` (the seepage that doesn't
+	 * return; absent when it all returns). Given only for a unit with a dam;
+	 * on a dam on the river (not measured at the intake) their sum is reported
+	 * per water year as `damLossesM3`, beside the use, never counted in it.
+	 */
+	damEvaporation?: ArrayLike<number | null> | null;
+	damSeepageLost?: ArrayLike<number | null> | null;
 }
 
 export interface AllocationComparisonInput {
@@ -145,6 +154,14 @@ export interface AllocationYear {
 	 * added to it. Absent otherwise.
 	 */
 	damDrawM3?: number;
+	/**
+	 * The dam's evaporation plus the seepage that doesn't return over the days
+	 * covered (m³, engine ≥ 1.83.0, issue #507 item 7), on the surface side of
+	 * a unit whose dam is on the river (not measured at the intake): storing
+	 * water is its own water use (NWA s21b), so the losses are shown beside the
+	 * use, never added to it, judged or capped. Absent otherwise.
+	 */
+	damLossesM3?: number;
 	/** Registered volume in force over the days covered, m³ (prorated by day for partial years and validity dates). */
 	registeredM3: number;
 	/** modelled / registered; null when nothing is registered. */
@@ -171,6 +188,8 @@ export interface AllocationSourceComparison {
 	meanModelledM3PerYear: number | null;
 	/** Mean registered volume per whole water year, m³; null without a whole year. */
 	meanRegisteredM3PerYear: number | null;
+	/** Mean dam losses per whole water year (m³; null without a whole year), when the years report `damLossesM3` (engine ≥ 1.83.0); absent otherwise. */
+	meanDamLossesM3PerYear?: number | null;
 }
 
 export interface AllocationNodeComparison {
@@ -236,7 +255,9 @@ const waterYearStart = (wy: number) => toEpochDay(`${wy}-10-01`);
  * pumped; the dam draw attributes to it first, up to what was pumped in that
  * water year, so re-drawing it is not a second, surface take. Water from a
  * dam beside the river was counted at that dam's intake, so it is netted the
- * same way. A unit measured at the intake reports its dam draw beside the take.
+ * same way. A unit measured at the intake reports its dam draw beside the take;
+ * a unit with a dam on the river reports the dam's losses (evaporation plus
+ * the seepage that doesn't return, engine ≥ 1.83.0) beside its use, not in it.
  */
 export function compareAllocations(input: AllocationComparisonInput): AllocationComparison {
 	const tolerance = input.tolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
@@ -289,6 +310,8 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const rivers = (n.riverTakes ?? []).filter((x): x is ArrayLike<number | null> => !!x);
 		const take = n.intakeTake ?? null;
 		const rcv = n.receivedAtIntake ?? null;
+		const evap = n.damEvaporation ?? null;
+		const seepLost = n.damSeepageLost ?? null;
 		const riverAt = (t: number) => {
 			let v = ra ? finite(ra[t]) : 0;
 			for (const x of rivers) v += finite(x[t]);
@@ -301,11 +324,15 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 				let modelled = 0;
 				let toDam = 0;
 				let damDraw = 0;
+				let losses = 0;
 				const atIntake = source === 'surface' && !!take;
+				// A dam on the river (#507 item 7): its losses are shown beside the use, never counted in it.
+				const onRiverDam = source === 'surface' && !take && !!evap;
 				for (let d = s.from; d <= s.to; d++) {
 					const t = d - start;
 					const g = gw ? finite(gw[t]) : 0;
 					const pumped = gd ? finite(gd[t]) : 0;
+					if (onRiverDam) losses += finite(evap![t]) + (seepLost ? finite(seepLost[t]) : 0);
 					if (source === 'groundwater') modelled += g + pumped;
 					else if (atIntake) {
 						// Measured at the intake (engine ≥ 1.82.0): the take is the use; the dam draw is reported only.
@@ -331,6 +358,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 					partial: covered < s.yearDays,
 					modelledM3: modelled,
 					...(atIntake ? { damDrawM3: damDraw } : {}),
+					...(onRiverDam ? { damLossesM3: losses } : {}),
 					registeredM3: reg,
 					ratio: reg > NOTHING_M3 ? modelled / reg : null,
 					status: allocationStatus(modelled, reg, tolerance)
@@ -346,7 +374,8 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 				yearsOver: whole.filter((y) => y.status === 'over').length,
 				wholeYears: whole.length,
 				meanModelledM3PerYear: mean((y) => y.modelledM3),
-				meanRegisteredM3PerYear: mean((y) => y.registeredM3)
+				meanRegisteredM3PerYear: mean((y) => y.registeredM3),
+				...(years.some((y) => y.damLossesM3 !== undefined) ? { meanDamLossesM3PerYear: mean((y) => y.damLossesM3 ?? 0) } : {})
 			};
 		};
 		// Storage registered for any of the run's days (an allocation that lapsed before the run, or starts after it, isn't the dam's now).

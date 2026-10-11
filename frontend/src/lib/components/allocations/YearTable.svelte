@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Modelled use against the registered volume, one row per unit, water
 	// source and water year (WP-3.10, docs/ui.md § Allocations): the picked
-	// unit's years beside the list, and every unit's under it. Every modelled
+	// unit's years beside the list, and every unit's under it; a dam on the
+	// river's losses show under its use, never counted (#507 item 7). Every modelled
 	// number is labelled "modelled, not metered", and the words describe the
 	// arithmetic, never a finding of lawfulness. In a narrow container each row
 	// is a card of label–value lines. The table grows with its rows (the page
@@ -54,6 +55,9 @@
 						<td class="num" data-label="Modelled use (m³, not metered)"
 							>{fmtNum(r.year.modelledM3)}{#if r.atIntake}<span class="sub" data-testid="allocation-at-intake"
 									>taken at the intake{#if r.year.damDrawM3 !== undefined}; drawn from the dam {fmtNum(r.year.damDrawM3)}, not added{/if}</span
+								>{/if}{#if r.year.damLossesM3 !== undefined}<span class="sub" data-testid="allocation-dam-losses"
+									title="The dam's evaporation plus the seepage that doesn't return: storing water is its own water use (s21b), so it isn't counted against the registered volume."
+									>dam losses {fmtNum(r.year.damLossesM3)}, not counted</span
 								>{/if}</td
 						>
 						<td class="num" data-label="Modelled ÷ registered">{r.year.ratio === null ? '–' : `${fmtNum(r.year.ratio * 100, 0)} %`}</td>

@@ -303,14 +303,16 @@ function useNodesLikeBackend(input: ModelInput, out: ModelOutput): AllocationUse
 			riverAbstraction: get(n.id, 'river_abstraction'),
 			riverTakes: picked.filter((s) => s.nodeId === n.id && (s.key === 'offtake_used' || s.key.startsWith('river_take@'))).map((s) => s.values),
 			intakeTake: get(n.id, 'intake_take'),
-			receivedAtIntake: get(n.id, 'received_at_intake')
+			receivedAtIntake: get(n.id, 'received_at_intake'),
+			// Only a unit with a dam (runUseNodes: damCapacityM3 > 0).
+			...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get(n.id, 'dam_evaporation'), damSeepageLost: get(n.id, 'dam_seepage_lost') } : {})
 		}));
 }
 
 describe('deep: RunSummary.allocations is compareAllocations on the run’s own series (§2.12)', () => {
 	it('the backend reads exactly the keys the engine’s summary passes', () => {
 		const { exact, prefixes } = backendKeys();
-		expect([...exact].sort()).toEqual(['groundwater_to_dam', 'groundwater_used', 'intake_take', 'offtake_used', 'received_at_intake', 'river_abstraction', 'supplied']);
+		expect([...exact].sort()).toEqual(['dam_evaporation', 'dam_seepage_lost', 'groundwater_to_dam', 'groundwater_used', 'intake_take', 'offtake_used', 'received_at_intake', 'river_abstraction', 'supplied']);
 		expect(prefixes).toEqual(['river_take@']);
 	});
 
@@ -319,6 +321,7 @@ describe('deep: RunSummary.allocations is compareAllocations on the run’s own 
 			const bad: string[] = [];
 			let compared = 0;
 			let gwRows = 0;
+			let withLosses = 0;
 			for (const seed of SEEDS.slice(0, 45)) {
 				const input = withAllocations(randomInput(seed, GEN), seed, mode);
 				const out = runModel(input);
@@ -339,6 +342,10 @@ describe('deep: RunSummary.allocations is compareAllocations on the run’s own 
 						const close = (a: number | null, b: number | null) => (a === null || b === null ? a === b : Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b)));
 						if (src.wholeYears !== side.wholeYears || src.yearsOver !== side.yearsOver || !close(src.meanModelledM3PerYear, side.meanModelledM3PerYear) || !close(src.meanRegisteredM3PerYear, side.meanRegisteredM3PerYear))
 							bad.push(`seed ${seed} ${n.nodeId} ${src.waterSource}: summary ${JSON.stringify([src.wholeYears, src.yearsOver, src.meanModelledM3PerYear, src.meanRegisteredM3PerYear])} vs tab ${JSON.stringify([side.wholeYears, side.yearsOver, side.meanModelledM3PerYear, side.meanRegisteredM3PerYear])}`);
+						// A dam on the river's losses (engine ≥ 1.83.0, #507 item 7): the same on both paths.
+						if ((src.meanDamLossesM3PerYear === undefined) !== (side.meanDamLossesM3PerYear === undefined) || !close(src.meanDamLossesM3PerYear ?? null, side.meanDamLossesM3PerYear ?? null))
+							bad.push(`seed ${seed} ${n.nodeId} ${src.waterSource}: dam losses ${src.meanDamLossesM3PerYear} vs tab ${side.meanDamLossesM3PerYear}`);
+						if (src.meanDamLossesM3PerYear != null && src.meanDamLossesM3PerYear > 0) withLosses++;
 					}
 					// Every node with a take allocation is listed, with each source it has one for.
 					const own = (input.model.allocations ?? []).filter((a) => a.nodeId === n.nodeId && a.waterUse !== '21b');
@@ -356,6 +363,7 @@ describe('deep: RunSummary.allocations is compareAllocations on the run’s own 
 			expect(bad).toEqual([]);
 			expect(compared).toBeGreaterThan(40);
 			expect(gwRows).toBeGreaterThan(5);
+			expect(withLosses).toBeGreaterThan(5);
 		});
 	}
 });

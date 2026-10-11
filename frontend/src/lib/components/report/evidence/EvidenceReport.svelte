@@ -39,7 +39,7 @@
 	import IntervalPlot from './IntervalPlot.svelte';
 	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
 	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
-	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
+	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import LocalityMap from './LocalityMap.svelte';
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
@@ -695,8 +695,12 @@
 												<th scope="row">{u.name}<span class="sub">{SOURCE_LABEL[src.waterSource]}</span></th>
 												<td class="nowrap">{waterYearLabel(y.waterYear)}{#if partNote(y, app)}<span class="sub">{partNote(y, app)}</span>{/if}</td>
 												<td class="num">{m3(y.registeredA ?? y.registeredB)}{#if app && y.registeredA !== null && y.registeredB !== null && Math.abs(y.registeredA - y.registeredB) > 0.5}<span class="sub">application {m3(y.registeredB)}</span>{/if}</td>
-												<td class="num">{m3(y.modelledA)}<span class="sub">{ratioText(y.modelledA, y.registeredA)}</span></td>
-												{#if app}<td class="num">{m3(y.modelledB)}<span class="sub">{ratioText(y.modelledB, y.registeredB)}</span></td>{/if}
+												<td class="num"
+													>{m3(y.modelledA)}<span class="sub">{ratioText(y.modelledA, y.registeredA)}</span>{#if measuredNote(src, y, 'A')}<span class="sub" data-testid="evidence-allocation-measured">{measuredNote(src, y, 'A')}</span>{/if}</td
+												>
+												{#if app}<td class="num"
+														>{m3(y.modelledB)}<span class="sub">{ratioText(y.modelledB, y.registeredB)}</span>{#if measuredNote(src, y, 'B')}<span class="sub" data-testid="evidence-allocation-measured">{measuredNote(src, y, 'B')}</span>{/if}</td
+													>{/if}
 												<td>{y.statusA ? STATUS_LABEL[y.statusA] : '–'}{app ? ` → ${y.statusB ? STATUS_LABEL[y.statusB] : '–'}` : ''}</td>
 											</tr>
 										{/each}

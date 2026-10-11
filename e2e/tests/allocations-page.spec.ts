@@ -6,7 +6,8 @@
 // few with a "Show all" that opens the rest in place, and nothing scrolls inside a card. A viewer sees totals per
 // water source until the owner lets viewers see each farm (162, D3), then volumes without names and nothing to change.
 // On a phone it stacks. A dam beside the river's surface use is the take at the river intake, its draws shown
-// beside it, not added (engine 1.82.0, issue #513). Synthetic data only.
+// beside it, not added (engine 1.82.0, issue #513); a dam on the river shows its losses beside its use, not counted
+// (engine 1.83.0, #507 item 7). Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addAllocation, compareCard, openAllocations, seedManyAllocations, volumesCard } from '../support/allocations.ts';
@@ -447,7 +448,7 @@ test('in the sidebar by default, it also opens from the Summary and from Hydrolo
 	await expect(compareCard(page).getByRole('link', { name: unit.name, exact: true })).toHaveAttribute('aria-current', 'true');
 });
 
-test('a dam beside the river: its surface use reads taken at the intake, with the draws beside it, not added; a dam on the river doesn’t (engine 1.82.0)', async ({ page, owner }) => {
+test('a dam beside the river: its surface use reads taken at the intake, with the draws beside it, not added; a dam on the river shows its dam losses instead, not counted (engines 1.82.0, 1.83.0)', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Allocations: dam beside the river');
 	const gauge = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
@@ -472,6 +473,8 @@ test('a dam beside the river: its surface use reads taken at the intake, with th
 	const cell = detail(page).getByTestId('allocation-unit-years').getByTestId('allocation-at-intake');
 	await expect(cell).toHaveCount(1);
 	await expect(cell).toHaveText(/^taken at the intake; drawn from the dam [\d\s ]+, not added$/);
+	// Its losses are in the take: no dam losses line (#507 item 7).
+	await expect(detail(page).getByTestId('allocation-dam-losses')).toHaveCount(0);
 	// The dam on the river: the draws rule, no such words.
 	const weirRow = units(page).filter({ has: page.getByRole('link', { name: 'Weir farm', exact: true }) });
 	await expect(weirRow).toContainText(/modelled [\d\s ]+ m³ a year/);
@@ -480,5 +483,9 @@ test('a dam beside the river: its surface use reads taken at the intake, with th
 	await expect(page).toHaveURL(new RegExp(`unit=${onRiver.id}`));
 	await expect(detail(page).getByRole('heading', { name: 'Weir farm' })).toBeVisible();
 	await expect(detail(page).getByTestId('allocation-at-intake')).toHaveCount(0);
+	// The dam on the river: its evaporation and lost seepage beside the use, not counted (#507 item 7).
+	const losses = detail(page).getByTestId('allocation-unit-years').getByTestId('allocation-dam-losses');
+	await expect(losses).toHaveCount(1);
+	await expect(losses).toHaveText(/^dam losses [\d\s ]+, not counted$/);
 	await expectNoViolations(page);
 });

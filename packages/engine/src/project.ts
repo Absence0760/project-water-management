@@ -3551,6 +3551,13 @@ export interface RunAllocationSource {
 	meanModelledM3PerYear: number | null;
 	meanRegisteredM3PerYear: number | null;
 	/**
+	 * Surface water of a dam on the river (engine ≥ 1.83.0, issue #507 item 7,
+	 * docs/model.md §2.12): the dam's evaporation plus the seepage that doesn't
+	 * return, mean m³ per whole water year (null without one). Shown beside the
+	 * use, never counted in it; absent on any other source.
+	 */
+	meanDamLossesM3PerYear?: number | null;
+	/**
 	 * 'cap' only: the water years (part years included) whose use reached the
 	 * cap, each with its budget (the whole year's registered volume) and the
 	 * use (m³). Empty when the cap never bound.

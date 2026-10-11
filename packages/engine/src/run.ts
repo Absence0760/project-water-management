@@ -2301,7 +2301,9 @@ function runAllocations(
 				riverAbstraction: (r.riverAbstraction ?? null),
 				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])],
 				intakeTake: intake.take.get(i) ?? null,
-				receivedAtIntake: intake.received.get(i) ?? null
+				receivedAtIntake: intake.received.get(i) ?? null,
+				// A unit's dam losses, shown beside a dam on the river's use (engine ≥ 1.83.0, §2.12); only when it has a dam.
+				...(nodes[i]!.kind === 'farm' && nodes[i]!.damCapacityM3 > 0 ? { damEvaporation: sim.workings?.[i]?.damEvaporation ?? null, damSeepageLost: plan.nodes[i]!.seepageReturn !== undefined ? (sim.workings?.[i]?.damSeepageLost ?? null) : null } : {})
 			};
 		})
 	});
@@ -2319,7 +2321,8 @@ function runAllocations(
 				wholeYears: side.wholeYears,
 				yearsOver: side.yearsOver,
 				meanModelledM3PerYear: side.meanModelledM3PerYear,
-				meanRegisteredM3PerYear: side.meanRegisteredM3PerYear
+				meanRegisteredM3PerYear: side.meanRegisteredM3PerYear,
+				...(side.meanDamLossesM3PerYear !== undefined ? { meanDamLossesM3PerYear: side.meanDamLossesM3PerYear } : {})
 			};
 			const budget = plan.nodes[i]!.allocationCap?.[side.waterSource];
 			if (ap.mode === 'cap' && budget) {

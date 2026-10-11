@@ -33,7 +33,7 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 	const users = (nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
 	const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 		`SELECT node_id AS "nodeId", key, "values" FROM run_series
-		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'intake_take', 'received_at_intake') OR key LIKE 'river\\_take@%') AND node_id = ANY($2::uuid[])`,
+		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used', 'intake_take', 'received_at_intake', 'dam_evaporation', 'dam_seepage_lost') OR key LIKE 'river\\_take@%') AND node_id = ANY($2::uuid[])`,
 		[runId, users.map((n) => n.id)]
 	);
 	const get = (nodeId: string, key: string) => {
@@ -55,7 +55,9 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 			// A dam beside the river measured at its intake, and water from one (engine ≥ 1.82.0, §2.12); absent before.
 			intakeTake: get(n.id, 'intake_take') ?? null,
 			receivedAtIntake: get(n.id, 'received_at_intake') ?? null,
-			damCapacityM3: n.damCapacityM3 ?? null
+			damCapacityM3: n.damCapacityM3 ?? null,
+			// A dam's losses, shown beside a dam on the river's use (engine ≥ 1.83.0, §2.12); only for a unit with a dam.
+			...((n.damCapacityM3 ?? 0) > 0 ? { damEvaporation: get(n.id, 'dam_evaporation') ?? null, damSeepageLost: get(n.id, 'dam_seepage_lost') ?? null } : {})
 		}));
 }
 

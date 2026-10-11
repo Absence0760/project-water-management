@@ -78,6 +78,11 @@ test('the evidence report compares modelled use with the registered volumes, lis
 	const years = appSection.getByTestId('evidence-allocation-years');
 	await expect(years.getByRole('row', { name: /Upper farm/ })).toHaveCount(2);
 	await expect(years.getByRole('row', { name: /Upper farm/ }).first()).toContainText('Above registered');
+	// evidence-16 (#516, #507 item 7): Upper farm's dam is on the river, so each run's use carries the dam's losses, not counted; nothing reads taken at the intake.
+	const measured = years.getByRole('row', { name: /Upper farm/ }).first().getByTestId('evidence-allocation-measured');
+	await expect(measured).toHaveCount(2);
+	for (const note of await measured.all()) await expect(note).toHaveText(/^dam losses [\d\s ]+, not counted$/);
+	await expect(years).not.toContainText('taken at the intake');
 	await expect(appSection.getByTestId('evidence-allocations-others')).toContainText('Only the applicant’s own units are listed one by one.');
 	await expect(appSection.getByTestId('evidence-allocations-others')).toContainText('1 other unit with a registered volume is left out');
 	await expect(appSection).not.toContainText('Lower farm');

@@ -9202,6 +9202,21 @@ the days *D(y)* of *y* inside the run:
 - partial = |*D(y)*| < *L(y)*; the per-node summary (`yearsOver`,
   `meanModelledM3PerYear`, `meanRegisteredM3PerYear`) counts whole years
   only.
+- **Dam losses** (engine ≥ 1.83.0, issue #507 item 7, decided by the
+  client's hydrologist 2026-10-10): for a farm whose dam is **on** the river
+  (a dam, not measured at the intake), the surface side of each water year
+  also reports *L(n,y)* = Σ over *D(y)* of `dam_evaporation` +
+  `dam_seepage_lost` (the seepage that doesn't return; 0 without that
+  column, when it all returns), as `damLossesM3`, with its mean per whole
+  water year in `meanDamLossesM3PerYear` (RunSummary.allocations too). It is
+  shown beside the use, so the dam's whole impact on the river is visible,
+  and is **never** part of *M*, the ratio, the status or a cap: storing water
+  is its own water use (NWA s21(b)), separate from taking it (s21(a)). Display
+  only, no change to the water balance. A dam beside the river reports none:
+  its take at the intake already includes what the dam later loses. A farm
+  without a dam, a water user and the groundwater side report none. The
+  backend reads the two stored columns, so a run of any engine shows the
+  line.
 - storage: Σ `storageM3` of the node's allocations, storage-only (s21b)
   rows included (none when no allocation states one), beside the run's
   `damCapacityM3` for a farm, with the difference *C* − *S* and a status

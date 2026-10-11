@@ -208,6 +208,16 @@ For a run, per farm or water user, per water source and per **water year**
   dam lost counted on top of the draws) is ignored. Run the model again for
   the take at the intake
   ([model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)).
+- **Dam losses on the river** (engine ≥ 1.83.0, issue #507 item 7): for a
+  farm whose dam is on the river, each water year's surface row also shows
+  the dam's evaporation plus the seepage that doesn't return ("dam losses
+  …, not counted"), so the dam's whole impact on the river is visible. They
+  are never counted against the licensed volume, judged or capped: storing
+  water is its own water use (s21(b)), separate from taking it (s21(a)).
+  Display only; the water balance doesn't change. A dam beside the river
+  shows none, since its take at the intake already includes what the dam
+  later loses
+  ([model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)).
 - **Registered volume**: each allocation's volume × the days it is valid in
   that part of the year ÷ the days in the water year (365 or 366). A run that
   covers only part of a water year compares that part with the prorated
@@ -341,6 +351,13 @@ existing lawful use beside the application's numbers.
   description counting the whole years above the band per run. The
   Allocations tab draws the same chart (`allocations/UsePlot.svelte`) for the
   run it compares, with the project's band now ([ui.md § Allocations](./ui.md#allocations-taballocations)).
+- **How the surface use was measured** (report version `evidence-16`, issue
+  #516): a dam beside the river's surface rows read "taken at the intake;
+  drawn from the dam N, not added" per run (`measuredAtA` / `B`,
+  `damDrawA` / `B`), and a dam on the river's read "dam losses N, not
+  counted" (`damLossesA` / `B`, issue #507 item 7), the same words as the
+  Allocations page. A total of other units carries neither; a pack drafted
+  before `evidence-16` has no such fields and shows no such words.
 - **What the cap held back** (report version `evidence-6`): a run made with
   the cap cites, per unit and water source it caps, the water years its use
   reached the registered volume and the days the licence limit held use

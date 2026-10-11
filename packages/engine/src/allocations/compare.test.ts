@@ -316,6 +316,31 @@ describe('compareAllocations', () => {
 		expect(x.surface.years.map((y) => y.modelledM3)).toEqual([0, 500]);
 	});
 
+	it('reports a dam on the river\'s losses per water year beside the use, never in it (#507 item 7)', () => {
+		const n = span('2001-10-01', '2002-09-30');
+		const evap = new Array(n).fill(2);
+		const lost = new Array(n).fill(0.5);
+		const base = { startDate: '2001-10-01', allocations: [alloc(36_500)] };
+		const without = compareAllocations({ ...base, nodes: [farm(new Array(n).fill(100))] }).nodes[0]!.surface;
+		const s = compareAllocations({ ...base, nodes: [farm(new Array(n).fill(100), undefined, { damEvaporation: evap, damSeepageLost: lost })] }).nodes[0]!.surface;
+		expect(s.years[0]!.damLossesM3).toBeCloseTo(n * 2.5, 6);
+		expect(s.meanDamLossesM3PerYear).toBeCloseTo(n * 2.5, 6);
+		// Display only: the use, the ratio and the status are the same as without the losses.
+		expect(s.years.map(({ damLossesM3: _, ...y }) => y)).toEqual(without.years);
+		expect(s.meanModelledM3PerYear).toBe(without.meanModelledM3PerYear);
+		expect(without.years[0]!.damLossesM3).toBeUndefined();
+		expect('meanDamLossesM3PerYear' in without).toBe(false);
+		// All seepage returning (no dam_seepage_lost column): evaporation alone.
+		const evapOnly = compareAllocations({ ...base, nodes: [farm(new Array(n).fill(100), undefined, { damEvaporation: evap })] }).nodes[0]!.surface;
+		expect(evapOnly.years[0]!.damLossesM3).toBeCloseTo(n * 2, 6);
+		// Never on groundwater, and not on a dam beside the river (measured at the intake: its losses are in the take).
+		const both = compareAllocations({ ...base, nodes: [farm(new Array(n).fill(100), new Array(n).fill(10), { damEvaporation: evap, damSeepageLost: lost, intakeTake: new Array(n).fill(120) })] }).nodes[0]!;
+		expect(both.groundwater.years[0]!.damLossesM3).toBeUndefined();
+		expect(both.surface.measuredAt).toBe('intake');
+		expect(both.surface.years[0]!.damLossesM3).toBeUndefined();
+		expect('meanDamLossesM3PerYear' in both.surface).toBe(false);
+	});
+
 	it('gives the same result at UTC+14 and UTC−11', () => {
 		const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env;
 		const tz = env.TZ;

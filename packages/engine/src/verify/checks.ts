@@ -3093,7 +3093,9 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					riverAbstraction: get.get(`${n.id}|river_abstraction`) ?? null,
 					riverTakes: [...get.entries()].filter(([k]) => k === `${n.id}|offtake_used` || k.startsWith(`${n.id}|river_take@`)).map(([, v]) => v),
 					intakeTake: get.get(`${n.id}|${INTAKE_SERIES.take.key}`) ?? null,
-					receivedAtIntake: get.get(`${n.id}|${INTAKE_SERIES.received.key}`) ?? null
+					receivedAtIntake: get.get(`${n.id}|${INTAKE_SERIES.received.key}`) ?? null,
+					// A unit's dam losses (engine ≥ 1.83.0): its own dam_evaporation and dam_seepage_lost columns, when it has a dam.
+					...(n.kind === 'farm' && n.damCapacityM3 > 0 ? { damEvaporation: get.get(`${n.id}|dam_evaporation`) ?? null, damSeepageLost: get.get(`${n.id}|dam_seepage_lost`) ?? null } : {})
 				}
 			];
 		})
@@ -3106,6 +3108,8 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 			const close = (a: number | null, b: number | null) => (a === null || b === null ? a === b : Math.abs(a - b) <= tol(Math.max(Math.abs(a), Math.abs(b))));
 			if (src.wholeYears !== side.wholeYears || src.yearsOver !== side.yearsOver || !close(src.meanModelledM3PerYear, side.meanModelledM3PerYear) || !close(src.meanRegisteredM3PerYear, side.meanRegisteredM3PerYear))
 				return `RunSummary.allocations for ${row.nodeId} (${src.waterSource}) doesn't match the comparison of the run's own series`;
+			if ((src.meanDamLossesM3PerYear === undefined) !== (side.meanDamLossesM3PerYear === undefined) || !close(src.meanDamLossesM3PerYear ?? null, side.meanDamLossesM3PerYear ?? null))
+				return `RunSummary.allocations for ${row.nodeId} (${src.waterSource}): the dam losses don't match the run's own dam_evaporation and dam_seepage_lost`;
 		}
 	}
 	return null;
