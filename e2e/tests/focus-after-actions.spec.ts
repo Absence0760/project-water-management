@@ -12,6 +12,7 @@ import { acceptInvites, addMember, createProject, createRun, seedRunnableProject
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 import { createScenario } from '../support/scenarios.ts';
 
 const GONE = '00000000-0000-0000-0000-000000000000';
@@ -151,6 +152,12 @@ test('a link to a deleted scenario or run says so and offers the newest, not a T
 	const gone = page.getByTestId('scenario-gone');
 	await expect(gone).toHaveText(/^This scenario no longer exists: it was deleted, or you no longer have access to it\./);
 	await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+	// The message and its button wrap on a phone.
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 740 });
+		await expectNoSidewaysScroll(page);
+	}
+	await resizeTo(page, { width: 1280, height: 800 });
 	await gone.getByRole('button', { name: 'Open the newest' }).click();
 	await expect(page.getByRole('heading', { name: 'Still here' })).toBeVisible();
 	await expect(page).not.toHaveURL(new RegExp(GONE));
@@ -159,6 +166,11 @@ test('a link to a deleted scenario or run says so and offers the newest, not a T
 	const alert = page.getByRole('alert').filter({ hasText: 'This run no longer exists' });
 	await expect(alert).toBeVisible();
 	await expect(alert.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 740 });
+		await expectNoSidewaysScroll(page);
+	}
+	await resizeTo(page, { width: 1280, height: 800 });
 	await alert.getByRole('button', { name: 'Show the newest run' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]run=${run}`));
 	await expect(page.getByRole('heading', { level: 2, name: 'Base' })).toBeVisible();
@@ -177,6 +189,11 @@ test('the Project page’s notes and registration checks offer Try again after a
 	const checks = page.getByTestId('registration-checks');
 	await expect(notes.getByRole('alert')).toHaveText(/^Couldn’t load the notes: Server unavailable/);
 	await expect(checks.getByRole('alert')).toHaveText(/^Server unavailable/);
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 740 });
+		await expectNoSidewaysScroll(page);
+	}
+	await resizeTo(page, { width: 1280, height: 800 });
 	down = false;
 	await notes.getByRole('button', { name: 'Try again' }).click();
 	await expect(notes).toContainText('No notes yet.');
