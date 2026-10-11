@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale } from './series';
+import uPlot from 'uplot';
+import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, TIME_TICKS } from './series';
 
 describe('printScale', () => {
 	it('lays a chart out twice as large on a 1× screen, so its canvas has 2 device pixels per CSS pixel', () => {
@@ -140,5 +141,31 @@ describe('chartName (a line chart’s accessible name)', () => {
 			'Storage–yield curve: line chart of Yield, in m³/day, against Dam capacity (thousand m³)'
 		);
 		expect(chartName('File preview', [{ label: 'rain.csv' }], '', [])).toBe('File preview: line chart of rain.csv');
+	});
+});
+
+describe('TIME_TICKS', () => {
+	// A UTC date, as the chart's tzDate gives uPlot.
+	const at = (iso: string) => {
+		const d = new Date(iso);
+		return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+	};
+	const label = (row: number, col: number, iso: string) => uPlot.fmtDate(TIME_TICKS[row]![col] as string)(at(iso));
+
+	it('puts the day before the month, never uPlot\'s American month/day', () => {
+		expect(label(2, 1, '2022-01-09T00:00:00Z')).toBe('9 Jan');
+		expect(label(2, 1, '2021-12-30T00:00:00Z')).toBe('30 Dec');
+		expect(TIME_TICKS.flat().filter((c) => typeof c === 'string' && /\{M\}\/\{D\}/.test(c))).toEqual([]);
+	});
+
+	it('adds the year under the first tick of each year, and names months and years plainly', () => {
+		expect(label(2, 2, '2022-01-09T00:00:00Z')).toBe('\n2022');
+		expect(label(1, 1, '2021-10-01T00:00:00Z')).toBe('Oct');
+		expect(label(0, 1, '2021-10-01T00:00:00Z')).toBe('2021');
+	});
+
+	it('goes from the largest step to the smallest, as uPlot reads the table', () => {
+		const steps = TIME_TICKS.map((r) => r[0] as number);
+		expect([...steps].sort((a, b) => b - a)).toEqual(steps);
 	});
 });

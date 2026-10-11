@@ -134,3 +134,19 @@ export function chartName(title: string, series: readonly { label: string }[], u
 	else if (!x && xLabel) parts.push(`against ${xLabel}`);
 	return parts.join(', ');
 }
+
+const DAY = 86_400;
+/**
+ * The time axis's tick labels, day before month ("30 Dec", year under the first tick of each year).
+ * uPlot's own are American ("12/30"), which a South African reader takes as day/month: "1/9" read
+ * as 1 September on a chart of 9 January. The rows are uPlot's `values` table: tick step (seconds),
+ * the label, then the label at a new year, month, day, hour, minute and second (null keeps the
+ * label), and 1 to show the extra line only where the larger unit changes.
+ */
+export const TIME_TICKS: (string | number | null)[][] = [
+	[DAY * 365, '{YYYY}', null, null, null, null, null, null, 1],
+	[DAY * 28, '{MMM}', '\n{YYYY}', null, null, null, null, null, 1],
+	[DAY, '{D} {MMM}', '\n{YYYY}', null, null, null, null, null, 1],
+	[3600, '{HH}:{mm}', '\n{D} {MMM} {YYYY}', null, '\n{D} {MMM}', null, null, null, 1],
+	[60, '{HH}:{mm}', '\n{D} {MMM} {YYYY}', null, '\n{D} {MMM}', null, null, null, 1]
+];

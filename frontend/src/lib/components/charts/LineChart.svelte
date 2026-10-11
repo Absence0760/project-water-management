@@ -10,7 +10,7 @@
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtNum, fmtReading } from '$lib/format/number';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -246,7 +246,7 @@
 					gap: 5 * k,
 					// Daily data: never tick more often than once a day (no "12am / 12pm").
 					...(isTime
-						? { space: Math.max(50, Math.ceil(w / Math.max(spanDays, 1))) * k, size: 50 * k }
+						? { space: Math.max(50, Math.ceil(w / Math.max(spanDays, 1))) * k, size: 50 * k, values: TIME_TICKS }
 						: { values: (_u, vals) => vals.map((v) => (v == null ? '' : (xFormat?.(v) ?? String(v)))), space: 50 * k, size: 50 * k }),
 					label: isTime ? undefined : xLabel,
 					labelFont: font,
