@@ -51,6 +51,11 @@
 //              release preflight trusts `CI gate` on the tagged commit alone,
 //              so a docs-only push to main must still run every heavy job:
 //              otherwise it goes green over code whose own run failed.
+//   draft-ready  when ci.yml's `changes` job skips the heavy jobs on a draft
+//              PR (it reads github.event.pull_request.draft), its
+//              pull_request trigger lists `ready_for_review` among its types.
+//              Without it, marking a draft ready starts no run and the
+//              draft's skipped-but-green `CI gate` lets it merge untested.
 //   prt-head   a workflow triggered by `pull_request_target` never checks out
 //              or fetches the PR's head (`ref:`/`repository:` naming
 //              github.event.pull_request.head.*, github.head_ref or
@@ -286,6 +291,22 @@ export function pushFullProblem(jobLines) {
 	return null;
 }
 
+/**
+ * Why ci.yml's draft skip could let a PR merge untested, or null.
+ * @param {string} text the whole ci.yml
+ * @param {string[]} changesLines the `changes` job's lines
+ */
+export function draftReadyProblem(text, changesLines) {
+	if (!changesLines.some((l) => /github\.event\.pull_request\.draft/.test(l) && !/^\s*#/.test(l))) return null;
+	const trigger = text.match(/^on:\n((?:[ #].*\n|\n)*)/m);
+	const pr = trigger && trigger[1].match(/^  pull_request:[ \t]*\n((?:    .*\n)*)/m);
+	const types = pr && pr[1].match(/^    types:\s*\[([^\]]*)\]/m);
+	if (!types || !types[1].split(',').map((t) => t.trim()).includes('ready_for_review')) {
+		return 'changes skips the heavy jobs on a draft PR, so the pull_request trigger must list `types: [opened, synchronize, reopened, ready_for_review]`: otherwise marking a draft ready runs nothing and its skipped gate stays green';
+	}
+	return null;
+}
+
 /** Ecosystems whose Dependabot PRs a human always merges (the auto-merge rule). */
 export const MANUAL_ECOSYSTEMS = ['github_actions', 'docker'];
 
@@ -499,6 +520,8 @@ export function checkWorkflow(file, text, repo = {}) {
 		if (changes) {
 			const problem = pushFullProblem(changes.lines);
 			if (problem) out.push({ file, line: changes.startLine, rule: 'push-full', message: problem });
+			const draft = draftReadyProblem(text, changes.lines);
+			if (draft) out.push({ file, line: changes.startLine, rule: 'draft-ready', message: draft });
 		}
 	}
 	return out;

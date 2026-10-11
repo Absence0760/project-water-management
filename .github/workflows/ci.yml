@@ -1,10 +1,14 @@
 name: CI
 
-# Always runs on pull_request — no paths-ignore. Docs-only PRs skip the heavy
-# jobs via the `changes` job instead, so `CI gate` still reports (templates
-# docs/USING.md "The CI gate"; this repo has no ci-gate-docs.yml by design).
+# Always runs on pull_request — no paths-ignore. Docs-only PRs and draft PRs
+# skip the heavy jobs via the `changes` job instead, so `CI gate` still
+# reports (templates docs/USING.md "The CI gate"; this repo has no
+# ci-gate-docs.yml by design). `ready_for_review` re-runs the full suite when
+# a draft is marked ready (the workflow guard's draft-ready rule); a draft
+# can't merge, so its skipped gate gates nothing.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:
@@ -43,8 +47,13 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$DRAFT" = "true" ]; then
+            echo "::notice::Draft PR: heavy jobs skipped. Mark it ready for review to run the full suite."
+            echo "code=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
