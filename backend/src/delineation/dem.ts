@@ -90,13 +90,18 @@ export function byteSource(url: string): ByteSource {
 		};
 	}
 	const path = url.startsWith('file:') ? fileURLToPath(url) : url;
-	let fh: ReturnType<typeof open> | undefined;
+	// Opened and closed for each read, so no handle outlives the read: one held for the source's life was closed only by the
+	// garbage collector once the source was dropped (a test's archive, a DEM_URL swapped), which Node 25 makes an error
+	// (ERR_INVALID_STATE). An open is microseconds beside a tile's decode, and the decoded tiles are cached (openDem).
 	return async (offset, length) => {
-		fh ??= open(path, 'r');
-		fh.catch(() => (fh = undefined));
-		const b = Buffer.alloc(length);
-		const { bytesRead } = await (await fh).read(b, 0, length, offset);
-		return new Uint8Array(b.buffer, b.byteOffset, bytesRead);
+		const fh = await open(path, 'r');
+		try {
+			const b = Buffer.alloc(length);
+			const { bytesRead } = await fh.read(b, 0, length, offset);
+			return new Uint8Array(b.buffer, b.byteOffset, bytesRead);
+		} finally {
+			await fh.close();
+		}
 	};
 }
 
