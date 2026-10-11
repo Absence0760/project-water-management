@@ -82,6 +82,7 @@ export const SETTING_NOTE_GROUPS = {
 	wr2012: 'WR2012 check',
 	reserve: 'Reserve rule tables',
 	restrict: 'Drought restrictions',
+	reporting: 'Reporting',
 	evidence: 'Evidence'
 } as const;
 export type SettingNoteGroup = keyof typeof SETTING_NOTE_GROUPS;
@@ -182,8 +183,12 @@ export function targetTitle(t: NoteTarget): string {
 	}
 }
 
-/** "Notes (3)" for a button's accessible name, "Notes" when there are none. */
-export const notesButtonLabel = (count: number, about: string) => (count > 0 ? `Notes on ${about} (${count})` : `Add a note on ${about}`);
+/**
+ * The Notes button's accessible name: "Notes on Farm A (3)", "Notes on
+ * Farm A" when there are none. It starts with the visible "Notes" so voice
+ * control finds it by what it shows (WCAG 2.5.3, Label in Name).
+ */
+export const notesButtonLabel = (count: number, about: string) => (count > 0 ? `Notes on ${about} (${count})` : `Notes on ${about}`);
 
 /** A note's target in a mixed list (the Overview's recent notes). */
 export function noteAbout(n: Pick<Note, 'target' | 'nodeName' | 'settingKey'>): string {

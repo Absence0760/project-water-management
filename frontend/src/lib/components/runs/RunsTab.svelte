@@ -417,7 +417,7 @@
 	const RESULTS_RAIL_FROM_REM = 62;
 	let navLayout = $state<'bar' | 'rail'>('bar');
 	const navGroups = $derived(
-		detail ? [...resultGroups(detail.run.summary), ...(navLayout === 'rail' ? otherPageGroups(detail.run.id) : [])] : []
+		detail ? [...resultGroups(detail.run.summary, navLayout === 'rail'), ...(navLayout === 'rail' ? otherPageGroups(detail.run.id) : [])] : []
 	);
 	const downloadItems = $derived(
 		detail
@@ -697,7 +697,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
 							{#snippet children(RunScaledEwrTables)}
@@ -793,6 +793,7 @@
 					{/if}
 				{/snippet}
 				{#snippet record()}
+					<!-- The Record group (issue #521): Run notes, Evidence and Reproduction are panels of their own, each with its action where it is seen. -->
 					<section class="panel" id="res-notes">
 						{#key shownRunId}
 							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved}>
@@ -802,19 +803,22 @@
 								{/snippet}
 							</RunNotes>
 						{/key}
-						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
-						<div class="evidence" id="res-evidence">
-							{#key shownRunId}
-								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
-							{/key}
-							{#key shownRunId}
-								<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
-							{/key}
-						</div>
+					</section>
+					<!-- The run header's evidence line links straight here. -->
+					<div class="panel" id="res-evidence">
+						{#key shownRunId}
+							<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+						{/key}
+					</div>
+					<!-- Re-running the run from its stored inputs, then what changed in the inputs since: both about the run's inputs. -->
+					<div class="panel" id="res-reproduce">
+						{#key shownRunId}
+							<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
+						{/key}
 						{#key shownRunId}
 							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
 						{/key}
-					</section>
+					</div>
 					<!-- The report's validation statement (WP-3.13), folded shut; its body loads when opened. -->
 					<div class="panel" id="res-validation">
 						<ValidationPanel
@@ -909,19 +913,16 @@
 		gap: 0.25em;
 		min-height: 24px;
 	}
+	/* Report, Evidence report and Download wrap on a 320 px phone rather than push the page sideways. */
 	.head-acts {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
 	}
 	.evidence-line {
 		display: block;
 		margin: 0.15rem 0;
-	}
-	.evidence {
-		margin-top: 1rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	.provenance {
 		margin-top: 1rem;

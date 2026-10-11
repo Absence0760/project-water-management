@@ -11,6 +11,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openDetails } from '../support/scenarios.ts';
 
 const NAME = 'A weir dam and a licence';
 
@@ -78,6 +79,7 @@ test('an editor moves and inserts nodes, changes a crop and sets a registered vo
 	await expect(changes).toHaveCount(4);
 	await expect(changes.nth(3)).toContainText(/Upper farm: add a registered volume, surface 100\s000 m³\/a/);
 	await expect(changes.nth(3)).toContainText('Baseline assumption');
+	await openDetails(page, 'proposer-fold');
 	await page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm').check();
 	await expect(changes.nth(3)).toContainText('Proposal');
 

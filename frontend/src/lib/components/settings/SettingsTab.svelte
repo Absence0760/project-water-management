@@ -866,6 +866,7 @@
 	<section class="panel" id="set-reporting" aria-labelledby="reporting-h">
 		<div class="panel-head">
 			<h2 id="reporting-h">Reporting</h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('reporting')} />
 		</div>
 		<p class="summary" data-testid="summary-reporting">{summaries['set-reporting']}</p>
 		<div class="reporting">

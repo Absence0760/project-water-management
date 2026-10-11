@@ -662,6 +662,27 @@ section it belongs to, with the example that taught it.
   description. The same for the rules' **Run the calibration rules**: the
   card's main action goes in its head (`CalibrationRulesFields` `headAction`),
   beside the count it acts on, not under the result list.
+- **An action that can't apply to this kind of item isn't offered; its
+  reason is.** On a scenario run the Evidence panel said "This run is not
+  nominated…" yet offered **Withdraw the nomination…** and showed the
+  project's nomination history, and Publication said the run "can't be
+  published" yet offered **Edit notice** (issue #521). Decide by the item's
+  kind from a pure helper (`runs/evidence.ts` `evidenceKindBlocker`,
+  `runs/publication.ts` `publishBlocker`), and for a kind that can never
+  take the action draw only the one-line reason, with a link to where the
+  action does apply (**Open the evidence run**). Nothing is lost: the
+  action and the history are on the items they are about. Pin it in e2e:
+  the panel has no buttons and no history on that kind
+  (`runs-record-layout.spec.ts`). The same pass split one card of four
+  actions (Run notes, Evidence, Reproduction, Changes since this run) into
+  a panel each, each one-click action in its panel's head, and kept the bar
+  to one link for the three with `covers`, so it still fits two rows.
+- **A long warning list on a first screen shows its first three.** The
+  run's "things to check" wall (8–9 items on a real catchment) pushed the
+  results below the fold. Show three and **Show all N things to check**
+  (one button whose name changes to "Show only the first 3 …", with
+  `aria-expanded`, so the focus stays on it); the printed report lists them
+  all (`RunSummaryView` `foldChecks`).
 - **One short line under a field; the rest behind ⓘ or the explain switch.**
   Fit automatically's starts and seed hints were four-line paragraphs that
   made every row of the grid a different height. A hint that states a value

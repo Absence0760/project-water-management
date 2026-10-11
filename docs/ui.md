@@ -7211,8 +7211,8 @@ read it before.
   (**Flow-duration curve**, **Calibration against observed flow**, **Water
   balance by water year**, **Runoff model: GR4J**, **WR2012 check:
   <quaternary>**, **EWR test: model against observed flow**, **Plausibility
-  checks**, **Run notes & evidence**, **Validation statement**, **Explore any
-  output**), and two last groups for the panels that moved to their own pages
+  checks**, **Run notes**, **Evidence**, **Reproduction**, **Validation
+  statement**, **Explore any output**), and two last groups for the panels that moved to their own pages
   (issue #17), linked with the run shown: *On River & reserve* (**Reserve
   rules met, by month**, **Days below the EWR, by month**, **Water
   account**) and *On Hydrological units* (**Curtailment targets**,
@@ -7226,7 +7226,9 @@ read it before.
   shorter names (`bar`: Flow duration, Calibration, Water balance, Runoff
   model, Unit rain, WR2012 check, EWR vs observed, Plausibility, Notes &
   evidence, Validation, Outputs) so it still fits two rows at 1280 px beside
-  the runs rail (issue #137). Runoff model only for a GR4J run, Rain for each
+  the runs rail (issue #137); its **Notes & evidence** is one link standing
+  for Run notes, Evidence and Reproduction (`covers`, as Settings'
+  Automation & access; issue #521). Runoff model only for a GR4J run, Rain for each
   unit only for a run with rain for each unit (`summary.unitRain`), WR2012
   check only with a reference, and Plausibility checks only on a run made by
   engine 0.25.0 or later. The page's `scroll-padding-top` includes the bar's
@@ -7245,7 +7247,10 @@ read it before.
      changes results. The summary opens with the run's warnings in two parts
      (`runs/credibility.ts` `warningGroups`): **things to check before relying
      on this run** (a warning box; any warning not known to be a data note
-     lands here, so a new engine warning is never hidden), then, collapsed,
+     lands here, so a new engine warning is never hidden; past three, the
+     first three and **Show all N things to check**, which folds back with
+     **Show only the first 3 things to check**, so the results reach the
+     first screen, issue #521; the report lists them all), then, collapsed,
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
@@ -7399,8 +7404,8 @@ read it before.
   …"), another run is, or nothing is published yet, and shows the current
   notice: the level with its percentage ("Advisory · 10 %"), its text in
   each language written (table order, `noticeLanguages`), the next update
-  date and who last changed it. Editors get
-  **Publish this run** on any other run: a confirm dialog says what changes
+  date and who last changed it. Editors get, in the panel's head (issue
+  #521), **Publish this run** on any other run: a confirm dialog says what changes
   for stakeholders (each farmer sees this run's figures for their own farm
   from 1 October, and the notice; it replaces the current baseline, which
   stays in the history), warns when farm dams have no stop level ("N farm
@@ -7410,7 +7415,8 @@ read it before.
   first, each with its `lang` so the browser spell-checks it in that
   language: `noticeTextFields`; issue #58) and an optional note for the staff
   ("farmers don't see it"). **Publish** answers "Published. N farm views
-  updated." **Edit notice** changes the current notice in place (`PATCH`,
+"  updated." **Edit notice** (in the head too; it opens the form with the
+  focus on the level) changes the current notice in place (`PATCH`,
   no re-publishing): "Notice saved." The edit form and the publish dialog
   keep separate notices and errors, so opening one never overwrites the
   other's typing. A publish that succeeds but whose history refresh
@@ -7419,7 +7425,9 @@ read it before.
   before engine 1.0.0) says why it can't be published: that model was
   removed and the run is a workbook comparison only. A scenario run (also once
   its scenario is deleted) says so too: farmers are shown the catchment as it
-  is, never a what-if. In the runs list the current published run carries a
+  is, never a what-if. Such a run offers neither Publish nor **Edit notice**,
+  only the reason, adding "The notice is edited from a run of the model."
+  while one is published (`publish-blocker`). In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
   the section. A run that was published says whether the responsible
@@ -7882,11 +7890,13 @@ read it before.
   and a line under the heading says which is which ("The run’s own
   explanation, kept with it …; the team’s discussion of the run is under
   Notes"); **Save notes**, like the Evidence form's **Nominate as evidence**,
-  is a default-size button in an action row under its field.
-  The same panel then holds the **Evidence** section
+  is a default-size button in an action row under its field. Run notes,
+  Evidence and Reproduction are three panels (issue #521; they were one card
+  with four actions), each in the side index, and one **Notes & evidence**
+  link on the bar.
+  The **Evidence** panel
   (`runs/EvidencePanel.svelte`, `#res-evidence`, helpers in
-  `runs/evidence.ts`; the menu entry is **Notes & evidence**, one entry for
-  the panel): whether the shown
+  `runs/evidence.ts`): whether the shown
   run is the project's nominated evidence run ("Nominated as evidence on … by
   …", or "…; replaced by “B” on …" for a past one) and, when another run is,
   which. Editors get a required **Why this run is the evidence** textarea (2 000
@@ -7894,9 +7904,14 @@ read it before.
   instead** when another run is current; `POST …/evidence`). A legacy-model
   run (a stored run from before engine 1.0.0, which removed the model), a
   scenario run (also once its scenario is deleted), a forecast run and the
-  current evidence run say why they can't be nominated instead.
-  While a run is nominated, editors also get **Withdraw the nomination…**,
-  which opens a required **Why the nomination is withdrawn** textarea and
+  current evidence run say why they can't be nominated instead. The first
+  three kinds can never be evidence (`evidenceKindBlocker`), so for them the
+  panel shows only that reason, to everyone, with **Open the evidence run**
+  (a link to its `#res-evidence`) "for its nomination history": no withdraw
+  action and no history, which are about runs of the model (issue #521).
+  While a run is nominated, editors also get **Withdraw the nomination…**
+  in the panel's head; it opens, with the focus in its field (Cancel hands
+  it back), a required **Why the nomination is withdrawn** textarea and
   **Withdraw the nomination** (`POST …/evidence/withdraw`, 098); afterwards
   the section says "The project's nomination was withdrawn: no run is its
   evidence now." and any run may be nominated again.
@@ -7915,9 +7930,10 @@ read it before.
   nomination still stands: …"), so neither an applicant nor an assessor can
   miss a later model switch. Since engine 1.0.0 every new run is GR4J, so
   only a stored legacy run made after the nomination can raise it.
-  Below the evidence, **Reproduction** (`runs/ReproducePanel.svelte`, in the
-  Runs chunk, helpers in `runs/reproduce.ts`; WP-3.1): for a run with stored
-  inputs, **Check reproduction** (viewers too) re-runs it on the server from
+  Then the **Reproduction** panel (`runs/ReproducePanel.svelte`, in the
+  Runs chunk, helpers in `runs/reproduce.ts`; WP-3.1; `#res-reproduce`, with
+  *Changes since this run* under it): for a run with stored
+  inputs, **Check reproduction** (viewers too; in the panel's head) re-runs it on the server from
   them (`GET …/runs/:runId/reproduce`) and says **Identical** (with the engine
   version), **Differs in N places** (each listed: a summary value, or a
   node's series with its differing days, first date and largest difference;
@@ -8680,8 +8696,21 @@ closing, and **Discard edits** puts it back. **Edits to record**
   while a run is in flight: the run re-reads the scenario when it ends, and
   that read could otherwise land after a submit and show the old status. The "Add a change" form and rebase are hidden while
   override mode is open.
+- **Two cards** (issue #521; one card held four things that saved
+  separately). **Changes** with **Add a change** (and Undo, **Edit in the
+  model tables**) is the first, the editor's main job; **Application
+  details** (`application-details`) is the second: the proposer's units,
+  the applicant's statement and the rebase, each a `.fold` whose closed line
+  says its value with a disclosure marker before it ("Proposer: none
+  ticked" or up to two names and "and N more", `scenarios/details.ts`
+  `proposerSummary`; "Statement: 0 of 3 answered"; "Based on Calibrated
+  baseline" with **Rebase…**), **Change** (an editor) or **Show** (a
+  reader) at its end and **Hide** while open. Each starts closed, and again
+  on another scenario. `e2e/tests/scenario-editor-layout.spec.ts` pins Add
+  change on screen at 1440×900, the closed lines, the marker, that each
+  opens, a viewer and the phone.
 - **The proposer's hydrological units** ("… and users" when the base has
-  other water users): a checkbox per hydrological unit, then per other
+  other water users; the **Proposer** fold): a checkbox per hydrological unit, then per other
   water user, each kind under its own label when both are there. A gauge
   measures and proposes nothing, so it is listed only while an older
   scenario still has one ticked (to untick it). Changes to the ticked ones
@@ -8699,10 +8728,10 @@ closing, and **Discard edits** puts it back. **Edits to record**
   hydrological unit drains into**, **Insert a hydrological unit on a
   reach**, the picker **Hydrological unit**.)
 - **Applicant's statement** (`ScenarioStatement.svelte`, every scenario, an
-  application's too): the evidence report's fixed Appendix C prompts
+  application's too; the **Statement** fold): the evidence report's fixed Appendix C prompts
   (engine `APPLICANT_PROMPTS`, `129_scenario_statement`), **Purpose and
-  need**, **Mitigation** and **Monitoring**, with "n of 3 answered" beside the
-  heading. Read, each prompt's answer as written or *Not given*. Whoever may
+  need**, **Mitigation** and **Monitoring**, with "n of 3 answered" on the
+  fold's closed line. Read, each prompt's answer as written or *Not given*. Whoever may
   change the scenario (an editor on a team scenario, only its applicant on
   an application) gets **Answer the prompts** (**Edit statement** once one
   is answered): a box per prompt, labelled with its heading and described by
@@ -8720,7 +8749,7 @@ closing, and **Discard edits** puts it back. **Edits to record**
   to draft**; only a draft's changes, nodes and base change), **Delete
   scenario** (draft or withdrawn; its runs stay as ordinary runs), and
   **Rename** (name and description).
-- **Rebase onto another run** (drafts): pick a newer run of the model,
+- **Rebase onto another run** (drafts; the **Based on … Rebase…** fold): pick a newer run of the model,
   **Check** (a dry run listing any change that no longer applies, for
   example a node removed since), then **Rebase onto this run**. A change on
   a node the new base lacks is still named, after a reload too: the server
@@ -9375,7 +9404,10 @@ March") is kept against what it is about.
 
 - **Where.** A notes button with a count badge opens the notes on one target
   in a side sheet down the right, full width on a phone (`NotesDrawer.svelte`
-  around `NotesList.svelte` with `formFirst`): the add form on top, the notes
+  around `NotesList.svelte` with `formFirst`). The button shows "Notes" and
+  is named "Notes on <target>" ("Notes on EWR (2)" with notes), so its
+  accessible name starts with its visible text (WCAG 2.5.3, Label in Name;
+  `notesButtonLabel`). The sheet has the add form on top, the notes
   newest first under it, scrolling inside the sheet, and **Close** pinned at
   the foot, so thirty notes push neither the form nor Close off the screen
   (`notes.spec.ts` checks 30). A half-typed note or an unsaved edit makes
@@ -9392,7 +9424,7 @@ March") is kept against what it is about.
     from anyone on the team, and the line under the heading says so);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
     gaps, Calibration record, WR2012 check, Flow share, EWR, Reserve rule
-    tables, Drought restrictions, Simulation period, Data quality,
+    tables, Drought restrictions, Reporting, Simulation period, Data quality,
     Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes

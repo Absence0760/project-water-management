@@ -146,7 +146,8 @@ test('with twenty long-labelled runs the rail sits beside the run and fits the w
 		expect(metaLines.length).toBe(20);
 		expect(Math.max(...metaLines)).toBe(1);
 		// Scrolled down the results (mid-page: at the very end the grid's bottom edge lifts a sticky rail), it is still in view.
-		await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Notes & evidence' }).click();
+		// The side index (1440) gives Run notes a line of its own; the bar (1280) one "Notes & evidence" link (issue #521).
+		await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: width === 1440 ? 'Run notes' : 'Notes & evidence', exact: true }).click();
 		await expect(page).toHaveURL(/#res-notes$/);
 		await expect(runsList(page)).toBeInViewport();
 		// Stuck at the top, it grows to the window's height, still no further.
@@ -354,7 +355,7 @@ test('run notes: the team’s Notes button on the heading’s row, saying which 
 		await notes.scrollIntoViewIfNeeded();
 		await expect(notes).toContainText('The run’s own explanation, kept with it and read in run comparison and the summary CSV; the team’s discussion of the run is under Notes.');
 		const heading = (await notes.getByRole('heading', { name: 'Run notes' }).boundingBox())!;
-		const team = (await notes.getByRole('button', { name: 'Add a note on this run' }).boundingBox())!;
+		const team = (await notes.getByRole('button', { name: 'Notes on this run', exact: true }).boundingBox())!;
 		const box = (await notes.boundingBox())!;
 		// Level with the heading (the two "notes" were stacked under it as one thing), at the section's right edge.
 		expect(Math.abs(team.y + team.height / 2 - (heading.y + heading.height / 2)), at).toBeLessThan(8);

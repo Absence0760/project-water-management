@@ -1,8 +1,8 @@
 <!--
 	"Check reproduction" (roadmap WP-3.1, docs/ui.md § Reproduction): re-run the
 	shown run from its stored inputs with today's engine, on the server, and say
-	whether every result comes out the same. Its own chunk, loaded with the
-	Notes & evidence group.
+	whether every result comes out the same. Its own panel in the Record
+	group, with the run's "Changes since this run" under it.
 -->
 <script lang="ts">
 	import { api, type Reproduction, type RunMeta } from '$lib/api';
@@ -30,7 +30,13 @@
 </script>
 
 <section aria-labelledby="{uid}-h" data-testid="reproduce">
-	<h3 id="{uid}-h">Reproduction</h3>
+	<!-- Its own panel in the Record group, the check in its head (issue #521). -->
+	<div class="panel-head">
+		<h3 id="{uid}-h">Reproduction</h3>
+		{#if run.reproducible !== false}
+			<button type="button" class="btn btn-sm" onclick={check} disabled={checking}>{checking ? 'Checking…' : 'Check reproduction'}</button>
+		{/if}
+	</div>
 	{#if run.reproducible === false}
 		<p class="muted">
 			This run was made before runs stored their input series, so it can't be re-run from them. Only hashes of its inputs were kept,
@@ -41,7 +47,6 @@
 			This run's input series are stored with it, so it can be re-run exactly as it was, whatever has happened to the project's data
 			since. Checking re-runs it on the server with today's engine and compares every result and daily output.
 		</p>
-		<button type="button" class="btn btn-sm" onclick={check} disabled={checking}>{checking ? 'Checking…' : 'Check reproduction'}</button>
 	{/if}
 	<div role="status" aria-live="polite">
 		{#if headline && result}
@@ -60,6 +65,10 @@
 </section>
 
 <style>
+	.panel-head {
+		align-items: center;
+		margin-bottom: 0.25rem;
+	}
 	.small {
 		font-size: 0.85rem;
 	}

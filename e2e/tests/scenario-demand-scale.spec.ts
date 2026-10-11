@@ -11,6 +11,7 @@ import type { APIRequestContext, Locator } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openDetails } from '../support/scenarios.ts';
 import { ungroup } from '../support/format.ts';
 
 const NAME = 'Upper farm takes half';
@@ -79,6 +80,7 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 	// A named farm that isn't the proposer's is another party's: a baseline assumption until it is.
 	await expect(changes).toContainText('Baseline assumption');
 	await expect(page.getByTestId('baseline-callout')).toContainText('Baseline assumptions changed');
+	await openDetails(page, 'proposer-fold');
 	await page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm').check();
 	await expect(changes).toContainText('Proposal');
 	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);

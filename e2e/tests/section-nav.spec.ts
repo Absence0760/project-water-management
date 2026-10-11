@@ -145,7 +145,7 @@ const RUNS_RAIL: [string | null, string[]][] = [
 		'Model quality',
 		['Hydrograph', 'Flow-duration curve', 'Calibration against observed flow', 'Water balance by water year', 'Runoff model: GR4J', 'EWR test: model against observed flow', 'Plausibility checks']
 	],
-	['Record', ['Run notes & evidence', 'Validation statement', 'Publication']],
+	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication']],
 	['Dig deeper', ['Self-checks', 'Explore any output']],
 	['On River & reserve', ['Reserve rules met, by month, on River & reserve', 'Days below the EWR, by month, on River & reserve', 'Water account, on River & reserve']],
 	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]

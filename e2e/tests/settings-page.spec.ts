@@ -102,7 +102,7 @@ test('a link into a group (?tab=calibration, a note’s #set- link) opens the pa
 	expect((await ewr.boundingBox())!.y).toBeGreaterThanOrEqual(menu.y + menu.height);
 
 	// A note on a settings group links to it from the Project page's recent notes (client-side navigation).
-	await page.getByRole('button', { name: 'Add a note on Data quality' }).click();
+	await page.getByRole('button', { name: 'Notes on Data quality', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on Data quality' });
 	await dialog.getByLabel('Add a note').fill('Thresholds agreed with the gauge owner');
 	await dialog.getByRole('button', { name: 'Add note' }).click();
@@ -257,7 +257,7 @@ test('a note or a quaternary lookup doesn’t save the settings: their forms are
 	await expect(settingsBar(page)).toBeVisible();
 
 	// A note on Demand, added with its own form's Add note.
-	await page.getByRole('button', { name: 'Add a note on Demand' }).click();
+	await page.getByRole('button', { name: 'Notes on Demand', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on Demand' });
 	await dialog.getByLabel('Add a note').fill('Trying the WR90 A-pan for this quaternary');
 	await dialog.getByRole('button', { name: 'Add note' }).click();
