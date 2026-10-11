@@ -320,6 +320,21 @@ section it belongs to, with the example that taught it.
   the group header row is gone ("Dam capacity", not "Capacity"). Let the
   cards scroll with the modal: `.table-wrap`'s 70vh cap made the node cards
   a scroll box inside a scroll box, with Add node out of reach below it.
+- **In a narrow column, a row's actions get their own line.** The team
+  page's Members panel (a 20–24rem side column) had Name · Role · actions,
+  and the third column clipped "Reset two-step" to "Reset two-" and
+  "Remove" to "Rem" at 1440, with the email breaking at "example." / "com"
+  (issue #520). Each row is now a grid of two lines (the name and email
+  beside a fixed-width role column, then the actions spanning both), the
+  table roles kept explicitly since the rows aren't `display: table-row`, the
+  actions' header visually hidden without a grid cell, and no actions line on
+  a row without actions. Widening the column only moves the clip to 1280 and
+  the phone. Pin it with the buttons' boxes inside the panel's
+  (`teams.spec.ts`). A long email in such a cell goes through `EmailText`
+  with `breakAfter`, whose name and domain are inline blocks: the browser
+  breaks after any hyphen on its own, and only inline blocks (or `nowrap`)
+  stop it, while an inline block still wraps inside itself when it alone is
+  wider than the line.
 - **A row that holds a form of its own is a card, not a table row.**
   Transfers stayed a table after that fix, and its Takes from cell grew a
   river off-take's six fields in one column: that row stood ~330 px tall with
@@ -718,6 +733,12 @@ section it belongs to, with the example that taught it.
   or a problem ("Default 1 500.", "Enter a seed.") stays visible; one that
   explains goes under the page's explain switch (`.explain`, as `class:explain`
   when the same element turns into an error) or is already the ⓘ tip's text.
+  The switch is one piece and one remembered value (`common/ExplainSwitch.svelte`
+  + `common/explain.svelte.ts`, extracted at its third caller: Settings, the
+  node sheet, the scenario editor); a form puts `class:explained=
+  {explainSwitch.on}` on its wrapper and hides `.explain` under it. A hint
+  with an ⓘ inside it splits: the words go in a `.explain` span, the ⓘ stays
+  (the scenario editor's rebase line).
   Give a field's label the height of a label with a tip (`min-height: 24px`),
   or the inputs of a row without tips sit 6 px higher than their neighbours.
 - **An index names each panel as the page does, and a page beside a rail
@@ -962,6 +983,7 @@ section it belongs to, with the example that taught it.
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`). A grid that isn't the model's (no save row; the Map's features save one at a time) is a `TAB_GRIDS` entry its tab draws itself, same `grid=` parameter (`map/MapTab.svelte`) |
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
+| Hiding a form's explanations until asked | `common/ExplainSwitch.svelte` (the remembered "Explain each setting under its field", `common/explain.svelte.ts` `explainSwitch`, one value for every form) and `.explain` on each hint that only explains, hidden under the wrapper's `class:explained` (§ 2 "One short line under a field") |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
@@ -1087,13 +1109,23 @@ Interaction details that bit:
   `LineChart` passes `TIME_TICKS` (`charts/series.ts`: "30 Dec", the year
   under each year's first tick); a new time chart uses `LineChart` or that
   table, never uPlot's default.
+  The hover read-out under the chart ("Date: 1 Oct 2021") goes through
+  `fmtDay` too; it read "2021-10-01" under day-first ticks until issue #521.
+- **A table shown day first finds days as it shows them.** The Data page's
+  preview and Download → Preview searched by ISO prefix ("2015-03"), which
+  stopped matching what the rows said once they read "14 Mar 2015". Read the
+  box through `dayPrefix` (`format/number.ts`): a day, a month ("Mar 2015",
+  "03/2015") or a year, day first or year first, and anything else as typed
+  so a half-typed "2021-1" still narrows (never January). The file itself
+  keeps ISO dates; only the screen changes.
 - **A typed date is day first too, so not `<input type="date">`.** A native
   date field shows the browser's own order: Trace a day read "12/30/2021"
   in a US-locale browser (issue #521). Where a person types one day, use a
   text field read by `parseDay` (`format/number.ts`: "15 Nov 2021",
   "15/11/2021", "2021-11-15", never month first), show it back through
   `fmtDay` once read, and say a day it can't read or that is out of range at
-  the field (`runs/SelfChecksPanel.svelte`, `self-checks.spec.ts`).
+  the field (`runs/SelfChecksPanel.svelte`, `self-checks.spec.ts`; the Data
+  page's Edit a day, `series/EditDay.svelte`, `series-hand-edit.spec.ts`).
 - **A small chart's month letters keep their room at 320 px.** The farm
   charts' "J F M A M …" nearly touched beside a "100 %" axis column on a
   320 px phone (issue #521). Below 20 px a month (`chartGeometry.ts`
@@ -1121,7 +1153,11 @@ Interaction details that bit:
   in plain decimals (the quaternary lookup's source note, coordinates a GIS
   reads). Dates a person reads are day first through `fmtDay`, `fmtStamp`
   and `fmtWhen`; Runs & results showed "2026-10-11 01:13" beside the
-  Summary's "1 Oct 2021".
+  Summary's "1 Oct 2021". When the date sits in prose another layer writes (the engine's
+  "GR4J fit of 2026-09-24 14:05 UTC"), take the timestamp as data and format
+  it on the screen (`describeFitRecord(r, fittedAtText)`); don't change the
+  stored prose, which history revisions keep and evidence pack manifests
+  hash.
 - **Move a page's main actions to where they're seen.** Scenarios' Run sat
   under the changes, the form and a checkbox per node, off the first screen
   on a big network; it now sits in the scenario's head row. A section's

@@ -1968,7 +1968,11 @@ it scrolls, and isn't fitted to the window.
 Email addresses (member rows here and on team pages,
 pending invitations, the confirm-email banner) render through
 `common/EmailText.svelte`, which lets them wrap before the `@` and after `.`,
-`-`, `_` or `+` rather than mid-word on a phone.
+`-`, `_` or `+` rather than mid-word on a phone. The team page's members pass
+`breakAfter="."`: the name and domain are inline blocks, so it wraps at the
+`@` first and after a `.` only when one side is wider than the line (not the
+default, since an inline block can leave a sentence's closing "." alone on a
+line).
 
 ## Project list
 
@@ -2324,9 +2328,17 @@ main column is **Projects**: two tiles (EWR bar, alerts firing), then each proje
 ("Published run"…), EWR pill, figures age and *Stale* flag, farms short
 (linking to the run's curtailment, as on the project list), lowest dam and
 alerts; a footnote states the traffic-light rule with a link to the
-settings. **Members** is the side column (below on a narrow page): name
-with the email under it, role, Remove; the add-by-email form, pending
-invites and the roles list. Admins pick each member's role from
+settings. **Members** is the side column (below on a narrow page): each
+member is a row of two lines (issue #520), the name with the email under it
+beside the role, then the row's **Reset two-step** and **Remove** on a line of
+their own under both, so the narrow column never clips them (a third column
+cut them to "Reset two-" and "Rem" at 1440). Each row is a grid with the table
+roles kept explicitly; your own row has no actions line. The email wraps at
+its `@` first, then only after a `.` (`EmailText` with `breakAfter="."`,
+`format/email.ts` `emailGroups`): "demo" / "@example.com", never
+"demo@example." / "com", and never after a hyphen in the name unless one part
+is wider than the line. Then the add-by-email form, pending invites and the
+roles list. Admins pick each member's role from
 **viewer / editor / owner** (the API's `viewer` / `member` / `admin`; the
 sole admin's viewer and editor options are disabled), and the page explains
 each role in a short list under the table: viewers read every team project,
@@ -2335,7 +2347,7 @@ New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
 
-**Reset two-step** (admins, on every row below admin, beside Remove;
+**Reset two-step** (admins, on every row below admin, beside Remove on the row's actions line;
 205_mfa_recovery, [security.md § Two-step sign-in](./security.md#two-step-sign-in) → Recovery):
 for a member who can't get a code and lost their recovery codes. Never on
 an admin's row (operator decision, 2026-10-08: another admin uses the
@@ -4985,7 +4997,8 @@ with the table the data needs).
   pill beside its age and an amber edge and the key line says what it means,
   so the table, the header's "2 behind" and the badge always give the same
   count. **Data up to** is the column straight after the series; **From**
-  after it gives only the first date (it was a *Period* start → end, whose
+  after it gives only the first date (both day first, `1 Oct 2021`, as is
+  the CSV menu's period line; issue #521) (it was a *Period* start → end, whose
   end repeated Data up to, issue #174). (Until 2026-09-26 any row
   older than 31 days, flow included, was amber, which disagreed with the
   badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
@@ -5066,14 +5079,16 @@ fields' visible labels): **Product**, **Measured at**, **Source**,
 2021-10-04 to 2021-10-06"), each only where it applies, wrapping to one
 column on a phone. **Edit a day** (issue #477 (a), `series/EditDay.svelte`,
 editors only; recommended to the client, whose answer to the issue's
-question 1 is still open) follows: a *Day* date field limited to the
-series' span, a *Value (unit)* box that takes the day's stored value when the
+question 1 is still open) follows: a *Day* text field read day first
+(`parseDay`: "2 Oct 2021", "2/10/2021" or "2021-10-02"; not a native date
+field, which shows the browser's own order; issue #521), shown back as
+"2 Oct 2021" and checked against the series' span, a *Value (unit)* box that takes the day's stored value when the
 day is picked (12.5 or 12,5; blank = no reading; never negative), and
 **Save the day** (**Clear the day** when the box is blank; disabled while
 nothing changes). The line under them says the stored value and whether the
 day is already edited by hand, and on a series a data feed fills that the
 feed won't write over the day. It saves through `PUT
-…/series/:id/days/:date`, then says *Saved 2021-10-02: 14.2 mm. Kept in
+…/series/:id/days/:date`, then says *Saved 2 Oct 2021: 14.2 mm. Kept in
 History, where the value before can be restored.*; a day outside the series
 is for Add data (a file or pasted rows), and while a feed is replacing the
 series the box says to wait. A day edited by hand is marked so an edited
@@ -5285,8 +5300,10 @@ unit once: the m³/day columns name it in their label, so no second `(m³/day)`
 follows. The derived columns are
 computed with the engine's own `prepareRun`/`rain.ts`/`calibrate/provenance.ts`
 (the same functions a run uses), not recomputed separately, so they are blank
-for any day outside the model's own run window. The search box takes a date
-prefix (`2015`, `2015-03-14`) or a value comparison (`> 20`, `= 0`); *Missing
+for any day outside the model's own run window. Its days read day first
+(`1 Oct 2021`, `fmtDay`; issue #521), and the search box takes a date as
+they read or year first (`2015`, `Mar 2015`, `14 Mar 2015`, `2015-03-14`;
+`format/number.ts` `dayPrefix`) or a value comparison (`> 20`, `= 0`); *Missing
 only* and *Flagged only* look only at the currently visible series columns.
 Rows are virtualised (fixed row height, only the rows near the scrollport are
 real `<tr>`s) so a multi-year daily record doesn't put thousands of rows in
@@ -5325,8 +5342,9 @@ The parser takes every leading `#` line: the provenance line is kept apart from
 the table, and a legacy run's (its warning line, or `runoff_model=legacy`)
 shows the legacy-model warning above it.
 The header row and the date column stay in view, numbers are right-aligned
-under right-aligned headers (to the precision the charts use, `fmtReading`), a
-date prefix (2015, 2015-03) narrows the rows, and closing it returns focus to
+under right-aligned headers (to the precision the charts use, `fmtReading`), the
+days read day first (the file keeps ISO dates), a date as they read or year first
+(2015, Mar 2015, 14 Mar 2015, 2015-03; `dayPrefix`) narrows the rows, and closing it returns focus to
 the Download button. Only the rows in view are rendered, as in the Data tab's
 preview: each body row is exactly 28 px, border included, and the spacer rows
 exist only when they have height, so the first day starts right under the
@@ -8786,6 +8804,21 @@ closing, and **Discard edits** puts it back. **Edits to record**
   on another scenario. `e2e/tests/scenario-editor-layout.spec.ts` pins Add
   change on screen at 1440×900, the closed lines, the marker, that each
   opens, a viewer and the phone.
+- **Explanations behind the switch** (issue #521): the Changes card's head
+  row carries **Explain each setting under its field**, the same remembered
+  switch as Settings' and a node's sheet (`common/ExplainSwitch.svelte`,
+  `common/explain.svelte.ts`, `localStorage` `wm.settings.explain`; ticked
+  in one, it is ticked in all). Off, the hints that only explain are hidden
+  (`.explain`): what **Edit in the model tables** edits, the proposer list's
+  meaning, the statement's Appendix C note, the rebase explanation (its ⓘ
+  stays), and in **Add a change** the how-it-works lines (a new unit's
+  place, Plant it…, a demand object's defaults, Scale demand's rules, what
+  Scale rainfall touches, what a registered volume caps, the PE source's
+  example). What states a value ("Now: …"), a classification ("Always a
+  baseline assumption…"), a limit ("At most 200 characters") or the next
+  step ("set its share returned to 0 as the next change") stays. The base
+  banner's run time and the rebase picker's runs read day first
+  (`fmtStamp`).
 - **The proposer's hydrological units** ("… and users" when the base has
   other water users; the **Proposer** fold): a checkbox per hydrological unit, then per other
   water user, each kind under its own label when both are there. A gauge
