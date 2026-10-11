@@ -21,7 +21,9 @@ export async function sidewaysOverflow(page: Page) {
 		const culprits = [...document.body.querySelectorAll('*')]
 			.filter((el) => {
 				const r = el.getBoundingClientRect();
-				return r.width > 0 && r.right > edge + 0.5 && !held(el);
+				// checkVisibility(): a closed <details>' content still has a box (content-visibility: hidden) but
+				// is never drawn and never widens the page, so it can't make the page scroll sideways.
+				return r.width > 0 && r.right > edge + 0.5 && !held(el) && el.checkVisibility();
 			})
 			.map((el) => {
 				const cls = typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).join('.')}` : '';

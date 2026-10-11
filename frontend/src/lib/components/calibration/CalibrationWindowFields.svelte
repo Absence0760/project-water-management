@@ -140,8 +140,13 @@
 		max-width: 75ch;
 		margin: 0 0 0.5rem;
 	}
+	/* A field never wider than its row: "Compare with"'s longest option would push it past a 320 px screen. */
 	.form-row .field {
 		margin-bottom: 0.5rem;
+		max-width: 100%;
+	}
+	.form-row select {
+		max-width: 100%;
 	}
 	.warn {
 		color: var(--warning);
