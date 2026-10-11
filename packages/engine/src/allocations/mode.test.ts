@@ -250,6 +250,16 @@ describe("allocationMode 'cap'", () => {
 			expect(tamper(ALLOCATION_SERIES.surfaceRoom.key, first, NaN)).toMatch(/is not a number on a capped day/);
 			expect(tamper(ALLOCATION_SERIES.surfaceLeft.key, first + 3, NaN)).toMatch(/is not a number on a capped day/);
 		});
+		it('the summary shows a dam on the river\'s losses beside its surface use, and the self-check holds them to the run\'s own columns (#507 item 7)', () => {
+			const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 50_000 }], 'none');
+			const out = runModelWithoutChecks(x);
+			expect(checkAllocations(x, out)).toBeNull();
+			const src = out.summary.allocations!.nodes.find((n) => n.nodeId === 'a')!.sources[0]!;
+			expect(src.meanDamLossesM3PerYear).toBeGreaterThan(0);
+			const bad = structuredClone(out);
+			bad.summary.allocations!.nodes.find((n) => n.nodeId === 'a')!.sources[0]!.meanDamLossesM3PerYear = src.meanDamLossesM3PerYear! * 2;
+			expect(checkAllocations(x, bad)).toMatch(/the dam losses don't match the run's own dam_evaporation/);
+		});
 		it('the self-check: a licence starting mid-year starts its capped days with the whole budget (the use before not counted)', () => {
 			const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 50_000, validFrom: '2004-01-15', maxRateM3s: 0.01 }], 'cap');
 			const out = runModelWithoutChecks(x);

@@ -78,8 +78,9 @@ export function demandSweepRequest(baseRunId: string, levels: readonly number[])
 /** A member's demand level, %, when it is one plain `demand.scale` on every farm; else null. */
 export function demandLevelOf(m: Pick<SweepMember, 'ops'>): number | null {
 	if (m.ops.length !== 1) return null;
-	const op = m.ops[0]! as { op: string; factor?: number; nodeIds?: unknown; months?: unknown; category?: unknown };
-	if (op.op !== 'demand.scale' || typeof op.factor !== 'number' || op.nodeIds !== undefined || op.months !== undefined) return null;
+	const op = m.ops[0]! as { op: string; factor?: number; nodeIds?: unknown; months?: unknown; category?: unknown; from?: unknown; to?: unknown };
+	// A dated one (engine ≥ 1.82.0) isn't a level over the whole record.
+	if (op.op !== 'demand.scale' || typeof op.factor !== 'number' || op.nodeIds !== undefined || op.months !== undefined || op.from !== undefined || op.to !== undefined) return null;
 	if (op.category !== undefined && op.category !== 'farm') return null;
 	return Math.round(op.factor * 1000) / 10;
 }

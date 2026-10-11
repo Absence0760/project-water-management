@@ -44,7 +44,13 @@ impact against full authorised use as well as modelled use
 2026-10-01); and § 5 naming only the
 applicant's own units, every other unit's registered volume and use as
 totals at 5 or more units (report format `evidence-15`, decision D3,
-2026-10-01; [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)). What is left is
+2026-10-01; [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)); and
+§ 5 saying how each unit's surface use was measured: a dam beside the river's
+"taken at the intake; drawn from the dam N, not added", a dam on the river's
+"dam losses N, not counted" (report format `evidence-16`, issue #516 and #507
+item 7, 2026-10-10; the new fields change the manifest hash, so a pack
+issued before keeps its `evidence-15` document, which the report page still
+reads, without the words). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds

@@ -354,7 +354,9 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			// One part of a unit's demand (engine ≥ 1.45.0): its crops, or its demand objects of one category.
 			const part = op.part ? (DEMAND_PART_OPTIONS.find((p) => p.value === op.part)?.label ?? op.part) : null;
 			const whose = part ? `${part} demand` : user ? 'Demand' : 'Irrigation demand';
-			return `${whose} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
+			// Dates (engine ≥ 1.82.0), worded as series.scale's.
+			const days = op.from || op.to ? `, ${op.from ?? 'start'} to ${op.to ?? 'end'}` : '';
+			return `${whose} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}${days}`;
 		}
 		case 'ewrRule.set': {
 			const t = op.table;
@@ -901,6 +903,9 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				if (months.length && months.length < 12) s.months = months;
 				if (d.demandCategory === 'user') s.category = 'user';
 				else if (d.demandPart) s.part = d.demandPart;
+				// Dates (engine ≥ 1.82.0), the same From/To fields as series.scale's.
+				if (d.from.trim()) s.from = d.from.trim();
+				if (d.to.trim()) s.to = d.to.trim();
 				op = s;
 				break;
 			}
