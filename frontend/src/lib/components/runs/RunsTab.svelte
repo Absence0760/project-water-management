@@ -134,6 +134,8 @@
 	);
 	let detailLoading = $state(false);
 	let detailError = $state<string | null>(null);
+	/** The run the URL names is no longer stored (404): Try again can't bring it back. */
+	let detailGone = $state(false);
 
 	// Display order and names come from the current model (nodes deleted since
 	// the run fall back to the run's own names).
@@ -230,6 +232,7 @@
 		}
 		detailLoading = true;
 		detailError = null;
+		detailGone = false;
 		try {
 			const d = await api.runs.get(projectId, id);
 			// The first charts' flows go out now, before the results page renders (cache.ts prefetchSeries).
@@ -240,6 +243,7 @@
 			if (detailFor === id) {
 				detail = null;
 				detailError = runErrorText(e);
+				detailGone = isRunGone(e);
 			}
 		} finally {
 			if (detailFor === id) detailLoading = false;
@@ -379,6 +383,7 @@
 				return;
 			}
 		}
+		const at = shownRuns.findIndex((x) => x.id === r.id);
 		forgetRun(r.id);
 		commit(runs.filter((x) => x.id !== r.id));
 		if (selectedId === r.id) {
@@ -386,6 +391,13 @@
 			detailFor = '';
 			select(runs[0]?.id ?? null);
 		}
+		// Its row, and the ✕ that had the focus, have gone: the run now in its place (else the last)
+		// takes it, or the list's heading once none is left, so the focus doesn't fall to the top of the page.
+		await tick();
+		const picks = railEl?.querySelectorAll<HTMLElement>('ul.runs button.pick') ?? [];
+		const next = picks.length ? picks[Math.min(Math.max(at, 0), picks.length - 1)] : document.getElementById('runs-h');
+		if (next && !picks.length) next.tabIndex = -1;
+		next?.focus();
 	}
 
 	// Inputs changed since the newest run? Settings/model saves bump the
@@ -624,7 +636,11 @@
 		{#if detailError && !detail}
 			<div class="alert alert-error" role="alert">
 				{detailError}
-				<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+				{#if !detailGone}
+					<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+				{:else if latest && latest.id !== selectedId}
+					<button type="button" class="btn btn-sm" onclick={() => select(latest.id)}>Show the newest run</button>
+				{/if}
 			</div>
 		{:else if detail}
 			{@const summary = detail.run.summary}

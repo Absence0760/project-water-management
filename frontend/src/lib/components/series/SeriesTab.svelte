@@ -17,7 +17,7 @@
 	// page charts what it uploaded (`series=`), and the empty state's button
 	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -418,10 +418,18 @@
 		actionError = null;
 		try {
 			await api.series.remove(projectId, s.id);
+			const at = rows.findIndex((x) => x.id === s.id);
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
 			if (seriesParam === s.id) void goto(withoutParam(page.url, 'series'), { noScroll: true, keepFocus: true, replaceState: true });
+			// Its row, and the Delete that had the focus, have gone: the View button of the series now in its
+			// place (else the last) takes it, or the panel's heading once none is left.
+			await tick();
+			const views = document.querySelectorAll<HTMLElement>('#series-rows button[aria-pressed]');
+			const next = views.length ? views[Math.min(Math.max(at, 0), views.length - 1)] : document.getElementById('ser-h');
+			if (next && !views.length) next.tabIndex = -1;
+			next?.focus();
 		} catch (e) {
 			actionError = msg(e);
 		}
