@@ -815,6 +815,12 @@ the result change?", and put back any earlier version.
   `settings.allocation_mode_reset` (213, issue #507: a stored baseline that
   capped or fully allocated was moved to compare only, `{ from, to }`; no
   actor, written by the migration),
+  `model.ewr_rules_reset` (216, issue #523 B4: the stored rules that kept
+  water for the EWR were switched off, `{ rules: [...] }`, each
+  `{ kind: 'damPassInflow' | 'unitHandsOff', id, name }`,
+  `{ kind: 'offtakeHandsOff', id, from, to }` or
+  `{ kind: 'restrictionEwrTrigger', siteNodeId, level }`; no actor, written
+  by the migration),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
   registration numbers, file name and hash, counts; never a holder's name;
   a viewer reads `allocation.created/changed/deleted` without the
@@ -3508,6 +3514,27 @@ string but `'none'`) to `'none'` and records the move on its History as a
 `settings.allocation_mode_reset` audit event, `{ from, to }`, with no actor.
 Stored runs and model revisions keep the mode they ran or were saved with
 (records of the past); a capped run of before stays readable as one.
+
+### The baseline keeps no water for the EWR (216_baseline_ewr_rules_scenario_only.sql)
+
+Issue #523 B4, decided by the client's hydrologist and the operator
+(2026-10-11, #90 R4, #507 § Principle): in the baseline the EWR is assessed
+and reported, never applied. The rules that keep water for it run only in a
+scenario ([scenarios.md § The EWR-keeping rules](./scenarios.md#the-ewr-keeping-rules-are-a-scenarios-issue-523-b4)):
+`node.dam_release_rule = 'passInflow'` with `dam_release_m3_day` NULL (a
+release up to the EWR), `node.hands_off_ewr`, `transfer.hands_off_ewr` and
+`project.settings.droughtRestriction.ewrTrigger`. `PUT …/model` and `PATCH
+/projects/:id` refuse them (400 `ewr_rule_scenario_only`,
+[api.md](./api.md)); an import, a copy or a restore switches them off, with
+a note in the revision's reason (`backend/src/projects/ewrRules.ts`); and the
+input a baseline run reads drops them (`runs/execute.ts`). 216 switched off
+every stored one (the release rule to `'none'`, `hands_off_ewr` false, the
+`ewrTrigger` key removed; inert ones too) and records, per project, one
+`model.ewr_rules_reset` audit event listing each with what it was, with no
+actor, so the owner can rebuild it as a scenario. Set flows
+(`hands_off_m3_day`, a pass-inflow release with amounts) stay. Stored runs
+and model revisions keep the rules they ran or were saved with; restoring
+one switches them off again.
 
 ### Legacy runoff settings removed (064_remove_legacy_runoff.sql)
 

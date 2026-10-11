@@ -259,7 +259,8 @@ a % cut per part of demand), or `null` for off, checked by the engine's
 `droughtRestrictionIssues` as a settings save is ([model.md §2.7i](./model.md));
 a `null` over no rule changes nothing. So a WUA compares restriction
 policies: the same base run with the rule off, with the outlook's triggers,
-and with a harsher table.
+and with a harsher table. A rule's `ewrTrigger` can be set **only** here
+(issue #523 B4, § The EWR-keeping rules below).
 And from engine 1.80.0 (issue #460) `ewrDailySource`: the daily outlet
 EWR's source, whole (`method` `pragmatic` | `tab` | `percentile`, `scaling`
 `mar` | `area`, the table MAR or area, and the DRM tables it reads), or
@@ -500,6 +501,57 @@ sensitivity (§2.10g) scales with the rest.
   not drivers: scaling them would change the calibration statistics and the
   EWR agreement, never the simulated water. Not scalable.
 - The reference gauge is never read by the engine.
+
+## The EWR-keeping rules are a scenario's (issue #523 B4)
+
+Decided by the client's hydrologist and the operator on 2026-10-11 (#90
+R4 (b), #507 § Principle): **in the baseline the EWR is assessed and
+reported, never applied**, and it stays unadjusted (not capped at the
+natural flow net of bed losses). The four rules that *keep* water in the
+river for the EWR therefore run only in a scenario, as `allocationMode`'s
+cap and full allocation do:
+
+| Rule | Stored as | The scenario op that switches it on |
+| --- | --- | --- |
+| A dam's pass-inflow release up to the EWR | `damReleaseRule: 'passInflow'` with `damReleaseM3Day: null` | `node.set damReleaseRule 'passInflow'` (and `node.set damReleaseM3Day null` when the base has amounts) |
+| A unit's hands-off flow that keeps the EWR | `handsOffEwr: true` | `node.set handsOffEwr true` |
+| A river off-take's that does | `Transfer.handsOffEwr: true` | `transfer.set handsOffEwr true` |
+| The drought restriction's EWR trigger | `settings.droughtRestriction.ewrTrigger` | `settings.set droughtRestriction` with the whole rule and its `ewrTrigger` |
+
+A **set flow** is not one of them and stays in the baseline: a hands-off
+flow by month (`handsOffM3Day`) and a pass-inflow release with monthly
+amounts (a compensation flow the hydrologist enters).
+
+Where it's enforced (one engine predicate, `baselineEwrRules` /
+`withoutEwrKeepingRules` in `packages/engine/src/reserve/ewrReleaseRules.ts`,
+used everywhere; the engine itself runs whatever input it's given, since a
+scenario's input is a `ModelInput` like any other):
+
+- **The run.** The input every baseline run reads is built in one place
+  (`backend/src/runs/execute.ts` `loadLiveInput`) and drops them, so a
+  baseline run is the same with or without them stored (the guard:
+  `packages/engine/src/reserve/baselineEwr.test.ts`, bit-identical, and
+  `backend/src/projects/baselineEwrRules.db.test.ts` for the input). A
+  scenario's ops apply to its base run's recorded input, so the ops in the
+  table switch them back on, and a scenario with all four runs bit-identical
+  to the same model with them stored.
+- **The save.** `PUT /projects/:id/model` and `PATCH /projects/:id` refuse
+  one (400 `ewr_rule_scenario_only`, one line per rule in `details`;
+  [api.md](./api.md)); the forms show each switch disabled with the reason
+  ([ui.md](./ui.md)).
+- **Arriving from outside a save** (a project file, a copy, a restore of an
+  older revision or of a run's inputs, which may be a scenario's): switched
+  off, the revision's reason naming them (`backend/src/projects/ewrRules.ts`).
+- **Stored before.** Migration 216 switched every stored one off and recorded
+  what each was on the project's History (`model.ewr_rules_reset`,
+  [data-model.md](./data-model.md)), so it can be rebuilt as a scenario.
+  Earlier runs keep them in their recorded inputs; a scenario on such a base
+  run still runs with them.
+
+`pnpm list:ewr-rules` marks each one `[scenario only]`
+([run-locally.md § Which rules keep water for the EWR](./run-locally.md#which-rules-keep-water-for-the-ewr)).
+An applicant's proposal that protects the EWR (an off-take or pump with a
+hands-off EWR) was always a scenario op, so evidence packs are unchanged.
 
 ## Combined what-ifs belong here (worked example: a dry-year stress)
 

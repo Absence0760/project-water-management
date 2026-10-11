@@ -2894,12 +2894,16 @@ itself.
   **Edit the survey rows** and **Remove the curve**. Below: **Release rule**
   (none / pass inflow / fixed) with its monthly amounts (m³/day, Oct–Sep,
   *Use October's amount for every month*); under pass inflow a checkbox
-  keeps the EWR required at the node as the target. The hint under the rule
-  says what pass inflow costs (`damRelease.ts`, issue #507): with the box
-  ticked it releases water for the EWR, the unit's river pump, river
-  abstractions and river off-takes leave that flow too, and a baseline of
-  the river as used today normally leaves the rule at None (off by default;
-  no import sets one). The Dam group gains
+  keeps the EWR required at the node as the target. Keeping the EWR is a
+  scenario's (issue #523 B4, [scenarios.md § The EWR-keeping rules](./scenarios.md#the-ewr-keeping-rules-are-a-scenarios-issue-523-b4)):
+  choosing pass inflow starts from monthly amounts of 0 (*Pass inflow: keep
+  a set flow in the river below*), and the box is disabled while unticked,
+  with the note *Scenario only: in the baseline the EWR is assessed and
+  reported, never applied…* (`network/ewrScenarioOnly.ts`); one ticked from
+  before can only be unticked. The hint under the rule says what pass
+  inflow costs (`damRelease.ts`, issue #507): the unit's river pump, river
+  abstractions and river off-takes leave that flow too (off by default; no
+  import sets one). The Dam group gains
   **Seepage returning** (%) and **Outlet capacity** (m³/day, empty = no
   limit), one-node form only. **Paste survey rows** moves the focus into the
   box, and **Use these rows** / **Cancel** (which remove themselves) hand it
@@ -2954,7 +2958,10 @@ itself.
   (engine ≥ 1.32.0, issue #204, [model.md §2.7h](./model.md)): **Leave a set
   flow in the river, by month** opens twelve m³/day fields (Oct–Sep, with
   **Use October’s flow for every month**; unticked = none), and **Also leave
-  the EWR in the river** keeps the EWR required at the farm too. A line under
+  the EWR in the river** keeps the EWR required at the farm too: a
+  scenario's (issue #523 B4), so in the baseline the box is disabled while
+  unticked, with the scenario-only note under it (one ticked from before can
+  only be unticked). A line under
   them says in plain words what the farm leaves and before which of its takes
   (`handsOffPreview`, `handsOffTakers`): no hands-off flow (priority users only,
   not the EWR), else the amount ("150 m³/day", or "between 150 and 12 345.5
@@ -4764,7 +4771,8 @@ The card's body holds three top-aligned groups:
   rejoins the river (*The source* or a hydrological unit downstream of the
   source along the river; a saved unit that no longer qualifies shows as *not
   below the source*, and the model check refuses it), and switches for leaving
-  the EWR in the river and topping up the destination’s dam. The fields sit
+  the EWR in the river (a scenario's, issue #523 B4: disabled while off,
+  with the scenario-only note) and topping up the destination’s dam. The fields sit
   two to a row, not one tall column.
 
 Every field keeps its visible label and its ⓘ tip, and its accessible name
@@ -8542,7 +8550,10 @@ see (WP-2.3); every place it shows says so.
   hydrological unit*, or a checkbox per unit); and the **EWR trigger**
   (*Also restrict when the EWR wasn't met the day before a review*, the
   site: the outlet or a gauge that is an EWR site, and the level: at least
-  which). An id the
+  which). The trigger is a scenario's (issue #523 B4): in Settings the box
+  is disabled while off, with the scenario-only note, and a rule that has
+  one (from before) blocks Save until it is unticked; the scenario form's
+  *Change a setting › Drought restriction rule* switches it on. An id the
   model hasn't got blocks Save with its name.
 - **Hydrological units → Drought restrictions** (`#res-restrictions`, its own
   panel and menu entry, before Other uses, for a run with the rule;
@@ -8583,7 +8594,7 @@ op); `e2e/tests/settings-drought-restriction.spec.ts` (the template, a
 blocked save, edits saved whole, a viewer, off saves null, axe and the
 cards stacked at phone width) and `e2e/tests/drought-restrictions-run.spec.ts`
 (the scenario's "Change a setting", a rule from the published notice on
-each unit's own dam with an EWR trigger, the outlook's triggers replacing
+each unit's own dam, its EWR trigger disabled in Settings, the outlook's triggers replacing
 it after the question, a run's tables on Hydrological units with axe and no
 sideways scroll).
 

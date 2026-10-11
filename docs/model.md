@@ -2901,7 +2901,7 @@ the destination is simulated after its source.
 | `source` | `dam` (default, every stored rule: §2.6) or `river` |
 | capacity | the month's rate × 86 400, capped by the daily cap: the same limit as a dam rule (§2.6, monthly rates) |
 | `handsOffM3Day` | a hands-off flow left in the river below the source before anything is taken; null = none (the default) |
-| `handsOffEwr` | also leave the EWR at the source (its cumulative requirement Z) in the river; default false |
+| `handsOffEwr` | also leave the EWR at the source (its cumulative requirement Z) in the river; default false. A scenario's only from engine 1.84.0 (§2.9g) |
 | `lossPct` | conveyance losses, 0 ≤ l < 1 of what is taken, lost from the catchment on the way (seepage and evaporation from the canal); default 0 |
 | `sizing` | `demand` (default): take only what the destination needs today, its abstraction demand (crops and demand objects) plus, with `topUpDam`, its dam's room, grossed up for the losses. `capacity`: up to capacity whatever the destination needs, like a weir-fed canal that runs full |
 | `topUpDam` | what arrives beyond the destination's demand goes into its dam (spilling what doesn't fit) rather than flowing on below it; default false |
@@ -3629,9 +3629,10 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
   hydrologist. The target also holds against the unit's river pump (§2.7e),
   river abstractions (§2.7j) and river off-takes (§2.6a), so pass inflow
   with no amounts is a release for the EWR that cuts what the unit takes
-  from the river. Release rules default to none and no importer sets one: a
-  baseline of the river as used today normally leaves the rule off, and the
-  node form's hint says so (issue #507).
+  from the river. Release rules default to none and no importer sets one.
+  From engine 1.84.0 the EWR target is a scenario's only (§2.9g, issue #523
+  B4): in the baseline a pass-inflow release keeps its monthly amounts (a
+  compensation flow), and the form starts one from a set flow.
 - *Fixed* releases a set amount from storage above dead storage.
 - The outlet cap (null = none) applies to both. No rule, or fixed with no
   amounts, is no release; nor is a day the dam has no capacity (§2.7g: not
@@ -4996,7 +4997,7 @@ baseline's existing users are current use and aren't held to it.
 | Field | Meaning |
 | --- | --- |
 | `handsOffM3Day` | a hands-off flow, m³/day per water-year month (Oct–Sep, 12 values ≥ 0); null (the default) = none. 0 in every month is none too |
-| `handsOffEwr` | also keep the EWR required at the farm, its cumulative requirement Z (its own and upstream shares, §2.7), as a river off-take's `handsOffEwr` does (§2.6a); default false |
+| `handsOffEwr` | also keep the EWR required at the farm, its cumulative requirement Z (its own and upstream shares, §2.7), as a river off-take's `handsOffEwr` does (§2.6a); default false. A scenario's only from engine 1.84.0 (§2.9g): the baseline never keeps the EWR |
 | `divertMonthlyM3Day` | River to dam's capacity per water-year month (12 values ≥ 0, m³/day); when set it replaces `divertCapacityM3Day`, which is then inert; null (the default) = the one value all year. 0 in the summer months fills the dam in winter only. Neither is used for a dam on the river (`pctUpstreamToDam` = 100 %, engine ≥ 1.68.0): River to dam is how an off-channel dam fills from the river, and a dam on the river already takes the river |
 
 **Each day** (§2.7's columns; m the calendar month):
@@ -5112,7 +5113,7 @@ notice says what the WUA asked for; the rule is what the model assumes.
 | `basis` | engine ≥ 1.54.0: which storage the level reads. `total` (the default, absent): every farm dam's, one level for every unit; `dams`: the farm dams in `damNodeIds` only, one level for every unit; `own`: each unit its own dam, a level per unit |
 | `damNodeIds` | the farm dams `dams` reads (with that basis only) |
 | `nodeIds` | the units the rule cuts (farm ids); absent = every unit |
-| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge that is an EWR site) wasn't met the day before, the level is at least `level` |
+| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge that is an EWR site) wasn't met the day before, the level is at least `level`. A scenario's only from engine 1.84.0 (§2.9g): the project's own rule has none |
 
 The parts are the ones `demand.scale` cuts on their own (#252): `crops` (a
 unit's crop water requirement F) and each demand-object category
@@ -6542,6 +6543,41 @@ flow fails there, as with a rule table (§2.9c).
 it imports as before. The Settings form also reads the DRM's own output
 files, the `.tab` summary and the `.rul` rule curves (ui.md § The daily EWR
 at the outlet).
+
+### 2.9g The EWR in the baseline: assessed and reported, never applied (engine 1.84.0, issue #523 B4)
+
+Decided by the client's hydrologist and the operator on 2026-10-11 (#90 R4,
+#507 § Principle). **In the baseline the EWR is assessed and reported,
+never applied**, and it stays **unadjusted**: the pragmatic EWR and the
+Reserve's tables are what they are, never capped at the natural flow net of
+bed losses (§2.6b; the run still warns when losses above the outlet could
+make an undeveloped catchment fall short of it). Everything in §2.9–§2.9f
+(the compliance grid, the charge, the assurance rules, the daily EWR) is
+assessment and reporting, and stays in the baseline.
+
+What moves water for the EWR is four rules, and they run **only in a
+scenario**, as `allocationMode`'s cap and full allocation do (§2.12a):
+
+- a dam's pass-inflow release with no monthly amounts (target Z, §2.7a);
+- a unit's hands-off flow that keeps the EWR, `handsOffEwr` (§2.7h);
+- a river off-take's `handsOffEwr` (§2.6a);
+- the drought restriction's EWR trigger, `ewrTrigger` (§2.7i).
+
+A set flow (a hands-off flow by month, a pass-inflow release with amounts)
+is a compensation or operating rule the hydrologist enters, not the EWR, and
+stays in the baseline.
+
+The engine's formulas are unchanged: for a given input it runs as before,
+so this needs no `ENGINE_VERSION` bump of its own and rides 1.84.0. What
+changed is the baseline's input: `withoutEwrKeepingRules`
+(`reserve/ewrReleaseRules.ts`) switches the four off, and every baseline
+run's input passes through it (`backend/src/runs/execute.ts`); a save that
+switches one on is refused, and migration 216 switched off the stored ones
+(scenarios.md § The EWR-keeping rules). A scenario turns them on with its
+ops. The guard is `reserve/baselineEwr.test.ts`: a baseline run is
+bit-identical with and without them stored, they do change the run as
+stored (the positive control), and a scenario switching them on runs
+exactly as the stored rules did.
 
 ### 2.10 Calibration statistics (`[Flow Calibration Cfg]`)
 

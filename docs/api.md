@@ -351,6 +351,14 @@ the frontend catalogue (same contract: add, never rename):
   (`163_licensing_authority`'s conflict guard; provisional position,
   pre-counsel research, 2026-10-01). Take them out of the party, or keep
   them below editor.
+- `ewr_rule_scenario_only` (`400` from `PUT /projects/:id/model` and
+  `PATCH /projects/:id` with `settings.droughtRestriction`): the save
+  switches on a rule that keeps water for the EWR (a pass-inflow release
+  without amounts, a unit's or a transfer's `handsOffEwr`, the drought
+  restriction's `ewrTrigger`). In the baseline the EWR is assessed and
+  reported, never applied, so they run only in a scenario (issue #523 B4).
+  `details` is one line per rule, naming where it is and the scenario op
+  that keeps it.
 - `pack_volumes_withheld` (`403` from `GET …/packs/:packId/bundle`, from
   `GET …/packs/:packId` and `…/pdf` for a pack whose frozen text names
   other farms' volumes (drafted before `evidence-15`, or a team scenario's
@@ -443,7 +451,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects/outcomes` | – | `{ projects: PortfolioProject[] }`: the [portfolio](#portfolio)'s figures for every project you can see (below) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId?, requireMfa? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows; `400` for `settings.allocationMode` other than `'none'` ("the baseline only compares registered volumes …": licence data never drives the baseline, issue #507; a cap or a full allocation is a scenario's `settings.set`, [allocations.md](./allocations.md#the-allocation-mode-engine--1180)); `403 mfa_required` / `mfa_step_up` turning `requireMfa` on without being signed in with a second factor (below) | editor (owner when `teamId` or `requireMfa` is sent) |
+| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId?, requireMfa? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows; `400` for `settings.allocationMode` other than `'none'` ("the baseline only compares registered volumes …": licence data never drives the baseline, issue #507; a cap or a full allocation is a scenario's `settings.set`, [allocations.md](./allocations.md#the-allocation-mode-engine--1180)); `400` `ewr_rule_scenario_only` for a `settings.droughtRestriction` with an `ewrTrigger` (the baseline never keeps water for the EWR, issue #523 B4; a scenario's `settings.set droughtRestriction` carries one); `403 mfa_required` / `mfa_step_up` turning `requireMfa` on without being signed in with a second factor (below) | editor (owner when `teamId` or `requireMfa` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { packs } }` for a project with an evidence pack past draft (issued, superseded or withdrawn: its verify link must keep answering; 112, [Evidence packs](#evidence-packs)), checked first; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id, and each series' site (a gauge's record, a unit's own rain) to its node's; a unit's rain whose unit has left the model is left out; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
@@ -1780,6 +1788,18 @@ transfer reference points at a node/crop in the same document; the network is a
 tree (no cycles) with exactly one node whose `downstreamNodeId` is `null`
 (the outflow gauge) — unless the model is empty. A failure is
 `400 { error: "invalid model", details: string[] }`, one message per problem.
+
+The rules that keep water for the EWR are a scenario's (issue #523 B4,
+[scenarios.md § The EWR-keeping rules](./scenarios.md#the-ewr-keeping-rules-are-a-scenarios-issue-523-b4)):
+a model with a pass-inflow release without monthly amounts
+(`damReleaseRule: 'passInflow'`, `damReleaseM3Day: null`), a unit's
+`handsOffEwr: true` or a transfer's `handsOffEwr: true` is refused with
+`400 { error, code: "ewr_rule_scenario_only", details: string[] }`, one line
+per rule naming where it is and the scenario op that keeps it. A set flow
+(`handsOffM3Day`, a pass-inflow release with amounts) is accepted. A project
+file (`POST /projects/import`), a copy and a restore bring such rules in
+switched off instead, their revision's reason saying which, and the input a
+baseline run reads (`GET /projects/:id/model-input` too) never has them.
 
 ## Time series
 
