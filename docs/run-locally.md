@@ -393,7 +393,7 @@ re-check of cached finals CHC rewrites in place
 ([architecture.md § Data feeds](./architecture.md#data-feeds)), backfill a
 CHIRPS feed past 120 days back, then set `FEED_FIXTURE_REWRITE=1` in a
 gitignored `backend/.env.development.local` and restart: the finals
-`backend/fixtures/feeds/chirps-rewrite.json` names (100–120 days back) are
+`backend/fixtures/feeds/chirps-rewrite.json` names (91–120 days back) are
 served ×1.25 at the same URL. Files are HEADed 90 days after their last
 check, so to see it at once run
 `UPDATE chirps_file SET checked_at = now() - interval '91 days';` in
