@@ -242,7 +242,7 @@ describe('shareThePain over seeded engine runs', () => {
 						expect(cell.fraction).toBeGreaterThanOrEqual(0);
 						expect(cell.fraction).toBeLessThanOrEqual(1);
 					}
-					expect(cell.pct.startsWith('-')).toBe(false);
+					expect(/^[-−]/.test(cell.pct)).toBe(false);
 				}
 			}
 			// The identity that made the equal share one sentence rather than a stage (issue #177): its total is today's.

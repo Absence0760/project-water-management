@@ -25,9 +25,13 @@ const num = (v: number | null | undefined, d: number) => (v === null || v === un
 const close = (a: number | null | undefined, b: number | null | undefined) => a !== null && a !== undefined && b !== null && b !== undefined && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
 const months = (m: readonly (number | null)[] | null | undefined) => (m && m.some((v) => v !== null) ? m.map((v) => (v === null ? '–' : fmtNum(v, 3))).join(' · ') : '–');
 
-/** The source as the form keeps it: the dataset's own, plus the quaternary and the point it was looked up at. */
+/**
+ * The source as the form keeps it: the dataset's own, plus the quaternary and the point it was looked up at.
+ * Saved text that leaves in exports, so the point is plain decimal degrees (a hyphen-minus a GIS reads), not
+ * fmtNum's display form with its true minus.
+ */
 export function proposedSource(p: QuaternaryProposal, at: MapPosition): string {
-	return `${p.source} (quaternary ${p.code}, looked up on the map at ${fmtNum(at[1], 4)}, ${fmtNum(at[0], 4)})`.slice(0, 500);
+	return `${p.source} (quaternary ${p.code}, looked up on the map at ${at[1].toFixed(4)}, ${at[0].toFixed(4)})`.slice(0, 500);
 }
 
 /** Every row the proposal has, in the form's order. */

@@ -559,7 +559,7 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 			if (v === null || v === undefined) return spec.nullLabel ?? 'none';
 			if (typeof v !== 'number') return String(v);
 			const x = v * spec.scale;
-			const s = fmtNum(x, Math.abs(x) >= 1000 ? 0 : 4, true).replace('-', '−');
+			const s = fmtNum(x, Math.abs(x) >= 1000 ? 0 : 4, true);
 			return spec.unit === '%' ? `${s} %` : spec.unit ? `${s} ${spec.unit}` : s;
 		}
 		case 'enum':

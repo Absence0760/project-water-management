@@ -229,11 +229,11 @@ describe('score intervals and benchmarks (CR-5)', () => {
 	it('a score cell carries its 90 % interval when there is one, and a negative bound never reads as a dash', () => {
 		const [col] = scoreColumns(report({ before: withExtras(period('2003-01-01', '2008-12-31', 0.62), 0.3) }));
 		expect(scoreCellText(col!, 'kgePrime')).toBe('0.62 (0.48–0.71)');
-		expect(scoreCellText(col!, 'nse')).toBe('0.40 (-0.30 to 0.05)');
+		expect(scoreCellText(col!, 'nse')).toBe('0.40 (−0.30 to 0.05)');
 		// No interval for this score, or not a score that gets one: the bare value.
 		expect(scoreCellText(col!, 'kgeLowHigh')).toBe('0.40');
 		expect(scoreCellText(col!, 'volumeErrorPct', '%')).toBe('+5.0%');
-		expect(intervalText(iv(-0.5, -0.1))).toBe('(-0.50 to -0.10)');
+		expect(intervalText(iv(-0.5, -0.1))).toBe('(−0.50 to −0.10)');
 	});
 
 	it('reads a report or stored record from before them: no intervals, no benchmarks, a missing score as "–"', () => {
@@ -257,7 +257,7 @@ describe('score intervals and benchmarks (CR-5)', () => {
 		const rows = benchmarkRows(scoreColumns(r), 'kgePrime');
 		expect(rows).toEqual([
 			{ label: 'Model', cells: ['0.62 (0.48–0.71)', '0.40 (0.48–0.71)'] },
-			{ label: 'Mean flow every day', cells: ['-0.41', '-0.41'] },
+			{ label: 'Mean flow every day', cells: ['−0.41', '−0.41'] },
 			{ label: 'Day-of-year climatology (±7 days)', cells: ['0.30', '0.20'] }
 		]);
 		expect(climatologyWarning(scoreColumns(r), 'kgePrime')).toBeNull();

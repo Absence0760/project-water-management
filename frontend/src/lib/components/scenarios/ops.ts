@@ -345,7 +345,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'series.scale': {
 			const pct = (op.factor - 1) * 100;
 			const days = op.from || op.to ? `, ${op.from ?? 'start'} to ${op.to ?? 'end'}` : '';
-			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true).replace('-', '−')} %)${days}`;
+			return `${kindLabel(op.kind)}: × ${fmtNum(op.factor, 4, true)} (${pct > 0 ? '+' : ''}${fmtNum(pct, 2, true)} %)${days}`;
 		}
 		case 'demand.scale': {
 			const user = op.category === 'user';

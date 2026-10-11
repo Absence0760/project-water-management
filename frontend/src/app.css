@@ -574,11 +574,13 @@ table.data tr.flag {
 	color: var(--text-muted);
 	margin-bottom: 0.15rem;
 }
+/* Proportional figures: a tile's figure stands alone, not in a column, and
+   Inter's tabular figures set a hyphen a digit wide, so its lines read
+   "- 2.26", "2021 - 10 - 01" and "under - estimates" (ui-playbook § 4). */
 .stat dd {
 	margin: 0;
 	font-size: 1.2rem;
 	font-weight: 600;
-	font-variant-numeric: tabular-nums;
 }
 .stat dd small {
 	font-size: 0.75rem;

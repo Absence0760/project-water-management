@@ -160,10 +160,10 @@
 		font-size: 0.8rem;
 		color: var(--text-2);
 	}
+	/* Proportional figures, as app.css's .stat dd: tabular ones set a hyphen a digit wide. */
 	.stat dd {
 		margin: 0;
 		font-size: 1.1rem;
-		font-variant-numeric: tabular-nums;
 	}
 	.stat dd.sub {
 		font-size: 0.75rem;

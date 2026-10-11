@@ -185,7 +185,7 @@ test('the DEM grid: every 10th elevation-model cell each way in view, with its e
 	await toggle.check();
 	await expect(page).toHaveURL(/[?&]layers=demgrid(&|$)/);
 	await expect(page.getByTestId('map-demgrid-summary')).toHaveText(
-		/^[\d\s,]+ points in view: every 10th cell of the elevation model each way \(cells about [\d\s,]+ m, so a point every [\d\s,]+ m\), -?[\d\s,]+ m to -?[\d\s,]+ m\. The map has no fonts for labels here, so it shows the points without their values\.$/
+		/^[\d\s,]+ points in view: every 10th cell of the elevation model each way \(cells about [\d\s,]+ m, so a point every [\d\s,]+ m\), [-−]?[\d\s,]+ m to [-−]?[\d\s,]+ m\. The map has no fonts for labels here, so it shows the points without their values\.$/
 	);
 	await expect(page.getByTestId('map-demgrid-source')).toContainText('Source: Synthetic DEM');
 	await expect(layers(page).getByRole('status')).toContainText(/DEM grid points? shown\./);

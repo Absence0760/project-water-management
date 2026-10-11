@@ -12,6 +12,9 @@ describe('readNumber', () => {
 		expect(readNumber('12,5')).toBe(12.5);
 		expect(readNumber('0,125')).toBe(0.125);
 		expect(readNumber('-0,5')).toBe(-0.5);
+		// The true minus a grouped field's own text carries (fmtNum).
+		expect(readNumber('\u22120,5')).toBe(-0.5);
+		expect(readNumber('\u22121\u202f234.5')).toBe(-1234.5);
 		expect(readNumber('1,500')).toBe(1500);
 		expect(readNumber('300 000')).toBe(300000);
 		expect(readNumber('300 000,5')).toBe(300000.5);

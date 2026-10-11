@@ -144,7 +144,7 @@ test('crop factors: a pasted 12-month row is previewed, applied and saved; the s
 	await expectAbove(grid.getByRole('button', { name: 'Paste from a spreadsheet…' }), grid.locator('table.factors tbody tr').first());
 	await grid.getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
 	await dlg.getByLabel('Cells copied from a spreadsheet').fill('Crop\tJan\nOrchard\t-1\n');
-	await expect(dlg.getByText('Orchard, Jan: a crop factor of -1 is below 0.')).toBeVisible();
+	await expect(dlg.getByText('Orchard, Jan: a crop factor of −1 is below 0.')).toBeVisible();
 	await dlg.getByRole('button', { name: 'Cancel' }).click();
 
 	await save(page, project.id, grid);
@@ -245,7 +245,7 @@ test('transfers: the monthly rates take a paste by rule or route, in the shown u
 
 	const box = dlg.getByLabel('Cells copied from a spreadsheet');
 	await box.fill('Transfer\tOct\nTransfer 1\t-1\n');
-	await expect(dlg.getByText('Transfer 1, Oct: -1 m³/s is below 0 m³/s.')).toBeVisible();
+	await expect(dlg.getByText('Transfer 1, Oct: −1 m³/s is below 0 m³/s.')).toBeVisible();
 	// By its route, an SA-locale decimal comma; 0 in March is already off.
 	await box.fill('Transfer\tOct\tMar\nUpper farm -> Lower farm\t0,02\t0\n');
 	await expect(dlg.getByTestId('paste-summary')).toHaveText('1 value changes; 1 already has the pasted value.');
