@@ -282,7 +282,12 @@
 				<span class="err" data-testid="sweep-status">{shown.text}</span>
 			{/if}
 		</div>
-		{#if loadError}<div class="alert alert-error" role="alert">{loadError}</div>{/if}
+		{#if loadError}
+			<div class="alert alert-error" role="alert" data-testid="outcome-load-error">
+				Couldn’t look up this run’s demand sweep: {loadError}
+				<button type="button" class="btn btn-sm" onclick={() => load()}>Try again</button>
+			</div>
+		{/if}
 
 		{#if !loading && !sweep && !loadError}
 			<p class="muted" data-testid="outcome-empty">

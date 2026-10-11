@@ -216,11 +216,17 @@
 	}
 	onDestroy(() => clearInterval(timer));
 
-	function select(id: string | null) {
+	/**
+	 * Show a run. A pick the user makes is a new history entry, so Back returns to the run before, as a
+	 * unit, dam or run pick does on every page (ui-playbook § 4, "A pick is a step in history"); the
+	 * default pick and the fallback after a delete replace the entry, so Back never stops on them.
+	 */
+	function select(id: string | null, how: 'pick' | 'default' = 'default') {
 		const url = new URL(page.url);
 		if (id) url.searchParams.set('run', id);
 		else url.searchParams.delete('run');
-		goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+		if (url.search === page.url.search) return;
+		goto(url, { replaceState: how === 'default', noScroll: true, keepFocus: true });
 	}
 
 	let detailFor = untrack(() => detail?.run.id ?? '');
@@ -318,7 +324,7 @@
 			const { summary: _summary, ...meta } = r;
 			// Drop the oldest runs the server trimmed to stay within its cap.
 			commit([meta, ...runs.filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
-			select(r.id);
+			select(r.id, 'pick');
 		} catch (err) {
 			actionError = msg(err);
 		} finally {
@@ -401,8 +407,31 @@
 	// run's end (when no fixed simulation end is set).
 	const latest = $derived(runs[0] ?? null);
 	// The rail's filter over run labels (shown from RUN_FILTER_FROM runs up).
-	let runQuery = $state('');
-	const shownRuns = $derived(filterRuns(runs, runQuery));
+	// In the URL (`q=`), so a reload and Back keep it (issue #521): the first change after the box takes the focus
+	// is a step in history, the rest of that search replaces it (as the project list's search does).
+	let runQuery = $state(untrack(() => page.url.searchParams.get('q') ?? ''));
+	// Only while the box shows: an old link's q= never hides runs behind a filter that isn't on screen.
+	const shownRuns = $derived(runs.length >= RUN_FILTER_FROM ? filterRuns(runs, runQuery) : runs);
+	let queryStep = false;
+	let queryTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		const q = page.url.searchParams.get('q') ?? '';
+		if (untrack(() => runQuery.trim()) !== q) runQuery = q;
+	});
+	function writeQuery() {
+		clearTimeout(queryTimer);
+		queryTimer = setTimeout(() => {
+			const url = new URL(page.url);
+			const words = runQuery.trim();
+			if (words) url.searchParams.set('q', words);
+			else url.searchParams.delete('q');
+			if (url.search === page.url.search) return;
+			const replaceState = queryStep;
+			queryStep = true;
+			void goto(url, { replaceState, noScroll: true, keepFocus: true });
+		}, 300);
+	}
+	$effect(() => () => clearTimeout(queryTimer));
 	const stale = $derived.by(() => {
 		if (!latest) return null;
 		const reasons: string[] = [];
@@ -570,7 +599,7 @@
 				</div>
 			{:else}
 				{#if runs.length >= RUN_FILTER_FROM}
-					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} />
+					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} onfocus={() => (queryStep = false)} oninput={writeQuery} />
 					{#if runQuery.trim()}<p class="muted small filter-count" role="status">{shownRuns.length ? `${shownRuns.length} of ${runs.length} runs` : 'No run label matches.'}</p>{/if}
 				{/if}
 				<!-- Compact rows: the label (two lines at most, the full label on
@@ -579,7 +608,7 @@
 				<ul class="runs">
 					{#each shownRuns as r (r.id)}
 						<li class:active={r.id === selectedId}>
-							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
+							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id, 'pick')}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<!-- Each part on one line: "2021–2022" broke after its dash, a third line on every row. -->
 								<span class="meta"><span class="nw">{fmtWhen(r.createdAt)}</span> · <span class="nw">{runYears(r.startDate, r.endDate)}</span></span>
@@ -635,7 +664,7 @@
 				{#if !detailGone}
 					<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
 				{:else if latest && latest.id !== selectedId}
-					<button type="button" class="btn btn-sm" onclick={() => select(latest.id)}>Show the newest run</button>
+					<button type="button" class="btn btn-sm" onclick={() => select(latest.id, 'pick')}>Show the newest run</button>
 				{/if}
 			</div>
 		{:else if detail}
@@ -677,7 +706,7 @@
 						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
 						<span class="muted small">
 							{fmtDay(detail.run.startDate)} – {fmtDay(detail.run.endDate)} ({fmtNum(runDays(detail.run))} days) · ran {fmtWhen(detail.run.createdAt)} by {detail.run.createdBy ?? FORMER_MEMBER} · engine {detail.run.engineVersion}
-							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
+							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id, 'pick')}>go to latest</button>{/if}
 						</span>
 						<!-- The river and unit panels have their own pages (issue #17): one link each, keeping the run. -->
 						<nav class="outcomes small" aria-label="Outcomes for this run">

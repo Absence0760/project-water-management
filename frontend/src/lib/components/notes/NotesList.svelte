@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
 	import {
@@ -174,15 +175,21 @@
 		if (!(await confirmDialog({ title: words.deleteTitle, message: words.confirmDelete(n), confirmLabel: words.delete, cancelLabel: words.cancel, danger: true }))) return;
 		busy = true;
 		error = null;
+		const at = (shown ?? []).findIndex((x) => x.id === n.id);
+		let removed = false;
 		try {
 			await api.notes.remove(projectId, n.id);
 			notes = (notes ?? []).filter((x) => x.id !== n.id);
+			removed = true;
 			onChanged?.();
 		} catch (err) {
 			error = message(err);
 		} finally {
 			busy = false;
 		}
+		// Its Delete button had the focus and has gone (into the drawer's start, or the page's): the note now
+		// in its place takes it, else the add field, else the list (ui-playbook § 4, focusAfterRemove).
+		if (removed) await focusAfterRemove(at, `[id="${uid}-list"] > li`, document.getElementById(`${uid}-new`) ?? `${uid}-notes`);
 	}
 </script>
 
@@ -220,7 +227,7 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 {/snippet}
 
-<div class="notes" class:form-first={formFirst} data-notes-ready={notes !== null || loadError !== null ? 'true' : undefined}>
+<div class="notes" id="{uid}-notes" class:form-first={formFirst} data-notes-ready={notes !== null || loadError !== null ? 'true' : undefined}>
 	{#if formFirst}{@render addForm()}{/if}
 	{#if loadError}
 		<div class="alert alert-error" role="alert">{words.loadFailed(loadError)}</div>
@@ -229,9 +236,10 @@
 	{:else if shown.length === 0}
 		<p class="muted">{emptyText}</p>
 	{:else}
-		<ul class="list" aria-label={words.list}>
+		<ul class="list" id="{uid}-list" aria-label={words.list}>
 			{#each shown as n (n.id)}
-				<li class="note">
+				<!-- tabindex -1: a delete puts the focus on the note that takes the deleted one's place. -->
+				<li class="note" tabindex="-1">
 					{#if editing === n.id}
 						<form onsubmit={(e) => saveEdit(e, n)}>
 							<label for="{uid}-edit" class="visually-hidden">{words.editLabel}</label>
