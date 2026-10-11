@@ -1,5 +1,6 @@
 // Labels for the fit record display (FitProvenance.svelte). Pure, so it is unit-tested.
 import { CALIBRATION_PARAMS, type ApanDailyFingerprint, type RunoffModelId } from '@water-management/engine';
+import { fittedAtText } from '$lib/calibration/fit';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum } from '$lib/format/number';
 
@@ -34,6 +35,14 @@ export function chirpsFactorsText(factors: readonly (number | null)[]): string {
  */
 export function fitModelLabel(model: string): string {
 	return model === 'gr4j' ? 'GR4J' : 'Legacy (removed in engine 1.0.0)';
+}
+
+/**
+ * A fit record in one line, its fold's summary in Settings (issue #521 round 5): "GR4J fit of 15 Jan 2025 09:30
+ * UTC", ", automated" when the calibration rules picked it.
+ */
+export function fitRecordLine(record: { model: string; fittedAt: string; auto?: unknown }): string {
+	return `${fitModelLabel(record.model)} fit of ${fittedAtText(record.fittedAt)}${record.auto ? ', automated' : ''}`;
 }
 
 /** A fit record's daily A-pan series (issue #45) in words: 'none', or its first day, length and a short hash. */

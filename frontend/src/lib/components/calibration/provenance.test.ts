@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
+import { apanDailyText, chirpsFactorsText, fitModelLabel, fitRecordLine, monthsText, paramLabel } from './provenance';
 
 describe('paramLabel', () => {
 	it('names GR4J’s parameters, and falls back to the key (a stored legacy fit’s, engine < 1.0.0)', () => {
@@ -31,6 +31,13 @@ describe('fitModelLabel', () => {
 	it('marks a stored legacy fit as the removed model (issue #16)', () => {
 		expect(fitModelLabel('gr4j')).toBe('GR4J');
 		expect(fitModelLabel('legacy')).toBe('Legacy (removed in engine 1.0.0)');
+	});
+});
+
+describe('fitRecordLine (issue #521)', () => {
+	it('says the model and when it was fitted, day first, and whether the rules picked it', () => {
+		expect(fitRecordLine({ model: 'gr4j', fittedAt: '2025-01-15T09:30:00Z' })).toBe('GR4J fit of 15 Jan 2025 09:30 UTC');
+		expect(fitRecordLine({ model: 'gr4j', fittedAt: '2025-01-15T09:30:00.123Z', auto: { chosen: 0 } })).toBe('GR4J fit of 15 Jan 2025 09:30 UTC, automated');
 	});
 });
 

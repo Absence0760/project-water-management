@@ -70,7 +70,11 @@ export type FoldId =
 	| 'restriction-rule-fold'
 	| 'rain-defaults'
 	| 'quality-limits'
-	| 'wr2012-judging';
+	| 'wr2012-judging'
+	| 'feb-advanced'
+	| 'ewr-scaled'
+	| 'pan-coefficient-helper'
+	| 'fit-record-fold';
 export async function openFold(scope: Page | Locator, testId: FoldId) {
 	const fold = scope.getByTestId(testId);
 	// Its own summary: a fold can hold another <details> (the pan row's tools hold the FAO-56 helper).
