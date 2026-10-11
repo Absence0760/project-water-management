@@ -405,8 +405,8 @@ export const af: Catalogue = {
 	'874e0640': 'Wat beteken hierdie woorde?',
 	// Account
 	'59f8a2fc': 'Rekening',
-	// Who decides about your farm’s information
-	'c084b088': 'Wie besluit oor jou hidrologiese eenheid se inligting',
+	// Who decides about your hydrological unit’s information
+	'21480e39': 'Wie besluit oor jou hidrologiese eenheid se inligting',
 	// Don’t keep a copy on this phone
 	'adfda47f': 'Moenie ’n kopie op hierdie foon hou nie',
 	// Back to the workspace
@@ -419,6 +419,8 @@ export const af: Catalogue = {
 	'5f3a8bf0': 'Voorspelling',
 	// Last 12 months, in ML
 	'99e77075': 'Afgelope 12 maande, in ML',
+	// Last 12 months, in m³
+	'6b354558': 'Afgelope 12 maande, in m³',
 	// Needed
 	'dc508b54': 'Nodig',
 	// Received
@@ -1895,12 +1897,14 @@ export const af: Catalogue = {
 	'78baf9da': 'Waar hierdie syfers vandaan kom',
 	// What is “modelled”?
 	'b7c8226b': 'Wat beteken “deur die model bereken”?',
-	// {organisation} decides what is done with your farm’s information in this catchment. Ask them first about it, or to see, correct or delete it:
-	'3f5aed22': '{organisation} besluit wat in hierdie opvanggebied met jou hidrologiese eenheid se inligting gedoen word. Vra hulle eerste daaroor, of om dit te sien, reg te stel of uit te vee:',
+	// We couldn’t load this page
+	'5781f5ba': 'Ons kon nie hierdie bladsy laai nie',
+	// {organisation} decides what is done with your hydrological unit’s information in this catchment. Ask them first about it, or to see, correct or delete it:
+	'c7c34bab': '{organisation} besluit wat in hierdie opvanggebied met jou hidrologiese eenheid se inligting gedoen word. Vra hulle eerste daaroor, of om dit te sien, reg te stel of uit te vee:',
 	// Your WUA
 	'2940b781': 'Jou WGV',
-	// The organisation that runs this catchment decides what is done with your farm’s information. It hasn’t added a contact here yet: ask the person who invited you, or your WUA.
-	'd82dcb91': 'Die organisasie wat hierdie opvanggebied bestuur, besluit wat met jou hidrologiese eenheid se inligting gedoen word. Dit het nog nie ’n kontakpersoon hier bygevoeg nie: vra die persoon wat jou uitgenooi het, of jou WGV.',
+	// The organisation that runs this catchment decides what is done with your hydrological unit’s information. It hasn’t added a contact here yet: ask the person who invited you, or your WUA.
+	'c9279d94': 'Die organisasie wat hierdie opvanggebied bestuur, besluit wat met jou hidrologiese eenheid se inligting gedoen word. Dit het nog nie ’n kontakpersoon hier bygevoeg nie: vra die persoon wat jou uitgenooi het, of jou WGV.',
 	// We run the app for them. How we handle your information, and how to ask us:
 	'3bb1e71b': 'Ons bedryf die app vir hulle. Hoe ons jou inligting hanteer, en hoe om ons te vra:',
 	// Why?
