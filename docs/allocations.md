@@ -501,8 +501,12 @@ The switch is off by default, for viewers can be outside the organisation
 (an NGO posting public-participation comments). The Allocations tab tells
 an owner to switch it on only if every viewer works for, or was appointed
 by, the organisation. With it off, no route hands a viewer a copy of the
-volumes ([api.md § Allocations](./api.md#allocations)), except a capped
-run's per-unit daily series, which still bound use by the volume
+volumes ([api.md § Allocations](./api.md#allocations)). Nor a series
+worked out from one (issue #523 finding I): no allocation series on any
+run, and in a cap or full-allocation scenario run none of the series or
+summary entries of a unit the run bound to its volume, the withheld ones
+named ([api.md § Runs](./api.md#runs)). Left, tracked: such a run's
+catchment totals less the units still shown
 ([followups.md § Allocations](./followups.md#allocations-wp-310)).
 
 Names live in their own table (`allocation_holder`) so RLS, not the API,

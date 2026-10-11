@@ -2880,12 +2880,37 @@ database:
   given (`foldedMix`). A storage-only (21b) row's warning no longer quotes
   its volume (engine; it reaches a run's summary and the evidence report's
   A.5 verbatim).
+  **Series and bound units** (issue #523 finding I). Such a viewer gets no
+  allocation series (`allocation_room_*`, `allocation_left_*`,
+  `allocation_demand_factor`) on any run: a cap's room on a licence's first
+  day of a water year *is* the unit's volume. In a cap or full-allocation
+  run every unit with an allocation is bound to its volume (a year the cap
+  binds adds up to it; a full allocation scales the unit's demand to it, so
+  its demand, supply and deficit add up to it every water year), so all of
+  that unit's daily series and its entries in the run's summary are
+  withheld too, on every route that serves them: the run and its series
+  list (`withheldSeries`), `…/series` (`403 allocation_series_withheld`),
+  `…/series/bulk` and `…/day` (the keys in `withheld`, a bound unit
+  refused), the daily, all-farms and summary CSVs (a `# withheld=` line),
+  the compare route, History, the evidence report's summaries and A.5's
+  warnings (a cap's licence-rate warning quoted the volume), sweep members
+  (a sweep on a cap or full-allocation base, the round-3 accepted risk) and
+  an uncertainty ensemble's per-unit metrics. `summary.allocations.withheldUnits`
+  names the units left out, and the run pages say so
+  (`runs/withheldSeries.ts`, `allocations/boundUnits.ts`,
+  `WithheldUnitsNote.svelte`). Such a run can't be published (only one from
+  before 213 could be), so no farm view carries one.
 
   **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
   route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)
-  is called as a viewer kept from the volumes, on the base run and on a
-  team scenario's run, with a registered volume, a 21b storage, a scenario
-  op's volume and a sweep member's volume planted, and a sweep, an
+  is called as a viewer kept from the volumes, on the base run, a team
+  scenario's run, and team scenario runs that cap and that fully allocate
+  (#523 finding I), with a registered volume (whose licence rate can't
+  deliver it, so the cap warns), a 21b storage, a scenario op's volume and a
+  sweep member's volume planted, and every per-unit series route (`…/series`
+  for each allocation key, `demand` and `supplied`, `…/series/bulk`, `…/day`,
+  the daily and all-farms CSVs) is asked for the canary unit's own on the
+  capped and full-allocation runs, and a sweep, an
   uncertainty ensemble, a (draft) evidence pack, an impact report, an
   assessment and a delineation request as fixtures; no answer may hold any
   of the numbers in m³ a year, megalitres, m³ a day or the run's partial
@@ -2895,15 +2920,18 @@ database:
   What it doesn't cover: routes outside `/projects/:id` (`/teams/:id/portfolio`,
   `/auth/me/export`), a pack PDF or bundle's bytes and a report PDF's
   (their routes are redirects; the refusals are tested in
-  `packs.db.test.ts` and above), a capped or full-allocation run (Left,
-  below), and a cross-project baseline (its own test, above). Left,
-  tracked: § 5's *Other registered users* total is gated at 5 units, not 5
-  holders (one holder with 5 units gets a total that is theirs), and
-  totals in successive pack versions can be differenced; a full-allocation
-  scenario run scales each unit's demand to its volume, so its per-unit
-  figures give the volume as a capped run's do.
-  Left: a capped run's per-unit daily series still bound use by the volume
-  ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
+  `packs.db.test.ts` and above), a completed uncertainty ensemble's
+  members and a sweep on a cap or full-allocation base (both unit-tested:
+  `allocations/boundUnits.test.ts`), and a cross-project baseline (its own
+  test, above). Left, tracked: § 5's *Other registered users* total is gated
+  at 5 units, not 5 holders (one holder with 5 units gets a total that is
+  theirs), and totals in successive pack versions can be differenced.
+  Left, tracked: a cap or full-allocation run's catchment figures are sums
+  over every unit, the bound ones included: the water balance's and
+  curtailment's totals less the units still shown give the bound units'
+  use together (their volumes in a full allocation), one unit's when only
+  one is bound, and the outflow and EWR results follow from it through the
+  model ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
   extract must say how it was obtained (`allocation_source.reference`,
   operator agreement 3A.1(d)); stricter terms from DWS or the CMA win.
 - Cells are stored as they came; the CSV export neutralises formula-looking

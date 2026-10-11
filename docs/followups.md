@@ -3697,16 +3697,15 @@ from the WP:
       on it (a report format bump); document the differencing as residual or
       round the totals. Trigger: before a pack is issued on a catchment where
       one holder has several units.
-- [ ] **A full-allocation run's per-unit figures give the volume** (issue
+- [x] **A full-allocation run's per-unit figures give the volume** (issue
       #523 G1 security review, finding 7; real by the model's definition,
       model.md §2.12a: demand is scaled per water year to the registered
       volume, so a unit's demand and supply in `summary.farms`, `users[]` and
-      its daily series are its volume, more exactly than a capped run's).
-      The model-input route already refuses such runs to a viewer kept from
-      the volumes; their results aren't. Durable fix: redact per-unit
-      figures of a cap or full-allocation run for that viewer (or refuse the
-      run as model-input does). Trigger: with the capped-run item below,
-      before a scenario that caps or fully allocates is shared with viewers.
+      its daily series are its volume). Done 2026-10-11 with finding I
+      (below): for a viewer kept from the volumes every unit with an
+      allocation in a cap or full-allocation run is bound, and its series
+      and summary entries are withheld everywhere they are served
+      ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
       dam and drawn out uses both volumes, where the comparison nets it
@@ -3784,17 +3783,40 @@ from the WP:
       volume or a name. Share views show no allocation figure today, so
       nothing leaks; this is the feature, to the rule. Trigger: a client
       asks for registered use on its public page.
-- [ ] **A capped run's per-unit series still bound a viewer's guess at the
-      volume** (D3). With viewers' switch off, a viewer reads no copy of the
-      volumes, but a cap run's daily `supplied` per unit is held to its
-      volume, and `allocation_left_*` (a capped source with licence
-      conditions) is the volume less use so far; a viewer's project
-      `model-input` also omits the volumes (RLS), so a fit they run in a cap
-      project runs uncapped. Durable fix: for a viewer with the switch off,
-      leave `allocation_left_*` out of the series routes and exports, and
-      say on a cap run's per-unit pages that its use is capped by a volume
-      they can't see. Trigger: a project with outside viewers runs in cap
-      mode, or counsel reads per-unit modelled use as personal information.
+- [x] **A capped run's per-unit series gave a viewer the volume exactly**
+      (D3; issue #523 security review round 3, finding I). Not a bound, as
+      this item first said: `allocation_room_*` on a licence's first in-force
+      day of each water year *is* the unit's volume (written for every
+      capped source, licence conditions or not), `allocation_left_*` is the
+      volume less use so far, and a year the cap binds adds the unit's use up
+      to it; a cap's licence-rate warning quoted it too. Any project running a
+      cap scenario with a viewer while the switch was off gave every capped
+      unit's volume through `…/series`, `…/series/bulk`, `…/day`, the CSV and
+      `.xlsx` exports. Done 2026-10-11: for that viewer no allocation series
+      on any run, and in a cap or full-allocation run none of a bound unit's
+      series or summary entries, on every route that serves them, with the
+      withheld ones named (`withheldSeries`, `withheld`,
+      `summary.allocations.withheldUnits`, `403 allocation_series_withheld`)
+      and the run pages saying so; such a run can't be published; the canary
+      sweep runs a capped and a full-allocation scenario run
+      ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql),
+      [api.md § Runs](./api.md#runs)). A viewer's project `model-input`
+      still omits the volumes (RLS), so a fit they run in a cap project runs
+      uncapped: by design.
+- [ ] **A cap or full-allocation run's catchment totals less the units
+      shown** (D3; issue #523 finding I, the residual). With the bound units
+      withheld, the run's water balance and curtailment totals still sum
+      every unit, so a viewer kept from the volumes can subtract the units
+      still shown and get the bound units' use together (their volumes, in a
+      full allocation), one unit's when only one unit holds a volume; the
+      outflow and the EWR results carry the same through the model. Durable
+      fix: serve those totals to that viewer only when 5 or more registered
+      users hold the bound units' volumes (the `app_allocation_volumes`
+      rule), else withhold them as the units are; the flows stay (the EWR
+      result is the point of such a run). Trigger: a cap or full-allocation
+      scenario on a project with outside viewers and fewer than 5 licence
+      holders, or counsel reading the catchment totals as personal
+      information.
 - [x] **Registration numbers in History** (2026-10-03): viewers read
       `allocation.created/changed/deleted` with `registrationNo` (a "unique
       identifier", POPIA s1) and `allocation.created` with the volume. Done:
