@@ -147,7 +147,7 @@
 		<select id={id('rule')} aria-describedby={id('rule-h')} disabled={readonly} value={rule} onchange={(e) => setRule(e.currentTarget.value as DamReleaseRule)}>
 			{#each DAM_RELEASE_RULES as r (r)}<option value={r}>{RULE_LABEL[r]}</option>{/each}
 		</select>
-		<span class="hint" id={id('rule-h')}>{releaseHint(rule, useEwr)}</span>
+		<span class="hint" class:explain={rule === 'none'} id={id('rule-h')}>{releaseHint(rule, useEwr)}</span>
 		<FieldHistoryLine field="node:{node.id}:damReleaseRule" {unit} />
 	</div>
 	{#if rule === 'passInflow'}

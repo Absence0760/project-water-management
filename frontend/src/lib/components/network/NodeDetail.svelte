@@ -1,8 +1,15 @@
 <script lang="ts">
-	// One node's fields as a labelled form with help text: the node sheet's
-	// form (NetworkTab.svelte). Its sections run in the order water moves
-	// through a unit (nodeSections.ts), each a fieldset the sheet's section menu
-	// can scroll to.
+	// One node's fields as a labelled form: the node sheet's form
+	// (NetworkTab.svelte). Its sections run in the order water moves through a
+	// unit (nodeSections.ts), each a card that folds to its heading and a line
+	// of its values (nodeSummary.ts; issue #521), the one the sheet's section
+	// menu points at open. Inside a card the fields people change come first,
+	// the rarely changed ones under "More … settings", and those this node or
+	// the flow-share method doesn't use behind one "Not used …" line (fields.ts
+	// splitFields). Each field's explanation is its ⓘ tip, and under it only
+	// with "Explain each setting under its field" on (`.explain`, still its
+	// description for screen readers, as on Settings).
+	import { onMount, tick, untrack } from 'svelte';
 	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, MAP_MM_MAX, MAP_MM_MIN, onRiverDam, PE_SOURCE_MAX, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import FlowUnitSelect from './FlowUnitSelect.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -10,7 +17,9 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { pctText } from '$lib/model/systems';
 	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
-	import { damHints, fieldScale, fieldUnused, hasDam, hiLoHint, isPct, NODE_FIELDS, returnFlowHint, setNodeField, type NodeField } from './fields';
+	import { damHints, fieldScale, hasDam, hiLoHint, isPct, NODE_FIELDS, returnFlowHint, setNodeField, splitFields, unusedLine, type NodeField } from './fields';
+	import { fieldsLine, sectionSummary } from './nodeSummary';
+	import { sheetFolds } from './sheetFolds.svelte';
 	import { fieldShows, nodeSections, SECTION_TITLE, sectionId } from './nodeSections';
 	import DamStorageFields from './DamStorageFields.svelte';
 	import DevelopmentFields from './DevelopmentFields.svelte';
@@ -49,7 +58,8 @@
 		systemsLine = null,
 		ownEfficiency = false,
 		transfersLine = null,
-		transfersHref = null
+		transfersHref = null,
+		section = null
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -91,6 +101,8 @@
 		/** "2 transfers, from Dam A, to Dam B": the unit's transfers, for the same pointer; null with none. */
 		transfersLine?: string | null;
 		transfersHref?: string | null;
+		/** The section a link opened the sheet on (`section=`, e.g. the Dams page's Edit dam): open and scrolled to on landing. */
+		section?: string | null;
 	} = $props();
 
 	/** Each field group's fields that show on this kind of node. */
@@ -104,6 +116,70 @@
 		return out;
 	});
 	const sections = $derived(nodeSections(node, demandObjects.length));
+	// The sheet opens on its first section unless one of this node's is already open (‹ › keeps the section).
+	sheetFolds.start(untrack(() => sections));
+	/** Each field group's fields laid out: first, under More, and not used (issue #521). */
+	const split = $derived(new Map([...groupFields].map(([g, fs]) => [g, splitFields(fs, node, method)])));
+	/** Every section and fold the form has, for "Show every field" and closing one while all show. */
+	const foldKeys = $derived([
+		...sections,
+		...[...split].flatMap(([g, sp]) => [...(sp.more.length || g === 'irrigation' ? [`more:${g}`] : []), ...sp.unused.map((u) => `unused:${g}:${u.reason}`)])
+	]);
+	const isOpen = (key: string) => sheetFolds.isOpen(key);
+	const ontoggle = (key: string) => (e: Event) => sheetFolds.toggled(key, (e.currentTarget as HTMLDetailsElement).open, foldKeys);
+	/** "More dam settings": each group's word. */
+	const MORE_NAME: Partial<Record<NodeField['group'], string>> = { dam: 'dam', groundwater: 'borehole', irrigation: 'irrigation' };
+	const summaryOf = (sec: (typeof sections)[number]) =>
+		sectionSummary(sec, node, {
+			method,
+			share,
+			demandNames: demandObjects.map((o) => o.name || '(unnamed)'),
+			boreholes: boreholes.length,
+			coverPatches: landCover.length,
+			efficiency: node.kind === 'farm' ? efficiency : null
+		});
+
+	/**
+	 * The section menu's jump (NetworkTab.svelte): that section open and the
+	 * others closed, scrolled to and its heading focused.
+	 */
+	export async function jump(domId: string, focus = true) {
+		const sec = sections.find((s) => sectionId(node.id, s) === domId);
+		if (sec) sheetFolds.only(sec, sections);
+		await tick();
+		const el = document.getElementById(domId);
+		el?.scrollIntoView({ block: 'start' });
+		if (focus) (el?.querySelector('summary') ?? el)?.focus({ preventScroll: true });
+	}
+	/** What marks a section as needing fixing (its heading's "needs fixing"). */
+	const PROBLEM = "[aria-invalid='true'], .problem, [role='alert']";
+	// Landing: the section a link named (`section=`), else the first one with a problem (a save bar's link to this
+	// node), open and in view; otherwise the sheet opens as it was left.
+	onMount(() => {
+		const named = sections.find((s) => s === section);
+		const target = named ?? sections.find((s) => document.getElementById(sectionId(node.id, s))?.querySelector(PROBLEM));
+		if (target) void jump(sectionId(node.id, target), false);
+	});
+
+	// The explanations under the fields: off by default, so the fields come first; the same remembered switch as Settings'.
+	const EXPLAIN_KEY = 'wm.settings.explain';
+	let explain = $state(readExplain());
+	function readExplain() {
+		try {
+			return localStorage.getItem(EXPLAIN_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+	function setExplain(on: boolean) {
+		explain = on;
+		try {
+			localStorage.setItem(EXPLAIN_KEY, on ? '1' : '0');
+		} catch {
+			// Private mode: it holds for this visit.
+		}
+	}
+	const GA_RATE_TEXT = (v: number | null | undefined) => (v == null ? 'not looked up' : `${fmtNum(v)} m³/ha/a`);
 	const hiLo = $derived(method === 'hiLo' ? hiLoHint(node) : null);
 	const id = (k: string) => `nd-${k}-${node.id}`;
 	const BOREHOLE_RULE_LABEL: Record<BoreholeRule, string> = {
@@ -128,7 +204,7 @@
 	const divertByMonth = (f: NodeField) => f.key === 'divertCapacityM3Day' && byMonth; // gitleaks:allow (a field name, not a secret)
 </script>
 
-<div class="detail">
+<div class="detail" class:explained={explain}>
 	<div class="ident">
 		<div class="field">
 			<label for={id('name')}>Name</label>
@@ -155,11 +231,11 @@
 					{#if other.id !== node.id}<option value={other.id}>{other.name || '(unnamed)'}</option>{/if}
 				{/each}
 			</select>
-			<span class="hint">
-				{node.downstreamNodeId === null
-					? 'This is the outflow gauge: the catchment outlet where simulated outflow is compared with observed flow and the EWR.'
-					: 'The hydrological unit directly downstream. Its outflow joins that unit’s upstream inflow.'}
-			</span>
+			{#if node.downstreamNodeId === null}
+				<span class="hint">This is the outflow gauge: the catchment outlet where simulated outflow is compared with observed flow and the EWR.</span>
+			{:else}
+				<span class="hint explain">The hydrological unit directly downstream. Its outflow joins that unit’s upstream inflow.</span>
+			{/if}
 			<FieldHistoryLine field="node:{node.id}:downstreamNodeId" {unit} />
 		</div>
 	</div>
@@ -167,6 +243,15 @@
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
 	{#if mapHref}<p class="hint gauge-note"><a href={mapHref} data-testid="node-detail-map">Show on map</a>: the features linked to this hydrological unit on the catchment map.</p>{/if}
 	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this hydrological unit’s page in the farmer view, as its farmer sees it, from the current publication.</p>{/if}
+	<!-- The form's view switches: the explanations under the fields, and every section and fold open at once. -->
+	<div class="tools">
+		<label class="check explain-switch">
+			<input type="checkbox" checked={explain} onchange={(e) => setExplain(e.currentTarget.checked)} />
+			Explain each setting under its field
+		</label>
+		<button type="button" class="btn btn-sm" aria-pressed={sheetFolds.all} onclick={() => sheetFolds.setAll(!sheetFolds.all)}>Show every field</button>
+	</div>
+
 	{#if showEwrSite}
 		<div class="field ewr-site">
 			<label class="check">
@@ -192,196 +277,244 @@
 		</div>
 	{/if}
 	{#if node.kind === 'gauge'}
-		<p class="hint gauge-note">
+		<p class="hint gauge-note explain">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
 		</p>
 		<!-- A gauge takes no water: an abstraction start left from another kind is shown so it can be cleared (the save refuses it). -->
 		{#if node.abstractionFrom}<DevelopmentFields {node} {readonly} part="abstraction" />{/if}
 	{:else if node.kind === 'user'}
-		<p class="hint gauge-note">
+		<p class="hint gauge-note explain">
 			An other water user takes its demand from the river where it sits, with no land, dam or crops of its own.
 		</p>
-		<fieldset>
+		<fieldset class="user-card">
 			<legend>Other water user</legend>
 			<UserFields {node} {readonly} />
 			<DevelopmentFields {node} {readonly} part="abstraction" />
 		</fieldset>
 	{/if}
 
-	{#each sections as sec (sec)}
-		<fieldset id={sectionId(node.id, sec)} tabindex="-1">
-			<legend>{SECTION_TITLE[sec]}</legend>
-			{#if sec === 'damSurvey'}
-				<!-- A dam's development fields (engine ≥ 1.30.0) also show on a node without a dam that still carries them, so they can be cleared. -->
-				{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
-				<DevelopmentFields {node} {readonly} part="dam" />
-			{:else if sec === 'supply'}
-				<SupplyFields {node} {nodes} {readonly} />
-			{:else if sec === 'demand'}
-				<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
-				<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />
-			{:else if sec === 'boreholes'}
-				<BoreholeFields {node} {boreholes} {readonly} onadd={onaddborehole} onremove={onremoveborehole} />
-			{:else if sec === 'cover'}
-				<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
+	{#snippet numField(f: NodeField, unusedId: string | null)}
+		{@const runs = f.derived && ownEfficiency && efficiency !== null && Math.abs(efficiency - (node.irrigationEfficiency ?? 0)) > 0.0005}
+		{@const describedBy = [unusedId, `${id(f.key)}-h`, runs ? `${id(f.key)}-run` : null].filter(Boolean).join(' ')}
+		<div class="field">
+			{#if f.derived && !ownEfficiency}
+				<!-- Every crop here is on a system (engine ≥ 1.72.0): the efficiency is theirs blended, text, not an input. -->
+				<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
+				<output id={id(f.key)} class="derived" aria-describedby={describedBy} data-testid="node-efficiency">{efficiency === null ? '–' : pctText(efficiency)}</output>
 			{:else}
-				{@const g = sec as NodeField['group']}
-				{@const fields = groupFields.get(g) ?? []}
-				{#if g === 'reach'}
-					<p class="hint section-note" data-testid="reach-note">
-						Water lost into the river bed and banks between {node.name || 'this hydrological unit'} and the next one downstream: it leaves the catchment
-						and doesn’t come back as baseflow. The next unit receives the outflow less the loss; priority water users downstream are still passed
-						their demand in full. Leave it at 0 % unless the flow records show the river losing water here.
-					</p>
-				{/if}
-				{#if g === 'groundwater'}
-					<p class="hint section-note">
-						One daily capacity for all of {node.name || 'this hydrological unit'}’s boreholes, under one rule: use it when only the total is known. List
-						boreholes under Individual boreholes below when each has its own yield, annual cap or mode. If both are set, both run.
-					</p>
-				{/if}
-				<div class="grid">
-					{#each fields as f (f.key)}
-						{@const unused = fieldUnused(f, node, method)}
-						<div class="field">
-							{#if f.derived && !ownEfficiency}
-								<!-- Every crop here is on a system (engine ≥ 1.72.0): the efficiency is theirs blended, text, not an input. -->
-								<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
-								<output id={id(f.key)} class="derived" aria-describedby="{id(f.key)}-h" data-testid="node-efficiency">{efficiency === null ? '–' : pctText(efficiency)}</output>
-							{:else}
-							<!-- A flow rate's unit is the select beside it, for everyone (display only); the label keeps it for a screen reader. -->
-							<span class="lbl"
-								><label for={id(f.key)}>{f.derived ? 'Efficiency for crops with no system' : f.label}{#if f.flowUnit}{' '}<span class="visually-hidden">({f.unit})</span>{:else}{' '}<span class="u">({f.unit})</span>{/if}</label>{#if f.flowUnit}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{/if}<HelpTip key={`node.${f.key}`} /></span
-							>
-							<NumberInput
-								id={id(f.key)}
-								min={0}
-								max={isPct(f) ? 100 : undefined}
-								scale={fieldScale(f)}
-								nullable={f.nullable}
-								grouped={!isPct(f)}
-								placeholder={f.nullable ? 'not set' : undefined}
-								disabled={readonly || unused !== null || divertByMonth(f)}
-								aria-describedby="{id(f.key)}-h"
-								value={node[f.key] ?? null}
-								onchange={(v) => setNodeField(node, f.key, v)}
-							/>
-							{/if}
-							<span class="hint" id="{id(f.key)}-h"
-								>{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}{#if f.derived && ownEfficiency && efficiency !== null && Math.abs(efficiency - (node.irrigationEfficiency ?? 0)) > 0.0005}{' '}With its crops' systems, a run uses {pctText(efficiency)}.{/if}</span
-							>
-							{#if f.key === 'returnFlowFraction' && efficiency !== null}
-								{@const over = returnFlowHint(node.returnFlowFraction, efficiency)}
-								{#if over}<span class="alert alert-warning small" role="status" data-testid="return-flow-over">{over}</span>{/if}
-							{/if}
-							<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
-						</div>
-					{/each}
-					{#if g === 'irrigation' && node.kind === 'farm'}
-						<!-- Each crop's irrigation system on this unit (engine ≥ 1.72.0): set in its crops, so the efficiency above is theirs. -->
-						<p class="hint systems-line" data-testid="node-systems">
-							{#if systemsLine}Irrigation systems: {systemsLine}.{:else}No crops planted, so no irrigation system yet.{/if}
-							{#if plantedHref}{' '}<a href={plantedHref}>Change them in its crops</a>.{/if}
+				<!-- A flow rate's unit is the select beside it, for everyone (display only); the label keeps it for a screen reader. -->
+				<span class="lbl"
+					><label for={id(f.key)}>{f.derived ? 'Efficiency for crops with no system' : f.label}{#if f.flowUnit}{' '}<span class="visually-hidden">({f.unit})</span>{:else}{' '}<span class="u">({f.unit})</span>{/if}</label>{#if f.flowUnit}<FlowUnitSelect unit={f.flowUnit} label="Unit of {f.label.toLowerCase()}" />{/if}<HelpTip key={`node.${f.key}`} /></span
+				>
+				<NumberInput
+					id={id(f.key)}
+					min={0}
+					max={isPct(f) ? 100 : undefined}
+					scale={fieldScale(f)}
+					nullable={f.nullable}
+					grouped={!isPct(f)}
+					placeholder={f.nullable ? 'not set' : undefined}
+					disabled={readonly || unusedId !== null || divertByMonth(f)}
+					aria-describedby={describedBy}
+					value={node[f.key] ?? null}
+					onchange={(v) => setNodeField(node, f.key, v)}
+				/>
+			{/if}
+			{#if divertByMonth(f)}
+				<span class="hint" id="{id(f.key)}-h">Not used: River to dam is set by month below.</span>
+			{:else}
+				<span class="hint explain" id="{id(f.key)}-h">{f.help}</span>
+			{/if}
+			{#if runs}<span class="hint" id="{id(f.key)}-run">With its crops' systems, a run uses {pctText(efficiency!)}.</span>{/if}
+			{#if f.key === 'returnFlowFraction' && efficiency !== null}
+				{@const over = returnFlowHint(node.returnFlowFraction, efficiency)}
+				{#if over}<span class="alert alert-warning small" role="status" data-testid="return-flow-over">{over}</span>{/if}
+			{/if}
+			<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
+		</div>
+	{/snippet}
+
+	{#snippet gaRate()}
+		<div class="field">
+			<span class="lbl"><label for={id('ga-rate')}>GN 538 rate <span class="u">(m³/ha/a)</span></label><HelpTip key="node.gaRateM3HaYear" /></span>
+			<select
+				id={id('ga-rate')}
+				disabled={readonly}
+				value={node.gaRateM3HaYear == null ? '' : String(node.gaRateM3HaYear)}
+				aria-describedby="{id('ga-rate')}-h"
+				onchange={(e) => (node.gaRateM3HaYear = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+			>
+				<option value="">Not looked up</option>
+				{#each GA538_GROUNDWATER_RATES as r (r)}<option value={String(r)}>{r}</option>{/each}
+			</select>
+			<span class="hint explain" id="{id('ga-rate')}-h">
+				The abstraction rate GN 538 Table 2 (Appendix B) lists for the property’s quaternary catchment. Property area × rate, at most 40 000 m³/a, is its
+				general authorisation volume; without both the run shows the 40 000 ceiling.
+			</span>
+			<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
+		</div>
+	{/snippet}
+
+	{#each sections as sec (sec)}
+		<!-- A section card: its heading and a line of its values; the section menu opens the one it points at. -->
+		<details class="sec" id={sectionId(node.id, sec)} open={isOpen(sec)} ontoggle={ontoggle(sec)} data-testid="node-section-{sec}">
+			<summary>
+				<span class="sec-title">{SECTION_TITLE[sec]}</span>
+				<span class="sec-sum" data-testid="node-section-summary">{summaryOf(sec)}</span>
+				<span class="sec-problem">needs fixing</span>
+			</summary>
+			<fieldset>
+				<legend class="visually-hidden">{SECTION_TITLE[sec]}</legend>
+				{#if sec === 'damSurvey'}
+					<!-- A dam's development fields (engine ≥ 1.30.0) also show on a node without a dam that still carries them, so they can be cleared. -->
+					{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
+					<DevelopmentFields {node} {readonly} part="dam" />
+				{:else if sec === 'supply'}
+					<SupplyFields {node} {nodes} {readonly} />
+				{:else if sec === 'demand'}
+					<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
+					<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />
+				{:else if sec === 'boreholes'}
+					<BoreholeFields {node} {boreholes} {readonly} onadd={onaddborehole} onremove={onremoveborehole} />
+				{:else if sec === 'cover'}
+					<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
+				{:else}
+					{@const g = sec as NodeField['group']}
+					{@const sp = split.get(g) ?? { main: [], more: [], unused: [] }}
+					{#if g === 'reach'}
+						<p class="hint section-note explain" data-testid="reach-note">
+							Water lost into the river bed and banks between {node.name || 'this hydrological unit'} and the next one downstream: it leaves the catchment
+							and doesn’t come back as baseflow. The next unit receives the outflow less the loss; priority water users downstream are still passed
+							their demand in full. Leave it at 0 % unless the flow records show the river losing water here.
 						</p>
 					{/if}
 					{#if g === 'groundwater'}
-						<div class="field">
-							<span class="lbl"><label for={id('bh-rule')}>Borehole rule</label><HelpTip key="node.boreholeRule" /></span>
-							<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
-								{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
-							</select>
-						</div>
-						<div class="field">
-							<span class="lbl"><label for={id('ga-rate')}>GN 538 rate <span class="u">(m³/ha/a)</span></label><HelpTip key="node.gaRateM3HaYear" /></span>
-							<select
-								id={id('ga-rate')}
-								disabled={readonly}
-								value={node.gaRateM3HaYear == null ? '' : String(node.gaRateM3HaYear)}
-								aria-describedby="{id('ga-rate')}-h"
-								onchange={(e) => (node.gaRateM3HaYear = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-							>
-								<option value="">Not looked up</option>
-								{#each GA538_GROUNDWATER_RATES as r (r)}<option value={String(r)}>{r}</option>{/each}
-							</select>
-							<span class="hint" id="{id('ga-rate')}-h">
-								The abstraction rate GN 538 Table 2 (Appendix B) lists for the property’s quaternary catchment. Property area × rate, at most 40 000 m³/a, is its
-								general authorisation volume; without both the run shows the 40 000 ceiling.
-							</span>
-							<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
-						</div>
+						<p class="hint section-note explain">
+							One daily capacity for all of {node.name || 'this hydrological unit'}’s boreholes, under one rule: use it when only the total is known. List
+							boreholes under Individual boreholes below when each has its own yield, annual cap or mode. If both are set, both run.
+						</p>
 					{/if}
-					{#if g === 'area' && hiLo}
-						<p class="hint dam-hint" role="note" data-testid="hilo-hint">{hiLo}</p>
-					{/if}
-					{#if g === 'area' && node.kind === 'farm'}
-						<!-- The unit's own MAP (issue #482): with rain for each unit on, it sets the level of the unit's rain (docs/model.md §2.4h). -->
-						<div class="field" data-testid="unit-map">
-							<span class="lbl"><label for={id('mapMm')}>MAP <span class="u">(mm)</span></label><HelpTip key="unit-map" /></span>
-							<NumberInput
-								id={id('mapMm')}
-								min={MAP_MM_MIN}
-								max={MAP_MM_MAX}
-								step={1}
-								nullable
-								grouped
-								placeholder="not set"
-								disabled={readonly}
-								aria-invalid={(!!mapProblem && !mapOnSource) || undefined}
-								aria-describedby="{id('mapMm')}-h{mapProblem && !mapOnSource ? ` ${id('map')}-err` : ''}"
-								value={node.mapMm ?? null}
-								onchange={(v) => withUnitMap(node, v)}
-							/>
-							<span class="hint" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only while Settings → Rain for each unit is on, where it sets the level of the unit’s rain. Empty: none.</span>
-							{#if mapProblem && !mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
-							<FieldHistoryLine field="node:{node.id}:mapMm" {unit} />
-						</div>
-						{#if node.mapMm !== null && node.mapMm !== undefined}
+					<div class="grid">
+						{#each sp.main as f (f.key)}{@render numField(f, null)}{/each}
+						{#if g === 'irrigation' && node.kind === 'farm'}
+							<!-- Each crop's irrigation system on this unit (engine ≥ 1.72.0): set in its crops, so the efficiency above is theirs. -->
+							<p class="hint systems-line" data-testid="node-systems">
+								{#if systemsLine}Irrigation systems: {systemsLine}.{:else}No crops planted, so no irrigation system yet.{/if}
+								{#if plantedHref}{' '}<a href={plantedHref}>Change them in its crops</a>.{/if}
+							</p>
+						{/if}
+						{#if g === 'groundwater'}
 							<div class="field">
-								<span class="lbl"><label for={id('mapSource')}>Source of the MAP</label></span>
-								<input
-									id={id('mapSource')}
-									readonly={readonly}
-									required
-									maxlength={PE_SOURCE_MAX}
-									value={node.mapSource ?? ''}
-									placeholder="e.g. a 1′ MAP grid averaged over the unit’s parcel"
-									aria-invalid={mapOnSource || undefined}
-									aria-describedby="{id('mapSource')}-h{mapOnSource ? ` ${id('map')}-err` : ''}"
-									oninput={(e) => (node.mapSource = e.currentTarget.value)}
-								/>
-								<span class="hint" id="{id('mapSource')}-h">Required: the dataset or study, and its years. The run shows it beside the unit’s rain factor.</span>
-								{#if mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
-								<FieldHistoryLine field="node:{node.id}:mapSource" {unit} />
+								<span class="lbl"><label for={id('bh-rule')}>Borehole rule</label><HelpTip key="node.boreholeRule" /></span>
+								<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
+									{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
+								</select>
 							</div>
 						{/if}
-					{/if}
-					{#if g === 'routing'}
-						<RiverToDamFields {node} readonly={readonly || onRiverDam(node)} />
-					{/if}
-					{#if g === 'irrigation'}
-						<DevelopmentFields {node} {readonly} part="abstraction" />
-						{#if node.kind === 'farm' && (plantedHref || transfersHref)}
+						{#if g === 'area' && hiLo}
+							<p class="hint dam-hint" role="note" data-testid="hilo-hint">{hiLo}</p>
+						{/if}
+						{#if g === 'area' && node.kind === 'farm'}
+							<!-- The unit's own MAP (issue #482): with rain for each unit on, it sets the level of the unit's rain (docs/model.md §2.4h). -->
+							<div class="field" data-testid="unit-map">
+								<span class="lbl"><label for={id('mapMm')}>MAP <span class="u">(mm)</span></label><HelpTip key="unit-map" /></span>
+								<NumberInput
+									id={id('mapMm')}
+									min={MAP_MM_MIN}
+									max={MAP_MM_MAX}
+									step={1}
+									nullable
+									grouped
+									placeholder="not set"
+									disabled={readonly}
+									aria-invalid={(!!mapProblem && !mapOnSource) || undefined}
+									aria-describedby="{id('mapMm')}-h{mapProblem && !mapOnSource ? ` ${id('map')}-err` : ''}"
+									value={node.mapMm ?? null}
+									onchange={(v) => withUnitMap(node, v)}
+								/>
+								<span class="hint explain" id="{id('mapMm')}-h">The unit’s own mean annual rain. Used only while Settings → Rain for each unit is on, where it sets the level of the unit’s rain. Empty: none.</span>
+								{#if mapProblem && !mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
+								<FieldHistoryLine field="node:{node.id}:mapMm" {unit} />
+							</div>
+							{#if node.mapMm !== null && node.mapMm !== undefined}
+								<div class="field">
+									<span class="lbl"><label for={id('mapSource')}>Source of the MAP</label></span>
+									<input
+										id={id('mapSource')}
+										readonly={readonly}
+										required
+										maxlength={PE_SOURCE_MAX}
+										value={node.mapSource ?? ''}
+										placeholder="e.g. a 1′ MAP grid averaged over the unit’s parcel"
+										aria-invalid={mapOnSource || undefined}
+										aria-describedby="{id('mapSource')}-h{mapOnSource ? ` ${id('map')}-err` : ''}"
+										oninput={(e) => (node.mapSource = e.currentTarget.value)}
+									/>
+									<span class="hint" id="{id('mapSource')}-h">Required: the dataset or study, and its years. The run shows it beside the unit’s rain factor.</span>
+									{#if mapOnSource}<p class="problem" id="{id('map')}-err">{mapProblem}</p>{/if}
+									<FieldHistoryLine field="node:{node.id}:mapSource" {unit} />
+								</div>
+							{/if}
+						{/if}
+						{#if g === 'routing'}
+							<RiverToDamFields {node} readonly={readonly || onRiverDam(node)} />
+						{/if}
+						{#if g === 'irrigation' && node.kind === 'farm' && (plantedHref || transfersHref)}
 							<!-- Where the unit's demand and its transfers are set: Crops and Transfers, not this form. -->
 							<p class="hint elsewhere" data-testid="node-elsewhere">
-							Set elsewhere:{#if plantedHref}{' '}its crops, <a href={plantedHref} data-testid="node-planted-link">{planting?.planted ? `${fmtNum(planting.totalM2 / 10_000, 2)} ha planted, ${planting.planted} crop${planting.planted === 1 ? '' : 's'}` : 'nothing planted yet'}</a>{/if}{#if plantedHref && transfersHref};{/if}{#if transfersHref}{' '}its transfers, <a href={transfersHref} data-testid="node-transfers-link">{transfersLine ?? 'none yet'}</a>{/if}.
-						</p>
+								Set elsewhere:{#if plantedHref}{' '}its crops, <a href={plantedHref} data-testid="node-planted-link">{planting?.planted ? `${fmtNum(planting.totalM2 / 10_000, 2)} ha planted, ${planting.planted} crop${planting.planted === 1 ? '' : 's'}` : 'nothing planted yet'}</a>{/if}{#if plantedHref && transfersHref};{/if}{#if transfersHref}{' '}its transfers, <a href={transfersHref} data-testid="node-transfers-link">{transfersLine ?? 'none yet'}</a>{/if}.
+							</p>
 						{/if}
+						{#if g === 'dam'}
+							{#each hints as h (h)}
+								<p class="hint dam-hint" role="note">{h}</p>
+							{/each}
+						{/if}
+						{#if g === 'share' && share !== null}
+							<div class="field">
+								<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
+								<span class="computed">{fmtPct(share, 2)}</span>
+								<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Settings &amp; calibration</a>). Saved settings only.</span>
+							</div>
+						{/if}
+					</div>
+					{#if sp.more.length || g === 'irrigation'}
+						{@const key = `more:${g}`}
+						{@const extra = g === 'groundwater' ? `GN 538 rate ${GA_RATE_TEXT(node.gaRateM3HaYear)}` : g === 'irrigation' ? `Abstraction starts ${node.abstractionFrom ?? 'with the run'}` : ''}
+						<!-- The rarely changed fields, folded into one line of their values (playbook § 2). -->
+						<details class="fold more" open={isOpen(key)} ontoggle={ontoggle(key)} data-testid="node-more-{g}">
+							<summary>
+								<span class="fold-name">More {MORE_NAME[g] ?? SECTION_TITLE[sec].toLowerCase()} settings:</span>
+								<span>{[fieldsLine(sp.more, node), extra].filter(Boolean).join(' · ')}</span>
+								<span class="fold-problem">needs fixing</span>
+								<span class="fold-change" aria-hidden="true">{isOpen(key) ? 'Hide' : 'Change'}</span>
+							</summary>
+							<div class="grid">
+								{#each sp.more as f (f.key)}{@render numField(f, null)}{/each}
+								{#if g === 'groundwater'}{@render gaRate()}{/if}
+								{#if g === 'irrigation'}<DevelopmentFields {node} {readonly} part="abstraction" />{/if}
+							</div>
+						</details>
 					{/if}
-					{#if g === 'dam'}
-						{#each hints as h (h)}
-							<p class="hint dam-hint" role="note">{h}</p>
-						{/each}
-					{/if}
-					{#if g === 'share' && share !== null}
-						<div class="field">
-							<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
-							<span class="computed">{fmtPct(share, 2)}</span>
-							<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Settings &amp; calibration</a>). Saved settings only.</span>
-						</div>
-					{/if}
-				</div>
-			{/if}
-		</fieldset>
+					{#each sp.unused as u (u.reason)}
+						{@const key = `unused:${g}:${u.reason}`}
+						{@const line = unusedLine(u.reason, method)}
+						{@const lineId = `nd-unused-${g}-${u.reason}-${node.id}`}
+						<!-- Fields this node or the flow-share method doesn't use: one line, not greyed-out cells; their values stay, shown read-only when opened. -->
+						<details class="fold unused" open={isOpen(key)} ontoggle={ontoggle(key)} data-testid="node-unused-{g}">
+							<summary>
+								<span id={lineId}>{line.why}: {u.fields.map((f) => f.label).join(', ')}.</span>
+								<span class="fold-change" aria-hidden="true">{isOpen(key) ? 'Hide' : 'Show'}</span>
+							</summary>
+							{#if line.fix}<p class="hint fix">{line.fix}</p>{/if}
+							<div class="grid">
+								{#each u.fields as f (f.key)}{@render numField(f, lineId)}{/each}
+							</div>
+						</details>
+					{/each}
+				{/if}
+			</fieldset>
+		</details>
 	{/each}
 
 	{#if !readonly}
@@ -416,18 +549,79 @@
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}
-	/* Each section is a card with its title in a tinted header band, so one
-	   section's fields don't run into the next's. The legend floats so it sits
-	   inside the card rather than on its border. The card itself stays
-	   --surface: read-only inputs are --surface-2 and would vanish on it. */
-	fieldset {
+	/* Each section is a card whose tinted header band is its summary: the
+	   title and a line of its values, open or closed (issue #521). The card
+	   stays --surface: read-only inputs are --surface-2 and would vanish on it. */
+	.sec,
+	.user-card {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		margin: 1rem 0 0;
-		padding: 0 1rem 0.75rem;
+		margin: 0.75rem 0 0;
 		min-width: 0;
 	}
-	legend {
+	.sec > summary {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.1rem 0.6rem;
+		min-height: 44px;
+		box-sizing: border-box;
+		padding: 0.55rem 1rem 0.55rem 2rem;
+		position: relative;
+		background: var(--surface-2);
+		border-radius: var(--radius);
+		cursor: pointer;
+		list-style: none;
+	}
+	.sec > summary::-webkit-details-marker {
+		display: none;
+	}
+	/* The disclosure arrow, turned down while the card is open. */
+	.sec > summary::before {
+		content: '';
+		position: absolute;
+		left: 0.85rem;
+		top: 1.05rem;
+		border: 0.3rem solid transparent;
+		border-left: 0.4rem solid var(--text-2);
+		border-right-width: 0;
+	}
+	.sec[open] > summary::before {
+		transform: rotate(90deg);
+	}
+	.sec[open] > summary {
+		border-bottom: 1px solid var(--border);
+		border-radius: var(--radius) var(--radius) 0 0;
+	}
+	.sec-title {
+		font-weight: 600;
+		font-size: 1rem;
+	}
+	.sec-sum {
+		font-size: 0.85rem;
+		color: var(--text-2);
+		font-variant-numeric: tabular-nums;
+	}
+	/* A closed card never hides a problem inside it. */
+	.sec-problem {
+		display: none;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--danger);
+	}
+	.sec:has(:global([aria-invalid='true'], .problem, [role='alert'])) > summary .sec-problem {
+		display: inline;
+	}
+	.sec > fieldset {
+		border: 0;
+		margin: 0;
+		padding: 0.75rem 1rem;
+		min-width: 0;
+	}
+	.user-card {
+		padding: 0 1rem 0.75rem;
+	}
+	.user-card > legend {
 		float: left;
 		width: calc(100% + 2rem);
 		margin: 0 -1rem 0.75rem;
@@ -438,8 +632,38 @@
 		font-weight: 600;
 		font-size: 1rem;
 	}
-	legend + :global(*) {
+	.user-card > legend + :global(*) {
 		clear: both;
+	}
+	.fold {
+		margin-top: 0.5rem;
+	}
+	.fold:last-child {
+		border-bottom: 0;
+	}
+	.fold .grid {
+		padding: 0.25rem 0 0.4rem;
+	}
+	.fix {
+		margin: 0.25rem 0 0.5rem;
+		font-size: 0.85rem;
+	}
+	/* The explanations under the fields, hidden until the switch is on (still each field's description). */
+	.detail:not(.explained) :global(.explain) {
+		display: none;
+	}
+	.tools {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		margin: 0 0 0.25rem;
+	}
+	.explain-switch {
+		font-size: 0.85rem;
+		font-weight: 400;
+		color: var(--text-2);
 	}
 	.grid {
 		display: grid;
@@ -459,11 +683,6 @@
 	/* Read-only values sit under their label rather than at the far right. */
 	.detail :global(input:read-only) {
 		text-align: left;
-	}
-	/* A section the sheet's section menu moved to: the focus ring on the whole card. */
-	fieldset:focus-visible {
-		outline: 2px solid var(--focus);
-		outline-offset: 2px;
 	}
 	.section-note {
 		margin: 0 0 0.5rem;
@@ -524,15 +743,22 @@
 		flex: 1;
 	}
 	@media (max-width: 640px) {
-		fieldset {
+		.sec > fieldset {
+			padding: 0.5rem 0.75rem;
+		}
+		.sec > summary {
+			padding-right: 0.75rem;
+		}
+		.user-card {
 			padding: 0 0.75rem 0.5rem;
 		}
-		legend {
+		.user-card > legend {
 			width: calc(100% + 1.5rem);
 			margin: 0 -0.75rem 0.75rem;
 			padding: 0.55rem 0.75rem;
 		}
-		.actions .btn {
+		.actions .btn,
+		.tools .btn {
 			min-height: 44px;
 		}
 	}

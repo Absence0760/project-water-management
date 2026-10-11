@@ -583,10 +583,34 @@ section it belongs to, with the example that taught it.
   (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
   problem. A native `<details>` keeps its fields in the page, so Find a
   setting still finds them and opens the fold (`SectionNav` `jump`), and
-  nothing is lost. Two callers so far (Fit automatically, the rules' search
-  budget): the CSS is shared in `app.css` (one copy, which also kept the
-  bundle under its ceiling); the markup is written out in each, until a
-  third caller earns a component.
+  nothing is lost. Callers: Fit automatically, the rules' search budget, and
+  the node sheet's "More … settings" and "Not used …" lines (issue #521).
+  The CSS is shared in `app.css` (one copy, which also kept the bundle under
+  its ceiling); the markup is still written out in each, so the node sheet
+  as the third caller earns a component once the round of regroupings that
+  add more callers has merged.
+- **A long form of sections folds each section to a card of its values.**
+  The node sheet held 72 fields, 13 checkboxes and 48 always-on help
+  paragraphs in 13 sections: 5,768 px for one unit, 9 screens, with Save
+  pinned but the dam on screen four (issue #521). Each section is now a
+  `<details>` card whose header band is its title and one line of what it is
+  set to (`network/nodeSummary.ts`, unit-tested), so a closed card still
+  answers "what is this unit's dam?"; only the first (or the one the section
+  menu points at) opens, and the menu's jump folds the others. Inside, the
+  rarely changed fields fold (`.fold`, above), the fields the current method
+  doesn't use hide behind one "Not used with the area flow share: High-MAP,
+  Low-MAP." line instead of greyed-out cells (they open read-only, nothing
+  lost), and the help goes behind the explain switch. Three things keep it
+  honest: the header shows **needs fixing** while anything inside is
+  invalid or a problem shows; a link into the sheet can name its section
+  (`section=dam`), and with none a sheet whose node has a problem opens on
+  that section; and **Show every field** opens it all for a full review
+  (remembered on the device). Keep the open sections per tab, not per item,
+  so ‹ › through the units keeps the same section in view. Result: 1,142 px
+  folded, Save and the menu always in the window
+  (`node-sheet-layout.spec.ts`). The old specs that work on fields call
+  `openNodeForm`, which presses Show every field; the layout spec opens it
+  folded.
 - **A form's state and actions in its head, not a sticky bar.** The rules'
   card opens with its badge, revision and fit count on the left and the
   sign-off on the right (`settings/CalibrationRulesFields.svelte` `.head`),
@@ -1313,6 +1337,12 @@ Interaction details that bit:
   `not.toContainText('needs fixing')` fail and `toContainText` pass whatever
   the state. Assert a shown-or-hidden word with `getByText(…)` and
   `toBeVisible()` / `toBeHidden()`.
+- **A `:has()` in a component's style doesn't see a child component's
+  elements.** Svelte scopes every selector inside `:has(…)` to the
+  component's own markup, so the node sheet's "needs fixing" never showed
+  for a `NumberInput`'s `aria-invalid` (the input is the child's). Wrap the
+  inner selector in `:global(…)`: `.sec:has(:global([aria-invalid='true'])) > summary .sec-problem`,
+  and pin it in e2e with a real invalid field.
 - **A closed `<details>` keeps its content out of the accessibility tree.**
   `getByRole('group', { name })` on a fieldset inside it finds nothing until
   it opens; `getByLabel` on its fields still resolves (and `fill` waits for

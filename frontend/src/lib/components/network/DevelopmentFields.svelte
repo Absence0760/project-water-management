@@ -42,7 +42,7 @@
 					aria-invalid={invalid('survey')}
 					onchange={(e) => (node.damSurveyDate = dateOf(e.currentTarget.value))}
 				/>
-				<span class="hint" id="{id('survey')}-h">The day the capacity above was measured. Empty: not recorded.</span>
+				<span class="hint explain" id="{id('survey')}-h">The day the capacity above was measured. Empty: not recorded.</span>
 				<FieldHistoryLine field="node:{node.id}:damSurveyDate" {unit} />
 			</div>
 			<div class="field">
@@ -60,7 +60,7 @@
 					value={node.damSedimentPctPerYear ?? null}
 					onchange={(v) => (node.damSedimentPctPerYear = v)}
 				/>
-				<span class="hint" id="{id('sediment')}-h">Capacity lost to silt each year, 0–20 %. The dam holds more before the survey date and less after it. Empty: none.</span>
+				<span class="hint explain" id="{id('sediment')}-h">Capacity lost to silt each year, 0–20 %. The dam holds more before the survey date and less after it. Empty: none.</span>
 				<FieldHistoryLine field="node:{node.id}:damSedimentPctPerYear" {unit} />
 			</div>
 			<div class="field">
@@ -74,7 +74,7 @@
 					aria-invalid={invalid('in-service')}
 					onchange={(e) => (node.damInServiceFrom = dateOf(e.currentTarget.value))}
 				/>
-				<span class="hint" id="{id('in-service')}-h">The first day the dam holds water; before it the unit has no dam. Empty: the whole run.</span>
+				<span class="hint explain" id="{id('in-service')}-h">The first day the dam holds water; before it the unit has no dam. Empty: the whole run.</span>
 				<FieldHistoryLine field="node:{node.id}:damInServiceFrom" {unit} />
 			</div>
 		</div>
@@ -90,7 +90,7 @@
 					aria-invalid={invalid('abstraction')}
 				onchange={(e) => (node.abstractionFrom = dateOf(e.currentTarget.value))}
 			/>
-			<span class="hint" id="{id('abstraction')}-h">
+			<span class="hint explain" id="{id('abstraction')}-h">
 				{node.kind === 'user' ? 'The first day this user takes water; before it its demand is 0.' : 'The first day this unit takes water; before it its crops and demand objects take nothing.'} Empty: the whole run.
 			</span>
 			<FieldHistoryLine field="node:{node.id}:abstractionFrom" {unit} />
