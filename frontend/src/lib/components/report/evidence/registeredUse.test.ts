@@ -2,7 +2,8 @@
 // the table's words.
 import type { EvidenceAllocationSource, EvidenceAllocationYear } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { bandText, countsText, measuredNote, partNote, ratioText, unitSourceLabel, USE_AXIS_MAX, USE_AXIS_MIN, useRows } from './registeredUse';
+import { bandText, countsText, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, USE_AXIS_MAX, USE_AXIS_MIN, useRows } from './registeredUse';
+import { fmtNum } from '$lib/format/number';
 
 const year = (waterYear: number, over: Partial<EvidenceAllocationYear> = {}): EvidenceAllocationYear => ({
 	waterYear,
@@ -110,5 +111,25 @@ describe('measuredNote (evidence-16, issue #516)', () => {
 	it('says nothing for an older pack’s document or a total of other units (no fields)', () => {
 		expect(measuredNote({}, {}, 'A')).toBeNull();
 		expect(measuredNote({ measuredAtA: null }, { damLossesA: null }, 'A')).toBeNull();
+	});
+});
+
+describe('a total of other units’ year too few registered users hold (evidence-18, #523 G)', () => {
+	it('reads "not shown", never a figure, and the application’s beside it only when it differs', () => {
+		const y = { registeredA: null, registeredB: null, withheldA: true as const };
+		expect(registeredText(y, false)).toEqual({ main: 'not shown', sub: null });
+		expect(registeredText({ ...y, registeredB: 5000 }, true)).toEqual({ main: 'not shown', sub: `application ${fmtNum(5000)}` });
+		expect(registeredText({ ...y, withheldB: true }, true)).toEqual({ main: 'not shown', sub: null });
+		// Shown in the baseline, withheld in the application.
+		expect(registeredText({ registeredA: 5000, registeredB: null, withheldB: true }, true)).toEqual({ main: fmtNum(5000), sub: 'application not shown' });
+		// Controls: as before, the baseline's, else the application's, and a difference of half a m³ or less isn't one.
+		expect(registeredText({ registeredA: 1000, registeredB: 1000.4 }, true)).toEqual({ main: fmtNum(1000), sub: null });
+		expect(registeredText({ registeredA: null, registeredB: 1000 }, true)).toEqual({ main: fmtNum(1000), sub: null });
+		expect(registeredText({ registeredA: null, registeredB: null }, false)).toEqual({ main: '–', sub: null });
+	});
+
+	it('counts the whole years not shown beside the judged ones', () => {
+		expect(countsText({ wholeYears: 5, over: 1, within: 1, under: 0, noVolume: 0, withheld: 3 })).toBe('1 above, 1 within, 0 below, 3 not shown, of 5');
+		expect(countsText({ wholeYears: 2, over: 1, within: 1, under: 0, noVolume: 0 })).toBe('1 above, 1 within, 0 below, of 2');
 	});
 });

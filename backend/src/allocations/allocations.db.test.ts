@@ -208,7 +208,9 @@ describe('what a viewer reads before the owners allow each volume (162, decision
 		const asViewer = (await viewer.call('GET', `/projects/${projectId}/allocations`)).body;
 		expect(asViewer).toMatchObject({ allocations: [], viewerUnits: false, unitsHidden: true, canSeeHolders: false });
 		// Surface water: six registered users (A–E and Z). Groundwater: three (A, D, E), too few for a total.
-		expect(asViewer.totals).toEqual([{ waterSource: 'surface', holders: 6, registeredM3PerYear: surfaceToday, storageM3: 150_000 + 90_000 + 75_000 + 100_000 }]);
+		// The storage in force is four holders' (150 000, 90 000, 75 000, 100 000): fewer than 5, so not given (#523 G).
+		expect(asViewer.totals).toEqual([{ waterSource: 'surface', holders: 6, registeredM3PerYear: surfaceToday, storageM3: null, storageWithheld: true }]);
+		expect(JSON.stringify(asViewer)).not.toContain(String(150_000 + 90_000 + 75_000 + 100_000));
 		expect(JSON.stringify(asViewer)).not.toMatch(/SYN-00|Invented Holdings|Portion 1/);
 		const asEditor = (await editor.call('GET', `/projects/${projectId}/allocations`)).body;
 		expect(asEditor).toMatchObject({ viewerUnits: false, unitsHidden: false, totals: null });
@@ -533,6 +535,97 @@ describe('the allocations export', () => {
 	});
 });
 
+// Issue #523 G: a "5 or more registered users" total sums the rows in force on a day or in a water year, so the
+// 5-holder rule counts the holders of those rows, not of the source's rows of every date. The review's repro: one
+// holder since 2005 (VOL), four from 2018-10-01 to 2024-09-30, a run of water years 2016–2018. Before, a viewer read
+// VOL alone as 2016's and 2017's total (the run comparison, § 5) and as today's (GET …/allocations).
+describe('no total a viewer reads is fewer than 5 registered users’ volume, with staggered dates (#523 G)', () => {
+	const VOL = 123_457;
+	const OTHER = 50_000;
+	let pid: string;
+	let run: string;
+	const at = () => `/projects/${pid}`;
+	/** VOL in m³ a year, its day's share and a part year's: none may appear in a viewer's answer. */
+	const holdsVol = (text: string) => [VOL, VOL / 365, VOL / 366].some((v) => new RegExp(`(?<![\\w.])${String(Math.trunc(v)).split('').join("[\\s,.'\\u00a0\\u202f]?")}(?![\\d])`).test(text));
+
+	beforeAll(async () => {
+		pid = (await owner.call('POST', '/projects', { name: 'Staggered holders' })).body.project.id;
+		const weir = node('Weir', null);
+		const units = ['S1', 'S2', 'S3', 'S4', 'S5'].map((n) => node(n, weir.id));
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		const model = { nodes: [weir, ...units], crops: [crop], cropAreas: units.map((f) => ({ nodeId: f.id, cropId: crop.id, areaM2: 60_000 })), transfers: [] };
+		expect((await owner.call('PUT', `${at()}/model`, model)).status).toBe(200);
+		expect((await owner.call('PATCH', at(), { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(300) } })).status).toBe(200);
+		const rain = Array.from({ length: 3 * 365 }, (_, i) => (i % 9 === 0 ? 25 : i % 4 === 0 ? 3 : 0));
+		expect((await owner.call('PUT', `${at()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2016-10-01', values: rain })).status).toBe(200);
+		for (const [u, role] of [
+			[editor, 'editor'],
+			[viewer, 'viewer']
+		] as const)
+			expect((await owner.call('POST', `${at()}/members`, { email: u.email, role })).status).toBe(201);
+		const add = async (nodeId: string, holder: string, volumeM3PerYear: number, dates: { validFrom?: string; validTo?: string }) => {
+			const res = await editor.call('POST', `${at()}/allocations`, { nodeId, holder, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear, ...dates });
+			expect(res.status, JSON.stringify(res.body)).toBe(201);
+		};
+		await add(units[0]!.id, 'Staggered Holder One', VOL, { validFrom: '2005-10-01' });
+		for (let i = 1; i < 5; i++) await add(units[i]!.id, `Staggered Holder ${i + 1}`, OTHER, { validFrom: '2018-10-01', validTo: '2024-09-30' });
+		const made = await owner.call('POST', `${at()}/runs`, { label: 'staggered' });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		run = made.body.run.id;
+	}, 120_000);
+
+	it('the database counts 5 holders of the source, and an editor reads VOL on its own row (positive control)', async () => {
+		expect(await rowsAs(viewer, 'SELECT DISTINCT water_source, holders FROM app_allocation_volumes($1)', [pid])).toEqual([{ water_source: 'surface', holders: 5 }]);
+		// Each row an opaque ordinal, no name: five holders, five ordinals.
+		const keys = await rowsAs<{ holder: number }>(viewer, 'SELECT holder FROM app_allocation_volumes($1)', [pid]);
+		expect(new Set(keys.map((k) => k.holder)).size).toBe(5);
+		expect(keys.every((k) => Number.isInteger(k.holder))).toBe(true);
+		const asEditor = (await editor.call('GET', `${at()}/allocations`)).body;
+		expect(asEditor.allocations.map((a: { volumeM3PerYear: number }) => a.volumeM3PerYear)).toContain(VOL);
+	});
+
+	it('GET …/allocations: today only VOL is in force, so the viewer’s total is withheld, not VOL', async () => {
+		const res = await viewer.call('GET', `${at()}/allocations`);
+		expect(res.status).toBe(200);
+		expect(res.body.totals).toEqual([{ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null }]);
+		expect(holdsVol(JSON.stringify(res.body))).toBe(false);
+	});
+
+	it('GET …/runs/:runId/allocations: 2016 and 2017 withheld (one holder in force), 2018 the five’s total; the editor’s comparison holds VOL (positive control)', async () => {
+		const res = await viewer.call('GET', `${at()}/runs/${run}/allocations`);
+		expect(res.status).toBe(200);
+		const years = res.body.totals.sources[0].years as { waterYear: number; registeredM3: number | null; status: string | null; withheld?: true; modelledM3: number }[];
+		expect(years.map((y) => [y.waterYear, y.withheld ?? false])).toEqual([
+			[2016, true],
+			[2017, true],
+			[2018, false]
+		]);
+		for (const y of years.slice(0, 2)) expect([y.registeredM3, y.status]).toEqual([null, null]);
+		expect(years[2]!.registeredM3!).toBeCloseTo(VOL + 4 * OTHER, 6);
+		expect(holdsVol(JSON.stringify(res.body))).toBe(false);
+		const asEditor = (await editor.call('GET', `${at()}/runs/${run}/allocations`)).body.comparison;
+		expect(holdsVol(JSON.stringify(asEditor))).toBe(true);
+	});
+
+	it('the evidence report’s § 5: the "Other registered users" years 2016 and 2017 withheld for every reader, 2018 shown; the editor still reads VOL in Appendix A.1 (positive control)', async () => {
+		const total = (r: { allocations: { units: { nodeId: string; sources: { years: { waterYear: number; registeredA: number | null; withheldA?: true }[] }[] }[] } }) =>
+			r.allocations.units.find((u) => u.nodeId === 'others:surface')!.sources[0]!.years;
+		const asViewer = await viewer.call('GET', `${at()}/runs/${run}/evidence-report`);
+		expect(asViewer.status).toBe(200);
+		expect(total(asViewer.body.report).map((y) => [y.waterYear, y.withheldA ?? false])).toEqual([
+			[2016, true],
+			[2017, true],
+			[2018, false]
+		]);
+		expect(total(asViewer.body.report)[2]!.registeredA!).toBeCloseTo(VOL + 4 * OTHER, 6);
+		expect(holdsVol(JSON.stringify(asViewer.body))).toBe(false);
+		const asEditor = (await editor.call('GET', `${at()}/runs/${run}/evidence-report`)).body.report;
+		// The same § 5 for every reader: the gate is in the document, not the redaction.
+		expect(total(asEditor)).toEqual(total(asViewer.body.report));
+		expect(holdsVol(JSON.stringify(asEditor.appendix))).toBe(true);
+	});
+});
+
 // The canary sweep (issue #523 G1): the redaction of a viewer's copy of the
 // volumes is opt-in per route, which is how the scenario base, the report PDFs
 // and the evidence report's changes were missed. So every GET a viewer can
@@ -540,6 +633,8 @@ describe('the allocations export', () => {
 // viewer the project keeps from each volume, on a project whose runs carry a
 // registered volume and a team scenario that sets another farm's, and no
 // answer may hold either number, in figures or in words ("987 654 321").
+// Four more holders' rows in force only from 2040 make the source one of 5
+// holders, so the totals by source are computed over the canary alone (#523 G).
 // An editor reads both on the routes that carry them (the positive control).
 describe('no viewer GET carries a registered volume while the owners keep them from viewers (#523 G1)', () => {
 	const ctx = {} as LadderCtx;
@@ -653,6 +748,11 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		await post('/allocations', { nodeId: ctx.farmId, holder: 'Canary Holder', registrationNo: 'REG-CANARY', authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: CANARY });
 		// A dam's registered storage (21b): a figure of the registration too.
 		await post('/allocations', { nodeId: ctx.otherFarmId, authorisation: 'registration', waterSource: 'surface', waterUse: '21b', volumeM3PerYear: 0, storageM3: STORAGE_CANARY });
+		// Four more holders of surface water, in force only from 2040 (#523 G): the source has 5 holders, so the viewer's
+		// totals are computed, but on every day and water year the canaries are the only volumes in force. A total gated
+		// on the source's holders of every date gave the canary itself.
+		for (const [i, nodeId] of [ctx.farmId, ctx.farmId, ctx.otherFarmId, ctx.otherFarmId].entries())
+			await post('/allocations', { nodeId, holder: `Later Holder ${i + 1}`, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 31_111 + i * 1_111, validFrom: '2040-10-01' });
 		baseRun = (await post('/runs', { label: 'With the canary' })).run.id;
 		// Published after the ladder's run: its changes since the previous publication add the canary.
 		await post('/publication', { runId: baseRun });

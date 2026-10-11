@@ -51,4 +51,25 @@ describe('the board against full authorised use (evidence-14)', () => {
 		expect(m.leftOut).toBe('6 registered users’ volumes are left out: no line gives fewer than 5 registered users’ volume.');
 		expect(mixLines({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, someLeftOut: true }).leftOut).toMatch(/^Some registered users’ volumes are left out/);
 	});
+
+	it('words a share-only folded mix (evidence-18, #523 H/J): each line a whole percent, the total 100 %, no m³', () => {
+		const m = mixLines({
+			rows: [
+				{ authorisation: 'licence', sharePct: 59, entitlement: true },
+				{ authorisation: 'existing_lawful_use', sharePct: 41, entitlement: false, withOthers: true }
+			],
+			entitlementPct: 59,
+			folded: true,
+			shares: true,
+			leftOutHolders: 6
+		});
+		expect(m.shares).toBe(true);
+		expect(m.lines.map((l) => [l.label, l.volume, l.entitlement])).toEqual([
+			['Licence', '59 %', true],
+			['Existing lawful use (verified under s35), with the ways of holding too few hold to show', '41 %', false]
+		]);
+		expect([m.total, m.entitlement]).toEqual(['100 %', '59 %']);
+		expect(JSON.stringify(m)).not.toContain('m³');
+		expect(mixLines({ rows: [], entitlementPct: 0, folded: true, shares: true, someLeftOut: true }).total).toBe('0 %');
+	});
 });

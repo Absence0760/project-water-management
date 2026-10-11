@@ -343,6 +343,16 @@ export function namesEveryUnit(reportVersion: string): boolean {
 }
 
 /**
+ * Whether a pack's report format gates § 5's totals of other units on units
+ * over every date, not on the registered users in force each year: before
+ * `evidence-18` (#523 G). An unknown format counts as doing so.
+ */
+export function gatesTotalsOnUnits(reportVersion: string): boolean {
+	const m = /^evidence-(\d+)$/.exec(reportVersion);
+	return !m || Number(m[1]) < 18;
+}
+
+/**
  * Whether the caller is kept from a pack's per-farm registered volumes (D3,
  * issue #523 G1): a viewer the project doesn't let read each one
  * (allocationUnitsHidden), on a pack whose runs carry any. The reproduction
@@ -389,13 +399,20 @@ async function packOwnUnits(db: Db, projectId: string, pack: Pick<PackMeta, 'sce
  * evidence-15, whose § 5 and page-1 flag name every farm, and for a team
  * scenario's pack (or one whose scenario the caller can't read) whose § 5
  * lists a unit one by one (before evidence-17) or whose changes touch a
- * registered volume (Appendix A.2 prints the old one); `pdf` for one whose
+ * registered volume (Appendix A.2 prints the old one), and for a pack drafted
+ * before evidence-18 whose § 5 has a total of other units with a registered
+ * volume (gated on units over every date, a year's total could be one
+ * holder's, #523 G); `pdf` for one whose
  * page-1 prints the full authorised volume mix (the manifest is served with
  * the folded one instead, or none). Null: the redacted manifest and the PDF
  * hold nothing more.
  */
 export function packWithheldPart(reportVersion: string, report: PackManifest['report'], origin: ScenarioOrigin | null): 'pack' | 'pdf' | null {
 	if (namesEveryUnit(reportVersion)) return 'pack';
+	// Before evidence-18, § 5's "Other registered users" totals were gated on units over every date, so a year's total
+	// could be one holder's volume (#523 G). Which years were isn't in the frozen document, so any such total refuses it.
+	if (gatesTotalsOnUnits(reportVersion) && (report.allocations?.units ?? []).some((u) => u.aggregate !== undefined && u.sources.some((s) => s.years.some((y) => y.registeredA !== null || y.registeredB !== null))))
+		return 'pack';
 	if (origin !== 'applicant' && origin !== null) {
 		if ((report.allocations?.units ?? []).some((u) => u.aggregate === undefined)) return 'pack';
 		if ((report.ops ?? []).some((o) => o.op.op.startsWith('allocation.'))) return 'pack';

@@ -2259,8 +2259,12 @@ export interface AllocationList {
 export interface AllocationTotal {
 	waterSource: 'surface' | 'groundwater';
 	holders: number;
-	registeredM3PerYear: number;
+	/** Null when fewer than 5 registered users hold the takes in force today (#523 G). */
+	registeredM3PerYear: number | null;
+	/** Null when none states one, or when withheld (`storageWithheld`). */
 	storageM3: number | null;
+	/** The storage in force today is held by fewer than 5 registered users (#523 G). */
+	storageWithheld?: true;
 }
 
 /** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
@@ -2270,7 +2274,8 @@ export interface AllocationComparisonTotals {
 		waterSource: 'surface' | 'groundwater';
 		holders: number;
 		units: number;
-		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+		/** `withheld`: fewer than 5 registered users hold the volumes in force that year, so `registeredM3` and `status` are null (#523 G). */
+		years: { waterYear: number; partial: boolean; registeredM3: number | null; modelledM3: number; status: import('@water-management/engine').AllocationStatus | null; withheld?: true }[];
 	}[];
 }
 

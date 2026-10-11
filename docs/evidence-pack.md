@@ -53,7 +53,12 @@ issued before keeps its `evidence-15` document, which the report page still
 reads, without the words); and § 5 listing units one by one only for an
 applicant's application, a team scenario's all in the totals, and page 1's
 authorised volume mix giving no fewer than 5 registered users' volume
-(report format `evidence-17`, issue #523 G1, 2026-10-11). What is left is
+(report format `evidence-17`, issue #523 G1, 2026-10-11); and § 5's
+*Other registered users* totals gated on registered users, not units, and
+per water year on the holders whose volumes are in force that year (a year
+too few hold reads "not shown", its modelled use kept), with the folded
+mix frozen as whole-percent shares with no m³ (report format
+`evidence-18`, issue #523 G/H/J, 2026-10-11). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -416,8 +421,15 @@ the application twice, both labelled:
   and Schedule 1 use are not, and the table says which. Since
   `evidence-17` the pack freezes the mix twice: in full (editors, owners,
   the authority and the PDF read it) and folded, which a viewer kept from
-  each registered volume reads in its place and which gives no fewer than 5
-  registered users' volume, alone or by difference
+  each registered volume reads in its place: no line is fewer than 5
+  registered users' volume. Since `evidence-18` the folded one is frozen as
+  each line's whole-percent share, with no m³ and no total (`mixShares`;
+  an `evidence-17` pack's or board's folded m³ is served to that viewer as
+  its shares). The mix sums every row of the baseline, whatever its dates,
+  while that viewer's live totals are of the rows in force today, so an m³
+  total beside them gave the rows out of force by subtraction (#523 H), and
+  a kind's line beside the per-source totals formed the margins of a
+  source × kind table (#523 J)
   ([allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)).
 - **Against modelled current use** (`licenceImpact`, as before): the
   baseline as it ran, so "existing use" is what the model found holders
@@ -815,7 +827,11 @@ the manifest and the PDF of a pack whose frozen text names other farms'
 volumes: one drafted before `evidence-15`, whose § 5 and page-1 flag name
 every farm; a team scenario's whose § 5 lists a unit one by one (before
 `evidence-17`) or whose changes touch a registered volume (Appendix A.2
-prints the old one). Its redacted manifest also leaves out the ops that set
+prints the old one); and one drafted before `evidence-18` whose § 5 has an
+*Other registered users* total with a registered volume: those were gated
+on units over every date, so a year's total could be one holder's (#523 G),
+and which years were isn't in the frozen document. An editor drafts a new
+version (at `evidence-18`) for such a viewer to read. Its redacted manifest also leaves out the ops that set
 a volume on a unit that isn't an applicant's own and an authorised volume
 mix built before the 5-holder rule, and such a pack's PDF is refused
 (`packWithheldPart`). The live evidence report leaves the same parts out

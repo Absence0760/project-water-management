@@ -33,8 +33,9 @@ export const AUTHORISATION_ORDER: readonly AuthorisationKind[] = ['licence', 'ex
  * it is held (m³ a year; storage-only s21b entries count none). The full mix
  * (authorisedMix) is what editors, owners, the authority and the PDF read;
  * a viewer the project keeps from each registered volume reads the folded one
- * (foldedMix, `folded`; evidence-17, issue #523 G1, D3), which never gives
- * fewer than FARMER_K (5) registered users' volume, alone or by difference.
+ * as shares (foldedMix, AuthorisedMixShares; evidence-18, issue #523 G/H/J,
+ * D3). Evidence-17 froze the folded one in m³ (`folded`); the backend serves
+ * that viewer its shares (mixShares).
  */
 export interface AuthorisedMix {
 	rows: {
@@ -91,21 +92,21 @@ export function authorisedMix(entries: readonly MixEntry[]): AuthorisedMix | nul
 }
 
 /**
- * The mix as a viewer kept from each registered volume reads it (evidence-17,
- * issue #523 G1, D3): no figure, nor any difference between figures they can
- * read, gives fewer than 5 registered users' volume.
- *  - A water source held by fewer than 5 is left out whole (the viewer reads
- *    no total of it either), so the total is the sum of the sources they read
- *    a total of (`app_allocation_volumes`): no difference left.
+ * The mix folded so no line gives fewer than 5 registered users' volume
+ * (evidence-17, issue #523 G1, D3), in m³: what foldedMix gives as shares.
+ *  - A water source held by fewer than 5 is left out whole.
  *  - A way of holding held by 5 or more is a row; the others are pooled in
  *    one `other` row when the pool has 5 or more holders, and otherwise
  *    merged into the smallest row that isn't an entitlement (or the smallest
- *    row, then no longer an entitlement): never dropped, so no row's
- *    absence shows in the total.
+ *    row, then no longer an entitlement): never dropped.
  *  - How many were left out is said only when 5 or more; fewer, only that
  *    some were.
+ * Its m³ can still be differenced against a live total over other rows (the
+ * mix sums every row of the run, whatever its dates; a viewer's live totals
+ * are of the rows in force today: #523 H), or a kind row against a source
+ * total (#523 J), so it is never served: only its shares are.
  */
-export function foldedMix(entries: readonly MixEntry[]): AuthorisedMix | null {
+function fold(entries: readonly MixEntry[]): AuthorisedMix | null {
 	const takes = takesOf(entries);
 	if (!takes.length) return null;
 	const holdersOf = (list: readonly { who: string }[]) => new Set(list.map((e) => e.who)).size;
@@ -134,6 +135,67 @@ export function foldedMix(entries: readonly MixEntry[]): AuthorisedMix | null {
 }
 
 /**
+ * The folded mix as a viewer kept from each registered volume reads it
+ * (evidence-18, issue #523 G/H/J, D3): each line's share of the lines' sum in
+ * whole percent, and no m³ at all, neither per line nor in total. A frozen
+ * m³ figure beside a viewer's live per-source totals could be differenced:
+ * the mix sums every row of the run whatever its dates, the live totals only
+ * the rows in force today (H), and a kind's line sums across sources, so with
+ * the per-source totals it forms the margins of a source × kind table (J).
+ */
+export interface AuthorisedMixShares {
+	rows: {
+		authorisation: AuthorisedMix['rows'][number]['authorisation'];
+		/** Whole percent of the lines' sum; the lines add up to 100 (largest remainder). */
+		sharePct: number;
+		entitlement: boolean;
+		withOthers?: true;
+	}[];
+	/** The entitlement lines' shares, summed. */
+	entitlementPct: number;
+	folded: true;
+	shares: true;
+	leftOutHolders?: number;
+	someLeftOut?: true;
+}
+
+/** Whether a mix is given as shares (a folded one, evidence-18, or one the backend made from an evidence-17 folded one). */
+export const isMixShares = (m: AuthorisedMix | AuthorisedMixShares): m is AuthorisedMixShares => (m as AuthorisedMixShares).shares === true;
+
+/** A mix's lines as whole-percent shares of their sum, adding up to 100 (largest remainder), with no m³. */
+export function mixShares(m: AuthorisedMix | AuthorisedMixShares): AuthorisedMixShares {
+	if (isMixShares(m)) return m;
+	const total = m.rows.reduce((s, r) => s + Math.max(r.volumeM3PerYear, 0), 0);
+	const exact = m.rows.map((r) => (total > 0 ? (100 * Math.max(r.volumeM3PerYear, 0)) / total : 0));
+	const pct = exact.map(Math.floor);
+	if (total > 0) {
+		const order = exact.map((e, i) => ({ i, rem: e - Math.floor(e) })).sort((a, b) => b.rem - a.rem || a.i - b.i);
+		for (let k = 0, short = 100 - pct.reduce((s, p) => s + p, 0); k < short; k++) pct[order[k % order.length]!.i]! += 1;
+	}
+	const rows = m.rows.map((r, i) => ({ authorisation: r.authorisation, sharePct: pct[i]!, entitlement: r.entitlement, ...(r.withOthers ? { withOthers: true as const } : {}) }));
+	return {
+		rows,
+		entitlementPct: rows.filter((r) => r.entitlement).reduce((s, r) => s + r.sharePct, 0),
+		folded: true,
+		shares: true,
+		...(m.leftOutHolders !== undefined ? { leftOutHolders: m.leftOutHolders } : {}),
+		...(m.someLeftOut ? { someLeftOut: true as const } : {})
+	};
+}
+
+/**
+ * The mix as a viewer kept from each registered volume reads it
+ * (evidence-18): folded (fold: no line is fewer than 5 registered users'
+ * volume, no source fewer than 5 hold is in it, no count of them below 5),
+ * then given as whole-percent shares with no m³ (mixShares), so nothing
+ * absolute can be differenced against the totals that viewer reads.
+ */
+export function foldedMix(entries: readonly MixEntry[]): AuthorisedMixShares | null {
+	const f = fold(entries);
+	return f ? mixShares(f) : null;
+}
+
+/**
  * Why there is no full-authorised-use board, or that there is one:
  *   notBuilt      nobody has run the full-allocation pair for this application run;
  *   noAllocations the baseline ran with no registered or licensed volumes, so there is nothing to hold holders to;
@@ -149,13 +211,17 @@ export interface EvidenceAuthorisedImpact {
 	detail: string | null;
 	/** The board over the full-allocation pair; null unless ok. */
 	board: EvidenceLicenceImpact | null;
-	/** The volumes it held every holder to, by how they are held; null unless ok. */
-	mix: AuthorisedMix | null;
 	/**
-	 * The same, folded for a viewer kept from each registered volume (foldedMix, evidence-17, #523 G1): the
-	 * backend serves it to them in `mix`'s place. Absent from a board built before.
+	 * The volumes it held every holder to, by how they are held; null unless ok. A viewer kept from each
+	 * registered volume is served the folded shares here instead (backend redactReportAllocations).
 	 */
-	mixFolded?: AuthorisedMix | null;
+	mix: AuthorisedMix | AuthorisedMixShares | null;
+	/**
+	 * The same, folded for a viewer kept from each registered volume, which the backend serves them in
+	 * `mix`'s place: shares with no m³ since evidence-18 (foldedMix, #523 H/J); in m³ on a board built
+	 * at evidence-17 (served as its shares, mixShares). Absent from a board built before.
+	 */
+	mixFolded?: AuthorisedMix | AuthorisedMixShares | null;
 	/** When the pair was run, and on which engine; null unless ok or stale. */
 	builtAt: string | null;
 	engineVersion: string | null;

@@ -297,11 +297,14 @@ export function allocationsContext(volumes: number, unmatched: number, rows: rea
 
 /**
  * A water source's total for a viewer (162, D3): "Surface water: 12 registered
- * users, 1 250 000 m³ a year registered today, 300 000 m³ of storage."
+ * users, 1 250 000 m³ a year registered today, 300 000 m³ of storage." A sum
+ * of the volumes in force today held by fewer than 5 isn't given (#523 G).
  */
 export function totalsSentence(t: AllocationTotal): string {
-	const storage = t.storageM3 !== null ? `, ${fmtNum(t.storageM3)} m³ of storage` : '';
-	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${fmtNum(t.registeredM3PerYear)} m³ a year registered today${storage}.`;
+	const storage = t.storageM3 !== null ? `, ${fmtNum(t.storageM3)} m³ of storage` : t.storageWithheld ? '; the storage in force today isn’t shown' : '';
+	const volume = t.registeredM3PerYear !== null ? `${fmtNum(t.registeredM3PerYear)} m³ a year registered today` : 'the volume in force today isn’t shown';
+	const why = t.registeredM3PerYear === null || t.storageWithheld ? ' (fewer than 5 of them hold one in force today)' : '';
+	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${volume}${storage}${why}.`;
 }
 
 /** The note an owner reads before letting viewers see each farm's registered volumes (162, D3). */

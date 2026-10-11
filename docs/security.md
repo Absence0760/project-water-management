@@ -2834,9 +2834,9 @@ database:
   | --- | --- | --- |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
-  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`) |
+  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`), each sum given only when the rows in it, in force that day or water year, are ≥ 5 registered users' (215, #523 G) |
   | Share links, pack links, the public verify page | never | never per unit (none shown today; any later total at ≥ 5 holders) |
-  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`) |
+  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`); at ≥ 5 registered users, and each water year's registered volume only at ≥ 5 in force that year (`evidence-18`, #523 G) |
 
   With the switch off, a viewer's routes carry no copy of the volumes: the
   run's model and summary per unit, the compare route, the summary CSV, the
@@ -2871,13 +2871,37 @@ database:
   printed that way, without either project's volumes, and any reader of the
   report's project may download it. A scenario sweep's members
   (`GET …/sweeps`, `…/sweeps/:sweepId`) come without their summaries'
-  per-unit allocations and their `allocation.set` ops. Page 1's authorised
-  volume mix is frozen twice (evidence-17): the full one for editors,
-  owners, the authority and the PDF (refused to such a viewer), and a
-  folded one served in its place to such a viewer: no line, total or
-  difference between them and the per-source totals that viewer reads gives
-  fewer than 5 registered users' volume, and no count of them below 5 is
-  given (`foldedMix`). A storage-only (21b) row's warning no longer quotes
+  per-unit allocations and their `allocation.set` ops. Every "5 or more
+  registered users" total counts the holders of the rows actually summed
+  into it (#523 G, 215's opaque per-row holder key): today's per-source
+  totals (`volumeTotals`), each water year of a run's totals
+  (`comparisonTotals`) and of § 5's *Other registered users*
+  (`evidence-18`, for every reader); before, the count was over the
+  source's rows of every date, so with staggered `valid_from` / `valid_to`
+  a total of "5 or more" could be one holder's volume. A pack drafted
+  before `evidence-18` whose § 5 has such a total is refused to such a
+  viewer (manifest and PDF; which years were affected isn't in the frozen
+  document). Page 1's authorised volume mix is frozen twice: the full one
+  for editors, owners, the authority and the PDF (refused to such a
+  viewer), and a folded one served in its place to such a viewer, no line
+  of it fewer than 5 registered users' volume and no count of them below 5
+  (`foldedMix`), as whole-percent shares with no m³ (`evidence-18`; an
+  `evidence-17` folded m³ mix is served as its shares). No m³ figure of the
+  mix is served to that viewer, so it can't be differenced against their
+  live totals, which are of the rows in force today while the mix sums
+  every row of the run (#523 H), nor a kind's line against the per-source
+  totals as the margins of a source × kind table (#523 J). What is true
+  now: no total such a viewer reads is the sum of fewer than 5 registered
+  users' volumes, and no difference between two figures read at the same
+  time gives one exactly. Left: where the mix's rows and that viewer's
+  live totals are the same rows (none dated, none changed since the board
+  was built), a share times the sum of the totals estimates a line's m³ to
+  within 1 % of the mix's total (whole-percent rounding), and with outside
+  knowledge of an empty source × kind cell (J's premise) such estimates can
+  be combined to bound one holder's volume to within that 1 % (coarser than
+  J's exact figure, and needing the same outside knowledge, which no route
+  gives); figures read at different times (successive pack versions, a
+  frozen mix against a later live total) can still be differenced (below). A storage-only (21b) row's warning no longer quotes
   its volume (engine; it reaches a run's summary and the evidence report's
   A.5 verbatim).
 
@@ -2896,10 +2920,14 @@ database:
   `/auth/me/export`), a pack PDF or bundle's bytes and a report PDF's
   (their routes are redirects; the refusals are tested in
   `packs.db.test.ts` and above), a capped or full-allocation run (Left,
-  below), and a cross-project baseline (its own test, above). Left,
-  tracked: § 5's *Other registered users* total is gated at 5 units, not 5
-  holders (one holder with 5 units gets a total that is theirs), and
-  totals in successive pack versions can be differenced; a full-allocation
+  below), and a cross-project baseline (its own test, above). Its fixture
+  has four more holders' rows in force only from 2040, so the source has 5
+  holders while the canaries are the only volumes in force on any day or
+  year: a total gated on the source's holders of every date would give a
+  canary (#523 G; the staggered-dates test beside it holds the review's
+  repro on each path, with an editor positive control). Left, tracked:
+  totals in successive pack versions, and the folded mix across boards or
+  packs, can be differenced; a full-allocation
   scenario run scales each unit's demand to its volume, so its per-unit
   figures give the volume as a capped run's do.
   Left: a capped run's per-unit daily series still bound use by the volume

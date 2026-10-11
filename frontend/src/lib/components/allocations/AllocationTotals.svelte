@@ -32,6 +32,11 @@
 	{#if runLabel && years?.sources.length}
 		<h3 class="sub-h">Modelled use against the registered volumes, run “{runLabel}”</h3>
 		<p class="small muted">Summed over the units with a registered volume, each water year (October–September). Modelled, not metered: arithmetic, not a finding about anyone’s use.</p>
+		{#if years.sources.some((s) => s.years.some((y) => y.withheld))}
+			<p class="small muted" data-testid="allocation-totals-years-withheld">
+				“Not shown”: fewer than 5 registered users held a volume in force that year, so the year’s registered total would be too few people’s.
+			</p>
+		{/if}
 		{#each years.sources as s (s.waterSource)}
 			<div class="table-wrap">
 				<table class="data compact" data-testid="allocation-totals-years-{s.waterSource}">
@@ -48,9 +53,9 @@
 						{#each s.years as y (y.waterYear)}
 							<tr>
 								<th scope="row">{waterYearLabel(y.waterYear)}{y.partial ? ' (part)' : ''}</th>
-								<td class="num">{fmtNum(y.registeredM3)}</td>
+								<td class="num">{y.registeredM3 === null ? 'Not shown' : fmtNum(y.registeredM3)}</td>
 								<td class="num">{fmtNum(y.modelledM3)}</td>
-								<td>{y.partial ? 'Part year, not judged' : STATUS_LABEL[y.status]}</td>
+								<td>{y.partial ? 'Part year, not judged' : y.status === null ? 'Not judged' : STATUS_LABEL[y.status]}</td>
 							</tr>
 						{/each}
 					</tbody>

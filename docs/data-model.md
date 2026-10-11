@@ -1630,6 +1630,15 @@ water-use volumes per farm or water user.
   the holder's name ignoring case and spacing, else a name another row of the same unit carries, else the unit, else the row):
   water source, holder count, node, volume, storage, water use, validity;
   never a name, number or property. The API sums them (`allocations/viewerUnits.ts`).
+  Since 215 each row also carries `holder`, an opaque ordinal (1..n over the
+  md5 of the project and the holder key, not a hash a list of names can be
+  matched against), so the API gives a sum only when the rows in it (in force
+  that day or water year) are 5 or more holders' (#523 G).
+  `app_allocation_holders(project)` (`SECURITY DEFINER`, viewer and up, 215)
+  returns every row's id, node and that ordinal, no volume: the evidence
+  report's § 5 gate and the authorised mix count holders by it, the same for
+  every reader. Both read `app_allocation_holder_keys` (215, internal, not
+  granted).
 - **No personal identifiers.** No ID-number, phone or email column exists;
   the importer refuses files that carry them ([security.md](./security.md)).
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`

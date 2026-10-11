@@ -307,6 +307,15 @@ describe('a viewer’s totals (162, decision D3)', () => {
 		expect(totalsSentence({ waterSource: 'groundwater', holders: 5, registeredM3PerYear: 0, storageM3: null })).toBe('Groundwater: 5 registered users, 0 m³ a year registered today.');
 	});
 
+	it('says a sum held by fewer than 5 in force today isn’t shown, with no figure (#523 G)', () => {
+		expect(totalsSentence({ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null, storageWithheld: true })).toBe(
+			'Surface water: 5 registered users, the volume in force today isn’t shown; the storage in force today isn’t shown (fewer than 5 of them hold one in force today).'
+		);
+		expect(totalsSentence({ waterSource: 'surface', holders: 6, registeredM3PerYear: 1_000, storageM3: null, storageWithheld: true })).toBe(
+			`Surface water: 6 registered users, ${fmtNum(1_000)} m³ a year registered today; the storage in force today isn’t shown (fewer than 5 of them hold one in force today).`
+		);
+	});
+
 	it('tells an owner who viewers must be before they see each farm', () => {
 		expect(VIEWER_UNITS_NOTE).toContain('works for, or was appointed by, your organisation');
 		expect(VIEWER_UNITS_NOTE).toContain('5 or more registered users');

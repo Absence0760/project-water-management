@@ -39,7 +39,7 @@
 	import IntervalPlot from './IntervalPlot.svelte';
 	import UsePlot from '$lib/components/allocations/UsePlot.svelte';
 	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
-	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
+	import { bandText as useBandText, countsText, m3, measuredNote, partNote, ratioText, registeredText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
 	import LocalityMap from './LocalityMap.svelte';
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
@@ -628,9 +628,10 @@
 						<!-- evidence-15 (D3): only the applicant's own units one by one; the rest as totals at 5 or more units. -->
 						<p class="small muted" data-testid="evidence-allocations-others">
 							{app ? 'Only the applicant’s own units are listed one by one.' : 'No unit is listed one by one.'} Every other unit’s volume and use is in one total per water
-							source, “Other registered users”, when at least 5 units hold that source.{#if al.othersLeftOut}
-								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: fewer than 5 hold one
-								from that water source. The project’s editors see each unit on the Allocations tab.{/if}
+							source, “Other registered users”, when enough registered users hold that source; a year’s registered volume in that total is “not shown” when fewer
+							than 5 registered users hold one in force that year.{#if al.othersLeftOut}
+								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: too few registered
+								users hold one from that water source. The project’s editors see each unit on the Allocations tab.{/if}
 						</p>
 					{/if}
 					{#if useJudged}<p class="na">{useJudged}</p>{/if}
@@ -694,7 +695,7 @@
 											<tr>
 												<th scope="row">{u.name}<span class="sub">{SOURCE_LABEL[src.waterSource]}</span></th>
 												<td class="nowrap">{waterYearLabel(y.waterYear)}{#if partNote(y, app)}<span class="sub">{partNote(y, app)}</span>{/if}</td>
-												<td class="num">{m3(y.registeredA ?? y.registeredB)}{#if app && y.registeredA !== null && y.registeredB !== null && Math.abs(y.registeredA - y.registeredB) > 0.5}<span class="sub">application {m3(y.registeredB)}</span>{/if}</td>
+												<td class="num">{registeredText(y, app).main}{#if registeredText(y, app).sub}<span class="sub">{registeredText(y, app).sub}</span>{/if}</td>
 												<td class="num"
 													>{m3(y.modelledA)}<span class="sub">{ratioText(y.modelledA, y.registeredA)}</span>{#if measuredNote(src, y, 'A')}<span class="sub" data-testid="evidence-allocation-measured">{measuredNote(src, y, 'A')}</span>{/if}</td
 												>

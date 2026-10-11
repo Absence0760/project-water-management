@@ -3686,17 +3686,30 @@ from the WP:
       per water year to them, keeping its own seasonal shape (not the
       licence's months, which only the cap applies, below). Warm starts carry
       both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
-- [ ] **§ 5's other-units total counts units, not holders** (issue #523
-      G1 security review, finding 6; confirmed in the engine's
-      `otherUnitTotals`: `holding.length < FARMER_K` over units). One holder
-      with 5 or more units on a source gets an *Other registered users*
-      total that is their own volume; and two pack versions' totals can be
-      differenced (one unit added between them gives its volume). Durable
-      fix: pass a holder count per source from the server (as
-      `app_allocation_volumes` counts holders) into the report input and gate
-      on it (a report format bump); document the differencing as residual or
-      round the totals. Trigger: before a pack is issued on a catchment where
-      one holder has several units.
+- [x] **§ 5's other-units total counts units, not holders** (issue #523
+      G1 security review, finding 6; round 3 finding G, 2026-10-11, report
+      format `evidence-18`, migration 215). § 5's *Other registered users*
+      total is now gated on registered users (opaque per-row holder keys,
+      `app_allocation_holders`), and each water year's registered volume
+      only at 5 or more holders whose rows are in force that year; the
+      viewer's per-source totals today and a run's totals per water year
+      the same way (`app_allocation_volumes` returns each row's holder).
+      Pre-`evidence-18` packs with such a total are refused to a viewer
+      kept from the volumes. The folded authorised mix is served as shares
+      with no m³ (round 3 H and J).
+- [ ] **Totals read at different times can be differenced** (issue #523
+      G1 review finding 6's second half, round 3's accepted residuals).
+      Two pack versions' § 5 totals (a unit's rows added or ended between
+      them gives their volume), a run's totals before and after an
+      allocation is edited, and the folded mix's shares across boards, or
+      a frozen mix's share times a later live total. Also: with no dated
+      rows, a share times the sum of a viewer's totals estimates a line to
+      within 1 % of the mix's total ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
+      Durable fix: round every total a viewer kept from the volumes reads
+      (to a band wide enough that one holder's change moves no figure), or
+      add bounded noise per release, and coarsen the mix's shares to 5 %.
+      Trigger: before a project with outside viewers issues a second pack
+      version, or counsel asks for k-anonymity across releases.
 - [ ] **A full-allocation run's per-unit figures give the volume** (issue
       #523 G1 security review, finding 7; real by the model's definition,
       model.md §2.12a: demand is scaled per water year to the registered
