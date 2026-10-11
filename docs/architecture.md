@@ -1447,9 +1447,13 @@ sequenceDiagram
   cookie whose JWT carries `scope: { p, r }`; `requireUser` refuses a scoped
   session anywhere but the report's own reads (`reports/scope.ts`). It is a
   new trust boundary: [security.md § Render tokens](./security.md#render-tokens).
-- **The render** (`reports/render.ts`): a fresh browser and context (light
-  theme, UTC, 1200 × 1600), the token exchange through the context's own
-  request client (so the cookie lands in its jar), `page.goto`, a wait for
+- **The render** (`reports/render.ts`): a fresh browser, the token exchange
+  in a context of its own (its answer carries the session cookie and the
+  project's time zone), then the report's context (light theme, 1200 × 1600,
+  the exchange's cookie, and the project's zone, so every date the page
+  formats in the browser's own zone is the catchment's day as a browser
+  there prints it, not UTC's, issue #521; an unknown or missing zone prints
+  in `Africa/Johannesburg`, `renderTimeZone`), `page.goto`, a wait for
   `main[data-report-ready="true"]`, or the page's own "can't show this"
   message (no access, no run: failed at once, no retry), then
   `page.pdf({ format: 'A4', printBackground: true })` with the page's own

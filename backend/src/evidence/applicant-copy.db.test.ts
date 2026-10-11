@@ -167,6 +167,8 @@ describe("the applicant's printable copy", () => {
 		// The job's token was consumed by nobody (the browser is stubbed): it opens a session now.
 		const session = await anon('POST', '/auth/render-session', { token });
 		expect(session.status, JSON.stringify(session.body)).toBe(200);
+		// The project's zone, which the renderer prints in (issue #521): the party reads it though project_select hides the row from them (215).
+		expect(session.body.timeZone).toBe('Africa/Johannesburg');
 		const cookie = session.headers.get('set-cookie')!.split(';')[0]!;
 		const get = (path: string) => anon('GET', path, undefined, cookie);
 		expect((await get(`${P()}/scenarios/${app}/packs/${pack}`)).status).toBe(200);

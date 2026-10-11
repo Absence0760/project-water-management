@@ -33,7 +33,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |
-| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true, timeZone }` + a **render session** cookie (`timeZone`: the project's zone, which the renderer prints in, or `null`; issue #521); `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars, all of it counted (Argon2id; a pre-2026-10 bcrypt hash is upgraded on the next sign-in, security.md § Authentication).
 

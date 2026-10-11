@@ -941,7 +941,14 @@ buys a **render session** that can read one report and nothing else.
   lives **10 minutes** (a pack's carries `scope: { p, k }`, the project and
   the pack; an applicant's copy's `scope: { p, k, s }`, with the pack's
   application, after the exchange checks the requester is still its
-  party). A used, expired, unknown or malformed token gets one
+  party). The answer also names the project's time zone
+  (`app_project_time_zone`, 215: any member reads it, so an applicant's
+  copy gets it too; `null` otherwise), which the renderer's browser runs in
+  so the PDF's dates are the catchment's day (issue #521). The renderer
+  treats it as input: a name its Intl doesn't know, or none (an API older
+  than the field), prints in the default zone (`reports/render.ts`
+  `renderTimeZone`); it changes how dates read, never what the page may
+  load. A used, expired, unknown or malformed token gets one
   answer, `400`. Both refusals carry the machine-only code
   `render_token_refused`: the renderer fails a report for good only on that
   code, so a WAF or CloudFront `403` in front of the API (no code) is
