@@ -20,8 +20,18 @@
 		legend,
 		label,
 		legendLabel,
-		tilesUrl
-	}: { features: FarmMapFeature[]; band: ModelBand | null; legend: LegendItem[]; label: string; legendLabel: string; tilesUrl: string | null } = $props();
+		tilesUrl,
+		onstatus
+	}: {
+		features: FarmMapFeature[];
+		band: ModelBand | null;
+		legend: LegendItem[];
+		label: string;
+		legendLabel: string;
+		tilesUrl: string | null;
+		/** The map's state (CatchmentMap): drawn, or said why it can't be (no WebGL). */
+		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
+	} = $props();
 
 	let dark = $state(appIsDark());
 	let selectedId = $state<string | null>(null);
@@ -38,7 +48,7 @@
 </script>
 
 <div class="farm-map">
-	<CatchmentMap features={drawn} {selectedId} onselect={(id) => (selectedId = selectedId === id ? null : id)} {tilesUrl} {label} {fills} words={mapWords()} />
+	<CatchmentMap features={drawn} {selectedId} onselect={(id) => (selectedId = selectedId === id ? null : id)} {tilesUrl} {label} {fills} words={mapWords()} {onstatus} />
 	<ul class="legend" aria-label={legendLabel} data-testid="farm-map-legend">
 		{#each legend as item (item.kind)}
 			<li

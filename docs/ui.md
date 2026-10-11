@@ -1292,7 +1292,9 @@ same way on every screen:
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
   days are added and overlapping days corrected. Days the file leaves blank
   keep their stored value. The preview counts new, changed and unchanged
-  days before anything is sent, and warns about **blank days** between the
+  days before anything is sent (its dates day first, "1 Oct 2021 → 31 Dec
+  2021", as are the existing series' period, the blank days and the overwrite
+  confirm; issue #521), and warns about **blank days** between the
   series' last value and the file's first day (`coverage.ts` `holeBefore`):
   the merge stores them as blanks, and a run treats a blank rain day as dry.
   If the stored values can't be read for that comparison, the summary says so
@@ -6074,7 +6076,7 @@ two.
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
     At the card's foot (issue #521), **Fit record of these parameters**
-    (`calibration/FitProvenance.svelte`) shows the record: model and time,
+    (`calibration/FitProvenance.svelte`) shows the record: model and time (day first, in UTC: "GR4J fit of 24 Sep 2026 10:05 UTC"),
     objective, seed, model runs, engine version, the record and window fitted
     to, the pan coefficient and A-pan evaporation it ran under (month by
     month, or "not recorded" for a fit made before this was tracked) and the
@@ -7173,7 +7175,8 @@ read it before.
   list and a "Forecast from …" badge in its header linking to its own panel
   (`forecast/ForecastPanel.svelte`, its own chunk, `#res-forecast`, the menu
   entry **Forecast** right after Summary): which days, from how much forecast
-  rain after which recorded day; per farm the lowest dam level expected, the
+  rain after which recorded day ("Next 14 days: 29 Jan 2022 to 11 Feb 2022,
+  modelled on … after the last recorded rain on 28 Jan 2022", day first); per farm the lowest dam level expected, the
   days short expected and the share of demand supplied, farms short on a
   forecast day first; and the outlet's EWR days at risk, counts only. No
   misleading certainty (the persona rules): every figure is "expected" or
@@ -7566,12 +7569,18 @@ read it before.
   residual by eye, as in the summary CSV. A red residual
   if it isn't float noise; a GR4J run adds the runoff model's residual in mm.
   The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
-  and a date (it opens on the farm-day with the largest residual) and it
+  and a day (it opens on the farm-day with the largest residual) and it
   fetches `GET …/runs/:runId/day` and lists every column in FarmTemplate order,
   with its letter, value and formula, starting from the day before's storage
   (and, engine ≥ 0.14.0, the day before's soil-water store, from which the
   day's effective rain used and the store can be redone), then works the day's balance out from the numbers shown: in (H + I + J +
-  rain on dam) − used (G − T) − evaporated − stored (Q − Q[t−1]) − out (U). Parameters and names come from
+  rain on dam) − used (G − T) − evaporated − stored (Q − Q[t−1]) − out (U). The day is a text field read
+  day first (`format/number.ts` `parseDay`: "15 Nov 2021", "15/11/2021", "15.11.2021" or "2021-11-15", never
+  month first), shown as "15 Nov 2021" once read, with "Run days 1 Oct 2021 to 28 Jan 2022, day first." under
+  the form; a day it can't read, or one outside the run, replaces that line with what's wrong (an alert,
+  the field `aria-invalid` and focused) and traces nothing. It was a native date field, which shows the
+  browser's own order (12/30/2021 in a US browser; issue #521). The table's caption and the largest
+  residual's day are day first too. Parameters and names come from
   the run's input snapshot, not today's model. The picker's first option,
   **Catchment (rain to natural flow)**, traces the runoff model's day instead
   (`GET …/runs/:runId/day` without a `nodeId`): for GR4J, rain used P, PET E,
@@ -10391,9 +10400,15 @@ published.
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My hydrological unit", the EN | AF
   language switch, Menu: your farms, the words, Account, the privacy notice, on a catchment's
-  pages *Who decides about your farm's information*, "Don't keep a copy
+  pages *Who decides about your hydrological unit's information*, "Don't keep a copy
   on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
-- **Who decides about your farm's information** (`/farm/[id]/who-decides`,
+  The Menu's link to the page shown carries `aria-current="page"` (your
+  farms on `/farm`, the words, Account, Who decides). Who decides carries
+  the farm a farm page shows (`?node=`, as the page's other links do,
+  `load.ts` `farmHref`; `FarmShell`'s `nodeId`, else the URL's own), so its
+  back link returns to that farm rather than to the one the phone last
+  remembered (issue #521).
+- **Who decides about your hydrological unit's information** (`/farm/[id]/who-decides`,
   POPIA s18(1)(b), 168): the organisation that runs the catchment (the
   project's team) and the person or office to ask, as the team's owners set
   it in Team settings (`GET /projects/:id/privacy-contact`): name, a
@@ -10401,8 +10416,10 @@ published.
   it says to ask the person who invited them or the WUA. Both link the
   privacy notice's § 2. While it loads, the title and one skeleton card the
   card's height; a failure is the farm pages' error state with **Try again**
-  (the contact line after a second failure), and 403/404 their "removed"
-  state (`farm-view.spec.ts`).
+  (the contact line after a second failure), titled "We couldn’t load this
+  page" (`FarmStatus`'s `title`; a farm's own pages say "We couldn’t load
+  your hydrological unit"), and 403/404 their "removed" state
+  (`farm-view.spec.ts`).
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert
   emails" link lands there): the header's **Your hydrological units** back link in
@@ -10468,7 +10485,8 @@ published.
   a use is lawful"; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
   notice and when the river asked for no cut, since its % would only repeat
-  the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
+  the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months ("Last 12 months, in ML" or "…, in m³":
+  title, axis and table in the unit the reader chose on the water-received card, issue #521; inline SVG bars at the rendered width, a
   summary sentence and a full table behind "Show the numbers": each month's
   needed and received, and under the received a line with the share of the
   need and the engine's stress class in plain words ("99 % · all or nearly
@@ -10494,7 +10512,12 @@ published.
   MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
   the reader's language, and a one-line key (the land in its band's colour,
   "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
-  map draws them). A failed request says so in one line; the offline view
+  map draws them). The map draws without basemap tiles too (the farm's own
+  features on a plain background). The page's ready state doesn't wait for
+  it: the card carries `data-ready="true"` once the map has drawn or said
+  why it can't (no WebGL), or its chunk failed (`CatchmentMap`'s
+  `onstatus`); until then the map says "Drawing the map…" (issue #521,
+  `farm-map.spec.ts`). A failed request says so in one line; the offline view
   leaves it out; "Notes about your hydrological unit" ([§ Notes](#notes)); the
   CSV download. The CSV download fetches the file (the farm's last 365
   days to `dataUntil`, in whole m³, headed by the series keys; api.md
@@ -10536,6 +10559,14 @@ published.
   heading ("Dam level at the end of each month", the numbers table's caption
   reused, so it needed no new translation), with % ticks, a month under each
   point, and a caption with the months it covers and what the dashed line is.
+  Both charts keep each month at least 20 px (`chartGeometry.ts`
+  `MIN_MONTH_PX`): where a column of axis labels would leave less (a 320 px
+  phone; "100 %", or "160 000" in m³), the labels move into the plot, each
+  just above its grid line with a halo in the card's colour, drawn over the
+  bars or line, and the plot's top drops to make room (`chart.ts`
+  `axisPlacement`; `farm-view.spec.ts` measures the letters' gaps at 320 px).
+  A farm with no dam: its dam page says "… has no dam in the model." and
+  links back, with no estimate line (there is no figure for it to precede).
 - **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
   figures are worked out by a computer model of the catchment. They are
   estimates, not measurements or instructions, and they can be wrong. Only a
@@ -10545,7 +10576,7 @@ published.
   first figure on every farm page: on the main page right after the WUA's
   notice, in the offline view after the notice and before "At a glance", and
   on the dam and *Why?* pages after the header (`farm-view.spec.ts` pins the
-  order). It used to sit at the foot of the main page only.
+  order; not on a dam page with no dam, which has no figures). It used to sit at the foot of the main page only.
 - **"Before you look at your farm"** (`farm/FarmNoticeGate.svelte`, words in
   `farm/farmNotice.ts`): until the signed-in account has pressed **I
   understand** on the version in force (`/auth/me` `farmNoticeCurrent`, the

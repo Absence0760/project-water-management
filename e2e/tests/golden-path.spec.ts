@@ -155,7 +155,7 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 	let upload = await openAddData(page);
 	await upload.getByLabel('Kind').selectOption({ label: 'Rainfall — catchment' });
 	await upload.getByLabel('CSV file').setInputFiles(fixture('rainfall-2y.csv'));
-	await expect(upload.getByRole('definition').nth(0)).toHaveText('2020-10-01 → 2022-09-30');
+	await expect(upload.getByRole('definition').nth(0)).toHaveText('1 Oct 2020 → 30 Sep 2022');
 	await upload.getByRole('button', { name: 'Upload' }).click();
 	await expect(uploadedNote(page)).toHaveText('Uploaded 730 days to “Rainfall — catchment”.');
 

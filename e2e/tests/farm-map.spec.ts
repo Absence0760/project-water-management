@@ -80,8 +80,12 @@ test('a farmer sees their own land and dam on a small map, said in words, and ne
 	// Phone first: the card fits a 360 px screen without sideways scroll.
 	const [scroll, inner] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
 	expect(scroll).toBeLessThanOrEqual(inner);
-	// The map has drawn or said why it can't (no WebGL in some headless browsers): either way the page stays accessible.
-	await expect(page.getByTestId('catchment-map').locator('xpath=..')).toHaveAttribute('data-status', /ready|failed/);
+	// The card is ready once the map has drawn or said why it can't (no WebGL in some headless browsers), not
+	// with the page (the map draws after it): either way the page stays accessible. Without basemap tiles (this
+	// build) it still draws the farm's own features, on a plain background.
+	await expect(card).toHaveAttribute('data-ready', 'true');
+	await expect(page.getByTestId('catchment-map').locator('xpath=..')).toHaveAttribute('data-status', /^(?:ready|failed)$/);
+	await expect(card.getByRole('status').filter({ hasText: 'Drawing the map…' })).toHaveCount(0);
 	// Drawn, its zoom buttons are the farm pages' 44 px targets (MapLibre's own are 29 px).
 	if ((await page.getByTestId('catchment-map').locator('xpath=..').getAttribute('data-status')) === 'ready') {
 		for (const name of ['Zoom in', 'Zoom out']) {

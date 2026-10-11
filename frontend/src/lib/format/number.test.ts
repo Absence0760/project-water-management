@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseNum, zonedIsoDate } from './number';
+import { fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, parseNum, zonedIsoDate } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -184,5 +184,26 @@ describe('zonedIsoDate', () => {
 		expect(zonedIsoDate(now, 'Africa/Johannesburg')).toBe('2024-01-06');
 		expect(zonedIsoDate(now, 'UTC')).toBe('2024-01-05');
 		expect(() => zonedIsoDate(now, 'Not/AZone')).toThrow(RangeError);
+	});
+});
+
+describe('parseDay', () => {
+	it('reads a day typed day first, as fmtDay shows it, or year first', () => {
+		for (const typed of ['15 Nov 2021', '15 nov 2021', '15 November 2021', ' 15  Nov.  2021 ', '15 Nov, 2021', '15/11/2021', '15-11-2021', '15.11.2021', '2021-11-15', '2021/11/15']) {
+			expect(parseDay(typed), typed).toBe('2021-11-15');
+		}
+		expect(parseDay('1 Sept 2021')).toBe('2021-09-01');
+		expect(parseDay('5/3/2021')).toBe('2021-03-05');
+		// Round trip with fmtDay.
+		expect(parseDay(fmtDay('2024-02-29'))).toBe('2024-02-29');
+	});
+
+	it('never reads a day month first, and refuses days that don’t exist', () => {
+		for (const typed of ['11/15/2021', '31 Nov 2021', '29 Feb 2023', '2021-13-01', '0 Jan 2021', '15 Novv 2021', '15 Nob 2021', '15 Nov', 'Nov 15 2021', '', 'yesterday', '2021-11-15T00:00']) {
+			expect(parseDay(typed), typed).toBeNull();
+		}
+		expect(parseDay('29 Feb 2024')).toBe('2024-02-29');
+		expect(parseDay('29 Feb 2000')).toBe('2000-02-29');
+		expect(parseDay('29 Feb 1900')).toBeNull();
 	});
 });

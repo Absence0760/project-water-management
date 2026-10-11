@@ -30,7 +30,7 @@ import {
 	type ApanDailyFingerprint
 } from '@water-management/engine';
 import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
-import { fmtNum } from '$lib/format/number';
+import { fmtDay, fmtNum } from '$lib/format/number';
 
 export interface FitRequest {
 	input: ModelInput;
@@ -366,5 +366,12 @@ export function fitRecordFor(
 	});
 }
 
-/** "2026-09-24 10:05 UTC" for a fit record's ISO timestamp. */
-export const fittedAtText = (iso: string) => iso.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC');
+/**
+ * "24 Sep 2026 10:05 UTC" for a fit record's ISO timestamp: day first, as
+ * every date a person reads, and in UTC, so the printed report says the same
+ * wherever it is read. Anything else is returned unchanged.
+ */
+export function fittedAtText(iso: string): string {
+	const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z$/.exec(iso);
+	return m ? `${fmtDay(m[1]!)} ${m[2]} UTC` : iso;
+}

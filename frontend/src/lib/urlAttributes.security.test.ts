@@ -61,7 +61,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	mapHref: { why: 'NodeCard/NodeDetail: their `mapHref` prop, which NetworkTab builds with mapNodeHref(node id) or leaves null', in: ['lib/components/network/NodeCard.svelte', 'lib/components/network/NodeDetail.svelte'] },
 	allocationsHref: { why: 'BUILDER: "?" + URLSearchParams (tab=allocations, the run id and unit node id from the API; allocations/links.ts, #444)', in: ['lib/components/overview/OverviewTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
-	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
+	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id (FarmShell: its own projectId prop and a ?node= it encodes); NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/farm/FarmShell.svelte', 'lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
 	packHref: {

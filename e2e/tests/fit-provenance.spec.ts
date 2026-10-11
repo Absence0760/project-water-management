@@ -46,7 +46,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Fitted' })).toBeVisible();
 	const prov = page.getByRole('region', { name: /^Where the parameters came from/ });
-	await expect(prov).toContainText(/GR4J fit of \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
+	await expect(prov).toContainText(/GR4J fit of \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} UTC/);
 	await expect(definition(prov, 'Seed')).toHaveText('7');
 	await expect(definition(prov, 'Objective')).toHaveText('KGE′ (Kling–Gupta, 2012)');
 	await expect(definition(prov, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');

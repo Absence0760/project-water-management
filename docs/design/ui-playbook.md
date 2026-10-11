@@ -1058,6 +1058,20 @@ Interaction details that bit:
   `LineChart` passes `TIME_TICKS` (`charts/series.ts`: "30 Dec", the year
   under each year's first tick); a new time chart uses `LineChart` or that
   table, never uPlot's default.
+- **A typed date is day first too, so not `<input type="date">`.** A native
+  date field shows the browser's own order: Trace a day read "12/30/2021"
+  in a US-locale browser (issue #521). Where a person types one day, use a
+  text field read by `parseDay` (`format/number.ts`: "15 Nov 2021",
+  "15/11/2021", "2021-11-15", never month first), show it back through
+  `fmtDay` once read, and say a day it can't read or that is out of range at
+  the field (`runs/SelfChecksPanel.svelte`, `self-checks.spec.ts`).
+- **A small chart's month letters keep their room at 320 px.** The farm
+  charts' "J F M A M …" nearly touched beside a "100 %" axis column on a
+  320 px phone (issue #521). Below 20 px a month (`chartGeometry.ts`
+  `MIN_MONTH_PX`), the axis labels move into the plot, each just above its
+  grid line, drawn after the bars or line with a halo in the card's colour
+  (`chart.ts` `axisPlacement`). Pin it by measuring the letters' gaps in the
+  rendered SVG (`farm-view.spec.ts`).
 - **Measure a one-line meta with the font's real figures.** Inter's
   tabular figures set each hyphen a digit wide, so the runs rail's
   "2026-10-11 01:01 · 2021–2022" missed its line by a few px and broke

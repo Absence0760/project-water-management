@@ -39,11 +39,12 @@
 			<p class="sub">{view.farm.name}</p>
 			<DatesLine line={datesLine(view, farmToday(view))} />
 		</div>
-		<EstimateNote />
 		{#if !d}
+			<!-- No figures, so no estimate line (it precedes the first figure, issue #47). -->
 			<p>{t('{farm} has no dam in the model.', { farm: view.farm.name })}</p>
 			<a class="link" href={main}>{t('Back to my hydrological unit')}</a>
 		{:else}
+			<EstimateNote />
 			<section class="card" aria-labelledby="now-h">
 				<h2 id="now-h" class="visually-hidden">{t('How full it is')}</h2>
 				<p class="big"><span>{d.pct}</span><span class="sub">{d.asOf}</span></p>

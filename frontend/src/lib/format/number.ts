@@ -114,6 +114,36 @@ export function fmtDay(iso: string): string {
 	return m && month ? `${Number(m[3])} ${month} ${m[1]}` : iso;
 }
 
+const MONTHS_LONG = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const MONTH_NUMBER = new Map(MONTHS.map((m, i) => [m.toLowerCase(), i + 1]));
+
+/**
+ * A typed calendar day → YYYY-MM-DD, or null when it isn't one. Day first,
+ * as fmtDay shows it: "15 Nov 2021", "15 November 2021", "15/11/2021",
+ * "15-11-2021", "15.11.2021", and the ISO "2021-11-15" (year first is never
+ * ambiguous). Never month first, so "11/15/2021" is no day. The day must
+ * exist (no 31 Nov, 29 Feb only in a leap year). Read from the string, never
+ * through Date, so no time zone can shift it.
+ */
+export function parseDay(input: string): string | null {
+	const s = input.trim().replace(/\s+/g, ' ');
+	let y: number, m: number, d: number;
+	let x = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(s);
+	if (x) [y, m, d] = [Number(x[1]), Number(x[2]), Number(x[3])];
+	else if ((x = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(s))) [d, m, y] = [Number(x[1]), Number(x[2]), Number(x[3])];
+	else if ((x = /^(\d{1,2}) ([A-Za-z]{3,9})\.?,? (\d{4})$/.exec(s))) {
+		const word = x[2]!.toLowerCase();
+		const n = MONTH_NUMBER.get(word.slice(0, 3));
+		// The month's short name or its full name ("Sept" too), never any word that starts like one.
+		if (!n || !(word.length === 3 || MONTHS_LONG[n - 1]!.startsWith(word))) return null;
+		[d, m, y] = [Number(x[1]), n, Number(x[3])];
+	} else return null;
+	if (m < 1 || m > 12 || d < 1) return null;
+	const days = [31, y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]!;
+	if (d > days) return null;
+	return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 /**

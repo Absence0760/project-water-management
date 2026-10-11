@@ -525,9 +525,18 @@ describe('fitRecordFor', () => {
 		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null }).forcing).not.toHaveProperty('apanDaily');
 	});
 
-	it('shows the fit time in UTC to the minute', () => {
-		expect(fittedAtText('2026-09-24T10:05:33.120Z')).toBe('2026-09-24 10:05 UTC');
-		expect(fittedAtText('2026-09-24T10:05:33Z')).toBe('2026-09-24 10:05 UTC');
+	it('shows the fit time day first, in UTC to the minute, whatever the viewer’s zone', () => {
+		expect(fittedAtText('2026-09-24T10:05:33.120Z')).toBe('24 Sep 2026 10:05 UTC');
+		expect(fittedAtText('2026-09-24T10:05:33Z')).toBe('24 Sep 2026 10:05 UTC');
+		// Near midnight UTC: the UTC day, not the viewer's, in a zone where it is already the next day.
+		const tz = process.env.TZ;
+		try {
+			process.env.TZ = 'Pacific/Kiritimati';
+			expect(fittedAtText('2026-09-24T23:55:00Z')).toBe('24 Sep 2026 23:55 UTC');
+		} finally {
+			process.env.TZ = tz;
+		}
+		expect(fittedAtText('not a time')).toBe('not a time');
 	});
 });
 
