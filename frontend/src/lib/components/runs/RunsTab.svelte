@@ -41,6 +41,7 @@
 	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '$lib/components/river/links';
@@ -391,13 +392,8 @@
 			detailFor = '';
 			select(runs[0]?.id ?? null);
 		}
-		// Its row, and the ✕ that had the focus, have gone: the run now in its place (else the last)
-		// takes it, or the list's heading once none is left, so the focus doesn't fall to the top of the page.
-		await tick();
-		const picks = railEl?.querySelectorAll<HTMLElement>('ul.runs button.pick') ?? [];
-		const next = picks.length ? picks[Math.min(Math.max(at, 0), picks.length - 1)] : document.getElementById('runs-h');
-		if (next && !picks.length) next.tabIndex = -1;
-		next?.focus();
+		// Its row, and the ✕ that had the focus, have gone: the run now in its place takes it.
+		await focusAfterRemove(at, 'ul.runs button.pick', 'runs-h');
 	}
 
 	// Inputs changed since the newest run? Settings/model saves bump the

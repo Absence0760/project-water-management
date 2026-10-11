@@ -8,7 +8,8 @@
 	// out of the reading path.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -207,11 +208,8 @@
 			const at = members.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
 			if (team) team.memberCount -= 1;
-			// Its row, and the Remove button that had the focus, have gone: the member now in its place
-			// (else the last) takes it, on their role, so the focus doesn't fall to the top of the page.
-			await tick();
-			const rows = document.querySelectorAll<HTMLElement>('tr[data-member]');
-			(rows[Math.min(at, rows.length - 1)]?.querySelector<HTMLElement>('select, button:not([disabled])') ?? emailInput)?.focus();
+			// Its row, and the Remove button that had the focus, have gone: the member now in its place takes it, on their role.
+			await focusAfterRemove(at, 'tr[data-member] select', emailInput);
 		} catch (err) {
 			error = msg(err);
 		} finally {
