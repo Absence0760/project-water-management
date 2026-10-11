@@ -82,6 +82,13 @@ test('a farmer sees their own land and dam on a small map, said in words, and ne
 	expect(scroll).toBeLessThanOrEqual(inner);
 	// The map has drawn or said why it can't (no WebGL in some headless browsers): either way the page stays accessible.
 	await expect(page.getByTestId('catchment-map').locator('xpath=..')).toHaveAttribute('data-status', /ready|failed/);
+	// Drawn, its zoom buttons are the farm pages' 44 px targets (MapLibre's own are 29 px).
+	if ((await page.getByTestId('catchment-map').locator('xpath=..').getAttribute('data-status')) === 'ready') {
+		for (const name of ['Zoom in', 'Zoom out']) {
+			const box = (await card.getByRole('button', { name }).boundingBox())!;
+			expect(Math.min(box.width, box.height), name).toBeGreaterThanOrEqual(44);
+		}
+	}
 	await expectNoViolations(page);
 });
 

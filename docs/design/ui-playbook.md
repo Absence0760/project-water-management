@@ -396,6 +396,15 @@ section it belongs to, with the example that taught it.
   doesn't add its own `scroll-margin-top` on top (the notice's 72 px then
   doubled it). `farm-view.spec.ts` checks a link lands below the header at
   both widths.
+- **A frame with its own base size checks what it borrows.** The farm pages
+  set 16 px on their frame, but `rem` still means the app's 14 px root, so the
+  workspace's notes list inside them drew its help line, meta line and Add
+  note button at 0.85rem (11.9 px, the button 24 px tall on a desktop), and
+  the forecast and outlook kickers, written as 0.8125rem for "13 px", came
+  out at 11.4 px. Size in `px` inside such a frame, lift a borrowed piece in
+  the frame's own copy (`farm/FarmNotes.svelte`), and pin the floor by
+  walking the page's text (`farm-view.spec.ts` fails on any visible text
+  under 13 px).
 - **Print is a layout too.** The report route feeds the server PDF, so the
   frame must never reach paper: the shell's `.app-header` was renamed when
   the sidebar came in, the report's print rule kept hiding the old name, and

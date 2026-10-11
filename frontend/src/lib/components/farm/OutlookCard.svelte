@@ -29,7 +29,7 @@
 	}
 	.kicker {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: 13px;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;

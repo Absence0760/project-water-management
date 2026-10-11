@@ -32,7 +32,8 @@
 	<section class="card farm-alert" aria-labelledby="farm-alert-h" data-testid="farm-alert">
 		<h2 id="farm-alert-h">{t('Alerts')}</h2>
 		<p>{text}</p>
-		<p class="fine"><a href="{base}/account/alerts">{t('Choose your alert emails')}</a></p>
+		<!-- A link of its own, not a line of small print: a 44 px target like the page's other links. -->
+		<a class="link" href="{base}/account/alerts">{t('Choose your alert emails')}</a>
 	</section>
 {/if}
 

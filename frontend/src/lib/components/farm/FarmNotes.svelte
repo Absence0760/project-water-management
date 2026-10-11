@@ -14,7 +14,7 @@
 	let { projectId, nodeId, farmName, preview }: { projectId: string; nodeId: string; farmName: string; preview: boolean } = $props();
 </script>
 
-<section class="card" aria-labelledby="farm-notes-h">
+<section class="card farm-notes" aria-labelledby="farm-notes-h">
 	<h2 id="farm-notes-h">{t('Notes about your hydrological unit')}</h2>
 	<p class="sub">{t('Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this hydrological unit.', { farm: farmName })}</p>
 	<NotesList
@@ -27,3 +27,23 @@
 		words={farmNotesWords()}
 	/>
 </section>
+
+<style>
+	/* NotesList is the workspace's, sized for its 14 px root (.small, .meta and
+	   .btn-sm at 0.85rem, 11.9 px; the button 24 px tall above 640 px). The farm
+	   pages' floor is 13 px text and 44 px targets at every width (ui.md §
+	   Farmer view), so the farm's copy lifts them here. */
+	.farm-notes :global(.small),
+	.farm-notes :global(.meta) {
+		font-size: 14px;
+	}
+	.farm-notes :global(.btn-sm) {
+		min-height: var(--tap);
+		padding: 0 16px;
+		font-size: 15px;
+	}
+	/* "No notes … yet." sat on the form's label with no gap between them. */
+	.farm-notes :global(.notes > p.muted) {
+		margin: 0 0 12px;
+	}
+</style>

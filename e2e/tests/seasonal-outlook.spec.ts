@@ -286,6 +286,8 @@ test('the review triggers show for the review date, and a level published to far
 	await farmer.page.goto(`/farm/${project.id}`);
 	const card = farmer.page.getByTestId('farm-outlook');
 	await expect(card.getByRole('heading', { name: 'This season' })).toBeVisible();
+	// The kicker is at the farm pages' 13 px floor (it was 0.8125rem of the 14 px root, 11.4 px).
+	expect(await card.getByText('Season outlook', { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13);
 	const level = outlook.result.levels[1]!;
 	const own = level.demandMetByFarm.find((f) => f.nodeId === upper.id)!.stat!;
 	const dam = level.storageByDam.find((d) => d.nodeId === upper.id)!;

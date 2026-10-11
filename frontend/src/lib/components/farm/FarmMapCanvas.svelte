@@ -66,6 +66,11 @@
 		height: 280px;
 		min-height: 0;
 	}
+	/* MapLibre's zoom buttons are 29 px; the farm pages' targets are 44 px. */
+	.farm-map :global(.maplibregl-ctrl-group button) {
+		width: var(--tap);
+		height: var(--tap);
+	}
 	.legend {
 		list-style: none;
 		margin: 8px 0 0;

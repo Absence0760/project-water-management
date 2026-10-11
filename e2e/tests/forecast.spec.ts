@@ -107,6 +107,8 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expect(card.getByRole('heading', { name: /^Next 14\sdays$/ })).toBeVisible();
 	await expect(card).toContainText('Forecast');
 	await expect(card).toContainText('Forecasts change');
+	// The kicker is at the farm pages' 13 px floor (it was 0.8125rem of the 14 px root, 11.4 px).
+	expect(await card.getByText('Forecast', { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13);
 	await expectNoViolations(farmer.page, { include: '[data-testid="farm-forecast"]' });
 });
 
