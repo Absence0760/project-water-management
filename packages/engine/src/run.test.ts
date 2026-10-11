@@ -2031,7 +2031,7 @@ describe.skipIf(!clientCatchmentFixture)(
 			expect(full.summary.verification!.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
 		});
 
-		it('B4: spreads each detected accumulation over its window, keeping its total, and the zero-run fill leaves those days alone', () => {
+		it('B4: spreads each detected accumulation (after blank days only, engine ≥ 1.84.0) over its window, keeping its total, and the zero-run fill leaves those days alone', () => {
 			const recorded = prepareRun(modelInput);
 			const settings = { ...modelInput.settings } as Record<string, unknown>;
 			delete settings.zeroRainRuns; // the default: zero runs missing, accumulations spread
@@ -2039,8 +2039,18 @@ describe.skipIf(!clientCatchmentFixture)(
 			const acc = run.accumulation!;
 			expect(acc.info.mode).toBe('spread');
 			const spread = acc.info.windows.filter((w) => w.status === 'spread');
-			expect(spread.length).toBeGreaterThan(0);
 			expect(spread.every((w) => w.source === 'detected' && w.totalMm >= w.readingMm && w.readingMm >= ACC_MIN_MM)).toBe(true);
+			// Engine ≥ 1.84.0 (issue #523 A2): only blank days make a run, so every detected window's days before
+			// the reading are blank in the stored record, never a recorded 0. (The client record has no such window.)
+			const stored = modelInput.series.rain_catchment_mm!;
+			const s0 = toEpochDay(stored.startDate);
+			for (const w of acc.info.windows) {
+				if (w.source !== 'detected' || w.outageDays != null) continue;
+				for (let day = toEpochDay(w.start); day < toEpochDay(w.end); day++) {
+					const v = stored.values[day - s0];
+					expect(v == null || !Number.isFinite(v), w.start).toBe(true);
+				}
+			}
 			const d0 = toEpochDay(run.startDate);
 			const a = run.aligned('rain_catchment_mm');
 			const b = recorded.aligned('rain_catchment_mm');
@@ -2075,8 +2085,9 @@ describe.skipIf(!clientCatchmentFixture)(
 				if (!inWindow[t] && !setAside[t] && !run.zeroRain!.mask[t] && a[t] !== b[t]) bad.push(t);
 			}
 			expect(bad.slice(0, 5)).toEqual([]);
-			// The windows are left out of the CHIRPS factor fit, day by day.
-			expect(run.chirpsCorrection!.accumulationDaysLeftOut).toBeGreaterThan(0);
+			// The windows are left out of the CHIRPS factor fit, day by day (their blank days never were in it).
+			if (acc.info.windows.length === 0) expect(run.chirpsCorrection!.accumulationDaysLeftOut ?? 0).toBe(0);
+			else expect(run.chirpsCorrection!.accumulationDaysLeftOut).toBeGreaterThan(0);
 			// The model still conserves water with both on.
 			const input = { ...modelInput, settings };
 			const full = withVerification(input, runModel(input));

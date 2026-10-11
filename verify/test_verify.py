@@ -36,9 +36,14 @@ MUTANT_DENSE = 12
 # text must occur exactly once when its edit is applied.
 MUTANTS = [
     (
-        "blank days count like zeros however many (before engine 1.70.0, Q31)",
-        "if j - s > ACC_MAX_BLANK_DAYS:",
+        "a blank stretch of any length is a run (before engine 1.70.0, Q31)",
+        "if n > ACC_MAX_BLANK_DAYS:",
         "if False:",
+    ),
+    (
+        "days of 0 count towards an accumulation's run like blanks (before engine 1.84.0, issue #523 A2)",
+        "while j >= 0 and blank(j):",
+        "while j >= 0 and (blank(j) or c.values[j] == 0):",
     ),
     (
         "a flagged zero-rain day is filled whatever CHIRPS reads (before engine 1.81.0, B2)",
@@ -52,8 +57,8 @@ MUTANTS = [
     ),
     (
         "a blank stretch of exactly 7 days ends the run (Q31 limit off by one)",
-        "if j - s > ACC_MAX_BLANK_DAYS:",
-        "if j - s >= ACC_MAX_BLANK_DAYS:",
+        "if n > ACC_MAX_BLANK_DAYS:",
+        "if n >= ACC_MAX_BLANK_DAYS:",
     ),
     ("transfers ignore the receiver's room (N4)", "room_left[dst] = max(0.0, rm)", "room_left[dst] = math.inf"),
     (
@@ -72,9 +77,9 @@ MUTANTS = [
     ("flagged zero runs run as recorded (B2)", 'mode = zr.get("mode", "missing")', 'mode = "asRecorded"'),
     ("accumulations stay on their reading day (B4)", 'if acc_mode == "spread":', "if False:"),
     (
-        "the accumulation test reads CHIRPS over the whole run, not the window's run days",
+        "an outage reading's run test reads CHIRPS over the whole outage, not its last 92 days",
         "sum(ch(o) for o in run_days if o != r - 1)",
-        "sum(ch(o) for o in range(r - k, r) if o != r - 1)",
+        "sum(ch(o) for o in range(r - max(k, outage), r) if o != r - 1)",
     ),
     (
         "the usual low-vs-CHIRPS ratio of an even count is the upper middle year",

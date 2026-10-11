@@ -1,9 +1,10 @@
 // End-to-end: blank days, logger outages and multi-day accumulations
 // (docs/model.md §2.4d, engine ≥ 1.70.0, Q31 in issue #90, issue #393),
-// through runModel on invented catchments. A blank stretch counts towards an
-// accumulation only up to 7 days; a longer one is an outage that ends the
-// run, and a ≥ 20 mm reading straight after one that passes the CHIRPS tests
-// is set aside as missing. Expected rain is worked out here from the rules.
+// through runModel on invented catchments. Only blank days make an
+// accumulation's run (engine ≥ 1.84.0: a recorded 0 ends it), and only up to
+// 7 of them; a longer stretch is an outage, and a ≥ 20 mm reading straight
+// after one that passes the CHIRPS tests is set aside as missing. Expected
+// rain is worked out here from the rules.
 //
 // The background: catchment = ratio(month) × CHIRPS on every ordinary day, so
 // every CHIRPS factor is exactly ratio(month) as long as the suspect days stay
@@ -189,31 +190,47 @@ describe('7 blank days count, 8 break the window (ACC_MAX_BLANK_DAYS)', () => {
 		for (let d = f.a; d <= f.r; d++) expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo(f.fill(d), 12);
 	});
 
-	it('zeros and short blank stretches mixed (5 + 0 + 5 + 0 0): one window over all 13 days', () => {
-		const f = fixture('2017-12-22', [...blanks(5), 0, ...blanks(5), 0, 0], 60);
+	it('engine 1.84.0: blanks and zeros mixed, only the blanks after the last 0 count (5 + 0 + 5: a window over the last 5; + 0 0: none)', () => {
+		const f = fixture('2017-12-22', [...blanks(5), 0, ...blanks(5)], 60);
 		const out = runModel(catchment(f.series));
-		expect(out.summary.rainAccumulation!.windows.map((w) => [w.start, w.status])).toEqual([['2017-12-22', 'spread']]);
-		expect(sumUsed(out, f.a, f.r)).toBeCloseTo(60, 10);
+		const w0 = f.r - 5;
+		expect(out.summary.rainAccumulation!.windows.map((w) => [w.start, w.status, w.runDays])).toEqual([[fromEpochDay(w0), 'spread', 5]]);
+		expect(sumUsed(out, w0, f.r)).toBeCloseTo(60, 10);
+		expect(col(out, 'rain_used')![f.t(w0 - 1)]).toBe(0);
+		const g = fixture('2017-12-22', [...blanks(5), 0, ...blanks(5), 0, 0], 60);
+		const out2 = runModel(catchment(g.series));
+		expect(out2.summary.rainAccumulation?.windows ?? []).toEqual([]);
+		expect(col(out2, 'rain_used')![g.t(g.r)]).toBe(60);
 	});
 });
 
 describe('a long outage, then days of 0 or blank, then the reading', () => {
-	it('5 days after a 30-day outage: the window is those 5 days and the reading; the outage is CHIRPS-filled', () => {
-		const f = fixture('2017-12-01', [...blanks(30), ...zeros(5)], 50);
+	it('a 0 then 5 blank days after a 30-day outage: the window is those 5 days and the reading; the outage is CHIRPS-filled', () => {
+		const f = fixture('2017-12-01', [...blanks(30), 0, ...blanks(5)], 50);
 		const out = runModel(catchment(f.series));
 		const w0 = f.r - 5;
-		expect(out.summary.rainAccumulation!.windows.map((w) => [w.start, w.end, w.status, w.runDays])).toEqual([[fromEpochDay(w0), '2018-01-05', 'spread', 5]]);
+		expect(out.summary.rainAccumulation!.windows.map((w) => [w.start, w.end, w.status, w.runDays])).toEqual([[fromEpochDay(w0), fromEpochDay(f.r), 'spread', 5]]);
 		let W = 0;
 		for (let d = w0; d <= f.r; d++) W += f.fill(d);
 		for (let d = w0; d <= f.r; d++) expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo((50 * f.fill(d)) / W, 10);
 		expect(sumUsed(out, w0, f.r)).toBeCloseTo(50, 10);
 		const spread = col(out, 'rain_catchment_spread')!;
 		const source = col(out, 'rain_source')!;
-		for (let d = f.a; d < w0; d++) {
-			expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo(f.fill(d), 12);
+		// The recorded 0 (31 December, under CHIRPS' h + 4) joins December's fit, so the outage reads the run's own factor.
+		const months = out.summary.chirpsCorrection!.months;
+		for (let d = f.a; d < w0 - 1; d++) {
+			expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo(months[monthOf(d) - 1]!.factor! * f.ch[f.t(d)]!, 12);
 			expect(spread[f.t(d)]).toBe(0);
 			expect(source[f.t(d)]).toBe(2);
 		}
+		// The recorded 0 is a reading: it runs as 0 and is not in the window.
+		expect(col(out, 'rain_used')![f.t(w0 - 1)]).toBe(0);
+		expect(spread[f.t(w0 - 1)]).toBe(0);
+		// The same 5 days entered as 0: no window, nothing set aside, the 50 mm stays on its day (engine 1.84.0).
+		const z = fixture('2017-12-01', [...blanks(30), ...zeros(5)], 50);
+		const zo = runModel(catchment(z.series));
+		expect(zo.summary.rainAccumulation?.windows ?? []).toEqual([]);
+		expect(col(zo, 'rain_used')![z.t(z.r)]).toBe(50);
 	});
 
 	it('2 days after it: no window and nothing set aside; the reading stays on its day and the zeros stay 0', () => {
@@ -231,11 +248,11 @@ describe('a long outage, then days of 0 or blank, then the reading', () => {
 		expect(out.summary.warnings.some((x) => x.includes('accumulation') || x.includes('blank outage'))).toBe(false);
 	});
 
-	it('an outage in the middle of a flagged zero run: §2.4c fills the zeros before it, CHIRPS the outage, the window takes the zeros after it', () => {
-		// 70 zeros (Nov–Jan, flagged: 60+ wet-season days), 10 blanks, 20 zeros, then one wet day (80).
-		const f = fixture('2017-11-01', [...zeros(70), ...blanks(10), ...zeros(20)], 80);
+	it('an outage after a flagged zero run, then a 0 and 5 blanks: §2.4c fills the zeros, CHIRPS the outage, the window takes the 5 blanks', () => {
+		// 70 zeros (Nov–Jan, flagged: 60+ wet-season days), 10 blanks, a 0, 5 blanks, then one wet day (80).
+		const f = fixture('2017-11-01', [...zeros(70), ...blanks(10), 0, ...blanks(5)], 80);
 		const out = runModel(catchment(f.series));
-		const w0 = f.r - 20;
+		const w0 = f.r - 5;
 		expect(out.summary.rainAccumulation!.windows.map((w) => [w.start, w.status])).toEqual([[fromEpochDay(w0), 'spread']]);
 		expect(sumUsed(out, w0, f.r)).toBeCloseTo(80, 10);
 		const miss = col(out, 'rain_catchment_missing')!;
@@ -245,10 +262,11 @@ describe('a long outage, then days of 0 or blank, then the reading', () => {
 			expect(spread[f.t(d)]).toBe(0);
 			expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo(f.fill(d), 12);
 		}
-		for (let d = f.a + 70; d < w0; d++) {
+		for (let d = f.a + 70; d < w0 - 1; d++) {
 			expect(miss[f.t(d)]).toBe(0); // blank, not a zero: CHIRPS fills it as any blank day
 			expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo(f.fill(d), 12);
 		}
+		expect(col(out, 'rain_used')![f.t(w0 - 1)]).toBe(0); // the lone 0: a reading, not flagged
 		for (let d = w0; d <= f.r; d++) {
 			expect(miss[f.t(d)]).toBe(0);
 			expect(spread[f.t(d)]).toBe(1);
@@ -257,7 +275,8 @@ describe('a long outage, then days of 0 or blank, then the reading', () => {
 	});
 
 	it('listing a window day as missing still drops the detection (the listed period wins)', () => {
-		const f = fixture('2017-12-01', [...blanks(30), ...zeros(5)], 50);
+		const f = fixture('2017-12-01', [...blanks(30), 0, ...blanks(5)], 50);
+		expect(runModel(catchment(f.series)).summary.rainAccumulation!.windows.map((w) => w.status)).toEqual(['spread']);
 		const out = runModel(catchment(f.series, zrs({ missing: [{ start: '2018-01-02', end: '2018-01-02', reason: 'invented: bad day' }] })));
 		expect(out.summary.rainAccumulation?.windows ?? []).toEqual([]);
 		expect(col(out, 'rain_used')![f.t(f.r)]).toBe(50);
@@ -290,8 +309,17 @@ describe('property: random outages in a 5-year record (40 seeds)', () => {
 				// Often a long blank stretch: at the gap's start (a window may follow it) or its end (the reading ends it).
 				const kind = g();
 				const long = 8 + Math.floor(g() * 20);
-				if (kind < 0.35) for (let i = a; i < Math.min(r, a + long); i++) c[i] = null;
-				else if (kind < 0.7) for (let i = Math.max(a, r - long); i < r; i++) c[i] = null;
+				if (kind < 0.3) for (let i = a; i < Math.min(r, a + long); i++) c[i] = null;
+				else if (kind < 0.55) for (let i = Math.max(a, r - long); i < r; i++) c[i] = null;
+				else if (kind < 0.85) {
+					// A short blank stretch (3–7 days) ends the gap after a recorded 0: a window may follow (engine ≥ 1.84.0).
+					const short = 3 + Math.floor(g() * 5);
+					c[r - short - 1] = 0;
+					for (let i = r - short; i < r; i++) {
+						c[i] = null;
+						ch[i] = h(D0 + i) + 4;
+					}
+				}
 				for (const i of [r - 1, r, r + 1]) ch[i] = 0.05;
 				c[r] = 20 + g() * 100;
 			}
@@ -371,9 +399,10 @@ describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)'
 		expect(out.summary.rainAccumulation?.windows ?? []).toEqual([]);
 		expect(col(out, 'rain_used')![g.t(g.r)]).toBe(40);
 		for (let d = g.a; d < g.r; d++) expect(col(out, 'rain_catchment_missing')![g.t(d)]).toBe(1);
-		// Positive control: unlisted, the 7 zeros and the reading are a spread window.
-		const plain = runModel(catchment(g.series));
-		expect(plain.summary.rainAccumulation!.windows.map((w) => w.status)).toEqual(['spread']);
+		// Unlisted, the 7 zeros are no run (engine 1.84.0); positive control: the same 7 days blank are a spread window.
+		expect(runModel(catchment(g.series)).summary.rainAccumulation?.windows ?? []).toEqual([]);
+		const blank = fixture('2017-12-27', blanks(7), 40);
+		expect(runModel(catchment(blank.series)).summary.rainAccumulation!.windows.map((w) => w.status)).toEqual(['spread']);
 	});
 
 	it('keepReadings still keeps it on its day', () => {

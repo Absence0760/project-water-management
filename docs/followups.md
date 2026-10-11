@@ -797,7 +797,7 @@ runs and accumulations are real) can't be decided without the client.
       `rain_catchment_spread` column, the summary CSV block, Data-tab shading,
       run comparison and fit provenance.** Still open, for the hydrologist
       (engine-audit.md question 10): (1) confirm the thresholds (20 mm; 3 days;
-      CHIRPS ±1 day < 25 %; CHIRPS over the run ≥ 50 %; 92-day cap) against
+      CHIRPS ±1 day < 25 %; CHIRPS over the run ≥ 50 %; 3 to 7 blank days) against
       the station's observer logs or "accumulated" flags, if the source files
       have them; (2) some detected windows read far less than CHIRPS over
       them. An unread gauge loses catch to evaporation and overflow, so decide
@@ -808,6 +808,7 @@ runs and accumulations are real) can't be decided without the client.
       Trigger: the hydrologist's review of issue #2.
       **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
       **Blank outages (issue #90 Q31, issue #393), built in engine 1.70.0:** a blank stretch counts towards a run only up to 7 days (`ACC_MAX_BLANK_DAYS`); days listed as missing count as blank; a ≥ 20 mm reading straight after a longer outage that passes the CHIRPS tests is set aside as missing (CHIRPS fills it, out of the fit, warned). Provisional (operator, 2026-10-03), to be confirmed by the hydrologist with the limit itself (it rests on reasoning, not a source; model.md §2.4d).
+      **Only blank days make a run (issue #90 *Multi-day rain accumulations*, issue #523 A2), built in engine 1.84.0:** a recorded 0 ends the run and is never part of a window, so 0 mm days followed by 20 mm or more is real rain on its day; the 92-day cap now bounds only an outage reading's CHIRPS test (model.md §2.4d). Threshold item (1) above no longer includes a cap on a window.
 - [x] **`verify/` follows the blank-outage rule (engine 1.70.0, model.md §2.4d).** *Done (issue #393): (1)–(3) and the probe are in `verify/` (`outage-reading-set-aside`, `short-blank-run-window`, three mutants); (4) stays out of scope while the harness refuses `keepReadings`/`addAccumulations`.*
       `verify/model.py` `detect_accumulations` counts every blank day back
       from a reading like a zero. It needs: (1) the run to stop at a stretch

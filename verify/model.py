@@ -293,14 +293,15 @@ def corrected_chirps(h: Series, factors, o: int, apply: bool):
 
 
 def detect_accumulations(c: Series, h: Series, factors, blocked: set[int], missing: set[int]):
-    """§2.4d: reading ≥ 20 mm after ≥ 3 days of 0 or blank; CHIRPS × the
-    factors (raw where a month has none) little on the reading day ± 1 and a
-    lot over the window's run days (the day before the reading left out).
-    Engine ≥ 1.70.0: a day listed as missing reads as blank, and a stretch of
-    more than 7 blank days in a row (measured whole) is an outage that ends
-    the run; a reading straight after one is judged over the outage's last
-    92 days instead and, when it passes, set aside. Returns (windows,
-    set-aside reading days)."""
+    """§2.4d: reading ≥ 20 mm after ≥ 3 blank days in a row (engine ≥ 1.84.0:
+    a recorded 0 is a reading and ends the run; before, days of 0 counted
+    too); CHIRPS × the factors (raw where a month has none) little on the
+    reading day ± 1 and a lot over the window's run days (the day before the
+    reading left out). Engine ≥ 1.70.0: a day listed as missing reads as
+    blank, and more than 7 blank days straight before the reading is an
+    outage, not a run; the reading is judged over the outage's last 92 days
+    instead and, when it passes, set aside. Returns (windows, set-aside
+    reading days)."""
     wins = []
     set_aside = []
     if not c or not h:
@@ -318,24 +319,15 @@ def detect_accumulations(c: Series, h: Series, factors, blocked: set[int], missi
         if blank(i) or v < ACC_MIN_MM:
             continue
         r = c.start + i
-        k = 0
-        outage = 0
         j = i - 1
-        while j >= 0:
-            if blank(j):
-                s = j
-                while s >= 0 and blank(s):
-                    s -= 1
-                if j - s > ACC_MAX_BLANK_DAYS:
-                    outage = j - s
-                    break
-                k += j - s
-                j = s
-            elif c.values[j] == 0:
-                k += 1
-                j -= 1
-            else:
-                break
+        while j >= 0 and blank(j):
+            j -= 1
+        n = i - 1 - j
+        k = n
+        outage = 0
+        if n > ACC_MAX_BLANK_DAYS:
+            outage = n
+            k = 0
         if h.get(r) is None:
             continue
         if k >= ACC_MIN_RUN_DAYS:

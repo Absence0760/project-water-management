@@ -2411,7 +2411,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   missing, treated as missing: its window is its own day, and `usedMm` is the CHIRPS or forecast
   rain the run used there instead) and `outageDays` on each window (the
   outage's length for a set-aside or as-recorded outage reading, else
-  `null`; absent on older runs).
+  `null`; absent on older runs). Engine ≥ 1.84.0 adds `criteria.blankOnly`
+  (`true`): only blank days make a window's run, so `runDays` counts blank
+  days (3 to 7 for a window); absent on older runs, whose runs counted days
+  of 0 too.
   Rules: [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations).
 - `summary.rainSource` (engine ≥ 0.30.0) is what `settings.rainSource` did,
   `null` without periods, absent on older runs: `{ periods: [{ start, end,

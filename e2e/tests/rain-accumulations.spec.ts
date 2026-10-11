@@ -5,9 +5,11 @@ import { openFold, saveChanges, saveSettings } from '../support/settings.ts';
 // Audit B4 (engine ≥ 0.20.0): a multi-day accumulation in the catchment rain.
 // Synthetic records only: CHIRPS reads 4 mm every third day April–September
 // and 1 mm every ninth day otherwise over water years 2010/11–2015/16, and the
-// catchment reads twice that, except that its gauge was not read for 20 days
-// in June 2012: those days read 0 and 2012-06-21 holds the lot, on a day CHIRPS
-// was dry (and the days either side). Too short a run for the zero-run check.
+// catchment reads twice that, except that its gauge was not read for the 7
+// days before 2012-06-21: those days are blank (engine ≥ 1.84.0: only blank
+// days make an accumulation's run, a recorded 0 never does), CHIRPS reads 4 mm
+// on each but the last, and 2012-06-21 holds the lot, on a day CHIRPS was dry
+// (and the days either side).
 async function seedAccumulation(request: Parameters<typeof createProject>[0], name: string): Promise<string> {
 	const project = await createProject(request, name);
 	const start = Date.UTC(2010, 9, 1);
@@ -16,12 +18,13 @@ async function seedAccumulation(request: Parameters<typeof createProject>[0], na
 	const index = (iso: string) => (Date.parse(iso) - start) / 86_400_000;
 	const chirps = Array.from({ length: days }, (_, i) => (monthOf(i) >= 4 && monthOf(i) <= 9 ? (i % 3 === 0 ? 4 : 0) : i % 9 === 0 ? 1 : 0));
 	const reading = index('2012-06-21');
+	for (let i = reading - 7; i < reading - 1; i++) chirps[i] = 4;
 	for (const i of [reading - 1, reading, reading + 1]) chirps[i] = 0;
-	const catchment = chirps.map((v) => v * 2);
+	const catchment: (number | null)[] = chirps.map((v) => v * 2);
 	let total = 0;
-	for (let i = reading - 20; i < reading; i++) {
+	for (let i = reading - 7; i < reading; i++) {
 		total += catchment[i]!;
-		catchment[i] = 0;
+		catchment[i] = null;
 	}
 	catchment[reading] = total;
 	await putSeries(request, project.id, { kind: 'rain_catchment_mm', name: 'Catchment rain', unit: 'mm', startDate: '2010-10-01', values: catchment });
@@ -38,8 +41,8 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 		await page.getByRole('row', { name: /Catchment rain/ }).getByRole('button', { name: 'View', exact: true }).click();
 		await expect(page.getByRole('img', { name: /^Rainfall — catchment · Catchment rain: line chart/ }).locator('canvas')).toBeVisible();
 	};
-	// The window is the unread days plus the fixture's own dry days just before them.
-	const shaded = page.getByText(/Shaded: 1 multi-day accumulation, 2\d days, whose recorded total a run spreads over the days it covers by CHIRPS\./);
+	// The window is the 7 unread days and the reading day.
+	const shaded = page.getByText('Shaded: 1 multi-day accumulation, 8 days, whose recorded total a run spreads over the days it covers by CHIRPS.');
 
 	await page.goto(`/projects/${projectId}?tab=series`);
 	await viewCatchment();

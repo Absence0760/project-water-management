@@ -1,28 +1,30 @@
 // Untagged multi-day rainfall accumulations (engine ≥ 0.20.0, audit B4,
 // issue #2, docs/model.md §2.4d).
 //
-// An observer who doesn't read the gauge for some days records 0 (or
-// nothing) for the unread days and then the whole accumulated total on the
-// day of the reading. Viney & Bates (2004, "It never rains on Sunday", Int.
-// J. Climatol. 24) found these untagged accumulations throughout the
+// An observer who doesn't read the gauge for some days leaves the unread
+// days blank and records the whole accumulated total on the day of the
+// reading. Viney & Bates (2004, "It never rains on Sunday", Int. J.
+// Climatol. 24) found these untagged accumulations throughout the
 // Australian high-quality daily record. They leave the total right and the
-// days wrong: a run of dry days, then one day far wetter than it was.
+// days wrong: a run of unread days, then one day far wetter than it was.
 //
 // Detection (detectAccumulations): a reading of at least ACC_MIN_MM, after
-// at least ACC_MIN_RUN_DAYS days of 0 or blank catchment rain (engine ≥
-// 1.70.0: a blank stretch counts only up to ACC_MAX_BLANK_DAYS; a longer one
-// is an outage, which ends the run), on a day
+// at least ACC_MIN_RUN_DAYS blank (missing) days of catchment rain, on a day
 // CHIRPS (±1 day, bias-corrected) reads under ACC_READING_DAY_SHARE of it,
 // when CHIRPS over the run before (the day before the reading left out, for
-// timing) reads at least ACC_RUN_SHARE of it. The window is the run, at most
-// its last ACC_MAX_RUN_DAYS days, plus the reading day.
+// timing) reads at least ACC_RUN_SHARE of it. The window is the run plus
+// the reading day. Engine ≥ 1.84.0 (issue #523 A2): only blank days make a
+// run. A recorded 0 is a reading: it ends the run and is never part of a
+// window, so 0 mm days followed by 20 mm or more is real rain on its day (up
+// to 1.83, days of 0 counted like blanks). A blank run counts only up to
+// ACC_MAX_BLANK_DAYS (engine ≥ 1.70.0); a longer one is an outage (below).
 //
 // Treatment (settings.zeroRainRuns.accumulationMode 'spread', the default):
 // the window's recorded total is kept and spread over its days in proportion
 // to bias-corrected CHIRPS there (the Viney & Bates remedy, with CHIRPS as
 // the reference series). The stored series is never changed. Window days
 // are not also set aside as a flagged zero run (that double counted the
-// rain up to 0.19), and are left out of the CHIRPS factor fit (§2.4b): their
+// rain up to 0.19, when a window could hold zeros), and are left out of the CHIRPS factor fit (§2.4b): their
 // recorded days are wrong and their spread days are CHIRPS-shaped, so
 // fitting on either would be circular.
 //
@@ -42,15 +44,19 @@ import { chirpsBiasFactors, chirpsFactorOn, type ChirpsCorrection, type ChirpsFi
 
 /** A reading must be at least this, mm, to be judged. */
 export const ACC_MIN_MM = 20;
-/** … after at least this many days of 0 or blank catchment rain. */
+/** … after at least this many blank catchment rain days in a row (engine ≥ 1.84.0; up to 1.83, days of 0 or blank). */
 export const ACC_MIN_RUN_DAYS = 3;
 /**
- * A stretch of blank days counts towards that run only up to this many days
- * (engine ≥ 1.70.0): a long weekend or a public holiday plus a weekend. A
- * longer one is an outage, which ends the run (docs/model.md §2.4d says why 7).
+ * A stretch of blank days is a run only up to this many days (engine ≥
+ * 1.70.0): a long weekend or a public holiday plus a weekend. A longer one is
+ * an outage (docs/model.md §2.4d says why 7).
  */
 export const ACC_MAX_BLANK_DAYS = 7;
-/** A window covers at most this many days of the run before the reading (about a season). */
+/**
+ * CHIRPS over at most this many days before the reading counts (about a
+ * season). Since engine 1.84.0 a window's run is at most ACC_MAX_BLANK_DAYS,
+ * so this bounds only the CHIRPS an outage reading is judged over.
+ */
 export const ACC_MAX_RUN_DAYS = 92;
 /** CHIRPS on the reading day and the days either side must read less than this share of the reading … */
 export const ACC_READING_DAY_SHARE = 0.25;
@@ -64,7 +70,9 @@ export const ACCUMULATION_CRITERIA = {
 	maxRunDays: ACC_MAX_RUN_DAYS,
 	maxBlankDays: ACC_MAX_BLANK_DAYS,
 	readingDayShare: ACC_READING_DAY_SHARE,
-	runShare: ACC_RUN_SHARE
+	runShare: ACC_RUN_SHARE,
+	/** Engine ≥ 1.84.0: only blank days make a run (a recorded 0 ends it); absent on a run saved before. */
+	blankOnly: true
 } as const;
 
 const isReading = (v: number | null | undefined): v is number => v != null && Number.isFinite(v) && v >= 0;
@@ -78,9 +86,9 @@ export interface AccumulationCandidate {
 	/** The reading, mm. */
 	readingMm: number;
 	/**
-	 * Days of 0 or blank rain before the reading (the whole run, not capped):
-	 * back to the reading before, a blank outage or the record's start. For an
-	 * outage reading, the outage's blank days.
+	 * Blank days straight before the reading, back to the reading before (a
+	 * recorded 0 included, engine ≥ 1.84.0) or the record's start: 3 to 7 for
+	 * a window. For an outage reading, the outage's blank days.
 	 */
 	runDays: number;
 	/** CHIRPS on the reading day and the days either side, × factor, mm. */
@@ -98,12 +106,12 @@ export interface AccumulationCandidate {
  * reading day itself must have one. Windows never overlap: each run ends at
  * the reading before the next.
  *
- * Engine ≥ 1.70.0: the run is the 0 or blank days before the reading back to
- * the reading before, the record's start, or a stretch of more than
- * ACC_MAX_BLANK_DAYS consecutive blank days (an outage), whichever is
- * nearest; the outage's days and everything before it are not in the run.
- * A blank stretch of up to ACC_MAX_BLANK_DAYS counts like zeros. A reading
- * straight after an outage (no run) that passes the same tests over the
+ * Engine ≥ 1.84.0: the run is the blank days straight before the reading,
+ * back to the reading before or the record's start; a recorded 0 is a
+ * reading, so it ends the run (up to 1.83 days of 0 counted like blanks).
+ * ACC_MIN_RUN_DAYS to ACC_MAX_BLANK_DAYS blank days make a window: the run
+ * and the reading day. More than ACC_MAX_BLANK_DAYS is an outage (engine ≥
+ * 1.70.0): a reading straight after one that passes the same tests over the
  * outage's last ACC_MAX_RUN_DAYS days is a candidate whose window is its own
  * day, with `outageDays` set. Pure.
  */
@@ -116,33 +124,25 @@ export function detectAccumulations(catchment: DailySeries, chirps: DailySeries,
 	};
 	const out: AccumulationCandidate[] = [];
 	const vals = catchment.values;
-	let run = 0; // 0 or blank days immediately before index i, back to a reading, an outage or the record's start
-	let blank = 0; // blank days immediately before index i (the whole stretch)
+	let blank = 0; // blank days immediately before index i (the whole stretch); any reading, 0 included, ends it
 	for (let i = 0; i < vals.length; i++) {
 		const v = vals[i];
 		if (isBlank(v)) {
 			blank++;
-			// The stretch has become an outage: neither it nor anything before it is in the run.
-			if (blank > ACC_MAX_BLANK_DAYS) run = 0;
-			else run++;
 			continue;
 		}
-		if (v === 0) {
-			blank = 0;
-			run++;
-			continue;
-		}
-		const runBefore = run;
-		const outage = blank > ACC_MAX_BLANK_DAYS ? blank : 0; // runBefore is 0 whenever outage > 0
-		run = 0;
+		const runBefore = blank;
 		blank = 0;
+		// Engine ≥ 1.84.0: a recorded 0 is a reading. It ends the run and is never part of a window.
 		if (!isReading(v) || v < ACC_MIN_MM) continue;
-		if (runBefore < ACC_MIN_RUN_DAYS && outage === 0) continue;
+		const outage = runBefore > ACC_MAX_BLANK_DAYS ? runBefore : 0;
+		if (runBefore < ACC_MIN_RUN_DAYS) continue;
 		const day = c0 + i;
 		if (!isReading(chirps.values[day - h0])) continue;
 		const near = h(day - 1) + h(day) + h(day + 1);
 		if (!(near < ACC_READING_DAY_SHARE * v)) continue;
-		const w = Math.min(outage || runBefore, ACC_MAX_RUN_DAYS);
+		// A window's run is at most ACC_MAX_BLANK_DAYS long; the cap only bounds the CHIRPS an outage is judged over.
+		const w = Math.min(runBefore, ACC_MAX_RUN_DAYS);
 		let runMm = 0;
 		for (let d = day - w; d <= day - 2; d++) runMm += h(d);
 		if (!(runMm >= ACC_RUN_SHARE * v)) continue;
@@ -474,8 +474,9 @@ const windowLabel = (w: AccumulationWindowInfo) =>
 /**
  * The run warnings for the accumulations: what was spread, what stayed on
  * its reading day, what the settings kept or left as recorded, and listed
- * windows skipped. `doubleCounted` = windows left as recorded that end a
- * flagged zero run the run filled from CHIRPS.
+ * windows skipped. `doubleCounted` = windows left as recorded whose days
+ * the run filled from CHIRPS (a detected window's blank days, a flagged zero
+ * run's days, a blank outage).
  */
 export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCounted: readonly AccumulationWindowInfo[] = []): string[] {
 	if (!a) return [];
@@ -485,9 +486,9 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 	if (spread.length) {
 		out.push(
 			`Catchment rain accumulations spread over the days they cover: ${plural(spread.length, 'window')}, ${plural(a.spreadDays, 'run day')}: ` +
-				`${listed(spread.map(windowLabel))}. Each looks like several days' rain read on one day after days recorded as 0 or blank ` +
+				`${listed(spread.map(windowLabel))}. Each looks like several days' rain read on one day after days left blank ` +
 				'(CHIRPS reads rain over the run and little on the reading day). Its recorded total is kept and spread in proportion to bias-corrected CHIRPS; ' +
-				'those days are not also filled as a zero run, and they are left out of the CHIRPS factor fit. The stored series is unchanged. ' +
+				'those days are not also filled from CHIRPS as gaps or a zero run, and they are left out of the CHIRPS factor fit. The stored series is unchanged. ' +
 				'Settings → Rain gaps and CHIRPS keeps a reading as recorded.'
 		);
 	}
@@ -522,7 +523,7 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 			`${plural(asRec.length, 'multi-day accumulation')} run as recorded, because Settings → Rain gaps and CHIRPS says "as recorded": ` +
 				`${listed(asRec.map(windowLabel))}.` +
 				(doubleCounted.length
-					? ` ${plural(doubleCounted.length, 'of them ends', 'of them end')} a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (${doubleCounted.map((w) => w.end).join(', ')}).`
+					? ` ${plural(doubleCounted.length, 'of them ends', 'of them end')} blank days, a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (${doubleCounted.map((w) => w.end).join(', ')}).`
 					: '')
 		);
 	}
