@@ -529,7 +529,8 @@
 			display: flex;
 		}
 	}
-	/* Narrow (a phone): every figure moves under the name; the row keeps Add data and ⋯. */
+	/* Narrow (a phone): every figure moves under the name; the row keeps Add data and ⋯, side by side
+	   in one tap-high row at the name's line rather than stacked two targets tall (issue #521). */
 	@container (max-width: 730px) {
 		.wide {
 			display: none;
@@ -538,16 +539,21 @@
 			display: flex;
 		}
 		.c-act {
-			width: 6.5rem;
+			width: 7.75rem;
+		}
+		.projects td.actions {
+			padding-left: 0.25rem;
 		}
 		.act {
-			flex-direction: column;
-			align-items: stretch;
-			gap: 0.35rem;
+			gap: 0.25rem;
 		}
 		.act .btn {
 			justify-content: center;
 			min-height: var(--tap);
+			padding-inline: 0.5rem;
+		}
+		.more {
+			min-width: var(--tap);
 		}
 	}
 </style>

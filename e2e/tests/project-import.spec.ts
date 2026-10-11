@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { pickImport } from '../support/projects.ts';
 
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 
@@ -38,7 +39,8 @@ const row = (page: Page, name: string) =>
 	page.getByRole('row').filter({ has: page.getByRole('rowheader', { name, exact: true }) });
 
 async function openImport(page: Page) {
-	await page.getByRole('button', { name: 'Import project file (.json)' }).click();
+	// The named button, or on a phone Import's list (issue #521).
+	await pickImport(page, 'Import project file (.json)');
 	const dialog = page.getByRole('dialog', { name: 'Import project file' });
 	await expect(dialog.getByLabel('Project file (.json)')).toBeVisible();
 	return dialog;

@@ -40,6 +40,15 @@ export const SETTINGS_SECTIONS = [
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
+/**
+ * Settings that moved to another page, for Find a setting (issue #521): the registered-volumes
+ * comparison band went to Allocations in round 1, so a search for it, or its other names, offers
+ * a link to that card (`#alloc-band`, which AllocationsTab lands on).
+ */
+export const SETTINGS_ELSEWHERE = [
+	{ text: 'Comparison band', words: 'registered volumes allocation tolerance licence WARMS modelled use', href: '?tab=allocations#alloc-band', page: 'Allocations' }
+] as const;
+
 /** The menu's one link (on the bar) for the panels that run or connect by themselves. */
 export const AUTOMATION_LABEL = 'Automation & access';
 

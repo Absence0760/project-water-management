@@ -320,7 +320,7 @@ export const EXAMPLE_HIGH_FLOWS_CSV = 'Name,Months,Peak (m3/s),Duration (days),E
 export const filledCells = (grid: readonly (readonly (number | null)[])[] | null | undefined): number =>
 	(grid ?? []).reduce((n, row) => n + row.filter((v) => typeof v === 'number' && Number.isFinite(v) && v !== 0).length, 0);
 
-/** Whether a high-flow component holds anything typed (a Fill over the list asks first then). */
+/** Whether a high-flow component holds anything typed (the paste dialog's preview then says the paste replaces it). */
 export const highFlowTyped = (e: EwrHighFlowEvent): boolean => !!e.label.trim() || Number.isFinite(e.peakM3s);
 
 /**

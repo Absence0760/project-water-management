@@ -1,18 +1,19 @@
 <!--
-	Settings → Data feeds → "Rain for each unit" (issue #482; docs/ui.md § Data
-	feeds, docs/maps.md § Rain for each unit): for every land unit with a parcel
+	Settings → Data feeds → Attach a feed → Area: "Each unit's parcel" (issue
+	#482, issue #521; docs/ui.md § Data feeds, docs/maps.md § Rain for each unit): for every land unit with a parcel
 	on the map, the CHIRPS cells it covers, and one CHIRPS feed into that unit's
 	own rain series, created or updated on the button (owners: feeds are theirs
 	to set up; editors see the proposal). Each unit's row shows its feed's state
 	from the feeds list. Units without a parcel, and units the server can't set
 	up, are listed with what to do. Choosing the other product asks the server
-	again, since it decides what that would change. Opens by itself on
-	?rain=units. Helpers in ./unitRain.ts.
+	again, since it decides what that would change. Drawn inside the attach
+	card while that area is chosen, so it asks for the proposal when it mounts;
+	DataFeedsPanel opens it on ?rain=units with `focus` (the heading takes the
+	focus once loaded). Close closes the card (`onclose`). Helpers in ./unitRain.ts.
 -->
 <script lang="ts">
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { page } from '$app/state';
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { api } from '$lib/api';
 	import { ApiError } from '$lib/api/client';
@@ -21,12 +22,25 @@
 	import { CHIRPS_PRODUCT_FIRST_DAY, errorText, feedsApi, type FeedMeta } from './feeds';
 	import { appliedWords, feedLimitNote, sortUnitRows, STALE_PROPOSAL_CODES, UNIT_RAIN_DEFAULT_PRODUCT, unitRainAction, unitRainBody, unitRainRows, unitRainUpToDate } from './unitRain';
 
-	let { projectId, feeds, onapplied }: { projectId: string; feeds: FeedMeta[]; onapplied: () => Promise<void> | void } = $props();
+	let {
+		projectId,
+		feeds,
+		onapplied,
+		onclose,
+		focus = false
+	}: {
+		projectId: string;
+		feeds: FeedMeta[];
+		onapplied: () => Promise<void> | void;
+		/** Close: the card it is drawn in closes. */
+		onclose: () => void;
+		/** Focus the heading once the proposal has loaded (a link arrived here), not while the area is picked. */
+		focus?: boolean;
+	} = $props();
 
 	const uid = $props.id();
 	const calls = $derived(feedsApi(api, projectId));
 
-	let open = $state(false);
 	let loading = $state(false);
 	/** Asking again for the other product: the proposal stays shown (and the select keeps focus) until the answer lands. */
 	let reloading = $state(false);
@@ -38,7 +52,6 @@
 	let startError = $state<string | null>(null);
 	let done = $state<string | null>(null);
 	let heading = $state<HTMLElement>();
-	let opener = $state<HTMLButtonElement>();
 
 	// The units that need something first (no feed, failing, stale), the rest folded behind "Show all N units".
 	const rows = $derived(proposal ? sortUnitRows(unitRainRows(proposal, feeds)) : []);
@@ -75,7 +88,6 @@
 	}
 
 	async function show() {
-		open = true;
 		loading = true;
 		error = done = startError = null;
 		proposal = null;
@@ -85,15 +97,11 @@
 			error = errorText(e);
 		}
 		loading = false;
+		if (!focus) return;
 		await tick();
 		heading?.focus();
 	}
-
-	async function close() {
-		open = false;
-		await tick();
-		opener?.focus();
-	}
+	onMount(() => void show());
 
 	async function apply() {
 		if (!proposal || applying || reloading) return;
@@ -130,150 +138,135 @@
 		await tick();
 		if (!document.getElementById(`${uid}-apply`)) heading?.focus();
 	}
-
-	// ?rain=units (Settings' Rain for each unit links here) opens the proposal, also when the link is followed on this page.
-	const asked = $derived(page.url.searchParams.get('rain') === 'units');
-	// Once per arrival: closing it while the URL still asks must not open it again.
-	let answered = false;
-	$effect(() => {
-		if (!asked) answered = false;
-		else if (!answered) {
-			answered = true;
-			void show();
-		}
-	});
 </script>
 
-{#if !open}
-	<button type="button" class="btn btn-sm" bind:this={opener} onclick={show} data-testid="unit-rain-open">Rain for each unit</button>
-{:else}
-	<section class="unit-rain" aria-labelledby="{uid}-h" aria-busy={reloading || undefined} data-testid="unit-rain">
-		<h3 id="{uid}-h" tabindex="-1" bind:this={heading}>Rain for each unit <HelpTip key="unit-rain-feeds" /></h3>
-		<p class="hint">
-			One CHIRPS feed for each hydrological unit with land, averaging the 0.05° cells its parcel on the map covers, each weighted by the share of it
-			inside. Runs use these series when Settings → Flow generation → Rain for each unit is on. Source: CHIRPS v3 daily, Climate Hazards Center, UC
-			Santa Barbara.
-		</p>
-		{#if loading}
-			<p class="muted" role="status">Working out the cells…</p>
-		{:else if proposal}
-			{@const p = proposal}
-			{#if rows.length}
+<section class="unit-rain" aria-labelledby="{uid}-h" aria-busy={reloading || undefined} data-testid="unit-rain">
+	<h4 id="{uid}-h" tabindex="-1" bind:this={heading}>Rain for each unit <HelpTip key="unit-rain-feeds" /></h4>
+	<p class="hint explain">
+		One CHIRPS feed for each hydrological unit with land, averaging the 0.05° cells its parcel on the map covers, each weighted by the share of it
+		inside. Runs use these series when Settings → Flow generation → Rain for each unit is on. Source: CHIRPS v3 daily, Climate Hazards Center, UC
+		Santa Barbara.
+	</p>
+	{#if loading}
+		<p class="muted" role="status">Working out the cells…</p>
+	{:else if proposal}
+		{@const p = proposal}
+		{#if rows.length}
+			<!-- The wrap takes focus so the keyboard can scroll it (axe scrollable-region-focusable). -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="table-wrap" tabindex="0" role="region" aria-label="Units and their feeds">
+				<table class="data compact units" aria-labelledby="{uid}-cap" data-testid="unit-rain-units">
+					<caption id="{uid}-cap">Each unit’s CHIRPS cells and feed</caption>
+					<thead>
+						<tr><th scope="col">Unit</th><th scope="col" class="num">Area <span class="u">(km²)</span></th><th scope="col">Cells</th><th scope="col">Feed</th></tr>
+					</thead>
+					<tbody>
+						{#each fold.shown as r (r.nodeId)}
+							<tr data-testid="unit-rain-row">
+								<th scope="row">{r.name}</th>
+								<td class="num">{fmtNum(r.areaKm2, 2)}</td>
+								<td>{r.cellsText}</td>
+								<td>
+									{#if r.feed}
+										<span class="state state-{r.feed.state}">{r.feed.label}</span>
+										<span class="small">{r.feed.health}{#if r.seriesDays}{' '}{fmtNum(r.seriesDays)} days so far.{/if}</span>
+									{:else}
+										<span class="muted">No feed yet</span>
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			{#if allRows || fold.hidden}
+				<button type="button" class="btn btn-sm" aria-expanded={allRows} onclick={() => (allRows = !allRows)}>
+					{allRows ? `Show only the first ${FOLD} units` : `Show all ${rows.length} units`}
+				</button>
+			{/if}
+			<details>
+				<summary>The cells</summary>
 				<!-- The wrap takes focus so the keyboard can scroll it (axe scrollable-region-focusable). -->
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div class="table-wrap" tabindex="0" role="region" aria-label="Units and their feeds">
-					<table class="data compact units" aria-labelledby="{uid}-cap" data-testid="unit-rain-units">
-						<caption id="{uid}-cap">Each unit’s CHIRPS cells and feed</caption>
-						<thead>
-							<tr><th scope="col">Unit</th><th scope="col" class="num">Area <span class="u">(km²)</span></th><th scope="col">Cells</th><th scope="col">Feed</th></tr>
-						</thead>
+				<div class="table-wrap" tabindex="0" role="region" aria-label="The cells by unit">
+					<table class="data compact cells" aria-label="Each unit’s CHIRPS cells">
+						<thead><tr><th scope="col">Unit</th><th scope="col" class="num">Latitude</th><th scope="col" class="num">Longitude</th><th scope="col" class="num">Inside</th><th scope="col" class="num">Weight</th></tr></thead>
 						<tbody>
-							{#each fold.shown as r (r.nodeId)}
-								<tr data-testid="unit-rain-row">
-									<th scope="row">{r.name}</th>
-									<td class="num">{fmtNum(r.areaKm2, 2)}</td>
-									<td>{r.cellsText}</td>
-									<td>
-										{#if r.feed}
-											<span class="state state-{r.feed.state}">{r.feed.label}</span>
-											<span class="small">{r.feed.health}{#if r.seriesDays}{' '}{fmtNum(r.seriesDays)} days so far.{/if}</span>
-										{:else}
-											<span class="muted">No feed yet</span>
-										{/if}
-									</td>
-								</tr>
+							{#each p.units as u (u.nodeId)}
+								{#each u.cells as c (`${c.lat},${c.lon}`)}
+									<tr><th scope="row">{u.name}</th><td class="num">{c.lat.toFixed(3)}</td><td class="num">{c.lon.toFixed(3)}</td><td class="num">{fmtNum(c.share * 100, c.share < 0.1 ? 1 : 0)} %</td><td class="num">{fmtNum(c.weight, 3)}</td></tr>
+								{/each}
 							{/each}
 						</tbody>
 					</table>
 				</div>
-				{#if allRows || fold.hidden}
-					<button type="button" class="btn btn-sm" aria-expanded={allRows} onclick={() => (allRows = !allRows)}>
-						{allRows ? `Show only the first ${FOLD} units` : `Show all ${rows.length} units`}
-					</button>
-				{/if}
-				<details>
-					<summary>The cells</summary>
-					<!-- The wrap takes focus so the keyboard can scroll it (axe scrollable-region-focusable). -->
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<div class="table-wrap" tabindex="0" role="region" aria-label="The cells by unit">
-						<table class="data compact cells" aria-label="Each unit’s CHIRPS cells">
-							<thead><tr><th scope="col">Unit</th><th scope="col" class="num">Latitude</th><th scope="col" class="num">Longitude</th><th scope="col" class="num">Inside</th><th scope="col" class="num">Weight</th></tr></thead>
-							<tbody>
-								{#each p.units as u (u.nodeId)}
-									{#each u.cells as c (`${c.lat},${c.lon}`)}
-										<tr><th scope="row">{u.name}</th><td class="num">{c.lat.toFixed(3)}</td><td class="num">{c.lon.toFixed(3)}</td><td class="num">{fmtNum(c.share * 100, c.share < 0.1 ? 1 : 0)} %</td><td class="num">{fmtNum(c.weight, 3)}</td></tr>
-									{/each}
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</details>
-			{:else}
-				<p class="muted" data-testid="unit-rain-none">No unit has a parcel on the map yet, so there is nothing to propose.</p>
-			{/if}
-			{#if p.withoutPolygon.length}
-				<p data-testid="unit-rain-without">
-					Without a parcel on the map ({p.withoutPolygon.length === 1 ? '1 unit' : `${fmtNum(p.withoutPolygon.length)} units`}): {p.withoutPolygon.map((u) => u.name).join(', ')}.
-					Draw or delineate each one’s parcel and link it to the unit. <a href="?tab=map">Open the map</a>
-				</p>
-			{/if}
-			{#if p.refused.length}
-				<div class="alert alert-warning" data-testid="unit-rain-refused">
-					<p>These units can’t be set up:</p>
-					<ul>
-						{#each p.refused as u (u.nodeId)}<li><strong>{u.name}</strong>: {u.reason}</li>{/each}
-					</ul>
-				</div>
-			{/if}
-			{#if canApply && (p.units.length || p.refused.length)}
-				<div class="form-row">
-					<div class="field">
-						<label for="{uid}-product">Daily product <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
-						<select id="{uid}-product" value={product} disabled={applying} onchange={(e) => pickProduct(e.currentTarget.value as UnitRainProduct)} aria-describedby="{uid}-product-h">
-							<option value="rnl">rnl: from 1981, final days only</option>
-							<option value="sat">sat: from 1998, with preliminary days</option>
-						</select>
-					</div>
-					<div class="field">
-						<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
-						<input
-							id="{uid}-start"
-							type="date"
-							min={CHIRPS_PRODUCT_FIRST_DAY[product]}
-							bind:value={startDate}
-							oninput={() => (startError = null)}
-							aria-invalid={startError ? true : undefined}
-							aria-describedby="{uid}-product-h{startError ? ` ${uid}-start-err` : ''}"
-						/>
-					</div>
-				</div>
-				<p class="hint" id="{uid}-product-h">
-					Every unit reads the same product, end to end; a feed whose series already holds days keeps its own. Without a start date the feeds read from
-					the product’s first day ({CHIRPS_PRODUCT_FIRST_DAY[product]}), so the MAP period has its years.
-				</p>
-				{#if startError}<p class="err" id="{uid}-start-err" role="alert">{startError}</p>{/if}
-			{/if}
-			{#if limitNote}<p class="alert alert-warning" role="note" data-testid="unit-rain-limit">{limitNote}</p>{/if}
-			{#if action}
-				<p data-testid="unit-rain-words">{action.words}</p>
-			{:else if upToDate}
-				<p class="muted" data-testid="unit-rain-words">Every unit’s feed already reads its parcel with this product: nothing to change.</p>
-			{/if}
-			<div class="action-row">
-				{#if action && canApply}
-					<button type="button" id="{uid}-apply" class="btn btn-primary" aria-disabled={applying || reloading} onclick={apply} data-testid="unit-rain-apply">{applying ? 'Working…' : action.label}</button>
-				{:else if action}
-					<p class="muted small">An owner of the project creates the feeds.</p>
-				{/if}
-				<button type="button" class="btn" onclick={close}>Close</button>
-			</div>
+			</details>
 		{:else}
-			<div class="action-row"><button type="button" class="btn" onclick={close}>Close</button></div>
+			<p class="muted" data-testid="unit-rain-none">No unit has a parcel on the map yet, so there is nothing to propose.</p>
 		{/if}
-		<div role="status">{#if done}<p class="muted" data-testid="unit-rain-done">{done}</p>{/if}</div>
-		{#if error}<p class="alert alert-error" role="alert">{error}</p>{/if}
-	</section>
-{/if}
+		{#if p.withoutPolygon.length}
+			<p data-testid="unit-rain-without">
+				Without a parcel on the map ({p.withoutPolygon.length === 1 ? '1 unit' : `${fmtNum(p.withoutPolygon.length)} units`}): {p.withoutPolygon.map((u) => u.name).join(', ')}.
+				Draw or delineate each one’s parcel and link it to the unit. <a href="?tab=map">Open the map</a>
+			</p>
+		{/if}
+		{#if p.refused.length}
+			<div class="alert alert-warning" data-testid="unit-rain-refused">
+				<p>These units can’t be set up:</p>
+				<ul>
+					{#each p.refused as u (u.nodeId)}<li><strong>{u.name}</strong>: {u.reason}</li>{/each}
+				</ul>
+			</div>
+		{/if}
+		{#if canApply && (p.units.length || p.refused.length)}
+			<div class="form-row">
+				<div class="field">
+					<label for="{uid}-product">Daily product <HelpTip key="chirps-version" label="About which CHIRPS a series holds" /></label>
+					<select id="{uid}-product" value={product} disabled={applying} onchange={(e) => pickProduct(e.currentTarget.value as UnitRainProduct)} aria-describedby="{uid}-product-h">
+						<option value="rnl">rnl: from 1981, final days only</option>
+						<option value="sat">sat: from 1998, with preliminary days</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="{uid}-start">Start date <span class="muted">(optional)</span></label>
+					<input
+						id="{uid}-start"
+						type="date"
+						min={CHIRPS_PRODUCT_FIRST_DAY[product]}
+						bind:value={startDate}
+						oninput={() => (startError = null)}
+						aria-invalid={startError ? true : undefined}
+						aria-describedby="{uid}-product-h{startError ? ` ${uid}-start-err` : ''}"
+					/>
+				</div>
+			</div>
+			<p class="hint explain" id="{uid}-product-h">
+				Every unit reads the same product, end to end; a feed whose series already holds days keeps its own. Without a start date the feeds read from
+				the product’s first day ({CHIRPS_PRODUCT_FIRST_DAY[product]}), so the MAP period has its years.
+			</p>
+			{#if startError}<p class="err" id="{uid}-start-err" role="alert">{startError}</p>{/if}
+		{/if}
+		{#if limitNote}<p class="alert alert-warning" role="note" data-testid="unit-rain-limit">{limitNote}</p>{/if}
+		{#if action}
+			<p data-testid="unit-rain-words">{action.words}</p>
+		{:else if upToDate}
+			<p class="muted" data-testid="unit-rain-words">Every unit’s feed already reads its parcel with this product: nothing to change.</p>
+		{/if}
+	{/if}
+	<!-- What the button did, or what went wrong, above the action row so the card reads top to bottom; the status always in the page. -->
+	<div role="status">{#if done}<p class="muted" data-testid="unit-rain-done">{done}</p>{/if}</div>
+	{#if error}<p class="alert alert-error" role="alert">{error}</p>{/if}
+	{#if !loading}
+		<div class="action-row">
+			{#if proposal && action && canApply}
+				<button type="button" id="{uid}-apply" class="btn btn-primary" aria-disabled={applying || reloading} onclick={apply} data-testid="unit-rain-apply">{applying ? 'Working…' : action.label}</button>
+			{:else if proposal && action}
+				<p class="muted small">An owner of the project creates the feeds.</p>
+			{/if}
+			<button type="button" class="btn" onclick={onclose}>Close</button>
+		</div>
+	{/if}
+</section>
 
 <style>
 	/* A disclosure's summary is a full touch target (WCAG 2.5.8; a phone gets --tap). */
@@ -289,11 +282,9 @@
 		}
 	}
 	.unit-rain {
-		margin-top: 0.75rem;
-		border-top: 1px solid var(--border);
-		padding-top: 0.75rem;
+		margin-top: 0.5rem;
 	}
-	.unit-rain h3 {
+	.unit-rain h4 {
 		margin: 0 0 0.5rem;
 		font-size: 1rem;
 	}

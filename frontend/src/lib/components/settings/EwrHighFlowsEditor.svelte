@@ -2,17 +2,23 @@
 	A rule table's high-flow components (engine ≥ 0.33.0, docs/model.md §2.9d):
 	freshets and floods, each a name, the months it may peak in, a peak
 	(m³/s), an event duration (days, rise to recession) and the events required per water year. Rows
-	are edited in place, pasted from a spreadsheet, or read from a CSV file.
-	Part of EwrRuleTablesEditor.svelte's chunk; helpers in ./ewrRules.ts. A
-	"Peaks in" that doesn't read as months is kept as typed, said under its field
-	and counted as invalid (common/invalidFields), so it blocks the save as an
-	invalid number does; a Fill over typed components asks first.
+	are edited in place, or pasted from a spreadsheet or read from a CSV file in
+	a dialog (issue #521: it was an always-open box under the rows) that looks
+	like the shared grid paste dialog (model/GridPasteDialog.svelte) but
+	previews the rows the parser reads, since this is a list of rows, not a
+	grid of numbers: the same parser and result as the old Fill, and the
+	preview (with what it replaces) is the check before Fill, so it asks no
+	confirm. Part of EwrRuleTablesEditor.svelte's chunk; helpers in
+	./ewrRules.ts. A "Peaks in" that doesn't read as months is kept as typed,
+	said under its field and counted as invalid (common/invalidFields), so it
+	blocks the save as an invalid number does.
 -->
 <script lang="ts">
 	import { EWR_HIGH_FLOWS_MAX, highFlowsIssue, type EwrHighFlowEvent } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { fmtNum } from '$lib/format/number';
 	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import { latestFileText } from '$lib/files/latest';
 	import { describeMonths } from '$lib/format/months';
@@ -36,7 +42,21 @@
 	let monthsText = $state<Record<number, string>>({});
 	let monthsBad = $state<Record<number, boolean>>({});
 	let paste = $state('');
+	let pasteOpen = $state(false);
+	let fileNote = $state('');
 	let note = $state<{ ok: boolean; text: string } | null>(null);
+	// The dialog's preview: the parser's rows, or its error.
+	const parsed = $derived(paste.trim() ? parseHighFlows(paste) : null);
+	const rows = $derived(parsed && !('error' in parsed) ? parsed : null);
+	const typedNow = $derived(value.filter(highFlowTyped).length);
+	const plural = (n: number) => `${n} high flow${n === 1 ? '' : 's'}`;
+	const summary = $derived(
+		!parsed
+			? 'Paste or load the rows to see what they fill.'
+			: 'error' in parsed
+				? parsed.error
+				: `${parsed.length} high-flow component${parsed.length === 1 ? '' : 's'}${typedNow ? `, replacing the ${typedNow === 1 ? '1 component' : `${typedNow} components`} listed` : ''}.`
+	);
 	const issue = $derived(value.length ? highFlowsIssue(value) : null);
 	const exampleHref = `data:text/csv;charset=utf-8,${encodeURIComponent(EXAMPLE_HIGH_FLOWS_CSV)}`;
 
@@ -81,36 +101,32 @@
 		resetText();
 	}
 
-	async function fill(text: string) {
-		const r = parseHighFlows(text);
-		if ('error' in r) {
-			note = { ok: false, text: r.error };
-			return;
-		}
-		const typed = value.filter(highFlowTyped).length;
-		if (
-			typed &&
-			!(await confirmDialog({
-				title: `Replace the high flows at ${siteLabel}?`,
-				message: `${typed === 1 ? 'The 1 component' : `The ${typed} components`} listed will be replaced by the ${r.length} filled in.`,
-				confirmLabel: 'Replace the high flows'
-			}))
-		)
-			return;
-		value = r;
+	/** The dialog's Fill: the parser's rows replace the list, as the old Fill button did. */
+	function fill() {
+		// Held before the box is cleared, which empties `rows`.
+		const filled = rows;
+		if (!filled) return;
+		value = filled;
 		resetText();
 		paste = '';
-		note = { ok: true, text: `Filled ${r.length} high-flow component${r.length === 1 ? '' : 's'}.` };
+		fileNote = '';
+		pasteOpen = false;
+		note = { ok: true, text: `Filled ${filled.length} high-flow component${filled.length === 1 ? '' : 's'}.` };
 	}
 
-	// The latest file only: a large file still read can't land over one picked after it.
+	// The latest file only: a large file still read can't land over one picked after it, or in a closed dialog.
 	const fileText = latestFileText();
+	$effect(() => {
+		if (!pasteOpen) void fileText(null);
+	});
 	async function load(e: Event & { currentTarget: HTMLInputElement }) {
 		const f = e.currentTarget.files?.[0];
 		e.currentTarget.value = '';
 		if (!f) return;
 		const text = await fileText(f);
-		if (text !== null) fill(text);
+		if (text === null) return;
+		paste = text;
+		fileNote = `Read ${f.name}.`;
 	}
 </script>
 
@@ -122,6 +138,13 @@
 		<strong>daily-mean</strong> flow: a gazetted Reserve gives an instantaneous peak, which daily flow rarely reaches, so enter the daily-mean peak the
 		hydrologist converts it to (the run warns when natural flow reaches a peak in no more than half the water years).
 	</p>
+	{#if !readonly}
+		<!-- The list's actions above it, in one row (a grid's actions go above it). -->
+		<div class="actions">
+			<button type="button" class="btn btn-sm" disabled={value.length >= EWR_HIGH_FLOWS_MAX} onclick={add}>Add a high flow</button>
+			<button type="button" class="btn btn-sm" aria-haspopup="dialog" onclick={() => (pasteOpen = true)}>Paste or load a CSV…<span class="visually-hidden"> high flows at {siteLabel}</span></button>
+		</div>
+	{/if}
 	{#if value.length}
 		<div class="table-wrap">
 			<table class="data compact">
@@ -168,31 +191,63 @@
 		<p class="muted small">None: only the monthly flows are judged.</p>
 	{/if}
 	{#if issue}<p class="err" role="alert">{issue}</p>{/if}
-	{#if !readonly}
-		<div class="actions">
-			<button type="button" class="btn btn-sm" disabled={value.length >= EWR_HIGH_FLOWS_MAX} onclick={add}>Add a high flow</button>
-		</div>
+	<p id="{uid}-status" class="small" class:err={note && !note.ok} role="status" aria-label="High-flow paste result">{note?.text ?? ''}</p>
+</fieldset>
+
+{#if !readonly}
+	<Dialog bind:open={pasteOpen} title="Paste high flows at {siteLabel}" wide>
 		<div class="paste">
-			<label for="{uid}-paste">Paste high flows</label>
-			<textarea
-				id="{uid}-paste"
-				rows="3"
-				placeholder={'One per row: name, months, daily-mean peak (m³/s), event days, events per year. A heading row is skipped.'}
-				bind:value={paste}
-				aria-describedby="{uid}-status"
-			></textarea>
+			<p class="small muted" id="{uid}-layout">One per row: name, months, daily-mean peak (m³/s), event days, events per year. A heading row is skipped. The rows replace the list.</p>
+			<label for="{uid}-paste">Rows copied from a spreadsheet</label>
+			<textarea id="{uid}-paste" rows="6" spellcheck="false" bind:value={paste} oninput={() => (fileNote = '')} aria-describedby="{uid}-layout"></textarea>
 			<div class="actions">
-				<button type="button" class="btn btn-sm" onclick={() => fill(paste)}>Fill the high flows</button>
 				<label class="btn btn-sm file">
 					Load a CSV file
 					<input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange={load} />
 				</label>
-				<a class="small" href={exampleHref} download="high-flows-example.csv">Example CSV (synthetic)</a>
+				<a class="btn btn-sm" href={exampleHref} download="high-flows-example.csv">Example CSV (synthetic)</a>
+				<span class="small muted" role="status">{fileNote}</span>
 			</div>
 		</div>
-	{/if}
-	<p id="{uid}-status" class="small" class:err={note && !note.ok} role="status" aria-label="High-flow paste result">{note?.text ?? ''}</p>
-</fieldset>
+		<section class="preview" aria-labelledby="{uid}-pv">
+			<h3 id="{uid}-pv">Preview</h3>
+			<!-- One status line that stays in the page, its text changing, so a screen reader reads each new result. -->
+			<p class="small" class:alert={!!parsed && 'error' in parsed} class:alert-error={!!parsed && 'error' in parsed} class:muted={!parsed} role="status" data-testid="high-flow-paste-summary">{summary}</p>
+			{#if rows}
+				<!-- Focusable, so the list scrolls from the keyboard too (axe scrollable-region-focusable). -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-wrap preview-rows" role="region" aria-label="Pasted high flows" tabindex="0">
+					<table class="data compact">
+						<thead>
+							<tr>
+								<th scope="col">Name</th>
+								<th scope="col">Peaks in</th>
+								<th scope="col" class="num">Daily-mean peak <span class="u">m³/s</span></th>
+								<th scope="col" class="num">Event days</th>
+								<th scope="col" class="num">Per year</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each rows as r, k (k)}
+								<tr>
+									<th scope="row">{r.label || `High flow ${k + 1}`}</th>
+									<td>{describeMonths(r.months)}</td>
+									<td class="num">{fmtNum(r.peakM3s, 4, true)}</td>
+									<td class="num">{r.durationDays}</td>
+									<td class="num">{r.perYear}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</section>
+		{#snippet actions()}
+			<button type="button" class="btn" onclick={() => (pasteOpen = false)}>Cancel</button>
+			<button type="button" class="btn btn-primary" disabled={!rows} onclick={fill}>{rows ? (typedNow ? `Replace with ${plural(rows.length)}` : `Fill ${plural(rows.length)}`) : 'Fill the high flows'}</button>
+		{/snippet}
+	</Dialog>
+{/if}
 
 <style>
 	.hint {
@@ -218,11 +273,13 @@
 	td input {
 		width: 100%;
 	}
+	/* The paste dialog, in the shared grid paste dialog's look. */
 	.paste {
 		display: grid;
-		gap: 0.35rem;
-		margin-top: 0.5rem;
-		max-width: 75ch;
+		gap: 0.4rem;
+	}
+	.paste p {
+		margin: 0;
 	}
 	.paste > label {
 		font-weight: 500;
@@ -231,7 +288,22 @@
 	.paste textarea {
 		width: 100%;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.8rem;
+		font-size: 0.8125rem;
+	}
+	.preview {
+		margin-top: 1rem;
+	}
+	.preview h3 {
+		margin: 0 0 0.4rem;
+		font-size: 0.9375rem;
+	}
+	.preview-rows {
+		max-height: 18rem;
+		overflow: auto;
+	}
+	.u {
+		color: var(--text-muted);
+		font-size: 0.75rem;
 	}
 	.actions {
 		display: flex;

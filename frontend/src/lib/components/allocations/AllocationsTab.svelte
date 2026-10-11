@@ -31,7 +31,8 @@
 	// the page's settings draft takes the change in (onProjectChange). Farmers
 	// never reach the workspace.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
@@ -115,6 +116,27 @@
 	$effect(() => {
 		void projectId;
 		untrack(load);
+	});
+	// A link to the comparison band (Settings' Find a setting, `#alloc-band`): the card draws once the
+	// volumes are in, after the browser's own jump found nothing, so land on it then, hold it while the
+	// page settles, and focus its heading (as Settings and River & reserve do for theirs).
+	let bandLanded = false;
+	$effect(() => {
+		if (!data || bandLanded) return;
+		bandLanded = true;
+		if (untrack(() => hashId(page.url.hash)) !== 'alloc-band') return;
+		let release = () => {};
+		tick().then(() => {
+			const el = document.getElementById('alloc-band');
+			if (!el) return;
+			release = holdAnchor(el);
+			const heading = el.querySelector<HTMLElement>('h2');
+			if (heading) {
+				if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+				heading.focus({ preventScroll: true });
+			}
+		});
+		return () => release();
 	});
 	const sourceById = $derived(new Map((data?.sources ?? []).map((s) => [s.id, s])));
 	const unmatchedCount = $derived(data?.allocations.filter((a) => a.nodeId === null).length ?? 0);

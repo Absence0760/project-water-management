@@ -551,7 +551,13 @@ section it belongs to, with the example that taught it.
   10,000 px, and every panel reachable in one click. Two rules from it: an
   explanation and a state line look alike, so mark only what explains
   (`.explain`) and leave warnings, "now" figures and required notes alone
-  ("With no rule declared…" was inside an explanation and had to move out);
+  ("With no rule declared…" was inside an explanation and had to move out;
+  a hint that is half format, half reasoning splits into two elements, both
+  in the field's `aria-describedby`, since a hidden child of a referenced
+  element drops out of the description: "The gauge code, e.g. A2H012." stays,
+  "Verified DWS data lags by months…" is `.explain`. The switch hides
+  `.explain` inside `.settings-form` and `.settings-after`, the panels after
+  the form that save on their own, so a panel outside both needs a wrapper);
   and measure the widest content beside a rail before choosing where it
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
@@ -618,6 +624,29 @@ section it belongs to, with the example that taught it.
   caller gives the buttons the list's words: "Add a missing water year",
   "Spread a date range", "Exclude a water year". Pin it in e2e: no two
   visible buttons in a panel share an accessible name.
+- **A panel that adds to a list puts its add action in its head, opening a
+  card above the list.** Settings' Data feeds had **Attach a feed** under the
+  list and two unlabelled buttons under it ("Use the catchment boundary",
+  "Rain for each unit") that belonged to no form; its attach form opened
+  mid-panel with its button ~880 px down; API keys' make form was always
+  open above "No API keys yet" (issue #521). Now each panel after the form
+  (`feeds/DataFeedsPanel`, `apiKeys/ApiKeysPanel`,
+  `report/ReportSchedulesPanel`) has one add action at the right of its
+  `.panel-head`, named for the list ("Attach a feed", "Make a key", "Add a
+  schedule"), which opens a bordered card above the list with its own
+  `.action-row` (submit and Cancel), focus going into the card and back to
+  the head's button. A shortcut that is another way to fill one of the
+  form's choices becomes an option of that choice, not a button beside it:
+  the two map proposals are choices of the attach card's **Area**, each
+  drawing its proposal and its own action row in place of the typed area
+  (and a role that may only read them, an editor, gets a head action of its
+  own, "Rain from the map", with only those choices). Picking a choice
+  never moves the focus (an arrow key through a closed select fires
+  `change`); a link that opens it (`?rain=boundary`) focuses the proposal's
+  heading. The intro paragraph under such a heading goes behind its ⓘ when
+  the glossary entry already says it. `settings-after-form-layout.spec.ts`
+  pins the actions in the window at 1440×900 and the open cards at 390 and
+  320 px.
 - **A long form of sections folds each section to a card of its values.**
   The node sheet held 72 fields, 13 checkboxes and 48 always-on help
   paragraphs in 13 sections: 5,768 px for one unit, 9 screens, with Save
@@ -1259,6 +1288,32 @@ Interaction details that bit:
   result diffed against the grid (`settings/ewrPaste.ts`), so the values are
   the same. The preview (Now and Pasted) is the check before values are
   replaced: drop the confirm the Fill button asked, don't stack a second one.
+  A paste that fills a **list of rows** rather than a grid of numbers (the
+  Reserve tables' high flows: name, months, peak…) has no Now/Pasted cells to
+  diff, so it is a `Dialog` in the same look (layout line, the box, Load a
+  CSV file and the example, a **Preview** status line, then a table of the
+  rows the parser read) whose button says what it does ("Fill 2 high
+  flows", "Replace with 2 high flows" over typed rows): the same parser and
+  result, opened from **Paste or load a CSV…** above the list
+  (`settings/EwrHighFlowsEditor.svelte`).
+- **A setting that moves to another page stays findable.** Round 1 of issue
+  #521 moved the registered-volumes comparison band to Allocations, and Find
+  a setting, which reads the page, stopped finding it. SectionNav takes an
+  `elsewhere` list (`FindElsewhere`: the name, other words it may be searched
+  by, the link and the page; `settings/sections.ts` `SETTINGS_ELSEWHERE`),
+  listed after the matches as "Comparison band, on Allocations", and the
+  page it lands on scrolls to and focuses the card once drawn
+  (`AllocationsTab` on `#alloc-band`). Add an entry whenever a setting leaves
+  Settings.
+- **A head of named actions folds into one control on a phone, keeping the
+  names.** The project list's head was three full-width buttons (New
+  project, Import b023 workbook, Import project file) before any project on
+  a phone. The two imports stay named buttons where there is room (the
+  client looks for a named workbook import), and at 560 px they become one
+  **Import ▾** beside New project whose list names both; the one picked
+  opens the dialog with the focus on Import, so the dialog's Escape returns
+  there. A row's two buttons (Add data, ⋯) sit side by side at tap height,
+  not stacked two targets tall.
 - **Line up a table of fieldsets with fixed row heights, not subgrid.** The
   drought levels became one table (a column per level, a row per part of
   demand) while each level stays a `<fieldset>` named by its legend, so the

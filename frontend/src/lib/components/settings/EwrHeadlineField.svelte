@@ -57,7 +57,7 @@
 				{#each options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
 			</select>
 		</div>
-		<p class="hint muted" id="judge-hint">
+		<p class="hint muted explain" id="judge-hint">
 			Which EWR the Summary’s headline, the run sentence and River &amp; reserve report against. It changes no result: save it and no
 			re-run is needed. The pragmatic EWR and the Reserve rule tables are set under <a href="#set-ewr">EWR</a> and
 			<a href="#set-reserve">Reserve rules</a>.

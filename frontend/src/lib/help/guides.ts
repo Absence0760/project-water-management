@@ -495,7 +495,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Put the catchment boundary on the **Map** (delineate, draw or upload it).',
-							'Open **Settings & calibration → Data feeds** and press **Use the catchment boundary** (the Map’s own link opens it too).',
+							'Open **Settings & calibration → Data feeds**, press **Attach a feed** (an editor: **Rain from the map**) and choose the **Area** *The catchment boundary, from the map* (the Map’s own link opens it too).',
 							'Read the proposal: the CHIRPS cells the boundary covers, the share of each inside it and its weight. A boundary over about 2 500 km² needs feeds for its parts.',
 							'An owner presses **Apply**. The feed attaches into the CHIRPS series; if that series already holds a record, it goes into a separate series to compare beside the old one, which you switch off once satisfied.'
 						]
@@ -514,7 +514,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Give each hydrological unit its parcel on the **Map** (delineate, draw or upload it, and link it to the unit).',
-							'Open **Settings & calibration → Data feeds** and press **Rain for each unit**: one CHIRPS feed per unit, over the cells its parcel covers.',
+							'Open **Settings & calibration → Data feeds**, press **Attach a feed** and choose the **Area** *Each unit’s parcel*: one CHIRPS feed per unit, over the cells its parcel covers.',
 							'An owner picks the daily product (*rnl* from 1981 by default) and presses **Create**. Units without a parcel are listed, with a link to the map.',
 							'Give each unit its MAP and source on its form, then switch on **Settings → Flow generation → Rain for each unit**, and refit.'
 						]
@@ -534,7 +534,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Press **Attach a feed** (owners) and choose the **Source**, then **Into series**: the kind of series it writes. CHIRPS goes into the CHIRPS series, so it fills the days catchment rain is blank; into catchment rain it becomes the catchment rain itself, used raw.',
 							'For CHIRPS, choose the **Daily product**: *sat* from 1998, with preliminary days, or *rnl* from 1981, final days only (see [[chirps-version|CHIRPS product and version]]). Without a start date the feed reads the last 60 days, then keeps up.',
-							'For CHIRPS and the forecast, give the **Area**: grid cells (latitude, longitude, an optional weight, one a line) or a bounding box (south, west, north, east). A box on the coast can leave out sea cells.',
+							'For CHIRPS and the forecast, give the **Area**: grid cells (latitude, longitude, an optional weight, one a line) or a bounding box (south, west, north, east). A box on the coast can leave out sea cells. CHIRPS’s Area also offers the catchment boundary and each unit’s parcel, from the map (above).',
 							'For DWS flow, pick from **Nearest gauging stations** (river gauges within 50 km of the outlet, with the years their record covers) or type the station code, such as A2H012.',
 							'If the series already has data, the form asks: use a separate series, or fill only its empty days. Then press **Attach feed**, and **Run now** to fetch at once rather than wait for the daily run.'
 						]

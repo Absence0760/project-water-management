@@ -37,11 +37,24 @@ test('an owner makes a key, a gateway pushes days with it, History names the key
 
 	const panel = page.getByRole('region', { name: 'API keys' });
 	await expect(panel.getByText('No API keys yet.')).toBeVisible();
+	// The make form is a card opened from the panel's head (issue #521), not always open over the list.
 	const form = panel.getByRole('form', { name: 'Make an API key' });
+	await expect(form).toHaveCount(0);
+	const make = panel.getByRole('button', { name: 'Make a key' });
+	// Cancel closes it and gives the focus back to the head's button.
+	await make.click();
+	await expect(form.getByLabel('Name')).toBeFocused();
+	await form.getByRole('button', { name: 'Cancel' }).click();
+	await expect(form).toHaveCount(0);
+	await expect(make).toBeFocused();
+	await make.click();
 	await form.getByLabel('Name').fill('Weir gateway');
 	await expect(form.getByLabel('Works for')).toHaveValue('0');
 	await form.getByRole('button', { name: 'Make key' }).click();
 
+	// The card closes on the new key, which takes the focus (and selects itself to copy).
+	await expect(form).toHaveCount(0);
+	await expect(panel.getByLabel('The new key')).toBeFocused();
 	const secret = await panel.getByLabel('The new key').inputValue();
 	expect(secret).toMatch(/^wm_[0-9a-f]{8}_[A-Za-z0-9_-]{43}$/);
 	// The example uses a placeholder, never the key itself.
