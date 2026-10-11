@@ -8,6 +8,7 @@
 	head, as a fieldset by its legend; ui-playbook.md § 2).
 -->
 <script lang="ts">
+	import { localIsoDate } from '$lib/format/number';
 	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { exclusionsError, exclusionRange, waterYearLabel, type CalibrationExclusion } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -53,8 +54,9 @@
 	/** A new water year: the one before the latest listed, else last year. */
 	function nextYear(): number {
 		const years = list.flatMap((x) => ('waterYear' in x ? [x.waterYear] : []));
-		const month = new Date().getUTCMonth() + 1;
-		const current = new Date().getUTCFullYear() - (month >= 10 ? 0 : 1);
+		// The viewer's own day: the UTC one turns the water year two hours late in South Africa.
+		const [year, month] = localIsoDate().split('-').map(Number);
+		const current = year - (month >= 10 ? 0 : 1);
 		return years.length ? Math.min(...years) - 1 : current - 1;
 	}
 

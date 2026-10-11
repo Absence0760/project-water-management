@@ -10,6 +10,7 @@
 	Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
+	import { localIsoDate } from '$lib/format/number';
 	import { DEFAULT_UNIT_MAP_PERIOD, MAP_MM_MAX, MAP_MM_MIN, PE_SOURCE_MAX, type NetworkNode, type UnitRainSettings } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -54,7 +55,7 @@
 	const reference = $derived(on && value ? (value.reference ?? null) : null);
 	/** A stored reference unit the model no longer has as a unit with land: the run warns and ignores the reference. */
 	const refGone = $derived(!!reference?.unitId && !land.some((n) => n.id === reference.unitId));
-	const lastYear = new Date().getUTCFullYear();
+	const lastYear = Number(localIsoDate().slice(0, 4));
 	/** The units without a MAP named, each a link to its form; the rest counted. */
 	const MISSING_SHOWN = 6;
 	/** Years the fields take; one before CHIRPS (1981) saves, with a note. */

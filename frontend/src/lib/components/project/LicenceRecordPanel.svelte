@@ -5,6 +5,7 @@
 	// the outcome or confirm a review (the API answers anyone else 403, and
 	// ProjectTab renders it for editors and owners only). Provisional position
 	// (pre-counsel research, 2026-10-01).
+	import { localIsoDate } from '$lib/format/number';
 	import DayInput from '$lib/components/common/DayInput.svelte';
 	import { onMount } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -22,7 +23,7 @@
 	let form = $state<OutcomeForm>({ outcome: '', outcomeOn: '', expiresOn: '', reason: '' });
 	let notice = $state('');
 
-	const today = new Date().toISOString().slice(0, 10);
+	const today = localIsoDate();
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const status = $derived(record ? recordStatus(record, today) : null);
 	const problem = $derived(formProblem(form));
