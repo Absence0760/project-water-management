@@ -942,7 +942,7 @@ buys a **render session** that can read one report and nothing else.
   the pack; an applicant's copy's `scope: { p, k, s }`, with the pack's
   application, after the exchange checks the requester is still its
   party). The answer also names the project's time zone
-  (`app_project_time_zone`, 215: any member reads it, so an applicant's
+  (`app_project_time_zone`, 217: any member reads it, so an applicant's
   copy gets it too; `null` otherwise), which the renderer's browser runs in
   so the PDF's dates are the catchment's day (issue #521). The renderer
   treats it as input: a name its Intl doesn't know, or none (an API older

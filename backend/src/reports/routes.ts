@@ -304,7 +304,7 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
  * for a pack token (119), one evidence pack that was issued.
  *
  * The answer carries the project's time zone (project.time_zone, 058;
- * null for a requester who is no member, 215_project_time_zone_for_render):
+ * null for a requester who is no member, 217_project_time_zone_for_render):
  * the renderer prints in it, so the page's dates are the catchment's day,
  * as a browser there prints them, not UTC's (issue #521).
  */
