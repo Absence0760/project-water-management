@@ -1559,9 +1559,25 @@ the observer says no rain fell. So a run of 0 mm days followed by 20 mm or
 more is real rain and stays on its day; a recorded 0 ends the run and is
 never part of a window. Only days with no value (left blank, as an unread
 gauge's days are) count towards the run. Up to 1.83.0 days of 0 counted like
-blanks, and a window could reach back over up to 92 days of zeros. A long
-zero run before a large reading is §2.4c's to judge (a flagged run is filled
-from CHIRPS when CHIRPS reads more than 2 mm), on its own.
+blanks, and a window could reach back over up to 92 days of zeros.
+
+**A zero run §2.4c flags reads as missing** (engine ≥ 1.84.0, issue #523,
+the operator's rule, *provisional pending the hydrologist*). A reading is
+spread only if the days before it are marked missing, and the engine marks a
+flagged zero run missing: §2.4c sets it aside and fills it from CHIRPS. So
+the detection reads every day of a flagged run as blank, as it reads a day
+listed as missing: 3 to 7 such days (with any blank days next to them) before
+a reading of 20 mm or more make a window, and more than 7 make an outage,
+whose reading is set aside (*Readings after a blank outage* below). This
+covers the run's days whose CHIRPS reads 2 mm or less too: §2.4c keeps them
+at 0 because CHIRPS saw no rain, which sets their fill, not whether anyone
+read the gauge (and the reading test needs CHIRPS dry around the reading, so
+those are just the days before it). Zeros §2.4c trusts (not flagged, kept dry
+by a keep-dry period, or every zero in zero-run mode `'asRecorded'`) are
+readings and end the run, so trusted zeros then 20 mm is real rain on its
+day. Without this rule (the first 1.84.0 build) a flagged run ended the run,
+so its CHIRPS fill and the whole reading on its day both counted: the double
+count audit B4 is about, with no warning.
 
 **Detection** (`detectAccumulations`). Over the whole stored record, a
 catchment reading is an accumulation when:
@@ -1569,7 +1585,7 @@ catchment reading is an accumulation when:
 | Test | Value (`accumulation.ts`) | Why |
 | --- | --- | --- |
 | The reading is large | ≥ 20 mm (`ACC_MIN_MM`) | Spreading a few millimetres changes little, and small readings are where a storm CHIRPS missed is most likely |
-| It follows blank days | 3 to 7 blank days straight before it (`ACC_MIN_RUN_DAYS`, `ACC_MAX_BLANK_DAYS`), back to the reading before (a recorded 0 included, engine ≥ 1.84.0) or the record's start | A weekend is the shortest common gap. A recorded 0 is a reading, not an unread day, so it ends the run (up to 1.83.0 days of 0 counted like blanks). More than 7 blank days in a row is an **outage**, not a run (engine ≥ 1.70.0; *Readings after a blank outage* below) |
+| It follows blank days | 3 to 7 blank days straight before it (`ACC_MIN_RUN_DAYS`, `ACC_MAX_BLANK_DAYS`), back to the reading before (a recorded 0 included, engine ≥ 1.84.0) or the record's start; a day listed as missing or in a zero run §2.4c flags (`flaggedZeroSpans`, provisional) reads as blank | A weekend is the shortest common gap. A recorded 0 is a reading, not an unread day, so it ends the run (up to 1.83.0 days of 0 counted like blanks), unless §2.4c has set it aside as missing. More than 7 blank days in a row is an **outage**, not a run (engine ≥ 1.70.0; *Readings after a blank outage* below) |
 | CHIRPS saw little rain on the reading day | bias-corrected CHIRPS on the day before, the day and the day after < 25 % of the reading (`ACC_READING_DAY_SHARE`) | If CHIRPS rained then, the reading is most likely that day's storm. The ±1 day is timing slop: a gauge read at 08:00 books the previous day's rain, and CHIRPS's day boundary differs |
 | CHIRPS saw rain over the days before | bias-corrected CHIRPS over the window's run days, leaving out the day just before the reading, ≥ 50 % of the reading (`ACC_RUN_SHARE`) | This separates an accumulation from a convective storm CHIRPS missed after unread days that were dry: then CHIRPS is dry over the run too. The day before is left out so a storm CHIRPS booked a day early is not mistaken for rain in the run |
 | Window length | the run (3 to 7 blank days) plus the reading day | The run's own limits. `ACC_MAX_RUN_DAYS` (92 days, about a season) now bounds only the CHIRPS an outage reading is judged over (verify/ probe `accumulation-window-run`); up to 1.83.0 it capped a window over a long zero run |
@@ -1582,9 +1598,10 @@ Windows never overlap: each run ends at the reading before the next. A
 blank day is one with no value (or a non-finite one). Worked examples
 (engine ≥ 1.84.0): 5 zeros then 7 blanks is a run of the 7 blanks; 4
 blanks, a zero and 4 blanks is a run of the last 4; 7 blanks then 5 zeros,
-any number of zeros alone, or 20 blanks then 2 zeros is no run at all, so
-the reading stays on its day; 20 blanks, a zero and 3 blanks is a run of the
-3 blanks; 8 or more blanks is an outage. (Up to 1.83.0 the mixed cases were
+any number of zeros §2.4c trusts alone, or 20 blanks then 2 such zeros is
+no run at all, so the reading stays on its day; 20 blanks, a zero and 3
+blanks is a run of the 3 blanks; 8 or more blanks is an outage. A 5-day zero
+run §2.4c flags is a run of 5, and a 120-day one an outage. (Up to 1.83.0 the mixed cases were
 each one run over all their days, and 10 blanks then 88 zeros was an 88-day
 window.)
 
@@ -1604,9 +1621,10 @@ changed.**
 
 - **Precedence.** The window's days are not also filled from CHIRPS as
   blank days (or, for a listed window, as a flagged zero run, §2.4c): its
-  total covers them. A detected window holds no zeros (engine ≥ 1.84.0), so
-  it never shares a day with a flagged zero run; up to 1.83.0 a zero run
-  longer than 92 days was split between the two. A detection is dropped
+  total covers them. A detected window holds no zeros but a flagged zero
+  run's (engine ≥ 1.84.0), and a window's days are never also filled as a
+  zero run; up to 1.83.0 a zero run longer than 92 days was split between
+  the two. A detection is dropped
   when its window touches a period listed as missing, or (in zero-run mode
   `'missing'`) a keep-dry period: the hydrologist has already said what
   those days are.
@@ -1622,7 +1640,7 @@ changed.**
 
 **Readings after a blank outage** (engine ≥ 1.70.0, issue #90 Q31, issue
 #393, `detectAccumulations` and `applyAccumulations`). A blank outage
-(more than 7 days blank or listed as missing in a row, *Interplay* below) ends
+(more than 7 days blank, listed as missing or in a flagged zero run in a row, *Interplay* below) ends
 the run, so a reading straight after it (no day between) has no window. When that reading would otherwise pass every test of the table
 above, read over the outage instead of a run (at least 20 mm; bias-corrected
 CHIRPS on the day ±1 under 25 % of it; CHIRPS over the outage's last 92 days,
@@ -1668,15 +1686,18 @@ holidays, an observer away) are exactly the cases the record can't tell
 from a logger fault, so they go to the set-aside rule, which costs little
 when it is wrong. Up to 1.83.0 zeros kept counting up to 92 days, on the
 view that an observer who writes 0 for unread days is reporting days; from
-1.84.0 a recorded 0 is taken at its word (issue #523 A2), so zeros never
-count. The hydrologist may move the limit (issue #90 Q31).
+1.84.0 a recorded 0 is taken at its word (issue #523 A2), so zeros §2.4c
+trusts never count; zeros it flags count, since the engine has marked them
+missing. The hydrologist may move the limit (issue #90 Q31).
 
 *Interplay.*
 - **Flagged zero runs** (§2.4c) are runs of zeros only; a blank day ends
-  them. Zeros before or after an outage are judged by §2.4c on their own
-  (filled when flagged, else run as recorded); they never form a window
-  (engine ≥ 1.84.0). A set-aside reading is never a zero, so no flagged run
-  claims it.
+  them. The detection reads a flagged run's days as blank (engine ≥ 1.84.0,
+  provisional, above): one of 3 to 7 days (with any blank days next to it)
+  makes a window, whose spread takes over its days from the zero-run fill;
+  a longer one is an outage, filled by §2.4c as before, and the reading after
+  it is set aside. Zeros §2.4c trusts never form a window. A set-aside
+  reading is never a zero, so no flagged run claims it.
 - **Listed missing periods count as blank.** A day listed under
   `zeroRainRuns.missing` is the modeller saying its rain is unknown, as a
   blank day is, so the detection reads it as blank, whatever it records (a
@@ -1710,8 +1731,10 @@ count. The hydrologist may move the limit (issue #90 Q31).
   of the fit, and the run warns that the outage's rain may be counted twice.
 - **The cross-check** (`verify/model.py` `detect_accumulations`) states the
   same rule; its probes `outage-reading-set-aside`, `accumulation-window-run`
-  (an outage judged over its last 92 days) and `short-blank-run-window` (7
-  blanks after 4 zeros: a window over the blanks only) pin it.
+  (an outage judged over its last 92 days), `short-blank-run-window` (7
+  blanks after 4 zeros: a window over the blanks only) and
+  `flagged-zero-run-outage` (a reading after a flagged 200-day zero run is
+  set aside) pin it.
 
 | Field | Values | Meaning |
 | --- | --- | --- |
@@ -1764,14 +1787,20 @@ so changing them flags "Forcing changed since fit" (a record made before
 client catchment suite replays with `accumulationMode: 'asRecorded'`. Its
 "B4:" test runs the defaults: each window wholly inside the run adds up to
 its recorded total, its days before the reading are blank in the stored
-record (engine ≥ 1.84.0), no window day is also filled as a zero run,
-catchment rain changes on no other day, and every self-check passes.
+record or in a flagged zero run (engine ≥ 1.84.0), no window day is also
+filled as a zero run, catchment rain changes on no other day, and every
+self-check passes. It pins the client outcome in counts (no spread window,
+one reading set aside by the outage rule) and checks that every reading of
+20 mm or more straight after a flagged zero run is a window §2.4d handles,
+never kept whole beside the run's fill.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the detection thresholds and the gauge total as recorded until the station's observer logs are seen.
 
 **Provisional decision 2026-10-03, to be confirmed by the client's hydrologist** (issue #90 Q31, from issue #393; operator decision): only a short blank stretch counts towards an accumulation (7 days, `ACC_MAX_BLANK_DAYS`), and a large reading straight after a longer blank outage is set aside as missing rather than spread or kept (*Readings after a blank outage* above). Engine ≥ 1.70.0.
 
 **Decision, issue #90 *Multi-day rain accumulations* (issue #523 item A2):** only blank days count towards an accumulation's run; a recorded 0 ends it, so 0 mm days followed by 20 mm or more is real rain on its day. The CHIRPS spread, the 20 mm threshold, the CHIRPS tests and the outage rule above are kept. Engine ≥ 1.84.0.
+
+**Provisional decision 2026-10-11, to be confirmed by the client's hydrologist** (issue #523, operator's intent: "spread only if the preceding days are marked missing"): zeros §2.4c flags as a suspect zero run and sets aside as missing count as missing (blank) days for the detection, so 3 to 7 of them before a large reading make a window and more trigger the outage rule; zeros §2.4c trusts still end the run (*A zero run §2.4c flags reads as missing* above). Engine ≥ 1.84.0.
 
 ### 2.4e Rain-source periods (engine ≥ 0.30.0, issue #40 (b))
 
@@ -11024,7 +11053,7 @@ step when a definition changes.
 | **Percentile (natural condition)** | Where a month's natural flow sits on that month's natural flow duration curve, as % exceedance: low = wet, high = dry; it picks the row of a Reserve rule table (§2.9c). |
 | **Quaternary catchment** | The smallest standard SA catchment unit (e.g. A21A). |
 | **CHIRPS** | Climate Hazards Group InfraRed Precipitation with Station data: satellite-based daily rainfall. |
-| **Untagged accumulation** | Several days' rain entered on the day the gauge was read, with the unread days blank (or 0) and nothing marking it (Viney & Bates 2004). Spread back by CHIRPS from engine 0.20.0 (§2.4d); from 1.70.0 a large reading after more than 7 blank days is set aside instead; from 1.84.0 only blank days count, so a large reading after days of 0 is real rain on its day (§2.4d). |
+| **Untagged accumulation** | Several days' rain entered on the day the gauge was read, with the unread days blank (or 0) and nothing marking it (Viney & Bates 2004). Spread back by CHIRPS from engine 0.20.0 (§2.4d); from 1.70.0 a large reading after more than 7 blank days is set aside instead; from 1.84.0 only blank days count (and the days of a zero run §2.4c flags and sets aside, provisionally), so a large reading after days of 0 §2.4c trusts is real rain on its day (§2.4d). |
 | **Water year** | Oct–Sep in South African hydrology. The workbook orders monthly tables this way. |
 | **Recession curve** | How flow decays day by day without rain. b023 uses a table from flow to daily factor; the engine's port of it was removed in 1.0.0 (§2.4). |
 | **Base flow / quickflow** | The slow groundwater-fed part of the flow, and the fast storm response. |
