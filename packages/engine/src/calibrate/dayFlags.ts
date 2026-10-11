@@ -152,14 +152,15 @@ export function zeroFlowSuspect(s: DailySeries, months: readonly number[] = []):
  * last, and a gap between two of its in-month days of at most 2 × `max`.
  */
 function zeroStretchTrusted(from: number, to: number, months: readonly number[], max: number): boolean {
-	let lastIn = -1; // epoch day of the last in-month day seen, -1 = none yet
+	// The last in-month day seen, null = none yet. Not a -1 sentinel: an epoch day before 1970-01-01 is negative.
+	let lastIn: number | null = null;
 	for (let d = from; d < to; d++) {
 		if (!months.includes(monthOfEpochDay(d))) continue;
-		const gap = lastIn < 0 ? d - from : d - lastIn - 1;
-		if (gap > (lastIn < 0 ? max : 2 * max)) return false;
+		const gap = lastIn === null ? d - from : d - lastIn - 1;
+		if (gap > (lastIn === null ? max : 2 * max)) return false;
 		lastIn = d;
 	}
-	return lastIn >= 0 && to - 1 - lastIn <= max;
+	return lastIn !== null && to - 1 - lastIn <= max;
 }
 
 /** Each run day's flow class code (FLOW_FLAG_CODE). */

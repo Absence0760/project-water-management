@@ -114,11 +114,12 @@ describe('flowDayFlags (CR-18)', () => {
 	// Engine 1.84.0 (issue #523 A1): a zero stretch over the months is trusted as long as it runs no more than 30 days
 	// beyond them on each side; the days before the first month and after the last are counted separately, not summed.
 	describe('the river-stops months allow 30 days beyond them on each side (engine 1.84.0)', () => {
-		/** Each listed stretch [from, to] alone in a varying record; whether zeroFlowSuspect flags it (every day, or none). */
-		const judge = (months: number[], ...stretches: (readonly [string, string])[]) => {
+		/** Each listed stretch [from, to] alone in a varying record from `origin`; whether zeroFlowSuspect flags it (every day, or none). */
+		const judgeFrom = (origin: string) => (months: number[], ...stretches: (readonly [string, string])[]) => {
+			const at = (date: string) => toEpochDay(date) - toEpochDay(origin);
 			const values: (number | null)[] = varying(1500);
-			for (const [a, b] of stretches) zeroOver(values, a, b);
-			const sus = zeroFlowSuspect({ startDate: start, values }, months);
+			for (const [a, b] of stretches) for (let i = at(a); i <= at(b); i++) values[i] = 0;
+			const sus = zeroFlowSuspect({ startDate: origin, values }, months);
 			return stretches.map(([a, b]) => {
 				const days = Array.from(sus.slice(at(a), at(b) + 1));
 				expect(new Set(days).size).toBe(1); // judged whole
@@ -128,6 +129,7 @@ describe('flowDayFlags (CR-18)', () => {
 				return days[0] === 1 ? 'suspect' : 'trusted';
 			});
 		};
+		const judge = judgeFrom(start);
 
 		it('trusts mid-January to mid-May with Feb–Apr (17 days before, 15 after); flags it with no months (a positive control)', () => {
 			expect(judge([2, 3, 4], ['2001-01-15', '2001-05-15'])).toEqual(['trusted']);
@@ -178,6 +180,36 @@ describe('flowDayFlags (CR-18)', () => {
 			// longest such gap); Jan and May listed: the 89 days of Feb–Apr are not, so the stretch is suspect whole.
 			expect(judge([1, 4], ['2001-01-20', '2001-04-10'])).toEqual(['trusted']);
 			expect(judge([1, 5], ['2001-01-20', '2001-05-10'])).toEqual(['suspect']);
+		});
+
+		// Epoch days before 1970-01-01 are negative: a -1 "no in-month day yet" sentinel flagged every stretch there.
+		describe('before 1970 (negative epoch days), judged as after it', () => {
+			const judge60 = judgeFrom('1960-10-01');
+
+			it('trusts a stretch wholly inside the months and flags one wholly outside them', () => {
+				expect(judge60([2, 3, 4], ['1961-02-05', '1961-04-20'], ['1961-07-01', '1961-07-20'])).toEqual(['trusted', 'suspect']);
+			});
+
+			it('trusts 30 days beyond the months on each side and flags 31, before and after alike', () => {
+				expect(
+					judge60(
+						[2, 3, 4],
+						['1961-01-02', '1961-03-10'], // 30 days of January before
+						['1962-01-01', '1962-03-10'], // 31 days before
+						['1963-03-01', '1963-05-30'], // 30 days of May after
+						['1964-03-01', '1964-05-31'] // 31 days after
+					)
+				).toEqual(['trusted', 'suspect', 'trusted', 'suspect']);
+			});
+
+			it('holds an interior gap between listed months to 30 days from one of them', () => {
+				expect(judge60([1, 4], ['1961-01-20', '1961-04-10'])).toEqual(['trusted']);
+				expect(judge60([1, 5], ['1961-01-20', '1961-05-10'])).toEqual(['suspect']);
+			});
+
+			it('trusts a stretch across 1970-01-01 (negative days into positive ones) over Dec–Feb', () => {
+				expect(judgeFrom('1968-10-01')([12, 1, 2], ['1969-12-01', '1970-02-28'])).toEqual(['trusted']);
+			});
 		});
 	});
 
