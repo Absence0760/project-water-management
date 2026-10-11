@@ -6,7 +6,7 @@
 import type { Page } from '@playwright/test';
 import { createProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { layoutSettled } from '../support/reflow.ts';
+import { expectNoSidewaysScroll, layoutSettled, resizeTo } from '../support/reflow.ts';
 import { expectFoldsNamed, sharedButtonNames } from '../support/settings.ts';
 import { seedShowcaseModel } from '../support/showcase.ts';
 
@@ -37,6 +37,12 @@ async function checkPanels(page: Page, projectId: string) {
 	for (const panel of panels) {
 		const id = (await panel.getAttribute('id')) ?? (await panel.getByRole('heading', { level: 2 }).first().innerText());
 		expect(await sharedButtonNames(panel), `${id}: buttons that share a name`).toEqual([]);
+	}
+
+	// Every fold open, the page still stacks on a phone with no sideways scroll (the chevron takes room on each line).
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 844 });
+		await expectNoSidewaysScroll(page);
 	}
 }
 
