@@ -327,8 +327,10 @@ test('the review triggers show for the review date, and a level published to far
 		await expectNoViolations(farmer.page, { include: '[data-testid="farm-outlook"]' });
 	}
 	await farmer.page.emulateMedia({ colorScheme: 'light' });
+	// The words page's back link returns to this farm page (?from=, issue #519).
+	const farmUrl = new URL(farmer.page.url());
 	await card.getByRole('link', { name: af('What is the season outlook?') }).click();
-	await expect(farmer.page).toHaveURL(/\/farm\/words#farm-season-outlook$/);
+	await expect(farmer.page).toHaveURL(`${farmUrl.origin}/farm/words?from=${encodeURIComponent(farmUrl.pathname + farmUrl.search)}#farm-season-outlook`);
 	await expect(farmer.page.locator('#farm-season-outlook')).toBeVisible();
 	await farmer.page.goBack();
 
