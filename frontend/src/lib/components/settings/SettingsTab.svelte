@@ -109,6 +109,8 @@
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
+	import { explainSwitch } from '$lib/components/common/explain.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
@@ -433,25 +435,6 @@
 		}))
 	);
 
-	// The explanations under the fields (issue #468): off by default, so the controls come first; remembered here.
-	const EXPLAIN_KEY = 'wm.settings.explain';
-	let explain = $state({ on: readExplain() });
-	function readExplain() {
-		try {
-			return localStorage.getItem(EXPLAIN_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
-	function setExplain(on: boolean) {
-		explain.on = on;
-		try {
-			localStorage.setItem(EXPLAIN_KEY, on ? '1' : '0');
-		} catch {
-			// Private mode: it holds for this visit.
-		}
-	}
-
 	// The section header (issue #17): where the parameters came from, and the way to the fit.
 	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
 	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
@@ -501,7 +484,7 @@
 <SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={SETTINGS_ELSEWHERE} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
-<div class="settings-form" class:explained={explain.on}>
+<div class="settings-form" class:explained={explainSwitch.on}>
 
 	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
 	     section menu, which starts right above it; River & reserve's "Change" links here (#set-judge). -->
@@ -517,10 +500,7 @@
 
 	<!-- The explanations under the fields (issue #468): off, the controls come first; each field keeps its ⓘ tip,
 	     and the hidden text stays its description for screen readers. Remembered on this device. -->
-	<label class="check explain-switch">
-		<input type="checkbox" checked={explain.on} onchange={(e) => setExplain(e.currentTarget.checked)} />
-		Explain each setting under its field
-	</label>
+	<ExplainSwitch />
 
 	<!-- Period ------------------------------------------------------------------------>
 	<section class="panel" id="set-period" aria-labelledby="per-h">
@@ -1467,7 +1447,7 @@
 	</p>
 {/if}
 <!-- The panels after the form follow the explain switch too (their field help is .explain, issue #521). -->
-<div class="settings-after" class:explained={explain.on}>
+<div class="settings-after" class:explained={explainSwitch.on}>
 <!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
 <div id="set-feeds">
 	<Lazy load={loadDataFeeds}>
@@ -1509,10 +1489,8 @@
 	:is(.settings-form, .settings-after):not(.explained) :global(.explain) {
 		display: none;
 	}
-	.explain-switch {
+	.settings-form > :global(.explain-switch) {
 		margin: 0 0 0.75rem;
-		font-size: 0.85rem;
-		color: var(--text-2);
 	}
 	/* Each panel's current values, the line under its heading (the panels in their own components too). */
 	.settings-form :global(.summary) {

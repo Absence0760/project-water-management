@@ -76,7 +76,7 @@
 				<button type="button" class="btn btn-sm" disabled={saving} onclick={start}>{answered ? 'Edit statement' : 'Answer the prompts'}</button>
 			{/if}
 		</div>
-		<p class="hint">
+		<p class="hint explain">
 			Appendix C of the evidence report prints these answers as written, beside the description and the run’s notes, and “Not given” for any
 			prompt left blank.
 		</p>

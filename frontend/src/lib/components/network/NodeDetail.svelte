@@ -30,6 +30,8 @@
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
+	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
+	import { explainSwitch } from '$lib/components/common/explain.svelte';
 	import { ewrSiteIssue, unitMapProblem, withUnitMap } from '$lib/model/validate';
 
 	let {
@@ -161,24 +163,6 @@
 		if (target) void jump(sectionId(node.id, target), false);
 	});
 
-	// The explanations under the fields: off by default, so the fields come first; the same remembered switch as Settings'.
-	const EXPLAIN_KEY = 'wm.settings.explain';
-	let explain = $state(readExplain());
-	function readExplain() {
-		try {
-			return localStorage.getItem(EXPLAIN_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
-	function setExplain(on: boolean) {
-		explain = on;
-		try {
-			localStorage.setItem(EXPLAIN_KEY, on ? '1' : '0');
-		} catch {
-			// Private mode: it holds for this visit.
-		}
-	}
 	const GA_RATE_TEXT = (v: number | null | undefined) => (v == null ? 'not looked up' : `${fmtNum(v)} m³/ha/a`);
 	const hiLo = $derived(method === 'hiLo' ? hiLoHint(node) : null);
 	const id = (k: string) => `nd-${k}-${node.id}`;
@@ -204,7 +188,7 @@
 	const divertByMonth = (f: NodeField) => f.key === 'divertCapacityM3Day' && byMonth; // gitleaks:allow (a field name, not a secret)
 </script>
 
-<div class="detail" class:explained={explain}>
+<div class="detail" class:explained={explainSwitch.on}>
 	<div class="ident">
 		<div class="field">
 			<label for={id('name')}>Name</label>
@@ -245,10 +229,7 @@
 	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this hydrological unit’s page in the farmer view, as its farmer sees it, from the current publication.</p>{/if}
 	<!-- The form's view switches: the explanations under the fields, and every section and fold open at once. -->
 	<div class="tools">
-		<label class="check explain-switch">
-			<input type="checkbox" checked={explain} onchange={(e) => setExplain(e.currentTarget.checked)} />
-			Explain each setting under its field
-		</label>
+		<ExplainSwitch />
 		<button type="button" class="btn btn-sm" aria-pressed={sheetFolds.all} onclick={() => sheetFolds.setAll(!sheetFolds.all)}>Show every field</button>
 	</div>
 
@@ -659,11 +640,6 @@
 		justify-content: space-between;
 		gap: 0.5rem 1rem;
 		margin: 0 0 0.25rem;
-	}
-	.explain-switch {
-		font-size: 0.85rem;
-		font-weight: 400;
-		color: var(--text-2);
 	}
 	.grid {
 		display: grid;

@@ -89,3 +89,50 @@ test('the editor stacks on a phone with no sideways scroll, folds open, and pass
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page, { include: '[data-testid="application-details"]' });
 });
+
+// The explanations under the form's fields (issue #521): hidden behind the same remembered switch as Settings' and a
+// node's sheet, so the fields come first; a hint that says a value, a classification or what to do next stays.
+test('the hints that only explain follow the remembered explain switch, the one Settings has', async ({ page, owner }) => {
+	void owner;
+	const p = await seed(page, 'Scenario editor explain');
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto(`/projects/${p.id}?tab=scenarios&scenario=${p.sid}`);
+	await expect(details(page)).toBeVisible();
+	const sw = page.getByRole('checkbox', { name: 'Explain each setting under its field' });
+	const tables = page.getByText("The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.");
+	await expect(sw).not.toBeChecked();
+	await expect(tables).toBeHidden();
+	// In the Changes card's head row, beside Undo, so Add change keeps its place on the first screen.
+	await expect(sw).toBeInViewport({ ratio: 1 });
+	await expect(page.getByRole('button', { name: 'Add change', exact: true })).toBeInViewport({ ratio: 1 });
+	// A classification stays: changing the Reserve is always a baseline assumption.
+	await page.getByLabel('Kind of change').selectOption({ label: "Set an EWR site's rule table" });
+	await expect(page.getByTestId('op-ewr-baseline')).toBeVisible();
+	// The rebase fold's explanation hides; its ⓘ stays.
+	await openDetails(page, 'rebase-fold');
+	const rebase = page.getByTestId('rebase-fold');
+	await expect(rebase.getByText(/^Rebase onto another run: apply the same changes/)).toBeHidden();
+	await expect(rebase.getByRole('button', { name: 'About rebasing a scenario' })).toBeVisible();
+
+	await sw.check();
+	await expect(tables).toBeVisible();
+	await expect(rebase.getByText(/^Rebase onto another run: apply the same changes/)).toBeVisible();
+	// Remembered on this device, and the same switch in Settings.
+	await page.reload();
+	await expect(page.getByRole('checkbox', { name: 'Explain each setting under its field' })).toBeChecked();
+	await expect(tables).toBeVisible();
+	await page.goto(`/projects/${p.id}?tab=settings`);
+	await expect(page.getByRole('checkbox', { name: 'Explain each setting under its field' })).toBeChecked();
+	await page.getByRole('checkbox', { name: 'Explain each setting under its field' }).uncheck();
+	await page.goto(`/projects/${p.id}?tab=scenarios&scenario=${p.sid}`);
+	await expect(page.getByRole('checkbox', { name: 'Explain each setting under its field' })).not.toBeChecked();
+	await expect(tables).toBeHidden();
+
+	// On, the editor still stacks at 320 and 390 with no sideways scroll.
+	await page.getByRole('checkbox', { name: 'Explain each setting under its field' }).check();
+	for (const width of [320, 390]) {
+		await resizeTo(page, { width, height: 844 });
+		await expectNoSidewaysScroll(page);
+	}
+	await expectNoViolations(page);
+});

@@ -1673,7 +1673,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Run the model at least once: a scenario needs a run to start from.',
 							'On **Scenarios**, press **+ New scenario**, name it and pick its base run (the [[published-baseline|published run]] by default, else the latest).',
-							'Under **Add a change**, add each change in turn. Each reads in words against the value it meets (“dam capacity 120 000 → 144 000 m³”), so a second change to the same value shows the first one’s result as “was”.',
+							'Under **Add a change**, add each change in turn. Each reads in words against the value it meets (“dam capacity 120 000 → 144 000 m³”), so a second change to the same value shows the first one’s result as “was”. Tick **Explain each setting under its field** (beside Undo; the same switch as in Settings, remembered by your browser) to see how each kind of change works under its fields.',
 							'Read the label on each change: a **Proposal** is the change being assessed; a **Baseline assumption** changes what the river is like today (rain, a setting, a Reserve rule) and puts a red **Baseline assumptions changed** callout above the list.',
 							'Press **Run scenario**. The run joins Runs & results tagged **Scenario**, and **Scenario against its base** shows the headline water balance and each hydrological unit against the base run.',
 							'To bring an older scenario up to date, open **Based on … Rebase…** under **Application details**: **Check** lists any change that no longer applies, then **Rebase onto this run**.'

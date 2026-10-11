@@ -26,7 +26,9 @@
 	import { api, scenarioProblems, SCENARIO_STATUS_MOVES, type Run, type RunMeta, type ScenarioStatus, type ScenarioWithCheck } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { detailCache } from '$lib/components/runs/cache';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtStamp } from '$lib/format/number';
+	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
+	import { explainSwitch } from '$lib/components/common/explain.svelte';
 	import ApplicationPanel from './ApplicationPanel.svelte';
 	import OpForm from './OpForm.svelte';
 	import OpList from './OpList.svelte';
@@ -338,7 +340,7 @@
 			rebasing = false;
 		}
 	}
-	const runLabel = (r: { label: string | null; createdAt: string }) => `${r.label || 'Untitled run'} · ${fmtDate(r.createdAt, true)}`;
+	const runLabel = (r: { label: string | null; createdAt: string }) => `${r.label || 'Untitled run'} · ${fmtStamp(r.createdAt)}`;
 
 	// --- delete ------------------------------------------------------------------------
 	async function remove() {
@@ -364,7 +366,7 @@
 	}
 </script>
 
-<section class="panel" aria-labelledby="scenario-h">
+<section class="panel editor" class:explained={explainSwitch.on} aria-labelledby="scenario-h">
 	<!-- The scenario's name and status, with what to do with it on the right (issue #17): Run stays on the first
 	     screen however long the changes and the node list below get. -->
 	<div class="sc-head">
@@ -414,7 +416,7 @@
 	{/if}
 
 	<p class="banner" data-testid="scenario-base">
-		Based on run <strong>{s.baseRun.label || 'Untitled run'}</strong>{#if s.baseRun.createdAt}{' '}(run {fmtDate(s.baseRun.createdAt, true)}{baseMeta?.published || isApplication ? ', published' : ''}){/if}.
+		Based on run <strong>{s.baseRun.label || 'Untitled run'}</strong>{#if s.baseRun.createdAt}{' '}(run {fmtStamp(s.baseRun.createdAt)}{baseMeta?.published || isApplication ? ', published' : ''}){/if}.
 		Created by {s.owner ?? FORMER_MEMBER}.
 		The base can't be deleted or trimmed while this scenario exists. <HelpTip key="base-run" label="About the run a scenario starts from" />
 	</p>
@@ -474,6 +476,9 @@
 		<div class="changes-head">
 			<h3 id="changes-h"><span id="changes-h-t">Changes</span> <HelpTip key="scenario-change" label="About scenario changes" /></h3>
 			{#if editable}<button type="button" class="btn btn-sm" disabled={!past.length || busy} onclick={undo}>Undo</button>{/if}
+			<!-- The explanations under the form's fields and in the folds below, as in Settings and a node's sheet: one
+			     remembered switch (common/explain.svelte.ts). What states a value, a classification or a next step stays. -->
+			<span class="explain-at"><ExplainSwitch /></span>
 		</div>
 		{#if s.ops.length}
 			<OpList items={list.items} other={list.other} label="Changes in {s.name}" onremove={editable ? removeAt : undefined} disabled={busy} />
@@ -486,7 +491,7 @@
 			{:else}
 				<div class="override-open">
 					<button type="button" class="btn" onclick={() => (overriding = true)}>Edit in the model tables</button>
-					<span class="hint">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
+					<span class="hint explain">The Network, Crops and Transfers tables on this scenario's model; each edit is recorded as a change.</span>
 					<HelpTip key="override-mode" label="About override mode" />
 				</div>
 				<OpForm input={effective} onadd={add} disabled={saving} {projectId} />
@@ -506,7 +511,7 @@
 				>
 				<fieldset class="owned">
 					<legend>The proposer's hydrological units{ownable.some((g) => g.legend !== 'Hydrological units') ? ' and users' : ''} <HelpTip key="change-class" label="About proposals and baseline assumptions" /></legend>
-					<p class="hint">
+					<p class="hint explain">
 						Changes to the ticked units and users (and to any the scenario adds) are the proposal; changes to anything else are
 						baseline assumptions. Ticking one says whose a change is; it doesn't limit where a change applies (a change to a crop
 						applies on every unit that grows it).
@@ -539,7 +544,10 @@
 					></summary
 				>
 				<div class="fold-stack">
-					<p class="hint">Rebase onto another run: apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say). <HelpTip key="base-run" label="About rebasing a scenario" /></p>
+					<p class="hint">
+						<span class="explain">Rebase onto another run: apply the same changes to a newer run of the model. The check lists any change that no longer applies (a hydrological unit removed since, say).</span>
+						<HelpTip key="base-run" label="About rebasing a scenario" />
+					</p>
 					{#if rebaseChoices.length}
 						<div class="form-row">
 							<div class="field">
@@ -702,9 +710,17 @@
 	}
 	.changes-head {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: baseline;
-		gap: 0.75rem;
+		gap: 0.25rem 0.75rem;
 		margin: 0.5rem 0;
+	}
+	.explain-at {
+		margin-left: auto;
+	}
+	/* The explanations, hidden until the switch is on (still read where a field names them as its description). */
+	.editor:not(.explained) :global(.explain) {
+		display: none;
 	}
 	h3 {
 		margin: 0;
