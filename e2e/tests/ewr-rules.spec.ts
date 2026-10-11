@@ -14,6 +14,8 @@ import { openFold, saveChanges, saveSettings } from '../support/settings.ts';
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 const pasteDialog = (page: import('@playwright/test').Page) => page.getByRole('dialog', { name: 'Paste into the rule table at Outlet (Outflow gauge)' });
+/** The high flows' own paste dialog (issue #521: it was an always-open box), a preview of the rows it reads. */
+const highFlowDialog = (page: import('@playwright/test').Page) => page.getByRole('dialog', { name: 'Paste high flows at Outlet (Outflow gauge)' });
 
 /** Three whole water years (Oct 2019 – Sep 2022) of the sample catchment: 36 complete months. */
 async function seedThreeYears(request: APIRequestContext, name: string): Promise<string> {
@@ -193,10 +195,16 @@ test('low flows and a freshet are entered by paste, saved and reloaded (engine 0
 	await expect(paste).toBeHidden();
 	await expect(table.getByRole('status', { name: 'Paste result', exact: true })).toHaveText('Filled the low-flow values: 12 months × 10 % points (rows matched by month name).');
 
-	// A freshet pasted as CSV, heading row and all.
+	// A freshet pasted as CSV, heading row and all, in the high flows' paste dialog: the preview shows the row it reads.
 	const high = table.getByRole('group', { name: 'High flows: freshets and floods' });
-	await high.getByLabel('Paste high flows').fill('Name,Months,Peak (m3/s),Duration (days),Events per year\nSynthetic freshet,Nov-Jan,0.2,2,1');
-	await high.getByRole('button', { name: 'Fill the high flows' }).click();
+	await high.getByRole('button', { name: 'Paste or load a CSV… high flows at Outlet (Outflow gauge)' }).click();
+	const hf = highFlowDialog(page);
+	await hf.getByLabel('Rows copied from a spreadsheet').fill('Name,Months,Peak (m3/s),Duration (days),Events per year\nSynthetic freshet,Nov-Jan,0.2,2,1');
+	await expect(hf.getByTestId('high-flow-paste-summary')).toHaveText('1 high-flow component.');
+	await expect(hf.getByRole('row', { name: /^Synthetic freshet Nov–Jan 0\.2 2 1$/ })).toBeVisible();
+	await expectNoViolations(page, { include: 'dialog[open]' });
+	await hf.getByRole('button', { name: 'Fill 1 high flow' }).click();
+	await expect(hf).toBeHidden();
 	await expect(high.getByRole('status', { name: 'High-flow paste result' })).toHaveText('Filled 1 high-flow component.');
 	await expect(high.getByLabel('High flow 1 name')).toHaveValue('Synthetic freshet');
 	await expect(high.getByLabel('High flow 1 months it may peak in')).toHaveValue('Nov–Jan');
@@ -270,7 +278,7 @@ test('run comparison compares Reserve compliance and lists the rule-table change
 	await expect(months.getByRole('row', { name: /^Jan 0% 100%/ })).toBeVisible();
 });
 
-test('Add a rule table sits above the tables; a paste over typed values shows them first, and removing a table or filling the high flows over typed ones asks first', async ({ page, owner }) => {
+test('Add a rule table sits above the tables; a paste over typed values shows them first (the high flows’ too), and removing a table asks first', async ({ page, owner }) => {
 	void owner;
 	const id = await seedThreeYears(page.request, 'Reserve rules asks');
 	await updateSettings(page.request, id, {
@@ -297,11 +305,21 @@ test('Add a rule table sits above the tables; a paste over typed values shows th
 	await paste.getByRole('button', { name: 'Cancel' }).click();
 	await expect(paste).toBeHidden();
 	await expect(table.getByLabel('EWR, Jan, 50 %, Mm³')).toHaveValue('2');
-	// The same for the high flows.
+	// The same for the high flows: the preview says what it replaces; Cancel keeps the list. Rows that don't read say why, and fill nothing.
 	const high = table.getByRole('group', { name: 'High flows: freshets and floods' });
-	await high.getByLabel('Paste high flows').fill('Other freshet,Oct,0.5,1,1');
-	await high.getByRole('button', { name: 'Fill the high flows' }).click();
-	await answerConfirm(page, false, 'The 1 component listed will be replaced by the 1 filled in.');
+	const opener = high.getByRole('button', { name: 'Paste or load a CSV… high flows at Outlet (Outflow gauge)' });
+	await opener.click();
+	const hf = highFlowDialog(page);
+	await expect(hf.getByTestId('high-flow-paste-summary')).toHaveText('Paste or load the rows to see what they fill.');
+	await hf.getByLabel('Rows copied from a spreadsheet').fill('Other freshet,Oct,0.5,1,1');
+	await expect(hf.getByTestId('high-flow-paste-summary')).toHaveText('1 high-flow component, replacing the 1 component listed.');
+	await expect(hf.getByRole('button', { name: 'Replace with 1 high flow' })).toBeEnabled();
+	await hf.getByLabel('Rows copied from a spreadsheet').fill('Other freshet,Smarch,0.5,1,1');
+	await expect(hf.getByTestId('high-flow-paste-summary')).toHaveText('Row 1: “Smarch” isn\'t a list of months (e.g. Nov-Jan, or Nov Dec Jan).');
+	await expect(hf.getByRole('button', { name: 'Fill the high flows' })).toBeDisabled();
+	await hf.getByRole('button', { name: 'Cancel' }).click();
+	await expect(hf).toBeHidden();
+	await expect(opener).toBeFocused();
 	await expect(high.getByLabel('High flow 1 name')).toHaveValue('Synthetic freshet');
 
 	// Months that don't read are said under their field, block the save, and are listed in the save bar.
