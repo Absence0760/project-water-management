@@ -126,3 +126,81 @@ export function ewrReleaseRules(project: EwrReleaseRulesInput): EwrReleaseRule[]
 	}
 	return out;
 }
+
+// ---------------------------------------------------------------------------
+// Scenario-only (issue #523 B4, #90 R4 (b), #507 § Principle)
+// ---------------------------------------------------------------------------
+//
+// The client's hydrologist and the operator decided (2026-10-11) that in the
+// baseline the EWR is assessed and reported, never applied: the rules that
+// *keep* water for the EWR run only in a scenario, as allocationMode's cap
+// and full allocation do. Those are the rules above whose target is the EWR:
+// a pass-inflow release without amounts, a unit's or an off-take's
+// `handsOffEwr`, and the drought restriction's `ewrTrigger`. A set flow (a
+// hands-off flow by month, a pass-inflow release with amounts: a
+// compensation flow the hydrologist enters) is an operating rule, not the
+// EWR, and stays in the baseline. The engine runs whatever input it is given
+// (a scenario's input is a ModelInput like any other); the backend keeps them
+// out of the baseline: it refuses a save that switches one on, and the input
+// a baseline run reads passes through withoutEwrKeepingRules
+// (backend/src/runs/execute.ts loadLiveInput). A scenario switches them on
+// with its ops (node.set damReleaseRule / damReleaseM3Day / handsOffEwr,
+// transfer.set handsOffEwr, settings.set droughtRestriction).
+
+/** True for a rule that keeps water for the EWR (scenario-only), false for a set flow (an operating rule the baseline keeps). */
+export const keepsEwr = (r: Pick<EwrReleaseRule, 'kind' | 'target'>): boolean => r.kind === 'restrictionEwrTrigger' || r.target !== 'setFlow';
+
+/** How a scenario switches each kind on (docs/scenarios.md § The EWR-keeping rules). */
+export const EWR_RULE_SCENARIO_OP: Record<EwrReleaseRuleKind, string> = {
+	damPassInflow: 'node.set damReleaseRule passInflow, with damReleaseM3Day null',
+	unitHandsOff: 'node.set handsOffEwr true',
+	offtakeHandsOff: 'transfer.set handsOffEwr true',
+	restrictionEwrTrigger: 'settings.set droughtRestriction, with an ewrTrigger'
+};
+
+/**
+ * The EWR-keeping rules a project stores (inert ones included, since one
+ * edit makes them run): what a baseline may not hold. Empty = none.
+ */
+export function baselineEwrRules(project: EwrReleaseRulesInput): EwrReleaseRule[] {
+	return ewrReleaseRules(project).filter(keepsEwr);
+}
+
+/** One line per rule for a refusal or a note: where, what, and the scenario op that keeps it. */
+export function scenarioOnlyLine(r: EwrReleaseRule): string {
+	return `${r.where}: ${EWR_RELEASE_RULE_LABEL[r.kind]} keeps the EWR, which only a scenario may do (${EWR_RULE_SCENARIO_OP[r.kind]})`;
+}
+
+type RulesProject = {
+	model: { nodes: NetworkNode[]; transfers?: Transfer[] };
+	settings?: { droughtRestriction?: DroughtRestrictionRule | null } | null;
+};
+
+/**
+ * The project with its EWR-keeping rules switched off, and the rules it had
+ * (baselineEwrRules, before). Pure: `project` is never mutated; parts that
+ * change are copied, the rest is shared. Switching off: a pass-inflow
+ * release without amounts becomes no release ('none'; with amounts it is a
+ * set flow and stays), `handsOffEwr` becomes false on a unit and an
+ * off-take (a set hands-off flow beside it stays), and the drought
+ * restriction loses its `ewrTrigger` (its storage levels stay). With
+ * nothing to switch off, `project` itself comes back.
+ */
+export function withoutEwrKeepingRules<P extends RulesProject>(project: P): { project: P; removed: EwrReleaseRule[] } {
+	const removed = baselineEwrRules({ model: { nodes: project.model.nodes, transfers: project.model.transfers ?? [] }, settings: project.settings ?? null });
+	if (!removed.length) return { project, removed };
+	const nodes = project.model.nodes.map((n) => {
+		const passEwr = n.damReleaseRule === 'passInflow' && !Array.isArray(n.damReleaseM3Day);
+		if (!passEwr && n.handsOffEwr !== true) return n;
+		return { ...n, ...(passEwr ? { damReleaseRule: 'none' as const } : {}), ...(n.handsOffEwr === true ? { handsOffEwr: false } : {}) };
+	});
+	const transfers = project.model.transfers?.map((t) => (t.handsOffEwr === true ? { ...t, handsOffEwr: false } : t));
+	const model = { ...project.model, nodes, ...(transfers ? { transfers } : {}) };
+	const rule = project.settings?.droughtRestriction;
+	let settings = project.settings;
+	if (rule?.ewrTrigger) {
+		const { ewrTrigger: _trigger, ...rest } = rule;
+		settings = { ...project.settings, droughtRestriction: rest };
+	}
+	return { project: { ...project, model, settings } as P, removed };
+}
