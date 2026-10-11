@@ -133,6 +133,7 @@ export * from './seriesProvenance';
 export * from './liability';
 export * from './evidence';
 export * from './allocations/compare';
+export * from './allocations/holders';
 export * from './allocations/mode';
 export * from './allocations/useBand';
 export * from './flowGapFill';

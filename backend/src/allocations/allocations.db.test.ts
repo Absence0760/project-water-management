@@ -12,8 +12,9 @@
 //  - a WARMS extract needs its reference (how it was obtained, 162);
 //  - a run's comparison sums the run's own supplied series per water year;
 //  - the export guards formula-looking cells and hides names from viewers.
-import { compareAllocations } from '@water-management/engine';
+import { allocationStatus, compareAllocations, type AllocationComparison, type AllocationStatus } from '@water-management/engine';
 import { readFileSync } from 'node:fs';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // The report job's render request (REPORT_RENDERER=sqs in the render-claim test): captured, never sent.
@@ -208,7 +209,9 @@ describe('what a viewer reads before the owners allow each volume (162, decision
 		const asViewer = (await viewer.call('GET', `/projects/${projectId}/allocations`)).body;
 		expect(asViewer).toMatchObject({ allocations: [], viewerUnits: false, unitsHidden: true, canSeeHolders: false });
 		// Surface water: six registered users (A–E and Z). Groundwater: three (A, D, E), too few for a total.
-		expect(asViewer.totals).toEqual([{ waterSource: 'surface', holders: 6, registeredM3PerYear: surfaceToday, storageM3: 150_000 + 90_000 + 75_000 + 100_000 }]);
+		// The storage in force is four holders' (150 000, 90 000, 75 000, 100 000): fewer than 5, so not given (#523 G).
+		expect(asViewer.totals).toEqual([{ waterSource: 'surface', holders: 6, registeredM3PerYear: surfaceToday, storageM3: null, storageWithheld: true }]);
+		expect(JSON.stringify(asViewer)).not.toContain(String(150_000 + 90_000 + 75_000 + 100_000));
 		expect(JSON.stringify(asViewer)).not.toMatch(/SYN-00|Invented Holdings|Portion 1/);
 		const asEditor = (await editor.call('GET', `/projects/${projectId}/allocations`)).body;
 		expect(asEditor).toMatchObject({ viewerUnits: false, unitsHidden: false, totals: null });
@@ -533,6 +536,412 @@ describe('the allocations export', () => {
 	});
 });
 
+// Issue #523 G–O: what a viewer kept from each volume reads of the registered volumes. Since round 4 (operator's
+// decision, 2026-10-11) the only registered m³ they read is today's total per water source, at 5 or more holders in
+// force with none (or two) dominating it; a run's water years and the evidence report's totals of other units give
+// them the modelled use and the status only. Each test is the review's repro, which failed before, with an editor
+// positive control.
+
+/** A whole number token in text (digits, maybe grouped by spaces or commas, maybe decimals), never part of an id, a word or a hex run. */
+const NUMBER_TOKEN = /(?<![\w.\-])(\d{1,3}(?:[ ,  ]\d{3})+|\d+)(?:\.\d+)?(?![\w\-])/g;
+/**
+ * Where a JSON answer carries v as a figure: a number within 0.5 of v m³ a year, or, for v of 365 000 or more, of its
+ * share of a day (smaller day shares are too short to tell from any other number); in a JSON number, or a whole
+ * number token in a string. Each match as "path = value", so a failure says what matched (#523 round 6: the old
+ * pattern matched 3-digit day shares inside uuids).
+ */
+function figuresAt(text: string, v: number): string[] {
+	const targets = v >= 365_000 ? [v, v / 365, v / 366] : [v];
+	const hit = (n: number) => targets.some((t) => Math.abs(n - t) < 0.5);
+	const out: string[] = [];
+	const walk = (x: unknown, at: string) => {
+		if (typeof x === 'number') {
+			if (hit(x)) out.push(`${at} = ${x}`);
+		} else if (typeof x === 'string') {
+			for (const m of x.matchAll(NUMBER_TOKEN)) if (hit(Number(m[0].replace(/[ ,  ]/g, '')))) out.push(`${at} ~ "${m[0]}" in "${x.slice(0, 120)}"`);
+		} else if (Array.isArray(x)) x.forEach((y, i) => walk(y, `${at}[${i}]`));
+		else if (x && typeof x === 'object') for (const [k, y] of Object.entries(x)) walk(y, `${at}.${k}`);
+	};
+	walk(JSON.parse(text), '$');
+	return out;
+}
+const holdsFigure = (text: string, v: number) => figuresAt(text, v).length > 0;
+
+/** A project with units `names` under a weir, rain from `start` for `days`, the editor and viewer as members. */
+async function volumesProject(name: string, names: string[], start: string, days: number) {
+	const pid = (await owner.call('POST', '/projects', { name })).body.project.id as string;
+	const weir = node('Weir', null);
+	const units = names.map((n) => node(n, weir.id));
+	const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+	const model = { nodes: [weir, ...units], crops: [crop], cropAreas: units.map((f) => ({ nodeId: f.id, cropId: crop.id, areaM2: 60_000 })), transfers: [] };
+	expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+	expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(300) } })).status).toBe(200);
+	const rain = Array.from({ length: days }, (_, i) => (i % 9 === 0 ? 25 : i % 4 === 0 ? 3 : 0));
+	expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain })).status).toBe(200);
+	for (const [u, role] of [
+		[editor, 'editor'],
+		[viewer, 'viewer']
+	] as const)
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: u.email, role })).status).toBe(201);
+	const add = async (nodeId: string | null, holder: string, volumeM3PerYear: number, dates: { validFrom?: string; validTo?: string } = {}) => {
+		const res = await editor.call('POST', `/projects/${pid}/allocations`, { nodeId, holder, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear, ...dates });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		return res.body.allocation.id as string;
+	};
+	const run = async (label: string) => {
+		const made = await owner.call('POST', `/projects/${pid}/runs`, { label });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		return made.body.run.id as string;
+	};
+	return { pid, units, add, run };
+}
+
+type Section5 = { othersRegisteredWithheld?: true; units: { nodeId: string; aggregate?: number; sources: { meanRegisteredA: number | null; years: { waterYear: number; registeredA: number | null; registeredB: number | null; statusA: string | null; withheldA?: true }[] }[] }[] };
+const others = (al: Section5) => al.units.find((u) => u.nodeId === 'others:surface')?.sources[0]?.years ?? null;
+
+describe('#523 G: staggered dates (one holder since 2005, four from 2018 to 2024)', () => {
+	const VOL = 123_457;
+	const OTHER = 50_000;
+	let pid: string;
+	let run: string;
+
+	beforeAll(async () => {
+		const p = await volumesProject('Staggered holders', ['S1', 'S2', 'S3', 'S4', 'S5'], '2016-10-01', 3 * 365);
+		pid = p.pid;
+		await p.add(p.units[0]!.id, 'Staggered Holder One', VOL, { validFrom: '2005-10-01' });
+		for (let i = 1; i < 5; i++) await p.add(p.units[i]!.id, `Staggered Holder ${i + 1}`, OTHER, { validFrom: '2018-10-01', validTo: '2024-09-30' });
+		run = await p.run('staggered');
+	}, 120_000);
+
+	it('the database counts 5 holders of the source, each row a salted key (no name, no ordinal); an editor reads VOL on its row (positive control)', async () => {
+		expect(await rowsAs(viewer, 'SELECT DISTINCT water_source, holders FROM app_allocation_volumes($1)', [pid])).toEqual([{ water_source: 'surface', holders: 5 }]);
+		const keys = await rowsAs<{ holder: string }>(viewer, 'SELECT holder FROM app_allocation_volumes($1)', [pid]);
+		expect(new Set(keys.map((k) => k.holder)).size).toBe(5);
+		expect(keys.every((k) => /^[0-9a-f]{32}$/.test(k.holder))).toBe(true);
+		expect((await editor.call('GET', `/projects/${pid}/allocations`)).body.allocations.map((a: { volumeM3PerYear: number }) => a.volumeM3PerYear)).toContain(VOL);
+	});
+
+	it('GET …/allocations: today only VOL is in force, so the viewer’s total is withheld, not VOL', async () => {
+		const res = await viewer.call('GET', `/projects/${pid}/allocations`);
+		expect(res.body.totals).toEqual([{ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null }]);
+		expect(holdsFigure(JSON.stringify(res.body), VOL)).toBe(false);
+	});
+
+	it('GET …/runs/:runId/allocations: modelled use per year only, no status, and no judgement (the rows change in 2018); the editor’s comparison holds VOL (positive control)', async () => {
+		const res = await viewer.call('GET', `/projects/${pid}/runs/${run}/allocations`);
+		const src = res.body.totals.sources[0];
+		expect(src.years.map((y: object) => Object.keys(y).sort())).toEqual(new Array(3).fill(['modelledM3', 'partial', 'waterYear']));
+		expect(src.judgement).toBeNull();
+		expect(JSON.stringify(res.body)).not.toMatch(/registered/i);
+		expect(holdsFigure(JSON.stringify(res.body), VOL)).toBe(false);
+		expect(holdsFigure(JSON.stringify((await editor.call('GET', `/projects/${pid}/runs/${run}/allocations`)).body.comparison), VOL)).toBe(true);
+	});
+
+	it('§ 5: the editor reads 2016 and 2017 withheld and 2018 the five’s total; the viewer reads no registered m³ in it at all', async () => {
+		const asEditor = (await editor.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+		const ed = others(asEditor.allocations)!;
+		expect(ed.map((y) => [y.waterYear, y.withheldA ?? false])).toEqual([
+			[2016, true],
+			[2017, true],
+			[2018, false]
+		]);
+		expect(ed[2]!.registeredA!).toBeCloseTo(VOL + 4 * OTHER, 6);
+		expect(holdsFigure(JSON.stringify(asEditor.appendix), VOL)).toBe(true);
+		const asViewer = (await viewer.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+		expect(asViewer.allocations.othersRegisteredWithheld).toBe(true);
+		expect(others(asViewer.allocations)!.every((y) => y.registeredA === null && y.registeredB === null)).toBe(true);
+		for (const v of [VOL, VOL + 4 * OTHER]) expect(figuresAt(JSON.stringify(asViewer), v), String(v)).toEqual([]);
+	});
+});
+
+describe('#523 K, L, M: no two figures a viewer reads at the same time differ by one holder’s volume', () => {
+	// Five matched holders on S1–S5, a sixth unmatched (no unit, L), a seventh on S6 from 2018-10-01 (M).
+	const V = [51_234, 52_345, 53_456, 54_567, 55_678];
+	const UNMATCHED = 111_119;
+	const LATER = 123_457;
+	const TODAY = V.reduce((s, v) => s + v, 0) + UNMATCHED + LATER;
+	let pid: string;
+	let base: string;
+	let scenarioRun: string;
+
+	beforeAll(async () => {
+		const p = await volumesProject('Same-time differences', ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'], '2016-10-01', 3 * 365);
+		pid = p.pid;
+		const ids = [];
+		for (let i = 0; i < 5; i++) ids.push(await p.add(p.units[i]!.id, `Same Time Holder ${i + 1}`, V[i]!));
+		await p.add(null, 'Same Time Unmatched', UNMATCHED);
+		await p.add(p.units[5]!.id, 'Same Time Later', LATER, { validFrom: '2018-10-01' });
+		base = await p.run('same time');
+		// K: an editor's team scenario that takes S1's row away.
+		const sc = await editor.call('POST', `/projects/${pid}/scenarios`, { name: 'Without S1', baseRunId: base, ops: [{ op: 'allocation.remove', allocationId: ids[0] }] });
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const ran = await editor.call('POST', `/projects/${pid}/scenarios/${sc.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		scenarioRun = ran.body.run.id;
+	}, 180_000);
+
+	it('positive control: the editor reads each figure the differences would come from', async () => {
+		const ed = others((await editor.call('GET', `/projects/${pid}/runs/${scenarioRun}/evidence-report`)).body.report.allocations)!;
+		// K: in 2018 (S2–S5 and the later holder in the application, 5 holders) baseline less application is S1's volume.
+		expect(ed[2]!.registeredA! - ed[2]!.registeredB!).toBeCloseTo(V[0]!, 3);
+		// M: 2018 less 2017 is the later holder's.
+		expect(ed[2]!.registeredA! - ed[1]!.registeredA!).toBeCloseTo(LATER, 3);
+	});
+
+	it('L and M: today’s total is shown, and no year of the run carries a registered m³ to subtract from it or from another year', async () => {
+		const today = (await viewer.call('GET', `/projects/${pid}/allocations`)).body.totals[0];
+		expect(today.registeredM3PerYear).toBe(TODAY);
+		const text = JSON.stringify((await viewer.call('GET', `/projects/${pid}/runs/${base}/allocations`)).body);
+		for (const v of [UNMATCHED, LATER, TODAY - UNMATCHED - LATER, TODAY - UNMATCHED]) expect(figuresAt(text, v), String(v)).toEqual([]);
+		expect(text).not.toMatch(/registered/i);
+	});
+
+	it('K, L and M in the live evidence report: no registered m³ in the totals of other units, baseline or application', async () => {
+		const r = (await viewer.call('GET', `/projects/${pid}/runs/${scenarioRun}/evidence-report`)).body.report;
+		const ys = others(r.allocations)!;
+		expect(ys.length).toBe(3);
+		expect(ys.every((y) => y.registeredA === null && y.registeredB === null)).toBe(true);
+		expect(r.allocations.units.every((u: Section5['units'][number]) => u.sources.every((s) => s.meanRegisteredA === null))).toBe(true);
+		const text = JSON.stringify(r);
+		for (const v of [V[0]!, LATER, UNMATCHED, V.reduce((s, x) => s + x, 0), V.reduce((s, x) => s + x, 0) + LATER]) expect(figuresAt(text, v), String(v)).toEqual([]);
+	});
+});
+
+describe('#523 round 5: the band, cap and full-allocation runs, run visibility, erasure', () => {
+	const V = [51_234, 52_345, 53_456, 54_567, 55_678];
+	const LATER = 123_457;
+	let pid: string;
+	let base: string;
+	let fullRun: string;
+	let ids: string[];
+
+	beforeAll(async () => {
+		const p = await volumesProject('Round five', ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'], '2016-10-01', 3 * 365);
+		pid = p.pid;
+		ids = [];
+		for (let i = 0; i < 5; i++) ids.push(await p.add(p.units[i]!.id, `Round Five Holder ${i + 1}`, V[i]!));
+		ids.push(await p.add(p.units[5]!.id, 'Round Five Later', LATER, { validFrom: '2018-10-01' }));
+		base = await p.run('round five');
+		// An editor's team scenario that runs the baseline at full allocation: each unit's demand scaled to its volume.
+		const sc = await editor.call('POST', `/projects/${pid}/scenarios`, { name: 'At full allocation', baseRunId: base, ops: [{ op: 'settings.set', path: 'allocationMode', value: 'fullAllocation' }] });
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const ran = await editor.call('POST', `/projects/${pid}/scenarios/${sc.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		fullRun = ran.body.run.id;
+	}, 180_000);
+
+	it('R5-1: the viewer’s totals use the run’s own band, whatever ?tolerance= says; the editor’s comparison takes it (positive control)', async () => {
+		const plain = await viewer.call('GET', `/projects/${pid}/runs/${base}/allocations`);
+		expect(plain.status).toBe(200);
+		expect(plain.body.totals.tolerance).toBe(0.1);
+		for (const t of [0, 0.01, 0.37, 0.99]) expect((await viewer.call('GET', `/projects/${pid}/runs/${base}/allocations?tolerance=${t}`)).body, String(t)).toEqual(plain.body);
+		const ed = async (t: number) => (await editor.call('GET', `/projects/${pid}/runs/${base}/allocations?tolerance=${t}`)).body.comparison;
+		expect((await ed(0.37)).tolerance).toBe(0.37);
+		const statuses = async (t: number) => (await ed(t)).nodes.flatMap((n: { surface: { years: { status: string }[] } }) => n.surface.years.map((y) => y.status));
+		expect(await statuses(0)).not.toEqual(await statuses(0.99));
+	});
+
+	it('R5-2: a full-allocation run gives the viewer no totals by year, and § 5 no modelled use, so no two years differ by a holder’s volume; the editor reads them (positive control)', async () => {
+		const res = await viewer.call('GET', `/projects/${pid}/runs/${fullRun}/allocations`);
+		expect(res.status).toBe(200);
+		expect([res.body.totals, res.body.totalsWithheld, res.body.comparison]).toEqual([null, 'allocation_mode', null]);
+		const r = (await viewer.call('GET', `/projects/${pid}/runs/${fullRun}/evidence-report`)).body.report;
+		expect(r.allocations.othersUseWithheld).toBe(true);
+		const ys = others(r.allocations)!;
+		const total = r.allocations.units.find((u: { nodeId: string }) => u.nodeId === 'others:surface').sources[0];
+		expect([total.meanModelledB, total.countsB]).toEqual([null, null]);
+		// The subtraction itself: nothing of the application side to take one year from the next.
+		for (let i = 1; i < ys.length; i++) {
+			const [a, b] = [ys[i - 1] as unknown as { modelledB: number | null; statusB: string | null }, ys[i] as unknown as { modelledB: number | null; statusB: string | null }];
+			expect([a.modelledB, b.modelledB, a.statusB, b.statusB]).toEqual([null, null, null, null]);
+		}
+		// The baseline side (compare-only) keeps its modelled use and status.
+		expect(ys.some((y) => (y as unknown as { modelledA: number | null }).modelledA !== null)).toBe(true);
+		// Positive control: the editor reads the application side's modelled use for every year.
+		const ed = others((await editor.call('GET', `/projects/${pid}/runs/${fullRun}/evidence-report`)).body.report.allocations)! as unknown as { modelledB: number | null }[];
+		expect(ed.every((y) => typeof y.modelledB === 'number')).toBe(true);
+		expect((await editor.call('GET', `/projects/${pid}/runs/${fullRun}/allocations`)).body.comparison).not.toBeNull();
+	});
+
+	it('R5-3: app_run_allocation_holders answers only for a run the caller can read', async () => {
+		const call = (u: User, run: string) => rowsAs<{ allocation_id: string }>(u, 'SELECT allocation_id FROM app_run_allocation_holders($1, $2, $3::text[])', [pid, run, ids]);
+		expect(await call(viewer, base)).toHaveLength(6);
+		// A draft application of someone else's, with a copy of the base run as its run: the viewer can't read it.
+		// Planted as the schema owner, signed in as a contributor for the scenario's own trigger (a fresh session, then closed).
+		const applicant = await signUp('R5applicant');
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await owner.call('POST', `/projects/${pid}/publication`, { runId: base })).status).toBeLessThan(300);
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		let sc: { id: string };
+		try {
+			await client.query(`SELECT set_config('app.current_user_id', $1, false)`, [applicant.id]);
+			sc = (
+				await client.query<{ id: string }>(
+					`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, origin, status, owner_user_id) VALUES ($1, 'Hidden draft', $2, repeat('0', 64), 'applicant', 'draft', $3) RETURNING id`,
+					[pid, base, applicant.id]
+				)
+			).rows[0]!;
+		} finally {
+			await client.end();
+		}
+		const [run] = await asOwner(
+			`INSERT INTO model_run (id, project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, trigger)
+			 SELECT gen_random_uuid(), project_id, created_by, 'hidden', engine_version, start_date, end_date, inputs, summary, $2, trigger FROM model_run WHERE id = $1 RETURNING id`,
+			[base, sc.id]
+		);
+		expect(await rowsAs(viewer, 'SELECT id FROM model_run WHERE id = $1', [run!.id])).toEqual([]);
+		expect(await call(viewer, run!.id as string)).toEqual([]);
+		// Its keys were frozen all the same (positive control: the table holds them).
+		expect((await asOwner('SELECT count(*)::int AS n FROM run_allocation_holder WHERE run_id = $1', [run!.id]))[0]!.n).toBe(6);
+	});
+
+	it('erasure: when a holder’s name leaves the project, the runs’ frozen keys of it become the shared "gone"; a name still on another row is kept (positive control)', async () => {
+		const key = async (aid: string) => (await asOwner('SELECT holder FROM run_allocation_holder WHERE run_id = $1 AND allocation_id = $2', [base, aid]))[0]!.holder as string;
+		const before = await key(ids[0]!);
+		expect(before).not.toBe('gone');
+		// Holder 2's name goes on another row too, then off row 2: still in the project, so kept.
+		const extra = await editor.call('POST', `/projects/${pid}/allocations`, { nodeId: null, holder: 'round five holder 2', authorisation: 'licence', waterSource: 'groundwater', volumeM3PerYear: 1 });
+		expect(extra.status).toBe(201);
+		const k2 = await key(ids[1]!);
+		expect((await editor.call('PATCH', `/projects/${pid}/allocations/${ids[1]}`, { holder: '' })).status).toBe(200);
+		expect(await key(ids[1]!)).toBe(k2);
+		// Holder 1's only row: its name cleared, then the row deleted. Gone from every run that froze it.
+		expect((await editor.call('PATCH', `/projects/${pid}/allocations/${ids[0]}`, { holder: '' })).status).toBe(200);
+		expect(await key(ids[0]!)).toBe('gone');
+		expect((await asOwner('SELECT count(*)::int AS n FROM run_allocation_holder WHERE holder = $1', [before]))[0]!.n).toBe(0);
+		// The extra row deleted: holder 2's name leaves too.
+		expect((await editor.call('DELETE', `/projects/${pid}/allocations/${extra.body.allocation.id}`)).status).toBe(204);
+		expect(await key(ids[1]!)).toBe('gone');
+	});
+});
+
+// Round 6: a status per water year at a fixed band, pooled over the years of several runs, pins the registered total
+// (and so, by L and M, one holder's volume) to a few percent. The review's probe as a fixture: three 30-year runs
+// whose use varies with the weather and the crop area. A viewer kept from each volume gets no status per year (and no
+// judgement for a run whose rows change), so the interval they could derive is unbounded; the editor's figures give
+// a narrow one (the positive control: the attack works on what the old route served).
+describe('#523 round 6: statuses pooled over several runs give no interval for the registered volume', () => {
+	const START = '1995-10-01';
+	const YEARS = 30;
+	let pid: string;
+	const runs: string[] = [];
+	let perHolder = 0;
+
+	/** [lo, hi] for a registered total R, from (modelled use, status) pairs of years with the same R in force; null when nothing bounds it. */
+	const pooled = (pairs: { m: number; status: AllocationStatus }[], t: number): [number, number] | null => {
+		let lo = 0;
+		let hi = Infinity;
+		for (const { m, status } of pairs) {
+			if (status === 'within') ((lo = Math.max(lo, m / (1 + t))), (hi = Math.min(hi, m / (1 - t))));
+			else if (status === 'over') hi = Math.min(hi, m / (1 + t));
+			else if (status === 'under') lo = Math.max(lo, m / (1 - t));
+		}
+		return lo > 0 && Number.isFinite(hi) ? [lo, hi] : null;
+	};
+
+	beforeAll(async () => {
+		// A wet-and-dry rain series, seeded: each year's use differs.
+		let seed = 7;
+		const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+		const days = YEARS * 365 + 8;
+		const wet = Array.from({ length: YEARS + 1 }, () => 0.4 + 1.2 * rnd());
+		const p = await volumesProject('Pooled statuses', ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'], START, days);
+		pid = p.pid;
+		const rain = Array.from({ length: days }, (_, i) => (rnd() < 0.12 ? 18 * wet[Math.floor(i / 365)]! : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: START, values: rain })).status).toBe(200);
+		const model = (await owner.call('GET', `/projects/${pid}/model`)).body;
+		for (const factor of [0.8, 1, 1.25]) {
+			const scaled = { nodes: model.nodes, crops: model.crops, transfers: model.transfers ?? [], cropAreas: model.cropAreas.map((a: { areaM2: number }) => ({ ...a, areaM2: 60_000 * factor })) };
+			expect((await owner.call('PUT', `/projects/${pid}/model`, scaled)).status).toBe(200);
+			runs.push(await p.run(`area × ${factor}`));
+		}
+		// Volumes set near the middle run's mean use, so years fall either side of the band.
+		const probe = await p.add(p.units[0]!.id, 'Pooled Probe', 1);
+		const c = (await editor.call('GET', `/projects/${pid}/runs/${runs[1]}/allocations`)).body.comparison as AllocationComparison;
+		const unit = c.nodes.find((n) => n.nodeId === p.units[0]!.id)!.surface.years.filter((y) => !y.partial);
+		perHolder = Math.round(unit.reduce((s, y) => s + y.modelledM3, 0) / unit.length);
+		expect((await editor.call('DELETE', `/projects/${pid}/allocations/${probe}`)).status).toBe(204);
+		for (let i = 0; i < 5; i++) await p.add(p.units[i]!.id, `Pooled Holder ${i + 1}`, perHolder);
+		await p.add(p.units[5]!.id, 'Pooled Later', 123_457, { validFrom: '2018-10-01' });
+		await p.add(null, 'Pooled Unmatched', 77_777);
+	}, 600_000);
+
+	it('positive control: the old route’s statuses (the editor’s sums, at the band) pin the five holders’ total to a few percent', async () => {
+		const pairs: { m: number; status: AllocationStatus }[] = [];
+		for (const run of runs) {
+			const c = (await editor.call('GET', `/projects/${pid}/runs/${run}/allocations`)).body.comparison as AllocationComparison;
+			const held = c.nodes.filter((n) => n.surface.allocationIds.length > 0);
+			for (const y of held[0]!.surface.years) {
+				if (y.partial || y.waterYear >= 2018) continue;
+				const sum = (k: 'modelledM3' | 'registeredM3') => held.reduce((s, n) => s + n.surface.years.find((x) => x.waterYear === y.waterYear)![k], 0);
+				pairs.push({ m: sum('modelledM3'), status: allocationStatus(sum('modelledM3'), sum('registeredM3'), 0.1) });
+			}
+		}
+		const R = 5 * perHolder;
+		const box = pooled(pairs, 0.1);
+		expect(box).not.toBeNull();
+		expect(box![0]).toBeLessThanOrEqual(R + 1);
+		expect(box![1]).toBeGreaterThanOrEqual(R - 1);
+		expect((box![1] - box![0]) / R).toBeLessThan(0.1);
+	});
+
+	it('the viewer gets no status for any year of any run, and no judgement, so pooling bounds nothing', async () => {
+		const pairs: { m: number; status: AllocationStatus }[] = [];
+		for (const run of runs) {
+			const body = (await viewer.call('GET', `/projects/${pid}/runs/${run}/allocations`)).body;
+			const src = body.totals.sources[0];
+			expect(src.judgement).toBeNull();
+			for (const y of src.years as { modelledM3: number; status?: AllocationStatus }[]) {
+				expect(y.status).toBeUndefined();
+				if (y.status) pairs.push({ m: y.modelledM3, status: y.status });
+			}
+			expect(JSON.stringify(body)).not.toMatch(/"(within|over|under)"/);
+		}
+		expect(pooled(pairs, 0.1)).toBeNull();
+	});
+});
+
+describe('#523 N: rows deleted after a run keep the holder they had when it ran', () => {
+	const VOL = 77_777;
+	let pid: string;
+	let run: string;
+
+	beforeAll(async () => {
+		// One holder on five units (finding 6's layout), a run, then every row deleted (as deleting the import does).
+		const p = await volumesProject('Deleted rows', ['D1', 'D2', 'D3', 'D4', 'D5'], '2016-10-01', 365);
+		pid = p.pid;
+		const ids = [];
+		for (const u of p.units) ids.push(await p.add(u.id, 'One Estate Holdings', VOL));
+		run = await p.run('one holder');
+		for (const id of ids) expect((await editor.call('DELETE', `/projects/${pid}/allocations/${id}`)).status).toBe(204);
+	}, 120_000);
+
+	it('§ 5 leaves the one holder out, for every reader: before, each gone row counted as its unit, 5 holders', async () => {
+		for (const u of [editor, viewer]) {
+			const r = (await u.call('GET', `/projects/${pid}/runs/${run}/evidence-report`)).body.report;
+			expect(others(r.allocations)).toBeNull();
+			expect(r.allocations.othersLeftOut).toBe(5);
+		}
+		// The run kept one key for all five rows (owner-only table: the app can't read it).
+		const [k] = await asOwner('SELECT count(DISTINCT holder)::int AS n, count(*)::int AS rows FROM run_allocation_holder WHERE run_id = $1', [run]);
+		expect(k).toEqual({ n: 1, rows: 5 });
+		await expect(rowsAs(editor, 'SELECT 1 FROM run_allocation_holder')).rejects.toThrow(/permission denied/);
+	});
+});
+
+describe('#523 O: a total one holder dominates isn’t shown (provisional dominance rule)', () => {
+	it('today’s total of one estate of 900 000 m³/a and four farms of 1 is withheld; the editor reads each row (positive control)', async () => {
+		const p = await volumesProject('Dominant estate', ['E1', 'E2', 'E3', 'E4', 'E5'], '2016-10-01', 365);
+		await p.add(p.units[0]!.id, 'Large Estate', 900_000);
+		for (let i = 1; i < 5; i++) await p.add(p.units[i]!.id, `Small Farm ${i}`, 1);
+		const totals = (await viewer.call('GET', `/projects/${p.pid}/allocations`)).body.totals;
+		expect(totals).toEqual([{ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null }]);
+		expect(holdsFigure(JSON.stringify(totals), 900_004)).toBe(false);
+		expect((await editor.call('GET', `/projects/${p.pid}/allocations`)).body.allocations).toHaveLength(5);
+	});
+});
+
 // The canary sweep (issue #523 G1): the redaction of a viewer's copy of the
 // volumes is opt-in per route, which is how the scenario base, the report PDFs
 // and the evidence report's changes were missed. So every GET a viewer can
@@ -540,6 +949,8 @@ describe('the allocations export', () => {
 // viewer the project keeps from each volume, on a project whose runs carry a
 // registered volume and a team scenario that sets another farm's, and no
 // answer may hold either number, in figures or in words ("987 654 321").
+// Four more holders' rows in force only from 2040 make the source one of 5
+// holders, so the totals by source are computed over the canary alone (#523 G).
 // An editor reads both on the routes that carry them (the positive control).
 describe('no viewer GET carries a registered volume while the owners keep them from viewers (#523 G1)', () => {
 	const ctx = {} as LadderCtx;
@@ -564,6 +975,27 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 	 */
 	const forms = (n: number) => [figure(n, 9), figure(n / 1000, 6), figure(n / 365, 7), figure((n * PARTIAL_DAYS) / 365, 7)];
 	const seen = (text: string, n: number) => forms(n).some((r) => r.test(text));
+	/** Where a JSON answer carries a registered volume as a number (a key starting registered or meanRegistered, #523 K/L/M). */
+	const registeredFigures = (text: string): string[] => {
+		let body: unknown;
+		try {
+			body = JSON.parse(text);
+		} catch {
+			return [];
+		}
+		const out: string[] = [];
+		const walk = (v: unknown, at: string) => {
+			if (Array.isArray(v)) v.forEach((x, i) => walk(x, at ? `${at}.${i}` : String(i)));
+			else if (v && typeof v === 'object')
+				for (const [k, x] of Object.entries(v)) {
+					const here = at ? `${at}.${k}` : k;
+					if (/^(registered|meanRegistered)/.test(k) && typeof x === 'number' && x !== 0) out.push(here);
+					walk(x, here);
+				}
+		};
+		walk(body, '');
+		return out;
+	};
 	const routes = [
 		...new Set(
 			app.routes
@@ -586,8 +1018,9 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		'/projects/:id/packs/:packId/bundle': { status: 403, why: 'pack_volumes_withheld: the bundle holds the runs’ inputs and results' },
 		'/projects/:id/reports/:jobId/pdf': { status: 403, why: 'pack_volumes_withheld: the editor’s impact report was printed with the volumes' },
 		'/projects/:id/allocations/export.csv': { status: 403, why: 'each registered volume is the editors’ and owners’ (162)' },
-		// The pack is a draft: never printed.
-		'/projects/:id/packs/:packId/pdf': { status: 409, why: 'a draft pack has no PDF' },
+		// The pack's § 5 prints the groundwater total of other units with its registered m³ (#523 K/L/M), refused before
+		// the draft's 409 (a draft is never printed).
+		'/projects/:id/packs/:packId/pdf': { status: 403, why: 'pack_volumes_withheld: § 5 prints a total of other units’ registered volume' },
 		// An application's routes, on the team's scenario.
 		'/projects/:id/scenarios/:sid/packs/:packId': { status: 404, why: 'an applicant’s pack view: the viewer is no party, and the scenario is the team’s' },
 		'/projects/:id/scenarios/:sid/packs/:packId/pdf': { status: 404, why: 'an applicant’s copy: likewise' },
@@ -653,6 +1086,16 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		await post('/allocations', { nodeId: ctx.farmId, holder: 'Canary Holder', registrationNo: 'REG-CANARY', authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: CANARY });
 		// A dam's registered storage (21b): a figure of the registration too.
 		await post('/allocations', { nodeId: ctx.otherFarmId, authorisation: 'registration', waterSource: 'surface', waterUse: '21b', volumeM3PerYear: 0, storageM3: STORAGE_CANARY });
+		// Four more holders of surface water, in force only from 2040 (#523 G): the source has 5 holders, so the viewer's
+		// totals are computed, but on every day and water year the canaries are the only volumes in force. A total gated
+		// on the source's holders of every date gave the canary itself.
+		for (const [i, nodeId] of [ctx.farmId, ctx.farmId, ctx.otherFarmId, ctx.otherFarmId].entries())
+			await post('/allocations', { nodeId, holder: `Later Holder ${i + 1}`, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 31_111 + i * 1_111, validFrom: '2040-10-01' });
+		// Five holders of groundwater in force throughout, none dominating (#523 K/L/M): the run's years and § 5's total of
+		// other units are shown to the editor, so a route that hands that viewer a registered figure other than today's
+		// per-source total is caught by registeredFigures below, not only by a canary's digits.
+		for (const [i, nodeId] of [ctx.farmId, ctx.farmId, ctx.farmId, ctx.otherFarmId, ctx.otherFarmId].entries())
+			await post('/allocations', { nodeId, holder: `Groundwater Holder ${i + 1}`, authorisation: 'licence', waterSource: 'groundwater', volumeM3PerYear: 40_001 + i });
 		baseRun = (await post('/runs', { label: 'With the canary' })).run.id;
 		// Published after the ladder's run: its changes since the previous publication add the canary.
 		await post('/publication', { runId: baseRun });
@@ -719,6 +1162,8 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		const sweep = (await get(ctx.editor, `${at}/sweeps/${ids.sweepId}`)).text;
 		expect(seen(sweep, CANARY) && seen(sweep, SWEEP_CANARY)).toBe(true);
 		expect(seen((await get(ctx.editor, `${at}/sweeps`)).text, SWEEP_CANARY)).toBe(true);
+		// § 5's groundwater total of other units carries its registered figures for the editor (control for registeredFigures).
+		expect(registeredFigures((await get(ctx.editor, `${at}/runs/${baseRun}/evidence-report`)).text).some((p) => p.startsWith('report.allocations.units'))).toBe(true);
 	});
 
 	it('every viewer GET of the project, on the base run and on the scenario run, holds none of the numbers, and answers or is an expected refusal', async () => {
@@ -735,6 +1180,9 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 				const expected = EXPECTED[route];
 				if ((r.status < 200 || r.status >= 400) && r.status !== expected?.status) refused.push(`${path} answered ${r.status}`);
 				for (const n of CANARIES) if (seen(r.text, n)) leaks.push(`${path} (${r.status}) holds ${n}`);
+				// #523 K/L/M: the only registered m³ such a viewer reads is today's total per water source; any other
+				// registered figure (a run's year, a total of other units) can be differenced against it or another.
+				for (const at of registeredFigures(r.text)) if (!(route === '/projects/:id/allocations' && /^totals\.\d+\.registeredM3PerYear$/.test(at))) leaks.push(`${path} carries a registered figure at ${at}`);
 			}
 		}
 		expect(leaks).toEqual([]);

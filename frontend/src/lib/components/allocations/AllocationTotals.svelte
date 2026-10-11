@@ -8,16 +8,22 @@
 	import type { AllocationComparisonTotals, AllocationTotal } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { SOURCE_LABEL, STATUS_LABEL, totalsSentence, waterYearLabel } from './allocations';
+	import { judgementSentence, SOURCE_LABEL, totalsSentence, waterYearLabel } from './allocations';
 
-	let { totals, years, runLabel, loading }: { totals: AllocationTotal[] | null; years: AllocationComparisonTotals | null; runLabel: string | null; loading: boolean } = $props();
+	let {
+		totals,
+		years,
+		yearsWithheld = false,
+		runLabel,
+		loading
+	}: { totals: AllocationTotal[] | null; years: AllocationComparisonTotals | null; yearsWithheld?: boolean; runLabel: string | null; loading: boolean } = $props();
 </script>
 
 <section class="panel" aria-labelledby="alloc-totals-h" data-testid="allocation-totals">
 	<h2 id="alloc-totals-h">Registered water use in this catchment <HelpTip key="allocation-viewer-access" /></h2>
 	<p class="muted">
-		This catchment’s registered volumes are shown to viewers as totals per water source, and only where at least 5 registered users hold one, so no farm’s volume can be
-		read from them. The organisation’s editors and owners see each farm.
+		This catchment’s registered volumes are shown to viewers as today’s totals per water source, and only where at least 5 registered users hold one in force and no one
+		or two of them hold most of it, so no farm’s volume can be read from them. The organisation’s editors and owners see each farm.
 	</p>
 	{#if totals && totals.length}
 		<ul class="totals">
@@ -30,34 +36,38 @@
 	{/if}
 
 	{#if runLabel && years?.sources.length}
-		<h3 class="sub-h">Modelled use against the registered volumes, run “{runLabel}”</h3>
-		<p class="small muted">Summed over the units with a registered volume, each water year (October–September). Modelled, not metered: arithmetic, not a finding about anyone’s use.</p>
+		<h3 class="sub-h">Modelled use by the units with a registered volume, run “{runLabel}”</h3>
+		<p class="small muted">
+			Summed over the units with a registered volume, each water year (October–September). Modelled, not metered: arithmetic, not a finding about anyone’s use. The
+			registered volume is shown only as today’s total above, and how the use compares with it only once for the whole run, when the same registered users held the same
+			volumes all through it: figures for each year would give the volumes away.
+		</p>
 		{#each years.sources as s (s.waterSource)}
+			<p class="small" data-testid="allocation-totals-judgement-{s.waterSource}">{judgementSentence(s.judgement, years.tolerance)}</p>
 			<div class="table-wrap">
 				<table class="data compact" data-testid="allocation-totals-years-{s.waterSource}">
 					<caption>{SOURCE_LABEL[s.waterSource]}: {fmtNum(s.units)} units, {fmtNum(s.holders)} registered users</caption>
 					<thead>
 						<tr>
 							<th scope="col">Water year</th>
-							<th scope="col" class="num">Registered (m³)</th>
 							<th scope="col" class="num">Modelled use (m³)</th>
-							<th scope="col">Compared</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each s.years as y (y.waterYear)}
 							<tr>
 								<th scope="row">{waterYearLabel(y.waterYear)}{y.partial ? ' (part)' : ''}</th>
-								<td class="num">{fmtNum(y.registeredM3)}</td>
 								<td class="num">{fmtNum(y.modelledM3)}</td>
-								<td>{y.partial ? 'Part year, not judged' : STATUS_LABEL[y.status]}</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
 			</div>
 		{/each}
-		<p class="hint muted">“Within band” is within ±{fmtNum(years.tolerance * 100, 0)} % of the registered volume.</p>
+	{:else if runLabel && yearsWithheld}
+		<p class="small muted" data-testid="allocation-totals-years-mode">
+			The run “{runLabel}” holds each unit’s use to its registered volume (capped or full allocation), so its modelled use would show the volumes: it isn’t shown here.
+		</p>
 	{:else if loading}
 		<p class="muted small">Loading the run’s totals…</p>
 	{/if}

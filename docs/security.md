@@ -2834,9 +2834,9 @@ database:
   | --- | --- | --- |
   | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
   | Farmer or applicant linked to the farm | their own farm's holder | their own units |
-  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`) |
+  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise only today's total per water source, at ≥ 5 registered users in force and none (or two) dominating it (provisional, #92); a run's years and § 5's totals of other units as status and modelled use, no registered m³ (#523 G–O) |
   | Share links, pack links, the public verify page | never | never per unit (none shown today; any later total at ≥ 5 holders) |
-  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`) |
+  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`); at ≥ 5 registered users, and each water year's registered volume only at ≥ 5 in force that year (`evidence-18`, #523 G) |
 
   With the switch off, a viewer's routes carry no copy of the volumes: the
   run's model and summary per unit, the compare route, the summary CSV, the
@@ -2871,13 +2871,112 @@ database:
   printed that way, without either project's volumes, and any reader of the
   report's project may download it. A scenario sweep's members
   (`GET …/sweeps`, `…/sweeps/:sweepId`) come without their summaries'
-  per-unit allocations and their `allocation.set` ops. Page 1's authorised
-  volume mix is frozen twice (evidence-17): the full one for editors,
-  owners, the authority and the PDF (refused to such a viewer), and a
-  folded one served in its place to such a viewer: no line, total or
-  difference between them and the per-source totals that viewer reads gives
-  fewer than 5 registered users' volume, and no count of them below 5 is
-  given (`foldedMix`). A storage-only (21b) row's warning no longer quotes
+  per-unit allocations and their `allocation.set` ops.
+
+  **The one registered m³ such a viewer reads** (issue #523 rounds 3–4,
+  operator's decision 2026-10-11): today's total per water source
+  (`GET …/allocations` `totals`, `volumeTotals`), given only when the
+  takes (or the storage) in force today are 5 or more registered users'
+  and pass the **dominance rule**: no one holder above 80 % of the sum and
+  no two above 90 % (`totalShown`, engine `allocations/holders.ts`). The
+  dominance rule and its limits are **provisional**, pending the CISO and
+  counsel's D3 review (#92); before it, one estate of 900 000 m³/a beside
+  four farms of 1 m³/a gave the estate's volume as a "5 holder" total
+  (#523 O). Every other figure is withheld from that viewer: a run's
+  water years (`GET …/runs/:runId/allocations` `totals`) carry the
+  modelled use only, and § 5's *Other registered users* totals in the
+  live evidence report and in a served pack manifest carry no registered
+  m³ (per year, mean or cap) and no status or count of years against the
+  band, for the baseline or the application (`withoutOthersRegistered`,
+  `othersRegisteredWithheld`; page 1's "above the registered volume" flag
+  is rebuilt without them); their modelled use stays, and so do an
+  applicant's own units. **No status per year** (#523 round 6;
+  operator's decision 2026-10-11, **provisional**, pending the CISO and
+  the D3 privacy review, #92): every year with the same rows in force has
+  the same registered total, so the statuses of many run-years at a fixed
+  band intersect to pin it to well under 1 %, and with today's total (L)
+  or two row-set periods (M) one holder's volume to a few percent
+  (`allocations.db.test.ts` pools three 30-year runs). Instead the route
+  gives at most **one judgement for the whole run** (`judgement`: whole
+  years within the band and outside it), only when the rows in force on
+  the run's units are the same rows on every day of the run, are exactly
+  the rows of today's total for that source (none unmatched or on a unit
+  the run lacks, none ended or started since), and pass the 5-holder and
+  dominance rules; otherwise `null`. So the total it is judged against is
+  the one that viewer already reads today, and pooling judgements tells
+  them nothing new. Its band is the run's
+  own (`inputs.settings.allocationTolerance`): that viewer's
+  `?tolerance=` is ignored, as a band they choose is an oracle for the
+  volume (#523 round 5). A run in cap or full-allocation mode holds each
+  unit's use to its registered volume, so its modelled use is the volume
+  wherever supply met demand: such a viewer gets no totals by year for it
+  (`totals: null`, `totalsWithheld: 'allocation_mode'`), and § 5's totals
+  of other units leave out that side's modelled use and its mean too
+  (`othersUseWithheld`).
+  A pack PDF that prints such a total is refused to them (`403
+  pack_volumes_withheld`; `packWithheldPart` `pdf`), as is the manifest
+  and PDF of a pack drafted before `evidence-18` with one (its totals were
+  gated on units over every date). Why not a gate per figure: two sums
+  over different rows read at the same time give the rows between them
+  exactly, whatever each one's count: a team scenario's baseline and
+  application year that differ by one removed row (#523 K), today's total
+  less a run's year (the unmatched rows and units the run lacks, L), and
+  two consecutive years (a row starting at a year boundary, M). Editors,
+  owners and the authority read every figure.
+
+  The holders behind each sum are counted from the rows actually in it,
+  by a salted key per row (215): `md5` of a random per-project salt
+  (`allocation_holder_salt`, owner-only, never leaves the database) and
+  the holder as 162 counts them, so a member who knows the project and a
+  list of names has nothing to match the keys against (#523 P). A run
+  freezes its rows' keys when it is stored (`run_allocation_holder`,
+  owner-only, written by a trigger, read only through
+  `app_run_allocation_holders` for the given rows of one run the caller can
+  read under `model_run_select`'s rule), so rows
+  deleted later can't count as new holders (#523 N; a row no living
+  holder had, one a scenario op adds, shares one key `gone`). A key is a
+  pseudonym of the holder's name: it can't be turned back without the
+  salt, but the schema owner, who holds the salt, could confirm a guessed
+  name against it. So when a name leaves the project (the last row
+  carrying it is deleted, its import undone, or its holder cleared or
+  renamed), `allocation_holder_erased` resets every run's frozen key of it
+  to `gone` (POPIA s24 erasure; `allocations.db.test.ts` "erasure"). Keys
+  otherwise go with their run or project. § 5's totals
+  of other units are gated on registered users, not units, and per water
+  year on the holders in force, with the dominance rule, for every reader
+  (`evidence-18`).
+
+  Applicants and contributors read no registered m³ of anyone else's: an
+  applicant's pack view (`app_applicant_pack`, an allowlisted projection)
+  carries no § 5, their copy prints that view, and the base they build on
+  keeps only their own units' rows. An editor can't change an applicant's
+  application (only its applicant), and the applicant's ops can't reach a
+  hidden row (`applicationMask`: a hidden allocation id answers "not
+  found"), so a pack of an application has no K-type difference.
+
+  Page 1's authorised volume mix is frozen twice: the full one for
+  editors, owners, the authority and the PDF (refused to such a viewer),
+  and a folded one served in its place to such a viewer, no line of it
+  fewer than 5 registered users' volume and no count of them below 5
+  (`foldedMix`), as whole-percent shares with no m³ (`evidence-18`; an
+  `evidence-17` folded m³ mix is served as its shares), so it can't be
+  differenced against the live totals (#523 H) nor form a source × kind
+  table with them (#523 J).
+
+  What is true now: such a viewer reads registered m³ only as today's
+  per-source totals, each at 5 or more registered users in force, none
+  (or two) dominating; no two figures they read at the same time are sums
+  over different sets of today's rows. Left: today's total less an
+  applicant's own units (listed in their application's live report) is
+  the other holders' sum, a group of 4 or more, which the two-holder limb
+  of the dominance rule keeps from being mostly one of them; where the
+  mix's rows and the live totals are the same rows, a share times the
+  total estimates a line to within 1 % of the mix's total; and with
+  outside knowledge of an empty source × kind cell (J's premise) can bound
+  one holder's volume to that 1 %; and figures read at different times
+  (today's total on two days, successive pack versions, a frozen mix
+  against a later total) can still be differenced
+  ([followups.md § Allocations](./followups.md#allocations-wp-310)). A storage-only (21b) row's warning no longer quotes
   its volume (engine; it reaches a run's summary and the evidence report's
   A.5 verbatim).
 
@@ -2896,10 +2995,19 @@ database:
   `/auth/me/export`), a pack PDF or bundle's bytes and a report PDF's
   (their routes are redirects; the refusals are tested in
   `packs.db.test.ts` and above), a capped or full-allocation run (Left,
-  below), and a cross-project baseline (its own test, above). Left,
-  tracked: § 5's *Other registered users* total is gated at 5 units, not 5
-  holders (one holder with 5 units gets a total that is theirs), and
-  totals in successive pack versions can be differenced; a full-allocation
+  below), and a cross-project baseline (its own test, above). Its fixture
+  has four more holders' rows in force only from 2040, so the source has 5
+  holders while the canaries are the only volumes in force on any day or
+  year: a total gated on the source's holders of every date would give a
+  canary (#523 G). Five groundwater holders in force throughout make the
+  run's years and § 5's total shown to the editor, and every answer is
+  also searched for any number under a `registered…` or
+  `meanRegistered…` key: only `GET …/allocations`'s today's totals may
+  carry one (#523 K/L/M, which give a volume by subtraction, not as
+  digits). The tests beside it hold the review's repros for G, K, L, M, N
+  and O, each with an editor positive control. Left, tracked:
+  totals in successive pack versions, and the folded mix across boards or
+  packs, can be differenced; a full-allocation
   scenario run scales each unit's demand to its volume, so its per-unit
   figures give the volume as a capped run's do.
   Left: a capped run's per-unit daily series still bound use by the volume
@@ -3254,6 +3362,8 @@ PDF someone else asked for kept the person as a recipient
 | Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql); D3: editors, owners and the linked farmer only) | Not linked to an account | Deleted |
+| A pseudonym of each registered user's name, frozen with each run to count holders (215, #523): `md5` of a per-project salt and the name | `run_allocation_holder`, `allocation_holder_salt` (owner-only) | With the run; reset to `gone` in every run once the name leaves the project (`allocation_holder_erased`, indexed on the normalised name: undoing a 2 500-row import in a 5 000-row project takes about 70 ms locally) | Not linked to an account | Deleted |
+| Registered users' names in issued evidence: none as a field. A run's input and the evidence report carry no holder name (§ 5 names units; Appendix A.1's model rows and A.2's diff have no holder field), so a frozen pack manifest has none either. A name can reach one only as text someone typed (a unit named after its owner, notes, the applicant statement) | `evidence_pack.manifest` (frozen, hashed) | With the pack: an issued pack is never edited (its hash is verified publicly); whether issued evidence is kept against an erasure request is a legal-hold question for counsel (#92) | Not linked to an account | Kept while the project is a licence record |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |

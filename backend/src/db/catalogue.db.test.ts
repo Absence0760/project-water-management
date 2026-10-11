@@ -20,7 +20,8 @@ const NO_RLS = new Set(['schema_migrations']);
  * schema owner, reads it (deployment.md § Restoring the database).
  */
 // A reset's cancel-link hashes and the cap on asking for one (205_mfa_recovery): only its SECURITY DEFINER functions touch them.
-const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota']);
+// The allocation holder keys' salt and each run's frozen keys (215_allocation_holder_keys, #523 N/P): only its definer functions and trigger.
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load', 'mfa_reset_cancel', 'mfa_reset_quota', 'allocation_holder_salt', 'run_allocation_holder']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -387,6 +388,7 @@ const SCENARIO_ID_NULL_TESTS = new Map<string, string>([
 	['function app_applicant_pack_meta', 'evidence_pack.scenario_id: an application pack'],
 	['function app_own_new_scenario_run', 'link: a contributor reads their own run of a live application'],
 	['function app_purge_deleted_notes', 'note.scenario_id'],
+	['function app_run_allocation_holders', 'access: who reads the run (as the model_run_select policy, 215)'],
 	['function app_run_brief', 'access: who reads the run (as the model_run_select policy)'],
 	['function app_run_digest', 'access: who reads the run (as the model_run_select policy)'],
 	['function app_run_digest_body', 'the stamp: a set scenario_id matches the inputs.scenario it ran (077); unchanged, so stamps hold'],

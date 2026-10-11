@@ -317,8 +317,10 @@ describe('an application', () => {
 		// Viewers still don't, until it is decided.
 		expect((await viewer.call('GET', `${P()}/scenarios/${sid}`)).status).toBe(404);
 		expect((await viewer.call('GET', `${P()}/applications`)).status).toBe(403);
-		// An assessor can't edit it.
+		// An assessor can't edit it, nor add an op that takes another unit's registered volume away (#523 K: such an op
+		// would put a holder's volume between § 5's baseline and application totals in a pack of it).
 		expect((await assessor.call('PATCH', `${P()}/scenarios/${sid}`, { name: 'Renamed' })).status).toBe(403);
+		expect((await assessor.call('PATCH', `${P()}/scenarios/${sid}`, { ops: [{ op: 'allocation.remove', allocationId: crypto.randomUUID() }] })).status).toBe(403);
 	});
 
 	it('is decided by an assessor, never by its applicant, and viewers then read it', async () => {

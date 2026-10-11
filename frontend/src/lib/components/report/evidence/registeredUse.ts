@@ -45,7 +45,31 @@ export function countsText(c: EvidenceAllocationCounts | null): string {
 	if (!c) return '–';
 	const parts = [`${c.over} above`, `${c.within} within`, `${c.under} below`];
 	if (c.noVolume) parts.push(`${c.noVolume} with no volume`);
+	// evidence-18 (#523 G): a total of other units' years whose registered volume is too few holders' to show.
+	if (c.withheld) parts.push(`${c.withheld} not shown`);
 	return `${parts.join(', ')}, of ${c.wholeYears}`;
+}
+
+/** A total of other units' registered volume held by fewer than 5 registered users that year (evidence-18, #523 G). */
+export const REGISTERED_WITHHELD = 'not shown';
+
+/**
+ * A water year's registered volume in the table: the baseline's (else the
+ * application's), and the application's beside it when it differs; a year
+ * whose total of other units is too few registered users' (evidence-18,
+ * `withheldA` / `B`) reads "not shown", never a figure.
+ */
+export function registeredText(
+	y: Pick<EvidenceAllocationYear, 'registeredA' | 'registeredB' | 'withheldA' | 'withheldB'>,
+	application: boolean,
+	/** A total of other units served to a viewer kept from each volume (othersRegisteredWithheld, #523 K/L/M): no registered m³ at all. */
+	othersWithheld = false
+): { main: string; sub: string | null } {
+	if (othersWithheld) return { main: REGISTERED_WITHHELD, sub: null };
+	const a = y.withheldA ? REGISTERED_WITHHELD : y.registeredA === null ? null : m3(y.registeredA);
+	const b = !application ? null : y.withheldB ? REGISTERED_WITHHELD : y.registeredB === null ? null : m3(y.registeredB);
+	const differ = a !== null && b !== null && (y.withheldA || y.withheldB ? a !== b : Math.abs(y.registeredA! - y.registeredB!) > 0.5);
+	return { main: a ?? b ?? '–', sub: differ ? `application ${b}` : null };
 }
 
 /** A volume in m³ with no decimals, "–" when missing. */

@@ -2265,8 +2265,12 @@ export interface AllocationList {
 export interface AllocationTotal {
 	waterSource: 'surface' | 'groundwater';
 	holders: number;
-	registeredM3PerYear: number;
+	/** Null when the takes in force today are fewer than 5 registered users', or one or two of them dominate the sum (#523 G/O). */
+	registeredM3PerYear: number | null;
+	/** Null when none states one, or when withheld (`storageWithheld`). */
 	storageM3: number | null;
+	/** The storage in force today is fewer than 5 registered users', or dominated by one or two (#523 G/O). */
+	storageWithheld?: true;
 }
 
 /** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
@@ -2276,7 +2280,10 @@ export interface AllocationComparisonTotals {
 		waterSource: 'surface' | 'groundwater';
 		holders: number;
 		units: number;
-		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+		/** No registered m³ (only today's totals carry it, #523 K/L/M) and no status per year (#523 round 6): the modelled use. */
+		years: { waterYear: number; partial: boolean; modelledM3: number }[];
+		/** One judgement for the whole run, when the same rows were in force all through and pass the 5-holder and dominance rules; else null. */
+		judgement: { wholeYears: number; within: number; outside: number } | null;
 	}[];
 }
 

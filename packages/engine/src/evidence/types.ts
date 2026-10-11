@@ -114,8 +114,21 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * document; such a viewer gets no team-scenario pack before evidence-17 that
  * names a unit, and no mix without a folded one, and no PDF with a mix
  * (backend evidence/packs.ts).
+ * evidence-18 (issue #523 G/H/J, D3): § 5's "Other registered users" totals
+ * are gated on registered users, not units, and per water year on the
+ * holders whose rows are in force that year (`EvidenceRunInput.allocationHolders`):
+ * a source is left out when fewer than 5 hold it, and a year whose
+ * registered volume in force is fewer than 5 holders' gives its modelled use
+ * only (`EvidenceAllocationYear.withheldA` / `B`, counted in
+ * `EvidenceAllocationCounts.withheld`, left out of the mean registered). The
+ * folded authorised volume mix is frozen as whole-percent shares with no m³
+ * (`AuthorisedMixShares`): an m³ figure beside a viewer's live totals of the
+ * rows in force today could be differenced. A pack drafted before keeps its
+ * document; a viewer kept from each volume gets no manifest or PDF of one
+ * whose § 5 has a total of other units (backend evidence/packs.ts), and an
+ * evidence-17 folded mix is served as its shares.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-17';
+export const EVIDENCE_REPORT_VERSION = 'evidence-18';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -152,6 +165,17 @@ export interface EvidenceRunInput {
 	 * holder names: a run's allocations never do (docs/allocations.md § Who sees what).
 	 */
 	allocations?: AllocationComparison | null;
+	/**
+	 * evidence-18: who holds each of the run's allocations (by id), as an
+	 * opaque key (backend app_run_allocation_holders, 215), never a name: § 5
+	 * gives a total of other units' registered volume in a water year only
+	 * when the rows in force that year are held by FARMER_K (5) or more
+	 * registered users, none dominating it (#523 G/O). The keys are frozen
+	 * with the run (backend run_allocation_holder, 215). An allocation the
+	 * map lacks shares the key 'gone' (at most one holder, #523 N); with no
+	 * map at all, each counts as its unit's (`n:<nodeId>`).
+	 */
+	allocationHolders?: Readonly<Record<string, string>> | null;
 }
 
 /** The scenario an application run came from, as the run recorded it (inputs.scenario), with the scenario's current metadata. */
@@ -817,6 +841,14 @@ export interface EvidenceAllocationYear {
 	damDrawB?: number | null;
 	damLossesA?: number | null;
 	damLossesB?: number | null;
+	/**
+	 * evidence-18, on a total of other units, per run: the registered volume in
+	 * force that year is held by fewer than FARMER_K (5) registered users, so
+	 * it isn't given (`registeredA`/`B` and `statusA`/`B` are null; the
+	 * modelled use stays). Issue #523 G, D3.
+	 */
+	withheldA?: true;
+	withheldB?: true;
 }
 
 /** Whole water years by how modelled use compared with the registered volume. */
@@ -827,6 +859,8 @@ export interface EvidenceAllocationCounts {
 	under: number;
 	/** No registered volume in force that year (outside its validity dates). */
 	noVolume: number;
+	/** evidence-18, a total of other units: whole years whose registered volume is withheld (fewer than 5 registered users hold it that year), so not judged. */
+	withheld?: number;
 }
 
 export interface EvidenceAllocationSource {
@@ -912,6 +946,20 @@ export interface EvidenceAllocations {
 	 * older pack's document.
 	 */
 	unitYears?: { overA: number; judgedA: number; overB: number | null; judgedB: number | null };
+	/**
+	 * Set only on the copy served to a viewer kept from each registered volume
+	 * (backend withoutOthersRegistered, #523 K/L/M): the totals of other units
+	 * carry no registered m³ (each year's, the means, the cap), only the
+	 * status and modelled use. Never in a frozen document.
+	 */
+	othersRegisteredWithheld?: true;
+	/**
+	 * With it, when a run is in cap or full-allocation mode: that side's
+	 * modelled use, means, status and counts of the totals of other units are
+	 * left out too, since such a run's use is the registered volume wherever
+	 * supply met demand (#523 R5-2). Never in a frozen document.
+	 */
+	othersUseWithheld?: true;
 }
 
 /** Why the licence impact board couldn't be built; the page words it. */

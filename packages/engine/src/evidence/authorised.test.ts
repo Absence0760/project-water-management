@@ -1,7 +1,7 @@
 // The full-authorised-use board's mix and its fixed rows (licensing build
 // item 8; docs/model.md §2.14a). Invented volumes.
 import { describe, expect, it } from 'vitest';
-import { authorisedMix, authorisedUnavailable, foldedMix } from './authorised';
+import { authorisedMix, authorisedUnavailable, foldedMix, isMixShares, mixShares } from './authorised';
 
 /** `n` holders' volumes of one kind on one source, `total` m³ a year between them. */
 const held = (authorisation: string | null, total: number, n = 5, waterSource = 'surface', tag = authorisation ?? 'none') =>
@@ -43,53 +43,88 @@ describe('authorisedMix (the full mix: editors, owners, the authority, the PDF)'
 	});
 });
 
-describe('foldedMix (a viewer kept from each registered volume: evidence-17, #523 G1, D3)', () => {
-	it('shows each way of holding 5 or more hold, and pools the rest in "other" when the pool has 5 or more', () => {
+describe('foldedMix (a viewer kept from each registered volume: evidence-18, #523 G1/H/J, D3)', () => {
+	/** No m³ anywhere in a share-only mix: no volume field, no total, no figure of the entries' volumes. */
+	const noM3 = (mix: object, volumes: readonly number[]) => {
+		const text = JSON.stringify(mix);
+		expect(text).not.toMatch(/M3|volume|total/i);
+		for (const v of volumes) expect(text).not.toMatch(new RegExp(`(^|\\D)${v}(\\D|$)`));
+	};
+
+	it('shows each way of holding 5 or more hold as a whole-percent share, and pools the rest in "other" when the pool has 5 or more', () => {
 		const mix = foldedMix([...held('registration', 500), ...held('licence', 70, 1), ...held('existing_lawful_use', 30, 3), ...held('general_authorisation', 8, 2)])!;
+		// 500 and 108 (70 + 30 + 8) of 608.
 		expect(mix.rows).toEqual([
-			{ authorisation: 'registration', volumeM3PerYear: 500, entitlement: false },
-			{ authorisation: 'other', volumeM3PerYear: 108, entitlement: false }
+			{ authorisation: 'registration', sharePct: 82, entitlement: false },
+			{ authorisation: 'other', sharePct: 18, entitlement: false }
 		]);
-		expect(mix).toMatchObject({ totalM3PerYear: 608, entitlementM3PerYear: 0, folded: true });
+		expect(mix).toMatchObject({ entitlementPct: 0, folded: true, shares: true });
 		expect(mix.leftOutHolders).toBeUndefined();
 		expect(mix.someLeftOut).toBeUndefined();
+		noM3(mix, [500, 108, 608, 70]);
 	});
 
-	it('merges a pool of fewer than 5 into the smallest row that isn’t an entitlement, so the total stays the sources’ and no difference gives it', () => {
+	it('merges a pool of fewer than 5 into the smallest row that isn’t an entitlement, and gives no m³ to difference', () => {
 		// Many registrations, a few claimed uses, and one licence: the licence holder's volume must not come out.
 		const entries = [...held('registration', 600, 6), ...held('existing_lawful_use_claimed', 90, 5), ...held('licence', 70, 1)];
 		const mix = foldedMix(entries)!;
+		// 600 and 160 (90 + 70) of 760.
 		expect(mix.rows).toEqual([
-			{ authorisation: 'registration', volumeM3PerYear: 600, entitlement: false },
-			{ authorisation: 'existing_lawful_use_claimed', volumeM3PerYear: 160, entitlement: false, withOthers: true }
+			{ authorisation: 'registration', sharePct: 79, entitlement: false },
+			{ authorisation: 'existing_lawful_use_claimed', sharePct: 21, entitlement: false, withOthers: true }
 		]);
-		// The viewer's per-source total (app_allocation_volumes, ≥ 5 holders) less the mix's total gives nothing.
-		const sourceTotal = entries.reduce((s, e) => s + e.volumeM3PerYear, 0);
-		expect(sourceTotal - mix.totalM3PerYear).toBeCloseTo(0, 9);
-		// Nor any row less a known figure: 70 appears in no row and no total.
-		expect(JSON.stringify(mix)).not.toMatch(/(^|\D)70(\D|$)/);
+		noM3(mix, [600, 160, 760, 70, 90]);
 		// With only entitlements shown, the pool goes into the smallest, which is no longer one.
 		const lic = foldedMix([...held('licence', 300), ...held('existing_lawful_use', 200), ...held('registration', 9, 2)])!;
 		expect(lic.rows).toEqual([
-			{ authorisation: 'licence', volumeM3PerYear: 300, entitlement: true },
-			{ authorisation: 'existing_lawful_use', volumeM3PerYear: 209, entitlement: false, withOthers: true }
+			{ authorisation: 'licence', sharePct: 59, entitlement: true },
+			{ authorisation: 'existing_lawful_use', sharePct: 41, entitlement: false, withOthers: true }
 		]);
-		expect(lic.entitlementM3PerYear).toBe(300);
+		expect(lic.entitlementPct).toBe(59);
 	});
 
 	it('leaves out a water source fewer than 5 hold, saying how many only when 5 or more, else only that some were', () => {
 		const few = foldedMix([...held('licence', 500), ...held('licence', 40, 2, 'groundwater')])!;
-		expect(few.rows).toEqual([{ authorisation: 'licence', volumeM3PerYear: 500, entitlement: true }]);
-		expect([few.totalM3PerYear, few.someLeftOut, few.leftOutHolders]).toEqual([500, true, undefined]);
+		expect(few.rows).toEqual([{ authorisation: 'licence', sharePct: 100, entitlement: true }]);
+		expect([few.someLeftOut, few.leftOutHolders]).toEqual([true, undefined]);
 		// One holder alone: nothing shown, and no count of 1.
 		const one = foldedMix(Array.from({ length: 5 }, () => ({ volumeM3PerYear: 10, authorisation: 'licence', waterSource: 'surface', holder: 'same' })))!;
 		expect(one.rows).toEqual([]);
+		expect(one.entitlementPct).toBe(0);
 		expect(one.leftOutHolders).toBeUndefined();
 		expect(one.someLeftOut).toBe(true);
 		// Two sources of 3 holders each, beside a kept one: 6 left out, counted.
 		const six = foldedMix([...held('registration', 100), ...held('licence', 10, 3, 'groundwater'), ...held('licence', 10, 3, 'other')])!;
 		expect(six.leftOutHolders).toBe(6);
 		expect(six.someLeftOut).toBeUndefined();
+	});
+
+	it('rounds by largest remainder so the shares add up to 100, and passes a share-only mix through', () => {
+		const thirds = mixShares({
+			rows: (['licence', 'registration', 'schedule_1'] as const).map((k) => ({ authorisation: k, volumeM3PerYear: 1, entitlement: k === 'licence' })),
+			entitlementM3PerYear: 1,
+			totalM3PerYear: 3,
+			folded: true,
+			leftOutHolders: 7
+		});
+		expect(thirds.rows.map((r) => r.sharePct)).toEqual([34, 33, 33]);
+		expect(thirds).toMatchObject({ entitlementPct: 34, leftOutHolders: 7, shares: true, folded: true });
+		expect(mixShares(thirds)).toBe(thirds);
+		expect(isMixShares(thirds)).toBe(true);
+		expect(isMixShares(authorisedMix(held('licence', 10))!)).toBe(false);
+	});
+
+	it('#523 H: a row out of force today moves no figure a viewer can difference against their live totals', () => {
+		// The review's probe: 5 surface holders, one row expired (123 457 m³/a), four of 50 000 with no dates. The
+		// viewer's live total today (backend volumeTotals) is the 4 in force, and gives none of the expired row; the
+		// mix sums all 5, so an m³ total beside it would give 123 457 by subtraction. As shares there is no total.
+		const entries = [
+			{ volumeM3PerYear: 123_457, authorisation: 'licence', waterSource: 'surface', holder: 'expired', validTo: '2024-09-30' },
+			...Array.from({ length: 4 }, (_, i) => ({ volumeM3PerYear: 50_000, authorisation: 'licence', waterSource: 'surface', holder: `h${i}` }))
+		];
+		const mix = foldedMix(entries)!;
+		expect(mix.rows).toEqual([{ authorisation: 'licence', sharePct: 100, entitlement: true }]);
+		noM3(mix, [123_457, 323_457, 200_000]);
 	});
 });
 

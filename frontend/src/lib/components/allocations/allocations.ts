@@ -297,11 +297,24 @@ export function allocationsContext(volumes: number, unmatched: number, rows: rea
 
 /**
  * A water source's total for a viewer (162, D3): "Surface water: 12 registered
- * users, 1 250 000 m³ a year registered today, 300 000 m³ of storage."
+ * users, 1 250 000 m³ a year registered today, 300 000 m³ of storage." A sum
+ * of the volumes in force today held by fewer than 5 isn't given (#523 G).
  */
 export function totalsSentence(t: AllocationTotal): string {
-	const storage = t.storageM3 !== null ? `, ${fmtNum(t.storageM3)} m³ of storage` : '';
-	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${fmtNum(t.registeredM3PerYear)} m³ a year registered today${storage}.`;
+	const storage = t.storageM3 !== null ? `, ${fmtNum(t.storageM3)} m³ of storage` : t.storageWithheld ? '; the storage in force today isn’t shown' : '';
+	const volume = t.registeredM3PerYear !== null ? `${fmtNum(t.registeredM3PerYear)} m³ a year registered today` : 'the volume in force today isn’t shown';
+	const why = t.registeredM3PerYear === null || t.storageWithheld ? ' (fewer than 5 of them hold one in force today, or one or two hold most of it)' : '';
+	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${volume}${storage}${why}.`;
+}
+
+/**
+ * A viewer's one judgement of a run against the registered volumes (#523
+ * round 6): "Of 30 whole water years, 24 within ±10 % of the registered
+ * volumes and 6 outside", or why there is none.
+ */
+export function judgementSentence(j: { wholeYears: number; within: number; outside: number } | null, tolerance: number): string {
+	if (!j) return 'Not judged against the registered volumes: they changed during the run, or too few registered users (or mostly one or two) held them.';
+	return `Of ${fmtNum(j.wholeYears)} whole water years, ${fmtNum(j.within)} within ±${fmtNum(tolerance * 100, 0)} % of the registered volumes and ${fmtNum(j.outside)} outside.`;
 }
 
 /** The note an owner reads before letting viewers see each farm's registered volumes (162, D3). */

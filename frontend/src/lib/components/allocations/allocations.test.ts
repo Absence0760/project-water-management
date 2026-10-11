@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
+import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, judgementSentence, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
 import { fmtNum } from '$lib/format/number';
 
 const comparison = () =>
@@ -305,6 +305,20 @@ describe('a viewer’s totals (162, decision D3)', () => {
 			`Surface water: 12 registered users, ${fmtNum(1_250_000)} m³ a year registered today, ${fmtNum(300_000)} m³ of storage.`
 		);
 		expect(totalsSentence({ waterSource: 'groundwater', holders: 5, registeredM3PerYear: 0, storageM3: null })).toBe('Groundwater: 5 registered users, 0 m³ a year registered today.');
+	});
+
+	it('words a run’s one judgement, or why there is none (#523 round 6)', () => {
+		expect(judgementSentence({ wholeYears: 30, within: 24, outside: 6 }, 0.1)).toBe('Of 30 whole water years, 24 within ±10 % of the registered volumes and 6 outside.');
+		expect(judgementSentence(null, 0.1)).toMatch(/^Not judged against the registered volumes/);
+	});
+
+	it('says a sum held by fewer than 5 in force today isn’t shown, with no figure (#523 G)', () => {
+		expect(totalsSentence({ waterSource: 'surface', holders: 5, registeredM3PerYear: null, storageM3: null, storageWithheld: true })).toBe(
+			'Surface water: 5 registered users, the volume in force today isn’t shown; the storage in force today isn’t shown (fewer than 5 of them hold one in force today, or one or two hold most of it).'
+		);
+		expect(totalsSentence({ waterSource: 'surface', holders: 6, registeredM3PerYear: 1_000, storageM3: null, storageWithheld: true })).toBe(
+			`Surface water: 6 registered users, ${fmtNum(1_000)} m³ a year registered today; the storage in force today isn’t shown (fewer than 5 of them hold one in force today, or one or two hold most of it).`
+		);
 	});
 
 	it('tells an owner who viewers must be before they see each farm', () => {

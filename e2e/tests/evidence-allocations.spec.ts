@@ -73,7 +73,7 @@ test('the evidence report compares modelled use with the registered volumes, lis
 	const section = page.locator('#ev-allocations');
 	await expect(section.getByRole('heading', { level: 2, name: '5. Registered water use' })).toBeVisible();
 	await expect(section.getByTestId('evidence-allocations-others')).toContainText('No unit is listed one by one.');
-	await expect(section.getByTestId('evidence-allocations-others')).toContainText('2 other units with a registered volume are left out: fewer than 5 hold one');
+	await expect(section.getByTestId('evidence-allocations-others')).toContainText('2 other units with a registered volume are left out: too few registered users hold one');
 	await expect(section).not.toContainText('Upper farm');
 	await expect(section).not.toContainText('Lower farm');
 	await expectNoViolations(page);
@@ -178,7 +178,7 @@ test('an application’s evidence report leads with the board against full autho
 	await page.getByTestId('evidence-authorised-run').getByRole('button', { name: 'Run at full authorised use' }).click();
 	await expect(authorised.getByTestId('evidence-impact-authorised-na')).toHaveCount(0);
 	const mix = authorised.getByTestId('evidence-authorised-mix');
-	// The owner reads the full mix (a viewer kept from each volume reads the folded one: evidence-17, #523 G1, unit- and DB-tested).
+	// The owner reads the full mix (a viewer kept from each volume reads the folded one as shares, no m³: evidence-18, #523 G1/H/J, unit- and DB-tested).
 	await expect(mix.getByRole('rowheader')).toHaveText(['Licence', 'Registration (WARMS)', /^All of it/]);
 	await expect(mix.getByRole('row', { name: /^Licence/ })).toContainText('Yes');
 	await expect(mix.getByRole('row', { name: /^Registration/ })).toContainText('No');

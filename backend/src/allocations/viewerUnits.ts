@@ -7,7 +7,9 @@
 // on; otherwise RLS gives a viewer no allocation row, and the API serves
 // totals per water source instead, summed here from app_allocation_volumes
 // (which returns a source's rows only when 5 or more registered users hold
-// it). The run's own copy of the rows (its model's `allocations`, the
+// it, each with an opaque holder key, 215): each sum is given only when the
+// rows in it, in force that day or water year, are 5 or more holders'
+// (#523 G). The run's own copy of the rows (its model's `allocations`, the
 // per-unit part of its summary's `allocations`) is left out of what a viewer
 // reads too (redactRunAllocations).
 import {
@@ -18,7 +20,16 @@ import {
 	type AllocationStatus,
 	type AllocationUseNode,
 	type AllocationWaterSource,
-	type ScenarioOp
+	type ScenarioOp,
+	allocationsOverFlag,
+	mixShares,
+	shownWithin,
+	takesWithin,
+	totalShown,
+	waterYearWithin,
+	type AuthorisedMix,
+	type AuthorisedMixShares,
+	type EvidenceAllocations
 } from '@water-management/engine';
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
@@ -36,7 +47,10 @@ export async function allocationUnitsHidden(db: Db, projectId: string, role: Rol
 /** One row behind a viewer's totals (app_allocation_volumes): no name, number or property. */
 export interface VolumeRow {
 	waterSource: AllocationWaterSource;
+	/** Registered users holding this source over all its rows, whatever their dates (5 or more, or no row is returned). */
 	holders: number;
+	/** This row's holder: a salted key (215), only to count the holders, and their shares, of the rows a total sums. */
+	holder: string;
 	nodeId: string | null;
 	volumeM3PerYear: number;
 	storageM3: number | null;
@@ -47,7 +61,7 @@ export interface VolumeRow {
 
 export async function loadVolumes(db: Db, projectId: string): Promise<VolumeRow[]> {
 	const { rows } = await db.query<VolumeRow>(
-		`SELECT water_source AS "waterSource", holders, node_id AS "nodeId", volume_m3_year AS "volumeM3PerYear", storage_m3 AS "storageM3",
+		`SELECT water_source AS "waterSource", holders, holder, node_id AS "nodeId", volume_m3_year AS "volumeM3PerYear", storage_m3 AS "storageM3",
 			water_use AS "waterUse", to_char(valid_from, 'YYYY-MM-DD') AS "validFrom", to_char(valid_to, 'YYYY-MM-DD') AS "validTo"
 		 FROM app_allocation_volumes($1)`,
 		[projectId]
@@ -55,45 +69,89 @@ export async function loadVolumes(db: Db, projectId: string): Promise<VolumeRow[
 	return rows;
 }
 
-/** A water source's registered volumes in force on a day, summed: what a viewer reads instead of the list. */
+/**
+ * A water source's registered volumes in force today, summed: the only
+ * registered m³ a viewer kept from each volume reads (#523 G/K/L/M, operator
+ * decision 2026-10-11). Any other figure (a run's water years, the evidence
+ * report's totals of other units) is over another set of rows, and two sums
+ * over different rows read at the same time give their difference.
+ */
 export interface AllocationTotal {
 	waterSource: AllocationWaterSource;
-	/** Registered users holding this source (5 or more, or it isn't returned). */
+	/** Registered users holding this source over all its rows (5 or more, or it isn't returned). */
 	holders: number;
-	/** Volumes in force that day, m³ a year (takes only; a 21b row is storage). */
-	registeredM3PerYear: number;
-	/** Registered storage in force that day, m³; null when none states one. */
+	/**
+	 * Volumes in force today, m³ a year (takes only; a 21b row is storage); null when the takes in force
+	 * today are fewer than 5 registered users', or one or two of them dominate the sum (totalShown).
+	 */
+	registeredM3PerYear: number | null;
+	/** Registered storage in force today, m³; null when none states one, or when it is withheld (`storageWithheld`). */
 	storageM3: number | null;
+	/** The storage in force today is fewer than 5 registered users', or dominated by one or two (#523 G/O). */
+	storageWithheld?: true;
 }
 
 const inForce = (r: Pick<VolumeRow, 'validFrom' | 'validTo'>, day: string) => (!r.validFrom || r.validFrom <= day) && (!r.validTo || r.validTo >= day);
 const SOURCES: readonly AllocationWaterSource[] = ['surface', 'groundwater'];
+/** Each holder's part of a sum over `rows`. */
+const partsOf = <R extends { holder: string }>(rows: readonly R[], amount: (r: R) => number) => {
+	const out = new Map<string, number>();
+	for (const r of rows) out.set(r.holder, (out.get(r.holder) ?? 0) + amount(r));
+	return out.values();
+};
 
+/**
+ * Each water source's takes and storage in force on `day`, summed, each sum
+ * given only when it passes the 5-holder and dominance rules over the rows in
+ * it (totalShown; none at all is 0, or no storage), not over the source's
+ * rows of every date (#523 G, O).
+ */
 export function volumeTotals(rows: readonly VolumeRow[], day: string): AllocationTotal[] {
 	return SOURCES.flatMap((src) => {
 		const mine = rows.filter((r) => r.waterSource === src);
 		if (!mine.length) return [];
-		const now = mine.filter((r) => inForce(r, day));
-		const storages = now.filter((r) => r.storageM3 !== null);
+		const takes = mine.filter((r) => r.waterUse !== '21b' && r.volumeM3PerYear > 0 && inForce(r, day));
+		const storages = mine.filter((r) => r.storageM3 !== null && r.storageM3 > 0 && inForce(r, day));
+		const storageShown = totalShown(partsOf(storages, (r) => r.storageM3!));
 		return [
 			{
 				waterSource: src,
 				holders: mine[0]!.holders,
-				registeredM3PerYear: now.filter((r) => r.waterUse !== '21b').reduce((s, r) => s + r.volumeM3PerYear, 0),
-				storageM3: storages.length ? storages.reduce((s, r) => s + r.storageM3!, 0) : null
+				registeredM3PerYear: totalShown(partsOf(takes, (r) => r.volumeM3PerYear)) ? takes.reduce((s, r) => s + r.volumeM3PerYear, 0) : null,
+				storageM3: storages.length && storageShown ? storages.reduce((s, r) => s + r.storageM3!, 0) : null,
+				...(storageShown ? {} : { storageWithheld: true as const })
 			}
 		];
 	});
 }
 
-/** One water year of a source's use, summed over the units with a volume on it. */
+/**
+ * One water year of a source's use, summed over the units with a volume on
+ * it: the modelled use only. Neither the registered volume (#523 K/L/M:
+ * consecutive years, or a year and today's total, differ by one holder's
+ * volume) nor the year's status: a status per year at a fixed band, pooled
+ * over the years of several runs, pins the registered volume to well under
+ * 1 % and one holder's to a few percent (#523 round 6; operator's decision
+ * 2026-10-11, provisional pending the D3 review, #92).
+ */
 export interface AllocationYearTotal {
 	waterYear: number;
-	/** A part of the year only (the run's edge): listed, not judged. */
+	/** A part of the year only (the run's edge). */
 	partial: boolean;
-	registeredM3: number;
 	modelledM3: number;
-	status: AllocationStatus;
+}
+
+/**
+ * The run's whole water years within the band and outside it (over or
+ * under), one count for the whole run: given only when the takes in force on
+ * the run's units are the same rows on every day of the run, are exactly the
+ * rows of today's total, and pass the 5-holder and dominance rules over it.
+ * Otherwise null.
+ */
+export interface AllocationRunJudgement {
+	wholeYears: number;
+	within: number;
+	outside: number;
 }
 
 export interface AllocationSourceTotals {
@@ -102,6 +160,7 @@ export interface AllocationSourceTotals {
 	/** Units with a registered volume on this source in the run. */
 	units: number;
 	years: AllocationYearTotal[];
+	judgement: AllocationRunJudgement | null;
 }
 
 export interface AllocationComparisonTotals {
@@ -109,13 +168,25 @@ export interface AllocationComparisonTotals {
 	sources: AllocationSourceTotals[];
 }
 
+/** Whether `rows`' takes in force over [from, to] are the same rows on every day of it (none starts or ends inside). */
+const steadyWithin = (rows: readonly VolumeRow[], from: string, to: string) =>
+	rows.every((r) => !takesWithin(r, from, to) || ((!r.validFrom || r.validFrom <= from) && (!r.validTo || r.validTo >= to)));
+
 /**
- * The run's modelled use against the registered volumes, summed per water
- * source and water year over the units that hold one (compareAllocations,
- * then the sum). A source with fewer than 5 holders isn't in `rows`, so it
- * isn't here.
+ * The run's modelled use summed per water source and water year over the
+ * units that hold a registered volume (compareAllocations, then the sum),
+ * with at most one judgement for the whole run (AllocationRunJudgement): no
+ * registered m³ and no status per year. A source with fewer than 5 holders
+ * isn't in `rows`, so it isn't here.
  */
-export function comparisonTotals(input: { startDate: string; nodes: readonly AllocationUseNode[]; tolerance: number; rows: readonly VolumeRow[] }): AllocationComparisonTotals {
+export function comparisonTotals(input: {
+	startDate: string;
+	nodes: readonly AllocationUseNode[];
+	tolerance: number;
+	rows: readonly VolumeRow[];
+	/** Today (ISO): the judgement is given only over the rows of today's total, which the viewer reads anyway. */
+	today: string;
+}): AllocationComparisonTotals {
 	const holders = new Map(input.rows.map((r) => [r.waterSource, r.holders]));
 	const allocations: AllocationEntry[] = input.rows.map((r, i) => ({
 		id: `v${i}`,
@@ -127,21 +198,35 @@ export function comparisonTotals(input: { startDate: string; nodes: readonly All
 		validFrom: r.validFrom,
 		validTo: r.validTo
 	}));
+	const rowOf = new Map(allocations.map((a, i) => [a.id, input.rows[i]!]));
 	const c: AllocationComparison = compareAllocations({ startDate: input.startDate, nodes: input.nodes, tolerance: input.tolerance, allocations });
 	const sources = SOURCES.flatMap((src): AllocationSourceTotals[] => {
 		if (!holders.has(src)) return [];
 		const held = c.nodes.map((n) => n[src]).filter((s) => s.allocationIds.length > 0);
-		const byYear = new Map<number, AllocationYearTotal>();
+		// The rows summed into the source's years: those on the run's units (compareAllocations' allocationIds).
+		const summed = held.flatMap((s) => s.allocationIds.map((id) => rowOf.get(id)!));
+		const byYear = new Map<number, { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number }>();
 		for (const s of held)
 			for (const y of s.years) {
-				const t = byYear.get(y.waterYear) ?? { waterYear: y.waterYear, partial: y.partial, registeredM3: 0, modelledM3: 0, status: 'none' as AllocationStatus };
+				const t = byYear.get(y.waterYear) ?? { waterYear: y.waterYear, partial: y.partial, registeredM3: 0, modelledM3: 0 };
 				t.registeredM3 += y.registeredM3;
 				t.modelledM3 += y.modelledM3;
 				t.partial ||= y.partial;
 				byYear.set(y.waterYear, t);
 			}
-		const years = [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear).map((y) => ({ ...y, status: allocationStatus(y.modelledM3, y.registeredM3, input.tolerance) }));
-		return [{ waterSource: src, holders: holders.get(src)!, units: held.length, years }];
+		const all = [...byYear.values()].sort((a, b) => a.waterYear - b.waterYear);
+		const years = all.map((y): AllocationYearTotal => ({ waterYear: y.waterYear, partial: y.partial, modelledM3: y.modelledM3 }));
+		const whole = all.filter((y) => !y.partial);
+		// The rows judged against must be exactly today's total's (every take of the source in force today, matched or
+		// not), in force all through the run: then the run's registered total is the one the viewer reads today, and a
+		// judgement pooled over runs narrows nothing they don't already read. Any other set would difference against it (L, M).
+		const inRun = new Set(summed.filter((r) => takesWithin(r, c.startDate, c.endDate)));
+		const today = input.rows.filter((r) => r.waterSource === src && takesWithin(r, input.today, input.today));
+		const sameAsToday = today.length === inRun.size && today.every((r) => inRun.has(r));
+		const judged = whole.length > 0 && sameAsToday && steadyWithin(summed, c.startDate, c.endDate) && shownWithin(summed, c.startDate, c.endDate);
+		const within = whole.filter((y) => allocationStatus(y.modelledM3, y.registeredM3, input.tolerance) === 'within').length;
+		const judgement = judged ? { wholeYears: whole.length, within, outside: whole.length - within } : null;
+		return [{ waterSource: src, holders: holders.get(src)!, units: held.length, years, judgement }];
 	});
 	return { tolerance: input.tolerance, sources };
 }
@@ -200,8 +285,79 @@ type ReportLike = {
 	appendix: { baselineInputs: { model?: { allocations?: unknown } | null } | null };
 	summaries: { baseline: { allocations?: { nodes?: unknown[] } | null } | null; application: { allocations?: { nodes?: unknown[] } | null } | null };
 	ops?: { op: ScenarioOp }[];
-	licenceImpactAuthorised?: { mix?: { folded?: true } | null; mixFolded?: unknown } | null;
+	licenceImpactAuthorised?: { mix?: AuthorisedMix | AuthorisedMixShares | null; mixFolded?: AuthorisedMix | AuthorisedMixShares | null } | null;
+	/** § 5 (EvidenceAllocations); typed loosely so a frozen manifest of any format passes. */
+	allocations?: unknown;
+	mode?: string;
+	flags?: { id: string; text: string }[];
 };
+
+/** A run mode that holds use to the registered volume: its modelled use is the volume wherever supply meets demand (#523 R5-2). */
+const holdsToVolume = (mode: string | null | undefined) => mode === 'cap' || mode === 'fullAllocation';
+
+/**
+ * § 5 without the registered m³ of its totals of other units, per year, mean
+ * or cap (#523 K/L/M): a viewer kept from each volume reads registered m³
+ * only as today's per-source totals. Two sums over different rows read at
+ * the same time (the baseline's and the application's year, two consecutive
+ * years, a year and today's total) give the rows between them, often one
+ * holder's. Nor their status per year or count of years over the band: at a
+ * fixed band, pooled over the years of several runs, they pin the volume
+ * (#523 round 6, operator's decision, provisional, #92). The modelled use
+ * stays, except on a side whose run is in cap or full-allocation mode
+ * (`modeA` / `modeB`), where it is the registered volume wherever supply met
+ * demand (#523 R5-2). The applicant's own units stay.
+ */
+export function withoutOthersRegistered(al: EvidenceAllocations): EvidenceAllocations {
+	if (!Array.isArray(al.units) || !al.units.some((u) => u.aggregate !== undefined)) return al;
+	const hideA = holdsToVolume(al.modeA);
+	const hideB = holdsToVolume(al.modeB);
+	return {
+		...al,
+		othersRegisteredWithheld: true,
+		...(hideA || hideB ? { othersUseWithheld: true as const } : {}),
+		units: al.units.map((u) =>
+			u.aggregate === undefined
+				? u
+				: {
+						...u,
+						sources: u.sources.map((src) => ({
+							...src,
+							meanRegisteredA: null,
+							meanRegisteredB: null,
+							capA: null,
+							capB: null,
+							// No status per year nor count of them (#523 round 6): pooled over runs at a fixed band, they pin the volume.
+							countsA: null,
+							countsB: null,
+							...(hideA ? { meanModelledA: null } : {}),
+							...(hideB ? { meanModelledB: null } : {}),
+							years: src.years.map((y) => ({
+								...y,
+								registeredA: null,
+								registeredB: null,
+								statusA: null,
+								statusB: null,
+								...(hideA ? { modelledA: null } : {}),
+								...(hideB ? { modelledB: null } : {})
+							}))
+						}))
+					}
+		)
+	};
+}
+
+/**
+ * Page 1's "above the registered volume" flag without the totals of other
+ * units: it counts their whole years over the band, the same count § 5 leaves
+ * out for such a viewer (#523 round 6). Rebuilt from the units listed one by
+ * one; gone when none is over.
+ */
+function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], al: EvidenceAllocations | undefined, app: boolean): F[] {
+	if (!al || !Array.isArray(al.units) || !al.units.some((u) => u.aggregate !== undefined)) return flags;
+	const text = allocationsOverFlag({ ...al, units: al.units.filter((u) => u.aggregate === undefined) }, app);
+	return flags.flatMap((f) => (f.id !== 'allocationsOver' ? [f] : text ? [{ ...f, text }] : []));
+}
 
 /**
  * An evidence report as a viewer who can't read each registered volume gets
@@ -210,10 +366,12 @@ type ReportLike = {
  * redactRunAllocations leaves a run, the ops that set a volume on a unit
  * that isn't `own` (an applicant's application's own units; none for a team
  * scenario) left out, and page 1's authorised volume mix replaced by its
- * folded one (`mixFolded`, evidence-17; none for a board built before). § 5 stays:
- * since `evidence-15` it lists only the applicant's own units, the rest as
- * totals at 5 or more units (and since `evidence-17` none of a team
- * scenario's). A frozen pack manifest redacted this way no longer hashes to
+ * folded one as whole-percent shares with no m³ (`mixFolded`: shares since
+ * evidence-18, an evidence-17 board's m³ turned into its shares by
+ * mixShares; none for a board built before, #523 H/J). § 5 lists only the
+ * applicant's own units (`evidence-15`; none of a team scenario's since
+ * `evidence-17`), the rest as totals, whose registered m³ is left out
+ * (withoutOthersRegistered, #523 K/L/M): their status and modelled use stay. A frozen pack manifest redacted this way no longer hashes to
  * its manifestSha256, so the caller says so (packs.ts `volumesWithheld`).
  * Appendix A.2's input diff is the caller's: the live report builds it
  * without other units' volumes (evidence/report.ts), and an issuable pack's
@@ -228,10 +386,12 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 	return {
 		...report,
 		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
-		// The folded mix in the full one's place (evidence-17), or none: a board built before has no folded one.
-		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: (mixFolded ?? null) as typeof lia.mix }))(lia) } : {}),
+		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one.
+		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
-		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) }
+		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
+		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {}),
+		...(report.flags ? { flags: withoutOthersOver(report.flags, report.allocations as EvidenceAllocations | undefined, report.mode === 'application') } : {})
 	};
 }
 

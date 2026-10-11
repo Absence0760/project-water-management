@@ -1085,6 +1085,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					comparison: AllocationComparison | null;
 					capYears: AllocationCapYears[];
 					totals: AllocationComparisonTotals | null;
+					/** Why a viewer kept from each volume gets no `totals`: the run holds use to the registered volume (cap or full allocation, #523). */
+					totalsWithheld?: 'allocation_mode' | null;
 				}>(
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`

@@ -283,7 +283,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-17');
+		expect(manifest.report.version).toBe('evidence-18');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -1643,6 +1643,47 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		withheld(await viewer.call('GET', packPath(await plant('evidence-17', { scenario: changed }))));
 	});
 
+	it('refuses a viewer a pack from before evidence-18 whose § 5 has an "Other registered users" total, gated then on units over every date (#523 G); serves one from evidence-18, and an editor reads both (positive control)', async () => {
+		/** § 5 as it froze one total of other units, with one water year's registered volume. */
+		const withTotal = (r: PackManifest['report']) =>
+			({
+				...r,
+				allocations: {
+					...r.allocations,
+					units: [
+						{
+							nodeId: 'others:surface',
+							name: 'Other registered users (5 units)',
+							aggregate: 5,
+							kind: 'farm',
+							own: false,
+							onlyIn: null,
+							sources: [{ waterSource: 'surface', years: [{ waterYear: 2021, days: 365, yearDays: 365, partialA: false, partialB: null, registeredA: VOLUME, modelledA: 1, statusA: 'under', registeredB: null, modelledB: null, statusB: null }], countsA: null, countsB: null, meanModelledA: null, meanRegisteredA: null, meanModelledB: null, meanRegisteredB: null }]
+						}
+					]
+				}
+			}) as PackManifest['report'];
+		const old = await plant('evidence-17', { edit: withTotal });
+		withheld(await viewer.call('GET', packPath(old)));
+		withheld(await viewer.call('GET', `${packPath(old)}/pdf`));
+		expect((await editor.call('GET', packPath(old))).status).toBe(200);
+		// Without such a total (§ 5 left the one unit out), the same format is served, redacted.
+		expect((await viewer.call('GET', packPath(current))).status).toBe(200);
+		// evidence-18 gates each year on the holders in force: served, but without the total's registered m³ (#523 K/L/M:
+		// the only registered m³ such a viewer reads is today's per-source total), and its PDF, which prints it, refused.
+		const now = await plant('evidence-18', { edit: withTotal });
+		const read = await viewer.call('GET', packPath(now));
+		expect(read.status, JSON.stringify(read.body)).toBe(200);
+		const al = read.body.manifest.report.allocations;
+		// Nor its status per year (#523 round 6); the modelled use stays.
+		expect([al.units[0].aggregate, al.othersRegisteredWithheld, al.units[0].sources[0].years[0].registeredA, al.units[0].sources[0].years[0].statusA, al.units[0].sources[0].years[0].modelledA]).toEqual([5, true, null, null, 1]);
+		expect(JSON.stringify(read.body)).not.toContain(String(VOLUME));
+		withheld(await viewer.call('GET', `${packPath(now)}/pdf`));
+		// Positive control: the editor reads the figure, and passes the PDF check (a draft: 409).
+		expect((await editor.call('GET', packPath(now))).body.manifest.report.allocations.units[0].sources[0].years[0].registeredA).toBe(VOLUME);
+		expect((await editor.call('GET', `${packPath(now)}/pdf`)).status).toBe(409);
+	});
+
 	it('serves a viewer page 1’s folded authorised volume mix in the full one’s place (none for a board built before), and refuses the PDF, which prints the full one (evidence-17)', async () => {
 		const full = { rows: [{ authorisation: 'licence', volumeM3PerYear: VOLUME, entitlement: true }], entitlementM3PerYear: VOLUME, totalM3PerYear: VOLUME };
 		const folded = { rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, someLeftOut: true };
@@ -1667,7 +1708,8 @@ describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)
 		withheld(await viewer.call('GET', `${packPath(before)}/pdf`));
 		const both = await plant('evidence-17', { edit: board(true) });
 		const got = (await viewer.call('GET', packPath(both))).body;
-		expect(got.manifest.report.licenceImpactAuthorised.mix).toEqual(folded);
+		// An evidence-17 folded mix is in m³: served as its shares, with no m³ (evidence-18, #523 H/J).
+		expect(got.manifest.report.licenceImpactAuthorised.mix).toEqual({ rows: [], entitlementPct: 0, folded: true, shares: true, someLeftOut: true });
 		expect(got.manifest.report.licenceImpactAuthorised).not.toHaveProperty('mixFolded');
 		expect(JSON.stringify(got)).not.toContain(String(VOLUME));
 		withheld(await viewer.call('GET', `${packPath(both)}/pdf`));

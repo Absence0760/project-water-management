@@ -1636,6 +1636,29 @@ water-use volumes per farm or water user.
   the holder's name ignoring case and spacing, else a name another row of the same unit carries, else the unit, else the row):
   water source, holder count, node, volume, storage, water use, validity;
   never a name, number or property. The API sums them (`allocations/viewerUnits.ts`).
+  Since 215 each row also carries `holder`, a salted key (`md5` of the
+  project's random salt in `allocation_holder_salt` and the holder key;
+  the salt is made with the project, owner-only, never leaves the
+  database), so the API gives a sum only when the rows in it (in force
+  today) are 5 or more holders' and none dominates it (#523 G/O).
+  `run_allocation_holder` (owner-only, 215) keeps each run's rows' keys as
+  they were when it was stored (trigger `model_run_allocation_holders` on
+  `model_run` insert; `gone` for a row no living holder had; existing runs
+  filled by 215 from the rows then living), and
+  `app_run_allocation_holders(project, run, ids)` (`SECURITY DEFINER`,
+  viewer and up) returns the keys of the given rows of one run, no volume:
+  the evidence report's § 5 gate and the authorised mix count holders by
+  them, the same for every reader, and only for a run the caller can read
+  (`model_run_select`'s rule, #523 N/P). When a holder's name leaves the
+  project (its last `allocation_holder` row with that name deleted or
+  renamed), trigger `allocation_holder_erased` resets the runs' frozen keys
+  of it to `gone` (POPIA erasure; the lookup is indexed,
+  `allocation_holder_norm_idx` on `(project_id, allocation_holder_norm(user_display))`,
+  about 70 ms locally to undo 2 500 rows of a 5 000-row project). All read `app_allocation_holder_keys`
+  (215, internal, not granted; one window pass per project), and 215's
+  backfill computes each project's keys once and joins them to the runs, so
+  its cost is the runs' allocation rows plus the projects' rows (not runs ×
+  rows²).
 - **No personal identifiers.** No ID-number, phone or email column exists;
   the importer refuses files that carry them ([security.md](./security.md)).
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`

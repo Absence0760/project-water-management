@@ -39,6 +39,7 @@ import {
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
+import { allocationHolderKeys } from '../allocations/holders.js';
 import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
 import { checkCombination } from '../assessments/store.js';
 import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
@@ -121,9 +122,12 @@ function runInput(r: RunRow): EvidenceRunInput {
  * allocations carry no holder name (D3), so a viewer reads nothing here the
  * Allocations tab wouldn't show them.
  */
-async function withAllocations(db: Db, run: EvidenceRunInput): Promise<EvidenceRunInput> {
+async function withAllocations(db: Db, projectId: string, run: EvidenceRunInput): Promise<EvidenceRunInput> {
 	const forecastFrom = run.summary.forecast?.from ?? null;
-	return { ...run, allocations: await runAllocationComparison(db, { id: run.id, startDate: run.startDate, forecastFrom, inputs: run.inputs }) };
+	const allocations = await runAllocationComparison(db, { id: run.id, startDate: run.startDate, forecastFrom, inputs: run.inputs });
+	// Who held each when the run was stored (salted keys, 215): § 5 gives a total of other units' volume in a year only at 5 or more holders in force, none dominating (evidence-18, #523 G/N/O).
+	const allocationHolders = allocations ? await allocationHolderKeys(db, projectId, run.id, run.inputs.model.allocations ?? []) : null;
+	return { ...run, allocations, allocationHolders };
 }
 
 interface EnsembleRow {
@@ -507,7 +511,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	const baseRow = recorded ? await loadRun(db, projectId, recorded.baseRunId) : named;
 	if (!baseRow) throw new ApiError(404, 'the application’s base run is gone, or you can’t see it');
 	const { rows: project } = await db.query<{ id: string; name: string }>('SELECT id, name FROM project WHERE id = $1', [projectId]);
-	const baseline = await withAllocations(db, runInput(baseRow));
+	const baseline = await withAllocations(db, projectId, runInput(baseRow));
 
 	let application: EvidenceInput['application'] = null;
 	let changes: EvidenceInput['changes'] = [];
@@ -532,7 +536,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		const meta = sc[0];
 		ownOrigin = meta?.origin ?? null;
 		application = {
-			...(await withAllocations(db, runInput(named))),
+			...(await withAllocations(db, projectId, runInput(named))),
 			scenario: {
 				id: recorded.id,
 				name: meta?.name ?? recorded.name,

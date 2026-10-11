@@ -164,6 +164,7 @@
 	let comparison = $state.raw<AllocationComparison | null>(null);
 	/** A viewer who can't read each volume (162, D3): the run's use summed per water source and year. */
 	let yearTotals = $state.raw<AllocationComparisonTotals | null>(null);
+	let yearTotalsWithheld = $state(false);
 	/** What the compared run's allocation mode did to its use (engine ≥ 1.18.0). */
 	let runMode = $state<AllocationMode>('none');
 	/** A cap run's water years per unit and source (engine ≥ 1.18.0; the days the limit bound from 1.40.0). */
@@ -182,6 +183,7 @@
 			if (wanted === id) {
 				comparison = r.comparison;
 				yearTotals = r.totals ?? null;
+				yearTotalsWithheld = r.totalsWithheld === 'allocation_mode';
 				runMode = r.run.allocationMode ?? 'none';
 				capYears = r.capYears ?? [];
 				capForecast = !!r.run.forecastFrom;
@@ -403,7 +405,7 @@
 	{#if notice}<p class="alert alert-info slim" role="status">{notice}</p>{/if}
 
 	{#if data?.unitsHidden}
-		<AllocationTotals totals={data.totals} years={yearTotals} runLabel={run ? run.label || 'Untitled run' : null} loading={cLoading} />
+		<AllocationTotals totals={data.totals} years={yearTotals} yearsWithheld={yearTotalsWithheld} runLabel={run ? run.label || 'Untitled run' : null} loading={cLoading} />
 	{:else}
 	{#if !run}
 		<section class="panel" aria-labelledby="alloc-compare-h" data-testid="allocation-compare">
