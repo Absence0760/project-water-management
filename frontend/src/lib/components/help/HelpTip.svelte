@@ -41,7 +41,7 @@
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { glossaryPath } from '$lib/help/glossaryLinks';
-	import { SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
+	import { DUSK_MEDIA, SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
 
 	let { key, label }: { key: string; label?: string } = $props();
 
@@ -150,12 +150,15 @@
 				<span class="bubble" class:pictured={shot} popover="manual" bind:this={bubble} style:top="{pos.top}px" style:left="{pos.left}px">
 					{#if shot}
 						<span class="pic">
-							<img
-								src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
-								width={SHOTS[shot].width / 2}
-								height={SHOTS[shot].height / 2}
-								alt=""
-							/>
+							<picture>
+								<source media={DUSK_MEDIA} srcset="{base}{pictureSrc(shot, SHOTS[shot].width / 2, 'dusk')}" />
+								<img
+									src="{base}{pictureSrc(shot, SHOTS[shot].width / 2)}"
+									width={SHOTS[shot].width / 2}
+									height={SHOTS[shot].height / 2}
+									alt=""
+								/>
+							</picture>
 							{#if ring}<span class="ring" aria-hidden="true" style:left="{ring.x}%" style:top="{ring.y}%"></span>{/if}
 						</span>
 					{/if}
