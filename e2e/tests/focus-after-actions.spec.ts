@@ -8,7 +8,7 @@
 // - Removing a hydrological unit from its sheet left `node=` naming it in the URL.
 // - A link to a deleted scenario or run said so with a Try again that could never work.
 import type { Page } from '@playwright/test';
-import { acceptInvites, createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, addMember, createProject, createRun, seedRunnableProject, uniqueEmail } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -185,4 +185,48 @@ test('the Project page’s notes and registration checks offer Try again after a
 	await checks.getByRole('button', { name: 'Try again' }).click();
 	await expect(checks).toContainText('No check recorded yet.');
 	await expect(checks.getByRole('alert')).toHaveCount(0);
+});
+
+test('removing a project member, revoking an invitation and a farmer’s invitation keep the focus in the panel', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Focus members');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
+	const colleague = await signIn('Focus editor');
+	await addMember(page.request, project.id, colleague.user.email, 'editor');
+	// Two invitations to addresses without an account, as members and as farmers.
+	for (const name of ['First', 'Second']) {
+		expect((await page.request.post(`${API_URL}/projects/${project.id}/members`, { data: { email: uniqueEmail(`${name} invitee`), role: 'viewer' } })).status()).toBe(201);
+		expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: uniqueEmail(`${name} farmer`), nodeIds: [upper.id], locale: 'en', role: 'farmer' } })).status()).toBe(201);
+	}
+	await page.goto(`/projects/${project.id}?tab=project`);
+
+	// Members: the editor's row goes; yours, now in its place (the last), takes the focus on its role.
+	await page.getByRole('row', { name: /Focus editor/ }).getByRole('button', { name: 'Remove' }).click();
+	await answerConfirm(page, true, 'Remove this member?');
+	await expect(page.getByRole('row', { name: /Focus editor/ })).toHaveCount(0);
+	await expect(page.getByRole('combobox', { name: /^Role for / })).toBeFocused();
+
+	// The members' pending invitations: the first goes, the second's Revoke takes the focus; the last, the add field.
+	const memberInvites = page.getByRole('region', { name: /^Pending invitations/ });
+	const memberRevokes = memberInvites.getByRole('button', { name: /^Revoke invitation to / });
+	await expect(memberRevokes).toHaveCount(2);
+	await memberRevokes.first().click();
+	await answerConfirm(page, true, 'Revoke this invitation?');
+	await expect(memberRevokes).toHaveCount(1);
+	await expect(memberRevokes).toBeFocused();
+	await memberRevokes.click();
+	await answerConfirm(page, true, 'Revoke this invitation?');
+	await expect(page.getByLabel('Add member by email')).toBeFocused();
+
+	// The farmers' pending invitations: the same, and the panel's heading once none is left.
+	const farmerInvites = page.getByRole('region', { name: /^Pending farmer invitations/ });
+	const farmerRevokes = farmerInvites.getByRole('button', { name: /^Revoke invitation to / });
+	await expect(farmerRevokes).toHaveCount(2);
+	await farmerRevokes.first().click();
+	await answerConfirm(page, true, 'Revoke this invitation?');
+	await expect(farmerRevokes).toHaveCount(1);
+	await expect(farmerRevokes).toBeFocused();
+	await farmerRevokes.click();
+	await answerConfirm(page, true, 'Revoke this invitation?');
+	await expect(page.getByRole('heading', { name: /^Farmers/ })).toBeFocused();
 });
