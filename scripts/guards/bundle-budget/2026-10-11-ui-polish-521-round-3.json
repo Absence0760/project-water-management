@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #521 round 3 on PR #519: day-first dates and the dayPrefix search on the Data page and previews, the Edit a day text field, the shared ExplainSwitch in the scenario editor, the team members' two-line rows (#520); measured 1965 KB against 1963 KB"
+}
