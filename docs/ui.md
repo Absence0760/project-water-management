@@ -2551,23 +2551,32 @@ itself.
     viewer), the node picker (‹ select ›, labelled "Hydrological unit to edit") and under it
     the form's section menu (the pages' `common/SectionNav` as a bar,
     "Sections of the form": Catchment area, Flow share, Dam, …, Bed losses,
-    short names on the bar and each legend in More; one press scrolls the
-    form to the section and focuses its card, with no fragment in the URL,
-    and the section being read is marked; issue #462, [§ On this page
+    short names on the bar and each legend in More; one press opens that
+    section's card and folds the other sections, scrolls the form to it and
+    focuses its heading, with no fragment in the URL, and the section being
+    read is marked; issue #462, [§ On this page
     menu](#on-this-page-menu)), both fixed in the dialog's sub-header
     above the scrolling form (so no control scrolls under it, and the menu
     never scrolls away; on a phone it is one strip that scrolls sideways),
-    then the one-node form (`NodeDetail`: every field with its help
-    text, land cover, boreholes, the farmers note, Show on map (as the card's),
+    then the one-node form (`NodeDetail`: every field, folded into section
+    cards (below), land cover, boreholes, the farmers note, Show on map (as the card's),
     Preview as farmer, make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
     Move down (removed, issue #174): row order is for display only and the
     list isn't visible from the sheet; the node table reorders (drag, ↑/↓,
     Sort by flow path). The save row
     (`ModelSaveRow`: status, the problems as links, reason, Discard model
     changes, Done, Save changes) is pinned under the form. ‹ › and the
-    picker move it to another node (replacing `edit=` in place; the sheet
-    is modal, so the map behind it can't be tapped); Done, Esc, the ✕ or
-    Back close it. **Remove** asks when something goes with the node
+    picker move it to another node (replacing `edit=` in place and dropping
+    `section=`; the same sections stay open, so ‹ › reads each unit's dam
+    in turn; the sheet is modal, so the map behind it can't be tapped);
+    Done, Esc, the ✕ or Back close it. `section=<name>` (a `NodeSection`:
+    `area`, `share`, `dam`, `damSurvey`, `routing`, `supply`, `irrigation`,
+    `demand`, `groundwater`, `boreholes`, `cover`, `reach`) opens the sheet on
+    that section, folding the others: the Dams page's **Edit dam** sends
+    `section=dam`, the Demands table's Edit `section=demand`, the node
+    table's River to dam "by month" link `section=routing`. Without it, a
+    sheet whose node has a problem (the save row's links name only the node)
+    opens on the first section with one. **Remove** asks when something goes with the node
     (`removeMessage` in `network/farmerLinks.ts`: only the parts it has,
     with real plurals, "Its 1 crop area and 1 transfer go with it."; the
     nodes that drain into it and where they will drain; its farmers; and
@@ -2727,15 +2736,42 @@ itself.
   other water users too): the share of the flow lost (up to 100 %: with a daily maximum, WRSM's bed loss; over half without one, the run warns) and the
   most lost in a day, under a note saying where the water goes. On the outlet
   both are read-only (no reach below it) unless a share is left there to
-  clear; the cap is read-only while the share is 0 %. Each is a bordered card with its title in a tinted header
-  band, so one section's fields don't run into the next's; the card itself
+  clear; the cap is read-only while the share is 0 %. Each is a bordered card
+  (a `<details>`, issue #521) whose tinted header band is its title and a
+  line of its values now (`network/nodeSummary.ts` `sectionSummary`: "Dam
+  300 000 m³ · starts 60 % · min 15 % · seepage 0 %/day", "Supply Dam only",
+  "Demand objects 1 demand object: Packhouse", "None"), with **needs
+  fixing** while a field inside is invalid or a problem shows, so a closed
+  card never hides one. The sheet opens with its first section open (or the
+  one already open from the last node), the others closed to their lines,
+  and the section menu opens the one it points at (`sheetFolds.svelte.ts`,
+  per tab). Inside a card the fields people change come first; the rarely
+  changed ones fold under one line of their values, the playbook's `.fold`
+  ("More dam settings: Area exponent 0.7 · Seepage 0 %/day · Seepage
+  returning 100 % · Outlet capacity not set", **Change**/**Hide**; the
+  fields marked `more` in `fields.ts`: the dam's area exponent, seepage,
+  seepage returning and outlet capacity; the combined boreholes' stream
+  depletion, depletion lag, property area and GN 538 rate; the irrigation's
+  Abstraction starts). Each field's explanation is its ⓘ tip and, hidden
+  until **Explain each setting under its field** is ticked (the same
+  remembered switch as Settings', `wm.settings.explain`), the text under it,
+  which stays its `aria-describedby`; lines that state a value or warn stay
+  visible. **Show every field** (`aria-pressed`, remembered on the device,
+  `wm.nodeSheet.all`) opens every section and fold at once; closing one then
+  keeps the rest open. An other water user's own fields stay one open card
+  ("Other water user"), above its folded boreholes and bed losses. The card
   stays `--surface`, since read-only inputs are `--surface-2`.
-- **Fields that don't apply** show read-only with the reason as their hint,
-  their stored value kept (`fieldUnused` in `fields.ts`, given the
-  project's flow-share method): on a unit with no dam (capacity 0, as the
-  engine reads it), the Dam fields other than Capacity ("Not used: no dam
-  (capacity 0). Enter a capacity to use it."), which come alive once a
-  capacity is typed; **High-MAP** and **Low-MAP** unless the method is the
+- **Fields that don't apply** fold, in the one-node form, behind one line
+  per reason in their section ("Not used with the area flow share: High-MAP,
+  Low-MAP.", **Show**/**Hide**; `splitFields` and `unusedLine` in
+  `fields.ts`, issue #521) instead of being drawn greyed out; opened, they
+  show read-only with what would make them count ("Enter a capacity to use
+  these.") and their stored value kept, the line in each one's description
+  (`fieldUnused`/`unusedReason` in `fields.ts`, given the project's
+  flow-share method): on a unit with no dam (capacity 0, as the engine reads
+  it), the Dam fields other than Capacity ("Not used without a dam
+  (capacity 0)"), which move up among the first fields once a capacity is
+  typed; **High-MAP** and **Low-MAP** unless the method is the
   high/low MAP split, and **Manual** unless it is Manual (Settings &
   calibration). Routing to the dam stays live with no dam: what is routed to
   it is irrigated straight from the river. The node table keeps them all

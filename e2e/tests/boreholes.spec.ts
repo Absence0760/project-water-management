@@ -133,7 +133,7 @@ test('the combined and the individual boreholes are told apart, and removing a b
 	// Each section says when to use it, and the two sit side by side in the form.
 	await expect(combined).toContainText('If both are set, both run.');
 	await expect(each).toContainText('use these when each has its own yield');
-	const legends = await sheet.locator('.detail > fieldset > legend').allTextContents();
+	const legends = await sheet.locator('details.sec > summary > .sec-title').allTextContents();
 	expect(legends.indexOf('Individual boreholes')).toBe(legends.indexOf('Combined boreholes (one capacity)') + 1);
 	// No two fields share a name: one "Stream depletion" per set-up.
 	await expect(sheet.getByLabel('Combined stream depletion (%)')).toHaveCount(1);

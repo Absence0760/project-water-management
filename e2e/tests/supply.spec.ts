@@ -249,6 +249,8 @@ test('the node table shows River to dam set by month read-only, and links to the
 	const sheet = page.getByRole('dialog', { name: 'Edit Upper farm' });
 	await expect(sheet).toBeVisible();
 	await expect(page.getByRole('dialog', { name: 'Hydrological unit table' })).toHaveCount(0);
+	// The link lands on the sheet's Routing section, open (section=routing; its other sections fold, issue #521).
+	await expect(page).toHaveURL(/[?&]section=routing\b/);
 	await expect(sheet.getByRole('group', { name: 'Routing', exact: true }).getByTestId('river-to-dam-months-note')).toHaveText(
 		'River to dam takes up to 0.01 m³/s; nothing in Oct–Apr. The one value above is not used.'
 	);
@@ -266,7 +268,7 @@ test('a dam on the river (Upstream inflow to dam 100 %) has no River to dam; an 
 	const divert = routing.getByLabel('River to dam (m³/s)', { exact: true });
 	await expect(divert).toHaveValue('0.2');
 	await expect(divert).not.toBeEditable();
-	await expect(routing.getByText(/^Not available: the dam is on the river/)).toBeVisible();
+	await expect(routing.getByText(/^Not available on a dam on the river \(Upstream inflow to dam is 100 %\): River to dam\.$/)).toBeVisible();
 	await expect(routing.getByRole('checkbox', { name: 'Set River to dam by month', exact: true })).toBeDisabled();
 	// Off the river: it is available, entered in m³/s and stored in m³/day.
 	await routing.getByLabel('Upstream inflow to dam (%)', { exact: true }).fill('0');

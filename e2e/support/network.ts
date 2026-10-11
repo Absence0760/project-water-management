@@ -1,7 +1,7 @@
 // The Network page is a map (issue #17): the node table opens as a grid from
 // the Tables menu (`grid=nodes`), a node's full form in a sheet from its card's
 // Edit (`edit=<id>`). These open them the way a person does.
-import type { Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Opens the node table (Tables → Node table) and returns the grid's dialog. */
 export async function openNodeTable(page: Page) {
@@ -17,19 +17,41 @@ export async function openNodeTable(page: Page) {
 	return page.getByRole('dialog', { name: 'Hydrological unit table' });
 }
 
-/** Opens a node's form (the first node in the list unless `name` is given) and returns the sheet's dialog. */
-export async function openNodeForm(page: Page, name?: string) {
-	const open = page.getByRole('dialog', { name: /^Edit |: details$/ });
+/**
+ * Opens a node's form (the first node in the list unless `name` is given) and
+ * returns the sheet's dialog. The form folds its sections to a line of their
+ * values (issue #521); unless `folded`, this presses Show every field, so a
+ * spec about a field finds it open (the switch is remembered on the device,
+ * so it holds across a reload or ‹ ›). node-sheet-layout.spec.ts checks the
+ * folded form itself.
+ */
+export async function openNodeForm(page: Page, name?: string, opts: { folded?: boolean } = {}) {
+	const sheet = page.getByRole('dialog', { name: /^Edit |: details$/ });
 	// Already open (the sheet stays open after a save, and a reload keeps `edit=`): its picker moves it
 	// to another node. Wait for it rather than click the map behind it.
-	if (/[?&]edit=/.test(page.url())) {
-		await open.waitFor();
-		return open;
+	if (/[?&]edit=/.test(page.url())) await sheet.waitFor();
+	else {
+		const list = page.getByRole('list', { name: 'All hydrological units' });
+		// The row's own Edit (the card has none since 2026-10-03).
+		await (name ? list.getByRole('button', { name: new RegExp(`^(Edit|Details) ${name}`) }) : list.getByRole('button', { name: /^(Edit|Details) / }).first()).click();
 	}
-	const list = page.getByRole('list', { name: 'All hydrological units' });
-	// The row's own Edit (the card has none since 2026-10-03).
-	await (name ? list.getByRole('button', { name: new RegExp(`^(Edit|Details) ${name}`) }) : list.getByRole('button', { name: /^(Edit|Details) / }).first()).click();
-	return page.getByRole('dialog', { name: /^Edit |: details$/ });
+	if (!opts.folded) await showEveryField(sheet);
+	return sheet;
+}
+
+/** Presses the node sheet's Show every field unless it is already on: every section and fold open. */
+export async function showEveryField(sheet: Locator) {
+	const all = sheet.getByRole('button', { name: 'Show every field' });
+	if ((await all.getAttribute('aria-pressed')) !== 'true') await all.click();
+	await expect(all).toHaveAttribute('aria-pressed', 'true');
+}
+
+/** Opens one section card of the node sheet by its heading (clicking its summary), and returns the card. */
+export async function openNodeSection(sheet: Locator, title: string) {
+	const card = sheet.locator('details.sec').filter({ has: sheet.page().locator('summary > .sec-title', { hasText: new RegExp(`^${title}$`) }) });
+	if (!(await card.evaluate((d: HTMLDetailsElement) => d.open))) await card.locator(':scope > summary').click();
+	await expect(card).toHaveAttribute('open', '');
+	return card;
 }
 
 /** Saves the model: in the open grid or sheet's save row if one is open (it hides the save bar), else from the save bar. */

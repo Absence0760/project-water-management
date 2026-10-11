@@ -230,10 +230,11 @@ test('the one-node sheet is wide enough for three fields a row, each section in 
 	expect(new Set(ys.map(Math.round)).size).toBe(1);
 
 	// Sections are boxed apart: Dam's card ends before Routing's starts, with a gap between.
-	const dam = (await sheet.getByRole('group', { name: 'Dam', exact: true }).boundingBox())!;
-	const routing = (await sheet.getByRole('group', { name: 'Routing', exact: true }).boundingBox())!;
+	const cardOf = (title: string) => sheet.locator('details.sec').filter({ has: page.locator('summary > .sec-title', { hasText: new RegExp(`^${title}$`) }) });
+	const dam = (await cardOf('Dam').boundingBox())!;
+	const routing = (await cardOf('Routing').boundingBox())!;
 	expect(routing.y - (dam.y + dam.height)).toBeGreaterThanOrEqual(12);
-	await expect(sheet.getByRole('group', { name: 'Dam', exact: true })).toHaveCSS('border-top-style', 'solid');
+	await expect(cardOf('Dam')).toHaveCSS('border-top-style', 'solid');
 });
 
 test('large values show thousands separators in the one-node form and the view-only table', async ({ page, owner, signIn }) => {

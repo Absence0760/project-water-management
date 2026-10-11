@@ -48,6 +48,8 @@ export interface NodeField {
 	nullable?: boolean;
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
+	/** In the one-node form, folded under its section's "More … settings" line (rarely changed; issue #521). */
+	more?: boolean;
 	/** A flow rate whose unit is picked beside it (./flowUnit.svelte.ts): `unit` and `scale` follow it. */
 	flowUnit?: FlowUnit;
 	/**
@@ -136,6 +138,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damAreaExponent',
+		more: true,
 		detailOnly: true,
 		label: 'Area exponent',
 		unit: '×',
@@ -146,6 +149,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damSeepagePerDay',
+		more: true,
 		detailOnly: true,
 		label: 'Seepage',
 		unit: '%/day',
@@ -156,6 +160,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damSeepageReturnPct',
+		more: true,
 		detailOnly: true,
 		label: 'Seepage returning',
 		unit: '%',
@@ -166,6 +171,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'damOutletCapacityM3Day',
+		more: true,
 		detailOnly: true,
 		label: 'Outlet capacity',
 		unit: 'm³/day',
@@ -268,6 +274,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'streamDepletionFrac',
+		more: true,
 		detailOnly: true,
 		notGauge: true,
 		label: 'Combined stream depletion',
@@ -278,6 +285,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'streamDepletionLagDays',
+		more: true,
 		detailOnly: true,
 		notGauge: true,
 		label: 'Combined depletion lag',
@@ -288,6 +296,7 @@ export const NODE_FIELDS: NodeField[] = [
 	},
 	{
 		key: 'gaPropertyAreaHa',
+		more: true,
 		detailOnly: true,
 		notGauge: true,
 		label: 'Property area (GN 538)',
@@ -345,6 +354,33 @@ export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day' || f
 /** What a field's input multiplies the stored value by to show it. */
 export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
 
+/** Why a field isn't used on this node (fieldUnused): one id per reason, so the form can name each reason once. */
+export type UnusedReason = 'onRiver' | 'outlet' | 'noLoss' | 'noDam' | 'notHiLo' | 'notManual';
+
+const UNUSED_TEXT: Record<UnusedReason, string> = {
+	onRiver: 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.',
+	outlet: 'Not used: the outlet has no reach below it in the model.',
+	noLoss: 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.',
+	noDam: 'Not used: no dam (capacity 0). Enter a capacity to use it.',
+	notHiLo: 'Not used: the flow-share method isn’t the high/low MAP split (Settings & calibration). Pick it there to use this.',
+	notManual: 'Not used: the flow-share method isn’t Manual (Settings & calibration). Pick it there to use this.'
+};
+
+type UnusedNode = Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3' | 'downstreamNodeId' | 'reachLossFrac'>>;
+
+/** fieldUnused's reason, as an id. */
+export function unusedReason(f: NodeField, n: UnusedNode, method?: FlowShareMethod): UnusedReason | null {
+	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) return 'onRiver'; // gitleaks:allow (a field name, not a secret)
+	// Bed losses (engine ≥ 1.75.0) are in the reach below: none below the outlet. One left there stays editable so it can be cleared.
+	if (f.group === 'reach' && n.downstreamNodeId === null && !((n.reachLossFrac ?? 0) > 0)) return 'outlet';
+	if (f.key === 'reachLossMaxM3Day' && !((n.reachLossFrac ?? 0) > 0)) return 'noLoss';
+	if (!method) return null;
+	if (f.group === 'dam' && f.key !== 'damCapacityM3' && !((n.damCapacityM3 ?? 0) > 0)) return 'noDam';
+	if ((f.key === 'areaHiKm2' || f.key === 'areaLoKm2') && method !== 'hiLo') return 'notHiLo';
+	if (f.key === 'flowShareManual' && method !== 'manual') return 'notManual';
+	return null;
+}
+
 /**
  * Why a field isn't used on this node, or null; the field then shows
  * read-only with this as its hint, its stored value kept. River to dam on a
@@ -355,22 +391,51 @@ export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
  * The node table passes no method and keeps those editable, so a block pasted
  * or typed across a row lands whole.
  */
-export function fieldUnused(
-	f: NodeField,
-	n: Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3' | 'downstreamNodeId' | 'reachLossFrac'>>,
-	method?: FlowShareMethod
-): string | null {
-	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) // gitleaks:allow (a field name, not a secret)
-		return 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.';
-	// Bed losses (engine ≥ 1.75.0) are in the reach below: none below the outlet. One left there stays editable so it can be cleared.
-	if (f.group === 'reach' && n.downstreamNodeId === null && !((n.reachLossFrac ?? 0) > 0)) return 'Not used: the outlet has no reach below it in the model.';
-	if (f.key === 'reachLossMaxM3Day' && !((n.reachLossFrac ?? 0) > 0)) return 'Not used: no bed losses (the share is 0 %). Enter a share to cap it.';
-	if (!method) return null;
-	if (f.group === 'dam' && f.key !== 'damCapacityM3' && !((n.damCapacityM3 ?? 0) > 0)) return 'Not used: no dam (capacity 0). Enter a capacity to use it.';
-	if ((f.key === 'areaHiKm2' || f.key === 'areaLoKm2') && method !== 'hiLo')
-		return 'Not used: the flow-share method isn’t the high/low MAP split (Settings & calibration). Pick it there to use this.';
-	if (f.key === 'flowShareManual' && method !== 'manual') return 'Not used: the flow-share method isn’t Manual (Settings & calibration). Pick it there to use this.';
-	return null;
+export function fieldUnused(f: NodeField, n: UnusedNode, method?: FlowShareMethod): string | null {
+	const r = unusedReason(f, n, method);
+	return r ? UNUSED_TEXT[r] : null;
+}
+
+/** The flow-share method in the "Not used with the … flow share" line. */
+const METHOD_WORD: Record<FlowShareMethod, string> = { area: 'area', hiLo: 'high/low MAP', manual: 'manual' };
+
+/** One reason's line in the one-node form (issue #521): what it is, then what would make the fields count. */
+export function unusedLine(r: UnusedReason, method: FlowShareMethod = 'area'): { why: string; fix: string } {
+	switch (r) {
+		case 'onRiver':
+			return { why: 'Not available on a dam on the river (Upstream inflow to dam is 100 %)', fix: 'River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.' };
+		case 'outlet':
+			return { why: 'Not used at the outlet, which has no reach below it in the model', fix: '' };
+		case 'noLoss':
+			return { why: 'Not used with no bed losses (the share is 0 %)', fix: 'Enter a share to cap it.' };
+		case 'noDam':
+			return { why: 'Not used without a dam (capacity 0)', fix: 'Enter a capacity to use these.' };
+		case 'notHiLo':
+			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick the high/low MAP split in Settings & calibration to use these.' };
+		case 'notManual':
+			return { why: `Not used with the ${METHOD_WORD[method]} flow share`, fix: 'Pick Manual in Settings & calibration to use it.' };
+	}
+}
+
+/**
+ * A section's fields as the one-node form lays them out (issue #521): the
+ * ones people change first, the rarely changed ones under "More … settings"
+ * (`more`), and the ones this node or method doesn't use, by reason, behind
+ * one "Not used …" line each instead of drawn greyed out.
+ */
+export function splitFields(fields: readonly NodeField[], n: UnusedNode, method?: FlowShareMethod): { main: NodeField[]; more: NodeField[]; unused: { reason: UnusedReason; fields: NodeField[] }[] } {
+	const main: NodeField[] = [];
+	const more: NodeField[] = [];
+	const unused: { reason: UnusedReason; fields: NodeField[] }[] = [];
+	for (const f of fields) {
+		const r = unusedReason(f, n, method);
+		if (r) {
+			const g = unused.find((u) => u.reason === r);
+			if (g) g.fields.push(f);
+			else unused.push({ reason: r, fields: [f] });
+		} else (f.more ? more : main).push(f);
+	}
+	return { main, more, unused };
 }
 
 /**

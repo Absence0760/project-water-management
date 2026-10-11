@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newNetworkNode } from '@water-management/engine';
-import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, GROUPS, hasDam, hasDamDevelopment, hiLoHint, isVolume, NODE_FIELDS, TABLE_FIELDS } from './fields';
+import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, GROUPS, hasDam, hasDamDevelopment, hiLoHint, isVolume, NODE_FIELDS, splitFields, TABLE_FIELDS, unusedLine, unusedReason } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -201,5 +201,38 @@ describe('hasDamDevelopment', () => {
 		// A rate of 0 is still an entry the form should show.
 		expect(hasDamDevelopment({ ...none, damSedimentPctPerYear: 0 })).toBe(true);
 		expect(hasDamDevelopment({ ...none, damInServiceFrom: '2003-10-01' })).toBe(true);
+	});
+});
+
+describe('splitFields', () => {
+	const vlei = { ...newNetworkNode('n1', 0, 'n0'), kind: 'farm' as const, damCapacityM3: 300_000, damMinPct: 0.15 };
+	const dam = NODE_FIELDS.filter((f) => f.group === 'dam');
+
+	it('puts the fields people change first and the rarely changed ones under More (issue #521)', () => {
+		const sp = splitFields(dam, vlei, 'area');
+		expect(sp.main.map((f) => f.key)).toEqual(['damCapacityM3', 'damInitialPct', 'damMinPct', 'damAreaFullM2']);
+		expect(sp.more.map((f) => f.key)).toEqual(['damAreaExponent', 'damSeepagePerDay', 'damSeepageReturnPct', 'damOutletCapacityM3Day']);
+		expect(sp.unused).toEqual([]);
+	});
+
+	it('gathers the fields the node or method doesn’t use under one reason each', () => {
+		const sp = splitFields(dam, { ...vlei, damCapacityM3: 0 }, 'area');
+		expect(sp.main.map((f) => f.key)).toEqual(['damCapacityM3']);
+		expect(sp.more).toEqual([]);
+		expect(sp.unused.map((u) => [u.reason, u.fields.length])).toEqual([['noDam', 7]]);
+		const area = splitFields(NODE_FIELDS.filter((f) => f.group === 'area'), vlei, 'area');
+		expect(area.unused.map((u) => [u.reason, u.fields.map((f) => f.label)])).toEqual([['notHiLo', ['High-MAP', 'Low-MAP']]]);
+		// The node table passes no method: the method's fields stay in use.
+		expect(splitFields(NODE_FIELDS.filter((f) => f.group === 'area'), vlei).unused).toEqual([]);
+	});
+
+	it('names each reason once, with what would make the fields count', () => {
+		expect(unusedLine('notHiLo', 'area')).toEqual({ why: 'Not used with the area flow share', fix: 'Pick the high/low MAP split in Settings & calibration to use these.' });
+		expect(unusedLine('notManual', 'hiLo').why).toBe('Not used with the high/low MAP flow share');
+		expect(unusedLine('outlet').fix).toBe('');
+		// The reasons are fieldUnused's.
+		const reach = NODE_FIELDS.find((f) => f.key === 'reachLossMaxM3Day')!;
+		expect(unusedReason(reach, vlei)).toBe('noLoss');
+		expect(fieldUnused(reach, vlei)).toBe('Not used: no bed losses (the share is 0 %). Enter a share to cap it.');
 	});
 });

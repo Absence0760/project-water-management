@@ -344,7 +344,7 @@
 							{/if}
 							<p class="links small">
 								<!-- The dam's inputs (capacity, minimum level, area, curve, release rule) are its node sheet's (ui.md § Network). -->
-								<a href="?tab=network&edit={encodeURIComponent(c.nodeId)}" aria-label="{readonly ? 'Dam details' : 'Edit dam'}: {c.name}" data-testid="dam-edit-link">{readonly ? 'Dam details' : 'Edit dam'}</a>
+								<a href="?tab=network&edit={encodeURIComponent(c.nodeId)}&section=dam" aria-label="{readonly ? 'Dam details' : 'Edit dam'}: {c.name}" data-testid="dam-edit-link">{readonly ? 'Dam details' : 'Edit dam'}</a>
 								<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
 								{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="dam-map-link">Show on map</a>{/if}
 								{#if c.farm}<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>{/if}
