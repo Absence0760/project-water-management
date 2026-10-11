@@ -30,8 +30,8 @@ describe('UnitRainFields', () => {
 		const { body } = render(UnitRainFields, { props: { value: { mode: 'perUnit' }, nodes } });
 		expect(body).toMatch(/<input type="checkbox"[^>]*checked/);
 		expect(body).toContain('1 of 2 units with land has a MAP.');
-		// The one without is named, linked to its form.
-		expect(body).toMatch(/Without a MAP:.*<a href="\?tab=network&amp;edit=b">Lower unit<\/a>/s);
+		// The one without is named, linked to its form's Catchment area card (section=area).
+		expect(body).toMatch(/Without a MAP:.*<a href="\?tab=network&amp;edit=b&amp;section=area">Lower unit<\/a>/s);
 		expect(body).toContain('Rain gauge’s MAP');
 		expect(body).not.toContain('Source of the gauge’s MAP');
 		expect(body).toContain('MAP period');
