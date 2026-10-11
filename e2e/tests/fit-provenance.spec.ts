@@ -106,6 +106,9 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	await expect(page.getByText('Fit record: parameters edited since the fit (x1)')).toBeVisible();
 	const fits = page.getByRole('table', { name: 'Fit and validation for both runs' });
 	await expect(fits.getByRole('row', { name: /^Parameters edited since fit/ })).toHaveText(/no\s*yes \(x1\)$/);
+	// The fit's time day first and in UTC, as the run's own provenance says it (issue #521); the engine's
+	// stored-change line above keeps its own form, which history revisions and evidence pack manifests carry.
+	await expect(fits.getByRole('row', { name: /^Fit GR4J/ })).toHaveText(/^Fit\s*(?:GR4J fit of \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} UTC \([^()]+, seed 3\)\s*){2}$/);
 	await expect(fits.getByRole('row', { name: /^Split-sample: other half/ })).toContainText('not run');
 });
 

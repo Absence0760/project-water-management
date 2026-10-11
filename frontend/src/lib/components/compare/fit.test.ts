@@ -1,5 +1,5 @@
 import type { FitRecord, FitScores, ProjectSettings } from '@water-management/engine';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { asFitRecord, fitValidationRows } from './fit';
 
 const scores = (v: number): FitScores => ({
@@ -36,9 +36,25 @@ const record = (over: Partial<FitRecord> = {}): FitRecord =>
 const row = (rows: ReturnType<typeof fitValidationRows>, label: string) => rows!.find((r) => r.label === label)!;
 
 describe('fitValidationRows', () => {
+	// The fit time is day first and in UTC wherever the page is read (issue #521): a skewed zone can't move its day.
+	describe('the fit time', () => {
+		const tz = process.env.TZ;
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+		it('reads day first in UTC under any time zone, and an older record’s time as stored', () => {
+			process.env.TZ = 'Pacific/Kiritimati'; // UTC+14: 23:30 UTC is the next day locally
+			const late = fitValidationRows(record({ fittedAt: '2026-09-24T23:30:12.5Z' }), record({ fittedAt: '2026-09-24T23:30Z' }));
+			expect(row(late, 'Fit')).toMatchObject({ a: 'GR4J fit of 24 Sep 2026 23:30 UTC (KGE′, seed 7)', b: 'GR4J fit of 24 Sep 2026 23:30 UTC (KGE′, seed 7)' });
+			process.env.TZ = 'Pacific/Pago_Pago';
+			const odd = fitValidationRows(record({ fittedAt: '2026-09-24 10:05' }), record({ fittedAt: null as unknown as string }));
+			expect(row(odd, 'Fit')).toMatchObject({ a: 'GR4J fit of 2026-09-24 10:05 (KGE′, seed 7)', b: 'GR4J fit of unknown time (KGE′, seed 7)' });
+		});
+	});
+
 	it('puts each run’s in-sample score next to its validation scores', () => {
 		const rows = fitValidationRows(record(), record({ seed: 8, editedParams: ['x1'] }));
-		expect(row(rows, 'Fit')).toEqual({ label: 'Fit', a: 'GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 7)', b: 'GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed 8)' });
+		expect(row(rows, 'Fit')).toEqual({ label: 'Fit', a: 'GR4J fit of 24 Sep 2026 10:05 UTC (KGE′, seed 7)', b: 'GR4J fit of 24 Sep 2026 10:05 UTC (KGE′, seed 8)' });
 		expect(row(rows, 'Calibration period (in-sample)')).toMatchObject({ a: '0.81', b: '0.81' });
 		expect(row(rows, 'Split-sample: other half')).toMatchObject({ a: '0.46', b: '0.46' });
 		expect(row(rows, 'Dry → wet: wet years')).toMatchObject({ a: 'not run', b: 'not run' });

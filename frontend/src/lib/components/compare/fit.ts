@@ -2,7 +2,7 @@
 // score next to its validation scores, from each run's stored fit record.
 // Pure, so it is unit-tested; FitValidationCompare.svelte draws it.
 import { describeFitRecord, fitRecordStatus, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
-import { objectiveName } from '$lib/calibration/fit';
+import { fittedAtText, objectiveName } from '$lib/calibration/fit';
 
 export interface FitValidationRow {
 	label: string;
@@ -69,7 +69,9 @@ export function fitValidationRows(
 		return p ? score(p.scores[r.objective]) : 'not run';
 	};
 	return [
-		{ label: 'Fit', a: ra ? describeFitRecord(ra) : NONE, b: rb ? describeFitRecord(rb) : NONE },
+		// The fit's time day first and in UTC, as the run's own Where the parameters came from says it (fittedAtText):
+		// the engine hands over the stored timestamp and leaves its format to the screen (issue #521).
+		{ label: 'Fit', a: ra ? describeFitRecord(ra, fittedAtText) : NONE, b: rb ? describeFitRecord(rb, fittedAtText) : NONE },
 		{ label: 'Objective', ...both((r) => objectiveName(r.objective)) },
 		{ label: 'Bounds', ...both((r) => (r.bounds === 'typical' ? 'typical (Perrin et al. 80 %)' : 'wide')) },
 		{ label: 'Calibration period (in-sample)', ...both((r) => score(r.fit.scores[r.objective])) },

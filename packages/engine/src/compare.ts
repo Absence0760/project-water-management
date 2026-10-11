@@ -1210,11 +1210,20 @@ function diffExclusions(ra: unknown, rb: unknown, noun = 'Calibration exclusion'
 
 const MODEL_NAME: Record<string, string> = { gr4j: 'GR4J', legacy: 'legacy' };
 
-/** "GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)". */
-export function describeFitRecord(r: Pick<FitRecord, 'model' | 'fittedAt' | 'objective' | 'seed' | 'auto'>): string {
-	const when = typeof r.fittedAt === 'string' ? r.fittedAt.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC') : 'unknown time';
+/** A fit record's ISO timestamp as describeFitRecord writes it by default: "2026-09-24 14:05 UTC". */
+const fitTimeIso = (iso: string): string => iso.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC');
+
+/**
+ * "GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)". `when` writes the fit's
+ * time from its stored ISO timestamp (`fittedAt`, the data): a screen passes
+ * its own day-first formatter, so no date format is decided here. The
+ * default is the one diffInputs' "Fit record" lines use, which history
+ * revisions store and evidence pack manifests hash, so it never changes.
+ */
+export function describeFitRecord(r: Pick<FitRecord, 'model' | 'fittedAt' | 'objective' | 'seed' | 'auto'>, when: (iso: string) => string = fitTimeIso): string {
+	const time = typeof r.fittedAt === 'string' ? when(r.fittedAt) : 'unknown time';
 	const objective = (OBJECTIVE_LABELS[r.objective as ObjectiveId] ?? String(r.objective)).replace(/ \([^()]*\)$/, '');
-	return `${r.auto ? 'automated ' : ''}${MODEL_NAME[r.model] ?? String(r.model)} fit of ${when} (${objective}, seed ${r.seed}${r.auto ? `, calibration rules revision ${r.auto.rules.revision}` : ''})`;
+	return `${r.auto ? 'automated ' : ''}${MODEL_NAME[r.model] ?? String(r.model)} fit of ${time} (${objective}, seed ${r.seed}${r.auto ? `, calibration rules revision ${r.auto.rules.revision}` : ''})`;
 }
 
 /** The fit record the parameters came from: set, cleared, replaced, or edited since. */
