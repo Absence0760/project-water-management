@@ -503,11 +503,11 @@ an owner to switch it on only if every viewer works for, or was appointed
 by, the organisation. With it off, no route hands a viewer a copy of the
 volumes ([api.md § Allocations](./api.md#allocations)). Nor a series
 worked out from one (issue #523 finding I): no allocation series on any
-run, and of a cap or full-allocation scenario run only its river outcomes
-(the EWR results, the outflow, the sites, the natural flow), no unit's
-figure and no use total, the withheld parts named
-([api.md § Runs](./api.md#runs)). The natural flow less the outflow
-approximates the units' use together: accepted
+run, and of a cap or full-allocation scenario run only its EWR verdicts
+and counts (days and months the EWR is not met, assurance rates), no
+series, volume, unit figure or use total, the withheld parts named
+([api.md § Runs](./api.md#runs)); on every report the licence-impact boards
+give their verdicts without the waterfall
 ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
 
 Names live in their own table (`allocation_holder`) so RLS, not the API,

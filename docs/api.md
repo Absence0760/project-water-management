@@ -1952,38 +1952,46 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 
 - **What a viewer kept from each registered volume gets of a run** (D3,
   issue #523 finding I, `runs/withheldSeries.ts`,
-  `allocations/riverOutcomes.ts`). No allocation series on any run
+  `allocations/verdictsOnly.ts`). No allocation series on any run
   (`allocation_room_*`, `allocation_left_*`, `allocation_demand_factor`).
   Of a cap or full-allocation run (a scenario's, or a baseline from before
-  213) only its **river outcomes**, an allowlist: the catchment's natural
-  flow, outflow, EWR and its shortfall and the rain, records and runoff
-  model behind them; at each gauge its flows, EWR and shortfall; nothing of
-  any unit and no use total. The summary keeps `historyDays`, `runoff`,
-  `catchment`, `calibration`, `ewrAssurance`, `ewrCompliance` (no
-  `farms`), `servedWhileEwrFails` (no `units`), `wr2012`, `dataQuality`
-  (no `areaMismatches`), `forecast` (no `perFarm`) and the input-handling
-  fields; `farms`, `users` and `warnings` are empty;
-  `allocations` keeps the mode, band and counts with
-  `riverOutcomesOnly: true`, and `withheld` names every field left out.
-  This summary is what the run, compare, History, the summary CSV, sweep
-  members and the evidence report serve such a viewer.
-  `GET …/runs/:runId` leaves the other series out of `series` and lists
-  them in `withheldSeries: { nodeId, key }[]` (empty for anyone else).
-  Asked for by name, `…/series` is `403 allocation_series_withheld`;
-  `…/series/bulk` and `…/day` answer without them and name them in
-  `withheld` (keys), or refuse a unit outright with that code; the daily
-  and all-farms CSVs leave the columns out with a `# withheld=…` line
-  under the provenance (a unit's daily file, and `farms.csv`, are refused),
-  and the summary CSV names the fields left out. An uncertainty ensemble
-  of such a run keeps each member's river metrics only and no unit list.
-  The evidence report on such a run (either side) keeps page 1's river rows
-  and the flags that name no unit's figure, the EWR sites and months, the
-  cumulative and licence-impact boards, the identity, checks and appendix;
-  `users`, `questions`, § 5's units, `demandObjects`, served-while-failing
-  units and the run warnings are empty, and `withheld` names them; a pack's
-  PDF is refused (`pack_volumes_withheld`). An outlook on such a base comes
-  with `result` and `triggers` null and `withheld: ["result", "triggers"]`;
-  a farm preview while such a run is published is `403
+  213) only its **verdicts and counts**, an allowlist, and **no series at
+  all**. The summary keeps `historyDays`; `catchment` with
+  `ewrDaysNotMet`, `ewrFractionDaysNotMet` and `noFlow` (`days`,
+  `longestRun`), its mean flows `null`; `ewrCompliance` (`waterYears`,
+  `days`, the outlet's `daysNotMet`; no `farms`, no shortfall); each
+  `ewrAssurance` site's months met, rates and longest run not met (no
+  flow, requirement, natural or FDC figure); `servedWhileEwrFails` site day
+  counts (no `units`); `forecast`'s days at risk (no `perFarm`).
+  `farms`, `users` and `warnings` are empty, `calibration` null,
+  `allocations` keeps the mode, band and counts with `verdictsOnly: true`,
+  and `withheld` names every field left out. This summary is what the run,
+  compare, History, the summary CSV, sweep members and the evidence report
+  serve such a viewer. `GET …/runs/:runId` gives `series: []` and lists
+  every series in `withheldSeries: { nodeId, key }[]` (empty for anyone
+  else). `…/series`, `…/series/bulk`, `…/day` (a unit's or the
+  catchment's), the daily and all-farms CSVs are `403
+  allocation_series_withheld`; the summary CSV names the fields left out.
+  A sweep member of such a run comes with `series: null` and
+  `withheld: ["series"]`; an uncertainty ensemble keeps each member's EWR
+  counts and rates (`ewrDaysNotMet`, by month, `reserveRate`, `noFlowDays`,
+  `ewrSiteDaysNotMet`) and the matching bands, no flow, shortfall or unit
+  figure; a yield computed on such a run or scenario is listed with
+  `points: null` and `withheld: ["points"]`. The evidence report on such a
+  run (either side) keeps only the sections it lists (an allowlist, so a
+  new one is withheld): page 1's count rows and the flags that name no
+  figure, the EWR sites as verdicts with their monthly delivered shares,
+  the month changes, the boards' verdicts, the ensembles' counts, the
+  cumulative counts, the identity, checks, ops, appendix (no warnings) and
+  the summaries as above; `users`, `questions`, § 5's units, `demandObjects`
+  and served-while-failing units are empty, and `withheld` names the rest;
+  a pack's PDF is refused (`pack_volumes_withheld`). On **every** report
+  and pack manifest such a viewer reads, each licence-impact board
+  (`licenceImpact`, `licenceImpactAuthorised`) gives each year class's
+  `classId`, `label`, years, `below` and `verdict`, with `waterfall`,
+  `lowerM3` and `upperM3` null and no warnings. An outlook on such a base
+  comes with `result` and `triggers` null and `withheld: ["result",
+  "triggers"]`; a farm preview while such a run is published is `403
   allocation_series_withheld`, and its history leaves those publications
   out (a linked farmer reads their own farm). A compare-only run gives
   that viewer everything but the allocation series.

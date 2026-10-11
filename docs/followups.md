@@ -3703,7 +3703,7 @@ from the WP:
       volume, so a unit's demand and supply in `summary.farms`, `users[]` and
       its daily series are its volume). Done 2026-10-11 with finding I
       (below): for a viewer kept from the volumes a cap or full-allocation
-      run serves its river outcomes only, everywhere it is served
+      run serves its EWR verdicts and counts only, everywhere it is served
       ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
@@ -3792,9 +3792,9 @@ from the WP:
       cap scenario with a viewer while the switch was off gave every capped
       unit's volume through `…/series`, `…/series/bulk`, `…/day`, the CSV and
       `.xlsx` exports. Done 2026-10-11: for that viewer no allocation series
-      on any run, and of a cap or full-allocation run its river outcomes
-      only (next item), with the withheld ones named (`withheldSeries`,
-      `withheld`, `summary.allocations.riverOutcomesOnly`,
+      on any run, and of a cap or full-allocation run its EWR verdicts and
+      counts only (next item), with the withheld ones named (`withheldSeries`,
+      `withheld`, `summary.allocations.verdictsOnly`,
       `403 allocation_series_withheld`) and the run pages saying so; such a
       run can't be published; the canary sweep runs a capped and a
       full-allocation scenario run
@@ -3807,15 +3807,19 @@ from the WP:
       less the units still shown gave a bound unit's volume exactly, and the
       evidence report's per-unit sections, a pre-213 published cap run's
       farm view and an outlook on such a base gave the same. Done
-      2026-10-11, the operator's durable option: of a cap or full-allocation
-      run a viewer kept from the volumes reads an allowlist of river
-      outcomes only (EWR results, outflow, the EWR and gauge sites, natural
-      flow), no unit's figure and no use total, on every route that serves
-      runs; such a run can't be published or start an outlook, and an older
-      one's farm preview and outlook are withheld from that viewer
+      2026-10-11, the operator's durable option, tightened after round 5
+      (a gauge's inflow less a dam-less unit's share of the natural flow gave
+      its supply exactly; the licence-impact boards' waterfalls gave use
+      totals): of a cap or full-allocation run a viewer kept from the
+      volumes reads an allowlist of EWR verdicts and counts only, no series,
+      volume, unit figure or use total, on every route that serves runs
+      (yields included); on every report the boards give verdicts only;
+      such a run can't be published or start an outlook, and an older one's
+      farm preview and outlook are withheld from that viewer
       ([security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)).
-      Accepted, documented there: natural flow less outflow approximates
-      the units' consumptive use together. Still to do by the operator: run
+      Nothing is left as an accepted flow differencing. The modelled use
+      on `GET …/runs/:runId/allocations` for such a run (round 5, finding 3)
+      is fixed on `fix/523-g-holder-totals`. Still to do by the operator: run
       the read-only check for cap or full-allocation publications in
       production (`SELECT p.project_id, p.id, p.superseded_at FROM
       run_publication p JOIN model_run r ON r.id = p.run_id WHERE

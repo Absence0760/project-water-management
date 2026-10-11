@@ -8936,15 +8936,17 @@ or more registered users, the holders, the volume registered today and the
 storage (`totalsSentence`), and the run's modelled use against the
 registered volumes summed per water year; "No total is shown" when no
 source has 5 holders. No unit, number, name or Download CSV. On a cap or
-full-allocation scenario run such a viewer gets only the river outcomes
-(issue #523 finding I, [api.md § Runs](./api.md#runs)): no unit cards,
-tables or unit charts, no use totals, and the `.xlsx` workbook has the
-catchment and gauge sheets only. The run's summary (Runs & results) and
-Hydrological units each say so in one line above the results,
-`WithheldUnitsNote.svelte` (`data-testid="river-outcomes-only"`,
+full-allocation scenario run such a viewer gets only the EWR verdicts and
+counts (issue #523 finding I, [api.md § Runs](./api.md#runs)): no charts,
+unit cards or tables, no use totals and no `.xlsx` sheets. The run's
+summary (Runs & results) and Hydrological units each say so in one line
+above the results, `WithheldUnitsNote.svelte` (`data-testid="verdicts-only"`,
 `runs/withheld.ts`); the evidence report says it under its first heading
-(`evidence-river-outcomes-only`), and an outlook on such a base says its
-results are withheld (`outlook-withheld`). Owners get a
+(`evidence-verdicts-only`), an outlook on such a base says its results are
+withheld (`outlook-withheld`), and the Yield panel says a yield on such a
+run is withheld (`yield-withheld`). On every report such a viewer reads,
+the licence-impact boards show each class's verdict without the waterfall
+(its empty state). Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every
 viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
