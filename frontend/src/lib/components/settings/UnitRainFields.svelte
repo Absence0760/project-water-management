@@ -86,7 +86,7 @@
 		{#if coverage.without.length}
 			<p class="hint coverage" data-testid="unit-rain-without-map">
 				Without a MAP:
-				{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
+				{#each coverage.without.slice(0, MISSING_SHOWN) as n, i (n.id)}{i ? ', ' : ' '}<a href="?tab=network&edit={encodeURIComponent(n.id)}&section=area">{n.name}</a>{/each}{coverage.without.length > MISSING_SHOWN ? ` and ${coverage.without.length - MISSING_SHOWN} more` : ''}.
 			</p>
 		{/if}
 		<div class="fields">

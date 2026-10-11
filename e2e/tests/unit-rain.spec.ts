@@ -187,7 +187,7 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const group = page.getByTestId('unit-rain-settings');
 	await group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' }).check();
 	await expect(group.getByTestId('unit-rain-without-map')).toContainText('Without a MAP: Upper farm, Lower farm.');
-	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=/);
+	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=[^&]+&section=area$/);
 	await saveSettings(page);
 	await group.getByRole('link', { name: 'Data feeds → Rain for each unit' }).click();
 	await expect(page).toHaveURL(/[?&]rain=units/);

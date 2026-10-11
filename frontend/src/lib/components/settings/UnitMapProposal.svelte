@@ -154,7 +154,7 @@
 						<tbody>
 							{#each data.units as u (u.nodeId)}
 								<tr data-node={u.nodeId} data-same={u.same}>
-									<th scope="row"><a href="?tab=network&edit={encodeURIComponent(u.nodeId)}">{u.name}</a></th>
+									<th scope="row"><a href="?tab=network&edit={encodeURIComponent(u.nodeId)}&section=area">{u.name}</a></th>
 									<td class="num">{fmtNum(u.mapMm)}</td>
 									<td class="num">{fmtNum(u.cells)}</td>
 									<td class="num" title={u.current.mapSource ?? undefined}>{currentText(u)}{#if u.same}<span class="visually-hidden">, the same</span>{/if}</td>

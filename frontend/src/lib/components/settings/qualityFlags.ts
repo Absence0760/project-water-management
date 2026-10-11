@@ -3,18 +3,7 @@
 // how the fit scores flagged days. The form's error mirrors the backend's
 // SettingsPatch (the engine's ratingError), so Save is blocked with a
 // readable message instead of a 400. QualityFlagsFields.svelte renders it.
-import {
-	CALIBRATION_FLOW_KINDS,
-	GAP_FILL_KINDS,
-	gapFillRecordLabel,
-	ratingError,
-	zeroFlowMonthsError,
-	zeroFlowMonthsText,
-	type CalibrationFlowKind,
-	type FlowGapFillSettings,
-	type GaugeRating,
-	type QualityFlagSettings
-} from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, ratingError, zeroFlowMonthsError, type CalibrationFlowKind, type GaugeRating, type QualityFlagSettings } from '@water-management/engine';
 
 export const RECORD_NAME: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'Gauge record', flow_logger_m3s: 'Logger record' };
 
@@ -81,25 +70,3 @@ export function ratingProblem(q: QualityFlagSettings | null | undefined, kind: C
 	return { field, message: `${RECORD_NAME[kind]} gauged range: ${err.charAt(0).toUpperCase()}${err.slice(1)}.` };
 }
 
-const DAY_NAME = { aboveRating: 'above-range', belowRating: 'below-range', suspect: 'suspect', infilled: 'infilled' } as const;
-const TREATMENT = { censor: 'censored', exclude: 'left out', include: 'scored as recorded' } as const;
-const andList = (xs: string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
-
-/**
- * The Calibration record's folded line (ui-playbook.md § 2, "Rarely changed settings fold into their values"):
- * "gauged range not known · above-range days censored · below-range, suspect and infilled days left out ·
- * river stops: none · flow gaps not filled". `kinds` are the records a range is offered for (ratedKinds).
- */
-export function qualityFlagsSummary(q: QualityFlagSettings, gapFill: FlowGapFillSettings | null | undefined, kinds: readonly CalibrationFlowKind[]): string {
-	const known = kinds.filter((k) => q.ratings[k] && (q.ratings[k]!.gaugedMaxM3s !== null || q.ratings[k]!.gaugedMinM3s !== null));
-	const parts = [known.length ? `gauged range set for the ${andList(known.map((k) => RECORD_NAME[k].toLowerCase()))}` : 'gauged range not known'];
-	for (const t of ['censor', 'exclude', 'include'] as const) {
-		const days = (Object.keys(DAY_NAME) as (keyof typeof DAY_NAME)[]).filter((k) => q[k] === t).map((k) => DAY_NAME[k]);
-		if (days.length) parts.push(`${andList(days)} days ${TREATMENT[t]}`);
-	}
-	const months = q.zeroFlowMonths ?? [];
-	parts.push(months.length ? `river stops ${zeroFlowMonthsText(months)}` : 'no river-stop months');
-	const filled = GAP_FILL_KINDS.filter((k) => gapFill?.[k]);
-	parts.push(filled.length ? `gaps filled in the ${andList(filled.map((k) => gapFillRecordLabel(k)))}` : 'flow gaps not filled');
-	return parts.join(' · ');
-}

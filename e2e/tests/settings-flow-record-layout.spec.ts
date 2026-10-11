@@ -95,7 +95,7 @@ test('at 1440×900 the Calibration record opens on the window and the exclusions
 	await expect(add).toBeInViewport({ ratio: 1 });
 	await expect(excl.getByRole('button', { name: 'Exclude a date range' })).toBeInViewport({ ratio: 1 });
 	// Beside the legend, above the rows, not under them.
-	const legend = await box(excl.locator('legend'));
+	const legend = await box(excl.locator('.head .legend'));
 	const button = await box(add);
 	expect(button.y).toBeLessThan(legend.y + legend.height);
 	expect(button.y + button.height).toBeGreaterThan(legend.y);

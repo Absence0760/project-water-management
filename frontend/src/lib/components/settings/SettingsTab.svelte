@@ -24,6 +24,7 @@
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
 	// Rain for each unit (settings.unitRain, issue #482): its own chunk, for the same reason.
 	const loadUnitRain = () => import('./UnitRainFields.svelte');
+	const loadArealRain = () => import('./ArealRainBody.svelte');
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
 </script>
@@ -73,7 +74,7 @@
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
-	import { qualityFlagsSummary, ratedKinds } from './qualityFlags';
+	import { qualityFlagsAtDefaults, qualityFlagsSummary } from './qualityFlagsLine';
 	import MarPenaltyFields from './MarPenaltyFields.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import type { FitSession } from '$lib/calibration/fitSession.svelte';
@@ -112,7 +113,7 @@
 	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
-	import { AREAL_METHOD_OPTIONS, arealRainFormError, flatFactor, storedArealRain, withArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
+	import { arealRainFormError, storedArealRain, withArealRain, type EditableArealRain } from './arealRain';
 	import { unitRainFormError } from './unitRain';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
@@ -171,11 +172,11 @@
 	const s = $derived(draft.s);
 	// The preset pickers themselves are never saved: each only fills its row and source note, then resets.
 	let panPreset = $state('');
-	// The folds of rarely changed settings (app.css .fold), closed at first: Flow calibration's warm-up, the pan row's
-	// fill tools, and the Calibration record's quality flags.
-	let moreGr4jOpen = $state(false);
+	/** GR4J's default warm-up (days): the warm-up fold starts closed at it. */
+	const GR4J_WARMUP_DEFAULT = 365;
+	// The pan row's fill tools, folded (app.css .fold) and closed at first; the warm-up and the quality flags are
+	// DefaultsFolds, closed while at their defaults.
 	let panToolsOpen = $state(false);
-	let flagsOpen = $state(false);
 	// Automated calibration's panel: the rules card's head runs it (its start() and canRun()).
 	let autoFit = $state<{ start: () => void; canRun: () => boolean } | undefined>(undefined);
 	// The lake-factor preset picker (engine ≥ 1.49.0) fills lakeEvapFactorMonthly and its source note.
@@ -198,7 +199,6 @@
 	// The areal rainfall correction on GR4J's rain (engine ≥ 1.13.0, §2.4g); the one switched off is kept until saved.
 	const areal = $derived((s.arealRain ?? null) as unknown as EditableArealRain | null);
 	const arealError = $derived(arealRainFormError(areal));
-	const arealFlat = $derived(areal ? flatFactor(areal) : null);
 	// Rain for each unit (settings.unitRain, issue #482): checked here, so Save is blocked before its chunk has loaded.
 	const unitRainError = $derived(unitRainFormError(s.unitRain));
 	function setArealOn(on: boolean) {
@@ -937,22 +937,14 @@
 				<span class="hint explain" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 				<FieldHistoryLine field="settings:gr4j.x2" />
 			</fieldset>
-			<details class="fold" data-testid="flow-more" bind:open={moreGr4jOpen}>
-				<summary>
-					<span class="fold-name">More:</span>
-					<span data-testid="flow-more-summary">warm-up {fmtNum(s.gr4j.warmupDays)} days</span>
-					<span class="fold-problem">needs fixing</span>
-					<span class="fold-change" aria-hidden="true">{moreGr4jOpen ? 'Hide' : 'Change'}</span>
-				</summary>
-				<div class="fold-body">
-					<div class="field">
-						<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
-						<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
-						<span class="hint explain" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
-						<FieldHistoryLine field="settings:gr4j.warmupDays" />
-					</div>
+			<DefaultsFold name="More:" line="warm-up {fmtNum(s.gr4j.warmupDays)} days" atDefaults={s.gr4j.warmupDays === GR4J_WARMUP_DEFAULT} testid="flow-more" lineTestid="flow-more-summary">
+				<div class="field">
+					<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
+					<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
+					<span class="hint explain" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
+					<FieldHistoryLine field="settings:gr4j.warmupDays" />
 				</div>
-			</details>
+			</DefaultsFold>
 		</div>
 		<div class="sub-card" data-testid="flow-rain-card">
 			<h3 class="sub first">Rain into GR4J</h3>
@@ -974,89 +966,10 @@
 					<span class="hint" role="note" data-testid="areal-rain-unit-note">With rain for each unit on (below), it applies only to the units that fall back to the catchment rain.</span>
 				{/if}
 				{#if areal}
-					<div class="fields">
-						<div class="field">
-							<span class="lbl"><label for="st-areal-all">Factor in every month <span class="u">(×)</span></label></span>
-							<NumberInput
-								id="st-areal-all"
-								min={0.25}
-								max={4}
-								step={0.01}
-								decimals={3}
-								disabled={readonly}
-								value={arealFlat}
-								aria-describedby="st-areal-all-h"
-								onchange={(v) => {
-									if (v !== null && s.arealRain) s.arealRain = storedArealRain(withFactorEveryMonth(areal, v));
-								}}
-							/>
-							<span class="hint" id="st-areal-all-h">An independent MAP ÷ the forcing’s mean annual rain gives one factor. {arealFlat === null ? 'The months differ now (below).' : ''}</span>
-						</div>
-						<div class="field">
-							<span class="lbl"><label for="st-areal-method">Derived from</label></span>
-							<select
-								id="st-areal-method"
-								disabled={readonly}
-								value={areal.method}
-								aria-describedby="st-areal-method-h"
-								onchange={(e) => {
-									if (s.arealRain) s.arealRain = storedArealRain({ ...areal, method: e.currentTarget.value as EditableArealRain['method'] });
-								}}
-							>
-								{#each AREAL_METHOD_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-							</select>
-							<span class="hint explain" id="st-areal-method-h">{AREAL_METHOD_OPTIONS.find((o) => o.value === areal.method)?.hint}</span>
-						</div>
-					</div>
-					<div class="table-wrap">
-						<table class="data compact monthly">
-							<thead>
-								<tr>
-									<th scope="col" class="sticky">Month</th>
-									{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-								</tr>
-							</thead>
-							<tbody>
-								<tr>
-									<th scope="row" class="sticky">Areal factor <span class="u">×</span></th>
-									{#each WATER_YEAR_MONTHS as m, i (m)}
-										<td>
-											<NumberInput
-												label="Areal rainfall factor, {m}"
-												min={0.25}
-												max={4}
-												step={0.01}
-												decimals={3}
-												disabled={readonly}
-												value={areal.factors[i] ?? 1}
-												onchange={(v) => {
-													if (v !== null && s.arealRain) s.arealRain = storedArealRain({ ...areal, factors: areal.factors.map((f, j) => (j === i ? v : f)) });
-												}}
-											/>
-										</td>
-									{/each}
-								</tr>
-							</tbody>
-						</table>
-					</div>
-					<div class="field pe-source">
-						<span class="lbl"><label for="st-areal-source">Source</label></span>
-						<input
-							id="st-areal-source"
-							readonly={readonly}
-							required
-							value={areal.source}
-							placeholder="e.g. catchment MAP 560 mm (reference) ÷ CHIRPS mean 2001–2024"
-							aria-invalid={(!!arealError && !areal.source.trim()) || undefined}
-							aria-describedby={arealError ? 'st-areal-source-h st-areal-err' : 'st-areal-source-h'}
-							oninput={(e) => {
-								if (s.arealRain) s.arealRain = storedArealRain({ ...areal, source: e.currentTarget.value });
-							}}
-						/>
-						<span class="hint" id="st-areal-source-h">Required: the MAP or gauges and their reference, and the years compared. A fit records the factors, so changing them marks it “Forcing changed since fit”.</span>
-						{#if arealError}<span class="err" id="st-areal-err">{arealError}</span>{/if}
-					</div>
-					<FieldHistoryLine field="settings:arealRain" />
+					<!-- Its own chunk (issue #521): most projects leave the correction off. -->
+					<Lazy load={loadArealRain}>
+						{#snippet children(ArealRainBody)}<ArealRainBody bind:value={s.arealRain} {arealError} {readonly} />{/snippet}
+					</Lazy>
 				{/if}
 			</fieldset>
 			<!-- Rain for each unit (settings.unitRain, issue #482): GR4J per unit with land on its own rain; arealRain then applies only to units on the catchment rain. -->
@@ -1255,13 +1168,14 @@
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
 		<!-- Rarely changed: the gauged ranges, the day rules, the river-stop months and gap filling, folded into one line of
 		     their values (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
-		<details class="fold record-flags" data-testid="record-flags" bind:open={flagsOpen}>
-			<summary>
-				<span class="fold-name">Quality flags:</span>
-				<span data-testid="record-flags-summary">{qualityFlagsSummary(s.qualityFlags, s.flowGapFill, ratedKinds(seriesKinds))}</span>
-				<span class="fold-problem">needs fixing</span>
-				<span class="fold-change" aria-hidden="true">{flagsOpen ? 'Hide' : 'Change'}</span>
-			</summary>
+		<DefaultsFold
+			name="Quality flags:"
+			line={qualityFlagsSummary(s.qualityFlags, s.flowGapFill, seriesKinds)}
+			atDefaults={qualityFlagsAtDefaults(s.qualityFlags, s.flowGapFill)}
+			stack
+			testid="record-flags"
+			lineTestid="record-flags-summary"
+		>
 			<Lazy load={loadQualityFlags}>
 				{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={draft.errors.qualityFlags} {readonly} {seriesKinds} />{/snippet}
 			</Lazy>
@@ -1272,7 +1186,7 @@
 					{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} bind:last={draft.kept.flowGapFill} {readonly} {seriesKinds} />{/snippet}
 				</Lazy>
 			{/if}
-		</details>
+		</DefaultsFold>
 	</section>
 
 	<section class="panel" id="set-fit" aria-labelledby="fit-h">
