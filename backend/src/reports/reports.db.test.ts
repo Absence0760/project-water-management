@@ -130,6 +130,23 @@ describe('render tokens', () => {
 		expect(await as(cookie, 'DELETE', `/projects/${projectId}`)).toBe(403);
 	});
 
+	it('answers with the project’s time zone, which the renderer prints in (issue #521), and the default zone for a project left on it', async () => {
+		const owner = await signUp('RtZone');
+		const viewer = await signUp('RtZoneViewer');
+		const { projectId, runId } = await withRun(owner, 'Zoned');
+		await member(owner, projectId, viewer, 'viewer');
+		// Positive control: a project left on the default zone answers with it.
+		expect((await exchange(await withUser(viewer.id, (db) => issueRenderToken(db, projectId, runId)))).body).toEqual({ ok: true, timeZone: 'Africa/Johannesburg' });
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { timeZone: 'Pacific/Pago_Pago' })).status).toBe(200);
+		const s = await exchange(await withUser(viewer.id, (db) => issueRenderToken(db, projectId, runId)));
+		expect(s.status).toBe(200);
+		expect(s.body).toEqual({ ok: true, timeZone: 'Pacific/Pago_Pago' });
+		// The function shows the zone to members only: no one signed in, nothing.
+		expect(await asOwner('SELECT app_project_time_zone($1) AS tz', [projectId])).toEqual([{ tz: null }]);
+		expect(await withUser((await signUp('RtZoneStranger')).id, async (db) => (await db.query('SELECT app_project_time_zone($1) AS tz', [projectId])).rows)).toEqual([{ tz: null }]);
+		expect(await withUser(viewer.id, async (db) => (await db.query('SELECT app_project_time_zone($1) AS tz', [projectId])).rows)).toEqual([{ tz: 'Pacific/Pago_Pago' }]);
+	});
+
 	it('is single use, and dies after 5 minutes', async () => {
 		const owner = await signUp('RtOnce');
 		const { projectId, runId } = await withRun(owner);
