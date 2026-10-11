@@ -21,9 +21,10 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, type MarBand, type Wr2012Draft } from './wr2012';
+	import { mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, wr2012JudgingAtDefaults, wr2012JudgingLine, type MarBand, type Wr2012Draft } from './wr2012';
 
 	let {
 		/** What the panel is set to now, under its heading (settings/summaries.ts). */
@@ -110,7 +111,13 @@
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h2>
-		{#if projectId}<NotesDrawer {projectId} target={settingTarget('wr2012')} />{/if}
+		<!-- The action that fills the reference sits in the head, above the fields it fills (ui-playbook.md § 2). -->
+		<div class="head-actions">
+			{#if ref && projectId && !readonly && !proposing}
+				<button type="button" class="btn btn-sm" onclick={() => (proposing = true)} bind:this={proposeBtn} aria-describedby="{uid}-prop-h">Propose from the map</button>
+			{/if}
+			{#if projectId}<NotesDrawer {projectId} target={settingTarget('wr2012')} />{/if}
+		</div>
 	</div>
 	{#if summary}<p class="summary" data-testid="summary-wr2012">{summary}</p>{/if}
 	<p class="hint muted explain">Optional: compare simulated natural flow with the quaternary’s naturalised flow.</p>
@@ -125,22 +132,16 @@
 	</label>
 
 	{#if ref}
-		{#if projectId && !readonly}
-			{#if proposing}
-				<Lazy load={loadProposal}>
-					{#snippet children(QuaternaryProposal)}
-						<QuaternaryProposal {projectId} bind:ref={() => ref!, (v) => (value.reference = v as unknown as Wr2012Settings['reference'])} />
-					{/snippet}
-				</Lazy>
-				<p class="propose">
-					<button type="button" class="btn btn-sm btn-ghost" onclick={closeProposal}>Close the proposal</button>
-				</p>
-			{:else}
-				<p class="propose">
-					<button type="button" class="btn btn-sm" onclick={() => (proposing = true)} bind:this={proposeBtn}>Propose from the map</button>
-					<span class="hint muted explain">Look up the quaternary under a point and use its reference values one by one.</span>
-				</p>
-			{/if}
+		{#if projectId && !readonly}<p class="hint muted explain" id="{uid}-prop-h">Propose from the map: look up the quaternary under a point and use its reference values one by one.</p>{/if}
+		{#if projectId && !readonly && proposing}
+			<Lazy load={loadProposal}>
+				{#snippet children(QuaternaryProposal)}
+					<QuaternaryProposal {projectId} bind:ref={() => ref!, (v) => (value.reference = v as unknown as Wr2012Settings['reference'])} />
+				{/snippet}
+			</Lazy>
+			<p class="propose">
+				<button type="button" class="btn btn-sm btn-ghost" onclick={closeProposal}>Close the proposal</button>
+			</p>
 		{/if}
 		<div class="fields">
 			<div class="field">
@@ -156,7 +157,7 @@
 			<div class="field">
 				<label for="{uid}-map">Quaternary MAP <span class="u">(mm, optional)</span></label>
 				<NumberInput id="{uid}-map" min={0} nullable disabled={readonly} bind:value={ref.mapMm} aria-invalid={err('mapMm') ? 'true' : undefined} aria-describedby="{uid}-map-h" />
-				<span class="hint" id="{uid}-map-h">{#if err('mapMm')}<span class="err">{err('mapMm')}</span>{:else}Mean annual precipitation. Enables the rainfall scaling and the check that the MAR is less than the rain.{/if}</span>
+				<span class="hint" class:explain={!err('mapMm')} id="{uid}-map-h">{#if err('mapMm')}<span class="err">{err('mapMm')}</span>{:else}Mean annual precipitation. Enables the rainfall scaling and the check that the MAR is less than the rain.{/if}</span>
 			</div>
 			<div class="field">
 				<label for="{uid}-mar">Naturalised MAR <span class="u">(Mm³/a)</span></label>
@@ -175,7 +176,7 @@
 						<NumberInput id="{uid}-to" min={1800} max={2200} step={1} nullable disabled={readonly} bind:value={ref.periodEnd} aria-invalid={err('periodEnd') ? 'true' : undefined} aria-describedby="{uid}-per-h" />
 					</div>
 				</div>
-				<span class="hint" id="{uid}-per-h">
+				<span class="hint" class:explain={!err('periodEnd') && (ref.periodStart == null || ref.periodEnd == null)} id="{uid}-per-h">
 					{#if err('periodEnd')}<span class="err">{err('periodEnd')}</span>{:else if ref.periodStart != null && ref.periodEnd != null}{waterYearLabel(ref.periodStart)} to {waterYearLabel(ref.periodEnd)}: each year starts in October.{:else}Each water year is labelled by the year it starts in (1920 = Oct 1920 – Sep 1921).{/if}
 				</span>
 			</fieldset>
@@ -228,7 +229,9 @@
 		</p>
 		{#if err('monthlyMm3')}<p class="err" id="{uid}-monthly-e">{err('monthlyMm3')}</p>{/if}
 
-		<div class="fields">
+		<!-- How the check judges: rarely changed, so one line of its values that opens to edit them. -->
+		<DefaultsFold testid="wr2012-judging" name="How the check judges:" line={wr2012JudgingLine(value)} atDefaults={wr2012JudgingAtDefaults(value)} stack>
+		<div class="fields first">
 			<div class="field">
 				<label for="{uid}-scale">Scale the reference by <HelpTip key="wr2012-check" label="About scaling the reference" /></label>
 				<select id="{uid}-scale" disabled={readonly} bind:value={value.scaling} aria-describedby="{uid}-scale-h">
@@ -281,13 +284,16 @@
 			</div>
 			<span class="hint explain">Shown as run warnings. Defaults 10, 25 (or 15 wetter) and 50 %.</span>
 		</fieldset>
+		</DefaultsFold>
 
+		<!-- The soft MAR penalty is switched on in Fit the parameters → Fit automatically (issue #521, operator's OK
+		     2026-10-11); its weight and band, which read this reference, stay here while it is on. -->
+		{#if !value.calibrationPenalty.enabled}
+			<p class="hint muted explain" data-testid="wr2012-penalty-moved">The soft MAR penalty for automatic fitting is switched on in <a href="#set-fit">Fit the parameters</a>.</p>
+		{:else}
 		<fieldset class="plain penalty">
-			<legend>Automatic calibration <HelpTip key="wr2012-penalty" /></legend>
-			<label class="check">
-				<input type="checkbox" disabled={readonly} bind:checked={value.calibrationPenalty.enabled} />
-				Add a soft penalty on the MAR when fitting automatically
-			</label>
+			<legend>MAR penalty in automatic fitting <HelpTip key="wr2012-penalty" /></legend>
+			<span class="hint muted explain">On in <a href="#set-fit">Fit the parameters</a>, which also fits without it, so you can see what it changed.</span>
 			{#if value.calibrationPenalty.enabled}
 				<div class="field weight">
 					<label for="{uid}-w">Penalty weight</label>
@@ -333,8 +339,8 @@
 					</span>
 				{/if}
 			{/if}
-			<span class="hint explain">Off by default. The fit then also runs without it, so you can see what it changed.</span>
 		</fieldset>
+		{/if}
 	{/if}
 </section>
 
@@ -460,6 +466,15 @@
 	.err {
 		color: var(--danger);
 		font-size: 0.8rem;
+	}
+	.head-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.fields.first {
+		margin-top: 0;
 	}
 	.propose {
 		display: flex;

@@ -3,7 +3,9 @@
 	with a required reason (the engine's CalibrationExclusion shape). Used for
 	settings.calibrationExclusions and settings.zeroRainRuns' keep-dry and
 	missing periods. Bind the list; `error` is set while it is invalid, so the
-	parent form can block saving.
+	parent form can block saving. The list's name and its two add buttons share its
+	head row, so the buttons sit with the list they fill (a group named by the
+	head, as a fieldset by its legend; ui-playbook.md § 2).
 -->
 <script lang="ts">
 	import { exclusionsError, exclusionRange, waterYearLabel, type CalibrationExclusion } from '@water-management/engine';
@@ -79,8 +81,16 @@
 	const blankReason = (x: CalibrationExclusion) => !x.reason.trim();
 </script>
 
-<fieldset class="plain excl" aria-describedby="{uid}-hint">
-	<legend>{legend} <HelpTip key={helpKey} label={helpLabel} /></legend>
+<div class="excl" role="group" aria-labelledby="{uid}-l" aria-describedby="{uid}-hint">
+	<div class="head">
+		<span class="legend"><span id="{uid}-l">{legend}</span> <HelpTip key={helpKey} label={helpLabel} /></span>
+		{#if !readonly}
+			<span class="add">
+				<button type="button" class="btn btn-sm" onclick={addYear}>{addYearLabel}</button>
+				<button type="button" class="btn btn-sm" onclick={addRange}>{addRangeLabel}</button>
+			</span>
+		{/if}
+	</div>
 	<p class="hint explain" id="{uid}-hint">{hint}</p>
 	{#if list.length}
 		<ol class="rows">
@@ -124,28 +134,27 @@
 	{:else}
 		<p class="muted small">{empty}</p>
 	{/if}
-	{#if !readonly}
-		<div class="add">
-			<button type="button" class="btn btn-sm" onclick={addYear}>{addYearLabel}</button>
-			<button type="button" class="btn btn-sm" onclick={addRange}>{addRangeLabel}</button>
-		</div>
-	{/if}
 	{#if error}<p class="err" role="alert">{error}.</p>{/if}
-</fieldset>
+</div>
 
 <style>
-	.plain {
-		border: 0;
-		padding: 0;
-		margin: 0;
+	.excl {
 		min-width: 0;
 	}
-	legend {
+	.head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
+		margin-bottom: 0.2rem;
+	}
+	.legend {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
-		padding: 0;
-		margin-bottom: 0.2rem;
 	}
 	.hint {
 		font-size: 0.8rem;
@@ -188,7 +197,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
-		margin-top: 0.5rem;
 	}
 	.err {
 		color: var(--danger);

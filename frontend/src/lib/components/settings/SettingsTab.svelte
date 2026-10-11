@@ -92,7 +92,7 @@
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '$lib/components/autorun/autoRun';
 	import { outcomesError } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError } from '$lib/components/outlook/settings';
-	import { CHIRPS_BIAS_OPTIONS, withChirpsQuantileMap } from './rain';
+	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
 	import { saveBlockers, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
@@ -107,6 +107,7 @@
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
+	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 	import { AREAL_METHOD_OPTIONS, arealRainFormError, flatFactor, storedArealRain, withArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
@@ -445,6 +446,8 @@
 	// The section header (issue #17): where the parameters came from, and the way to the fit.
 	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
 	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
+	// Rain gaps at its defaults: one line that opens its two cards (rain.ts).
+	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
 		settingsSummaries({
@@ -560,66 +563,73 @@
 		</div>
 		<p class="summary" data-testid="summary-rain">{summaries['set-rain']}</p>
 		<p class="hint explain">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge.</p>
-		<h3 class="sub first">CHIRPS bias correction and quantile map</h3>
-		<div class="fields">
-			<div class="field">
-				<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
-				<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
-					{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-				</select>
-				<span class="hint explain" id="st-chirps-bias-h">{chirpsOption?.help}</span>
-			</div>
-		</div>
-		<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
-		<fieldset class="plain" data-testid="chirps-quantile-map">
-			<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
-			<label class="check">
-				<input
-					type="checkbox"
-					disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
-					checked={!!s.chirpsQuantileMap}
-					onchange={(e) => setGapMapOn(e.currentTarget.checked)}
-					aria-describedby="st-chirps-qm-h"
-				/>
-				Quantile-map the CHIRPS that fills gaps onto the catchment rain (each month’s total kept)
-			</label>
-			{#if s.chirpsQuantileMap}
-				{@const q = s.chirpsQuantileMap}
-				<div class="field">
-					<label for="st-chirps-qm-wet">Wet day from <span class="u">(mm)</span></label>
-					<NumberInput
-						id="st-chirps-qm-wet"
-						min={QM_WET_DAY_MM_MIN}
-						max={QM_WET_DAY_MM_MAX}
-						step={0.1}
-						disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
-						value={q.wetDayMm}
-						onchange={(v) => v !== null && (s.chirpsQuantileMap = { wetDayMm: v })}
-					/>
+		<!-- Two cards, CHIRPS gap filling and Flagged rain, each list with its add actions in its own head row; at the
+		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
+		     are one line"). Always mounted, like the other sections that feed the Save blocker: a list left invalid
+		     after turning bias correction off must stay in the page, where the fold's line says it needs fixing. -->
+		<DefaultsFold testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} stack>
+			<ChirpsFitPeriodSection
+				bind:value={s.chirpsFitPeriod}
+				bind:error={draft.errors.fitPeriod}
+				{readonly}
+				inactive={s.chirpsBiasCorrection !== 'monthly'}
+				propose={() => proposeFitRanges(project.id, s.zeroRainRuns, s.dataQuality)}
+			>
+				<div class="fields">
+					<div class="field">
+						<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
+						<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
+							{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+						</select>
+						<span class="hint explain" id="st-chirps-bias-h">{chirpsOption?.help}</span>
+					</div>
 				</div>
-			{/if}
-			<span class="hint" class:explain={s.chirpsBiasCorrection === 'monthly'} id="st-chirps-qm-h">
-				{#if s.chirpsBiasCorrection !== 'monthly'}
-					Needs bias correction: the map reshapes bias-corrected CHIRPS.{#if s.chirpsQuantileMap}{' '}A run ignores it and says so.{/if}
-				{:else}
-					Off, gap days take CHIRPS × the monthly factor. On, CHIRPS is also fitted to the catchment rain month by month over the fit period: where it is wet more
-					often, its drizzle days go dry; its wet days take the catchment’s spread of falls; and each month is scaled back to its corrected total, so the volume
-					doesn’t change. A month with fewer than {QM_MIN_WET_DAYS} wet days uses its three-month season, else keeps the factor alone (the run warns).
-				{/if}
-			</span>
-			<FieldHistoryLine field="settings:chirpsQuantileMap" />
-		</fieldset>
-		<!-- Always mounted, like the other sections that feed the Save blocker: a list left invalid
-		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
-		<ChirpsFitPeriodSection
-			bind:value={s.chirpsFitPeriod}
-			bind:error={draft.errors.fitPeriod}
-			{readonly}
-			inactive={s.chirpsBiasCorrection !== 'monthly'}
-			propose={() => proposeFitRanges(project.id, s.zeroRainRuns, s.dataQuality)}
-		/>
-		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
-		<RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
+				<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
+				<fieldset class="plain" data-testid="chirps-quantile-map">
+					<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
+					<label class="check">
+						<input
+							type="checkbox"
+							disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+							checked={!!s.chirpsQuantileMap}
+							onchange={(e) => setGapMapOn(e.currentTarget.checked)}
+							aria-describedby="st-chirps-qm-h"
+						/>
+						Quantile-map the CHIRPS that fills gaps onto the catchment rain (each month’s total kept)
+					</label>
+					{#if s.chirpsQuantileMap}
+						{@const q = s.chirpsQuantileMap}
+						<div class="field">
+							<label for="st-chirps-qm-wet">Wet day from <span class="u">(mm)</span></label>
+							<NumberInput
+								id="st-chirps-qm-wet"
+								min={QM_WET_DAY_MM_MIN}
+								max={QM_WET_DAY_MM_MAX}
+								step={0.1}
+								disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+								value={q.wetDayMm}
+								onchange={(v) => v !== null && (s.chirpsQuantileMap = { wetDayMm: v })}
+							/>
+						</div>
+					{/if}
+					<span class="hint" class:explain={s.chirpsBiasCorrection === 'monthly'} id="st-chirps-qm-h">
+						{#if s.chirpsBiasCorrection !== 'monthly'}
+							Needs bias correction: the map reshapes bias-corrected CHIRPS.{#if s.chirpsQuantileMap}{' '}A run ignores it and says so.{/if}
+						{:else}
+							Off, gap days take CHIRPS × the monthly factor. On, CHIRPS is also fitted to the catchment rain month by month over the fit period: where it is wet more
+							often, its drizzle days go dry; its wet days take the catchment’s spread of falls; and each month is scaled back to its corrected total, so the volume
+							doesn’t change. A month with fewer than {QM_MIN_WET_DAYS} wet days uses its three-month season, else keeps the factor alone (the run warns).
+						{/if}
+					</span>
+					<FieldHistoryLine field="settings:chirpsQuantileMap" />
+				</fieldset>
+			</ChirpsFitPeriodSection>
+			<div class="sub-card" data-testid="flagged-rain-card">
+				<h3 class="card-title">Flagged rain</h3>
+				<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
+				<RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
+			</div>
+		</DefaultsFold>
 	</section>
 
 	<!-- Data quality (DataQualitySection: gauge vs logger, outliers, flat stretches, zero-rain runs, low vs CHIRPS) -->
@@ -1542,11 +1552,16 @@
 	}
 	/* Fit the parameters' two cards: Fit automatically, and the calibration rules with their run (ui-playbook.md § 2,
 	   "Two forms in one panel are two cards"). */
-	.sub-card {
+	.settings-form :global(.sub-card) {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		padding: 0.75rem 0.9rem;
 		margin: 0.75rem 0;
+	}
+	/* Rain gaps' Flagged rain card (ChirpsFitPeriodSection's card titles itself the same way). */
+	.card-title {
+		font-size: 1rem;
+		margin: 0 0 0.75rem;
 	}
 	.panel > .hint {
 		margin: 0.5rem 0 0.75rem;
@@ -1748,9 +1763,6 @@
 	}
 	.sub {
 		margin: 1rem 0 0.35rem;
-	}
-	.sub.first {
-		margin-top: 0.25rem;
 	}
 	legend .sub {
 		margin: 0;

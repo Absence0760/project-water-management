@@ -14,7 +14,8 @@
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
-	import { LOW_VS_CHIRPS_BASELINE_OPTIONS, LOW_VS_CHIRPS_MINIMUM_OPTIONS, ZERO_RUN_RULE_OPTIONS } from './dataQuality';
+	import DefaultsFold from '$lib/components/common/DefaultsFold.svelte';
+	import { dataQualityAtDefaults, dataQualityLine, LOW_VS_CHIRPS_BASELINE_OPTIONS, LOW_VS_CHIRPS_MINIMUM_OPTIONS, ZERO_RUN_RULE_OPTIONS } from './dataQuality';
 
 	let {
 		/** What the panel is set to now, under its heading (settings/summaries.ts). */
@@ -26,6 +27,7 @@
 	}: { summary?: string | null; value: DataQualitySettings; projectId: string; readonly?: boolean; error?: string | null } = $props();
 
 	const rule = $derived(ZERO_RUN_RULE_OPTIONS.find((o) => o.value === value.zeroRunRule));
+	const atDefaults = $derived(dataQualityAtDefaults(value));
 </script>
 
 <section class="panel" id="set-quality" aria-labelledby="dq-h" data-testid="data-quality-settings">
@@ -36,7 +38,10 @@
 	{#if summary}<p class="summary" data-testid="summary-quality">{summary}</p>{/if}
 	<p class="hint muted explain">Input checks, and the zero-rain and low-vs-CHIRPS limits runs use.</p>
 
-	<h3 class="sub">Gauge vs logger</h3>
+	<!-- At the defaults (most projects) the limits are one line of their values; Change the limits opens the three
+	     groups (ui-playbook.md § 2, "Settings at their defaults are one line"). -->
+	<DefaultsFold testid="quality-limits" name={atDefaults ? 'Default limits:' : 'Limits:'} line={dataQualityLine(value)} {atDefaults} change="Change the limits" stack>
+	<h3 class="sub first">Gauge vs logger</h3>
 	<div class="fields">
 		<div class="field">
 			<label for="dq-min">Lowest gauge/logger ratio <span class="u">(%)</span></label>
@@ -131,15 +136,24 @@
 			</div>
 		{/if}
 	</div>
-	<label class="check">
-		<input type="checkbox" disabled={readonly} bind:checked={value.zeroRunChirpsCheck} aria-describedby="dq-zero-chirps-h" />
-		Check each zero-rain run against CHIRPS
-	</label>
-	<span class="hint block explain" id="dq-zero-chirps-h">
-		When CHIRPS read at least half its usual rain over a run, the run is probably missing data and stays flagged. When CHIRPS was dry too,
-		it may be a real dry spell: it is listed, not flagged, and a run keeps it as recorded. Off by default.
-	</span>
-	<FieldHistoryLine field="settings:dataQuality.zeroRunChirpsCheck" />
+	<!-- The CHIRPS check heads its own group, what it decides indented under it; the low-vs-CHIRPS limits
+	     below don't depend on it, so they are a group of their own. -->
+	<fieldset class="plain gate">
+		<legend>
+			<label class="check">
+				<input type="checkbox" disabled={readonly} bind:checked={value.zeroRunChirpsCheck} aria-describedby="dq-zero-chirps-h" />
+				Check each zero-rain run against CHIRPS
+			</label>
+		</legend>
+		<div class="gated">
+			<span class="hint block explain" id="dq-zero-chirps-h">
+				When CHIRPS read at least half its usual rain over a run, the run is probably missing data and stays flagged. When CHIRPS was dry too,
+				it may be a real dry spell: it is listed, not flagged, and a run keeps it as recorded. Off by default.
+			</span>
+			<FieldHistoryLine field="settings:dataQuality.zeroRunChirpsCheck" />
+		</div>
+	</fieldset>
+	<h3 class="sub">Catchment rain against CHIRPS</h3>
 	<div class="fields">
 		<div class="field">
 			<label for="dq-low-ratio">Low vs CHIRPS: flag below <span class="u">(% of the usual ratio)</span></label>
@@ -169,6 +183,7 @@
 		of the CHIRPS factor fit, and a fit made under other limits asks to be redone. The defaults are the rules runs used before these were
 		settings; the alternatives follow a hydrologist review and are still to be tested on a semi-arid record.
 	</p>
+	</DefaultsFold>
 	{#if error}<p class="err" role="alert">{error}</p>{/if}
 </section>
 
@@ -209,12 +224,29 @@
 	.panel > .hint {
 		margin: 0.5rem 0 0.75rem;
 	}
+	.sub.first {
+		margin-top: 0.25rem;
+	}
 	.check {
 		display: flex;
 		gap: 0.4rem;
 		align-items: center;
-		margin: 0.75rem 0 0.25rem;
+		min-height: 36px;
 		font-weight: 500;
+	}
+	.gate {
+		border: 0;
+		padding: 0;
+		margin: 0.75rem 0 0;
+		min-width: 0;
+	}
+	.gate legend {
+		padding: 0;
+		font-size: 0.9rem;
+	}
+	/* What the box decides, indented under it: in line with its words, not its box. */
+	.gated {
+		padding-left: 1.6rem;
 	}
 	.err {
 		color: var(--danger);

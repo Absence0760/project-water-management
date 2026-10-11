@@ -35,8 +35,11 @@
 	const accOption = $derived(ACCUMULATION_OPTIONS.find((o) => o.value === value.accumulationMode));
 </script>
 
+<!-- Two topics in Settings → Rain gaps' Flagged rain card, each list's add buttons in its own head row with
+     their own names (PeriodList), so the two "Also …" lists' buttons are told apart. -->
 <div class="zero-rain" data-testid="zero-rain-settings">
-	<h3 class="sub">Zero-rain runs in the catchment rain</h3>
+	<div class="topic">
+	<h4 class="sub">Zero-rain runs in the catchment rain</h4>
 	<div class="field mode">
 		<span class="lbl"><label for="st-zero-rain">Flagged zero runs</label><HelpTip key="settings.zeroRainRuns" label="About how zero runs are treated" /></span>
 		<select id="st-zero-rain" disabled={readonly} bind:value={value.mode} aria-describedby="st-zero-rain-h">
@@ -86,13 +89,15 @@
 		helpLabel="About other periods treated as missing"
 		hint="Other periods whose catchment rain is bad, whatever it reads: for example the gap days inside a year the Data tab flags as far below CHIRPS. CHIRPS fills them, and they are left out of the CHIRPS factor fit."
 		empty="None."
-		addYearLabel="Add a water year"
-		addRangeLabel="Add a date range"
+		addYearLabel="Add a missing water year"
+		addRangeLabel="Add a missing date range"
 		placeholder="e.g. logger fault; values copied from a neighbour"
 		noun="missing-rain period"
 	/>
+	</div>
 
-	<h3 class="sub" id="st-acc-h">Multi-day accumulations</h3>
+	<div class="topic">
+	<h4 class="sub" id="st-acc-h">Multi-day accumulations</h4>
 	<div class="field mode" data-testid="accumulation-settings">
 		<span class="lbl"><label for="st-acc">Accumulated readings</label><HelpTip key="rain-accumulations" label="About rain read as a multi-day total" /></span>
 		<select id="st-acc" disabled={readonly} bind:value={value.accumulationMode} aria-describedby="st-acc-h2">
@@ -125,26 +130,31 @@
 		helpLabel="About other periods spread as accumulations"
 		hint="Accumulations the check misses, listed by hand: the period's last day is the reading day, and the catchment rain recorded over the period is spread over it by CHIRPS. A period listed as missing above wins over one listed here."
 		empty="None."
-		addYearLabel="Add a water year"
-		addRangeLabel="Add a date range"
+		addYearLabel="Spread a water year"
+		addRangeLabel="Spread a date range"
 		placeholder="e.g. station log: gauge read weekly in 1985"
 		noun="listed accumulation"
 	/>
+	</div>
 </div>
 
 <style>
-	.zero-rain {
+	.zero-rain,
+	.topic {
 		display: grid;
 		/* One column that may shrink below its content's min-content width, so a
 		   long select option never widens the page at 320 px (WCAG 1.4.10, #38). */
 		grid-template-columns: minmax(0, 1fr);
 		gap: 0.75rem;
-		margin: 0.25rem 0 0.75rem;
+	}
+	/* Each topic under a rule, as Rain source periods after them. */
+	.topic + .topic {
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--border);
 	}
+	/* A topic under the card's title: a step smaller than it. */
 	.sub {
-		font-size: 0.95rem;
+		font-size: 0.875rem;
 		margin: 0;
 	}
 	.mode {

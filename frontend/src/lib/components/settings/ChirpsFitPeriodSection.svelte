@@ -8,8 +8,12 @@
 	the list and back keeps it for the session. Proposing over listed ranges
 	asks first. A problem sits beside the range's field it is fixed in, which
 	names it (aria-describedby); a blank reason is marked once it has been left.
+	It is Settings → Rain gaps' "CHIRPS gap filling" card: the bias correction
+	and quantile map come in as `children` above the fit period, and the
+	proposal's button sits in the card's head (ui-playbook.md § 2).
 -->
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { waterYearLabel, type ChirpsFitPeriod, type ChirpsFitRange } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -22,7 +26,8 @@
 		error = $bindable(null),
 		readonly = false,
 		inactive = false,
-		propose
+		propose,
+		children
 	}: {
 		value: ChirpsFitPeriod;
 		error?: string | null;
@@ -31,6 +36,8 @@
 		inactive?: boolean;
 		/** Ranges proposed from the double-mass breaks, or why there are none. */
 		propose?: () => Promise<FitRangeProposal>;
+		/** What comes before the fit period in the card (the bias correction and the quantile map). */
+		children?: Snippet;
 	} = $props();
 
 	let proposing = $state(false);
@@ -110,8 +117,17 @@
 	}
 </script>
 
-<div class="fit-period" data-testid="chirps-fit-period">
-	<h3 class="title">CHIRPS fit period</h3>
+<div class="sub-card fit-period" data-testid="chirps-fit-period">
+	<div class="card-head">
+		<h3 class="title">CHIRPS gap filling</h3>
+		{#if propose && !readonly}
+			<button type="button" class="btn btn-sm" disabled={proposing} onclick={runProposal}>
+				{proposing ? 'Proposing…' : 'Propose from the double-mass breaks'}
+			</button>
+		{/if}
+	</div>
+	{#if proposeNote}<p class="hint propose-note" role="status" data-testid="chirps-fit-proposal">{proposeNote}</p>{/if}
+	{@render children?.()}
 	<div class="field mode">
 		<span class="lbl"><label for="{uid}-mode">CHIRPS fit period</label><HelpTip key="settings.chirpsFitPeriod" /></span>
 		<select
@@ -126,14 +142,6 @@
 		<span class="hint explain" id="{uid}-h">{option?.help}</span>
 		{#if inactive}<span class="hint" data-testid="chirps-fit-inactive">Not used while CHIRPS bias correction is off: raw CHIRPS has no factors. The setting is kept for when it is turned back on.</span>{/if}
 	</div>
-	{#if propose && !readonly}
-		<div class="propose">
-			<button type="button" class="btn btn-sm" disabled={proposing} onclick={runProposal}>
-				{proposing ? 'Proposing…' : 'Propose from the double-mass breaks'}
-			</button>
-			{#if proposeNote}<p class="hint" role="status" data-testid="chirps-fit-proposal">{proposeNote}</p>{/if}
-		</div>
-	{/if}
 	{#if choice === 'ranges'}
 		<fieldset class="plain">
 			<legend>Fit ranges</legend>
@@ -205,7 +213,17 @@
 	.fit-period {
 		display: grid;
 		gap: 0.5rem;
-		margin-bottom: 0.75rem;
+	}
+	.card-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+	}
+	.propose-note {
+		margin: 0;
+		max-width: 75ch;
 	}
 	.mode {
 		max-width: 75ch;
@@ -272,15 +290,9 @@
 	.add {
 		margin-top: 0.5rem;
 	}
-	.propose {
-		display: grid;
-		gap: 0.25rem;
-		justify-items: start;
-		max-width: 75ch;
-	}
 	.title {
-		font-size: 0.95rem;
-		margin: 0.5rem 0 0;
+		font-size: 1rem;
+		margin: 0;
 	}
 	.err {
 		color: var(--danger);

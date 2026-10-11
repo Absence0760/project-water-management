@@ -1,6 +1,6 @@
 import { defaultDataQualitySettings, defaultProjectSettings, rainCheckLimits } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { dataQualityError, describeRainChecks } from './dataQuality';
+import { dataQualityAtDefaults, dataQualityError, dataQualityLine, describeRainChecks } from './dataQuality';
 
 describe('dataQualityError', () => {
 	const d = defaultProjectSettings().dataQuality;
@@ -68,6 +68,23 @@ describe('describeRainChecks', () => {
 			describeRainChecks({ ...d, zeroRunRule: 'usualRain', zeroRunUsualShare: 0.3, zeroRunMinDays: 45, zeroRunChirpsCheck: true, lowVsChirpsBaseline: 'moving', lowVsChirpsMinimum: 'scaled' })
 		).toBe(
 			'zero-rain runs by 30 % of the usual annual rain over 45+ days, checked against CHIRPS; low vs CHIRPS below 50 % of the moving (±5 years) median, scaled CHIRPS minimum'
+		);
+	});
+});
+
+describe('dataQualityAtDefaults and dataQualityLine (the Data quality fold)', () => {
+	const d = defaultDataQualitySettings();
+	it('the defaults, and a limit the stored settings lack, count as at the defaults', () => {
+		expect(dataQualityAtDefaults(d)).toBe(true);
+		expect(dataQualityAtDefaults({ agreementMinRatio: d.agreementMinRatio })).toBe(true);
+		expect(dataQualityAtDefaults(undefined)).toBe(true);
+		expect(dataQualityAtDefaults({ ...d, zeroRunChirpsCheck: true })).toBe(false);
+		expect(dataQualityAtDefaults({ ...d, flatlineFlowMaxDays: 120 })).toBe(false);
+	});
+	it('names the limits in one line', () => {
+		expect(dataQualityLine(d)).toBe('gauge/logger 66.7–150 % · outliers × 5 / × 10 · flat stretches 5–90 days · zero runs 60 wet-season days · low vs CHIRPS below 50 %');
+		expect(dataQualityLine({ ...d, zeroRunRule: 'usualRain', zeroRunChirpsCheck: true })).toBe(
+			'gauge/logger 66.7–150 % · outliers × 5 / × 10 · flat stretches 5–90 days · zero runs under 25 % of the usual rain over 60 days, checked against CHIRPS · low vs CHIRPS below 50 %'
 		);
 	});
 });

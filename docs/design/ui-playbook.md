@@ -583,10 +583,40 @@ section it belongs to, with the example that taught it.
   (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
   problem. A native `<details>` keeps its fields in the page, so Find a
   setting still finds them and opens the fold (`SectionNav` `jump`), and
-  nothing is lost. Two callers so far (Fit automatically, the rules' search
-  budget): the CSS is shared in `app.css` (one copy, which also kept the
-  bundle under its ceiling); the markup is written out in each, until a
-  third caller earns a component.
+  nothing is lost. The CSS is shared in `app.css` (one copy, which also
+  kept the bundle under its ceiling); Fit automatically and the rules'
+  search budget write the markup out, and the groups that fold at their
+  defaults use `common/DefaultsFold.svelte` (below).
+- **Settings at their defaults are one line.** Rain gaps, Data quality and
+  the WR2012 check's judging drew every field at full weight though nearly
+  every project leaves them at their defaults (Data quality: 609 px of 14
+  limits under a summary that already said "The default limits"; Rain gaps:
+  five sub-topics and 11 buttons, every choice "(default)"; issue #521).
+  Now each is `common/DefaultsFold.svelte`: the `.fold` above, starting
+  closed only while everything inside is its default (`atDefaults`, from a
+  pure helper beside the form, `rainGapsAtDefaults`, `dataQualityAtDefaults`,
+  `wr2012JudgingAtDefaults`), its line naming the values ("Default limits:
+  gauge/logger 66.7–150 % · outliers × 5 / × 10 · …", unit-tested) and
+  ending in a named action (`change`: "Change the limits"; **Hide** while
+  open). A group with something set starts open, and `atDefaults` is read
+  once when it mounts, so a value put back to its default while the fold is
+  open never snaps it shut under the cursor. `stack` lays out headed groups
+  or cards instead of the fold's field grid. It is the third caller of the
+  fold markup, so it is a component; the node sheet's sections and the
+  quality flags can take it next. e2e opens one with `openFold`
+  (`e2e/support/settings.ts`), and `settings-defaults-layout.spec.ts`
+  checks the closed line, that it opens, and its actions on screen at
+  1440×900.
+- **A list's add actions sit in its own head row, each named for the
+  list.** Rain gaps had "Add a water year / Add a date range" twice, under
+  "Also treat as missing" and "Also spread", with nothing in the names to
+  tell them apart, and each pair sat under its list, away from the name
+  (issue #521). `common/PeriodList.svelte` now puts the list's name, its ⓘ
+  and its two buttons in one row (a `role="group"` named by that row's
+  name, since a `<legend>` can't share a row with buttons), and every
+  caller gives the buttons the list's words: "Add a missing water year",
+  "Spread a date range", "Exclude a water year". Pin it in e2e: no two
+  visible buttons in a panel share an accessible name.
 - **A form's state and actions in its head, not a sticky bar.** The rules'
   card opens with its badge, revision and fit count on the left and the
   sign-off on the right (`settings/CalibrationRulesFields.svelte` `.head`),
@@ -854,6 +884,7 @@ section it belongs to, with the example that taught it.
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
 | Rarely changed settings, folded to one line of their values | `<details class="fold">` (`app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` (`e2e/support/settings.ts`) |
+| A group that usually stays at its defaults, as one line that opens | `common/DefaultsFold.svelte` (`name`, `line`, `atDefaults`, `change`, `stack`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
 | Two forms in one panel | a bordered card each (`settings/SettingsTab.svelte` `.sub-card`), the state and actions in the card's head (§ 2) |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |

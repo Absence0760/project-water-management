@@ -1,6 +1,6 @@
 import { defaultWr2012Settings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors } from './wr2012';
+import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, wr2012JudgingAtDefaults, wr2012JudgingLine } from './wr2012';
 
 // Synthetic reference: an invented quaternary and round numbers.
 const monthly = (mar: number) => [31, 30, 31, 31, 28.25, 31, 30, 31, 30, 31, 31, 30].map((d) => (mar * d) / 365.25);
@@ -73,5 +73,20 @@ describe('switching the WR2012 check and its MAR band off and on', () => {
 		expect(withMarBand(false, { marLowMm3: 10, marHighMm3: 20 })).toEqual({ marLowMm3: null, marHighMm3: null });
 		expect(withMarBand(true, null)).toEqual({ marLowMm3: null, marHighMm3: null });
 		expect(withMarBand(true, { marLowMm3: 10, marHighMm3: 20 })).toEqual({ marLowMm3: 10, marHighMm3: 20 });
+	});
+});
+
+describe('wr2012JudgingAtDefaults and wr2012JudgingLine (the "How the check judges" fold)', () => {
+	const d = defaultWr2012Settings();
+	it('the defaults read as one line', () => {
+		expect(wr2012JudgingAtDefaults(d)).toBe(true);
+		expect(wr2012JudgingLine(d)).toBe('area ratio · dry season from each run · note 10 % / query 25 % (15 % wetter) / unusable 50 %');
+	});
+	it('a changed scaling, months or threshold leaves the defaults', () => {
+		expect(wr2012JudgingAtDefaults({ ...d, scaling: 'areaRain' })).toBe(false);
+		expect(wr2012JudgingAtDefaults({ ...d, lowFlowMonths: [12, 1, 2] })).toBe(false);
+		expect(wr2012JudgingAtDefaults({ ...d, flags: { ...d.flags, notePct: 5 } })).toBe(false);
+		expect(wr2012JudgingLine({ ...d, scaling: 'areaRain', flags: { ...d.flags, notePct: 5 } })).toMatch(/^area and rainfall ratio · dry season from each run · note 5 % \//);
+		expect(wr2012JudgingLine({ ...d, lowFlowMonths: [12, 1, 2] })).toMatch(/^area ratio · dry season (?!from each run)/);
 	});
 });
