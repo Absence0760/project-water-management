@@ -340,6 +340,16 @@ async function loadProjectionRun(
 export const SCENARIO_NOT_PUBLISHABLE =
 	'a scenario run cannot be published: it is its scenario’s changes applied to a base run, not the catchment as it is; publish a run of the model';
 
+/**
+ * Why a run that caps use at, or scales demand to, the registered volumes
+ * can't be published (publishRun): licence data never drives the baseline
+ * (#507, 213), and its farm views would give each farm's figures, worked out
+ * from its volume, to viewers kept from it (#523 finding I). Only a run made
+ * before 213 can be one.
+ */
+export const ALLOCATION_MODE_NOT_PUBLISHABLE =
+	'a run that caps use at, or scales demand to, the registered volumes cannot be published: licence data never drives the baseline; publish a run that compares only';
+
 export async function publishRun(
 	db: Db,
 	projectId: string,
@@ -352,11 +362,12 @@ export async function publishRun(
 	if (!loaded) throw new ApiError(400, 'no such run in this project');
 	// A scenario's run (or one whose scenario was deleted: its inputs still record it) is a what-if on a base run, never the
 	// season farmers are shown; an applicant's published baseline is a run of the model too (app_published_run_input, 045).
-	const { rows: scen } = await db.query<{ scenario: boolean }>(
-		`SELECT from_scenario AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
+	const { rows: scen } = await db.query<{ scenario: boolean; mode: string | null }>(
+		`SELECT from_scenario AS scenario, summary->'allocations'->>'mode' AS mode FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, body.runId]
 	);
 	if (scen[0]?.scenario) throw new ApiError(409, SCENARIO_NOT_PUBLISHABLE);
+	if (scen[0]?.mode === 'cap' || scen[0]?.mode === 'fullAllocation') throw new ApiError(409, ALLOCATION_MODE_NOT_PUBLISHABLE);
 	// Audit H1: a legacy-runoff run is a workbook comparison, not evidence.
 	if (loaded.runoffModel === 'legacy') throw new ApiError(409, 'this run used the legacy runoff model (removed in engine 1.0.0), a workbook comparison only; run the model again to publish');
 	let analysis;

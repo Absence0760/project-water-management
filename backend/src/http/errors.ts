@@ -130,6 +130,12 @@ export const ERROR_CODES = [
  *     the manifest or PDF of a pack drafted before evidence-15, which name
  *     every farm with its volume, on a pack whose runs carry them (issue
  *     #523 G1; evidence/packs.ts). The pack page is an English workspace page.
+ *   allocation_series_withheld (403): such a viewer asked for a run's daily
+ *     series worked out from a registered volume: an allocation series (a
+ *     cap's room or what is left, a full allocation's factor), or any series,
+ *     day or file of a unit a cap or full-allocation run bound to its volume
+ *     (issue #523 finding I; runs/withheldSeries.ts). The run pages are
+ *     English workspace pages; they don't ask for these (`withheldSeries`).
  */
 export const MACHINE_ERROR_CODES = [
 	'render_token_refused',
@@ -138,7 +144,8 @@ export const MACHINE_ERROR_CODES = [
 	'mfa_fresh_code',
 	'role_conflict',
 	'job_collision',
-	'pack_volumes_withheld'
+	'pack_volumes_withheld',
+	'allocation_series_withheld'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 

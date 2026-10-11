@@ -3525,6 +3525,13 @@ export interface RunAllocations {
 	notMatched: number;
 	/** Per farm or water user with an allocation (node-id order), per water source it has one for. */
 	nodes: RunAllocationNode[];
+	/**
+	 * Never written by the engine: the API sets it on a cap or full-allocation
+	 * run read by a viewer kept from each registered volume, naming the units it
+	 * left out of the summary and the series (issue #523 finding I,
+	 * backend allocations/boundUnits.ts).
+	 */
+	withheldUnits?: string[];
 }
 
 export interface RunAllocationNode {
