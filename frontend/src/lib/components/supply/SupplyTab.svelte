@@ -23,6 +23,7 @@
 	import { page } from '$app/state';
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
+	import WithheldUnitsNote from '$lib/components/runs/WithheldUnitsNote.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -443,6 +444,7 @@
 
 					<h2 class="group-h">Tables for this run</h2>
 					<section class="panel" id="res-farms" aria-labelledby="res-farms-h">
+						<WithheldUnitsNote {summary} />
 						<UnitResultsTable farms={summary.farms} days={historyDays(run)} {nodeOrder} startDate={run.startDate} endDate={historyEnd(run)} title="Hydrological unit results" headingId="res-farms-h" />
 						{#if showAllocations}
 							<p class="alloc-link small"><a href={allocationsHref(run.id)}>Registered vs modelled use, for each unit <span aria-hidden="true">→</span> Allocations</a></p>

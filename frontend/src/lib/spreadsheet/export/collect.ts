@@ -30,6 +30,8 @@ interface BulkResponse {
 	count: number;
 	next: number | null;
 	series: { key: string; header: string; unit: string | null; values: (number | null)[] }[];
+	/** Keys left out for a viewer kept from each registered volume (#523 I); a bound unit isn't in the run's series list, so isn't asked for. */
+	withheld?: string[];
 }
 
 /** GET with the session cookie; throw a DownloadError carrying the server's message, as the CSV downloads do. */

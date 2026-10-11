@@ -916,6 +916,17 @@ export interface RunSeriesRef {
 	unit: string;
 }
 
+/**
+ * A series GET …/runs/:runId leaves out of `series` for a viewer kept from
+ * each registered volume (issue #523 finding I): an allocation series, or any
+ * of a unit a cap or full-allocation run bound to its volume. Asked for by
+ * name it is 403 `allocation_series_withheld`.
+ */
+export interface WithheldSeriesRef {
+	nodeId: string | null;
+	key: string;
+}
+
 /** GET …/runs/:runId/day: one node's columns on one day, for the day trace. */
 export interface RunDay {
 	date: string;
@@ -945,6 +956,8 @@ export interface RunDay {
 		damSeepagePerDay: number | null;
 	};
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
+	/** Columns left out for a viewer kept from each registered volume (allocation series, #523 I); absent from an older API. */
+	withheld?: string[];
 }
 
 /** GET …/runs/:runId/day without a nodeId: the catchment's runoff-model day (docs/api.md). */
