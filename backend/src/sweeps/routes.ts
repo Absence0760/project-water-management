@@ -16,13 +16,15 @@ import { requireRole, UUID } from '../projects/access.js';
 import { CreateSweepBody, SWEEP_JOBS_PER_USER } from './schema.js';
 import { createSweep, getSweep, listSweeps, pendingSweepJobs, type SweepRow } from './store.js';
 import { allocationUnitsHidden, redactRunAllocations, withheldAllocationOps, withoutPositions } from '../allocations/viewerUnits.js';
+import { verdictsOnly } from '../allocations/verdictsOnly.js';
 
 /**
  * A sweep as a viewer the project keeps from each registered volume reads it
  * (D3, issue #523 G1): each member's run summary without its per-unit
  * allocations (redactRunAllocations), and without the ops that set a volume
  * (a sweep's members are the team's: every allocation.set), with
- * `withheldOps` saying how many.
+ * `withheldOps` saying how many; a member that caps or fully allocates
+ * comes with its verdicts and counts only and no series (`withheld`, #523 I).
  */
 export function sweepForViewer(sweep: SweepRow): SweepRow {
 	return {
@@ -30,7 +32,9 @@ export function sweepForViewer(sweep: SweepRow): SweepRow {
 		members: sweep.members.map((m) => {
 			const drop = withheldAllocationOps(m.ops);
 			const ops = drop.size ? { ops: withoutPositions(m.ops, drop), withheldOps: drop.size } : {};
-			return { ...m, ...ops, ...(m.summary ? { summary: redactRunAllocations({ summary: m.summary }).summary } : {}) };
+			// A member that caps or fully allocates: its verdicts and counts only, so no series (#523 I, round 5).
+			const series = verdictsOnly(m.summary?.allocations) && m.series ? { series: null, withheld: ['series'] } : {};
+			return { ...m, ...ops, ...(m.summary ? { summary: redactRunAllocations({ summary: m.summary }).summary } : {}), ...series };
 		})
 	};
 }

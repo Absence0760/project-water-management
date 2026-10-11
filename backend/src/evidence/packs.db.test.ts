@@ -32,6 +32,7 @@ import {
 	type ModelInput,
 	type PackManifest
 } from '@water-management/engine';
+import { boardVerdicts } from '../allocations/verdictsOnly.js';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -494,12 +495,16 @@ describe('drafting a pack', () => {
 			[id, projectId, baseRun, sid, appRun, JSON.stringify(old), sha, now.engine.version, editor.id]
 		);
 		try {
-			const read = await viewer.call('GET', packPath(id));
+			// The editor reads it as frozen; a viewer kept from each registered volume the same but each licence-impact
+			// board's verdicts without its waterfall (#523 I, round 5: boardVerdicts).
+			const read = await editor.call('GET', packPath(id));
 			expect(read.status).toBe(200);
 			expect(read.body.manifestMatches).toBe(true);
 			expect(read.body.pack.manifestSha256).toBe(sha);
 			const got = read.body.manifest as PackManifest;
 			expect(got).toEqual(old);
+			const theirs = (await viewer.call('GET', packPath(id))).body.manifest as PackManifest;
+			expect(theirs).toEqual({ ...old, report: { ...old.report, licenceImpact: boardVerdicts(old.report.licenceImpact), licenceImpactAuthorised: boardVerdicts(old.report.licenceImpactAuthorised) } });
 			expect(got.report.cumulative).not.toHaveProperty('combined');
 			expect(got.report.rows.find((x) => x.id === 'otherApplications')?.label).toBe('Other applications on this baseline, summed');
 		} finally {

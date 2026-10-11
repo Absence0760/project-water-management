@@ -67,8 +67,8 @@ describe('redactRunAllocations', () => {
 		const out = redactRunAllocations(run);
 		expect(out.model.allocations).toEqual([]);
 		expect(out.inputs.model.allocations).toEqual([]);
-		// A cap run: its river outcomes only (#523 I, riverOutcomes.test.ts).
-		expect(out.summary.allocations).toEqual({ mode: 'cap', tolerance: 0.1, used: 1, notMatched: 0, nodes: [], riverOutcomesOnly: true });
+		// A cap run: its verdicts and counts only (#523 I, verdictsOnly.test.ts).
+		expect(out.summary.allocations).toEqual({ mode: 'cap', tolerance: 0.1, used: 1, notMatched: 0, nodes: [], verdictsOnly: true });
 		expect(out.id).toBe('r');
 		// The original isn't changed (it may be cached or reused).
 		expect(run.model.allocations).toHaveLength(1);

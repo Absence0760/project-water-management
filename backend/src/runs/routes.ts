@@ -12,7 +12,7 @@ import { allocationUnitsHidden, redactRunAllocations } from '../allocations/view
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
-import { allocationSeriesWithheld, keepVisible, seriesWithholding } from './withheldSeries.js';
+import { allocationSeriesWithheld, keepVisible, seriesWithholding, type SeriesWithholding } from './withheldSeries.js';
 import { runVerified } from './stamp.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
 import { withErrata, type RunEngines } from '../errata/runs.js';
@@ -219,7 +219,8 @@ export const runRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			if (!q.nodeId) return c.json(await catchmentDay(db, id, runId, q.date));
+			// The catchment's day through the same withholding as a unit's (#523 I, round 5: no series of a cap or full-allocation run).
+			if (!q.nodeId) return c.json(await catchmentDay(db, id, runId, q.date, await seriesWithholding(db, id, role, runId)));
 			const { rows: run } = await db.query<{
 				index: number | null;
 				days: number;
@@ -376,7 +377,7 @@ const RUNOFF_STORES = ['production_store', 'routing_store', 'uh_store'] as const
  * the run's summary. A legacy run has no stores (runoffModel 'legacy',
  * previousStorageMm null); the UI says so and lists the [Flow data] columns.
  */
-async function catchmentDay(db: Db, projectId: string, runId: string, date: string) {
+async function catchmentDay(db: Db, projectId: string, runId: string, date: string, w: SeriesWithholding | null) {
 	const { rows: run } = await db.query<{ index: number | null; days: number; runoff: RunoffBalance | null }>(
 		`SELECT ($3::date - r.start_date) AS index, (r.end_date - r.start_date + 1) AS days, r.summary->'runoff' AS runoff
 		 FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
@@ -392,6 +393,7 @@ async function catchmentDay(db: Db, projectId: string, runId: string, date: stri
 		[runId, r.index]
 	);
 	if (!rows.length) throw new ApiError(404, 'not found');
+	const { kept, withheld } = keepVisible(w, null, rows, "the catchment's day");
 	const b = r.runoff;
 	// A conceptual model's stores the day before. On the run's first day that
 	// is each store after the warm-up (engine ≥ 1.20.0, summary.runoff.storesStartMm);
@@ -423,7 +425,8 @@ async function catchmentDay(db: Db, projectId: string, runId: string, date: stri
 		params: b ? { ...b.params, warmupDays: b.warmupDays } : null,
 		previousStorageMm,
 		previousStores,
-		columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
+		columns: kept.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value })),
+		withheld
 	};
 }
 

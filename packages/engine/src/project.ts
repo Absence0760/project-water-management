@@ -3528,10 +3528,10 @@ export interface RunAllocations {
 	/**
 	 * Never written by the engine: the API sets it on a cap or full-allocation
 	 * run read by a viewer kept from each registered volume, which reads that
-	 * run's river outcomes only (issue #523 finding I, backend
-	 * allocations/riverOutcomes.ts); the summary's `withheld` names the rest.
+	 * run's EWR verdicts and counts only (issue #523 finding I, backend
+	 * allocations/verdictsOnly.ts); the summary's `withheld` names the rest.
 	 */
-	riverOutcomesOnly?: true;
+	verdictsOnly?: true;
 }
 
 export interface RunAllocationNode {

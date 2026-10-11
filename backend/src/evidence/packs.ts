@@ -38,7 +38,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
-import { reportRiverOutcomesOnly } from '../allocations/riverOutcomes.js';
+import { boardVerdicts, reportVerdictsOnly } from '../allocations/verdictsOnly.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
@@ -401,8 +401,8 @@ export function packWithheldPart(reportVersion: string, report: PackManifest['re
 		if ((report.allocations?.units ?? []).some((u) => u.aggregate === undefined)) return 'pack';
 		if ((report.ops ?? []).some((o) => o.op.op.startsWith('allocation.'))) return 'pack';
 	}
-	// A cap or full-allocation run: the PDF prints every unit's figures, the manifest is served its river outcomes only (#523 I).
-	if (reportRiverOutcomesOnly(report as unknown as Parameters<typeof reportRiverOutcomesOnly>[0])) return 'pdf';
+	// A cap or full-allocation run: the PDF prints every unit's figures, the manifest is served its verdicts and counts only (#523 I).
+	if (reportVerdictsOnly(report as unknown as Parameters<typeof reportVerdictsOnly>[0])) return 'pdf';
 	// The PDF prints the full mix (evidence-17 freezes a folded one too, for the redacted manifest).
 	const mix = report.licenceImpactAuthorised?.mix;
 	if (mix && !mix.folded && mix.rows.length) return 'pdf';
@@ -518,7 +518,12 @@ export const packRoutes = new Hono<AuthEnv>()
 				const errataFoundSince = await packErrataFoundSince(db, pack, manifest);
 				return c.json({
 					pack,
-					manifest: scope ? { ...manifest, report: redactReportAllocations(manifest.report, scope.own) } : manifest,
+					// The licence-impact boards' verdicts only, for any viewer kept from each volume, as the live report (#523 I).
+					manifest: scope
+						? { ...manifest, report: redactReportAllocations(manifest.report, scope.own) }
+						: (await allocationUnitsHidden(db, id, role))
+							? { ...manifest, report: { ...manifest.report, licenceImpact: boardVerdicts(manifest.report.licenceImpact), licenceImpactAuthorised: boardVerdicts(manifest.report.licenceImpactAuthorised) } }
+							: manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					// The manifest above is redacted (it no longer hashes to manifestSha256), and the bundle is refused (#523 G1).

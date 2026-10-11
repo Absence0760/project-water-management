@@ -103,3 +103,37 @@ describe('an outlook on a cap or full-allocation base (#523 I)', () => {
 		await expect(withUser(ctx.editor.id, (db) => publishOutlook(db, ctx.projectId, ctx.ids.outlookId!, '0'))).rejects.toThrow(ALLOCATION_MODE_NOT_PUBLISHABLE);
 	});
 });
+
+// Round 5 (I): a yield computed on a cap or full-allocation run carries the capped use of the units above the dam.
+describe('a yield on a cap or full-allocation run (#523 I)', () => {
+	let yieldId: string;
+	beforeAll(async () => {
+		await markMode(ctx.runId, 'cap');
+		yieldId = await withUser(ctx.owner.id, async (db) => {
+			const { rows } = await db.query<{ id: string }>(
+				`INSERT INTO yield_result (project_id, run_id, node_id, kind, params, points, engine_version) VALUES ($1, $2, $3, 'firm', '{}', '{"point": {"boundM3Day": 4321}}', '1.0.0') RETURNING id`,
+				[ctx.projectId, ctx.runId, ctx.farmId]
+			);
+			return rows[0]!.id;
+		});
+	});
+
+	it('is listed to that viewer without its points, and said; the editor and a viewer the switch lets read them (positive controls)', async () => {
+		const find = async (u: LadderCtx['viewer']) => ((await u.call('GET', `${at}/yield?runId=${ctx.runId}`)).body.results as { id: string; points: unknown; withheld?: string[] }[]).find((r) => r.id === yieldId)!;
+		expect(await find(ctx.viewer)).toMatchObject({ points: null, withheld: ['points'] });
+		expect((await find(ctx.editor)).points).toEqual({ point: { boundM3Day: 4321 } });
+		expect((await ctx.owner.call('PUT', `${at}/allocations/viewer-units`, { on: true })).status).toBe(200);
+		try {
+			expect((await find(ctx.viewer)).points).toEqual({ point: { boundM3Day: 4321 } });
+		} finally {
+			expect((await ctx.owner.call('PUT', `${at}/allocations/viewer-units`, { on: false })).status).toBe(200);
+		}
+		// A compare-only run's yield: served whole (the positive control for the rule).
+		await markMode(ctx.runId, 'none');
+		try {
+			expect((await find(ctx.viewer)).points).toEqual({ point: { boundM3Day: 4321 } });
+		} finally {
+			await markMode(ctx.runId, 'cap');
+		}
+	});
+});

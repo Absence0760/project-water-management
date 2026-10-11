@@ -40,7 +40,7 @@ import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
-import { ensembleRiverOutcomes } from '../allocations/riverOutcomes.js';
+import { ensembleVerdicts } from '../allocations/verdictsOnly.js';
 import { seriesWithholding } from './withheldSeries.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, loadRunInput, RunInputError, seriesHash } from './execute.js';
@@ -262,9 +262,9 @@ export const uncertaintyRoutes = new Hono<AuthEnv>()
 			const { rows: run } = await db.query('SELECT 1 FROM model_run WHERE project_id = $1 AND id = $2', [id, runId]);
 			if (!run.length) throw new ApiError(404, 'not found');
 			const { rows } = await db.query<Row>(`SELECT ${COLUMNS} ${FROM} WHERE u.project_id = $1 AND u.run_id = $2 ORDER BY u.created_at DESC`, [id, runId]);
-			// A cap or full-allocation run's ensembles: their river outcomes only, for a viewer kept from the volumes (#523 I).
-			const riverOnly = !!(await seriesWithholding(db, id, role, runId))?.riverOnly;
-			return c.json({ ensembles: riverOnly ? ensembleRiverOutcomes(rows) : rows });
+			// A cap or full-allocation run's ensembles: their verdicts and counts only, for a viewer kept from the volumes (#523 I).
+			const verdicts = !!(await seriesWithholding(db, id, role, runId))?.verdictsOnly;
+			return c.json({ ensembles: verdicts ? ensembleVerdicts(rows) : rows });
 		});
 	})
 	.get('/:id/runs/:runId/uncertainty/:uid', async (c) => {
@@ -272,9 +272,9 @@ export const uncertaintyRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
 			const ensemble = await loadRow(db, id, runId, uid, true);
-			// A cap or full-allocation run: each member's river outcomes only, for a viewer kept from the volumes (#523 I).
-			const riverOnly = !!(await seriesWithholding(db, id, role, runId))?.riverOnly;
-			return c.json({ ensemble: riverOnly ? ensembleRiverOutcomes(ensemble) : ensemble });
+			// A cap or full-allocation run: each member's EWR counts and rates only, for a viewer kept from the volumes (#523 I).
+			const verdicts = !!(await seriesWithholding(db, id, role, runId))?.verdictsOnly;
+			return c.json({ ensemble: verdicts ? ensembleVerdicts(ensemble) : ensemble });
 		});
 	})
 	.post('/:id/runs/:runId/uncertainty', async (c) => {

@@ -19,7 +19,8 @@ import { ApiError } from '../http/errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { listPendingYieldJobs, listYieldResults, pendingYieldJobs, YIELD_JOBS_PER_USER, yieldDedupeKey, yieldInputFor, YieldRequest } from './store.js';
+import { listPendingYieldJobs, listYieldResults, pendingYieldJobs, YIELD_JOBS_PER_USER, yieldDedupeKey, yieldInputFor, YieldRequest, yieldsOnCapOrFull } from './store.js';
+import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 
 const Uuid = z.string().uuid();
 const ListQuery = z
@@ -77,7 +78,12 @@ export const yieldRoutes = new Hono<AuthEnv>()
 	.get('/:id/yield', async (c) => {
 		const q = ListQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, c.req.param('id'), 'contributor');
-			return c.json({ results: await listYieldResults(db, c.req.param('id'), q) });
+			const role = await requireRole(db, c.req.param('id'), 'contributor');
+			const results = await listYieldResults(db, c.req.param('id'), q);
+			// A yield on a cap or full-allocation run or scenario: its dam's inflow carries the capped use of the units above it,
+			// so a viewer kept from the volumes gets the result without its points (#523 I, round 5).
+			if (!results.length || !(await allocationUnitsHidden(db, c.req.param('id'), role))) return c.json({ results });
+			const bound = new Set(await yieldsOnCapOrFull(db, results.map((r) => r.id)));
+			return c.json({ results: results.map((r) => (bound.has(r.id) ? { ...r, points: null, withheld: ['points'] } : r)) });
 		});
 	});

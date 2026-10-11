@@ -35,6 +35,8 @@ export interface SweepMemberRow {
 	 * only when done.
 	 */
 	series?: StoredSeries[] | null;
+	/** What a viewer kept from each registered volume doesn't get of a cap or full-allocation member (`series`, #523 I); absent otherwise. */
+	withheld?: string[];
 }
 
 /** A RunSeries as JSON stores it: NaN (no value) is null. */

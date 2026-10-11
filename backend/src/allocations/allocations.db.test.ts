@@ -616,11 +616,15 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		'/projects/:id/alert-feedback': { status: 403, why: 'editor' }
 	};
 
-	/** The refusals on the capped and full-allocation runs only (#523 I): river outcomes only, so a unit's day or file is refused. */
+	/** The refusals on the capped and full-allocation runs only (#523 I): verdicts and counts only, so every series, day and daily file is refused. */
 	const EXPECTED_BOUND: Record<string, { status: number; why: string }> = {
 		'/projects/:id/runs/:runId/day': { status: 403, why: 'allocation_series_withheld: the unit is bound to its registered volume' },
 		'/projects/:id/runs/:runId/model-input': { status: 403, why: 'a cap or full-allocation run’s input holds the volumes (uncertainty.ts)' },
-		'/projects/:id/runs/:runId/export/farms.csv': { status: 403, why: 'allocation_series_withheld: river outcomes only, no unit’s column' }
+		'/projects/:id/runs/:runId/export/farms.csv': { status: 403, why: 'allocation_series_withheld: verdicts and counts only, no unit’s column' },
+		// Round 5 (I): no series of any kind, the catchment's included (a gauge's inflow less a unit's share of the natural flow gave its volume).
+		'/projects/:id/runs/:runId/series': { status: 403, why: 'allocation_series_withheld: no series of a cap or full-allocation run' },
+		'/projects/:id/runs/:runId/series/bulk': { status: 403, why: 'allocation_series_withheld: no series of a cap or full-allocation run' },
+		'/projects/:id/runs/:runId/export/daily.csv': { status: 403, why: 'allocation_series_withheld: no series of a cap or full-allocation run' }
 	};
 
 	/** The ids a route names differently from the ladder's (its :jobId a report's, its :aid an assessment's …). */
@@ -777,15 +781,19 @@ describe('no viewer GET carries a registered volume while the owners keep them f
 		const cap = await ctx.viewer.call('GET', `${at}/runs/${capRun}`);
 		expect(cap.body.series.some((s: { key: string }) => s.key.startsWith('allocation_'))).toBe(false);
 		expect(cap.body.withheldSeries).toContainEqual({ nodeId: unit, key: 'allocation_room_surface' });
-		// The unit's whole day is refused, with the reason; the outlet gauge's is served.
+		// The unit's whole day is refused, with the reason; so are the outlet gauge's and the catchment's (round 5: verdicts and counts only).
 		const day = await ctx.viewer.call('GET', `${at}/runs/${capRun}/day?nodeId=${unit}&date=2021-10-01`);
 		expect([day.status, day.body.code]).toEqual([403, 'allocation_series_withheld']);
-		const outlet = (await ctx.viewer.call('GET', `${at}/runs/${capRun}`)).body.series.find((s: { nodeId: string | null; key: string }) => s.nodeId && s.key === 'outflow').nodeId;
-		const outletDay = await ctx.viewer.call('GET', `${at}/runs/${capRun}/day?nodeId=${outlet}&date=2021-10-01`);
-		expect(outletDay.status).toBe(200);
-		expect(outletDay.body.columns.map((c: { key: string }) => c.key)).toContain('outflow');
+		expect(cap.body.series).toEqual([]);
+		const outlet = (await ctx.editor.call('GET', `${at}/runs/${capRun}`)).body.series.find((s: { nodeId: string | null; key: string }) => s.nodeId && s.key === 'outflow').nodeId;
+		for (const path of [`day?nodeId=${outlet}&date=2021-10-01`, 'day?date=2021-10-01']) {
+			const refused = await ctx.viewer.call('GET', `${at}/runs/${capRun}/${path}`);
+			expect([path, refused.status, refused.body.code]).toEqual([path, 403, 'allocation_series_withheld']);
+			// Positive control: the editor's.
+			expect((await ctx.editor.call('GET', `${at}/runs/${capRun}/${path}`)).status).toBe(200);
+		}
 		const capSummary = (await ctx.viewer.call('GET', `${at}/runs/${capRun}`)).body.run.summary;
-		expect([capSummary.allocations.riverOutcomesOnly, capSummary.farms, capSummary.waterBalance]).toEqual([true, [], undefined]);
+		expect([capSummary.allocations.verdictsOnly, capSummary.farms, capSummary.waterBalance]).toEqual([true, [], undefined]);
 		expect(capSummary.withheld).toContain('waterBalance');
 		expect((await get(ctx.viewer, `${at}/runs/${capRun}/export/summary.csv`)).text).toMatch(/^# withheld=[^\n]*waterBalance/m);
 		const full = await ctx.viewer.call('GET', `${at}/runs/${fullRun}`);
