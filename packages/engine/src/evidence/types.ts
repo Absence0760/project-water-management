@@ -106,12 +106,14 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * (`identity.application.origin`, issue #523 G1, D3): a team scenario's own
  * units are an editor's choice, not the applicant's farms, so all of its
  * units are in the totals. Page 1's authorised volume mix
- * (`licenceImpactAuthorised.mix`) gives no fewer than 5 registered users'
- * volume (`folded`): a water source held by fewer is left out, the ways of
- * holding held by fewer are pooled in one `other` row. A pack drafted before
- * keeps its document; a viewer who can't read each farm's volume gets no
- * team-scenario pack before evidence-17 that names a unit, and no mix that
- * isn't folded (backend evidence/packs.ts).
+ * (`licenceImpactAuthorised`) is frozen twice: the full mix (`mix`, which
+ * editors, owners, the authority and the PDF read) and the folded one
+ * (`mixFolded`, foldedMix), which never gives fewer than 5 registered users'
+ * volume, alone or by difference, and which the backend serves a viewer kept
+ * from each volume in `mix`'s place. A pack drafted before keeps its
+ * document; such a viewer gets no team-scenario pack before evidence-17 that
+ * names a unit, and no mix without a folded one, and no PDF with a mix
+ * (backend evidence/packs.ts).
  */
 export const EVIDENCE_REPORT_VERSION = 'evidence-17';
 

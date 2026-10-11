@@ -95,7 +95,7 @@ export function usableAllocations(list: readonly AllocationEntry[] | undefined, 
 		let c = a;
 		// A storage-only (21b) row registers no take (engine ≥ 1.59.0): a volume on it isn't one either.
 		if (use === '21b' && a.volumeM3PerYear > 0) {
-			warnings.push(`allocation ${String(a.id)}: it is storage only (21b), so its volume of ${a.volumeM3PerYear} m³ a year is not a take and is ignored`);
+			warnings.push(`allocation ${String(a.id)}: it is storage only (21b), so its volume is not a take and is ignored`);
 			c = { ...c, volumeM3PerYear: 0 };
 		}
 		if (a.months != null && !(Array.isArray(a.months) && a.months.every((m) => Number.isInteger(m) && m >= 1 && m <= 12))) {
