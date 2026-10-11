@@ -2,7 +2,7 @@
 // the table's words.
 import type { EvidenceAllocationSource, EvidenceAllocationYear } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { bandText, countsText, partNote, ratioText, unitSourceLabel, USE_AXIS_MAX, USE_AXIS_MIN, useRows } from './registeredUse';
+import { bandText, countsText, measuredNote, partNote, ratioText, unitSourceLabel, USE_AXIS_MAX, USE_AXIS_MIN, useRows } from './registeredUse';
 
 const year = (waterYear: number, over: Partial<EvidenceAllocationYear> = {}): EvidenceAllocationYear => ({
 	waterYear,
@@ -97,5 +97,18 @@ describe('partNote', () => {
 		expect(partNote({ ...y, partialA: true, partialB: null }, false)).toBe('part (120 of 365 days), not counted');
 		// Control: a whole year has no note.
 		expect(partNote({ ...y, partialA: false, partialB: false }, true)).toBeNull();
+	});
+});
+
+describe('measuredNote (evidence-16, issue #516)', () => {
+	const y = { damDrawA: 29_200, damDrawB: null, damLossesA: null, damLossesB: 1_460 };
+	it('labels a dam beside the river taken at the intake with its draws, and a dam on the river with its losses, per run', () => {
+		expect(measuredNote({ measuredAtA: 'intake', measuredAtB: null }, y, 'A')).toMatch(/^taken at the intake; drawn from the dam 29[\s ]200, not added$/);
+		expect(measuredNote({ measuredAtA: 'intake', measuredAtB: null }, y, 'B')).toMatch(/^dam losses 1[\s ]460, not counted$/);
+		expect(measuredNote({ measuredAtA: 'intake', measuredAtB: null }, { ...y, damDrawA: null }, 'A')).toBe('taken at the intake');
+	});
+	it('says nothing for an older pack’s document or a total of other units (no fields)', () => {
+		expect(measuredNote({}, {}, 'A')).toBeNull();
+		expect(measuredNote({ measuredAtA: null }, { damLossesA: null }, 'A')).toBeNull();
 	});
 });

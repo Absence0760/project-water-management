@@ -145,8 +145,6 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		dam_seepage: 0,
 		// Present in a run whose dam loses seepage from the catchment or releases water (WP-3.5); none here.
 		dam_seepage_lost: 0,
-		// Diverted river water lost from the dam (engine 1.79.0): only on a unit that can divert into its dam.
-		diverted_loss: 0,
 		dam_release: 0,
 		interim_storage: 1075 - F,
 		dam_storage: 1000,
@@ -177,6 +175,9 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		offtake_loss_return: 0,
 		offtake_used: 0,
 		offtake_to_dam: 0,
+		// The take at the river intake of a dam beside the river, and water from one (engine 1.82.0); none here.
+		intake_take: 0,
+		received_at_intake: 0,
 		// Registered volumes (engine 1.18.0): a cap's room per source, a full allocation's demand factor; none here.
 		allocation_room_surface: 0,
 		allocation_room_groundwater: 0,

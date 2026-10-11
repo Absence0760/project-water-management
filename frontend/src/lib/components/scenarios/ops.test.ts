@@ -334,6 +334,27 @@ describe('buildOp', () => {
 		expect(r.input.model.nodes.find((n) => n.id === UP)!.partDemandFactor).toEqual({ crops: new Array(12).fill(0.7) });
 	});
 
+	it('builds and describes a dated demand scaling (engine 1.82.0, issue #514): one change per drought year, with months the days in both', () => {
+		const b = (o: Partial<OpDraft>) => buildOp(draft({ kind: 'demand.scale', ...o }), m);
+		expect(b({ demandPct: '130', from: ' 2015-10-01 ', to: '2016-09-30' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 1.3, from: '2015-10-01', to: '2016-09-30' } });
+		expect(b({ demandPct: '130', demandCategory: 'user', to: '2016-09-30' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 1.3, category: 'user', to: '2016-09-30' } });
+		expect(b({ demandPct: '50', months: [12, 1], from: '2021-01-01' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.5, months: [1, 12], from: '2021-01-01' } });
+		// Empty is open, as Scale rainfall's: the op leaves the dates out and scales every day.
+		expect(b({ demandPct: '85', from: '', to: '  ' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.85 } });
+		// Checked as series.scale's dates are.
+		expect(b({ demandPct: '130', from: '2016-02-30' })).toEqual({ ok: false, error: 'From: must be an ISO date (YYYY-MM-DD)' });
+		expect(b({ demandPct: '130', from: '2017-01-01', to: '2016-09-30' })).toEqual({ ok: false, error: expect.stringMatching(/from 2017-01-01 is after to 2016-09-30/) });
+		expect(describeOp({ op: 'demand.scale', factor: 1.3, from: '2015-10-01', to: '2016-09-30' }, base())).toBe(
+			"Irrigation demand of every hydrological unit: 130 % of what they'd take (× 1.3), 2015-10-01 to 2016-09-30"
+		);
+		expect(describeOp({ op: 'demand.scale', factor: 0.5, nodeIds: [UP], months: [12, 1], from: '2021-01-01' }, base())).toBe(
+			"Irrigation demand of Upper farm: 50 % of what they'd take (× 0.5), in Jan, Dec, 2021-01-01 to end"
+		);
+		const r = applyScenario(base(), [(b({ demandPct: '130', demandNodeIds: [UP], from: '2015-10-01', to: '2016-09-30' }) as { op: ScenarioOp }).op]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.nodes.find((n) => n.id === UP)!.demandFactorWindows).toEqual([{ from: '2015-10-01', to: '2016-09-30', factor: new Array(12).fill(1.3) }]);
+	});
+
 	it('builds a demand scaling (issue #53 R1): none ticked is all, every month is none, farms are the default', () => {
 		const b = (o: Partial<OpDraft>) => buildOp(draft({ kind: 'demand.scale', ...o }), m);
 		expect(b({ demandPct: '85' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.85 } });

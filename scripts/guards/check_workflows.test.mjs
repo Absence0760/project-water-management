@@ -11,6 +11,7 @@ import {
 	pnpmVersionSteps,
 	prTargetHeadCheckouts,
 	pushFullProblem,
+	draftReadyProblem,
 	topLevelPermissions,
 	triggersOn,
 	unpreflightedProductionJobs,
@@ -226,6 +227,33 @@ test('ci.yml: a changes job that can skip on a push fails push-full', () => {
 test('pushFullProblem accepts the real ci.yml shape', () => {
 	const lines = ['        env:', '          EVENT_NAME: ${{ github.event_name }}', '        run: |', FULL.trimEnd()];
 	assert.equal(pushFullProblem(lines), null);
+});
+
+// A draft PR may skip the heavy jobs only if marking it ready re-runs CI;
+// otherwise its skipped-but-green gate lets it merge untested.
+const DRAFT_ENV = '          EVENT_NAME: ${{ github.event_name }}\n          BASE: ${{ github.event.pull_request.base.sha }}\n          DRAFT: ${{ github.event.pull_request.draft }}\n';
+const DRAFT = '          if [ "$DRAFT" = "true" ]; then echo "code=false" >> "$GITHUB_OUTPUT"; exit 0; fi\n';
+const withTrigger = (types) => `on:\n  pull_request:\n${types}  push:\n    branches: [main]\n` + changesJob(FULL + DRAFT + DIFF, DRAFT_ENV);
+
+test('ci.yml: a draft skip with ready_for_review passes (positive control)', () => {
+	assert.deepEqual(checkWorkflow('.github/workflows/ci.yml', withTrigger('    types: [opened, synchronize, reopened, ready_for_review]\n')), []);
+	// No draft skip: the trigger's types don't matter.
+	assert.deepEqual(checkWorkflow('.github/workflows/ci.yml', `on:\n  pull_request:\n` + changesJob(FULL + DIFF)), []);
+});
+
+test('ci.yml: a draft skip without ready_for_review fails draft-ready', () => {
+	const ci = (text) => rules(text, '.github/workflows/ci.yml');
+	// Default types (opened, synchronize, reopened) leave out ready_for_review.
+	assert.deepEqual(ci(withTrigger('')), ['draft-ready']);
+	assert.deepEqual(ci(withTrigger('    types: [opened, synchronize, reopened]\n')), ['draft-ready']);
+	// ready_for_review on another trigger doesn't count.
+	assert.deepEqual(ci(withTrigger('').replace('  push:\n', '  pull_request_target:\n    types: [ready_for_review]\n  push:\n')), ['draft-ready']);
+});
+
+test('draftReadyProblem reads the real ci.yml as passing', () => {
+	const text = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+	const lines = text.split('\n');
+	assert.equal(draftReadyProblem(text, lines.filter((l) => /DRAFT/.test(l))), null);
 });
 
 test('a workflow with a production job may not restore a dependency cache', () => {

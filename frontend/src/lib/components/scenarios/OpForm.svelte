@@ -840,9 +840,20 @@
 				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
 			{/each}
 		</fieldset>
+		<div class="form-row">
+			<div class="field">
+				<label for="op-demand-from">From (YYYY-MM-DD)</label>
+				<input id="op-demand-from" type="text" placeholder="empty for the start" bind:value={d.from} />
+			</div>
+			<div class="field">
+				<label for="op-demand-to">To (YYYY-MM-DD)</label>
+				<input id="op-demand-to" type="text" placeholder="empty for the end" bind:value={d.to} />
+			</div>
+		</div>
 		<p class="hint">
 			Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply. A part's
 			cut stacks on the whole demand's, so DWS's % per category is one change per category; a domestic or municipal cut never goes below its basic-needs floor (25 l a person a day).
+			From and To limit it to those days (both included), and with months ticked to those months' days within them: one change per drought year.
 		</p>
 	{/if}
 

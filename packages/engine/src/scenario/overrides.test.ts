@@ -1101,6 +1101,136 @@ describe('demand.scale (issue #53 R1)', () => {
 	});
 });
 
+describe('demand.scale with dates (engine ≥ 1.82.0, issue #514: a dry-year stress in named years)', () => {
+	const series = (out: { series: RunSeries[] }, nodeId: string) =>
+		Object.fromEntries(out.series.filter((s) => s.nodeId === nodeId).map((s) => [s.key, s.values]));
+	const withUser = () => {
+		const b = base();
+		b.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'G', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: new Array(12).fill(1000), sortOrder: 4 }));
+		return b;
+	};
+	/** Each day's factor on A's crop requirement, `y` ÷ `x`, checked against `k(day)`; returns how many days were scaled. */
+	const expectScaled = (x: Record<string, number[]>, y: Record<string, number[]>, day0: number, k: (day: number) => number) => {
+		let scaled = 0;
+		for (let t = 0; t < x.demand!.length; t++) {
+			const f = k(day0 + t);
+			if (f !== 1 && x.demand![t]! > 0) scaled++;
+			expect(y.crop_requirement![t]).toBeCloseTo(f * x.crop_requirement![t]!, 9);
+			expect(y.demand![t]).toBeCloseTo(f * x.demand![t]!, 9);
+		}
+		return scaled;
+	};
+
+	it('without dates, the op is stored and applied as before: no dated factor on any node', () => {
+		const r = one({ op: 'demand.scale', factor: 0.85, nodeIds: ['A'], months: [10] });
+		expect(r.problems).toEqual([]);
+		for (const n of r.input.model.nodes) expect('demandFactorWindows' in n).toBe(false);
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 0.85 }]).ops).toEqual([{ op: 'demand.scale', factor: 0.85 }]);
+	});
+
+	it('limits the scaling to the days from–to, both included; gross demand, rain and the store are untouched', () => {
+		const b = base();
+		const r = applyScenario(b, [{ op: 'demand.scale', factor: 1.3, nodeIds: ['A'], from: '2021-10-01', to: '2021-12-31' }]);
+		expect(r.problems).toEqual([]);
+		expect(nodeOf(r.input, 'A')!.demandFactor).toBeUndefined();
+		expect(nodeOf(r.input, 'A')!.demandFactorWindows).toEqual([{ from: '2021-10-01', to: '2021-12-31', factor: new Array(12).fill(1.3) }]);
+		expect(nodeOf(r.input, 'B')!.demandFactorWindows).toBeUndefined();
+		const out = runModel(b);
+		const [x, y] = [series(out, 'A'), series(runModel(r.input), 'A')];
+		expect(y.gross_demand).toEqual(x.gross_demand);
+		expect(y.effective_rain).toEqual(x.effective_rain);
+		expect(y.soil_water).toEqual(x.soil_water);
+		const [a, z] = [toEpochDay('2021-10-01'), toEpochDay('2021-12-31')];
+		const scaled = expectScaled(x, y, toEpochDay(out.startDate), (d) => (d >= a && d <= z ? 1.3 : 1));
+		expect(scaled).toBeGreaterThan(30);
+		// The day before and the day after are the base's to the bit.
+		const t0 = a - toEpochDay(out.startDate);
+		expect(y.crop_requirement![t0 - 1]).toBe(x.crop_requirement![t0 - 1]);
+		expect(y.crop_requirement![t0 + 92]).toBe(x.crop_requirement![t0 + 92]);
+		expect(checkAll(r.input)).toBeNull();
+	});
+
+	it('with months, scales only the days that are in both', () => {
+		const b = base();
+		const r = applyScenario(b, [{ op: 'demand.scale', factor: 0.5, nodeIds: ['A'], months: [12, 1], from: '2021-01-15', to: '2021-12-31' }]);
+		expect(nodeOf(r.input, 'A')!.demandFactorWindows![0]!.factor).toEqual([1, 1, 0.5, 0.5, 1, 1, 1, 1, 1, 1, 1, 1]);
+		const out = runModel(b);
+		const [a, z] = [toEpochDay('2021-01-15'), toEpochDay('2021-12-31')];
+		const inBoth = (d: number) => d >= a && d <= z && [12, 1].includes(monthOfEpochDay(d));
+		const scaled = expectScaled(series(out, 'A'), series(runModel(r.input), 'A'), toEpochDay(out.startDate), (d) => (inBoth(d) ? 0.5 : 1));
+		// 17 days of January 2021 and 31 of December 2021, not December 2020 or January 2022.
+		expect(scaled).toBeGreaterThan(20);
+		expect(checkAll(r.input)).toBeNull();
+	});
+
+	it('a window over the whole run runs as the op without dates, to the bit; one per drought year stacks on the undated', () => {
+		const b = base();
+		const whole = applyScenario(b, [{ op: 'demand.scale', factor: 0.85, nodeIds: ['A'], from: '2000-01-01' }]);
+		const plain = applyScenario(b, [{ op: 'demand.scale', factor: 0.85, nodeIds: ['A'] }]);
+		expect(series(runModel(whole.input), 'A').demand).toEqual(series(runModel(plain.input), 'A').demand);
+		// The dry-year stress: one dated op per drought year, on top of an undated cut.
+		const stress = applyScenario(b, [
+			{ op: 'demand.scale', factor: 0.9, nodeIds: ['A'] },
+			{ op: 'demand.scale', factor: 1.3, nodeIds: ['A'], from: '2020-10-01', to: '2021-03-31' },
+			{ op: 'demand.scale', factor: 1.3, nodeIds: ['A'], from: '2021-10-01', to: '2022-03-31' }
+		]);
+		expect(stress.problems).toEqual([]);
+		expect(nodeOf(stress.input, 'A')!.demandFactorWindows).toHaveLength(2);
+		const out = runModel(b);
+		const dry = (d: number) => (d >= toEpochDay('2020-10-01') && d <= toEpochDay('2021-03-31')) || (d >= toEpochDay('2021-10-01') && d <= toEpochDay('2022-03-31'));
+		expectScaled(series(out, 'A'), series(runModel(stress.input), 'A'), toEpochDay(out.startDate), (d) => 0.9 * (dry(d) ? 1.3 : 1));
+		expect(checkAll(stress.input)).toBeNull();
+	});
+
+	it("scales an other water user's demand on its days, and a part of a unit's", () => {
+		const b = withUser();
+		const r = applyScenario(b, [{ op: 'demand.scale', factor: 0.5, category: 'user', from: '2021-06-01', to: '2021-06-30' }]);
+		expect(r.problems).toEqual([]);
+		const out = runModel(r.input);
+		const day0 = toEpochDay(out.startDate);
+		const d = series(out, 'U').demand!;
+		d.forEach((v, t) => expect(v).toBe(day0 + t >= toEpochDay('2021-06-01') && day0 + t <= toEpochDay('2021-06-30') ? 500 : 1000));
+		expect(checkAll(r.input)).toBeNull();
+		// A part: the crops only, so the window carries it.
+		const p = one({ op: 'demand.scale', factor: 0.7, nodeIds: ['A'], part: 'crops', to: '2021-03-31' });
+		expect(nodeOf(p.input, 'A')!.demandFactorWindows).toEqual([{ to: '2021-03-31', factor: new Array(12).fill(0.7), part: 'crops' }]);
+		expect(checkAll(p.input)).toBeNull();
+	});
+
+	it("a demand object's part on its days only, never below its basic-needs floor", () => {
+		const b = base();
+		b.model.demandObjects = [demandObject('do1', 'A', { name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 1000, litresPerUnitDay: 230, returnPct: 0 })];
+		const village = (ops: ScenarioOp[]) => {
+			const r = applyScenario(b, ops);
+			expect(r.problems).toEqual([]);
+			expect(checkAll(r.input)).toBeNull();
+			const out = runModel(r.input);
+			return { avg: out.summary.farms.find((f) => f.nodeId === 'A')!.demandObjects![0]!.avgDemandM3Day, days: out.days };
+		};
+		// June 2021, 30 days at 50 %: 115 m³/day less on 30 of the run's days.
+		const half = village([{ op: 'demand.scale', factor: 0.5, nodeIds: ['A'], part: 'domestic', from: '2021-06-01', to: '2021-06-30' }]);
+		expect(half.avg).toBeCloseTo(230 - (115 * 30) / half.days, 9);
+		// A cut to 0 stops at the floor (25 m³/day) on those days.
+		const none = village([{ op: 'demand.scale', factor: 0, nodeIds: ['A'], part: 'domestic', from: '2021-06-01', to: '2021-06-30' }]);
+		expect(none.avg).toBeCloseTo(230 - (205 * 30) / none.days, 9);
+	});
+
+	it('is checked as series.scale’s dates are, stored as sent, and listed by run comparison', () => {
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, months: [1], from: '2021-10-01', to: '2022-09-30', junk: 1 } as unknown as ScenarioOp]).ops).toEqual([
+			{ op: 'demand.scale', factor: 1.3, months: [1], from: '2021-10-01', to: '2022-09-30' }
+		]);
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, from: '2021-02-30' }]).errors).toEqual(['ops[0].from: must be an ISO date (YYYY-MM-DD)']);
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, to: '1/10/2021' }]).errors).toEqual(['ops[0].to: must be an ISO date (YYYY-MM-DD)']);
+		expect(validateScenarioOps([{ op: 'demand.scale', factor: 1.3, from: '2022-01-01', to: '2021-12-31' }]).errors).toEqual(['ops[0]: from 2022-01-01 is after to 2021-12-31']);
+		// Unchecked input (a stored op) meets the same rules when applied.
+		expect(one({ op: 'demand.scale', factor: 1.3, from: '2022-01-01', to: '2021-12-31' }).problems).toEqual(['op 1 (demand.scale): from 2022-01-01 is after to 2021-12-31']);
+		expect(one({ op: 'demand.scale', factor: 1.3, from: 'soon' }).problems).toEqual(['op 1 (demand.scale): from must be an ISO date (YYYY-MM-DD)']);
+		const r = one({ op: 'demand.scale', factor: 1.3, nodeIds: ['A'], from: '2021-10-01', to: '2022-09-30' });
+		const snap = (x: ModelInput) => ({ settings: x.settings, model: x.model, series: {} });
+		expect(diffInputs(snap(base()), snap(r.input)).map((c) => c.text)).toEqual(['Farm A: dated demand factors none → 2021-10-01 – 2022-09-30 × 1.3']);
+	});
+});
+
 describe('ewrRule.set (engine ≥ 1.6.0, WP-3.7)', () => {
 	/** A usable rule table at `site`: invented values, falling with the % point. */
 	const table = (site: string | null, over: Partial<EwrRuleTable> = {}): EwrRuleTable => ({

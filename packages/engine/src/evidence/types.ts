@@ -95,8 +95,15 @@ import type { EvidenceAuthorisedImpact } from './authorised';
  * left out when fewer than FARMER_K (5) units hold that source (`othersLeftOut`). Baseline evidence
  * has no applicant, so every unit is in the totals. The page-1 row still counts unit-years over the
  * band per unit (`unitYears`). A pack drafted before evidence-15 names every unit.
+ * evidence-16: § 5 says how each unit's surface use was measured (issue #516, engines ≥ 1.82.0 and
+ * 1.83.0): a dam beside the river's per run (`EvidenceAllocationSource.measuredAtA` / `B`, `'intake'`)
+ * with the year's draws from the dam reported, not added (`EvidenceAllocationYear.damDrawA` / `B`),
+ * and a dam on the river's losses, its evaporation plus the seepage that doesn't return, shown
+ * beside the use, never counted (`damLossesA` / `B`, issue #507 item 7). A total of other units
+ * carries none of them. A pack drafted before evidence-16 has no such fields, and § 5 shows no
+ * such words.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-15';
+export const EVIDENCE_REPORT_VERSION = 'evidence-16';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -780,6 +787,17 @@ export interface EvidenceAllocationYear {
 	registeredB: number | null;
 	modelledB: number | null;
 	statusB: AllocationStatus | null;
+	/**
+	 * evidence-16, per run: the year's draws from a dam beside the river,
+	 * reported beside its take at the intake, not added (AllocationYear.damDrawM3),
+	 * and a dam on the river's losses, beside the use, never counted
+	 * (AllocationYear.damLossesM3). null where the run reports none; absent
+	 * from an older pack's document and from a total of other units.
+	 */
+	damDrawA?: number | null;
+	damDrawB?: number | null;
+	damLossesA?: number | null;
+	damLossesB?: number | null;
 }
 
 /** Whole water years by how modelled use compared with the registered volume. */
@@ -794,6 +812,14 @@ export interface EvidenceAllocationCounts {
 
 export interface EvidenceAllocationSource {
 	waterSource: AllocationWaterSource;
+	/**
+	 * evidence-16, per run: `'intake'` when the surface use of a dam beside the
+	 * river is measured at the river intake (AllocationSourceComparison.measuredAt,
+	 * engine ≥ 1.82.0); null otherwise. Absent from an older pack's document and
+	 * from a total of other units.
+	 */
+	measuredAtA?: 'intake' | null;
+	measuredAtB?: 'intake' | null;
 	years: EvidenceAllocationYear[];
 	countsA: EvidenceAllocationCounts | null;
 	/** Baseline evidence, or the application lacks the unit or has no volume on this source: null. */

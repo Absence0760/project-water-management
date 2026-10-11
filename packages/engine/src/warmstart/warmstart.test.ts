@@ -209,6 +209,17 @@ describe('what the resumed input may and may not change', () => {
 		expect(() => runModelFrom(snapshot, scaled)).toThrow(ModelStateMismatchError);
 	});
 
+	it('a dated demand factor from the snapshot day on is free, and is the uninterrupted run’s (engine 1.82.0)', () => {
+		const dated = clone(input);
+		for (const n of dated.model.nodes) if (n.kind === 'farm') n.demandFactorWindows = [{ from: at, factor: new Array(12).fill(1.3) }];
+		expect(modelStateFingerprint(dated, at)).toBe(snapshot.inputFingerprint);
+		expect(tailDifference(runModelWithoutChecks(dated), runModelFrom(snapshot, dated), k)).toBeNull();
+		// One starting before the snapshot day changed the history: refused.
+		for (const n of dated.model.nodes) if (n.kind === 'farm') n.demandFactorWindows = [{ from: '2009-10-01', to: at, factor: new Array(12).fill(1.3) }];
+		expect(modelStateFingerprint(dated, at)).not.toBe(snapshot.inputFingerprint);
+		expect(() => runModelFrom(snapshot, dated)).toThrow(ModelStateMismatchError);
+	});
+
 	it('a storage reset on the snapshot day is the uninterrupted run’s; withDamStorage gives the same days without the step column', () => {
 		const storageM3 = { a: 50_000, b: 140_000 };
 		const reset = clone(input);

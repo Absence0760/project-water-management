@@ -213,8 +213,9 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		ewr_shortfall_incremental: 'attribution of a shortfall downstream',
 		'transfer_rule@': "one transfer rule's part of J, an input",
 		reach_loss: 'lost in the reach below the farm, after its outflow U; the next unit’s H has it off already',
-		// Engine ≥ 1.79.0: it changes supply only through an allocation cap's room, whose columns refuse the farm.
-		diverted_loss: 'accounting only: the diverted share of the dam’s evaporation and lost seepage, counted as use'
+		// Engine ≥ 1.82.0: the allocation comparison's input only; nothing in the simulation reads them.
+		intake_take: 'accounting only: the surface take at the river intake, from columns the formulas already have',
+		received_at_intake: 'accounting only: water from a dam beside the river, counted at its intake'
 	};
 	// Written only beside a series or model feature that already refuses the farm.
 	const WITH_REFUSED: Record<string, string> = {
