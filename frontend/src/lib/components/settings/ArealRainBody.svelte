@@ -37,12 +37,13 @@
 			decimals={3}
 			disabled={readonly}
 			value={arealFlat}
-			aria-describedby="st-areal-all-h"
+			aria-describedby="st-areal-all-h{arealFlat === null ? ' st-areal-all-now' : ''}"
 			onchange={(v) => {
 				if (v !== null && value) value = storedArealRain(withFactorEveryMonth(areal, v));
 			}}
 		/>
-		<span class="hint" id="st-areal-all-h">An independent MAP ÷ the forcing’s mean annual rain gives one factor. {arealFlat === null ? 'The months differ now (below).' : ''}</span>
+		<span class="hint explain" id="st-areal-all-h">An independent MAP ÷ the forcing’s mean annual rain gives one factor.</span>
+		{#if arealFlat === null}<span class="hint" id="st-areal-all-now">The months differ now (below).</span>{/if}
 	</div>
 	<div class="field">
 		<span class="lbl"><label for="st-areal-method">Derived from</label></span>

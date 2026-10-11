@@ -331,7 +331,7 @@
 							/>
 						</div>
 					</div>
-					<span class="hint" id="{uid}-band-h">
+					<span class="hint" class:explain={!err('marLowMm3') && !err('marHighMm3') && !bandBlank} id="{uid}-band-h">
 						{#if err('marLowMm3')}<span class="err">{err('marLowMm3')}</span>{:else if err('marHighMm3')}<span class="err">{err('marHighMm3')}</span
 							>{:else if bandBlank}<span class="err">Enter both bounds, or untick “Use a MAR band instead of one target”.</span
 							>{:else}Already scaled to the modelled catchment (not the quaternary's own figure): use this when two published natural-MAR estimates for this

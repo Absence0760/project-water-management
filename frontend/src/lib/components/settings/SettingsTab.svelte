@@ -97,7 +97,7 @@
 	import { outcomesError } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError } from '$lib/components/outlook/settings';
 	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
-	import { saveBlockers, settingsNavGroups } from './sections';
+	import { saveBlockers, SETTINGS_ELSEWHERE, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
@@ -498,7 +498,7 @@
      (one Automation & access link standing for the four panels that run or connect by themselves), and a
      sideways strip on a phone. It wraps the whole tab, so it stays beside (or above) the panels after the
      form too. -->
-<SectionNav groups={navGroups} label="Settings sections" find="Find a setting" railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
+<SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={SETTINGS_ELSEWHERE} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
 <div class="settings-form" class:explained={explain.on}>
@@ -1465,6 +1465,8 @@
 		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with the save bar’s Save changes.
 	</p>
 {/if}
+<!-- The panels after the form follow the explain switch too (their field help is .explain, issue #521). -->
+<div class="settings-after" class:explained={explain.on}>
 <!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
 <div id="set-feeds">
 	<Lazy load={loadDataFeeds}>
@@ -1484,6 +1486,7 @@
 		{#snippet children(ReportSchedulesPanel)}<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />{/snippet}
 	</Lazy>
 </div>
+</div>
 </SectionNav>
 
 <style>
@@ -1502,7 +1505,7 @@
 	}
 	/* The explanations (issue #468): shown by the switch at the top; hidden, they stay each field's
 	   description (aria-describedby reads hidden text). The panels in their own components mark theirs too. */
-	.settings-form:not(.explained) :global(.explain) {
+	:is(.settings-form, .settings-after):not(.explained) :global(.explain) {
 		display: none;
 	}
 	.explain-switch {

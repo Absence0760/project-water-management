@@ -108,7 +108,7 @@
 	{error}
 	onretry={() => load(wanted)}
 >
-	{#snippet intro()}<p class="hint muted">
+	{#snippet intro()}<p class="hint muted explain">
 		Each unit’s mean annual precipitation, area-weighted over its parcel on the map, from one MAP grid for the whole project: two grids are never mixed,
 		and a unit the grid doesn’t cover keeps what it has. Nothing changes until you use it.
 	</p>{/snippet}

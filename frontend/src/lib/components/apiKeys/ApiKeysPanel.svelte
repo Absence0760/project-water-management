@@ -3,10 +3,12 @@
 	// key for a logger gateway or a script, copies it once (only its hash is
 	// kept, so it can't be shown again), sees when each was last used, and
 	// revokes one. Owners only: SettingsTab renders this for an owner, and the
-	// API answers anyone else 403.
+	// API answers anyone else 403. "Make a key" in the panel's head opens the
+	// make form as a card with its own action row (issue #521: it was always
+	// open above the list); the words under the heading are the (i)'s.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -27,6 +29,9 @@
 	let limit = $state(false);
 	let picked = $state<string[]>([]);
 	let creating = $state(false);
+	/** The make form is open (a card under the head). */
+	let making = $state(false);
+	let makeButton: HTMLButtonElement | undefined = $state();
 	/** The key just made: its secret is shown this once. */
 	let fresh = $state<{ id: string; name: string; secret: string; series: ApiKeySeries | null } | null>(null);
 	let copied = $state('');
@@ -53,6 +58,22 @@
 	}
 	onMount(load);
 
+	async function startMaking() {
+		error = null;
+		making = true;
+		await tick();
+		document.getElementById('key-name')?.focus();
+	}
+
+	async function stopMaking() {
+		making = false;
+		name = '';
+		picked = [];
+		limit = false;
+		await tick();
+		makeButton?.focus();
+	}
+
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
 		if (limit && picked.length === 0) {
@@ -70,6 +91,10 @@
 			name = '';
 			picked = [];
 			limit = false;
+			making = false;
+			// The card goes; the focus lands on the new key, which selects it to copy.
+			await tick();
+			secretInput?.focus();
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -105,45 +130,46 @@
 </script>
 
 <section class="panel" id="set-api-keys" aria-labelledby="api-keys-h-t">
+	<!-- The add action in the head (issue #521); what a key may do is the (i)'s, with the rest in the glossary. -->
 	<div class="panel-head">
 		<h2 id="api-keys-h"><span id="api-keys-h-t">API keys</span> <HelpTip key="api-key" label="About API keys" /></h2>
+		{#if !making}<button type="button" class="btn btn-sm btn-primary" bind:this={makeButton} onclick={startMaking}>Make a key</button>{/if}
 	</div>
-	<p class="muted small intro">
-		A key lets a logger gateway or a script add daily readings to this project’s series without signing in. It can write series, and nothing
-		else: it can’t read the model, runs or members. Each request with it shows in History under the key’s name.
-	</p>
 	<FormatHelp summary="Expected format of a request" format={INGEST_FORMAT} />
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
-	<form class="add" aria-label="Make an API key" onsubmit={create}>
-		<div class="row">
-			<div class="field grow">
-				<label for="key-name">Name</label>
-				<input id="key-name" required maxlength={API_KEY_NAME_MAX} placeholder="Weir logger gateway" bind:value={name} />
-			</div>
-			<div class="field">
-				<label for="key-days">Works for</label>
-				<select id="key-days" bind:value={days}>
-					{#each KEY_EXPIRY_CHOICES as c (c.days)}<option value={c.days}>{c.label}</option>{/each}
-				</select>
-			</div>
-		</div>
-		<fieldset class="series">
-			<legend>What it may write</legend>
-			<label class="check"><input type="radio" name="key-limit" value={false} bind:group={limit} /> Any series of this project</label>
-			<label class="check"><input type="radio" name="key-limit" value={true} bind:group={limit} disabled={series.length === 0} /> Only these series</label>
-			{#if limit}
-				<div class="picks">
-					{#each series as s (seriesKey(s))}
-						<label class="check"><input type="checkbox" value={seriesKey(s)} bind:group={picked} /> {seriesText(s)}</label>
-					{/each}
+	{#if making}
+		<form class="add" aria-label="Make an API key" onsubmit={create}>
+			<div class="row">
+				<div class="field grow">
+					<label for="key-name">Name</label>
+					<input id="key-name" required maxlength={API_KEY_NAME_MAX} placeholder="Weir logger gateway" bind:value={name} />
 				</div>
-			{/if}
-		</fieldset>
-		<div>
-			<button class="btn btn-primary" type="submit" disabled={creating || !name.trim()}>{creating ? 'Making…' : 'Make key'}</button>
-		</div>
-	</form>
+				<div class="field">
+					<label for="key-days">Works for</label>
+					<select id="key-days" bind:value={days}>
+						{#each KEY_EXPIRY_CHOICES as c (c.days)}<option value={c.days}>{c.label}</option>{/each}
+					</select>
+				</div>
+			</div>
+			<fieldset class="series">
+				<legend>What it may write</legend>
+				<label class="check"><input type="radio" name="key-limit" value={false} bind:group={limit} /> Any series of this project</label>
+				<label class="check"><input type="radio" name="key-limit" value={true} bind:group={limit} disabled={series.length === 0} /> Only these series</label>
+				{#if limit}
+					<div class="picks">
+						{#each series as s (seriesKey(s))}
+							<label class="check"><input type="checkbox" value={seriesKey(s)} bind:group={picked} /> {seriesText(s)}</label>
+						{/each}
+					</div>
+				{/if}
+			</fieldset>
+			<div class="action-row">
+				<button class="btn btn-primary" type="submit" disabled={creating || !name.trim()}>{creating ? 'Making…' : 'Make key'}</button>
+				<button class="btn" type="button" onclick={stopMaking}>Cancel</button>
+			</div>
+		</form>
+	{/if}
 
 	{#if fresh}
 		<div class="fresh" role="group" aria-labelledby="fresh-key-h">
@@ -200,12 +226,12 @@
 </section>
 
 <style>
-	.intro {
-		margin: -0.25rem 0 0.75rem;
-		max-width: 80ch;
-	}
+	/* The make card: bordered, under the head, its action row at its foot. */
 	.add {
-		margin-bottom: 0.75rem;
+		margin: 0.5rem 0 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.75rem 0.9rem;
 	}
 	.row {
 		display: flex;
@@ -220,7 +246,7 @@
 		width: 100%;
 	}
 	.series {
-		margin: 0 0 0.75rem;
+		margin: 0;
 		padding: 0;
 		border: 0;
 	}
