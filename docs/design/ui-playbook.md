@@ -490,7 +490,11 @@ section it belongs to, with the example that taught it.
   than a page is sliced wherever the break falls, through a row of names if
   that's where it is. Split it into page-high SVGs at clean boundaries, each
   `break-inside: avoid` (the schematic's `paperBands`), and check in the PDF
-  that every name lands whole on exactly one page.
+  that every name lands whole on exactly one page. One element wider than the
+  page shrinks the whole PDF to fit: a curtailment table's `min-width: 11rem`
+  name column (issue #521) took every printed word down ~3 %, and the
+  schematic's names fell under 7 pt. A fixed minimum width on anything the
+  report prints belongs in `@media screen`.
 - **An absolutely positioned bit inside a scrolling table escapes it**
   unless the box is its containing block: the visually-hidden words in
   `/compare`'s delta cells and the report's EWR grid gave both pages 185 px of
