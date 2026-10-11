@@ -203,8 +203,9 @@ bottom:
    settings changes between the runs and names who made them ("2 saved
    changes to the model or settings between the runs, by Ann and Bob", with
    a link to the project's History tab), and each model or settings line
-   says which save set its final value: "Changed by Ann on 2026-09-26
-   14:02 · “Licence application”" (the save's reason, when it has one).
+   says which save set its final value: "Changed by Ann on 26 Sep 2026
+   14:02 · “Licence application”" (day first, the viewer's clock; the save's
+   reason, when it has one).
    The saves are the project's `model_revision` rows made after the
    baseline ran and up to when the what-if ran; the matching rule is in
    [api.md § Compare runs](./api.md#compare-runs) (`attribution`). A
@@ -292,7 +293,9 @@ bottom:
    on the days scored, the shared reason when neither was ("parameters not
    fitted", "parameters edited since the fit", "not the period fitted"), and
    "run A …, run B …" when they differ. Under it, **Fit and validation** sets each run's fit record side
-   by side: the fit (model, time, objective, seed), the bounds it searched
+   by side: the fit (model, time, objective, seed; the time day first in UTC, "GR4J fit of 24 Sep 2026
+   10:05 UTC", as the run's own provenance says it: the engine's `describeFitRecord` takes the stored
+   `fittedAt` and the screen's formatter, `fittedAtText`, issue #521), the bounds it searched
    (wide or typical, model.md §2.10b), its in-sample score, its split-sample,
    wet-year and independent-record scores ("not run" when that test wasn't),
    whether (and what) the WR2012 MAR penalty pulled towards, whether the
@@ -695,7 +698,10 @@ whole: *"Parameters now from a GR4J fit of 2026-09-24 10:05 UTC (KGE′, seed
 7)"* when one run has none, *"Fit record: … → …"* for a different fit (time,
 model or seed), and *"Fit record: parameters edited since the fit (x1)"* when
 the same fit's parameters were edited by hand in between (or *"back to the
-fitted values"*). A parameter edit itself still has its own line. The
+fitted values"*). These lines keep the engine's own ISO time ("2026-09-24 10:05 UTC"):
+history revisions store them and an evidence pack's manifest hashes them
+(its reproduction recomputes them and compares), so their text never moves
+without an `ENGINE_VERSION` bump. A parameter edit itself still has its own line. The
 project's declared uncertainty rule for evidence (issue #71,
 `settings.evidenceUncertaintyRule`) is one line, **Declared uncertainty rule
 (evidence)**, the whole rule in words either side (`declaredRuleText`, "not

@@ -5,7 +5,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { saveChanges, saveSettings, openFold } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
 import { ungroup } from '../support/format.ts';
 
@@ -14,6 +14,7 @@ const definition = (scope: Locator, term: string) => scope.getByRole('term').fil
 
 async function fitAndApply(page: Page, { seed, validate, bounds }: { seed: string; validate: boolean; bounds?: 'wide' | 'typical' }) {
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Seed').fill(seed);
 	if (bounds) await fit.getByLabel(/^Bounds/).selectOption(bounds);
 	await fit.getByLabel('Model runs per fit').fill('50');
@@ -33,6 +34,8 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 
 	await fitAndApply(page, { seed: '7', validate: true, bounds: 'typical' });
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
+	// At the foot of the Fit automatically card, whose Apply wrote it (issue #521).
+	await expect(page.getByTestId('fit-now-card').getByRole('region', { name: /^Fit record of these parameters/ })).toBeVisible();
 	await expect(definition(record, 'Seed')).toHaveText('7');
 	await expect(definition(record, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);
@@ -43,7 +46,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Fitted' })).toBeVisible();
 	const prov = page.getByRole('region', { name: /^Where the parameters came from/ });
-	await expect(prov).toContainText(/GR4J fit of \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
+	await expect(prov).toContainText(/GR4J fit of \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} UTC/);
 	await expect(definition(prov, 'Seed')).toHaveText('7');
 	await expect(definition(prov, 'Objective')).toHaveText('KGE′ (Kling–Gupta, 2012)');
 	await expect(definition(prov, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
@@ -103,6 +106,9 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	await expect(page.getByText('Fit record: parameters edited since the fit (x1)')).toBeVisible();
 	const fits = page.getByRole('table', { name: 'Fit and validation for both runs' });
 	await expect(fits.getByRole('row', { name: /^Parameters edited since fit/ })).toHaveText(/no\s*yes \(x1\)$/);
+	// The fit's time day first and in UTC, as the run's own provenance says it (issue #521); the engine's
+	// stored-change line above keeps its own form, which history revisions and evidence pack manifests carry.
+	await expect(fits.getByRole('row', { name: /^Fit GR4J/ })).toHaveText(/^Fit\s*(?:GR4J fit of \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} UTC \([^()]+, seed 3\)\s*){2}$/);
 	await expect(fits.getByRole('row', { name: /^Split-sample: other half/ })).toContainText('not run');
 });
 

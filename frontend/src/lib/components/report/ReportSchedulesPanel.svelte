@@ -2,12 +2,13 @@
 	Settings → Scheduled reports (WP-2.15 Phase B; docs/ui.md § Scheduled
 	reports): email the latest run's report PDF to chosen project members
 	every week or month. Editors and owners add, pause and remove schedules;
-	viewers read. Part of the Settings tab's chunk. Helpers in
-	./serverPdf.ts.
+	viewers read. "Add a schedule" sits in the panel's head and opens the form
+	as a card above the list, with its own action row (issue #521); the words
+	under the heading are the (i)'s. Its own chunk. Helpers in ./serverPdf.ts.
 -->
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { api, type Member } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { session } from '$lib/auth/session.svelte';
@@ -36,6 +37,7 @@
 	let adding = $state(false);
 	let draft = $state<ScheduleDraft>(emptyScheduleDraft(null));
 	let formError = $state<string | null>(null);
+	let addButton: HTMLButtonElement | undefined = $state();
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -54,11 +56,20 @@
 	}
 	onMount(reload);
 
-	function startAdding() {
+	// Focus follows the card: into it when it opens, back to "Add a schedule" when it closes.
+	async function startAdding() {
 		const me = session.user?.id ?? null;
 		draft = emptyScheduleDraft(members.some((m) => m.userId === me) ? me : null);
 		formError = null;
 		adding = true;
+		await tick();
+		document.getElementById(`${uid}-freq`)?.focus();
+	}
+
+	async function closeForm() {
+		adding = false;
+		await tick();
+		addButton?.focus();
 	}
 
 	function toggleRecipient(userId: string, on: boolean) {
@@ -76,9 +87,9 @@
 		formError = message = error = null;
 		try {
 			const s = await reports.addSchedule(parsed.body);
-			adding = false;
 			message = `Schedule added: ${describeSchedule(s)}.`;
 			await reload();
+			await closeForm();
 		} catch (err) {
 			formError = msg(err);
 		} finally {
@@ -116,13 +127,14 @@
 	}
 </script>
 
-<section class="panel" id="set-report-schedules" aria-labelledby="{uid}-h">
-	<h2 id="{uid}-h">Scheduled reports</h2>
-	<p class="hint muted">
-		Email a PDF of the latest run’s report to project members every week or month. The link needs the member to sign in, and the PDF is kept
-		for 7 days. A schedule sends as the editor who last saved it.
-		<HelpTip key="report-pdf" label="About report PDFs and schedules" />
-	</p>
+<section class="panel" aria-labelledby="{uid}-h">
+	<!-- The add action in the head (issue #521); what a schedule sends, and as whom, is the (i)'s, with the rest in the glossary. -->
+	<div class="panel-head">
+		<h2 id="{uid}-h">Scheduled reports <HelpTip key="report-pdf" label="About report PDFs and schedules" /></h2>
+		{#if schedules && canEdit && !adding}
+			<button type="button" class="btn btn-sm btn-primary" bind:this={addButton} onclick={startAdding}>Add a schedule</button>
+		{/if}
+	</div>
 
 	{#if loadError}
 		<div class="alert alert-error" role="alert">
@@ -132,34 +144,8 @@
 	{:else if !schedules}
 		<p class="muted" role="status">Loading…</p>
 	{:else}
-		{#if schedules.length === 0}
-			<p class="muted">No scheduled reports{canEdit ? '.' : '. An editor can add one.'}</p>
-		{:else}
-			<ul class="schedules" aria-label="Scheduled reports">
-				{#each schedules as s (s.id)}
-					<li class="schedule" data-enabled={s.enabled}>
-						<strong>{describeSchedule(s)}</strong>
-						<p class="muted small">
-							To {s.recipients.map((r) => r.displayName).join(', ') || 'nobody'}{s.actingUser ? ` · sends as ${s.actingUser}` : ' · nobody to send as: an editor must save it again'}
-						</p>
-						<p class="small" class:warn={!!s.lastError}>{scheduleStatus(s)}</p>
-						{#if canEdit}
-							<div class="act">
-								<button type="button" class="btn btn-sm" disabled={busy === s.id} aria-label="{s.enabled ? 'Pause' : 'Resume'}: {describeSchedule(s)}" onclick={() => act(s, 'toggle')}>
-									{s.enabled ? 'Pause' : 'Resume'}
-								</button>
-								<button type="button" class="btn btn-sm btn-danger" disabled={busy === s.id} aria-label="Remove schedule: {describeSchedule(s)}" onclick={() => act(s, 'remove')}>Remove</button>
-							</div>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
-
-		{#if canEdit && !adding}
-			<button type="button" class="btn btn-sm btn-primary" onclick={startAdding}>Add a schedule</button>
-		{/if}
-		{#if message}<p class="muted" role="status">{message}</p>{/if}
+		<!-- Always in the page, so screen readers announce each new message. -->
+		<div role="status">{#if message}<p class="muted msg">{message}</p>{/if}</div>
 		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
 		{#if adding}
@@ -210,11 +196,35 @@
 					{/each}
 				</fieldset>
 				{#if formError}<p class="err" role="alert">{formError}</p>{/if}
-				<div class="row">
-					<button type="submit" class="btn btn-primary btn-sm" disabled={busy === 'add'}>{busy === 'add' ? 'Adding…' : 'Add schedule'}</button>
-					<button type="button" class="btn btn-sm" onclick={() => (adding = false)}>Cancel</button>
+				<div class="action-row">
+					<button type="submit" class="btn btn-primary" disabled={busy === 'add'}>{busy === 'add' ? 'Adding…' : 'Add schedule'}</button>
+					<button type="button" class="btn" onclick={closeForm}>Cancel</button>
 				</div>
 			</form>
+		{/if}
+
+		{#if schedules.length === 0}
+			<p class="muted">No scheduled reports{canEdit ? '.' : '. An editor can add one.'}</p>
+		{:else}
+			<ul class="schedules" aria-label="Scheduled reports">
+				{#each schedules as s (s.id)}
+					<li class="schedule" data-enabled={s.enabled}>
+						<strong>{describeSchedule(s)}</strong>
+						<p class="muted small">
+							To {s.recipients.map((r) => r.displayName).join(', ') || 'nobody'}{s.actingUser ? ` · sends as ${s.actingUser}` : ' · nobody to send as: an editor must save it again'}
+						</p>
+						<p class="small" class:warn={!!s.lastError}>{scheduleStatus(s)}</p>
+						{#if canEdit}
+							<div class="act">
+								<button type="button" class="btn btn-sm" disabled={busy === s.id} aria-label="{s.enabled ? 'Pause' : 'Resume'}: {describeSchedule(s)}" onclick={() => act(s, 'toggle')}>
+									{s.enabled ? 'Pause' : 'Resume'}
+								</button>
+								<button type="button" class="btn btn-sm btn-danger" disabled={busy === s.id} aria-label="Remove schedule: {describeSchedule(s)}" onclick={() => act(s, 'remove')}>Remove</button>
+							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
 		{/if}
 	{/if}
 </section>
@@ -242,15 +252,25 @@
 	.warn {
 		color: var(--warning);
 	}
-	.act,
-	.row {
+	.act {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		margin-top: 0.5rem;
 	}
+	.msg {
+		margin: 0 0 0.5rem;
+	}
+	/* The add card: bordered, above the list, its action row at its foot. */
 	.add {
-		margin-top: 1rem;
+		margin: 0 0 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.75rem 0.9rem;
+	}
+	.add h3 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
 	}
 	fieldset {
 		border: 1px solid var(--border);
@@ -259,9 +279,6 @@
 		padding: 0.5rem 0.75rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 		min-height: 24px;
 	}
 	.err {

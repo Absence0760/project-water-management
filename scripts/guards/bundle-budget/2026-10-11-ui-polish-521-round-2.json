@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #521 round 2 on PR #519: the run Record split into Notes, Evidence and Reproduction panels with kind-gated actions and the folded things to check, the scenario editor's Application details card (+1 KB); data feeds, API keys and schedules head actions and cards, the high-flows paste dialog, Find a setting's moved-settings list, the phone project list's Import menu (+2 KB); the farm chart month labels, the map ready state, day-first dates and the Trace a day text field (+1.6 KB); measured 1963 KB against 1958 KB"
+}

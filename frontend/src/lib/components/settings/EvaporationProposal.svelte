@@ -5,7 +5,7 @@
 	what the saved settings hold, with the dataset, version, period and method
 	cited. A reference-ET grid (FAO-56 ET₀) proposes GR4J's monthly PE as it
 	stands; an A-pan grid proposes the A-pan row. Nothing is converted between
-	the two. Use (editors) asks first, then saves the 12 values as one settings
+	the two. Use (editors, in the heading's row, marked "Saves now") asks first, then saves the 12 values as one settings
 	revision citing the dataset; it waits while the form has unsaved changes,
 	since it saves straight to the project. Nothing is applied by itself.
 -->
@@ -121,7 +121,21 @@
 	{error}
 	onretry={() => load(wanted)}
 >
-	{#snippet intro()}<p class="hint muted">
+	<!-- Use saves straight to the project, unlike the form's fields above (the save bar): so it sits in the heading's
+	     row and says so (issue #521). -->
+	{#snippet actions()}
+		{#if ready && !same && !readonly}
+			<span class="saves-now" id="{uid}-now">Saves now</span>
+			<button
+				type="button"
+				class="btn btn-sm"
+				disabled={busy || formDirty}
+				aria-describedby={formDirty ? `${uid}-now ${uid}-dirty` : `${uid}-now`}
+				onclick={use}>{busy ? 'Saving…' : `Use as ${TARGET_LABEL[ready.target]}`}</button
+			>
+		{/if}
+	{/snippet}
+	{#snippet intro()}<p class="hint muted explain">
 		The catchment boundary’s monthly evaporation from an evaporation grid. Reference evapotranspiration (FAO-56 ET₀) is proposed as GR4J’s
 		monthly PE as it stands, and A-pan evaporation as the A-pan row: neither is converted into the other. Nothing changes until you use it.
 	</p>{/snippet}
@@ -199,17 +213,10 @@
 				{#if accepted}<p class="small" data-testid="evaporation-accepted" data-current={accepted.current}>{acceptedText(accepted)}</p>{/if}
 				{#if same}
 					<p class="muted small" data-testid="evaporation-same">The saved settings hold these values.</p>
-				{:else if !readonly}
-					<button
-						type="button"
-						class="btn btn-sm"
-						disabled={busy || formDirty}
-						aria-describedby={formDirty ? `${uid}-dirty` : undefined}
-						onclick={use}>{busy ? 'Saving…' : `Use as ${TARGET_LABEL[ready.target]}`}</button
-					>
-					{#if formDirty}<p class="hint muted" id="{uid}-dirty">Save or discard your settings changes first: values used here are saved straight away.</p>{/if}
-				{:else}
+				{:else if readonly}
 					<p class="hint muted">Only an editor can use these values.</p>
+				{:else if formDirty}
+					<p class="hint muted" id="{uid}-dirty">Save or discard your settings changes first: values used here are saved straight away.</p>
 				{/if}
 				{#if useError}<p class="err small" role="alert">{useError}</p>{/if}
 			{/if}
@@ -234,6 +241,13 @@
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 		text-align: right;
+	}
+	.saves-now {
+		font-size: 0.75rem;
+		font-weight: 600;
+		padding: 0.05rem 0.45rem;
+		border-radius: 999px;
+		background: var(--warning-soft);
 	}
 	.warn {
 		color: var(--warning);

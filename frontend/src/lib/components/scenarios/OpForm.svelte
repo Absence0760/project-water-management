@@ -16,6 +16,7 @@
 	import { kindLabel } from '$lib/series/kinds';
 	import DemandScheduleFields from '$lib/components/network/DemandScheduleFields.svelte';
 	import { CROP_FIELDS, DEMAND_OBJECT_FIELDS, DEMAND_PART_OPTIONS, LAND_COVER_FIELDS, MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
+	import { fmtDay, tidyDay } from '$lib/format/number';
 	import { NEW_ALLOCATION, OP_LABEL, OUTLET_SITE, allocationDraft, buildOp, draftSpec, draftStarted, emptyDraft, objectText, siteTable, startTable, tableText, volumeText, type OpDraft } from './ops';
 
 	let {
@@ -173,7 +174,8 @@
 		}
 	}
 
-	const nowText = (s: ValueSpec, v: unknown) => `Now: ${formatValue(s, v, nodeName)}`;
+	// A date as the field takes it, day first (formatValue keeps the ISO text the change list and the evidence report print).
+	const nowText = (s: ValueSpec, v: unknown) => `Now: ${s.t === 'date' && typeof v === 'string' && v ? fmtDay(v) : formatValue(s, v, nodeName)}`;
 </script>
 
 {#snippet valueField(s: ValueSpec, label: string)}
@@ -220,7 +222,7 @@
 				<div class="field">
 					<label for="op-pe-source">Source of the monthly PE (required)</label>
 					<textarea id="op-pe-source" rows="2" maxlength={PE_SOURCE_MAX} bind:value={d.pe.source}></textarea>
-					<span class="hint">Where the values come from, e.g. a station's FAO-56 ET₀ and its years. At most {PE_SOURCE_MAX} characters.</span>
+					<span class="hint"><span class="explain">Where the values come from, e.g. a station's FAO-56 ET₀ and its years.</span> At most {PE_SOURCE_MAX} characters.</span>
 				</div>
 			{/if}
 			<!-- Unset is pan × A-pan (a project saved before engine 0.31.0), so there is always a "now". -->
@@ -267,8 +269,9 @@
 					id="op-value"
 					type="text"
 					inputmode={s.t === 'number' ? 'decimal' : undefined}
-					placeholder={s.t === 'date' ? `YYYY-MM-DD, or empty for ${s.nullLabel}` : s.t === 'monthly' ? '12 values, Oct to Sep, or one for every month' : s.t === 'number' && s.nullable ? `empty for ${s.nullLabel ?? 'none'}` : undefined}
+					placeholder={s.t === 'date' ? `15 Nov 2021, or empty for ${s.nullLabel}` : s.t === 'monthly' ? '12 values, Oct to Sep, or one for every month' : s.t === 'number' && s.nullable ? `empty for ${s.nullLabel ?? 'none'}` : undefined}
 					bind:value={d.value}
+					onblur={s.t === 'date' ? () => (d.value = tidyDay(d.value)) : undefined}
 				/>
 			{/if}
 			{#if current !== undefined}<span class="hint" data-testid="op-current">{nowText(s, current)}</span>{/if}
@@ -520,9 +523,9 @@
 					<span class="hint">Pick what it drains into first.</span>
 				{/each}
 			</fieldset>
-			<p class="hint">The new hydrological unit sits on the river between the ticked ones and what they drained into, with no land of its own; change its other values with “Change a hydrological unit” once it is added.</p>
+			<p class="hint explain">The new hydrological unit sits on the river between the ticked ones and what they drained into, with no land of its own; change its other values with “Change a hydrological unit” once it is added.</p>
 		{:else}
-			<p class="hint">A new hydrological unit is a leaf, with no land of its own; change its other values with “Change a hydrological unit” once it is added.</p>
+			<p class="hint explain">A new hydrological unit is a leaf, with no land of its own; change its other values with “Change a hydrological unit” once it is added.</p>
 		{/if}
 	{:else if d.kind === 'node.move'}
 		<p class="hint">Whatever drains into it moves with it. Moving one that isn't the proposer's own new structure, or one others drain into, is a <strong>baseline assumption</strong>: it redraws the river as modelled.</p>
@@ -555,12 +558,12 @@
 				<input id="op-al-storage" type="text" inputmode="decimal" placeholder="empty for none" bind:value={d.alStorage} />
 			</div>
 			<div class="field">
-				<label for="op-al-from">Valid from (YYYY-MM-DD)</label>
-				<input id="op-al-from" type="text" placeholder="empty for open" bind:value={d.alFrom} />
+				<label for="op-al-from">Valid from (day first)</label>
+				<input id="op-al-from" type="text" placeholder="15 Nov 2021, or empty for open" autocomplete="off" bind:value={d.alFrom} onblur={() => (d.alFrom = tidyDay(d.alFrom))} />
 			</div>
 			<div class="field">
-				<label for="op-al-to">Valid to (YYYY-MM-DD)</label>
-				<input id="op-al-to" type="text" placeholder="empty for open" bind:value={d.alTo} />
+				<label for="op-al-to">Valid to (day first)</label>
+				<input id="op-al-to" type="text" placeholder="15 Nov 2021, or empty for open" autocomplete="off" bind:value={d.alTo} onblur={() => (d.alTo = tidyDay(d.alTo))} />
 			</div>
 			<div class="field">
 				<label for="op-al-rate">Maximum rate (m³/s)</label>
@@ -573,7 +576,7 @@
 				<label><input type="checkbox" checked={d.months.includes(m)} onchange={(e) => toggleMonth(m, e.currentTarget.checked)} /> {MONTH_NAMES[m - 1]}</label>
 			{/each}
 		</fieldset>
-		<p class="hint">What a scenario’s allocation mode caps or scales its run to (the baseline only compares). A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
+		<p class="hint"><span class="explain">What a scenario’s allocation mode caps or scales its run to (the baseline only compares).</span> A volume on the proposer's own unit is the proposal; one on another's is a baseline assumption.</p>
 	{:else if d.kind === 'cropArea.set'}
 		<div class="form-row">
 			<div class="field">
@@ -618,7 +621,7 @@
 				<input id="op-crop-factors" type="text" bind:value={d.cropFactors} placeholder="12 values, or one for every month" />
 			</div>
 		</div>
-		<p class="hint">Plant it on a hydrological unit with “Set a hydrological unit's crop area” once it is added.</p>
+		<p class="hint explain">Plant it on a hydrological unit with “Set a hydrological unit's crop area” once it is added.</p>
 	{:else if d.kind === 'transfer.add'}
 		<div class="form-row">
 			<div class="field">
@@ -710,7 +713,7 @@
 				</div>
 			{/if}
 		</div>
-		<p class="hint">Its return share, priority and destination start at the category's defaults, as on the Network tab; change them with “Change a demand object” after adding it, or add it in the model tables (<strong>Edit in the model tables</strong>) to set everything, its schedule included, at once.</p>
+		<p class="hint explain">Its return share, priority and destination start at the category's defaults, as on the Network tab; change them with “Change a demand object” after adding it, or add it in the model tables (<strong>Edit in the model tables</strong>) to set everything, its schedule included, at once.</p>
 	{:else if d.kind === 'borehole.add'}
 		<div class="form-row">
 			<div class="field">
@@ -762,15 +765,15 @@
 				<input id="op-change" type="text" inputmode="decimal" placeholder="e.g. −10" bind:value={d.changePct} />
 			</div>
 			<div class="field">
-				<label for="op-from-day">From (YYYY-MM-DD)</label>
-				<input id="op-from-day" type="text" placeholder="empty for the start" bind:value={d.from} />
+				<label for="op-from-day">From (day first)</label>
+				<input id="op-from-day" type="text" placeholder="15 Nov 2021, or empty for the start" autocomplete="off" bind:value={d.from} onblur={() => (d.from = tidyDay(d.from))} />
 			</div>
 			<div class="field">
-				<label for="op-to-day">To (YYYY-MM-DD)</label>
-				<input id="op-to-day" type="text" placeholder="empty for the end" bind:value={d.to} />
+				<label for="op-to-day">To (day first)</label>
+				<input id="op-to-day" type="text" placeholder="15 Nov 2021, or empty for the end" autocomplete="off" bind:value={d.to} onblur={() => (d.to = tidyDay(d.to))} />
 			</div>
 		</div>
-		<p class="hint">Scales the recorded days of the series chosen; missing days stay missing. The monthly A-pan means are a setting (“Change a setting”): on a project with a daily A-pan series they reach only the days it doesn’t cover, so scale that series too.</p>
+		<p class="hint"><span class="explain">Scales the recorded days of the series chosen; missing days stay missing.</span> The monthly A-pan means are a setting (“Change a setting”): on a project with a daily A-pan series they reach only the days it doesn’t cover, so scale that series too.</p>
 	{:else if d.kind === 'ewrRule.set'}
 		<div class="form-row">
 			<div class="field">
@@ -842,15 +845,15 @@
 		</fieldset>
 		<div class="form-row">
 			<div class="field">
-				<label for="op-demand-from">From (YYYY-MM-DD)</label>
-				<input id="op-demand-from" type="text" placeholder="empty for the start" bind:value={d.from} />
+				<label for="op-demand-from">From (day first)</label>
+				<input id="op-demand-from" type="text" placeholder="15 Nov 2021, or empty for the start" autocomplete="off" bind:value={d.from} onblur={() => (d.from = tidyDay(d.from))} />
 			</div>
 			<div class="field">
-				<label for="op-demand-to">To (YYYY-MM-DD)</label>
-				<input id="op-demand-to" type="text" placeholder="empty for the end" bind:value={d.to} />
+				<label for="op-demand-to">To (day first)</label>
+				<input id="op-demand-to" type="text" placeholder="15 Nov 2021, or empty for the end" autocomplete="off" bind:value={d.to} onblur={() => (d.to = tidyDay(d.to))} />
 			</div>
 		</div>
-		<p class="hint">
+		<p class="hint explain">
 			Scales what they would take, not the crop area: irrigation efficiency and return flows stay as they are. 100 % changes nothing; two changes multiply. A part's
 			cut stacks on the whole demand's, so DWS's % per category is one change per category; a domestic or municipal cut never goes below its basic-needs floor (25 l a person a day).
 			From and To limit it to those days (both included), and with months ticked to those months' days within them: one change per drought year.

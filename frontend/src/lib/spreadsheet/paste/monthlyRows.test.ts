@@ -32,7 +32,7 @@ describe('planMonthlyPaste (issue #477)', () => {
 	});
 
 	it('stops on a value outside the row’s range, naming the row and month', () => {
-		expect(planMonthlyPaste('A-pan\t-1', rows())).toEqual({ error: 'A-pan evaporation, Oct: -1 mm is below 0 mm.' });
+		expect(planMonthlyPaste('A-pan\t-1', rows())).toEqual({ error: 'A-pan evaporation, Oct: −1 mm is below 0 mm.' });
 		expect(planMonthlyPaste('Pan coefficient\t0.7\t2.5', rows())).toEqual({ error: 'Pan coefficient, Nov: 2.5 is above 2.' });
 	});
 

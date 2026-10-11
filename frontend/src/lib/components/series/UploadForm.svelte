@@ -13,7 +13,7 @@
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, freeProvenanceFields, provenanceFields } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
-	import { fmtNum, fmtReading } from '$lib/format/number';
+	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
 	import { CsvError, type ParsedSeries } from '$lib/series/csv';
 	import { parseSeriesFile } from '$lib/series/file';
 	import { parsePastedSeries } from '$lib/series/paste';
@@ -353,7 +353,7 @@
 					meta,
 					added: p.added,
 					changed: p.changed,
-					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${dataEnd(meta)}.`
+					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${fmtDay(dataEnd(meta))}.`
 				};
 			} else {
 				const meta = await api.series.put(projectId, {
@@ -512,7 +512,7 @@
 	{/if}
 	{#if target}
 		<fieldset class="mode">
-			<legend>“{target.name || kindLabel(target.kind)}” already exists ({target.startDate} → {seriesEnd(target)}) <HelpTip key="series-update-mode" /></legend>
+			<legend>“{target.name || kindLabel(target.kind)}” already exists ({fmtDay(target.startDate)} → {fmtDay(seriesEnd(target))}) <HelpTip key="series-update-mode" /></legend>
 			<label><input type="radio" name="{idPrefix}-mode" value="merge" bind:group={mode} /> Append / update: add new days, correct overlapping ones</label>
 			<label><input type="radio" name="{idPrefix}-mode" value="replace" bind:group={mode} /> Replace the whole series with {input === 'paste' ? 'these rows' : 'this file'}</label>
 		</fieldset>
@@ -545,7 +545,7 @@
 		<div class="alert alert-error" role="alert">{input === 'paste' ? 'Pasted rows' : fileName}: {parseError}</div>
 	{:else if parsed}
 		<dl class="preview" aria-label={input === 'paste' ? 'Pasted rows summary' : 'File summary'}>
-			<div><dt>Period</dt><dd>{parsed.startDate} → {parsed.endDate}</dd></div>
+			<div><dt>Period</dt><dd>{fmtDay(parsed.startDate)} → {fmtDay(parsed.endDate)}</dd></div>
 			<div><dt>Days</dt><dd>{fmtNum(parsed.values.length)}</dd></div>
 			<div><dt>With values</dt><dd>{fmtNum(parsed.rowCount)}</dd></div>
 			<div><dt>Gaps</dt><dd>{fmtNum(parsed.missingCount)}</dd></div>
@@ -603,13 +603,13 @@
 				<div><dt>New days</dt><dd class="ok">{fmtNum(preview.added)}</dd></div>
 				<div><dt>Changed</dt><dd class:warn-text={preview.changed > 0}>{fmtNum(preview.changed)}</dd></div>
 				<div><dt>Unchanged</dt><dd>{fmtNum(preview.unchanged)}</dd></div>
-				<div><dt>Series after</dt><dd>{preview.result.startDate} → {fromEpochDay(toEpochDay(preview.result.startDate) + preview.result.values.length - 1)}</dd></div>
+				<div><dt>Series after</dt><dd>{fmtDay(preview.result.startDate)} → {fmtDay(fromEpochDay(toEpochDay(preview.result.startDate) + preview.result.values.length - 1))}</dd></div>
 				{#if hole}
 					<div class="wide">
 						<dt>Blank days</dt>
 						<dd class="warn-text" data-testid="upload-hole">
-							The series has values to {dataEnd(target!)} and {input === 'paste' ? 'the pasted rows start' : 'this file starts'} {parsed.startDate}: {fmtNum(hole.days)} day{hole.days === 1 ? '' : 's'} between ({hole.from}{hole.days > 1
-								? ` to ${hole.to}`
+							The series has values to {fmtDay(dataEnd(target!))} and {input === 'paste' ? 'the pasted rows start' : 'this file starts'} {fmtDay(parsed.startDate)}: {fmtNum(hole.days)} day{hole.days === 1 ? '' : 's'} between ({fmtDay(hole.from)}{hole.days > 1
+								? ` to ${fmtDay(hole.to)}`
 								: ''}) will be blank{target!.kind.startsWith('rain_') ? ', and a run treats a blank rain day as dry (0 mm)' : ''}.
 						</dd>
 					</div>
@@ -641,9 +641,9 @@
 		<div class="confirm" role="group" aria-labelledby={id('confirm-h')} data-testid="overwrite-confirm">
 			<p class="confirm-h" id={id('confirm-h')} tabindex="-1" bind:this={confirmEl}>
 				{#if overwrite.changes}
-					This changes {n} already stored in “{target.name || kindLabel(target.kind)}”, between {overwrite.from} and {overwrite.to}.
+					This changes {n} already stored in “{target.name || kindLabel(target.kind)}”, between {fmtDay(overwrite.from)} and {fmtDay(overwrite.to)}.
 				{:else}
-					This replaces all {n} stored in “{target.name || kindLabel(target.kind)}” ({overwrite.from} → {overwrite.to}) with {what}.
+					This replaces all {n} stored in “{target.name || kindLabel(target.kind)}” ({fmtDay(overwrite.from)} → {fmtDay(overwrite.to)}) with {what}.
 				{/if}
 			</p>
 			{#if overwrite.changes}
@@ -653,7 +653,7 @@
 						<thead><tr><th scope="col">Date</th><th scope="col">Stored ({target.unit})</th><th scope="col">{input === 'paste' ? 'Pasted' : 'From the file'} ({target.unit})</th></tr></thead>
 						<tbody>
 							{#each overwrite.changes.slice(0, CHANGES_SHOWN) as c (c.date)}
-								<tr><td>{c.date}</td><td>{fmtReading(c.from)}</td><td>{fmtReading(c.to)}</td></tr>
+								<tr><td>{fmtDay(c.date)}</td><td>{fmtReading(c.from)}</td><td>{fmtReading(c.to)}</td></tr>
 							{/each}
 						</tbody>
 					</table>

@@ -9,15 +9,18 @@
 	// board 1 has it.
 	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
+	import { page } from '$app/state';
 	import { signOutTo } from '$lib/auth/signOut';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
+	import { farmHref, wordsHref } from './load';
 	import { keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
 		projectId = null,
+		nodeId = null,
 		title = null,
 		back = null,
 		accountPage = false,
@@ -28,8 +31,10 @@
 		busy = false,
 		children
 	}: {
-		/** The catchment the page is in: the menu then offers "Who decides about your farm's information" (168). */
+		/** The catchment the page is in: the menu then offers "Who decides about your hydrological unit's information" (168). */
 		projectId?: string | null;
+		/** The farm a farm page shows, when its links carry it (?node=, load.ts farmHref): who-decides gets it too. Else the URL's own ?node=. */
+		nodeId?: string | null;
 		/** The header's title; "My farm" when not given. */
 		title?: string | null;
 		/** A back link instead of the title (the "Why?" and dam pages). */
@@ -52,6 +57,9 @@
 	} = $props();
 
 	let menuOpen = $state(false);
+	// The farm the page is about (?node=), carried to who-decides like the other farm links, so its back link returns to it.
+	const node = $derived(nodeId ?? page.url.searchParams.get('node'));
+	const path = $derived(base && page.url.pathname.startsWith(base) ? page.url.pathname.slice(base.length) : page.url.pathname);
 	let keep = $state(keepsCopy());
 	let menuRoot: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
@@ -122,14 +130,14 @@
 				{t('Menu')}
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
-				<li><a href="{base}/farm">{t('Your hydrological units')}</a></li>
-				<li><a href="{base}/farm/words">{t('What do these words mean?')}</a></li>
+				<li><a href="{base}/farm" aria-current={path === '/farm' ? 'page' : undefined}>{t('Your hydrological units')}</a></li>
+				<li><a href={wordsHref(base, page.url)} aria-current={path === '/farm/words' ? 'page' : undefined}>{t('What do these words mean?')}</a></li>
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
 				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
 				<!-- The catchment's organisation decides about the farm's information (POPIA s18(1)(b)): whom to ask. -->
 				{#if projectId}
-					<li><a href="{base}/farm/{encodeURIComponent(projectId)}/who-decides">{t('Who decides about your farm’s information')}</a></li>
+					<li><a href={farmHref(base, projectId, node, !!node, 'who-decides')} aria-current={path.endsWith('/who-decides') ? 'page' : undefined}>{t('Who decides about your hydrological unit’s information')}</a></li>
 				{/if}
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
@@ -206,6 +214,19 @@
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
 	}
+	/* From a desktop width the header's ends line up with the 560 px column's
+	   content (16 px in), not the window's edges: the title over the farm's name,
+	   Menu's words over the cards' right edge, its list under it. The preview
+	   banner and the saved-copy strip line up the same way. An account page keeps
+	   its own wider column, so its header spans the window as before. */
+	.farm:not(.account-page) .farm-header {
+		padding-left: max(16px, calc((100% - 560px) / 2 + 16px));
+		padding-right: max(8px, calc((100% - 560px) / 2 + 6px));
+	}
+	.farm:not(.account-page) .preview,
+	.farm:not(.account-page) .strip {
+		padding-inline: max(16px, calc((100% - 560px) / 2 + 16px));
+	}
 	.spacer {
 		flex: 1;
 	}
@@ -274,8 +295,11 @@
 		position: absolute;
 		right: 0;
 		top: calc(100% + 4px);
+		/* Wide enough that "Who decides about your hydrological unit's information" (longer in
+		   Afrikaans) wraps once at most, never past the window. */
+		width: max-content;
 		min-width: 250px;
-		max-width: calc(100vw - 16px);
+		max-width: min(320px, calc(100vw - 16px));
 		margin: 0;
 		padding: 4px 0;
 		list-style: none;
@@ -284,10 +308,13 @@
 		border-radius: var(--radius);
 		box-shadow: var(--shadow);
 	}
+	/* A two-line item keeps its own padding, so it doesn't run into the next
+	   one ("…unit's information" sat on "Don't keep a copy…" as one block). */
 	.menu a,
 	.menu button {
 		width: 100%;
-		padding: 0 16px;
+		padding: 8px 16px;
+		line-height: 1.3;
 		text-align: left;
 		color: var(--text);
 	}
@@ -446,13 +473,38 @@
 		flex-shrink: 0;
 		margin-top: 2px;
 	}
+	/* A flex summary loses the browser's ▸ marker, so "Show the numbers" read
+	   as a link with nothing to say it opens in place. Every disclosure on the
+	   farm pages (these and RiverCard's "Who can see" button, .disclosure) draws
+	   one chevron that points down when closed and up when open. */
 	.farm-main :global(details > summary) {
 		min-height: var(--tap);
 		display: flex;
 		align-items: center;
+		gap: 10px;
 		color: var(--accent);
 		font-weight: 600;
 		cursor: pointer;
+		list-style: none;
+	}
+	.farm-main :global(details > summary::-webkit-details-marker) {
+		display: none;
+	}
+	.farm-main :global(details > summary::after),
+	.farm-main :global(.disclosure::after) {
+		content: '';
+		flex: none;
+		width: 7px;
+		height: 7px;
+		margin-top: -4px;
+		border-right: 2px solid currentColor;
+		border-bottom: 2px solid currentColor;
+		transform: rotate(45deg);
+	}
+	.farm-main :global(details[open] > summary::after),
+	.farm-main :global(.disclosure[aria-expanded='true']::after) {
+		margin-top: 4px;
+		transform: rotate(-135deg);
 	}
 	.farm-main :global(table.numbers) {
 		width: 100%;

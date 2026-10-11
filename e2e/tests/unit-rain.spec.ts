@@ -1,12 +1,13 @@
 // Rain for each hydrological unit (issue #482; docs/ui.md § Data feeds, §
 // Settings & calibration, § Network; docs/maps.md § Rain for each unit). On
 // the sample model with an invented parcel linked to one unit:
-// - Settings → Data feeds → Rain for each unit proposes that unit's CHIRPS
+// - Settings → Data feeds → Attach a feed, Area "Each unit's parcel" (Rain for
+//   each unit, issue #521: an option of the attach card) proposes that unit's CHIRPS
 //   cells, names the unit without a parcel, checks the start date before
 //   anything is sent, and the owner's Create makes one feed into the unit's
 //   own rain series, whose card says it reads the unit's parcel; then nothing
-//   is left to change. An editor sees the proposal with no button. The panel
-//   passes axe.
+//   is left to change. An editor opens it from the head's Rain from the map
+//   and sees the proposal with no button. The panel passes axe.
 // - A unit's form takes its MAP and asks for its source before Save.
 // - Settings → Flow generation → Rain for each unit switches it on with the
 //   gauge's MAP and its source, and keeps it after a reload; its link opens
@@ -37,11 +38,17 @@ async function seed(request: APIRequestContext, name: string) {
 
 const unitRain = (page: Page) => page.getByTestId('unit-rain');
 
-async function openUnitRain(page: Page, projectId: string) {
+/** Settings → Data feeds: the head's add action (Attach a feed; Rain from the map for an editor), Area: each unit's parcel. */
+async function openUnitRain(page: Page, projectId: string, opener: 'Attach a feed' | 'Rain from the map' = 'Attach a feed') {
 	await page.goto(`/projects/${projectId}?tab=settings`);
 	const feeds = page.getByRole('region', { name: 'Data feeds' });
-	await feeds.getByRole('button', { name: 'Rain for each unit' }).click();
-	await expect(unitRain(page).getByRole('heading', { name: 'Rain for each unit' })).toBeFocused();
+	await feeds.getByRole('button', { name: opener }).click();
+	const area = feeds.getByLabel('Area');
+	await area.focus();
+	await area.selectOption({ label: 'Each unit’s parcel: a feed per unit' });
+	await expect(unitRain(page).getByRole('heading', { name: 'Rain for each unit' })).toBeVisible();
+	// Picking the area leaves the focus on the choice (an arrow key through the options must not throw it away).
+	await expect(area).toBeFocused();
 	return feeds;
 }
 
@@ -84,9 +91,10 @@ test('the owner sets up a CHIRPS feed for each unit with a parcel, and the feed 
 	await expect(card).toHaveCount(1);
 	await expect(card).toContainText(/\d+ cells? of a unit’s parcel \([\d.]+ km²\), area weighted · CHIRPS rnl v3\.0/);
 
-	// Close gives the focus back to the button that opened it.
+	// Close closes the card and gives the focus back to the head's button that opened it.
 	await panel.getByRole('button', { name: 'Close' }).click();
-	await expect(feeds.getByRole('button', { name: 'Rain for each unit' })).toBeFocused();
+	await expect(panel).toHaveCount(0);
+	await expect(feeds.getByRole('button', { name: 'Attach a feed' })).toBeFocused();
 });
 
 test('an editor sees the proposal but an owner creates the feeds', async ({ page, owner, signIn }) => {
@@ -94,7 +102,7 @@ test('an editor sees the proposal but an owner creates the feeds', async ({ page
 	const id = await seed(page.request, 'Unit rain editor');
 	const editor = await signIn('Unit rain editor');
 	await addMember(page.request, id, editor.user.email, 'editor');
-	await openUnitRain(editor.page, id);
+	await openUnitRain(editor.page, id, 'Rain from the map');
 	const panel = unitRain(editor.page);
 	await expect(panel.getByTestId('unit-rain-row')).toHaveCount(1);
 	await expect(panel.getByText('An owner of the project creates the feeds.')).toBeVisible();
@@ -187,7 +195,7 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const group = page.getByTestId('unit-rain-settings');
 	await group.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' }).check();
 	await expect(group.getByTestId('unit-rain-without-map')).toContainText('Without a MAP: Upper farm, Lower farm.');
-	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=/);
+	await expect(group.getByRole('link', { name: 'Upper farm' })).toHaveAttribute('href', /^\?tab=network&edit=[^&]+&section=area$/);
 	await saveSettings(page);
 	await group.getByRole('link', { name: 'Data feeds → Rain for each unit' }).click();
 	await expect(page).toHaveURL(/[?&]rain=units/);
@@ -199,8 +207,10 @@ test('Settings’ link opens the Data feeds panel, and a viewer reads the group 
 	const seen = viewer.page.getByTestId('unit-rain-settings');
 	await expect(seen.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' })).toBeChecked();
 	await expect(seen.getByRole('checkbox', { name: 'Runoff from each unit’s own rain' })).toBeDisabled();
-	// Data feeds' panel is for editors: a viewer has no button.
-	await expect(viewer.page.getByRole('region', { name: 'Data feeds' }).getByRole('button', { name: 'Rain for each unit' })).toHaveCount(0);
+	// Data feeds' proposals are for editors: a viewer has no button to open them, and the link opens nothing.
+	const viewerFeeds = viewer.page.getByRole('region', { name: 'Data feeds' });
+	await expect(viewerFeeds.getByRole('button', { name: 'Refresh status' })).toBeVisible();
+	await expect(viewerFeeds.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);
 });
 
 test('a run with rain for each unit lists each unit’s rule and factor, the fallback first, and passes axe on a phone', async ({ page, owner }) => {

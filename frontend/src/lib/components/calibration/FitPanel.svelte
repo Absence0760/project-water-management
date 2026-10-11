@@ -20,7 +20,7 @@
 		type ProjectModel,
 		type ProjectSettings
 	} from '@water-management/engine';
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import {
@@ -41,6 +41,7 @@
 		SCORE_ROWS,
 		scoreCellText,
 		scoreColumns,
+		searchSummary,
 		SEED_MAX,
 		seedError,
 		stageText,
@@ -57,6 +58,7 @@
 	import type { FitSession } from '$lib/calibration/fitSession.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { fmtNum } from '$lib/format/number';
 
 	let {
@@ -69,7 +71,8 @@
 		calibrationFlowKind = null,
 		readonly,
 		onApply,
-		session
+		session,
+		penaltyFields
 	}: {
 		projectId: string;
 		x2Open: boolean;
@@ -87,6 +90,8 @@
 		onApply: (report: CalibrationReport, record: FitRecord) => void;
 		/** The workspace's fit: choices, progress and result, kept across tab changes. */
 		session: FitSession;
+		/** The WR2012 MAR penalty's fields (a saved setting, Settings' form), beside the fit's own choices. */
+		penaltyFields?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -113,7 +118,7 @@
 		session.picked = Object.fromEntries(params.map((p) => [p.key, prev[p.key] ?? p.checked]));
 	});
 	const free = $derived(params.filter((p) => session.picked[p.key]).map((p) => p.key));
-	// The WR2012 MAR penalty (Settings → WR2012 check) adds a fit without it, for comparison.
+	// The WR2012 MAR penalty (its fields beside the choices, penaltyFields) adds a fit without it, for comparison.
 	const penalty = $derived(marPenaltyOn(settings()));
 	const runs = $derived(totalRuns(session.budget ?? 0, session.validate, penalty, startsOk ? session.starts! : 1));
 	const canStart = $derived(hasObserved && free.length > 0 && session.budget !== null && session.budget >= 50 && !seedProblem && startsOk && !session.busy);
@@ -124,6 +129,7 @@
 	const climWarning = $derived(report ? climatologyWarning(columns, report.objective) : null);
 	const benchSource = $derived(report ? benchmarkSourceNote(columns) : null);
 	const anyInterval = $derived(columns.some((c) => c.intervals));
+	// The search is a Fold (closed at first; its line says when a field inside needs fixing).
 	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, session.runValidate, penalty, session.runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
 
@@ -175,44 +181,22 @@
 	<h3 id="{uid}-h">Fit automatically <HelpTip key="auto-calibration" /></h3>
 	{#if !hasObserved}
 		<p class="muted small">Upload an observed or logger flow record (Data) to fit the parameters to it.</p>
+		<!-- A saved setting, so it shows (and can be read) before there is a record to fit to. -->
+		{@render penaltyFields?.()}
 	{:else}
 		<p class="muted small explain">
 			Searches the GR4J parameters for the best match between the run and the observed record, over the
 			calibration window above. It uses the form as it stands, fits in your browser, and never saves: check the result, apply it to the form,
 			then save.
 		</p>
+		<!-- The choices that decide the fit first, then the search folded into its values (rarely changed), then the
+		     button straight under them (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
 		<div class="controls">
 			<div class="field">
 				<label for="{uid}-obj">Objective <HelpTip key="calibration-objective" label="About what to optimise" /></label>
 				<select id="{uid}-obj" bind:value={session.objective} disabled={status === 'running'}>
 					{#each OBJECTIVES as o (o)}<option value={o}>{objectiveName(o)}</option>{/each}
 				</select>
-			</div>
-			<div class="field">
-				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
-				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
-					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
-				</select>
-				<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
-			</div>
-			<div class="field">
-				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
-				<NumberInput id="{uid}-budget" min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
-				<span class="hint" id="{uid}-budget-h">{fmtNum(runs)} runs in all. Default 1 500.</span>
-			</div>
-			<div class="field">
-				<label for="{uid}-seed">Seed</label>
-				<NumberInput id="{uid}-seed" min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
-				<span class="hint" id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
-			</div>
-			<div class="field">
-				<label for="{uid}-starts">Starts</label>
-				<NumberInput id="{uid}-starts" min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
-				<span class="hint" id="{uid}-starts-h">
-					{startsOk
-						? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
-						: `Starts must be a whole number from 1 to ${MAX_STARTS}.`}
-				</span>
 			</div>
 			<fieldset class="plain params">
 				<legend>Parameters to fit <HelpTip key="gr4j" label="About the GR4J parameters" /></legend>
@@ -223,35 +207,65 @@
 					</label>
 				{/each}
 			</fieldset>
-			<div class="tip-row">
-				<label class="check validate">
+			<fieldset class="plain validation">
+				<legend>Validation <HelpTip key="validation-tests" label="About the validation tests" /></legend>
+				<label class="check">
 					<input type="checkbox" bind:checked={session.validate} disabled={status === 'running'} />
 					Validate: split-sample and dry → wet tests (two more fits)
 				</label>
-				<HelpTip key="validation-tests" label="About the validation tests" />
-			</div>
-			{#if recordOptions.length}
-				<div class="field">
-					<label for="{uid}-record">Also validate against</label>
-					<select id="{uid}-record" bind:value={session.validationRecord} disabled={status === 'running'} aria-describedby="{uid}-record-h">
-						<option value={null}>No other record</option>
-						{#each recordOptions as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
-					</select>
-					<span class="hint" id="{uid}-record-h">Scores the fit against a second instrument over that record’s own days. No extra fit.</span>
-				</div>
-			{/if}
+				{#if recordOptions.length}
+					<div class="field">
+						<label for="{uid}-record">Also validate against</label>
+						<select id="{uid}-record" bind:value={session.validationRecord} disabled={status === 'running'} aria-describedby="{uid}-record-h">
+							<option value={null}>No other record</option>
+							{#each recordOptions as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
+						</select>
+						<span class="hint explain" id="{uid}-record-h">Scores the fit against a second instrument over that record’s own days. No extra fit.</span>
+					</div>
+				{/if}
+			</fieldset>
+			{@render penaltyFields?.()}
 		</div>
+		<Fold name="Search:" line={searchSummary({ bounds: session.bounds, budget: session.budget, starts: session.starts, seed: session.seed })} testid="fit-search" lineTestid="fit-search-summary">
+			<div class="field">
+				<label for="{uid}-bounds">Bounds <HelpTip key="calibration-bounds" /></label>
+				<select id="{uid}-bounds" bind:value={session.bounds} disabled={status === 'running'} aria-describedby="{uid}-bounds-h">
+					{#each CALIBRATION_BOUNDS as b (b)}<option value={b}>{BOUNDS_LABEL[b]}</option>{/each}
+				</select>
+				<span class="hint" id="{uid}-bounds-h">{boundsHint(session.bounds)}</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-budget">Model runs per fit <HelpTip key="calibration-search" label="About the search settings" /></label>
+				<NumberInput id="{uid}-budget" grouped min={50} max={10_000} step={50} bind:value={session.budget} disabled={status === 'running'} aria-describedby="{uid}-budget-h" />
+				<span class="hint" id="{uid}-budget-h">Default 1 500.</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-starts">Starts</label>
+				<NumberInput id="{uid}-starts" grouped min={1} max={MAX_STARTS} step={1} bind:value={session.starts} disabled={status === 'running'} aria-describedby="{uid}-starts-h" aria-invalid={startsOk ? undefined : 'true'} />
+				<span class="hint" class:explain={startsOk} id="{uid}-starts-h">
+					{startsOk
+						? `Separate searches of the whole record, each from its own seed; the best is kept. Nearly equal scores with scattered parameters mean the record can’t pin them down. Default ${DEFAULT_STARTS}.`
+						: `Starts must be a whole number from 1 to ${MAX_STARTS}.`}
+				</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-seed">Seed</label>
+				<NumberInput id="{uid}-seed" grouped min={0} max={SEED_MAX} step={1} bind:value={session.seed} disabled={status === 'running'} aria-describedby="{uid}-seed-h" aria-invalid={seedProblem ? 'true' : undefined} />
+				<span class="hint" class:explain={!seedProblem} id="{uid}-seed-h">{seedProblem ?? 'The same seed, data and engine version give the same fit. Recorded with the fit.'}</span>
+			</div>
+		</Fold>
 		{#if penalty}
 			<p class="muted small">
-				The WR2012 MAR penalty is on (Settings → WR2012 check), so the fit also runs once without it for comparison.
+				The WR2012 MAR penalty is on (above), so the fit also runs once without it for comparison.
 			</p>
 		{/if}
-		<div class="row">
+		<div class="action-row">
 			{#if status === 'running' || status === 'loading'}
 				<button type="button" class="btn" onclick={() => session.cancel()} disabled={status === 'loading'}>Cancel</button>
 			{:else}
-				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart}>Fit automatically</button>
+				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart} aria-describedby="{uid}-runs">Fit automatically</button>
 			{/if}
+			<span class="muted small" id="{uid}-runs" data-testid="fit-runs">{fmtNum(runs)} runs in all.</span>
 		</div>
 
 		{#if status === 'loading'}
@@ -454,10 +468,9 @@
 </section>
 
 <style>
+	/* Its card (Settings' .sub-card) draws the frame. */
 	.fit {
-		border-top: 1px solid var(--border);
-		padding-top: 0.75rem;
-		margin: 0.25rem 0 0.75rem;
+		margin: 0;
 	}
 	h3 {
 		margin: 0 0 0.25rem;
@@ -469,14 +482,18 @@
 		font-size: 0.8rem;
 		color: var(--text-muted);
 	}
+	/* The choices that decide the fit: one row where the panel is wide, top-aligned. */
 	.controls {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 0.25rem 1.25rem;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 0.5rem 1.25rem;
 		align-items: start;
 		margin: 0.5rem 0;
 	}
-	.field :global(input),
+	.controls > .field {
+		margin-bottom: 0;
+	}
+	.field :global(input:not([type='checkbox'])),
 	.field select {
 		width: 100%;
 	}
@@ -493,14 +510,21 @@
 		padding: 0;
 		margin-bottom: 0.2rem;
 	}
+	/* A box beside its words, aligned with their first line however many lines they wrap to. */
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		min-height: 32px;
+		padding: 0.3rem 0;
+		line-height: 1.4;
 	}
-	.validate {
-		align-self: end;
+	.check input {
+		margin: calc((1lh - 1rem) / 2) 0 0;
+	}
+	/* A field's label is as tall as one with a help tip, so the inputs of a row line up with or without one. */
+	.field > label {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0 0.25rem;
+		min-height: 24px;
 	}
 	.row {
 		display: flex;
@@ -560,11 +584,5 @@
 		.btn {
 			min-height: 44px;
 		}
-	}
-	/* A label and its help tip on one line: the tip sits outside the label (a label holds only its own control). */
-	.tip-row {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 	}
 </style>

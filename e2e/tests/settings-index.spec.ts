@@ -8,7 +8,7 @@ import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { openSettings, settingsBar, settingsMenu } from '../support/settings.ts';
+import { openSettings, settingsBar, settingsMenu, showExplanations } from '../support/settings.ts';
 
 const findBox = (page: import('@playwright/test').Page) => page.getByRole('searchbox', { name: 'Find a setting' });
 
@@ -64,6 +64,26 @@ test('the find box narrows the index to the settings that match, and a match jum
 	await expect(menu.getByRole('list', { name: 'Data & rain' })).toBeVisible();
 	await box.fill('evaporation');
 	await expectNoViolations(page);
+});
+
+test('a reload straight onto Rain gaps lands it, and the find box finds a field in its lazy fold and opens the fold', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Settings find lazy');
+	// Rain gaps' cards and the record's quality flags are their own chunk (lazySections.ts, issue #521), inside folds
+	// that start closed at the defaults: a load of the fragment still lands the section, and Find still reaches them.
+	await page.goto(`/projects/${project.id}?tab=settings#set-rain`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Rain gaps' })).toBeFocused();
+	await expect(page.getByTestId('rain-defaults')).not.toHaveAttribute('open', '');
+	// The find box reads the page when the query changes: the fold's fields are drawn once its chunk is in.
+	await expect(page.getByRole('combobox', { name: 'CHIRPS bias correction', includeHidden: true })).toBeAttached();
+	const box = findBox(page);
+	await box.fill('chirps bias');
+	const matches = settingsMenu(page).getByRole('list', { name: 'Matches' });
+	await expect(matches.getByRole('button')).toHaveText(['CHIRPS bias correction, in Rain gaps']);
+	await matches.getByRole('button').click();
+	await expect(page.getByRole('combobox', { name: 'CHIRPS bias correction' })).toBeFocused();
+	await expect(page.getByTestId('rain-defaults')).toHaveAttribute('open', '');
 });
 
 test('the index moves with the arrow keys, and a panel with a Save blocker is marked in it and linked from the save bar', async ({ page, owner }) => {
@@ -132,6 +152,8 @@ test('the Scored at choice says where a gauge’s record is placed, with a link 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()) as { series: { id: string; kind: string }[] };
 	const series = list.series.find((x) => x.kind === 'flow_observed_m3s')!;
 	await openSettings(page, project.id);
+	// An explanation (issue #521): shown under the field with the page's explain switch on.
+	await showExplanations(page);
 	const how = page.getByTestId('calibration-site-how');
 	await expect(how).toContainText(
 		"To score at a gauge inside the network, set its flow record's Measured at in Series details on the Data tab (the gauge has to be in the network, above the outlet)."

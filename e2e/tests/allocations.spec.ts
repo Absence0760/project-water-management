@@ -204,10 +204,11 @@ test('licence conditions entered by hand show with the volume, and a capped run 
 	await expect(change.getByLabel('Other conditions, one a line')).toHaveValue('No abstraction below 0.2 m³/s at the weir\nMeter and report monthly');
 	await change.getByRole('button', { name: 'Cancel' }).click();
 
-	// The baseline can't cap (issue #507): Settings shows compare only, with no choice.
-	await page.goto(`/projects/${project.id}?tab=settings`);
+	// The baseline can't cap (issue #507): the comparison band's card on Allocations (moved from Settings → EWR, issue #521)
+	// shows compare only, with no choice.
+	await page.goto(`/projects/${project.id}?tab=allocations`);
 	await expect(page.getByTestId('settings-allocation-mode')).toHaveText('Compare only');
-	await expect(page.getByTestId('settings-allocations').getByRole('combobox')).toHaveCount(0);
+	await expect(page.getByTestId('allocation-band').getByRole('combobox')).toHaveCount(0);
 
 	// A scenario capped at the registered volumes: the comparison says what the cap did.
 	const baseRun = await createRun(page.request, project.id, 'Baseline with the licence');

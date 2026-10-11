@@ -85,8 +85,7 @@
 				{#if previousError}
 					The previous run couldn’t be loaded ({previousError}), so no changes are shown.
 				{:else}
-					Changes are against the previous run, <a href={runHref(previousMeta.id)}>{name(previousMeta)}</a>{#if previousMeta.legacy}
-						(workbook comparison){/if}.
+					Changes are against the previous run, <a href={runHref(previousMeta.id)}>{name(previousMeta)}</a>{#if previousMeta.legacy}{' '}(workbook comparison){/if}.
 				{/if}
 			</p>
 		{/if}

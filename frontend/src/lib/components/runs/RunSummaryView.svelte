@@ -23,7 +23,8 @@
 		units,
 		reserveHref = '#res-reserve',
 		otherUsesHref,
-		headline = null
+		headline = null,
+		foldChecks = false
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -36,7 +37,16 @@
 		otherUsesHref?: (hash: string) => string;
 		/** The project's settings.ewrHeadline (issue #444): which test the headline reports; null = automatic. */
 		headline?: EwrHeadline | null;
+		/**
+		 * Show the first CHECKS_SHOWN things to check and a "Show all N" button, so the
+		 * results reach the first screen (the workspace; issue #521). The report lists them all.
+		 */
+		foldChecks?: boolean;
 	} = $props();
+
+	const CHECKS_SHOWN = 3;
+	const uid = $props.id();
+	let checksOpen = $state(false);
 
 	const farms = $derived(summary.farms ?? []);
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
@@ -53,6 +63,8 @@
 	// The cards below in one or two plain sentences (runs/runSentence.ts).
 	const lede = $derived(runSentence(summary, headline));
 	const groups = $derived(warningGroups(summary.warnings));
+	const checksFolded = $derived(foldChecks && groups.check.length > CHECKS_SHOWN);
+	const shownChecks = $derived(checksFolded && !checksOpen ? groups.check.slice(0, CHECKS_SHOWN) : groups.check);
 	const checkItems = $derived(credibility(summary));
 	const otherUses = $derived(otherUsesHref ? otherUsesLink(summary) : null);
 </script>
@@ -61,7 +73,12 @@
 {#if groups.check.length}
 	<div class="alert alert-warning" role="status" data-testid="warnings-check">
 		<strong>{groups.check.length === 1 ? '1 thing' : `${groups.check.length} things`} to check before relying on this run</strong>
-		<ul>{#each groups.check as w, i (i)}<li>{w}</li>{/each}</ul>
+		<ul id="{uid}-checks">{#each shownChecks as w, i (i)}<li>{w}</li>{/each}</ul>
+		{#if checksFolded}
+			<button type="button" class="checks-toggle" aria-expanded={checksOpen} aria-controls="{uid}-checks" onclick={() => (checksOpen = !checksOpen)}
+				>{checksOpen ? 'Show only the first 3 things to check' : `Show all ${groups.check.length} things to check`}</button
+			>
+		{/if}
 	</div>
 {/if}
 {#if groups.data.length}
@@ -89,7 +106,7 @@
 		<dt>Mean simulated outflow</dt>
 		<dd>{fmtQty(m3DayToM3s(c.meanSimulatedOutflowM3Day), 3)}<small>m³/s</small></dd>
 		<dd class="sub">
-			{fmtQty(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0} ·
+			{fmtQty(m3DayToMm3a(c.meanSimulatedOutflowM3Day), 2)} Mm³/a{#if c.meanNaturalFlowM3Day > 0}{' '}·
 				{fmtPct(c.meanSimulatedOutflowM3Day / c.meanNaturalFlowM3Day, 0)} of natural{/if}
 		</dd>
 	</div>
@@ -98,8 +115,8 @@
 			<dt>Reserve rules met <HelpTip key="reserve-compliance" /></dt>
 			<dd>{reserve.overall.rate === null ? '–' : fmtPct(reserve.overall.rate)}<small>of months</small></dd>
 			<dd class="sub">
-				{fmtNum(reserve.overall.met)} of {fmtNum(reserve.overall.months)} months at {reserve.isOutlet ? 'the outlet' : reserve.name}{#if reserve.overall.longestNotMetRun > 1}
-					· up to {fmtNum(reserve.overall.longestNotMetRun)} in a row not met{/if}
+				{fmtNum(reserve.overall.met)} of {fmtNum(reserve.overall.months)} months at {reserve.isOutlet ? 'the outlet' : reserve.name}{#if reserve.overall.longestNotMetRun > 1}{' '}·
+					up to {fmtNum(reserve.overall.longestNotMetRun)} in a row not met{/if}
 			</dd>
 			<dd class="sub"><a href={reserveHref}>by month of the year</a></dd>
 		</div>
@@ -150,6 +167,22 @@
 {/if}
 
 <style>
+	/* A link-like button in the alert's own text colour (its contrast is the alert's), a 24 px target (WCAG 2.5.8). */
+	.checks-toggle {
+		all: unset;
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		margin-top: 0.15rem;
+		font-weight: 600;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+	}
+	.checks-toggle:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+	}
 	.other-uses {
 		margin: 1rem 0 0;
 	}

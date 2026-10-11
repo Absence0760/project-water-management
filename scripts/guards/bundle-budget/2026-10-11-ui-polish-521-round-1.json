@@ -1,0 +1,4 @@
+{
+	"addKb": 20,
+	"why": "Issue #521 round 1 on PR #519: the node sheet's section cards and summaries (+4 KB), the settings regroupings with DefaultsFold, the paste dialog for EWR and rule tables, the Reporting panel and the Allocations band card (+~10 KB), and the 5 KB the #519 base was already over after merging main; measured 1958 KB against 1938 KB after a shared checkbox-label trim (-0.5 KB) and lazy-loading scheduled reports and the areal-rain fields"
+}

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -52,7 +53,39 @@
 	let creating = $state(false);
 
 	let importOpen = $state(false);
-	/** Which import button opened the dialog: its wording and file picker follow. */
+	/**
+	 * Where there is room the two imports are named buttons, as the client asked (below). On a phone
+	 * they fold into one Import control (issue #521: the head was three full-width buttons, ~150 px,
+	 * before any project): it opens a short list of the two, named the same, and the one picked opens
+	 * the dialog with the focus back on Import, so Escape returns there.
+	 */
+	let importMenu = $state(false);
+	let importButton: HTMLButtonElement | undefined = $state();
+	let importWrap: HTMLElement | undefined = $state();
+	function pickImport(source: 'project' | 'workbook') {
+		importMenu = false;
+		importButton?.focus();
+		void openImport(source);
+	}
+	function importMenuKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && importMenu) {
+			e.stopPropagation();
+			importMenu = false;
+			importButton?.focus();
+		}
+	}
+	function importMenuFocusOut(e: FocusEvent) {
+		if (importMenu && !importWrap?.contains(e.relatedTarget as Node | null)) importMenu = false;
+	}
+	$effect(() => {
+		if (!importMenu) return;
+		const onDoc = (e: PointerEvent) => {
+			if (!importWrap?.contains(e.target as Node)) importMenu = false;
+		};
+		document.addEventListener('pointerdown', onDoc);
+		return () => document.removeEventListener('pointerdown', onDoc);
+	});
+	/** Which import the dialog is for: its wording and file picker follow. */
 	let importSource = $state<'project' | 'workbook'>('project');
 	// The import dialog loads on demand (~18 KB gzip with its preview, the
 	// workbook review and the engine code they use; home's first load was
@@ -302,7 +335,12 @@
 		actionError = null;
 		try {
 			await api.projects.remove(p.id);
+			const at = [...document.querySelectorAll('.groups a.name')].findIndex((a) => a.getAttribute('href') === `${base}/projects/${p.id}`);
 			projects = projects.filter((x) => x.id !== p.id);
+			// Its row, and the menu that asked, have gone: the project now in its place takes the focus, or
+			// the search once none is shown, or the heading once the list has made way for Get started.
+			await tick();
+			await focusAfterRemove(at, '.groups a.name', document.getElementById('pj-q') ?? document.querySelector<HTMLElement>('main h1'));
 		} catch (err) {
 			const refusal = evidenceRefusal(err);
 			if (refusal) {
@@ -333,9 +371,10 @@
 			</p>
 		</div>
 		<div class="head-actions">
+			<!-- Two named imports where there is room; display: none on a phone, where Import below stands for both. -->
 			<button
 				type="button"
-				class="btn"
+				class="btn wide-import"
 				aria-busy={importWaiting && importSource === 'workbook' ? 'true' : undefined}
 				onpointerenter={prefetchImport}
 				onfocus={prefetchImport}
@@ -343,12 +382,32 @@
 			>
 			<button
 				type="button"
-				class="btn"
+				class="btn wide-import"
 				aria-busy={importWaiting && importSource === 'project' ? 'true' : undefined}
 				onpointerenter={prefetchImport}
 				onfocus={prefetchImport}
 				onclick={() => openImport('project')}>Import project file (.json)</button
 			>
+			<!-- svelte-ignore a11y_no_static_element_interactions (Escape and leaving close the list) -->
+			<div class="import" bind:this={importWrap} onkeydown={importMenuKeydown} onfocusout={importMenuFocusOut}>
+				<button
+					type="button"
+					class="btn"
+					bind:this={importButton}
+					aria-expanded={importMenu}
+					aria-controls="pj-import-menu"
+					aria-busy={importWaiting ? 'true' : undefined}
+					onpointerenter={prefetchImport}
+					onfocus={prefetchImport}
+					onclick={() => (importMenu = !importMenu)}>Import <span class="caret" aria-hidden="true">▾</span></button
+				>
+				{#if importMenu}
+					<ul class="import-menu" id="pj-import-menu">
+						<li><button type="button" class="item" onclick={() => pickImport('workbook')}>Import b023 workbook</button></li>
+						<li><button type="button" class="item" onclick={() => pickImport('project')}>Import project file (.json)</button></li>
+					</ul>
+				{/if}
+			</div>
 			<button type="button" class="btn btn-primary" onclick={openCreate}>New project</button>
 		</div>
 	</div>
@@ -623,6 +682,45 @@
 	.head-actions [aria-busy='true'] {
 		cursor: progress;
 	}
+	/* The phone's one Import control and its list of the two imports, over the page. */
+	.import {
+		position: relative;
+		display: none;
+	}
+	.caret {
+		font-size: 0.75em;
+		margin-left: 0.15rem;
+	}
+	.import-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		z-index: 50;
+		list-style: none;
+		margin: 0;
+		padding: 0.25rem;
+		min-width: 15rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow), 0 6px 18px rgb(0 0 0 / 0.14);
+	}
+	.item {
+		display: block;
+		width: 100%;
+		min-height: 36px;
+		padding: 0.35rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.item:hover,
+	.item:focus-visible {
+		background: var(--surface-2);
+	}
 	.page-head h1 {
 		margin: 0 0 0.2rem;
 	}
@@ -781,19 +879,41 @@
 			flex-direction: column;
 			align-items: stretch;
 		}
+		/* One row: Import beside New project, which takes the rest (issue #521). */
+		.wide-import {
+			display: none;
+		}
+		.import {
+			display: block;
+		}
 		.head-actions {
-			flex-direction: column-reverse;
+			flex-wrap: nowrap;
+			justify-content: stretch;
+		}
+		.head-actions > .btn-primary {
+			flex: 1;
 		}
 		.page-head .btn {
 			justify-content: center;
 		}
+		.item {
+			min-height: var(--tap);
+		}
+		/* Import starts the row: its list opens from its left edge, into the screen. */
+		.import-menu {
+			left: 0;
+		}
 		.search {
 			flex-basis: 100%;
 		}
-		.owner-select {
-			flex: 1;
+		/* The owner filter and the sort share the row evenly, so neither cuts its choice short. */
+		.owner-select,
+		.sort {
+			flex: 1 1 0;
+			min-width: 0;
 		}
-		.owner-select select {
+		.owner-select select,
+		.sort select {
 			width: 100%;
 		}
 		.sort label {

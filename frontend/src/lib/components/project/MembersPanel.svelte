@@ -2,6 +2,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { onMount, untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { base } from '$app/paths';
 	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
@@ -155,7 +156,10 @@
 		try {
 			await api.members.remove(projectId, m.userId);
 			if (self) return onLeftProject();
+			const at = shown.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
+			// Its row, and the Remove that had the focus, have gone: the member now in its place takes it, on their role.
+			await focusAfterRemove(at, 'select[aria-label^="Role for "]', 'mem-email');
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -237,7 +241,7 @@
 									{/if}
 								{/if}
 								{#if m.party && isOwner}
-									<label class="specialist small">
+									<label class="check small">
 										<input
 											type="checkbox"
 											checked={m.specialist}
@@ -253,7 +257,7 @@
 								{#if m.role === 'editor' || m.role === 'owner'}
 									{#if isOwner}
 										<div class="tip-row">
-											<label class="authority small">
+											<label class="check small">
 												<input
 													type="checkbox"
 													checked={m.actsForAuthority ?? false}
@@ -306,16 +310,6 @@
 			</div>
 		</form>
 		<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
-		<p class="muted small add-hint">
-			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
-			run it; owners also manage members. An applicant sees only the published baseline, their own hydrological units and their own
-			applications (a licence applicant or their consultant). Put an applicant and their consultant in the same applying
-			party: they can share applications only with each other. Tick “Specialist for this party” for the registered professional
-			the applicant appointed: they sign the evidence packs of the party’s applications (an editor still drafts and issues them).
-			Nobody who edits the project may also be in an applying party.
-			Tick “Acts for the responsible authority” for the editors who record the authority’s decisions on applications and
-			endorse a published baseline for it (DWS or the CMA that decides the project’s licences, named in Settings).
-		</p>
 		<PendingInvites
 			bind:invites
 			idPrefix="project"
@@ -327,12 +321,6 @@
 </section>
 
 <style>
-	.authority {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		margin-top: 0.25rem;
-	}
 	.add {
 		margin-top: 1rem;
 	}
@@ -364,11 +352,12 @@
 		margin-top: 0.25rem;
 		max-width: 12rem;
 	}
-	.specialist {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
+	.check,
+	.authority {
 		margin-top: 0.25rem;
+	}
+	.authority {
+		display: block;
 	}
 	.skeleton td {
 		height: 37px;
@@ -387,9 +376,6 @@
 	}
 	.added:empty {
 		margin: 0;
-	}
-	.add-hint {
-		margin: 0.5rem 0 0;
 	}
 	.team-note {
 		margin: -0.25rem 0 0.75rem;

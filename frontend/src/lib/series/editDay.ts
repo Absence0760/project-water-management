@@ -3,7 +3,7 @@
 // holds now, whether a date is one the series has, how a typed value reads,
 // and which days are marked as edited by hand.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
-import { parseNum } from '$lib/format/number';
+import { fmtDay, parseNum } from '$lib/format/number';
 
 export interface DailyValues {
 	startDate: string;
@@ -59,6 +59,6 @@ export function handPoints(s: DailyValues, ranges: readonly (readonly [string, s
 	return any ? { startDate: s.startDate, values } : null;
 }
 
-/** The ranges in words: "2021-10-02", "2021-10-02 to 2021-10-05", joined. */
+/** The ranges in words, day first: "2 Oct 2021", "2 Oct 2021 to 5 Oct 2021", joined. */
 export const handRangesText = (ranges: readonly (readonly [string, string])[] | null | undefined): string =>
-	(ranges ?? []).map(([from, to]) => (from === to ? from : `${from} to ${to}`)).join(', ');
+	(ranges ?? []).map(([from, to]) => (from === to ? fmtDay(from) : `${fmtDay(from)} to ${fmtDay(to)}`)).join(', ');

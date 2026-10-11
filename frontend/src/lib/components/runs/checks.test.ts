@@ -74,7 +74,7 @@ describe('water balance table', () => {
 		const two = years.map((r, i) => (i === 3 ? { ...r, residualM3: 12.34 } : i === 10 ? { ...r, residualM3: -4 } : r));
 		expect(balanceClosure(wb(two, row({ waterYear: null, residualM3: 8.34 })))).toEqual({
 			tone: 'bad',
-			text: '2 of 30 water years don’t close: 1997/98 (12.3 m³), 2004/05 (-4 m³); nor does the whole run (8.3 m³). Each residual should be float noise: that is a bug in the model, not in your data, so please report it.'
+			text: '2 of 30 water years don’t close: 1997/98 (12.3 m³), 2004/05 (−4 m³); nor does the whole run (8.3 m³). Each residual should be float noise: that is a bug in the model, not in your data, so please report it.'
 		});
 		// A long list is cut after five.
 		const many = years.map((r, i) => (i < 8 ? { ...r, residualM3: 100 } : r));

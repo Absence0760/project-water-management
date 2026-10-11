@@ -13,3 +13,11 @@ export const grouped = (n: number): string => Math.round(n).toLocaleString('en-U
 
 /** A shown figure back to a number: "1 234.5" → 1234.5. */
 export const ungroup = (s: string): number => Number(s.replace(/\u202f/g, ''));
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A calendar day as the app shows it, day first (frontend fmtDay): "2021-10-01" → "1 Oct 2021". */
+export const dayFirst = (iso: string): string => {
+	const [y, m, d] = iso.split('-');
+	return `${Number(d)} ${MONTHS[Number(m) - 1]} ${y}`;
+};

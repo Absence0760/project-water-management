@@ -22,7 +22,7 @@ export function actionOf(totalChange: number): Action {
 }
 
 /**
- * Signed volume: "+12.5", "-33.3", "0". The explicit "+" makes a positive
+ * Signed volume: "+12.5", "−33.3" (a true minus), "0". The explicit "+" makes a positive
  * value (below the equitable share) read as positive. Values are shown to at most one decimal (the workbook's 1-dp
  * target) and the trailing ".0" is trimmed.
  */

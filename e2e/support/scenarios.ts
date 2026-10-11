@@ -43,3 +43,16 @@ export async function seedManyScenarios(
 	}
 	return { ...project, runId, upper, ids };
 }
+
+/**
+ * Opens a fold of the scenario editor's Application details card (issue #521): the proposer's units
+ * (`proposer-fold`), the applicant's statement (`scenario-statement`) or the rebase (`rebase-fold`). Each is a
+ * one-line summary while closed. Does nothing when it is already open.
+ */
+export async function openDetails(page: Page, testId: 'proposer-fold' | 'scenario-statement' | 'rebase-fold') {
+	const fold = page.getByTestId(testId);
+	const summary = fold.locator(':scope > summary');
+	await expect(summary).toBeVisible();
+	if ((await fold.getAttribute('open')) === null) await summary.click();
+	await expect(fold).toHaveAttribute('open', '');
+}

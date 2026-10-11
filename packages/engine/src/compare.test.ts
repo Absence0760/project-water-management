@@ -1736,6 +1736,18 @@ describe('describeFitRecord', () => {
 	it('names the model, the time, the objective without its gloss, and the seed', () => {
 		expect(describeFitRecord({ model: 'gr4j', fittedAt: '2026-09-24T14:05:31.123Z', objective: 'kgePrime', seed: 1 })).toBe('GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)');
 	});
+	// The time is data the caller formats (a screen's day-first text); the default, which stored change lines and
+	// evidence pack manifests carry, stays as it was.
+	it('writes the time through the caller’s formatter, never for a record without one', () => {
+		const r = { model: 'gr4j', fittedAt: '2026-09-24T22:05:31.123Z', objective: 'kgePrime', seed: 1 } as const;
+		const seen: string[] = [];
+		const when = (iso: string) => (seen.push(iso), 'TIME');
+		expect(describeFitRecord(r, when)).toBe('GR4J fit of TIME (KGE′, seed 1)');
+		expect(seen).toEqual(['2026-09-24T22:05:31.123Z']);
+		expect(describeFitRecord({ ...r, fittedAt: null as unknown as string }, when)).toBe('GR4J fit of unknown time (KGE′, seed 1)');
+		expect(seen).toHaveLength(1);
+		expect(describeFitRecord(r)).toBe('GR4J fit of 2026-09-24 22:05 UTC (KGE′, seed 1)');
+	});
 	// An objective the engine doesn't know is shown as stored. Its trailing "(…)" is dropped without
 	// backtracking: `/ \(.*\)$/` rescanned to the end from every " (" (CodeQL js/polynomial-redos).
 	// The timeout is a hang guard, not a budget: the engine's default is 120 s, which the old pattern fit inside.

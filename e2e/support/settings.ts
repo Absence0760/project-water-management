@@ -1,6 +1,6 @@
 // The Settings & calibration page (?tab=settings, issue #17 option A): locators
 // the specs share. Invented data only.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 export const header = (page: Page) => page.getByTestId('section-header');
@@ -49,4 +49,74 @@ export async function showExplanations(page: Page) {
 	const sw = page.getByRole('checkbox', { name: 'Explain each setting under its field' });
 	await sw.check();
 	await expect(sw).toBeChecked();
+}
+
+/**
+ * Opens a fold of rarely changed settings (a `<details>` whose summary line shows their values, ui-playbook.md
+ * § 2): Fit automatically's search (`fit-search`), the calibration rules' search budget (`rules-search`), Flow
+ * calibration's warm-up (`flow-more`) and the pan row's fill tools (`pan-tools`), the Calibration record's quality
+ * flags (`record-flags`), a Reserve rule table's settings (`rule-settings`), the drought restriction rule's wording
+ * (`restriction-rule-fold`), or a group that starts closed while it is at its defaults (`atDefaults`): Rain gaps'
+ * two cards (`rain-defaults`), Data quality's limits (`quality-limits`) and the WR2012 check's judging
+ * (`wr2012-judging`). Every one is `common/Fold.svelte`. Does nothing when it is already open.
+ */
+export type FoldId =
+	| 'fit-search'
+	| 'rules-search'
+	| 'flow-more'
+	| 'pan-tools'
+	| 'record-flags'
+	| 'rule-settings'
+	| 'restriction-rule-fold'
+	| 'rain-defaults'
+	| 'quality-limits'
+	| 'wr2012-judging';
+export async function openFold(scope: Page | Locator, testId: FoldId) {
+	const fold = scope.getByTestId(testId);
+	// Its own summary: a fold can hold another <details> (the pan row's tools hold the FAO-56 helper).
+	const summary = fold.locator(':scope > summary');
+	await expect(summary).toBeVisible();
+	if ((await fold.getAttribute('open')) === null) await summary.click();
+	await expect(fold).toHaveAttribute('open', '');
+}
+
+/**
+ * Every fold in `scope` keeps the playbook's line (ui-playbook.md § 2, "Rarely changed settings fold into their
+ * values"; common/Fold.svelte): a visible summary that names its values (a non-empty line after the group's
+ * name), the app's one chevron before it, and a visible named action after it ("Hide" while open). Returns how
+ * many it checked, so a caller can say it found some.
+ */
+export async function expectFoldsNamed(scope: Page | Locator): Promise<number> {
+	const folds = await scope.locator('details.fold:visible').all();
+	for (const fold of folds) {
+		const summary = fold.locator(':scope > summary');
+		const parts = await summary.evaluate((el) => {
+			const spans = [...el.children].filter((c) => !c.matches('.fold-name, .fold-problem, .fold-change, .visually-hidden'));
+			return {
+				line: spans.map((c) => c.textContent?.trim() ?? '').join(' ').trim(),
+				marker: getComputedStyle(el, '::before').borderRightWidth,
+				action: (el.querySelector(':scope > .fold-change') as HTMLElement | null)?.innerText.trim() ?? ''
+			};
+		});
+		const id = (await fold.getAttribute('data-testid')) ?? (await summary.innerText());
+		expect(parts.line, `${id}: the line of its values`).not.toBe('');
+		expect(parts.marker, `${id}: the fold chevron`).toBe('2px');
+		expect(parts.action, `${id}: its named action`).not.toBe('');
+		if ((await fold.getAttribute('open')) !== null) expect(parts.action, `${id}: open, it says Hide`).toBe('Hide');
+	}
+	return folds.length;
+}
+
+/** The accessible names that two or more visible buttons in `scope` share (none, by the playbook's head-row rule). */
+export async function sharedButtonNames(scope: Locator): Promise<string[]> {
+	const names = await scope.getByRole('button').evaluateAll((els) =>
+		els
+			.filter((e) => (e as HTMLElement).checkVisibility?.() ?? !!(e as HTMLElement).offsetParent)
+			.map((e) => {
+				const by = e.getAttribute('aria-labelledby');
+				const named = by ? by.split(/\s+/).map((id) => document.getElementById(id)?.textContent?.trim() ?? '').join(' ') : null;
+				return (named ?? e.getAttribute('aria-label') ?? e.textContent ?? '').replace(/\s+/g, ' ').trim();
+			})
+	);
+	return [...new Set(names.filter((n, i) => names.indexOf(n) !== i))];
 }

@@ -42,7 +42,7 @@ test('set bed losses below a unit, save, reload and run', async ({ page, owner }
 	// The outlet has no reach below it in the model.
 	await page.getByLabel('Hydrological unit to edit').selectOption({ label: '1. Outflow gauge · gauge' });
 	await expect(reach(page).getByLabel('Share of the flow lost (%)')).not.toBeEditable();
-	await expect(reach(page)).toContainText('Not used: the outlet has no reach below it in the model.');
+	await expect(reach(page)).toContainText('Not used at the outlet, which has no reach below it in the model: Share of the flow lost, Most lost in a day.');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('Losing reach');

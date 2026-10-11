@@ -4,14 +4,17 @@
 	(editors, with a confirm dialog saying what changes for them) and the WUA's
 	restriction notice, which an editor can change without re-publishing.
 	Farmers see the published run's figures for their own farm; everyone on
-	the project sees the notice. Whether the responsible authority endorsed
+	the project sees the notice. Its actions sit in the panel's head, and a
+	run that can't be published (legacy, scenario) offers none, only why
+	(issue #521). Whether the responsible authority endorsed
 	this run as a baseline, and, for a member the owner marks as acting for
 	it, the action to endorse it, once (163_licensing_authority).
 -->
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { fmtDay, fmtStamp } from '$lib/format/number';
 	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, noticeLanguages, noticeTextFields, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
 
 	let {
@@ -35,7 +38,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const fmt = (iso: string) => fmtDate(iso, true);
+	const fmt = fmtStamp;
 	const isCurrent = $derived(current?.runId === run.id);
 	const blocker = $derived(publishBlocker(run));
 	const noStop = $derived(damsWithoutStopLevel(run.model?.nodes as { kind?: string; damCapacityM3?: number; damMinPct?: number }[] | undefined));
@@ -88,11 +91,14 @@
 		done = null;
 		dialogOpen = true;
 	}
-	function openEdit() {
+	// The head's Edit notice gives way to the form: the focus moves to its first field.
+	async function openEdit() {
 		draft = draftFrom(current);
 		error = null;
 		done = null;
 		editing = true;
+		await tick();
+		document.getElementById(`${uid}-edit-level`)?.focus();
 	}
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -189,10 +195,23 @@
 {/snippet}
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">
-		Publication
-		{#if isCurrent}<span class="badge badge-owner">Published</span>{/if}
-	</h3>
+	<!-- The panel's actions in its head (issue #521). A run that can't be published offers neither: its reason says why under the status. -->
+	<div class="panel-head">
+		<h3 id="{uid}-h">
+			Publication
+			{#if isCurrent}<span class="badge badge-owner">Published</span>{/if}
+		</h3>
+		{#if canEdit && !blocker && (!isCurrent || (current && !editing))}
+			<div class="acts head-acts">
+				{#if !isCurrent}
+					<button type="button" class="btn btn-primary btn-sm" onclick={openPublish}>Publish this run</button>
+				{/if}
+				{#if current && !editing}
+					<button type="button" class="btn btn-sm" onclick={openEdit}>Edit notice</button>
+				{/if}
+			</div>
+		{/if}
+	</div>
 	<p>
 		{#if isCurrent && current}
 			This run is the published baseline: stakeholders and farmers see its figures. Published {fmt(current.publishedAt)}{current.publishedBy ? ` by ${current.publishedBy}` : ''}.
@@ -237,17 +256,10 @@
 	{/if}
 
 	{#if canEdit}
-		<div class="acts">
-			{#if blocker}
-				<p class="muted small">{blocker}</p>
-			{:else if !isCurrent}
-				<button type="button" class="btn btn-primary btn-sm" onclick={openPublish}>Publish this run</button>
-			{/if}
-			{#if current && !editing}
-				<button type="button" class="btn btn-sm" onclick={openEdit}>Edit notice</button>
-			{/if}
-		</div>
-		{#if editing && current}
+		{#if blocker}
+			<p class="muted small" data-testid="publish-blocker">{blocker}{#if current} The notice is edited from a run of the model.{/if}</p>
+		{/if}
+		{#if editing && current && !blocker}
 			<form class="edit" onsubmit={saveNotice} aria-label="Edit the notice">
 				{@render noticeFields(`${uid}-edit`, draft)}
 				<div class="acts">
@@ -283,6 +295,12 @@
 </Dialog>
 
 <style>
+	.panel-head {
+		align-items: center;
+	}
+	.head-acts {
+		margin: 0;
+	}
 	h3 .badge {
 		margin-left: 0.4rem;
 		vertical-align: 1px;

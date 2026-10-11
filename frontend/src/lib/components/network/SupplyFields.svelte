@@ -60,7 +60,7 @@
 				onchange={(e) => (node.supplyRule = e.currentTarget.value as SupplyRule)}>
 				{#each SUPPLY_RULES as r (r)}<option value={r}>{cap(SUPPLY_RULE_LABEL[r])}</option>{/each}
 			</select>
-			<span class="hint" id="{id('rule')}-h">{SUPPLY_RULE_HELP[rule]}</span>
+			<span class="hint explain" id="{id('rule')}-h">{SUPPLY_RULE_HELP[rule]}</span>
 			<FieldHistoryLine field="node:{node.id}:supplyRule" {unit} />
 		</div>
 		<!-- An other water user's pump capacity is its own field, with its user fields (engine ≥ 1.58.0). -->
@@ -194,9 +194,6 @@
 		gap: 0.25rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 		font-size: 0.85rem;
 		margin-bottom: 0.5rem;
 	}

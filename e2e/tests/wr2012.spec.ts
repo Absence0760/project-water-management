@@ -50,9 +50,18 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await expect(section.getByText(/The MAR \(1\u202f200 Mm³\/a\) is more than the rain on the quaternary \(100 mm × 50 km² = 5 Mm³\/a\)\./)).toBeVisible();
 	await expect(save).toBeDisabled();
 	await map.fill('');
+	// The soft MAR penalty is switched on in Fit the parameters now (issue #521): nothing of it here while it is off.
+	await expect(section.getByLabel('Add a soft penalty on the MAR when fitting automatically')).toHaveCount(0);
+	await expect(section.getByLabel('Penalty weight')).toHaveCount(0);
+	await expect(save).toBeEnabled();
+	await saveSettings(page);
 
-	// The MAR band (issue #4 phase 6): both bounds or neither, low ≤ high.
-	await section.getByLabel('Add a soft penalty on the MAR when fitting automatically').check();
+	// The MAR band (issue #4 phase 6): both bounds or neither, low ≤ high. With the penalty on (here through the
+	// API), its weight and band read this reference, so they stay in this panel.
+	await updateSettings(page.request, project.id, { wr2012: { calibrationPenalty: { enabled: true, weight: 0.5, marLowMm3: null, marHighMm3: null } } });
+	await page.reload();
+	await expect(section.getByLabel('Penalty weight')).toHaveValue('0.5');
+	await section.getByLabel('Penalty weight').fill('0.6');
 	await section.getByLabel('Use a MAR band instead of one target').check();
 	// Both blank is still valid (no band, a single target): only a nudge, Save stays enabled.
 	await expect(section.getByText('Enter both bounds, or untick')).toBeVisible();
@@ -126,7 +135,7 @@ test('run comparison lists the WR2012 inputs that changed and compares the ratio
 	await expect(table.getByRole('rowheader', { name: 'Monthly pattern correlation' })).toBeVisible();
 });
 
-test('unticking the check or the MAR band and ticking it again keeps what was typed, until saved or discarded', async ({ page, owner }) => {
+test('unticking the check and ticking it again keeps what was typed, until saved or discarded', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'WR2012 keep');
 	await page.goto(`/projects/${project.id}?tab=settings`);
@@ -136,24 +145,14 @@ test('unticking the check or the MAR band and ticking it again keeps what was ty
 	await section.getByLabel(/^Quaternary catchment/).fill('Z99A');
 	await section.getByLabel(/^Quaternary area/).fill('50');
 	await section.getByLabel('WR2012 monthly mean, Mar, Mm³').fill('7');
-	await section.getByLabel('Add a soft penalty on the MAR when fitting automatically').check();
-	await section.getByLabel('Use a MAR band instead of one target').check();
-	await section.getByLabel(/^Band low/).fill('20');
-	await section.getByLabel(/^Band high/).fill('30');
 
-	// The band, off and on again: its bounds come back.
-	await section.getByLabel('Use a MAR band instead of one target').uncheck();
-	await section.getByLabel('Use a MAR band instead of one target').check();
-	await expect(section.getByLabel(/^Band low/)).toHaveValue('20');
-	await expect(section.getByLabel(/^Band high/)).toHaveValue('30');
-	// The check, off and on again: the reference and the penalty come back.
+	// The check, off and on again: the reference comes back.
 	await on.uncheck();
 	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveCount(0);
 	await on.check();
 	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('Z99A');
 	await expect(section.getByLabel(/^Quaternary area/)).toHaveValue('50');
 	await expect(section.getByLabel('WR2012 monthly mean, Mar, Mm³')).toHaveValue('7');
-	await expect(section.getByLabel('Add a soft penalty on the MAR when fitting automatically')).toBeChecked();
 	// Another tab and back keeps the unsaved form too (the page holds it).
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
@@ -165,6 +164,38 @@ test('unticking the check or the MAR band and ticking it again keeps what was ty
 	await answerConfirm(page, true);
 	await on.check();
 	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('');
+});
+
+// The penalty is switched on in Fit the parameters (issue #521); its band, and whether it was on, still come back
+// when the band or the whole check is unticked and ticked again. A saved reference with the penalty on, by the API.
+test('unticking the MAR band or the check and ticking it again keeps the band and the penalty, until saved', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'WR2012 keep band');
+	await updateSettings(page.request, project.id, {
+		wr2012: {
+			reference: { quaternary: 'Z99A', areaKm2: 60, marMm3: 6, monthlyMm3: new Array(12).fill(0.5), periodStart: 1990, periodEnd: 2025, mapMm: null, source: 'Synthetic' },
+			calibrationPenalty: { enabled: true, weight: 0.5, marLowMm3: null, marHighMm3: null }
+		}
+	});
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const section = page.getByRole('region', { name: /^WR2012 check/ });
+	const band = section.getByLabel('Use a MAR band instead of one target');
+	await band.check();
+	await section.getByLabel(/^Band low/).fill('20');
+	await section.getByLabel(/^Band high/).fill('30');
+
+	// The band, off and on again: its bounds come back.
+	await band.uncheck();
+	await band.check();
+	await expect(section.getByLabel(/^Band low/)).toHaveValue('20');
+	await expect(section.getByLabel(/^Band high/)).toHaveValue('30');
+	// The check, off and on again: the penalty comes back on, with its weight.
+	const on = section.getByLabel('Compare runs with WR2012 naturalised flow');
+	await on.uncheck();
+	await expect(section.getByLabel('Penalty weight')).toHaveCount(0);
+	await on.check();
+	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('Z99A');
+	await expect(section.getByLabel('Penalty weight')).toHaveValue('0.5');
 });
 
 test('Propose from the map can be closed again', async ({ page, owner }) => {

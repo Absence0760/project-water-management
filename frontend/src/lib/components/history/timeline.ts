@@ -5,7 +5,7 @@ import { ALLOCATION_MODE_LABEL, registrationLine, type AllocationMode } from '@w
 import { language, LOCALES } from '@water-management/engine/languages';
 import { roleLabel } from '$lib/api/roleLabels';
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
-import { fmtDay, fmtNum, fmtPct, localIsoDate } from '$lib/format/number';
+import { fmtDay, fmtNum, fmtPct, fmtWhen, localIsoDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 
 /** The filter's event kinds: '' is everything, 'revision' the model and settings, the rest an event noun. */
@@ -592,14 +592,8 @@ export function pickEntry(entries: readonly HistoryEntry[], key: string | null):
 	return (key ? entries.find((e) => e.key === key) : undefined) ?? entries[0] ?? null;
 }
 
-/** "today 14:05", "yesterday 09:30", "3 Sep 2026 14:05", in the viewer's time zone. */
-export function whenText(iso: string, now: Date = new Date()): string {
-	const day = localDay(iso);
-	const y = new Date(now);
-	y.setDate(y.getDate() - 1);
-	const label = day === localIsoDate(now) ? 'today' : day === localIsoDate(y) ? 'yesterday' : fmtDay(day);
-	return `${label} ${localTime(iso)}`;
-}
+/** "today 14:05", "yesterday 09:30", "3 Sep 2026 14:05", in the viewer's time zone (the app's fmtWhen). */
+export const whenText = fmtWhen;
 
 /**
  * The section header's line, the fact the page is opened for: the latest

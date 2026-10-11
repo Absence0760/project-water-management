@@ -109,6 +109,6 @@ test('a viewer gets neither the map’s link nor the button', async ({ page }) =
 	await page.goto(`/projects/${id}?tab=settings&rain=boundary`);
 	const panel = page.getByRole('region', { name: 'Data feeds' });
 	await expect(panel.getByRole('button', { name: 'Refresh status' })).toBeVisible();
-	await expect(panel.getByRole('button', { name: 'Use the catchment boundary' })).toHaveCount(0);
+	await expect(panel.getByRole('button', { name: /^(?:Attach a feed|Rain from the map)$/ })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Rain from the catchment boundary' })).toHaveCount(0);
 });

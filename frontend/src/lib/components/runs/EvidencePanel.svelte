@@ -7,10 +7,11 @@
 	withdrawing a nomination keeps the earlier one on the list.
 -->
 <script lang="ts">
+	import { tick } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, NOMINATION_REASON_MAX, type Nomination, type RunMeta } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
-	import { currentNomination, evidenceLine, historyEntries, nominateBlocker } from './evidence';
+	import { fmtStamp } from '$lib/format/number';
+	import { currentNomination, evidenceKindBlocker, evidenceLine, historyEntries, nominateBlocker } from './evidence';
 
 	let {
 		projectId,
@@ -28,7 +29,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const fmt = (iso: string) => fmtDate(iso, true);
+	const fmt = fmtStamp;
 	let reason = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
@@ -42,6 +43,9 @@
 	const current = $derived(currentNomination(history));
 	const line = $derived(evidenceLine(run.id, history, fmt));
 	const blocker = $derived(nominateBlocker(run, history));
+	/** Why this kind of run can never be the evidence: then nothing about nominating is offered. */
+	const kindBlocker = $derived(evidenceKindBlocker(run));
+	const evidenceRunHref = $derived(current ? `?tab=runs&run=${encodeURIComponent(current.runId)}#res-evidence` : null);
 	const entries = $derived(historyEntries(history, fmt).reverse());
 	const trimmed = $derived(reason.trim());
 	const tooLong = $derived(trimmed.length > NOMINATION_REASON_MAX);
@@ -60,6 +64,19 @@
 		} finally {
 			saving = false;
 		}
+	}
+
+	// The head's button gives way to the form: the focus moves to its field, and back to the button on Cancel.
+	async function openWithdraw() {
+		withdrawing = true;
+		await tick();
+		document.getElementById(`${uid}-w`)?.focus();
+	}
+	async function cancelWithdraw() {
+		withdrawing = false;
+		withdrawError = null;
+		await tick();
+		document.getElementById(`${uid}-wopen`)?.focus();
 	}
 
 	async function withdraw(e: SubmitEvent) {
@@ -81,7 +98,13 @@
 </script>
 
 <section aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Evidence</h3>
+	<div class="panel-head">
+		<h3 id="{uid}-h">Evidence</h3>
+		<!-- The panel's one-click action in its head (issue #521); nominating is a form, so its button ends the form. -->
+		{#if canEdit && current && !kindBlocker && !withdrawing}
+			<button class="btn btn-sm" type="button" id="{uid}-wopen" onclick={openWithdraw}>Withdraw the nomination…</button>
+		{/if}
+	</div>
 	<p>
 		{#if line}{line}{:else}This run is not nominated as evidence.{/if}
 		{#if current && current.runId !== run.id}
@@ -93,32 +116,40 @@
 		{/if}
 	</p>
 
-	{#if canEdit}
-		{#if blocker}
-			<p class="muted small">{blocker}</p>
-		{:else}
-			<form onsubmit={nominate}>
-				<label for="{uid}-r">Why this run is the evidence <span class="muted">(required)</span> <HelpTip key="evidence-run" label="About nominating a run" /></label>
-				<textarea
-					id="{uid}-r"
-					rows="3"
-					bind:value={reason}
-					aria-describedby="{uid}-help"
-					aria-invalid={tooLong}
-					placeholder="e.g. Calibrated GR4J against the logger record, KGE 0.71; the run the licence application relies on."
-				></textarea>
-				<p id="{uid}-help" class="muted small">
-					A nomination can't be edited or removed. Nominating another run later replaces it, and both stay in the history below.
-					<span class:over={tooLong}>{trimmed.length} / {NOMINATION_REASON_MAX} characters</span>
-				</p>
-				<button class="btn btn-primary btn-sm" type="submit" disabled={saving || !trimmed || tooLong}>
-					{saving ? 'Nominating…' : current ? 'Nominate this run instead' : 'Nominate as evidence'}
-				</button>
-				{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
-			</form>
-		{/if}
-		{#if current}
-			{#if withdrawing}
+	{#if kindBlocker}
+		<p class="muted small" data-testid="evidence-kind">
+			{kindBlocker}
+			{#if evidenceRunHref}<a href={evidenceRunHref}>Open the evidence run</a> for its nomination history.{:else if history.length}The nomination history is on each run of the model.{/if}
+		</p>
+	{:else}
+		{#if canEdit}
+			{#if blocker}
+				<p class="muted small">{blocker}</p>
+			{:else}
+				<form onsubmit={nominate}>
+					<label for="{uid}-r">Why this run is the evidence <span class="muted">(required)</span> <HelpTip key="evidence-run" label="About nominating a run" /></label>
+					<textarea
+						id="{uid}-r"
+						rows="3"
+						bind:value={reason}
+						aria-describedby="{uid}-help"
+						aria-invalid={tooLong}
+						placeholder="e.g. Calibrated GR4J against the logger record, KGE 0.71; the run the licence application relies on."
+					></textarea>
+					<p id="{uid}-help" class="muted small">
+						A nomination can't be edited or removed. Nominating another run later replaces it, and both stay in the history below.
+						<span class:over={tooLong}>{trimmed.length} / {NOMINATION_REASON_MAX} characters</span>
+					</p>
+					<!-- The panel's forms end in one action row (ui-playbook § 2). -->
+					<div class="action-row">
+						<button class="btn btn-primary" type="submit" disabled={saving || !trimmed || tooLong}>
+							{saving ? 'Nominating…' : current ? 'Nominate this run instead' : 'Nominate as evidence'}
+						</button>
+					</div>
+					{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+				</form>
+			{/if}
+			{#if current && withdrawing}
 				<form class="withdraw" onsubmit={withdraw}>
 					<label for="{uid}-w">Why the nomination is withdrawn <span class="muted">(required)</span></label>
 					<textarea
@@ -134,35 +165,38 @@
 						“{current.runLabel || 'Untitled run'}” stays kept for good.
 						<span class:over={withdrawTooLong}>{withdrawTrimmed.length} / {NOMINATION_REASON_MAX} characters</span>
 					</p>
-					<button class="btn btn-danger btn-sm" type="submit" disabled={saving || !withdrawTrimmed || withdrawTooLong}>
-						{saving ? 'Withdrawing…' : 'Withdraw the nomination'}
-					</button>
-					<button class="btn btn-sm" type="button" onclick={() => ((withdrawing = false), (withdrawError = null))}>Cancel</button>
+					<div class="action-row">
+						<button class="btn btn-danger" type="submit" disabled={saving || !withdrawTrimmed || withdrawTooLong}>
+							{saving ? 'Withdrawing…' : 'Withdraw the nomination'}
+						</button>
+						<button class="btn" type="button" onclick={cancelWithdraw}>Cancel</button>
+					</div>
 					{#if withdrawError}<div class="alert alert-error" role="alert">{withdrawError}</div>{/if}
 				</form>
-			{:else}
-				<p><button class="btn btn-sm" type="button" onclick={() => (withdrawing = true)}>Withdraw the nomination…</button></p>
 			{/if}
 		{/if}
-	{/if}
 
-	<h4>Nomination history</h4>
-	{#if entries.length}
-		<ol class="history" aria-label="Nomination history, newest first">
-			{#each entries as entry (entry.id)}
-				<li class:current={entry.current}>
-					<span class="what">{entry.text}{#if entry.current}<span class="badge badge-owner">Current</span>{/if}</span>
-					{#if entry.model}<span class="muted small">{entry.model}</span>{/if}
-					<span class="reason">{entry.reason}</span>
-				</li>
-			{/each}
-		</ol>
-	{:else}
-		<p class="muted">No nominations yet.</p>
+		<h4>Nomination history</h4>
+		{#if entries.length}
+			<ol class="history" aria-label="Nomination history, newest first">
+				{#each entries as entry (entry.id)}
+					<li class:current={entry.current}>
+						<span class="what">{entry.text}{#if entry.current}<span class="badge badge-owner">Current</span>{/if}</span>
+						{#if entry.model}<span class="muted small">{entry.model}</span>{/if}
+						<span class="reason">{entry.reason}</span>
+					</li>
+				{/each}
+			</ol>
+		{:else}
+			<p class="muted">No nominations yet.</p>
+		{/if}
 	{/if}
 </section>
 
 <style>
+	.panel-head {
+		align-items: center;
+	}
 	.withdraw {
 		margin-top: 0.75rem;
 	}

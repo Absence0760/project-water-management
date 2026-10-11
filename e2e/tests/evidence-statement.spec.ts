@@ -8,6 +8,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openDetails } from '../support/scenarios.ts';
 
 test('the prompts answered on the scenario print in Appendix C, a blank one as “Not given”', async ({ page, owner }) => {
 	void owner;
@@ -34,8 +35,10 @@ test('the prompts answered on the scenario print in Appendix C, a blank one as �
 	// On the scenario: nothing answered yet, each prompt "Not given".
 	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
 	const statement = page.getByTestId('scenario-statement');
-	await expect(statement.getByRole('heading', { name: 'Applicant’s statement' })).toBeVisible();
+	// A closed line in the Application details card says how many are answered (issue #521); it opens to the answers.
 	await expect(statement.getByTestId('statement-count')).toHaveText('0 of 3 answered');
+	await openDetails(page, 'scenario-statement');
+	await expect(statement.getByRole('heading', { name: 'Applicant’s statement' })).toBeVisible();
 	for (const id of ['purposeAndNeed', 'mitigation', 'monitoring']) await expect(statement.getByTestId(`statement-${id}`)).toContainText('Not given');
 
 	// Answer two of the three; each box is described by its question.

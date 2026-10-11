@@ -57,6 +57,11 @@ test('an editor uses the boundary’s reference ET as GR4J’s monthly PE; Histo
 	await expect(panel(page).getByTestId('evaporation-source')).toContainText('SYNTHETIC test data, invented for this repository (not dPET or ERA5-Land) (synthetic 1, 1991–2020 monthly means; dataset “synthetic”)');
 
 	const use = panel(page).getByRole('button', { name: 'Use as GR4J’s monthly PE' });
+	// Use saves straight away, unlike the form's fields: it sits in the heading's row and says so (issue #521).
+	await expect(use).toHaveAccessibleDescription('Saves now');
+	const heading = (await panel(page).getByRole('heading', { name: 'Evaporation from the map' }).boundingBox())!;
+	const button = (await use.boundingBox())!;
+	expect(Math.abs(button.y + button.height / 2 - (heading.y + heading.height / 2))).toBeLessThan(12);
 	await use.click();
 	// Cancel changes nothing.
 	await answerConfirm(page, false, 'Use these values as GR4J’s monthly PE?');

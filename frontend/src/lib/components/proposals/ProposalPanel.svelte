@@ -3,8 +3,8 @@
 	docs/maps.md "the map proposes, the modeller decides"): land cover in a
 	unit's planted-areas drawer (crops/CroplandProposalsBox), the dams on Dams
 	(dams/DamProposalsBox) and evaporation in Settings
-	(settings/EvaporationProposal). It draws the heading and intro, the
-	panel's own controls, a live notice that takes the keyboard after a Use
+	(settings/EvaporationProposal). It draws the heading (with an action at
+	its right, if given) and intro, the panel's own controls, a live notice that takes the keyboard after a Use
 	(the Use button it replaces is gone), and the body: busy while loading,
 	`data-ready` once loaded or failed, the failure with its reason and Try
 	again, else the panel's own content. Each panel keeps its data, its rows,
@@ -25,6 +25,7 @@
 		what,
 		intro,
 		controls,
+		actions,
 		notice,
 		loading,
 		loaded,
@@ -49,6 +50,8 @@
 		intro: Snippet;
 		/** The panel's own pickers, above the notice (the unit on Dams). */
 		controls?: Snippet;
+		/** An action in the heading's row, at its right (Settings' Use, which saves straight away). */
+		actions?: Snippet;
 		/** What the last Use did; null for none. */
 		notice: string | null;
 		loading: boolean;
@@ -73,7 +76,12 @@
 
 <section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
 	{#if variant === 'page'}
-		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h2></div>
+		<div class="panel-head"><h2 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h2>{@render actions?.()}</div>
+	{:else if actions}
+		<div class="head">
+			<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
+			<div class="actions">{@render actions()}</div>
+		</div>
 	{:else}
 		<h3 id="{uid}-h">{title}{#if helpKey}{' '}<HelpTip key={helpKey} />{/if}</h3>
 	{/if}
@@ -118,6 +126,23 @@
 	}
 	.inline {
 		margin: 1rem 0 0;
+	}
+	/* The heading and its action on one row, the action at the right (under it in a narrow column). */
+	.head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.4rem 1rem;
+	}
+	.head h3 {
+		margin: 0;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem 0.6rem;
 	}
 	.body {
 		min-width: 0;

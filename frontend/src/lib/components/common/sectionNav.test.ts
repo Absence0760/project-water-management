@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSectionId, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText, pageLinkName } from './sectionNav';
+import { activeSectionId, findElsewhere, findEntries, foldText, matchesQuery, navEmpty, navFitCount, navText, pageLinkName } from './sectionNav';
 
 describe('navFitCount', () => {
 	const fit = { avail: 400, lead: 100, gap: 5, groupGap: 15, more: 60, rows: 2 };
@@ -106,6 +106,23 @@ describe('the find box', () => {
 		expect(findEntries(sections, settings, 'flow')).toEqual([{ sectionId: 'b', text: 'Flow calibration', index: -1 }]);
 		expect(findEntries(sections, settings, 'evaporation', 2)).toHaveLength(2);
 		expect(findEntries(sections, settings, ' ')).toEqual([]);
+	});
+});
+
+describe('findElsewhere (issue #521)', () => {
+	const moved = [
+		{ text: 'Comparison band', words: 'registered volumes tolerance', href: '?tab=allocations#alloc-band', page: 'Allocations' },
+		{ text: 'Other thing', href: '?tab=x', page: 'X' }
+	];
+	it('matches a moved setting by its name or its other names, every word', () => {
+		expect(findElsewhere(moved, 'comparison band').map((e) => e.page)).toEqual(['Allocations']);
+		expect(findElsewhere(moved, 'Registered volumes').map((e) => e.page)).toEqual(['Allocations']);
+		expect(findElsewhere(moved, 'toler')).toHaveLength(1);
+		expect(findElsewhere(moved, 'band other')).toEqual([]);
+		expect(findElsewhere(moved, 'thing').map((e) => e.page)).toEqual(['X']);
+	});
+	it('lists nothing for an empty query', () => {
+		expect(findElsewhere(moved, '   ')).toEqual([]);
 	});
 });
 

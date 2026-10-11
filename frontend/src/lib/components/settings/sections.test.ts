@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AUTOMATION_LABEL, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
+import { findElsewhere } from '$lib/components/common/sectionNav';
+import { AUTOMATION_LABEL, saveBlockers, SETTINGS_ELSEWHERE, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 
 describe('SETTINGS_SECTIONS', () => {
 	it('has unique ids, in page order, grouped by task', () => {
@@ -12,6 +13,7 @@ describe('SETTINGS_SECTIONS', () => {
 			'set-demand',
 			'set-share',
 			'set-restrict',
+			'set-reporting',
 			'set-flow',
 			'set-record',
 			'set-fit',
@@ -36,6 +38,14 @@ describe('SETTINGS_SECTIONS', () => {
 			'Reading results',
 			'Automation & access'
 		]);
+	});
+});
+
+describe('SETTINGS_ELSEWHERE (issue #521)', () => {
+	it('offers the comparison band on Allocations for each way a reader may ask for it', () => {
+		for (const q of ['comparison band', 'registered volumes', 'tolerance']) {
+			expect(findElsewhere(SETTINGS_ELSEWHERE, q).map((e) => e.href), q).toEqual(['?tab=allocations#alloc-band']);
+		}
 	});
 });
 

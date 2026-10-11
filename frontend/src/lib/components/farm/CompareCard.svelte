@@ -37,13 +37,29 @@
 	}
 	th,
 	td {
-		padding: 3px 4px 3px 0;
-		text-align: left;
+		padding: 3px 0 3px 6px;
+		text-align: right;
 		vertical-align: top;
 		overflow-wrap: anywhere;
+		font-variant-numeric: tabular-nums;
+	}
+	/* Three equal columns wrapped "Water received" and "Dam on 31 Dec" onto two
+	   lines at 390 px beside two half-empty columns of short figures. The words
+	   take the room; the figures sit right, under their season. */
+	th.span {
+		width: 40%;
+	}
+	th.span,
+	tbody th {
+		padding-left: 0;
+		text-align: left;
 	}
 	thead th {
 		font-weight: 600;
+	}
+	/* "2024–25" breaks at its dash at 320 px in Afrikaans otherwise. */
+	thead th:not(.span) {
+		white-space: nowrap;
 	}
 	th.span,
 	tbody th {

@@ -92,6 +92,20 @@ describe('resultGroups', () => {
 		]);
 	});
 
+	it('gives Run notes, Evidence and Reproduction a line each in the rail, and one link standing for the three on the bar (issue #521)', () => {
+		const record = (rail: boolean) => resultGroups({ farms: [] }, rail).find((g) => g.label === 'Record')!.sections;
+		expect(record(true).map((s) => [s.id, s.label])).toEqual([
+			['res-notes', 'Run notes'],
+			['res-evidence', 'Evidence'],
+			['res-reproduce', 'Reproduction'],
+			['res-validation', 'Validation statement'],
+			['res-publication', 'Publication']
+		]);
+		expect(record(false)[0]).toEqual({ id: 'res-notes', label: 'Run notes & evidence', bar: 'Notes & evidence', covers: ['res-evidence', 'res-reproduce'] });
+		const ids = resultSections({ farms: [] }, true).map((s) => s.id);
+		expect(new Set(ids).size).toBe(ids.length);
+	});
+
 	it('uses unique ids', () => {
 		const ids = resultSections({ farms: [{ nodeId: 'f' } as FarmSummary] }).map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);

@@ -6,13 +6,17 @@
 	Whoever may change the scenario writes them (an editor on a team scenario,
 	only its applicant on an application), on the description's terms: a
 	submission doesn't freeze them, an issued evidence pack freezes what it
-	printed. Everyone who reads the scenario reads them.
+	printed. Everyone who reads the scenario reads them. A fold of the
+	editor's Application details card (issue #521): closed, one line,
+	"Statement: 1 of 3 answered"; open, the answers and the form.
 -->
 <script lang="ts">
 	import { APPLICANT_PROMPT_MAX, APPLICANT_PROMPTS, NO_PROMPTS, type ApplicantPrompts } from '@water-management/engine';
 	import { guardUnsaved } from '$lib/nav/unsaved';
 	import { leavesScenario } from './leaves';
 	import { answeredCount, statementPatch, storedAnswers } from './statement';
+	import { statementSummary } from './details';
+	import Fold from '$lib/components/common/Fold.svelte';
 
 	let {
 		scenarioName,
@@ -59,48 +63,46 @@
 	}
 </script>
 
-<section class="statement" aria-labelledby="{uid}-h" data-testid="scenario-statement">
-	<div class="statement-head">
-		<h3 id="{uid}-h">Applicant’s statement</h3>
-		<span class="muted small" data-testid="statement-count">{answered} of {APPLICANT_PROMPTS.length} answered</span>
-		{#if canChange && !editing}
-			<button type="button" class="btn btn-sm" disabled={saving} onclick={start}>{answered ? 'Edit statement' : 'Answer the prompts'}</button>
+<Fold name="Statement:" line={statementSummary(answered, APPLICANT_PROMPTS.length)} change={canChange ? 'Change' : 'Show'} problem={false} body="none" class="statement" testid="scenario-statement" lineTestid="statement-count">
+	<section class="fold-stack" aria-labelledby="{uid}-h">
+		<div class="statement-head">
+			<h4 id="{uid}-h">Applicant’s statement</h4>
+			{#if canChange && !editing}
+				<button type="button" class="btn btn-sm" disabled={saving} onclick={start}>{answered ? 'Edit statement' : 'Answer the prompts'}</button>
+			{/if}
+		</div>
+		<p class="hint explain">
+			Appendix C of the evidence report prints these answers as written, beside the description and the run’s notes, and “Not given” for any
+			prompt left blank.
+		</p>
+		{#if editing}
+			<form onsubmit={save}>
+				{#each APPLICANT_PROMPTS as p (p.id)}
+					<div class="field">
+						<label for="{uid}-{p.id}">{p.heading}</label>
+						<p id="{uid}-{p.id}-q" class="hint q">{p.question}</p>
+						<textarea id="{uid}-{p.id}" rows="3" maxlength={APPLICANT_PROMPT_MAX} aria-describedby="{uid}-{p.id}-q" bind:value={draft[p.id]}></textarea>
+					</div>
+				{/each}
+				<div class="toolbar">
+					<button type="submit" class="btn btn-primary btn-sm" disabled={saving}>{saving ? 'Saving…' : 'Save statement'}</button>
+					<button type="button" class="btn btn-sm" disabled={saving} onclick={() => (editing = false)}>Cancel</button>
+				</div>
+			</form>
+		{:else}
+			<dl class="answers">
+				{#each APPLICANT_PROMPTS as p (p.id)}
+					<div data-testid="statement-{p.id}">
+						<dt>{p.heading}</dt>
+						{#if stored[p.id].trim()}<dd class="text">{stored[p.id]}</dd>{:else}<dd class="na">Not given</dd>{/if}
+					</div>
+				{/each}
+			</dl>
 		{/if}
-	</div>
-	<p class="hint">
-		Appendix C of the evidence report prints these answers as written, beside the description and the run’s notes, and “Not given” for any
-		prompt left blank.
-	</p>
-	{#if editing}
-		<form onsubmit={save}>
-			{#each APPLICANT_PROMPTS as p (p.id)}
-				<div class="field">
-					<label for="{uid}-{p.id}">{p.heading}</label>
-					<p id="{uid}-{p.id}-q" class="hint q">{p.question}</p>
-					<textarea id="{uid}-{p.id}" rows="3" maxlength={APPLICANT_PROMPT_MAX} aria-describedby="{uid}-{p.id}-q" bind:value={draft[p.id]}></textarea>
-				</div>
-			{/each}
-			<div class="toolbar">
-				<button type="submit" class="btn btn-primary btn-sm" disabled={saving}>{saving ? 'Saving…' : 'Save statement'}</button>
-				<button type="button" class="btn btn-sm" disabled={saving} onclick={() => (editing = false)}>Cancel</button>
-			</div>
-		</form>
-	{:else}
-		<dl class="answers">
-			{#each APPLICANT_PROMPTS as p (p.id)}
-				<div data-testid="statement-{p.id}">
-					<dt>{p.heading}</dt>
-					{#if stored[p.id].trim()}<dd class="text">{stored[p.id]}</dd>{:else}<dd class="na">Not given</dd>{/if}
-				</div>
-			{/each}
-		</dl>
-	{/if}
-</section>
+	</section>
+</Fold>
 
 <style>
-	.statement {
-		margin: 1rem 0;
-	}
 	.statement-head {
 		display: flex;
 		flex-wrap: wrap;
@@ -108,12 +110,9 @@
 		gap: 0.25rem 0.75rem;
 		margin: 0.5rem 0 0.25rem;
 	}
-	h3 {
+	h4 {
 		margin: 0;
-		font-size: 1rem;
-	}
-	.small {
-		font-size: 0.82rem;
+		font-size: 0.95rem;
 	}
 	.hint {
 		font-size: 0.82rem;

@@ -17,6 +17,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openDetails } from '../support/scenarios.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
 const NAME = 'Upper dam +20 %';
@@ -82,7 +83,9 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	// No node is the proposer's yet, so the raise is a baseline assumption, called out in red.
 	await expect(changes(page).getByRole('listitem')).toContainText('Baseline assumption');
 	await expect(page.getByTestId('baseline-callout')).toContainText('Baseline assumptions changed');
-	// The proposer's list holds the hydrological units, never the gauge.
+	// The proposer's list holds the hydrological units, never the gauge; closed, its line says none is ticked (issue #521).
+	await expect(page.getByTestId('proposer-summary')).toHaveText('none ticked');
+	await openDetails(page, 'proposer-fold');
 	const proposer = page.getByRole('group', { name: "The proposer's hydrological units" });
 	await expect(proposer.getByRole('checkbox')).toHaveCount(2);
 	await expect(proposer.getByLabel('Outflow gauge')).toHaveCount(0);
@@ -181,7 +184,7 @@ test('a rebase onto a run without the farm reports the change that no longer app
 
 	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
 	await expect(changes(page).getByRole('listitem')).toContainText(RAISE);
-	await page.getByText('Rebase onto another run').click();
+	await openDetails(page, 'rebase-fold');
 	await page.getByLabel('New base run').selectOption(newer);
 	await page.getByRole('button', { name: 'Check', exact: true }).click();
 	const check = page.getByTestId('rebase-check');
@@ -241,6 +244,7 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	await expect(list.getByRole('listitem').nth(1)).toContainText('Upper farm: River pump capacity no limit → 1\u202f200 m³/day');
 
 	// On the proposer's own farm, how it takes water is the proposal.
+	await openDetails(page, 'proposer-fold');
 	await page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm').check();
 	await expect(list.getByRole('listitem').nth(0)).toContainText('Proposal');
 	await expect(list.getByRole('listitem').nth(1)).toContainText('Proposal');
@@ -503,6 +507,9 @@ test('a viewer reads a scenario and its comparison but changes nothing', async (
 		await expect(viewer.page.getByRole('button', { name, exact: true })).toHaveCount(0);
 	}
 	await expect(changes(viewer.page).getByRole('button', { name: /^Remove change/ })).toHaveCount(0);
+	// A viewer reads whose proposal it is on the closed line, and opens it read only.
+	await expect(viewer.page.getByTestId('proposer-summary')).toHaveText('Upper farm');
+	await openDetails(viewer.page, 'proposer-fold');
 	await expect(viewer.page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm')).toBeDisabled();
 });
 

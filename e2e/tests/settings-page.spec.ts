@@ -13,12 +13,12 @@ import { loadSyntheticQuaternaries } from '../support/map.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
-import { anySaveBar, fitSummary, header, isProjectPatch, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
+import { anySaveBar, fitSummary, header, isProjectPatch, openFold, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const SETTINGS_INDEX: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
-	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions']],
+	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions', 'Reporting']],
 	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
@@ -102,7 +102,7 @@ test('a link into a group (?tab=calibration, a note’s #set- link) opens the pa
 	expect((await ewr.boundingBox())!.y).toBeGreaterThanOrEqual(menu.y + menu.height);
 
 	// A note on a settings group links to it from the Project page's recent notes (client-side navigation).
-	await page.getByRole('button', { name: 'Add a note on Data quality' }).click();
+	await page.getByRole('button', { name: 'Notes on Data quality', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on Data quality' });
 	await dialog.getByLabel('Add a note').fill('Thresholds agreed with the gauge owner');
 	await dialog.getByRole('button', { name: 'Add note' }).click();
@@ -257,7 +257,7 @@ test('a note or a quaternary lookup doesn’t save the settings: their forms are
 	await expect(settingsBar(page)).toBeVisible();
 
 	// A note on Demand, added with its own form's Add note.
-	await page.getByRole('button', { name: 'Add a note on Demand' }).click();
+	await page.getByRole('button', { name: 'Notes on Demand', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on Demand' });
 	await dialog.getByLabel('Add a note').fill('Trying the WR90 A-pan for this quaternary');
 	await dialog.getByRole('button', { name: 'Add note' }).click();
@@ -375,23 +375,22 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 			.evaluateAll((els) => els.filter((e) => !e.closest('dialog:not([open])')).map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
 	// The lazy panels first: Evaporation from the map, the quality flags and the flow gaps.
 	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
+	// The quality flags and flow gaps are folded into one line of their values (issue #521): open it to see them.
+	await openFold(page.locator('#set-record'), 'record-flags');
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
-	expect((await names('set-flow')).slice(0, 5)).toEqual([
-		'Flow calibration',
-		'Areal rainfall correction',
-		'Rain for each unit',
-		'GR4J potential evaporation',
-		'Evaporation from the map'
-	]);
-	expect(await names('set-rain')).toEqual([
-		'Rain gaps',
-		'CHIRPS bias correction and quantile map',
-		'CHIRPS fit period',
-		'Zero-rain runs in the catchment rain',
-		'Multi-day accumulations',
-		'Rain source periods'
-	]);
+	// Its cards (issue #521), each an h3; the switches inside Rain into GR4J are h4s under it.
+	expect((await names('set-flow')).slice(0, 5)).toEqual(['Flow calibration', 'GR4J parameters', 'Rain into GR4J', 'GR4J potential evaporation', 'Evaporation from the map']);
+	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Areal rainfall correction' })).toBeVisible();
+	await expect(page.locator('#set-flow').getByRole('heading', { level: 4, name: 'Rain for each unit' })).toBeVisible();
+	// Rain gaps: two cards, the second's three topics under it (h4).
+	expect(await names('set-rain')).toEqual(['Rain gaps', 'CHIRPS gap filling', 'Flagged rain']);
+	expect(
+		await page
+			.getByTestId('flagged-rain-card')
+			.locator('h4')
+			.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()))
+	).toEqual(['Zero-rain runs in the catchment rain', 'Multi-day accumulations', 'Rain source periods']);
 	const record = await names('set-record');
 	expect(record[0]).toBe('Calibration record');
 	expect(record).toContain('Quality flags for Fit automatically');

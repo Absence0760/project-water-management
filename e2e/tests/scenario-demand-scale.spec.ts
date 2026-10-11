@@ -11,6 +11,7 @@ import type { APIRequestContext, Locator } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openDetails } from '../support/scenarios.ts';
 import { ungroup } from '../support/format.ts';
 
 const NAME = 'Upper farm takes half';
@@ -79,6 +80,7 @@ test('an editor scales one farm’s demand to 50 % in two months, runs it, and t
 	// A named farm that isn't the proposer's is another party's: a baseline assumption until it is.
 	await expect(changes).toContainText('Baseline assumption');
 	await expect(page.getByTestId('baseline-callout')).toContainText('Baseline assumptions changed');
+	await openDetails(page, 'proposer-fold');
 	await page.getByRole('group', { name: "The proposer's hydrological units" }).getByLabel('Upper farm').check();
 	await expect(changes).toContainText('Proposal');
 	await expect(page.getByTestId('baseline-callout')).toHaveCount(0);
@@ -151,12 +153,16 @@ test('an editor limits a demand scaling to dates, with months, and the run scale
 	const months = form.getByRole('group', { name: 'Months (none ticked: every month)' });
 	await months.getByLabel('Dec').check();
 	await months.getByLabel('Jan').check();
-	// A date that doesn't exist is refused, as Scale rainfall's are.
-	await form.getByLabel('From (YYYY-MM-DD)').fill('2021-12-32');
+	// A date that doesn't exist is refused, as Scale rainfall's are; the dates are typed day first (issue #521),
+	// as Trace a day reads them, and shown back day first once read.
+	const fromDay = form.getByLabel('From (day first)');
+	await fromDay.fill('32 Dec 2021');
 	await form.getByRole('button', { name: 'Add change' }).click();
-	await expect(form.getByRole('alert')).toHaveText('From: must be an ISO date (YYYY-MM-DD)');
-	await form.getByLabel('From (YYYY-MM-DD)').fill('2021-12-20');
-	await form.getByLabel('To (YYYY-MM-DD)').fill('2022-01-10');
+	await expect(form.getByRole('alert')).toHaveText('From: type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15');
+	await fromDay.fill('20/12/2021');
+	await fromDay.blur();
+	await expect(fromDay).toHaveValue('20 Dec 2021');
+	await form.getByLabel('To (day first)').fill('2022-01-10');
 	await form.getByRole('button', { name: 'Add change' }).click();
 	const changes = page.getByRole('list', { name: `Changes in ${name}` }).getByRole('listitem');
 	await expect(changes).toHaveCount(1);

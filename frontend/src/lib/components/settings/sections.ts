@@ -16,6 +16,8 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-share', label: 'Flow share', group: 'Demand & supply' },
 	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a model input, off by default.
 	{ id: 'set-restrict', label: 'Drought restrictions', group: 'Demand & supply' },
+	// The reporting window and the annual assurance threshold (issue #521, moved from EWR): how supply results are read.
+	{ id: 'set-reporting', label: 'Reporting', group: 'Demand & supply' },
 	// Runoff & calibration: rain to natural flow, and how its parameters are fitted and checked.
 	{ id: 'set-flow', label: 'Flow calibration', group: 'Runoff & calibration' },
 	{ id: 'set-record', label: 'Calibration record', group: 'Runoff & calibration' },
@@ -37,6 +39,15 @@ export const SETTINGS_SECTIONS = [
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
+
+/**
+ * Settings that moved to another page, for Find a setting (issue #521): the registered-volumes
+ * comparison band went to Allocations in round 1, so a search for it, or its other names, offers
+ * a link to that card (`#alloc-band`, which AllocationsTab lands on).
+ */
+export const SETTINGS_ELSEWHERE = [
+	{ text: 'Comparison band', words: 'registered volumes allocation tolerance licence WARMS modelled use', href: '?tab=allocations#alloc-band', page: 'Allocations' }
+] as const;
 
 /** The menu's one link (on the bar) for the panels that run or connect by themselves. */
 export const AUTOMATION_LABEL = 'Automation & access';

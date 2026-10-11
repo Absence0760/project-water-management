@@ -20,6 +20,7 @@ const SETTINGS_LINKS = [
 	'Demand',
 	'Flow share',
 	'Drought restrictions',
+	'Reporting',
 	'Flow calibration',
 	'Calibration record',
 	'Fit the parameters',
@@ -35,7 +36,7 @@ const SETTINGS_LINKS = [
 /** The side index's groups at 1440 px (issue #468): every panel, under its task. */
 const SETTINGS_RAIL: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
-	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions']],
+	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions', 'Reporting']],
 	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],
@@ -144,7 +145,7 @@ const RUNS_RAIL: [string | null, string[]][] = [
 		'Model quality',
 		['Hydrograph', 'Flow-duration curve', 'Calibration against observed flow', 'Water balance by water year', 'Runoff model: GR4J', 'EWR test: model against observed flow', 'Plausibility checks']
 	],
-	['Record', ['Run notes & evidence', 'Validation statement', 'Publication']],
+	['Record', ['Run notes', 'Evidence', 'Reproduction', 'Validation statement', 'Publication']],
 	['Dig deeper', ['Self-checks', 'Explore any output']],
 	['On River & reserve', ['Reserve rules met, by month, on River & reserve', 'Days below the EWR, by month, on River & reserve', 'Water account, on River & reserve']],
 	['On Hydrological units', ['Curtailment targets, on Hydrological units', 'Assurance of supply, on Hydrological units']]
@@ -281,8 +282,8 @@ test('River & reserve has the menu: every panel by its heading, a jump that land
 	const menu = page.getByRole('navigation', { name: 'River sections' });
 	// On the bar: findings first, the water account straight after them, the run-it-yourself tools last; Reserve rules
 	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Shorter names there.
-	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
-	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
+	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
 	// Its group names would take it to another row, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
 	await expect(moreButton(menu)).toHaveCount(0);
@@ -295,7 +296,7 @@ test('River & reserve has the menu: every panel by its heading, a jump that land
 		[
 			['The reserve', ['Flow vs reserve', 'Days below the reserve, each water year', 'Reserve rules met, by month', 'Days below the EWR, by month']],
 			['Water balance', ['Water account']],
-			['How sure, and what if', ['Uncertainty bands', 'Outcome matrix', 'Seasonal outlook']]
+			['How sure, and what if', ['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'Seasonal outlook']]
 		],
 		page.getByRole('region', { name: 'Flow vs reserve' })
 	);

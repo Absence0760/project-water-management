@@ -340,8 +340,10 @@ test('a card’s Edit dam opens its node sheet, Back returns to Dams with the pi
 	await expect(page.locator('.dams-page h3')).toHaveText(['Assurance of supply: Lower farm']);
 
 	await card(page, 'Lower farm').getByRole('link', { name: 'Edit dam: Lower farm' }).click();
-	await expect(page).toHaveURL(new RegExp(`\\?tab=network&edit=${lowerId}$`));
+	await expect(page).toHaveURL(new RegExp(`\\?tab=network&edit=${lowerId}&section=dam$`));
 	await expect(page.getByRole('dialog', { name: /Lower farm/ })).toBeVisible();
+	// The sheet lands on its Dam section, open (its other sections fold, issue #521).
+	await expect(page.getByRole('dialog', { name: /Lower farm/ }).getByLabel('Capacity (m³)')).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}$`));
 	await expect(chart(page).getByRole('heading', { level: 2 })).toHaveText('Storage: Lower farm');

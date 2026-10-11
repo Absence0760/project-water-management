@@ -100,7 +100,7 @@
 					</div>
 				</div>
 			{/if}
-			<p class="hint">{m.hint}</p>
+			<p class="hint explain">{m.hint}</p>
 		</fieldset>
 	{/each}
 	<p class="hint muted explain">
@@ -131,9 +131,6 @@
 		gap: 0.75rem 1.25rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
 		margin: 0.25rem 0;
 	}
 	.hint {

@@ -81,7 +81,7 @@
 	const regTotal = $derived(cells ? registeredTotal(cells) : null);
 
 	/** Where the rest of a row is set: a unit's crops in its farm drawer on Crops & demand, anything else in its node's sheet. */
-	const editHref = (r: DemandRow) => (r.kind === 'crops' ? `?tab=crops&farm=${encodeURIComponent(r.nodeId)}` : `?tab=network&edit=${encodeURIComponent(r.nodeId)}`);
+	const editHref = (r: DemandRow) => (r.kind === 'crops' ? `?tab=crops&farm=${encodeURIComponent(r.nodeId)}` : `?tab=network&edit=${encodeURIComponent(r.nodeId)}&section=demand`);
 
 	/** Writes one month of an editable row into the model (a monthly object's `monthlyM3Day`, a user's `userDemandM3Day`). */
 	function setMonth(r: DemandRow, m: number, v: number | null) {

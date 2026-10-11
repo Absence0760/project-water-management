@@ -16,8 +16,9 @@
 	import { api, type Publication, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { noticeLanguages, restrictionSummary } from '$lib/components/runs/publication';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { fmtDay, fmtStamp } from '$lib/format/number';
 	import { runHref } from './attention';
+	import { pickRuns } from './latestRun';
 
 	let {
 		projectId,
@@ -56,6 +57,9 @@
 	const run = $derived(current ? (runs?.find((r) => r.id === current!.runId) ?? null) : null);
 	// The Runs tab on the published run, at its Publication panel.
 	const panelHref = $derived(current ? `${runHref(current.runId)}#res-publication` : '?tab=runs');
+	// Nothing published: the newest run's Publication panel, or the bare page while there is no run.
+	const newest = $derived(pickRuns(runs)?.latest ?? null);
+	const firstPublishHref = $derived(newest ? `${runHref(newest.id)}#res-publication` : '?tab=runs');
 	// Publication stays a person's act (D5): a newer auto run is offered, never published here.
 	const autoRun = $derived(canEdit && current ? autoRunToPublish(runs, current.runId) : null);
 	const compareHref = $derived(
@@ -82,7 +86,7 @@
 					{#if run}<span class="muted">· {fmtDay(run.startDate)} – {fmtDay(run.endDate)}</span>{/if}
 				</dd>
 				<dt>Published</dt>
-				<dd>{fmtDate(current.publishedAt, true)}{current.publishedBy ? ` by ${current.publishedBy}` : ''}</dd>
+				<dd>{fmtStamp(current.publishedAt)}{current.publishedBy ? ` by ${current.publishedBy}` : ''}</dd>
 				<dt>Notice</dt>
 				<dd>{restrictionSummary(current.restriction)}</dd>
 				{#each noticeLanguages(current.restriction.notice) as n (n.code)}<dt>{n.name}</dt><dd class="text" lang={n.code}>{n.text}</dd>{/each}
@@ -97,11 +101,17 @@
 				</div>
 			{/if}
 			{#if canEdit}
-				<p class="small"><a href={panelHref}>Change the notice or publish another run</a> in the Runs tab.</p>
+				<p class="small"><a href={panelHref}>Change the notice or publish another run</a> in Runs &amp; results.</p>
 			{/if}
 		{:else}
+			<!-- Named as the sidebar names the page (there is no "Runs tab"), and only an editor is told to publish. -->
 			<p class="muted">
-				No run is published yet. Stakeholders and farmers see nothing until you publish one ({#if canEdit}<a href="?tab=runs">Runs tab</a>{:else}Runs tab{/if}).
+				{#if canEdit}
+					No run is published yet. Stakeholders and farmers see nothing until you publish one from its Publication panel
+					in <a href={firstPublishHref}>Runs &amp; results</a>.
+				{:else}
+					No run is published yet. Stakeholders and farmers see nothing until an editor publishes one.
+				{/if}
 			</p>
 		{/if}
 	</LoadState>

@@ -114,6 +114,13 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	const btn = (await panel.getByRole('button', { name: 'Run seasonal outlook' }).boundingBox())!;
 	expect(btn.y).toBeGreaterThan(box.y + box.height);
 	expect(Math.abs(btn.x - box.x)).toBeLessThan(2);
+	// The levels' hint is the box's placeholder and the ⓘ beside its label, not two lines under it (issue #521 § 14),
+	// so the button sits straight under the box; a screen reader still reads the whole hint.
+	expect(btn.y - (box.y + box.height)).toBeLessThan(45);
+	await expect(panel.getByRole('button', { name: 'Run seasonal outlook' })).toBeInViewport();
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveAttribute('placeholder', 'Up to 6, separated by commas');
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveAccessibleDescription(/^Up to 6, separated by commas\. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run/);
+	await expect(panel.getByRole('button', { name: 'About Demand levels' })).toBeVisible();
 	await panel.getByRole('checkbox', { name: 'Add a monthly plan' }).check();
 	await panel.getByLabel('Name', { exact: true }).fill('Taper');
 	for (const m of ['Jan', 'Feb', 'Mar', 'Apr']) await panel.getByLabel(`${m} (%)`).fill('80');
@@ -286,6 +293,8 @@ test('the review triggers show for the review date, and a level published to far
 	await farmer.page.goto(`/farm/${project.id}`);
 	const card = farmer.page.getByTestId('farm-outlook');
 	await expect(card.getByRole('heading', { name: 'This season' })).toBeVisible();
+	// The kicker is at the farm pages' 13 px floor (it was 0.8125rem of the 14 px root, 11.4 px).
+	expect(await card.getByText('Season outlook', { exact: true }).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(13);
 	const level = outlook.result.levels[1]!;
 	const own = level.demandMetByFarm.find((f) => f.nodeId === upper.id)!.stat!;
 	const dam = level.storageByDam.find((d) => d.nodeId === upper.id)!;
@@ -318,8 +327,10 @@ test('the review triggers show for the review date, and a level published to far
 		await expectNoViolations(farmer.page, { include: '[data-testid="farm-outlook"]' });
 	}
 	await farmer.page.emulateMedia({ colorScheme: 'light' });
+	// The words page's back link returns to this farm page (?from=, issue #519).
+	const farmUrl = new URL(farmer.page.url());
 	await card.getByRole('link', { name: af('What is the season outlook?') }).click();
-	await expect(farmer.page).toHaveURL(/\/farm\/words#farm-season-outlook$/);
+	await expect(farmer.page).toHaveURL(`${farmUrl.origin}/farm/words?from=${encodeURIComponent(farmUrl.pathname + farmUrl.search)}#farm-season-outlook`);
 	await expect(farmer.page.locator('#farm-season-outlook')).toBeVisible();
 	await farmer.page.goBack();
 

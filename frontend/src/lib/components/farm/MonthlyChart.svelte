@@ -1,11 +1,11 @@
 <!-- i18n-section: farm.chart -->
 <script lang="ts">
-	// "Last 12 months, in ML" (design §3 Q1, §7): needed as an outline and
+	// "Last 12 months, in ML" or "…, in m³" (design §3 Q1, §7; the unit the
+	// reader chose on the supply card, axis and table alike): needed as an outline and
 	// received as a fill, drawn as inline SVG at the card's rendered width so
 	// the 13 px labels stay 13 px. The chart is aria-hidden; a visually hidden
 	// sentence sums it up and "Show the numbers" is a real table of all 12
-	// months with their years, in the unit the reader chose on the supply
-	// card (the chart's axis stays in ML), and under each month's received the
+	// months with their years, in that unit, and under each month's received the
 	// share of its need, with the engine's stress class in plain words (issue
 	// #70): a line in the Received cell, not a fourth column, which didn't fit
 	// a 320 px phone in Afrikaans (docs/design/ui-playbook.md: stack, don't scroll).
@@ -17,12 +17,12 @@
 
 	let { farm, unit }: { farm: FarmProjection; unit: VolumeUnit } = $props();
 	let width = $state(0);
-	const chart = $derived(width > 0 ? barChart(farm.monthly, farm.dataUntil, width) : null);
+	const chart = $derived(width > 0 ? barChart(farm.monthly, farm.dataUntil, width, unit) : null);
 	const rows = $derived(supplyRows(farm.monthly, farm.dataUntil, unit));
 </script>
 
 <section class="card" aria-labelledby="chart-h">
-	<h2 id="chart-h">{t('Last 12 months, in ML')}</h2>
+	<h2 id="chart-h">{unit === 'ML' ? t('Last 12 months, in ML') : t('Last 12 months, in m³')}</h2>
 	<p class="visually-hidden">{supplySummary(farm.monthly, farm.dataUntil)}</p>
 	<div class="legend" aria-hidden="true">
 		<span><span class="key need"></span>{t('Needed')}</span>
@@ -33,12 +33,15 @@
 			<svg width={chart.width} height={chart.height} viewBox="0 0 {chart.width} {chart.height}" aria-hidden="true" font-size={CHART_FONT_PX}>
 				{#each chart.ticks as t (t.label)}
 					<line x1={chart.axisLeft} x2={chart.width} y1={t.y} y2={t.y} class={t.y >= CHART_BASE ? 'axis' : 'grid'} />
-					<text x="0" y={t.y + 5} class="tick">{t.label}</text>
 				{/each}
 				{#each chart.groups as g, i (i)}
 					<rect x={g.need.x} y={g.need.y} width={g.need.w} height={g.need.h} class="need" />
 					<rect x={g.got.x} y={g.got.y} width={g.got.w} height={g.got.h} class="got" />
 					<text x={g.labelX} y={LABEL_Y} text-anchor="middle" class="tick">{g.label}</text>
+				{/each}
+				<!-- After the bars: inside a narrow plot the labels sit over them. -->
+				{#each chart.ticks as t (t.label)}
+					<text x="0" y={chart.inside ? t.y - 4 : t.y + 5} class="tick value" class:inside={chart.inside}>{t.label}</text>
 				{/each}
 			</svg>
 		{/if}
@@ -99,6 +102,13 @@
 	}
 	.tick {
 		fill: var(--text-muted);
+	}
+	/* Just above its grid line inside a narrow plot (chart.ts axisPlacement): a halo in the card's colour keeps it legible over a bar or the line. */
+	.tick.inside {
+		stroke: var(--surface);
+		stroke-width: 4px;
+		stroke-linejoin: round;
+		paint-order: stroke;
 	}
 	.need {
 		fill: none;

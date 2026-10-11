@@ -39,7 +39,7 @@
 		<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11 V8 a4 4 0 0 1 8 0 V11" /></svg>
 		<span>{privacy()}</span>
 	</p>
-	<button type="button" class="link toggle" aria-expanded={open} aria-controls="who-can-see" onclick={toggle}>
+	<button type="button" class="link toggle disclosure" aria-expanded={open} aria-controls="who-can-see" onclick={toggle}>
 		{who.heading}
 	</button>
 	<div id="who-can-see" class="who" hidden={!open}>

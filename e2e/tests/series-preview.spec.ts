@@ -34,11 +34,17 @@ test('a row’s Preview opens the daily table, a search narrows the row count, a
 	await search.fill('2021');
 	await expect(dialog).toContainText('365 of 731 days shown');
 
-	// A full date narrows to the one day, and its value shows in the row.
+	// A full date narrows to the one day, and its value shows in the row; the days read day first (issue #521).
 	await search.fill('2020-01-01');
 	await expect(dialog).toContainText('1 of 731 days shown');
 	const table = dialog.getByRole('table');
-	await expect(table.getByRole('row').filter({ hasText: '2020-01-01' })).toContainText('10');
+	await expect(table.getByRole('row').filter({ has: page.getByRole('cell', { name: '1 Jan 2020', exact: true }) })).toContainText('10');
+	await expect(dialog.getByRole('status').filter({ hasText: '→' })).toHaveText('1 Jan 2020 → 31 Dec 2021 · 1 of 731 days shown');
+	// …and a day or a month typed as the table shows it finds the same rows.
+	await search.fill('1 Jan 2020');
+	await expect(dialog).toContainText('1 of 731 days shown');
+	await search.fill('Feb 2020');
+	await expect(dialog).toContainText('29 of 731 days shown');
 
 	// Missing only, with the search cleared, finds the two null days.
 	await search.fill('');
@@ -161,13 +167,13 @@ test('the preview fills the viewport and renders rows to the bottom of its talle
 	// the cell just above the scroll box's bottom edge is a real date, not a spacer.
 	const scroller = dialog.locator('.scroll');
 	await scroller.evaluate((el) => (el.scrollTop = 300 * 28));
-	await expect(dialog.getByRole('row').filter({ hasText: '2020-10-27' })).toBeVisible();
+	await expect(dialog.getByRole('row').filter({ has: page.getByRole('cell', { name: '27 Oct 2020', exact: true }) })).toBeVisible();
 	const bottomCell = await scroller.evaluate((el) => {
 		const r = el.getBoundingClientRect();
 		const hit = document.elementFromPoint(r.left + 40, r.bottom - 20);
 		return hit?.closest('tr')?.querySelector('th, td')?.textContent?.trim() ?? '';
 	});
-	expect(bottomCell).toMatch(/^2020-\d\d-\d\d$/);
+	expect(bottomCell).toMatch(/^\d{1,2} [A-Z][a-z]{2} 2020$/);
 });
 
 // The big case: two series over fifteen years. Only the rows in view are drawn,
@@ -200,13 +206,13 @@ for (const size of [
 		// Scrolled to the end, the last day is the last row, at the foot of the scroll box.
 		await scroll.evaluate((d) => (d.scrollTop = d.scrollHeight));
 		const last = rows.last();
-		await expect(last.getByRole('cell').first()).toHaveText('2024-12-31');
+		await expect(last.getByRole('cell').first()).toHaveText('31 Dec 2024');
 		const end = (await scroll.boundingBox())!;
 		const bottomScrollbar = await scroll.evaluate((d) => (d as HTMLElement).offsetHeight - d.clientHeight);
 		expect(Math.abs((await last.boundingBox())!.y + 28 - (end.y + end.height - bottomScrollbar))).toBeLessThan(3);
 		// Far in, the row at the top of the box is the day that far in.
 		await scroll.evaluate((d) => (d.scrollTop = 4000 * 28));
-		await expect(dialog.getByRole('row', { name: /^2020-12-14 / })).toBeInViewport();
+		await expect(dialog.getByRole('row', { name: /^14 Dec 2020 / })).toBeInViewport();
 
 		// The scroll box takes focus and scrolls from the keyboard.
 		await scroll.evaluate((d) => (d.scrollTop = 0));
@@ -325,7 +331,7 @@ test('the preview has a visible close button, and its number columns line up und
 	// A number sits under its own header, not between two: both are right-aligned.
 	const rainHeader = dialog.getByRole('columnheader', { name: /^Rainfall — catchment/ });
 	await expect(rainHeader).toHaveCSS('text-align', 'right');
-	const rainCell = dialog.getByRole('row').filter({ hasText: '2020-01-02' }).getByRole('cell').nth(1);
+	const rainCell = dialog.getByRole('row').filter({ has: page.getByRole('cell', { name: '2 Jan 2020', exact: true }) }).getByRole('cell').nth(1);
 	await expect(rainCell).toHaveText('22.50');
 	await expect(rainCell).toHaveCSS('text-align', 'right');
 	const headerBox = (await rainHeader.boundingBox())!;
@@ -357,14 +363,14 @@ test('a flagged value names its check, Rain used its source and an excluded day 
 	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
 	await expect(dialog).toContainText('3 of 3 days shown');
 
-	const day2 = dialog.getByRole('row').filter({ hasText: '2020-01-02' });
+	const day2 = dialog.getByRole('row').filter({ has: page.getByRole('cell', { name: '2 Jan 2020', exact: true }) });
 	// The catchment rain is missing that day: the cell says which check flagged it.
 	await expect(day2.getByTestId('cell-flags').first()).toBeVisible();
 	await expect(day2.getByTestId('cell-flags').first()).toHaveText(/Missing/);
 	// Rain used came from CHIRPS that day, from the catchment the day before.
 	await expect(day2.getByTestId('rain-source')).toBeVisible();
 	await expect(day2.getByTestId('rain-source')).toHaveText(/CHIRPS/);
-	await expect(dialog.getByRole('row').filter({ hasText: '2020-01-01' }).getByTestId('rain-source')).toHaveText(/catchment/);
+	await expect(dialog.getByRole('row').filter({ has: page.getByRole('cell', { name: '1 Jan 2020', exact: true }) }).getByTestId('rain-source')).toHaveText(/catchment/);
 	// Excluded, and why.
 	await expect(day2.getByTestId('exclusion-reason')).toBeVisible();
 	await expect(day2.getByTestId('exclusion-reason')).toHaveText(/Pump test/);

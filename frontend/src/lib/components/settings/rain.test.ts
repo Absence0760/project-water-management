@@ -1,6 +1,6 @@
 import { ACCUMULATION_MODES, CHIRPS_BIAS_MODES, defaultProjectSettings, ZERO_RAIN_MODES } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, chirpsFitRangesProblem, describeZeroRain, withChirpsQuantileMap, ZERO_RAIN_OPTIONS } from './rain';
+import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, chirpsFitRangesProblem, describeZeroRain, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap, ZERO_RAIN_OPTIONS } from './rain';
 
 describe('CHIRPS_BIAS_OPTIONS', () => {
 	it('offers every engine mode once, default first', () => {
@@ -82,5 +82,39 @@ describe('withChirpsQuantileMap (engine ≥ 1.53.0)', () => {
 		expect(withChirpsQuantileMap(true, null)).toEqual({ wetDayMm: 1 });
 		expect(withChirpsQuantileMap(true, { wetDayMm: 2.5 })).toEqual({ wetDayMm: 2.5 });
 		expect(withChirpsQuantileMap(false, { wetDayMm: 2.5 })).toBeNull();
+	});
+});
+
+describe('rainGapsAtDefaults and rainGapsLine (the Rain gaps fold)', () => {
+	const d = defaultProjectSettings();
+	it('a new project is at its defaults, and its line names them', () => {
+		expect(rainGapsAtDefaults(d)).toBe(true);
+		expect(rainGapsLine(d)).toBe('bias-corrected per month, whole record, zero runs missing, accumulations spread');
+		// Settings saved before the threshold existed (engine < 1.81.0) run the default.
+		expect(rainGapsAtDefaults({ ...d, zeroRainRuns: { ...d.zeroRainRuns, fillAboveChirpsMm: undefined } })).toBe(true);
+	});
+	it('any change leaves the defaults, and the line says what is set', () => {
+		const z = d.zeroRainRuns;
+		const changed = [
+			{ chirpsBiasCorrection: 'none' as const },
+			{ chirpsQuantileMap: { wetDayMm: 1 } },
+			{ chirpsFitPeriod: [{ fromWaterYear: 2000, toWaterYear: 2009, reason: 'synthetic' }] },
+			{ zeroRainRuns: { ...z, mode: 'asRecorded' as const } },
+			{ zeroRainRuns: { ...z, fillAboveChirpsMm: 5 } },
+			{ zeroRainRuns: { ...z, accumulationMode: 'asRecorded' as const } },
+			{ zeroRainRuns: { ...z, missing: [{ waterYear: 2001, reason: 'synthetic' }] } },
+			{ rainSource: [{} as never] }
+		];
+		for (const c of changed) expect(rainGapsAtDefaults({ ...d, ...c })).toBe(false);
+		expect(rainGapsLine({ ...d, chirpsBiasCorrection: 'none' })).toBe('raw CHIRPS, zero runs missing, accumulations spread');
+		expect(
+			rainGapsLine({
+				...d,
+				chirpsQuantileMap: { wetDayMm: 1 },
+				chirpsFitPeriod: [{ fromWaterYear: 2000, toWaterYear: 2009, reason: 'synthetic' }],
+				zeroRainRuns: { ...z, mode: 'asRecorded', keepReadings: [{ waterYear: 2001, reason: 'synthetic' }], addAccumulations: [{ waterYear: 2002, reason: 'synthetic' }] },
+				rainSource: [{} as never]
+			})
+		).toBe('bias-corrected per month, quantile-mapped, 1 fit range, zero runs as recorded, accumulations spread, 2 periods listed, 1 rain-source period');
 	});
 });

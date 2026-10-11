@@ -32,7 +32,7 @@
 			<select id={id('priority')} aria-describedby={id('priority-note')} disabled={readonly} value={node.userPriority ?? 'senior'} onchange={(e) => (node.userPriority = e.currentTarget.value as UserPriority)}>
 				{#each USER_PRIORITIES as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
 			</select>
-			<span class="hint" id={id('priority-note')} data-testid="user-priority-note">{userPriorityNote(node.userPriority)}</span>
+			<span class="hint explain" id={id('priority-note')} data-testid="user-priority-note">{userPriorityNote(node.userPriority)}</span>
 		</div>
 		<div class="field">
 			<span class="lbl"><label for={id('return')}>Share returned <span class="u">(%)</span></label><HelpTip key="node.userReturnPct" /></span>

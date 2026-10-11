@@ -175,6 +175,19 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(line).toContainText('Area of Upper farm from the map: “Upper farm”');
 });
 
+test('a reload straight onto a tool sheet’s link opens the sheet from its lazy chunk', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Catchment map sheet link');
+	// The tool sheets are a chunk of their own (map/sheets.ts, issue #521), not in the tab's: a loaded link still opens one.
+	await page.goto(`/projects/${project.id}?tab=map&place=1`);
+	const place = page.getByRole('dialog', { name: 'Place a point' });
+	await expect(place).toBeVisible();
+	await expect(place.getByLabel('Latitude')).toBeVisible();
+	await place.getByRole('button', { name: 'Close' }).last().click();
+	await expect(place).toBeHidden();
+	await expect(page).not.toHaveURL(/place=/);
+});
+
 test('the URL picks: feature= and node= select, an unknown one picks nothing, old and over-another-tab links land', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Catchment map links');

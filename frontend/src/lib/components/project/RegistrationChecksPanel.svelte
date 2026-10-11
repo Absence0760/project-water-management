@@ -12,7 +12,7 @@
 	// latest check says registered). Editors read the list; owners, and the
 	// editors an owner marked as acting for the responsible authority (163),
 	// record.
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { api, type Member, type RegistrationCheck, type RegistrationCheckRequest } from '$lib/api';
 	import { REGISTRATION_BODIES, registrationBody as bodyInfo, registrationCategoriesOf, type RegistrationBodyCode } from '@water-management/engine';
@@ -27,6 +27,11 @@
 	let error = $state<string | null>(null);
 	let note = $state('');
 	let busy = $state(false);
+	// Recording a check is rare (once a year a signer), so its form stays closed behind the
+	// header's "+ Record a check" until asked for (issue #521 § 13).
+	let recording = $state(false);
+	let opener: HTMLButtonElement | undefined = $state();
+	let firstField: HTMLSelectElement | undefined = $state();
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 	const today = () => new Date().toISOString().slice(0, 10);
@@ -61,6 +66,17 @@
 	}
 	onMount(load);
 
+	async function openForm() {
+		recording = true;
+		await tick();
+		firstField?.focus();
+	}
+	async function closeForm() {
+		recording = false;
+		await tick();
+		opener?.focus();
+	}
+
 	async function record(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
@@ -72,6 +88,7 @@
 			checks = [c, ...(checks ?? [])];
 			note = `Recorded the check of ${name(userId)}’s registration.`;
 			form = { ...form, registrationNo: '', registerName: '', note: '' };
+			await closeForm();
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -97,6 +114,9 @@
 <section class="panel" aria-labelledby="regcheck-h-t" data-testid="registration-checks">
 	<div class="panel-head">
 		<h2 id="regcheck-h"><span id="regcheck-h-t">Registration checks</span> <HelpTip key="registration-check" label="About registration checks" /></h2>
+		{#if canRecord && !recording}
+			<button type="button" class="btn btn-sm" bind:this={opener} onclick={openForm}>+ Record a check</button>
+		{/if}
 	</div>
 	<p class="muted small">
 		Before a signer’s evidence pack is issued, someone at your organisation looks their registration up on the public register and records it here. The
@@ -112,7 +132,13 @@
 		<p class="small">{required ? 'Issuing an evidence pack waits until each specialist signer has a check from the last year.' : 'Issuing an evidence pack doesn’t wait for a check.'}</p>
 	{/if}
 
-	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	{#if error}
+		<div class="alert alert-error" role="alert">
+			{error}
+			<!-- The list never loaded: a way to ask again, not only a reload. -->
+			{#if checks === null}<button type="button" class="btn btn-sm" onclick={load}>Try again</button>{/if}
+		</div>
+	{/if}
 	{#if checks === null && !error}
 		<p class="muted" role="status">Loading…</p>
 	{:else if checks?.length}
@@ -137,13 +163,13 @@
 		<p class="muted">No check recorded yet.</p>
 	{/if}
 
-	{#if canRecord}
+	{#if canRecord && recording}
 		<form class="record" onsubmit={record} aria-labelledby="regcheck-new-h">
 			<h3 id="regcheck-new-h">Record a check</h3>
 			<div class="grid">
 				<div class="field">
 					<label for="rc-who">Member</label>
-					<select id="rc-who" bind:value={form.userId} required>
+					<select id="rc-who" bind:value={form.userId} required bind:this={firstField}>
 						<option value="" disabled>Choose…</option>
 						{#each signers as m (m.userId)}<option value={m.userId}>{m.displayName}</option>{/each}
 					</select>
@@ -196,7 +222,10 @@
 			{#if register}
 				<p class="muted small">Look it up at {register.registerName}: <a href={register.registerUrl} rel="noopener noreferrer" target="_blank">{register.registerUrl}</a></p>
 			{/if}
-			<button type="submit" class="btn btn-primary" disabled={busy}>{busy ? 'Recording…' : 'Record the check'}</button>
+			<div class="action-row">
+				<button type="submit" class="btn btn-primary" disabled={busy}>{busy ? 'Recording…' : 'Record the check'}</button>
+				<button type="button" class="btn" disabled={busy} onclick={closeForm}>Cancel</button>
+			</div>
 		</form>
 	{/if}
 	<p class="visually-hidden" role="status">{note}</p>
@@ -204,9 +233,6 @@
 
 <style>
 	.check {
-		display: flex;
-		gap: 0.5rem;
-		align-items: flex-start;
 		margin: 0.5rem 0;
 	}
 	.record {

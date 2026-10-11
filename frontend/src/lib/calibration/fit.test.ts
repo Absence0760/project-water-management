@@ -1,6 +1,7 @@
 import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, rainCheckLimits, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { tipFor } from '$lib/help/tips';
+import { fmtNum } from '$lib/format/number';
 import {
 	applyReport,
 	benchmarkRows,
@@ -18,6 +19,7 @@ import {
 	SCORE_ROWS,
 	scoreCellText,
 	scoreColumns,
+	searchSummary,
 	SEED_MAX,
 	seedError,
 	STAGE_LABEL,
@@ -229,11 +231,11 @@ describe('score intervals and benchmarks (CR-5)', () => {
 	it('a score cell carries its 90 % interval when there is one, and a negative bound never reads as a dash', () => {
 		const [col] = scoreColumns(report({ before: withExtras(period('2003-01-01', '2008-12-31', 0.62), 0.3) }));
 		expect(scoreCellText(col!, 'kgePrime')).toBe('0.62 (0.48–0.71)');
-		expect(scoreCellText(col!, 'nse')).toBe('0.40 (-0.30 to 0.05)');
+		expect(scoreCellText(col!, 'nse')).toBe('0.40 (−0.30 to 0.05)');
 		// No interval for this score, or not a score that gets one: the bare value.
 		expect(scoreCellText(col!, 'kgeLowHigh')).toBe('0.40');
 		expect(scoreCellText(col!, 'volumeErrorPct', '%')).toBe('+5.0%');
-		expect(intervalText(iv(-0.5, -0.1))).toBe('(-0.50 to -0.10)');
+		expect(intervalText(iv(-0.5, -0.1))).toBe('(−0.50 to −0.10)');
 	});
 
 	it('reads a report or stored record from before them: no intervals, no benchmarks, a missing score as "–"', () => {
@@ -257,7 +259,7 @@ describe('score intervals and benchmarks (CR-5)', () => {
 		const rows = benchmarkRows(scoreColumns(r), 'kgePrime');
 		expect(rows).toEqual([
 			{ label: 'Model', cells: ['0.62 (0.48–0.71)', '0.40 (0.48–0.71)'] },
-			{ label: 'Mean flow every day', cells: ['-0.41', '-0.41'] },
+			{ label: 'Mean flow every day', cells: ['−0.41', '−0.41'] },
 			{ label: 'Day-of-year climatology (±7 days)', cells: ['0.30', '0.20'] }
 		]);
 		expect(climatologyWarning(scoreColumns(r), 'kgePrime')).toBeNull();
@@ -390,7 +392,8 @@ describe('applyReport', () => {
 describe('seedError', () => {
 	it('takes whole numbers 0 … 2³¹ − 1', () => {
 		for (const ok of [0, 1, 42, SEED_MAX]) expect(seedError(ok), String(ok)).toBeNull();
-		expect(seedError(null)).toBe('Enter a seed.');
+		// The field never empties, so there is no "Enter a seed.": a null is just not a whole number.
+		expect(seedError(null)).toMatch(/whole number/);
 		for (const bad of [-1, 1.5, SEED_MAX + 1, NaN]) expect(seedError(bad), String(bad)).toMatch(/whole number/);
 	});
 });
@@ -522,9 +525,18 @@ describe('fitRecordFor', () => {
 		expect(fitRecordFor(report(), form, { validate: false, validationRecord: null }).forcing).not.toHaveProperty('apanDaily');
 	});
 
-	it('shows the fit time in UTC to the minute', () => {
-		expect(fittedAtText('2026-09-24T10:05:33.120Z')).toBe('2026-09-24 10:05 UTC');
-		expect(fittedAtText('2026-09-24T10:05:33Z')).toBe('2026-09-24 10:05 UTC');
+	it('shows the fit time day first, in UTC to the minute, whatever the viewer’s zone', () => {
+		expect(fittedAtText('2026-09-24T10:05:33.120Z')).toBe('24 Sep 2026 10:05 UTC');
+		expect(fittedAtText('2026-09-24T10:05:33Z')).toBe('24 Sep 2026 10:05 UTC');
+		// Near midnight UTC: the UTC day, not the viewer's, in a zone where it is already the next day.
+		const tz = process.env.TZ;
+		try {
+			process.env.TZ = 'Pacific/Kiritimati';
+			expect(fittedAtText('2026-09-24T23:55:00Z')).toBe('24 Sep 2026 23:55 UTC');
+		} finally {
+			process.env.TZ = tz;
+		}
+		expect(fittedAtText('not a time')).toBe('not a time');
 	});
 });
 
@@ -554,5 +566,17 @@ describe('fitInput leaves the forecast tail out (issue #51)', () => {
 		const input = fitInput(server('2020-07-25'), form);
 		expect(input.settings.simulationEnd).toBe('2020-07-24');
 		expect(input.settings.runoffModel).toBe('gr4j');
+	});
+});
+
+describe('searchSummary', () => {
+	it('folds the search settings into one line, bounds first when given', () => {
+		expect(searchSummary({ bounds: 'wide', budget: 1500, starts: 5, seed: 1 })).toBe(`Wide bounds · ${fmtNum(1500)} runs × 5 starts · seed 1`);
+		expect(searchSummary({ bounds: 'typical', budget: 50, starts: 1, seed: 0 })).toBe('Typical (Perrin et al. 80 %) bounds · 50 runs × 1 start · seed 0');
+	});
+	it('leaves bounds out for the rules, and reads a cleared field as a dash', () => {
+		expect(searchSummary({ budget: null, starts: null, seed: null })).toBe('– runs × – starts · seed –');
+		// Grouped as the seed field shows it (NumberInput's grouped), not 20000.
+		expect(searchSummary({ budget: 1500, starts: 5, seed: 20000 })).toBe(`${fmtNum(1500)} runs × 5 starts · seed ${fmtNum(20000)}`);
 	});
 });

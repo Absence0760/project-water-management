@@ -11,7 +11,7 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtDay, fmtNum, MINUS, parseDay } from '$lib/format/number';
 	import { balanceClosure, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
 	import WaterBalanceTable from './WaterBalanceTable.svelte';
 
@@ -49,12 +49,19 @@
 	// Trace: start on the farm and day with the largest balance residual, else the first farm on the first day.
 	let nodeId = $state('');
 	let date = $state('');
+	// The day as typed, day first (parseDay): a native date field shows the browser's own order (12/30/2021 in a US
+	// browser), so this is a text field that reads "30 Dec 2021", "30/12/2021" or "2021-12-30" and says what's wrong.
+	let dayText = $state('');
+	let dayError = $state<string | null>(null);
+	let dayInput: HTMLInputElement | undefined = $state();
 	$effect(() => {
 		// Reset when another run is shown, and only then: a model edit mustn't clear the user's pick.
 		void runId;
 		untrack(() => {
 			nodeId = v?.maxResidual?.nodeId ?? nodes.find((n) => n.kind === 'farm')?.id ?? nodes[0]?.id ?? '';
 			date = v?.maxResidual?.date ?? startDate;
+			dayText = fmtDay(date);
+			dayError = null;
 			day = null;
 			traceError = null;
 		});
@@ -68,8 +75,26 @@
 	const dayBalance = $derived(day && day.kind !== 'catchment' ? dayClosure(day) : null);
 	const storeClosure = $derived(day?.kind === 'catchment' ? catchmentClosure(day) : null);
 
+	/** The typed day, checked against the run's days; sets the error and returns null when it isn't one of them. */
+	function readDay(): string | null {
+		const iso = parseDay(dayText);
+		dayError = !iso
+			? 'Type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15.'
+			: iso < startDate || iso > endDate
+				? `Pick a day of the run, from ${fmtDay(startDate)} to ${fmtDay(endDate)}.`
+				: null;
+		return dayError ? null : iso;
+	}
+
 	async function trace(e: SubmitEvent) {
 		e.preventDefault();
+		const picked = readDay();
+		if (!picked) {
+			dayInput?.focus();
+			return;
+		}
+		date = picked;
+		dayText = fmtDay(picked);
 		if (!nodeId || !date) return;
 		const want = runId;
 		tracing = true;
@@ -88,7 +113,7 @@
 	}
 
 	/** Enough digits to see float noise without drowning the volumes. */
-	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2) : fmtNum(x, 3, true));
+	const fmtValue = (x: number | null) => (x === null ? '–' : Math.abs(x) > 0 && Math.abs(x) < 1e-3 ? x.toExponential(2).replace(/^-/, MINUS) : fmtNum(x, 3, true));
 </script>
 
 <section aria-labelledby="{uid}-h">
@@ -110,7 +135,7 @@
 		{#if engineVersion}<p class="muted small" data-testid="checks-engine">Checked by engine {engineVersion} when the run was made.</p>{/if}
 		{#if v.maxResidual}
 			<p class="muted small">
-				Largest daily balance error of any hydrological unit (column V of its daily CSV): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {v.maxResidual.date}.
+				Largest daily balance error of any hydrological unit (column V of its daily CSV): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {fmtDay(v.maxResidual.date)}.
 				It should be float noise, far below the flows.
 			</p>
 		{/if}
@@ -145,15 +170,37 @@
 		</label>
 		<label>
 			<span>Day</span>
-			<input type="date" bind:value={date} min={startDate} max={endDate} required />
+			<input
+				type="text"
+				class="day"
+				bind:this={dayInput}
+				bind:value={dayText}
+				oninput={() => (dayError = null)}
+				onblur={() => {
+					const iso = parseDay(dayText);
+					if (iso) dayText = fmtDay(iso);
+				}}
+				placeholder="15 Nov 2021"
+				autocomplete="off"
+				spellcheck="false"
+				required
+				aria-invalid={dayError ? 'true' : undefined}
+				aria-describedby="{uid}-day-msg"
+			/>
 		</label>
 		<button type="submit" class="btn btn-sm" disabled={tracing || !nodeId}>{tracing ? 'Tracing…' : 'Trace'}</button>
 	</form>
+	<!-- One line under the form: the run's days, or what's wrong with the typed day (a fresh alert, so it is announced). -->
+	{#if dayError}
+		<p id="{uid}-day-msg" class="day-msg bad small" role="alert">{dayError}</p>
+	{:else}
+		<p id="{uid}-day-msg" class="day-msg muted small">Run days {fmtDay(startDate)} to {fmtDay(endDate)}, day first.</p>
+	{/if}
 	{#if traceError}<p class="alert alert-error" role="alert">{traceError}</p>{/if}
 	{#if day}
 		<div class="table-wrap" aria-live="polite">
 			<table class="data compact trace">
-				<caption>{day.name}{day.kind === 'catchment' ? ` (${day.runoffModel === 'gr4j' ? 'GR4J' : day.runoffModel})` : ''} on {day.date}</caption>
+				<caption>{day.name}{day.kind === 'catchment' ? ` (${day.runoffModel === 'gr4j' ? 'GR4J' : day.runoffModel})` : ''} on {fmtDay(day.date)}</caption>
 				<thead>
 					<tr>
 						<th scope="col">Col.</th>
@@ -254,6 +301,17 @@
 		flex-direction: column;
 		gap: 0.15rem;
 		font-size: 0.8rem;
+	}
+	/* Wide enough for "30 Sep 2021" and the placeholder, as the native date field was. */
+	.trace-form .day {
+		width: 9.5rem;
+	}
+	.day-msg {
+		margin: -0.25rem 0 0.5rem;
+	}
+	.day-msg.bad {
+		color: var(--danger);
+		font-weight: 500;
 	}
 	.trace caption {
 		text-align: left;

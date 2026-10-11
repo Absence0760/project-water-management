@@ -135,18 +135,18 @@
 							<td class="num">{r.supplied}</td>
 							<td class="num">{r.suppliedPct}</td>
 							<td class="num">{r.target}</td>
-							<td class="num" class:neg={r.reduceGain.startsWith('-')} class:pos={r.reduceGain.startsWith('+')}>{r.reduceGain}</td>
-							<td class="num" class:neg={r.reduceGainLs.startsWith('-')} class:pos={r.reduceGainLs.startsWith('+')}>{r.reduceGainLs}</td>
+							<td class="num" class:neg={r.reduceGain.startsWith('−')} class:pos={r.reduceGain.startsWith('+')}>{r.reduceGain}</td>
+							<td class="num" class:neg={r.reduceGainLs.startsWith('−')} class:pos={r.reduceGainLs.startsWith('+')}>{r.reduceGainLs}</td>
 							<td class="num">{r.ewrShortfall}</td>
 							{#if attributed}
 								<td class="num">{r.ewrIrrigation}</td>
 								<td class="num">{r.ewrStorage}</td>
-								<td class="num" class:neg={r.supplyCut.startsWith('-')}>{r.supplyCut}</td>
-								<td class="num" class:neg={r.supplyCutLs.startsWith('-')}>{r.supplyCutLs}</td>
+								<td class="num" class:neg={r.supplyCut.startsWith('−')}>{r.supplyCut}</td>
+								<td class="num" class:neg={r.supplyCutLs.startsWith('−')}>{r.supplyCutLs}</td>
 								<td>{r.bindingSite}</td>
 							{/if}
 							<td class="num strong" class:neg={r.action === 'cut'} class:pos={r.action === 'gain'}>{r.totalChange}</td>
-							<td class="num" class:neg={r.totalChangeLs.startsWith('-')} class:pos={r.totalChangeLs.startsWith('+')}>{r.totalChangeLs}</td>
+							<td class="num" class:neg={r.totalChangeLs.startsWith('−')} class:pos={r.totalChangeLs.startsWith('+')}>{r.totalChangeLs}</td>
 							<td class="num">{r.volumeLeft}</td>
 							<td class="num" title={r.demandLeftTitle ?? undefined}>{r.demandLeftPct}</td>
 						</tr>

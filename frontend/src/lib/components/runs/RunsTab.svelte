@@ -18,7 +18,7 @@
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { downloads, runDownloadItems, type FarmTableItem } from '$lib/export';
-	import { fmtDate, fmtNum } from '$lib/format/number';
+	import { fmtDay, fmtNum, fmtStamp, fmtWhen } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { dataEnd, newDataSinceRun } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun, prefetchSeries } from './cache';
@@ -41,6 +41,7 @@
 	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '$lib/components/river/links';
@@ -112,6 +113,10 @@
 	let publicationError = $state<string | null>(null);
 	let loading = $state(untrack(() => initialRuns === null));
 	let loadError = $state<string | null>(null);
+	/** The list has loaded and holds no run: the page shows one empty state (the Runs card) and no results column. */
+	const noRuns = $derived(!loading && !loadError && runs.length === 0);
+	const RESULTS_SHOW =
+		"A run's results: flows at the outflow gauge, calibration against observed flow, EWR compliance and each hydrological unit's supply and dam storage.";
 	let actionError = $state<string | null>(null);
 
 	let label = $state('');
@@ -130,6 +135,8 @@
 	);
 	let detailLoading = $state(false);
 	let detailError = $state<string | null>(null);
+	/** The run the URL names is no longer stored (404): Try again can't bring it back. */
+	let detailGone = $state(false);
 
 	// Display order and names come from the current model (nodes deleted since
 	// the run fall back to the run's own names).
@@ -226,6 +233,7 @@
 		}
 		detailLoading = true;
 		detailError = null;
+		detailGone = false;
 		try {
 			const d = await api.runs.get(projectId, id);
 			// The first charts' flows go out now, before the results page renders (cache.ts prefetchSeries).
@@ -236,6 +244,7 @@
 			if (detailFor === id) {
 				detail = null;
 				detailError = runErrorText(e);
+				detailGone = isRunGone(e);
 			}
 		} finally {
 			if (detailFor === id) detailLoading = false;
@@ -337,7 +346,7 @@
 		return m;
 	});
 	const drift = $derived(modelDriftWarning(runs, nominations));
-	const evidenceFmt = (iso: string) => fmtDate(iso, true);
+	const evidenceFmt = fmtStamp;
 	/** The run header's evidence line for the shown run, or null when it was never nominated. */
 	const shownEvidence = $derived(detail ? evidenceLine(detail.run.id, nominations, evidenceFmt) : null);
 
@@ -364,7 +373,7 @@
 	}
 
 	async function remove(r: RunMeta) {
-		if (!(await confirmDialog({ title: `Delete run “${r.label || fmtDate(r.createdAt, true)}”?`, confirmLabel: 'Delete run', danger: true }))) return;
+		if (!(await confirmDialog({ title: `Delete run “${r.label || fmtStamp(r.createdAt)}”?`, confirmLabel: 'Delete run', danger: true }))) return;
 		actionError = null;
 		try {
 			await api.runs.remove(projectId, r.id);
@@ -375,6 +384,7 @@
 				return;
 			}
 		}
+		const at = shownRuns.findIndex((x) => x.id === r.id);
 		forgetRun(r.id);
 		commit(runs.filter((x) => x.id !== r.id));
 		if (selectedId === r.id) {
@@ -382,6 +392,8 @@
 			detailFor = '';
 			select(runs[0]?.id ?? null);
 		}
+		// Its row, and the ✕ that had the focus, have gone: the run now in its place takes it.
+		await focusAfterRemove(at, 'ul.runs button.pick', 'runs-h');
 	}
 
 	// Inputs changed since the newest run? Settings/model saves bump the
@@ -413,7 +425,7 @@
 	const RESULTS_RAIL_FROM_REM = 62;
 	let navLayout = $state<'bar' | 'rail'>('bar');
 	const navGroups = $derived(
-		detail ? [...resultGroups(detail.run.summary), ...(navLayout === 'rail' ? otherPageGroups(detail.run.id) : [])] : []
+		detail ? [...resultGroups(detail.run.summary, navLayout === 'rail'), ...(navLayout === 'rail' ? otherPageGroups(detail.run.id) : [])] : []
 	);
 	const downloadItems = $derived(
 		detail
@@ -527,7 +539,9 @@
 {/if}
 {#if drift}<p class="alert alert-warning" role="status" data-testid="evidence-drift">{drift}</p>{/if}
 
-<div class="layout" bind:this={layoutEl} style:--rail-top="{railTop}px">
+<!-- No runs: one empty state, the Runs card across the page, saying what a run will show (a second
+     "Results appear here" card beside or under it was mostly empty space, a screen of it on a phone). -->
+<div class="layout" class:no-runs={noRuns} bind:this={layoutEl} style:--rail-top="{railTop}px">
 	<!-- The rail: the runs list, in view beside the long results page (sticky on wide screens). -->
 	<aside class="rail" bind:this={railEl}>
 		<section class="panel list" aria-labelledby="runs-h">
@@ -549,7 +563,11 @@
 					{loadError} <button type="button" class="btn btn-sm" onclick={load}>Try again</button>
 				</div>
 			{:else if runs.length === 0}
-				<p class="empty">{canRun ? 'No runs yet. Run the model to see results.' : 'No runs yet.'}</p>
+				<!-- "Run the model" only while it can start: otherwise the status line under the header says what a run needs. -->
+				<div class="empty">
+					<p>{!canRun ? 'No runs yet.' : missing.length || overAllocated ? 'No runs yet. A run can start once the note above is dealt with.' : 'No runs yet. Run the model to see results.'}</p>
+					<p class="muted small">{RESULTS_SHOW}</p>
+				</div>
 			{:else}
 				{#if runs.length >= RUN_FILTER_FROM}
 					<input class="filter" type="search" aria-label="Filter runs by label" placeholder="Filter {runs.length} runs" bind:value={runQuery} />
@@ -563,7 +581,8 @@
 						<li class:active={r.id === selectedId}>
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
-								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
+								<!-- Each part on one line: "2021–2022" broke after its dash, a third line on every row. -->
+								<span class="meta"><span class="nw">{fmtWhen(r.createdAt)}</span> · <span class="nw">{runYears(r.startDate, r.endDate)}</span></span>
 								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast' || r.errata?.length}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
@@ -587,13 +606,13 @@
 										type="button"
 										class="btn btn-icon pin"
 										aria-pressed={!!r.pinned}
-										aria-label="Pin run {r.label || fmtDate(r.createdAt, true)}"
+										aria-label="Pin run {r.label || fmtStamp(r.createdAt)}"
 										title={r.pinned ? 'Unpin: newer runs can push it out again' : `Pin: newer runs never push it out (at most ${PINNED_RUNS_MAX} per project)`}
 										onclick={() => togglePin(r)}
 										><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5v1H4v-1L6.5 6zM8 9.5V14" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg></button
 									>
 									{#if !evidenceById.has(r.id) && !r.pinned && !heldByPublication.has(r.id) && !r.citedBy?.length}
-										<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtDate(r.createdAt, true)}" title="Delete run" onclick={() => remove(r)}>✕</button>
+										<button type="button" class="btn btn-icon" aria-label="Delete run {r.label || fmtStamp(r.createdAt)}" title="Delete run" onclick={() => remove(r)}>✕</button>
 									{/if}
 								</div>
 							{/if}
@@ -604,6 +623,7 @@
 		</section>
 	</aside>
 
+	{#if !noRuns}
 	<div class="detail">
 		<!-- In-page menu, grouped by the question each panel answers: from 62rem of results a side index on the
 		     right (the runs list is the left column), with the main panels of River & reserve and Hydrological
@@ -612,7 +632,11 @@
 		{#if detailError && !detail}
 			<div class="alert alert-error" role="alert">
 				{detailError}
-				<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+				{#if !detailGone}
+					<button type="button" class="btn btn-sm" onclick={() => selectedId && loadDetail(selectedId)}>Try again</button>
+				{:else if latest && latest.id !== selectedId}
+					<button type="button" class="btn btn-sm" onclick={() => select(latest.id)}>Show the newest run</button>
+				{/if}
 			</div>
 		{:else if detail}
 			{@const summary = detail.run.summary}
@@ -647,12 +671,12 @@
 								onclick={() => (validationOpen = true)}
 								>May be affected by {detail.run.errata.length === 1 ? 'a known bug' : `${detail.run.errata.length} known bugs`}</a
 							>{/if}
-						{#if summary.forecast}<a class="badge badge-warn" href="#res-forecast">Forecast from {summary.forecast.from}</a>{/if}
+						{#if summary.forecast}<a class="badge badge-warn" href="#res-forecast">Forecast from {fmtDay(summary.forecast.from)}</a>{/if}
 						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
 						<!-- The note leads the reader to the Record group, below the results (sections.ts). -->
 						{#if notesPreview(detail.run.notes)}<a class="muted small evidence-line" href="#res-notes" data-testid="notes-preview">Notes: {notesPreview(detail.run.notes)}</a>{/if}
 						<span class="muted small">
-							{detail.run.startDate} → {detail.run.endDate} ({fmtNum(runDays(detail.run))} days) · run {fmtDate(detail.run.createdAt, true)} by {detail.run.createdBy ?? FORMER_MEMBER} · engine {detail.run.engineVersion}
+							{fmtDay(detail.run.startDate)} – {fmtDay(detail.run.endDate)} ({fmtNum(runDays(detail.run))} days) · ran {fmtWhen(detail.run.createdAt)} by {detail.run.createdBy ?? FORMER_MEMBER} · engine {detail.run.engineVersion}
 							{#if !viewingLatest && latest}· <button type="button" class="linkish" onclick={() => select(latest.id)}>go to latest</button>{/if}
 						</span>
 						<!-- The river and unit panels have their own pages (issue #17): one link each, keeping the run. -->
@@ -685,7 +709,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
+					<RunSummaryView foldChecks summary={detail.run.summary} days={historyDays(detail.run)} headline={project.settings.ewrHeadline ?? null} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
 					{#if summary.catchment.outletEwr && shownSettings?.ewrDailySource}
 						<Lazy load={loadRunScaledEwr}>
 							{#snippet children(RunScaledEwrTables)}
@@ -781,25 +805,32 @@
 					{/if}
 				{/snippet}
 				{#snippet record()}
+					<!-- The Record group (issue #521): Run notes, Evidence and Reproduction are panels of their own, each with its action where it is seen. -->
 					<section class="panel" id="res-notes">
 						{#key shownRunId}
-							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved} />
+							<RunNotes {projectId} run={shownRun} canEdit={canRun} flagLevel={summary.wr2012?.flag.level ?? null} onSaved={notesSaved}>
+								{#snippet aside()}
+									<!-- The team's notes on the run (WP-2.7), at the heading's right as on every Settings panel; RunNotes' intro says how they differ. -->
+									<NotesDrawer {projectId} target={{ kind: 'run', runId: shownRun.id, label: shownRun.label || fmtStamp(shownRun.createdAt) }} />
+								{/snippet}
+							</RunNotes>
 						{/key}
-						<!-- Comments on the run from anyone on the team (WP-2.7), beside its one written explanation above. -->
-						<p class="run-comments"><NotesDrawer {projectId} target={{ kind: 'run', runId: shownRun.id, label: shownRun.label || fmtDate(shownRun.createdAt, true) }} /></p>
-						<!-- One menu entry with the notes (sections.ts); the run header links straight here. -->
-						<div class="evidence" id="res-evidence">
-							{#key shownRunId}
-								<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
-							{/key}
-							{#key shownRunId}
-								<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
-							{/key}
-						</div>
+					</section>
+					<!-- The run header's evidence line links straight here. -->
+					<div class="panel" id="res-evidence">
+						{#key shownRunId}
+							<EvidencePanel {projectId} run={shownRun} history={nominations} canEdit={canRun} onNominated={nominated} />
+						{/key}
+					</div>
+					<!-- Re-running the run from its stored inputs, then what changed in the inputs since: both about the run's inputs. -->
+					<div class="panel" id="res-reproduce">
+						{#key shownRunId}
+							<ReproducePanel {projectId} run={shownRun} nodeName={(id: string) => nodeNames.get(id)} />
+						{/key}
 						{#key shownRunId}
 							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
 						{/key}
-					</section>
+					</div>
 					<!-- The report's validation statement (WP-3.13), folded shut; its body loads when opened. -->
 					<div class="panel" id="res-validation">
 						<ValidationPanel
@@ -849,13 +880,11 @@
 			<div class="panel" aria-hidden="true"><span class="sk sk-chart"></span></div>
 			<p class="visually-hidden" role="status">Loading run results…</p>
 		{:else}
-			<div class="panel placeholder muted">
-				Results appear here after a run: flows at the outflow gauge, calibration against observed flow, EWR compliance and each
-				hydrological unit's supply and dam storage.
-			</div>
+			<div class="panel placeholder muted">Pick a run to see its results. {RESULTS_SHOW}</div>
 		{/if}
 		</SectionNav>
 	</div>
+	{/if}
 </div>
 
 </div>
@@ -889,24 +918,23 @@
 		gap: 0 0.9rem;
 		margin-top: 0.2rem;
 	}
+	/* A flex item drops the space before the arrow ("River & reserve→"), so the gap puts it back. */
 	.outcomes a {
 		display: inline-flex;
 		align-items: center;
+		gap: 0.25em;
 		min-height: 24px;
 	}
+	/* Report, Evidence report and Download wrap on a 320 px phone rather than push the page sideways. */
 	.head-acts {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.5rem;
 	}
 	.evidence-line {
 		display: block;
 		margin: 0.15rem 0;
-	}
-	.evidence {
-		margin-top: 1rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
 	}
 	.provenance {
 		margin-top: 1rem;
@@ -1093,10 +1121,14 @@
 		line-clamp: 2;
 		overflow: hidden;
 	}
+	/* Proportional figures: Inter's tabular ones set each hyphen a digit wide, and "2026-10-11 01:01 ·
+	   2021–2022" then missed the rail's line by a few px, a third line on every row. */
 	.meta {
 		font-size: 0.75rem;
 		color: var(--text-muted);
-		font-variant-numeric: tabular-nums;
+	}
+	.meta .nw {
+		white-space: nowrap;
 	}
 	.tags {
 		display: flex;
@@ -1148,10 +1180,26 @@
 	.empty {
 		color: var(--text-muted);
 		text-align: center;
-		padding: 1.5rem 0.5rem;
-		margin: 0;
+		padding: 1.25rem 0.75rem;
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius);
+	}
+	.empty p {
+		margin: 0;
+	}
+	.empty p + p {
+		margin-top: 0.4rem;
+	}
+	/* No runs: the Runs card is the page's one empty state, across its width (wide too: no empty results column). */
+	.layout.no-runs {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.no-runs .rail {
+		position: static;
+		max-height: none;
+	}
+	.no-runs .empty {
+		text-align: left;
 	}
 	.placeholder {
 		text-align: center;

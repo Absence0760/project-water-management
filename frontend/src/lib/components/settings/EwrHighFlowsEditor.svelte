@@ -2,19 +2,24 @@
 	A rule table's high-flow components (engine ≥ 0.33.0, docs/model.md §2.9d):
 	freshets and floods, each a name, the months it may peak in, a peak
 	(m³/s), an event duration (days, rise to recession) and the events required per water year. Rows
-	are edited in place, pasted from a spreadsheet, or read from a CSV file.
-	Part of EwrRuleTablesEditor.svelte's chunk; helpers in ./ewrRules.ts. A
-	"Peaks in" that doesn't read as months is kept as typed, said under its field
-	and counted as invalid (common/invalidFields), so it blocks the save as an
-	invalid number does; a Fill over typed components asks first.
+	are edited in place, or pasted from a spreadsheet or read from a CSV file in
+	a dialog (issue #521: it was an always-open box under the rows) in the
+	paste dialogs' shared frame (model/PasteDialogFrame.svelte, as
+	model/GridPasteDialog.svelte) that previews the rows the parser reads, since this is a list of rows, not a
+	grid of numbers: the same parser and result as the old Fill, and the
+	preview (with what it replaces) is the check before Fill, so it asks no
+	confirm. Part of EwrRuleTablesEditor.svelte's chunk; helpers in
+	./ewrRules.ts. A "Peaks in" that doesn't read as months is kept as typed,
+	said under its field and counted as invalid (common/invalidFields), so it
+	blocks the save as an invalid number does.
 -->
 <script lang="ts">
 	import { EWR_HIGH_FLOWS_MAX, highFlowsIssue, type EwrHighFlowEvent } from '@water-management/engine';
 	import { untrack } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import PasteDialogFrame from '$lib/components/model/PasteDialogFrame.svelte';
+	import { fmtNum } from '$lib/format/number';
 	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
-	import { latestFileText } from '$lib/files/latest';
 	import { describeMonths } from '$lib/format/months';
 	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, highFlowTyped, parseHighFlows, parseMonths } from './ewrRules';
 
@@ -36,7 +41,20 @@
 	let monthsText = $state<Record<number, string>>({});
 	let monthsBad = $state<Record<number, boolean>>({});
 	let paste = $state('');
+	let pasteOpen = $state(false);
 	let note = $state<{ ok: boolean; text: string } | null>(null);
+	// The dialog's preview: the parser's rows, or its error.
+	const parsed = $derived(paste.trim() ? parseHighFlows(paste) : null);
+	const rows = $derived(parsed && !('error' in parsed) ? parsed : null);
+	const typedNow = $derived(value.filter(highFlowTyped).length);
+	const plural = (n: number) => `${n} high flow${n === 1 ? '' : 's'}`;
+	const summary = $derived(
+		!parsed
+			? 'Paste or load the rows to see what they fill.'
+			: 'error' in parsed
+				? parsed.error
+				: `${parsed.length} high-flow component${parsed.length === 1 ? '' : 's'}${typedNow ? `, replacing the ${typedNow === 1 ? '1 component' : `${typedNow} components`} listed` : ''}.`
+	);
 	const issue = $derived(value.length ? highFlowsIssue(value) : null);
 	const exampleHref = `data:text/csv;charset=utf-8,${encodeURIComponent(EXAMPLE_HIGH_FLOWS_CSV)}`;
 
@@ -81,47 +99,31 @@
 		resetText();
 	}
 
-	async function fill(text: string) {
-		const r = parseHighFlows(text);
-		if ('error' in r) {
-			note = { ok: false, text: r.error };
-			return;
-		}
-		const typed = value.filter(highFlowTyped).length;
-		if (
-			typed &&
-			!(await confirmDialog({
-				title: `Replace the high flows at ${siteLabel}?`,
-				message: `${typed === 1 ? 'The 1 component' : `The ${typed} components`} listed will be replaced by the ${r.length} filled in.`,
-				confirmLabel: 'Replace the high flows'
-			}))
-		)
-			return;
-		value = r;
+	/** The dialog's Fill: the parser's rows replace the list, as the old Fill button did (the frame then empties the box and closes). */
+	function fill() {
+		const filled = rows;
+		if (!filled) return;
+		value = filled;
 		resetText();
-		paste = '';
-		note = { ok: true, text: `Filled ${r.length} high-flow component${r.length === 1 ? '' : 's'}.` };
-	}
-
-	// The latest file only: a large file still read can't land over one picked after it.
-	const fileText = latestFileText();
-	async function load(e: Event & { currentTarget: HTMLInputElement }) {
-		const f = e.currentTarget.files?.[0];
-		e.currentTarget.value = '';
-		if (!f) return;
-		const text = await fileText(f);
-		if (text !== null) fill(text);
+		note = { ok: true, text: `Filled ${filled.length} high-flow component${filled.length === 1 ? '' : 's'}.` };
 	}
 </script>
 
 <fieldset class="plain" aria-describedby="{uid}-status">
 	<legend>High flows: freshets and floods</legend>
-	<p class="hint">
+	<p class="hint explain">
 		Each component is a flood that reaches its peak in one of its months and lasts its duration from rise to recession (counted as at least half the duration at or above half the peak), required that many times each water year. A
 		year is asked for no more events than the site’s natural flow had, so a dry year that would have had no flood is not failed for it. The peak is a
 		<strong>daily-mean</strong> flow: a gazetted Reserve gives an instantaneous peak, which daily flow rarely reaches, so enter the daily-mean peak the
 		hydrologist converts it to (the run warns when natural flow reaches a peak in no more than half the water years).
 	</p>
+	{#if !readonly}
+		<!-- The list's actions above it, in one row (a grid's actions go above it). -->
+		<div class="actions">
+			<button type="button" class="btn btn-sm" disabled={value.length >= EWR_HIGH_FLOWS_MAX} onclick={add}>Add a high flow</button>
+			<button type="button" class="btn btn-sm" aria-haspopup="dialog" onclick={() => (pasteOpen = true)}>Paste or load a CSV…<span class="visually-hidden"> high flows at {siteLabel}</span></button>
+		</div>
+	{/if}
 	{#if value.length}
 		<div class="table-wrap">
 			<table class="data compact">
@@ -168,31 +170,57 @@
 		<p class="muted small">None: only the monthly flows are judged.</p>
 	{/if}
 	{#if issue}<p class="err" role="alert">{issue}</p>{/if}
-	{#if !readonly}
-		<div class="actions">
-			<button type="button" class="btn btn-sm" disabled={value.length >= EWR_HIGH_FLOWS_MAX} onclick={add}>Add a high flow</button>
-		</div>
-		<div class="paste">
-			<label for="{uid}-paste">Paste high flows</label>
-			<textarea
-				id="{uid}-paste"
-				rows="3"
-				placeholder={'One per row: name, months, daily-mean peak (m³/s), event days, events per year. A heading row is skipped.'}
-				bind:value={paste}
-				aria-describedby="{uid}-status"
-			></textarea>
-			<div class="actions">
-				<button type="button" class="btn btn-sm" onclick={() => fill(paste)}>Fill the high flows</button>
-				<label class="btn btn-sm file">
-					Load a CSV file
-					<input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onchange={load} />
-				</label>
-				<a class="small" href={exampleHref} download="high-flows-example.csv">Example CSV (synthetic)</a>
-			</div>
-		</div>
-	{/if}
 	<p id="{uid}-status" class="small" class:err={note && !note.ok} role="status" aria-label="High-flow paste result">{note?.text ?? ''}</p>
 </fieldset>
+
+{#if !readonly}
+	<PasteDialogFrame
+		bind:open={pasteOpen}
+		bind:text={paste}
+		title="Paste high flows at {siteLabel}"
+		textLabel="Rows copied from a spreadsheet"
+		describedby="{uid}-layout"
+		download={{ href: exampleHref, name: 'high-flows-example.csv', label: 'Example CSV (synthetic)' }}
+		{summary}
+		error={!!parsed && 'error' in parsed}
+		summaryTestid="high-flow-paste-summary"
+		tableLabel="Pasted high flows"
+		showTable={!!rows}
+		applyLabel={rows ? (typedNow ? `Replace with ${plural(rows.length)}` : `Fill ${plural(rows.length)}`) : 'Fill the high flows'}
+		canApply={!!rows}
+		onapply={fill}
+	>
+		{#snippet intro()}
+			<p class="small muted" id="{uid}-layout">One per row: name, months, daily-mean peak (m³/s), event days, events per year. A heading row is skipped. The rows replace the list.</p>
+		{/snippet}
+		{#snippet table()}
+			{#if rows}
+				<table class="data compact">
+					<thead>
+						<tr>
+							<th scope="col">Name</th>
+							<th scope="col">Peaks in</th>
+							<th scope="col" class="num">Daily-mean peak <span class="u">m³/s</span></th>
+							<th scope="col" class="num">Event days</th>
+							<th scope="col" class="num">Per year</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each rows as r, k (k)}
+							<tr>
+								<th scope="row">{r.label || `High flow ${k + 1}`}</th>
+								<td>{describeMonths(r.months)}</td>
+								<td class="num">{fmtNum(r.peakM3s, 4, true)}</td>
+								<td class="num">{r.durationDays}</td>
+								<td class="num">{r.perYear}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		{/snippet}
+	</PasteDialogFrame>
+{/if}
 
 <style>
 	.hint {
@@ -218,20 +246,9 @@
 	td input {
 		width: 100%;
 	}
-	.paste {
-		display: grid;
-		gap: 0.35rem;
-		margin-top: 0.5rem;
-		max-width: 75ch;
-	}
-	.paste > label {
-		font-weight: 500;
-		font-size: 0.85rem;
-	}
-	.paste textarea {
-		width: 100%;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.8rem;
+	.u {
+		color: var(--text-muted);
+		font-size: 0.75rem;
 	}
 	.actions {
 		display: flex;

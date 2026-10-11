@@ -118,10 +118,22 @@ export function compareEvidenceNote(side: 'A' | 'B', e: RunEvidence | null | und
  * nominated. The server refuses each case too (409).
  */
 export function nominateBlocker(run: Pick<RunMeta, 'id' | 'legacy' | 'trigger'> & ScenarioRunFields, history: readonly Nomination[]): string | null {
+	const kind = evidenceKindBlocker(run);
+	if (kind) return kind;
+	if (currentNomination(history)?.runId === run.id) return 'This run is the nominated evidence run.';
+	return null;
+}
+
+/**
+ * Why a run of this kind can never be the evidence (legacy, scenario,
+ * forecast), or null for a run of the model. The Evidence panel then shows
+ * only this line, not the withdraw action or the project's nomination
+ * history, which are about runs of the model (issue #521).
+ */
+export function evidenceKindBlocker(run: Pick<RunMeta, 'legacy' | 'trigger'> & ScenarioRunFields): string | null {
 	if (run.legacy) return 'A run of the legacy runoff model (removed in engine 1.0.0) is workbook comparison only, so it can’t be nominated as evidence.';
 	// Also once the scenario is deleted (isScenarioRun).
 	if (isScenarioRun(run)) return 'A scenario run is its scenario’s changes on a base run, not the catchment as it is, so it can’t be nominated as evidence. Nominate a run of the model.';
 	if (run.trigger === 'forecast') return 'A forecast run’s last days are modelled on forecast rain, so it can’t be nominated as evidence: evidence is judged on the record.';
-	if (currentNomination(history)?.runId === run.id) return 'This run is the nominated evidence run.';
 	return null;
 }

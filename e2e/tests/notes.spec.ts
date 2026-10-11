@@ -23,7 +23,7 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	await acceptInvites(farmer.user.email, project.id);
 
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
-	await page.getByRole('button', { name: 'Add a note on Upper farm' }).click();
+	await page.getByRole('button', { name: 'Notes on Upper farm', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on Upper farm' });
 	await expect(dialog).toContainText('No notes yet.');
 	await dialog.getByLabel('Add a note').fill('Owner disputes the dam volume\n<b>check survey</b>');
@@ -71,7 +71,7 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await createRun(page.request, project.id, 'Baseline');
 
 	await page.goto(`/projects/${project.id}?tab=settings`);
-	await page.getByRole('button', { name: 'Add a note on EWR' }).click();
+	await page.getByRole('button', { name: 'Notes on EWR', exact: true }).click();
 	const dialog = page.getByRole('dialog', { name: 'Notes on EWR' });
 	await dialog.getByLabel('Add a note').fill('EWR from the 2014 reserve study');
 	await dialog.getByRole('button', { name: 'Add note' }).click();
@@ -85,12 +85,16 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Notes on EWR (1)' })).toBeVisible();
 	// The groups whose sources and determinations most need a "why" take notes too (WR2012, Reserve rules, restrictions, Evidence).
-	for (const group of ['WR2012 check', 'Reserve rule tables', 'Drought restrictions', 'Evidence']) {
-		await expect(page.getByRole('button', { name: `Add a note on ${group}` })).toBeVisible();
+	for (const group of ['WR2012 check', 'Reserve rule tables', 'Drought restrictions', 'Reporting', 'Evidence']) {
+		await expect(page.getByRole('button', { name: `Notes on ${group}`, exact: true })).toBeVisible();
 	}
+	// Label in Name (WCAG 2.5.3): the button shows "Notes", and its accessible name starts with it.
+	const reportingNotes = page.locator('#set-reporting .notes-btn');
+	await expect(reportingNotes).toHaveText('Notes');
+	await expect(reportingNotes).toHaveAccessibleName('Notes on Reporting');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
-	await page.getByRole('button', { name: 'Add a note on this run' }).click();
+	await page.getByRole('button', { name: 'Notes on this run', exact: true }).click();
 	const runDialog = page.getByRole('dialog', { name: 'Notes on run Baseline' });
 	await runDialog.getByLabel('Add a note').fill('Checked against the weir log');
 	await runDialog.getByRole('button', { name: 'Add note' }).click();
@@ -107,9 +111,9 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await runDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await answerConfirm(page, true, 'Discard your note?');
 	await expect(runDialog).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Add a note on this run' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Notes on this run', exact: true })).toBeVisible();
 	// Opened again, it starts empty and closes without a question.
-	await page.getByRole('button', { name: 'Add a note on this run' }).click();
+	await page.getByRole('button', { name: 'Notes on this run', exact: true }).click();
 	await expect(runDialog.getByLabel('Add a note')).toHaveValue('');
 	await runDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(runDialog).toBeHidden();

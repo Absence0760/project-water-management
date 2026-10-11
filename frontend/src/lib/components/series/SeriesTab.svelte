@@ -18,6 +18,7 @@
 	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -54,7 +55,7 @@
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { downloads } from '$lib/export';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtDay, fmtNum } from '$lib/format/number';
 	import { projectToday } from '$lib/components/projects/freshness';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
@@ -418,10 +419,13 @@
 		actionError = null;
 		try {
 			await api.series.remove(projectId, s.id);
+			const at = rows.findIndex((x) => x.id === s.id);
 			list = list.filter((x) => x.id !== s.id);
 			onSeriesChange?.(list);
 			// The deleted series was charted: back to the default, without a history entry for it.
 			if (seriesParam === s.id) void goto(withoutParam(page.url, 'series'), { noScroll: true, keepFocus: true, replaceState: true });
+			// Its row, and the Delete that had the focus, have gone: the View of the series now in its place takes it.
+			await focusAfterRemove(at, '#series-rows button[aria-pressed]', 'ser-h');
 		} catch (e) {
 			actionError = msg(e);
 		}
@@ -662,10 +666,10 @@
 								{/if}
 							</th>
 							<td role="cell" class="upto" data-label="Data up to">
-								<span class="num">{st?.lastValueDate ?? end}</span>
+								<span class="num">{fmtDay(st?.lastValueDate ?? end)}</span>
 								<span class="age">{agoText(age)}</span>
 								<!-- In a mid-width column From folds in here (the From column is hidden from sight, kept for screen readers). -->
-								<span class="from-inline" aria-hidden="true">from {s.startDate}</span>
+								<span class="from-inline" aria-hidden="true">from {fmtDay(s.startDate)}</span>
 								{#if behind !== undefined}
 									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
 										>Behind</span
@@ -673,7 +677,7 @@
 								{/if}
 							</td>
 							<!-- The start only: the end is Data up to's (issue #174). -->
-							<td role="cell" class="num period from-col" data-label="From">{s.startDate}</td>
+							<td role="cell" class="num period from-col" data-label="From">{fmtDay(s.startDate)}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -688,7 +692,7 @@
 								<div class="acts">
 								<button type="button" class="btn btn-sm" aria-pressed={s.id === selectedId} onclick={() => choose(s.id)}>View</button>
 								<button type="button" class="btn btn-sm" onclick={() => openPreviewSeries(s.id)} onpointerenter={warmPreview} onfocus={warmPreview}>Preview</button>
-								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${s.startDate} → ${end}` }]} />
+								<DownloadMenu label="CSV" items={[{ label: `${s.name || kindLabel(s.kind)} (CSV)`, url: downloads.series(projectId, s.id), hint: `${fmtDay(s.startDate)} → ${fmtDay(end)}` }]} />
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-danger" onclick={() => remove(s)} aria-label="Delete {s.name || kindLabel(s.kind)}">Delete</button>
 								{/if}

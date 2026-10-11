@@ -79,14 +79,14 @@ describe('checklist', () => {
 			model: full,
 			settings: settled(),
 			series: [series('rain_catchment_mm', 3653), series('flow_observed_m3s')],
-			runs: [run('2026-01-01T00:00:00Z'), run('2026-02-01T00:00:00Z')],
+			runs: [run('2026-01-01T12:00:00Z'), run('2026-02-01T12:00:00Z')],
 			updatedAt: '2026-01-15T00:00:00Z'
 		});
 		expect(statuses(steps)).toEqual({ network: 'done', crops: 'done', series: 'done', settings: 'done', runs: 'done' });
 		expect(steps[0]!.detail).toBe('1 hydrological unit, 1 gauge, draining to Gauge.');
 		expect(steps[1]!.detail).toBe('1 crop on 1 hydrological unit, 12.5 ha irrigated.');
 		expect(steps[2]!.detail).toBe('Rainfall (10 years) and observed flow loaded.');
-		expect(steps[4]!.detail).toBe('2 runs, latest 2026-02-01.');
+		expect(steps[4]!.detail).toBe('2 runs, latest 1 Feb 2026.');
 		expect(progress(steps).complete).toBe(true);
 		expect(nextStep(steps)).toBeUndefined();
 	});
@@ -151,11 +151,25 @@ describe('checklist', () => {
 			model: full,
 			settings: settled(),
 			series: [],
-			runs: [run('2026-01-01T00:00:00Z')],
+			runs: [run('2026-01-01T12:00:00Z')],
 			updatedAt: '2026-03-01T00:00:00Z'
 		})[4]!;
 		expect(step.status).toBe('partial');
-		expect(step.detail).toMatch(/^Last run 2026-01-01; the project has changed since/);
+		expect(step.detail).toMatch(/^Last run 1 Jan 2026; the project has changed since/);
+	});
+
+	it('dates the latest run on the viewer’s own day, not the timestamp’s UTC one', () => {
+		const tz = process.env.TZ;
+		try {
+			// 22:30 UTC on 1 Feb is 00:30 on 2 Feb in South Africa (UTC+2).
+			process.env.TZ = 'Africa/Johannesburg';
+			const at = (runs: RunMeta[]) => checklist({ model: full, settings: settled(), series: [], runs })[4]!.detail;
+			expect(at([run('2026-02-01T22:30:00Z')])).toBe('1 run, latest 2 Feb 2026.');
+			process.env.TZ = 'Pacific/Pago_Pago'; // UTC−11: 10:00 UTC on 1 Feb is still 31 Jan there
+			expect(at([run('2026-02-01T10:00:00Z')])).toBe('1 run, latest 31 Jan 2026.');
+		} finally {
+			process.env.TZ = tz;
+		}
 	});
 
 	it('progress counts optional steps left partial; next skips them', () => {

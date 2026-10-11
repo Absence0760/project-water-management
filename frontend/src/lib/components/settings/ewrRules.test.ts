@@ -1,6 +1,7 @@
 import { blankEwrRuleTable, type EwrRuleTable } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
+	ruleSettingsSummary,
 	applyPaste,
 	categoryFromText,
 	EXAMPLE_HIGH_FLOWS_CSV,
@@ -259,5 +260,14 @@ describe('asking before a Fill replaces typed values', () => {
 		expect(highFlowTyped({ label: '', months: [11, 12, 1], peakM3s: NaN, durationDays: 3, perYear: 1 })).toBe(false);
 		expect(highFlowTyped({ label: 'Class II freshet', months: [11], peakM3s: NaN, durationDays: 3, perYear: 1 })).toBe(true);
 		expect(highFlowTyped({ label: '', months: [11], peakM3s: 4, durationDays: 3, perYear: 1 })).toBe(true);
+	});
+});
+
+describe('ruleSettingsSummary (issue #521)', () => {
+	it('names the unit, natural flow, scale and points, and the natural MAR when given', () => {
+		const t: Parameters<typeof ruleSettingsSummary>[0] = { unit: 'mcm', naturalSource: 'run', scale: 1, points: [10, 20, 30, 40, 50, 60, 70, 80, 90, 99], naturalMarMcm: null };
+		expect(ruleSettingsSummary(t)).toBe('Mm³/month · the run’s natural flow · × 1 · 10–99 % (10 points)');
+		expect(ruleSettingsSummary({ ...t, unit: 'm3s', naturalSource: 'table', scale: 0.25, points: [50], naturalMarMcm: 12.5 })).toBe('m³/s · the table’s natural flows · × 0.25 · 50–50 % (1 point) · natural MAR 12.5 Mm³/a');
+		expect(ruleSettingsSummary({ ...t, scale: null as unknown as number, points: [] })).toBe('Mm³/month · the run’s natural flow · no scale · no % points');
 	});
 });

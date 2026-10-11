@@ -123,7 +123,7 @@ test('the compare page says who changed an input between two runs, and when (iss
 	const changes = page.getByRole('region', { name: 'Inputs that differ' });
 	await expect(changes.getByTestId('changes-attribution')).toHaveText(/1 saved change to the model or settings between the runs, by Dam editor\./);
 	const line = changes.getByRole('listitem').filter({ hasText: 'Upper farm: dam capacity 150\u202f000 m³ → 180\u202f000 m³' });
-	await expect(line).toContainText(/Changed by Dam editor on \d{4}-\d{2}-\d{2} \d{2}:\d{2} · “Licence application”/);
+	await expect(line).toContainText(/Changed by Dam editor on \d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2} · “Licence application”/);
 	await expectNoViolations(page);
 	void owner;
 });

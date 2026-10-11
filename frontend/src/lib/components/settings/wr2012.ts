@@ -1,7 +1,8 @@
 // The WR2012 check in Settings (issue #4 phase 8): an empty reference to fill
 // in, the checks that block Save (the engine's own plausibility rules, which
 // the backend applies too), and unit helpers for the form.
-import { wr2012FlagIssues, wr2012PenaltyIssues, wr2012ReferenceIssues, type Wr2012Reference, type Wr2012Settings } from '@water-management/engine';
+import { defaultWr2012Settings, wr2012FlagIssues, wr2012PenaltyIssues, wr2012ReferenceIssues, type Wr2012Reference, type Wr2012Settings } from '@water-management/engine';
+import { describeMonths } from '$lib/format/months';
 
 /** A reference as the form edits it: numbers may still be blank (null). */
 export type Wr2012Draft = Omit<Wr2012Reference, 'areaKm2' | 'marMm3' | 'monthlyMm3' | 'periodStart' | 'periodEnd'> & {
@@ -91,4 +92,24 @@ export interface MarBand {
 /** The MAR band's bounds switched on or off: on brings back the pair switched off (`last`), else both blank; off clears them. */
 export function withMarBand(on: boolean, last: MarBand | null | undefined): MarBand {
 	return on && last ? { marLowMm3: last.marLowMm3, marHighMm3: last.marHighMm3 } : { marLowMm3: null, marHighMm3: null };
+}
+
+/**
+ * The WR2012 check's "How the check judges" fold (ui-playbook.md § 2, "Settings at their defaults are one
+ * line"): the scaling, the dry-season months and the four MAR thresholds at their defaults, and as one line.
+ */
+export function wr2012JudgingAtDefaults(ws: Pick<Wr2012Settings, 'scaling' | 'lowFlowMonths' | 'flags'>): boolean {
+	const d = defaultWr2012Settings();
+	return ws.scaling === d.scaling && ws.lowFlowMonths === null && JSON.stringify(ws.flags) === JSON.stringify(d.flags);
+}
+
+/** "area ratio · dry season from each run · note 10 % / query 25 % (15 % wetter) / unusable 50 %". */
+export function wr2012JudgingLine(ws: Pick<Wr2012Settings, 'scaling' | 'lowFlowMonths' | 'flags'>): string {
+	const f = ws.flags;
+	const p = (v: number | null | undefined) => (v == null ? '–' : `${v} %`);
+	return [
+		ws.scaling === 'areaRain' ? 'area and rainfall ratio' : 'area ratio',
+		ws.lowFlowMonths ? `dry season ${describeMonths(ws.lowFlowMonths)}` : 'dry season from each run',
+		`note ${p(f.notePct)} / query ${p(f.queryPct)} (${p(f.queryWetterPct)} wetter) / unusable ${p(f.unusablePct)}`
+	].join(' · ');
 }

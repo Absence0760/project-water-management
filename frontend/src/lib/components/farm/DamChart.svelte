@@ -22,7 +22,6 @@
 			<svg width={chart.width} height={chart.height} viewBox="0 0 {chart.width} {chart.height}" aria-hidden="true" font-size={CHART_FONT_PX}>
 				{#each chart.ticks as t (t.label)}
 					<line x1={chart.axisLeft} x2={chart.width} y1={t.y} y2={t.y} class="grid" />
-					<text x="0" y={t.y + 5} class="tick">{t.label}</text>
 				{/each}
 				{#if chart.stopY != null}
 					<line x1={chart.axisLeft} x2={chart.width} y1={chart.stopY} y2={chart.stopY} class="stop" />
@@ -30,6 +29,10 @@
 				<polyline points={chart.points} class="line" />
 				{#each chart.labels as l, i (i)}
 					<text x={l.x} y={LABEL_Y} text-anchor="middle" class="tick">{l.label}</text>
+				{/each}
+				<!-- After the line: inside a narrow plot the labels sit over it. -->
+				{#each chart.ticks as t (t.label)}
+					<text x="0" y={chart.inside ? t.y - 4 : t.y + 5} class="tick value" class:inside={chart.inside}>{t.label}</text>
 				{/each}
 			</svg>
 		{/if}
@@ -68,6 +71,13 @@
 	}
 	.tick {
 		fill: var(--text-muted);
+	}
+	/* Just above its grid line inside a narrow plot (chart.ts axisPlacement): a halo in the card's colour keeps it legible over a bar or the line. */
+	.tick.inside {
+		stroke: var(--surface);
+		stroke-width: 4px;
+		stroke-linejoin: round;
+		paint-order: stroke;
 	}
 	.stop {
 		stroke: var(--text-2);

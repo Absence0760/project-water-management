@@ -53,6 +53,7 @@
 
 <fieldset class="plain cal-window" aria-describedby="{uid}-hint">
 	<legend class="label">Calibration window</legend>
+	<!-- The window, where it is scored and the record, on one row (issue #521); the notes about the site under it. -->
 	<div class="form-row">
 		<div class="field">
 			<label for="{uid}-start">From</label>
@@ -76,40 +77,42 @@
 				onchange={(e) => (end = e.currentTarget.value || null)}
 			/>
 		</div>
+		{#if sites.length || siteNodeId}
+			<div class="field">
+				<label for="{uid}-site">Scored at</label>
+				<select id="{uid}-site" disabled={readonly} bind:value={siteNodeId} aria-describedby="{uid}-site-hint">
+					<option value={null}>The outlet</option>
+					{#each sites as g (g.nodeId)}<option value={g.nodeId}>{g.name}</option>{/each}
+					{#if siteNodeId && !site}<option value={siteNodeId}>A gauge no longer in the model, or with no record</option>{/if}
+				</select>
+			</div>
+		{/if}
+		<div class="field">
+			<label for="{uid}-kind">Compare with</label>
+			<select id="{uid}-kind" disabled={readonly} bind:value={flowKind}>
+				<option value={null}>Default (observed gauge, else logger)</option>
+				{#each options as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
+			</select>
+		</div>
 	</div>
 	{#if sites.length || siteNodeId}
-		<div class="field">
-			<label for="{uid}-site">Scored at</label>
-			<select id="{uid}-site" disabled={readonly} bind:value={siteNodeId} aria-describedby="{uid}-site-hint">
-				<option value={null}>The outlet</option>
-				{#each sites as g (g.nodeId)}<option value={g.nodeId}>{g.name}</option>{/each}
-				{#if siteNodeId && !site}<option value={siteNodeId}>A gauge no longer in the model, or with no record</option>{/if}
-			</select>
-			{#if siteNodeId && !site}
-				<p class="warn" role="status" data-testid="calibration-site-gone">
-					The saved site's gauge is no longer in the model, or no flow record is attached to it any more. Runs score the outlet's record
-					and warn, and Fit automatically refuses the site: pick another gauge, or the outlet.
-				</p>
-			{/if}
-			<p class="hint muted" id="{uid}-site-hint">
-				At a gauge inside the network, a fit scores the simulated flow there against that gauge's record. The gauged ranges and gap
-				filling below are the outlet records', so they don't apply to it. A run scores its calibration statistics here too; the
-				outlet's EWR test stays the outlet's.{#if dataHref}{' '}A record is placed at a gauge by its <strong>Measured at</strong>, in Series details on the <a href={dataHref}>Data tab</a>.{/if}
+		{#if siteNodeId && !site}
+			<p class="warn" role="status" data-testid="calibration-site-gone">
+				The saved site's gauge is no longer in the model, or no flow record is attached to it any more. Runs score the outlet's record
+				and warn, and Fit automatically refuses the site: pick another gauge, or the outlet.
 			</p>
-		</div>
+		{/if}
+		<p class="hint muted explain" id="{uid}-site-hint">
+			At a gauge inside the network, a fit scores the simulated flow there against that gauge's record. The gauged ranges and gap
+			filling below are the outlet records', so they don't apply to it. A run scores its calibration statistics here too; the
+			outlet's EWR test stays the outlet's.{#if dataHref}{' '}A record is placed at a gauge by its <strong>Measured at</strong>, in Series details on the <a href={dataHref}>Data tab</a>.{/if}
+		</p>
 	{:else if dataHref && !readonly}
 		<!-- No gauge has a record of its own yet: say where one is placed, or the choice never appears. -->
-		<p class="hint muted" data-testid="calibration-site-how">
+		<p class="hint muted explain" data-testid="calibration-site-how">
 			Scored at the outlet. To score at a gauge inside the network, set its flow record's <strong>Measured at</strong> in Series details on the <a href={dataHref}>Data tab</a> (the gauge has to be in the network, above the outlet).
 		</p>
 	{/if}
-	<div class="field">
-		<label for="{uid}-kind">Compare with</label>
-		<select id="{uid}-kind" disabled={readonly} bind:value={flowKind}>
-			<option value={null}>Default (observed gauge, else logger)</option>
-			{#each options as k (k)}<option value={k}>{FLOW_KIND_LABEL[k]}</option>{/each}
-		</select>
-	</div>
 	<p class="hint muted explain" id="{uid}-hint">
 		Calibration statistics only score days inside this window. Leave blank to use every day with an observation. The
 		workbook calibrates on a fixed period (e.g. Oct 2005 – Sep 2012).
@@ -135,7 +138,15 @@
 	.hint {
 		font-size: 0.8rem;
 		max-width: 75ch;
-		margin: 0.4rem 0 0.75rem;
+		margin: 0 0 0.5rem;
+	}
+	/* A field never wider than its row: "Compare with"'s longest option would push it past a 320 px screen. */
+	.form-row .field {
+		margin-bottom: 0.5rem;
+		max-width: 100%;
+	}
+	.form-row select {
+		max-width: 100%;
 	}
 	.warn {
 		color: var(--warning);

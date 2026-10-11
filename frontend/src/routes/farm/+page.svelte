@@ -2,7 +2,7 @@
 <script lang="ts">
 	// "Your farms" (docs/design/farmer-view.md §6.5 board 9): every farm linked
 	// to this user, across projects, with its notice level, received % and dam
-	// %. A farmer with one farm goes straight to its page. The root page sends
+	// %, the worst notice first. A farmer with one farm goes straight to its page. The root page sends
 	// a user whose every membership is `farmer` here.
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -14,9 +14,9 @@
 	import FarmNoticeGate from '$lib/components/farm/FarmNoticeGate.svelte';
 	import FarmSkeleton from '$lib/components/farm/FarmSkeleton.svelte';
 	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
-	import { farmSummaryLine, farmsPrivacy, levelWord } from '$lib/components/farm/cards';
+	import { farmSummaryLine, farmsPrivacy, levelWord, stateText } from '$lib/components/farm/cards';
 	import { t } from '$lib/i18n/locale.svelte';
-	import { classify, farmHref } from '$lib/components/farm/load';
+	import { classify, farmHref, worstFirst } from '$lib/components/farm/load';
 	import { readSaved } from '$lib/components/farm/savedCopy';
 
 	interface Row {
@@ -27,6 +27,8 @@
 		several: boolean;
 		publication: FarmIndex['publication'];
 		view: FarmView | null;
+		/** Neither the live figures nor a saved copy could be had: the card says so rather than show a blank line. */
+		viewFailed: boolean;
 	}
 
 	let rows = $state<Row[] | null>(null);
@@ -58,7 +60,8 @@
 						name: f.name,
 						several: ix.farms.length > 1,
 						publication: ix.publication,
-						view: null
+						view: null,
+						viewFailed: false
 					});
 				}
 			});
@@ -68,16 +71,21 @@
 				return;
 			}
 			failures = 0;
-			rows = list;
+			// The worst notice first (a restriction before an advisory, before none, before
+			// unpublished), each level in the projects' order: a restricted farm is never a screen down.
+			const ordered = worstFirst(list);
+			rows = ordered;
 			// The figures on each card: live when published, else the phone's saved copy.
 			const user = session.user?.id ?? null;
 			await Promise.all(
-				list.map(async (row, i) => {
+				ordered.map(async (row, i) => {
 					if (!row.publication) return;
 					const view = await api.farm.view(row.projectId, row.nodeId).catch(() =>
 						user ? (readSaved(user, row.projectId, row.nodeId)?.view ?? null) : null
 					);
-					if (rows && rows[i]) rows[i]!.view = view;
+					if (!rows || !rows[i]) return;
+					rows[i]!.view = view;
+					rows[i]!.viewFailed = view == null;
 				})
 			);
 		} catch (e) {
@@ -111,7 +119,10 @@
 								{#if r.publication}<span class="level {r.publication.restriction.level}">{levelWord(r.publication.restriction.level)}</span>{/if}
 							</span>
 							<span class="sub">{r.projectName}</span>
-							<span>{r.publication ? (r.view ? farmSummaryLine(r.view.farm) : '') : t('Not published yet')}</span>
+							<!-- While the figures load, "Updating…"; if they can't be had (no signal, no saved copy), the page's own error title, never a blank line. -->
+							<span class:pending={r.publication && !r.view}
+								>{r.publication ? (r.view ? farmSummaryLine(r.view.farm) : r.viewFailed ? stateText('errorTitle') : stateText('updating')) : t('Not published yet')}</span
+							>
 						</a>
 					</li>
 				{/each}
@@ -152,6 +163,9 @@
 		flex-wrap: wrap;
 		gap: 8px;
 		font-size: 17px;
+	}
+	.pending {
+		color: var(--text-2);
 	}
 	.level {
 		padding: 2px 10px;

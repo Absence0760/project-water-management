@@ -8,7 +8,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { waitForMapFit } from '../support/diagrams.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { closeModal, openNodeForm, openNodeTable } from '../support/network.ts';
+import { closeModal, openNodeForm, openNodeSection, openNodeTable } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { expectAbove } from '../support/reflow.ts';
 
@@ -281,7 +281,7 @@ test('a note’s link opens the map with its node picked', async ({ page, owner 
 	await page.goto(`/projects/${project.id}?tab=network&node=${project.model.nodes[1]!.id}`);
 	await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	// Its notes are on the card, as on the table row.
-	await expect(card(page).getByRole('button', { name: /note on Upper farm/ })).toBeVisible();
+	await expect(card(page).getByRole('button', { name: /^Notes on Upper farm/ })).toBeVisible();
 });
 
 test('the grids open in a modal from the map, edit the same model, save, and close back to the map', async ({ page, owner }) => {
@@ -487,7 +487,7 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 		// Last, where the unit's water leaves it: the reach below (engine 1.75.0, issue #444).
 		'Bed losses in the reach below'
 	];
-	await expect(sheet.locator('.detail > fieldset > legend')).toHaveText(legends);
+	await expect(sheet.locator('details.sec > summary > .sec-title')).toHaveText(legends);
 	// The pages' section menu (common/SectionNav, issue #462), as a bar in the sheet's fixed sub-header: the same
 	// sections in the same order, by their short names on the bar and their legends in More.
 	const menu = sheet.getByRole('navigation', { name: 'Sections of the form' });
@@ -512,9 +512,10 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 
 	const url = page.url();
 	await menu.getByRole('link', { name: 'Routing', exact: true }).click();
-	const target = sheet.getByRole('group', { name: 'Routing', exact: true });
+	// The section's card heading (its summary, issue #521) takes the focus.
+	const target = sheet.locator('details.sec').filter({ has: page.locator('summary > .sec-title', { hasText: /^Routing$/ }) }).locator(':scope > summary');
 	await expect(target).toBeFocused();
-	await expect(target.locator('legend')).toBeInViewport();
+	await expect(target).toBeInViewport();
 	// No fragment in the URL (the sheet's own `edit=` stays as it was), and the section is marked as the one being read.
 	expect(page.url()).toBe(url);
 	await expect(menu.getByRole('link', { name: 'Routing', exact: true })).toHaveAttribute('aria-current', 'location');
@@ -529,20 +530,34 @@ test('the node sheet runs in the order water moves, with the section menu fixed 
 	await expectNoViolations(page);
 });
 
-test('fields only another set-up reads show read-only, saying what would use them', async ({ page, owner }) => {
+test('fields only another set-up reads fold behind one line saying why, read-only, with what would use them', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network unused fields');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await page.getByTestId('section-header').getByRole('button', { name: '+ Add hydrological unit' }).click();
 	const sheet = page.getByRole('dialog', { name: /^Edit Unit/ });
+	// No dam: the dam's other fields are one line, not seven greyed-out cells (issue #521); opened, they show read-only.
+	const dam = await openNodeSection(sheet, 'Dam');
+	const noDam = dam.locator('details.unused');
+	await expect(noDam.locator('summary')).toContainText('Not used without a dam (capacity 0): Initial, Minimum level, Area when full, Area exponent, Seepage, Seepage returning, Outlet capacity.');
 	const minimum = sheet.getByLabel('Minimum level (%)');
+	await expect(minimum).toBeHidden();
+	await noDam.locator('summary').click();
+	await expect(noDam.getByText('Enter a capacity to use these.', { exact: true })).toBeVisible();
 	await expect(minimum).toHaveAttribute('readonly', '');
-	await expect(minimum).toHaveAccessibleDescription(/Not used: no dam \(capacity 0\)/);
+	await expect(minimum).toHaveAccessibleDescription(/^Not used without a dam \(capacity 0\)/);
 	// The flow-share method is by area: the manual share and the high/low split are not read.
+	const share = await openNodeSection(sheet, 'Flow share');
+	await share.locator('details.unused > summary').click();
 	await expect(sheet.getByLabel('Manual (%)')).toHaveAttribute('readonly', '');
-	await expect(sheet.getByLabel('High-MAP (km²)')).toHaveAccessibleDescription(/high\/low MAP split/);
+	await expect(sheet.getByLabel('Manual (%)')).toHaveAccessibleDescription(/^Not used with the area flow share: Manual\./);
+	const area = await openNodeSection(sheet, 'Catchment area');
+	await area.locator('details.unused > summary').click();
+	await expect(sheet.getByLabel('High-MAP (km²)')).toHaveAccessibleDescription(/^Not used with the area flow share: High-MAP, Low-MAP\./);
+	// A capacity: the dam's fields are used, and editable among the first ones.
 	await sheet.getByLabel('Capacity (m³)').fill('5000');
 	await expect(minimum).not.toHaveAttribute('readonly', '');
+	await expect(dam.locator('details.unused')).toHaveCount(0);
 });
 
 test('removing a node from its sheet asks, names what goes with it, and leaves the focus on the page', async ({ page, owner }) => {

@@ -30,7 +30,7 @@ import {
 	type ApanDailyFingerprint
 } from '@water-management/engine';
 import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
-import { fmtNum } from '$lib/format/number';
+import { fmtDay, fmtNum } from '$lib/format/number';
 
 export interface FitRequest {
 	input: ModelInput;
@@ -59,6 +59,19 @@ export const boundsHint = (b: CalibrationBounds): string =>
 	b === 'typical'
 		? 'A tighter, published range — helps a short or drought-heavy record land on plausible values, at the cost of the fit if the catchment truly falls outside it.'
 		: 'Each parameter’s full calibration range.';
+
+/**
+ * The search settings folded into one line (ui-playbook.md § 2, "Rarely changed settings fold into
+ * their values"): "Wide bounds · 1 500 runs × 5 starts · seed 1". Bounds are left out where the
+ * caller lists them elsewhere (the calibration rules try several); a missing number reads "–".
+ */
+export function searchSummary(s: { bounds?: CalibrationBounds; budget: number | null; starts: number | null; seed: number | null }): string {
+	const parts: string[] = [];
+	if (s.bounds) parts.push(`${BOUNDS_LABEL[s.bounds].replace(' (default)', '')} bounds`);
+	parts.push(`${fmtNum(s.budget)} runs × ${fmtNum(s.starts)} start${s.starts === 1 ? '' : 's'}`);
+	parts.push(`seed ${s.seed === null ? '–' : fmtNum(s.seed)}`);
+	return parts.join(' · ');
+}
 
 export type WorkerMessage =
 	| { type: 'progress'; progress: CalibrationProgress }
@@ -312,10 +325,12 @@ export function applyReport<S extends Pick<ProjectSettings, 'gr4j'>>(settings: S
 /** Largest seed: the engine's generator takes a 32-bit integer. */
 export const SEED_MAX = 2 ** 31 - 1;
 
-/** Why a seed can't be used, or null. */
+/**
+ * Why a seed can't be used, or null. The seed field is a NumberInput that never empties (cleared, it keeps its last
+ * number and says so itself), so there is no "Enter a seed." case; a null that reaches here is simply not a whole number.
+ */
 export function seedError(seed: number | null): string | null {
-	if (seed === null) return 'Enter a seed.';
-	return Number.isInteger(seed) && seed >= 0 && seed <= SEED_MAX ? null : `The seed must be a whole number from 0 to ${fmtNum(SEED_MAX)}.`;
+	return seed !== null && Number.isInteger(seed) && seed >= 0 && seed <= SEED_MAX ? null : `The seed must be a whole number from 0 to ${fmtNum(SEED_MAX)}.`;
 }
 
 /**
@@ -351,5 +366,12 @@ export function fitRecordFor(
 	});
 }
 
-/** "2026-09-24 10:05 UTC" for a fit record's ISO timestamp. */
-export const fittedAtText = (iso: string) => iso.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC');
+/**
+ * "24 Sep 2026 10:05 UTC" for a fit record's ISO timestamp: day first, as
+ * every date a person reads, and in UTC, so the printed report says the same
+ * wherever it is read. Anything else is returned unchanged.
+ */
+export function fittedAtText(iso: string): string {
+	const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z$/.exec(iso);
+	return m ? `${fmtDay(m[1]!)} ${m[2]} UTC` : iso;
+}

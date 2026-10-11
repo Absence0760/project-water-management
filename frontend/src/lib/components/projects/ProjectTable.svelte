@@ -157,15 +157,16 @@
 	<span class="badge fresh" class:badge-warn={f.stale} title={f.detail}>{f.label}</span>
 {/snippet}
 
+<!-- The folded Last run column, labelled as its neighbour "Lowest dam: …" is, so the two don't read as one phrase. -->
 {#snippet lastRun(p: ProjectSummary)}
 	{#if p.lastRunAt}
-		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">last run {fmtDay(fmtDate(p.lastRunAt))}</span>
+		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">Last run: {fmtDay(fmtDate(p.lastRunAt))}</span>
 	{:else if hasRole(p.role, 'viewer')}
-		<!-- A farmer sees no runs (lastRunAt is null for them), so "not run yet" would be wrong. -->
-		<span class="run">not run yet</span>
+		<!-- A farmer sees no runs (lastRunAt is null for them), so "Not run yet" would be wrong. -->
+		<span class="run">Not run yet</span>
 	{/if}
 	{#if p.publishedAt}
-		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {fmtDay(fmtDate(p.publishedAt))}</span>
+		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">Published: {fmtDay(fmtDate(p.publishedAt))}</span>
 	{/if}
 {/snippet}
 
@@ -528,7 +529,8 @@
 			display: flex;
 		}
 	}
-	/* Narrow (a phone): every figure moves under the name; the row keeps Add data and ⋯. */
+	/* Narrow (a phone): every figure moves under the name; the row keeps Add data and ⋯, side by side
+	   in one tap-high row at the name's line rather than stacked two targets tall (issue #521). */
 	@container (max-width: 730px) {
 		.wide {
 			display: none;
@@ -537,16 +539,21 @@
 			display: flex;
 		}
 		.c-act {
-			width: 6.5rem;
+			width: 7.75rem;
+		}
+		.projects td.actions {
+			padding-left: 0.25rem;
 		}
 		.act {
-			flex-direction: column;
-			align-items: stretch;
-			gap: 0.35rem;
+			gap: 0.25rem;
 		}
 		.act .btn {
 			justify-content: center;
 			min-height: var(--tap);
+			padding-inline: 0.5rem;
+		}
+		.more {
+			min-width: var(--tap);
 		}
 	}
 </style>

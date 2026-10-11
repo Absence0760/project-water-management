@@ -15,10 +15,11 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	const list = page.getByRole('region', { name: 'Runs', exact: true });
 	const picked = list.getByRole('button', { name: /^Baseline/ });
 	await expect(picked).toHaveAttribute('aria-current', 'true');
-	// A compact row: when it ran and the years; the full period is in the results header.
-	await expect(picked).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2} · 2021–2022/);
+	// A compact row: when it ran (day first, "today 14:05") and the years; the full period is in the results header.
+	await expect(picked).toContainText(/(today|yesterday) \d{2}:\d{2} · 2021–2022/);
 	await expect(picked).toContainText('latest');
-	await expect(page.locator('#res-h').locator('..')).toContainText('2021-10-01 → 2022-01-28');
+	// The period in the app's day-first dates, as the Summary gives it.
+	await expect(page.locator('#res-h').locator('..')).toContainText(/1 Oct 2021 – 28 Jan 2022 \(120 days\) · ran (today|yesterday) \d\d:\d\d by /);
 	await expect(page).toHaveURL(/[?&]run=[0-9a-f-]{36}/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Baseline' })).toBeVisible();
 
@@ -411,7 +412,7 @@ test('an editor writes a run note that is still there after a reload, with who c
 
 	await page.reload();
 	await expect(box).toHaveValue('The quaternary includes an irrigated tributary outside the model.');
-	await expect(notes).toContainText(/Last changed \d{4}-\d\d-\d\d \d\d:\d\d by Owner/);
+	await expect(notes).toContainText(/Last changed (today|yesterday) \d\d:\d\d by Owner/);
 });
 
 test('flow shares over 100 % stop the Run button and say why, until they fit', async ({ page, owner }) => {

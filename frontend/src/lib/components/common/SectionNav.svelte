@@ -35,7 +35,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { activeSectionId, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
+	import { activeSectionId, findElsewhere, findEntries, navEmpty, navFitCount, navText, pageLinkName, type FindElsewhere, type FindEntry, type NavGroup, type NavSection } from './sectionNav';
 
 	let {
 		groups,
@@ -46,6 +46,7 @@
 		layout = $bindable('bar'),
 		barHeight = $bindable(0),
 		find,
+		elsewhere = [],
 		heading = 'On this page',
 		onjump,
 		children
@@ -64,6 +65,8 @@
 		barHeight?: number;
 		/** A find box: its label ("Find a setting"). */
 		find?: string;
+		/** Settings that moved to another page: the find box lists each as a link there (FindElsewhere). */
+		elsewhere?: readonly FindElsewhere[];
 		/** The muted words at the bar's start; null for none (the node sheet, where the nav's label says it). */
 		heading?: string | null;
 		/** In a box that scrolls on its own: a link to a section on the page calls this instead of following its fragment. */
@@ -169,6 +172,8 @@
 		scanned = scan();
 		return findEntries(local, scanned, query);
 	});
+	const away = $derived(find && query.trim() ? findElsewhere(elsewhere, query) : []);
+	const matchCount = $derived(results.length + away.length);
 	const sectionLabel = (id: string) => flat.find((s) => s.id === id)?.label ?? '';
 
 	/** Goes to a setting: opens what folds it away, brings it to the middle of the window and focuses its control. */
@@ -195,7 +200,11 @@
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
 			const first = results[0];
-			if (!first) return;
+			if (!first) {
+				// Only a setting on another page matches: follow its link.
+				if (away.length) focusItems()[0]?.click();
+				return;
+			}
 			if (first.index >= 0) jump(first);
 			else {
 				findOpen = false;
@@ -418,7 +427,7 @@
 			onkeydown={findKeydown}
 		/>
 		<p class="find-n" id="{uid}-find-n" role="status">
-			{#if query.trim()}{results.length ? `${results.length} ${results.length === 1 ? 'match' : 'matches'}` : `No setting matches “${query.trim()}”`}{/if}
+			{#if query.trim()}{matchCount ? `${matchCount} ${matchCount === 1 ? 'match' : 'matches'}` : `No setting matches “${query.trim()}”`}{/if}
 		</p>
 	</div>
 	{#if query.trim()}
@@ -432,6 +441,13 @@
 							<span>{r.text}</span><span class="in"><span class="visually-hidden">{', in '}</span>{sectionLabel(r.sectionId)}</span>
 						</button>
 					{/if}
+				</li>
+			{/each}
+			{#each away as moved (moved.href)}
+				<li>
+					<a data-item href={moved.href} onclick={() => (findOpen = false)} aria-label="{moved.text}, on {moved.page}" data-testid="find-elsewhere"
+						><span>{moved.text}</span><span class="in">on {moved.page} <span aria-hidden="true">↗</span></span></a
+					>
 				</li>
 			{/each}
 		</ul>
@@ -860,7 +876,8 @@
 		font-size: 0.85rem;
 		line-height: 1.25;
 	}
-	.results button {
+	.results button,
+	.results a[data-testid='find-elsewhere'] {
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 0;

@@ -70,7 +70,7 @@ describe('labels', () => {
 		expect(targetTitle(farm)).toBe('Notes on Farm A');
 		expect(targetTitle({ kind: 'project' })).toBe('Project notes');
 		expect(targetTitle(settingTarget('record'))).toBe('Notes on Calibration record');
-		expect(notesButtonLabel(0, 'Farm A')).toBe('Add a note on Farm A');
+		expect(notesButtonLabel(0, 'Farm A')).toBe('Notes on Farm A');
 		expect(notesButtonLabel(2, 'Farm A')).toBe('Notes on Farm A (2)');
 	});
 

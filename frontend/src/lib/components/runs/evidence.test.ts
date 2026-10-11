@@ -3,6 +3,7 @@ import type { Nomination, RunMeta } from '$lib/api';
 import {
 	compareEvidenceNote,
 	currentNomination,
+	evidenceKindBlocker,
 	evidenceLine,
 	historyEntries,
 	modelDriftWarning,
@@ -134,6 +135,18 @@ describe('nominateBlocker', () => {
 		expect(nominateBlocker({ id: 'f', legacy: false, trigger: 'forecast' }, [])).toMatch(/^A forecast run’s last days/);
 		expect(nominateBlocker({ id: 'm', legacy: false, scenarioName: null, trigger: 'manual' }, [])).toBeNull();
 		expect(nominateBlocker({ id: 'a', legacy: false, scenarioName: null, trigger: 'auto' }, [])).toBeNull();
+	});
+});
+
+describe('evidenceKindBlocker', () => {
+	it('names the run kinds that can never be evidence, and not the nominated run itself', () => {
+		expect(evidenceKindBlocker({ legacy: true })).toMatch(/workbook comparison only/);
+		expect(evidenceKindBlocker({ legacy: false, fromScenario: true })).toMatch(/^A scenario run is its scenario’s changes/);
+		expect(evidenceKindBlocker({ legacy: false, trigger: 'forecast' })).toMatch(/^A forecast run’s last days/);
+		expect(evidenceKindBlocker({ legacy: false, trigger: 'manual' })).toBeNull();
+		// The nominated run is a run of the model: nominateBlocker says so, the kind check doesn't.
+		expect(evidenceKindBlocker({ legacy: false })).toBeNull();
+		expect(nominateBlocker({ id: 'a', legacy: false }, [nom('a', 1)])).toBe('This run is the nominated evidence run.');
 	});
 });
 

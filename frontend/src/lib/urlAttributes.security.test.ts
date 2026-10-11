@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest';
 import { allocationsHref } from './components/allocations/links';
 import { compareTabHref } from './components/compare/picker';
 import { farmDrawerHref } from './components/crops/farmDrawer';
-import { farmHref } from './components/farm/load';
+import { farmHref, farmReturn, wordsHref } from './components/farm/load';
 import { fieldHistoryHref } from './components/history/fieldLine';
 import { noteHref } from './components/notes/notes';
 import { runHref } from './components/overview/attention';
@@ -61,8 +61,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	mapHref: { why: 'NodeCard/NodeDetail: their `mapHref` prop, which NetworkTab builds with mapNodeHref(node id) or leaves null', in: ['lib/components/network/NodeCard.svelte', 'lib/components/network/NodeDetail.svelte'] },
 	allocationsHref: { why: 'BUILDER: "?" + URLSearchParams (tab=allocations, the run id and unit node id from the API; allocations/links.ts, #444)', in: ['lib/components/overview/OverviewTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
-	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
+	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id (FarmShell: its own projectId prop and a ?node= it encodes); NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/farm/FarmShell.svelte', 'lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
+	evidenceRunHref: { why: 'EvidencePanel: a literal "?tab=runs&run=" + encodeURIComponent(the current evidence run id from the API) + "#res-evidence", or null (issue #521)', in: ['lib/components/runs/EvidencePanel.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
 	packHref: {
 		why: 'BUILDER: "{base}/projects/" + encoded project id + "/packs/" + encoded pack id (packs/pack.ts)',
@@ -101,6 +102,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	listHref: { why: 'ApplicationsTab: withoutParam(page.url, "view")', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	newHref: { why: 'ScenariosTab: withParam(page.url, "new", "1")', in: ['lib/components/scenarios/ScenariosTab.svelte'] },
 	panelHref: { why: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
+	firstPublishHref: { why: 'PublishedBaseline: runHref(newest run id) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
 	compareHref: { why: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"', in: ['lib/components/overview/PublishedBaseline.svelte', 'lib/components/scenarios/ScenarioCompare.svelte'] },
 	reserveHref: { why: 'RunSummaryView: riverHref(…)', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	otherUsesHref: { why: 'RunSummaryView: supplyHref(run id, a fixed #res-… anchor from otherUsesLink), a `?tab=` query', in: ['lib/components/runs/RunSummaryView.svelte'] },
@@ -109,6 +111,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		in: ['lib/components/runs/SelfChecksPanel.svelte', 'lib/components/reliability/WaterAccountPanel.svelte']
 	},
 	accountHref: { why: 'WaterBalanceTable: riverHref(run id, "res-water-account"), which RunsTab passes', in: ['lib/components/runs/WaterBalanceTable.svelte'] },
+	wordsHref: {
+		why: 'BUILDER: "{base}/farm/words", its ?from= only a path farmReturn accepts (one farm page\'s own /farm/<id>…), URL-encoded, and a literal anchor',
+		in: ['lib/components/farm/FarmShell.svelte', 'lib/components/farm/OutlookCard.svelte', 'routes/farm/[projectId]/+page.svelte', 'routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte']
+	},
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	issueHref: { why: 'BUILDER: "?tab=<area>" with the item id encodeURIComponent-ed (model/validate.ts issueHref)', in: ['lib/components/model/IssueList.svelte'] },
 	'p.href': { why: 'ProblemLinks: issueHref(…), "#" + a NumberInput id, or a draft adapter\'s "?tab=project" / "?tab=settings#<group id>" (SaveBar, ModelSaveRow, the page)', in: ['lib/components/model/ProblemLinks.svelte'] },
@@ -119,10 +125,11 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	reports: { why: 'CompareView: reportHref(), `${base}/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
 	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
 	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },
-	editHref: { why: 'DemandsTable: the literal "?tab=crops&farm=" or "?tab=network&edit=" + encodeURIComponent(node id)', in: ['lib/components/network/DemandsTable.svelte'] },
+	editHref: { why: 'DemandsTable: the literal "?tab=crops&farm=" or "?tab=network&edit=" + encodeURIComponent(node id) + "&section=demand"', in: ['lib/components/network/DemandsTable.svelte'] },
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	uploadHref: { why: 'MapSetupPill prop: MapTab passes withParam(page.url, "upload", "1")', in: ['lib/components/map/MapSetupPill.svelte'] },
 	dataHref: { why: 'CalibrationWindowFields prop: SettingsTab passes "?tab=series&series=" + encodeURIComponent(series id) + "#data-chart"', in: ['lib/components/calibration/CalibrationWindowFields.svelte'] },
+	'moved.href': { why: 'SectionNav: a moved setting\'s link from the page\'s `elsewhere` list, a literal "?tab=…#…" constant (settings/sections.ts SETTINGS_ELSEWHERE, issue #521)', in: ['lib/components/common/SectionNav.svelte'] },
 	hrefOf: { why: 'SectionNav: a section\'s `href` (a literal "?tab=…" from the page that lists it) or "#" + its id', in: ['lib/components/common/SectionNav.svelte'] },
 	'rainLink.href': { why: 'MapSetupPill prop: MapTab passes the literal "?tab=settings&rain=boundary#set-feeds"', in: ['lib/components/map/MapSetupPill.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
@@ -144,7 +151,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	abs: { why: 'landing link-preview tags: new URL(`${base}` + a literal path, page.url).href, the page’s own origin', in: ['lib/components/landing/Landing.svelte'] },
 	// Objects built in code from the builders above.
 	'done.href': { why: 'the invitations page: `${base}/teams/`, `/farm/` or `/projects/` + the encoded id of what was joined', in: ['routes/account/invitations/+page.svelte'] },
-	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm` or farmHref(…)', in: ['lib/components/farm/FarmShell.svelte'] },
+	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm`, farmHref(…), or (the words page) `${base}` + a ?from= farmReturn accepted', in: ['lib/components/farm/FarmShell.svelte'] },
 	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
 	'more.href': { why: 'SupplyByFarm / ReserveStrip prop: OverviewTab passes supplyHref / riverHref', in: ['lib/components/overview/ReserveStrip.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },
 	'h.href': { why: 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders', in: ['lib/components/overview/LatestRun.svelte'] },
@@ -167,13 +174,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'api.scenarios.participationCsvUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/projects/[id]/scenarios/[sid]/participation/+page.svelte'] },
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
-	exampleHref: {
-		why: 'EwrHighFlowsEditor: `data:text/csv;charset=utf-8,` + encodeURIComponent(its synthetic high-flows CSV)',
-		in: ['lib/components/settings/EwrHighFlowsEditor.svelte']
-	},
-	csvHref: {
-		why: 'GridPasteDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed)',
-		in: ['lib/components/model/GridPasteDialog.svelte']
+	'download.href': {
+		why: 'PasteDialogFrame, from its two callers: GridPasteDialog `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed), and EwrHighFlowsEditor `data:text/csv;charset=utf-8,` + encodeURIComponent(its synthetic high-flows CSV)',
+		in: ['lib/components/model/PasteDialogFrame.svelte']
 	},
 	currentHref: {
 		why: 'ImportPlantingsDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the project’s plantings as CSV, plantingsCsv, names defused by toCsv; empty while closed)',
@@ -477,6 +480,10 @@ describe('URL attributes', () => {
 				allocationsHref(id, { unit: id }),
 				farmHref('', id, id, true, 'dam'),
 				farmHref('/app', id, id, true),
+				wordsHref('', { pathname: id, search: id }, 'farm-reserve'),
+				wordsHref('', { pathname: '/farm/words', search: `?from=${encodeURIComponent(id)}` }),
+				farmReturn(id) ?? '/farm',
+				farmReturn(`/farm/${id}`) ?? '/farm',
 				farmDrawerHref(null, id),
 				compareTabHref({ projectId: id, runId: id }, { projectId: id, runId: id }),
 				curtailmentHref({ id, sourceRunId: id }),

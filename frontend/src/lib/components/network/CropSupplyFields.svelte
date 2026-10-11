@@ -149,8 +149,6 @@
 	}
 	.check {
 		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
 	}
 	.sources {
 		display: flex;

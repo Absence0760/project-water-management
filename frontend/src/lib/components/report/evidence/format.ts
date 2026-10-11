@@ -23,9 +23,9 @@ function suffix(unit: string, change = false): string {
 
 /** A signed number with a true minus sign: +3.2, −1.0, 0. */
 export function signed(v: number, digits: number): string {
+	// fmtNum writes the true minus and drops the sign of a value that rounds to zero.
 	const s = fmtNum(v, digits);
-	if (s === '0' || /^[-−]?0(\.0+)?$/.test(s)) return s.replace('-', '');
-	return s.startsWith('-') ? `−${s.slice(1)}` : `+${s}`;
+	return s.startsWith('−') || /^0(\.0+)?$/.test(s) ? s : `+${s}`;
 }
 
 /** A row's value in one run: "61.7 %", "786 days", "–" when missing. */

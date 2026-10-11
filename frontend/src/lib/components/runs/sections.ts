@@ -23,7 +23,14 @@ export interface ResultGroup extends NavGroup {
 
 type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast' | 'unitRain'>;
 
-export function resultGroups(summary: SectionInput): ResultGroup[] {
+/**
+ * `rail`: the side index, with a line for each panel. On the bar (which must
+ * keep every link on two rows at 1280 px, section-nav.spec.ts) the Record
+ * group's Run notes, Evidence and Reproduction are one link, "Notes &
+ * evidence", landing on Run notes and standing for the three (`covers`), as
+ * Settings' Automation & access does.
+ */
+export function resultGroups(summary: SectionInput, rail = false): ResultGroup[] {
 	return [
 		{
 			// The run header says whether the run is the evidence and previews its notes (links to Record).
@@ -58,8 +65,15 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			// The run's written explanation, its evidence nomination, its validation statement and its publication: sign-off, after the results.
 			label: 'Record',
 			sections: [
-				// The run's notes, then its evidence nomination, reproduction and inputs: one entry (its first heading is "Run notes").
-				{ id: 'res-notes', label: 'Run notes & evidence', bar: 'Notes & evidence' },
+				// The run's notes, its evidence nomination, and its reproduction with the input changes since: a panel each (issue #521),
+				// one link on the bar.
+				...(rail
+					? [
+							{ id: 'res-notes', label: 'Run notes' },
+							{ id: 'res-evidence', label: 'Evidence' },
+							{ id: 'res-reproduce', label: 'Reproduction' }
+						]
+					: [{ id: 'res-notes', label: 'Run notes & evidence', bar: 'Notes & evidence', covers: ['res-evidence', 'res-reproduce'] }]),
 				// The report's validation statement (WP-3.13), collapsed: every run.
 				{ id: 'res-validation', label: 'Validation statement', bar: 'Validation' },
 				// Whether the run is the published baseline, publishing it, and the WUA's notice (WP-2.3): every run.
@@ -107,7 +121,7 @@ export function otherPageGroups(runId: string | null): NavGroup[] {
 }
 
 /** Every section in page order: the scroll spy's list. */
-export const resultSections = (summary: SectionInput): ResultSection[] => resultGroups(summary).flatMap((g) => g.sections);
+export const resultSections = (summary: SectionInput, rail = false): ResultSection[] => resultGroups(summary, rail).flatMap((g) => g.sections);
 
 /**
  * Where a `#res-…` fragment on Runs & results now lives, when it moved: a panel

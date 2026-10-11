@@ -9,6 +9,7 @@ import { addMember, createProject, createRun, seedRunnableProject, uniqueEmail, 
 import { plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openFold } from '../support/settings.ts';
 import { closeModal, openNodeForm } from '../support/network.ts';
 
 const DEAD_TOKEN = 'q'.repeat(43);
@@ -248,6 +249,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 				await page.goto(`/projects/${project.id}?tab=settings`);
 				const fit = page.getByRole('region', { name: /^Fit automatically/ });
+				await openFold(fit, 'fit-search');
 				await fit.getByLabel('Model runs per fit').fill('50');
 				await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
 				await expect(fit.getByRole('table', { name: /^Fit, and validation/ })).toBeVisible();

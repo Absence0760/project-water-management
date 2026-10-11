@@ -27,7 +27,7 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	let form = await upload(page, 'Rainfall — catchment', 'rainfall-daily.csv');
 	await expect(form.getByLabel('Unit')).toHaveValue('mm');
 	const summary = form.getByRole('definition');
-	await expect(summary.nth(0)).toHaveText('2021-10-01 → 2021-12-31');
+	await expect(summary.nth(0)).toHaveText('1 Oct 2021 → 31 Dec 2021');
 	await expect(summary.nth(1)).toHaveText('92');
 	await expect(summary.nth(3)).toHaveText('0');
 	await form.getByRole('button', { name: 'Upload' }).click();
@@ -59,8 +59,9 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(table.getByRole('row')).toHaveCount(3);
 	const flowRow = table.getByRole('row').filter({ hasText: 'Gauge W7' });
 	await expect(flowRow).toContainText('Flow — observed gauge');
-	await expect(flowRow).toContainText('2021-10-01');
-	await expect(flowRow).toContainText('2021-12-31');
+	// Day first (issue #521).
+	await expect(flowRow).toContainText('1 Oct 2021');
+	await expect(flowRow).toContainText('31 Dec 2021');
 
 	// View re-draws a stored series.
 	await table.getByRole('row').filter({ hasText: 'Rainfall — catchment' }).getByRole('button', { name: 'View', exact: true }).click();
@@ -103,10 +104,10 @@ test('a later file appends to an existing series without erasing stored days', a
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	// 10-03 is overwritten, so the form asks first.
 	await form.getByRole('button', { name: 'Overwrite 1 day' }).click();
-	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 5 Oct 2021.');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — catchment' });
-	await expect(row).toContainText('2021-10-05');
+	await expect(row).toContainText('5 Oct 2021');
 	const stored = await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json();
 	const s = await (await page.request.get(`${API_URL}/projects/${project.id}/series/${stored.series[0].id}`)).json();
 	expect(s.values).toEqual([1, 2, 30, 4, 5]);
@@ -149,7 +150,7 @@ test('a US month/day CSV is read as month/day, and the summary says how dates we
 	});
 	const summary = form.getByRole('definition');
 	await expect(form.getByText('month/day/year')).toBeVisible();
-	await expect(summary.first()).toHaveText('2021-03-04 → 2021-03-13');
+	await expect(summary.first()).toHaveText('4 Mar 2021 → 13 Mar 2021');
 });
 
 test("a series' CSV menu opens in full, even on the table's last row", async ({ page, owner }) => {
@@ -198,8 +199,8 @@ test('on a phone each series row is a card: every column and button fits without
 
 	// Still a table to assistive tech: header cells and data cells keep their roles.
 	await expect(table.getByRole('columnheader', { name: 'Coverage by year' })).toHaveCount(1);
-	await expect(flowRow.getByRole('cell').first()).toContainText('2021-10-03'); // Data up to comes first (freshness first)
-	await expect(flowRow.getByRole('cell').nth(1)).toContainText('2021-10-01');
+	await expect(flowRow.getByRole('cell').first()).toContainText('3 Oct 2021'); // Data up to comes first (freshness first)
+	await expect(flowRow.getByRole('cell').nth(1)).toContainText('1 Oct 2021');
 
 	// Nothing is hidden behind a sideways scroll, in the table's box or the page.
 	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
@@ -304,7 +305,7 @@ test('a merge that changes stored days says which and how many before it overwri
 	// Positive control: a file that only adds days uploads straight away.
 	await form.getByLabel('CSV file').setInputFiles(csvFile('new.csv', 'date,value\n2021-10-04,4\n2021-10-05,5\n'));
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
-	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 5 Oct 2021.');
 	await expect(form).toBeHidden();
 	form = await openAddData(page);
 
@@ -312,15 +313,15 @@ test('a merge that changes stored days says which and how many before it overwri
 	await form.getByLabel('CSV file').setInputFiles(csvFile('fix.csv', 'date,value\n2021-10-02,20\n2021-10-03,3\n2021-10-04,40\n'));
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	const confirm = form.getByTestId('overwrite-confirm');
-	await expect(confirm.getByText('This changes 2 days already stored in “Rainfall — catchment”, between 2021-10-02 and 2021-10-04.')).toBeFocused();
+	await expect(confirm.getByText('This changes 2 days already stored in “Rainfall — catchment”, between 2 Oct 2021 and 4 Oct 2021.')).toBeFocused();
 	await expect(confirm).toContainText('you can put them back from the History tab');
 	await expect(form.getByRole('button', { name: 'Upload and merge' })).toHaveCount(0);
 	await confirm.getByText('Show the changes').click();
 	const rows = confirm.getByRole('row');
 	await expect(rows).toHaveCount(3);
 	await expect(rows.nth(0)).toHaveText(/Date\s*Stored \(mm\)\s*From the file \(mm\)/);
-	await expect(rows.nth(1)).toHaveText(/2021-10-02\s*2\.00\s*20\.00/);
-	await expect(rows.nth(2)).toHaveText(/2021-10-04\s*4\.00\s*40\.00/);
+	await expect(rows.nth(1)).toHaveText(/2 Oct 2021\s*2\.00\s*20\.00/);
+	await expect(rows.nth(2)).toHaveText(/4 Oct 2021\s*4\.00\s*40\.00/);
 	await expectNoViolations(page);
 
 	await form.getByRole('button', { name: 'Back' }).click();
@@ -337,7 +338,7 @@ test('a merge that changes stored days says which and how many before it overwri
 
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	await form.getByRole('button', { name: 'Overwrite 2 days' }).click();
-	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 5 Oct 2021.');
 	expect(await storedValues(page, project.id)).toEqual([1, 20, 3, 40, 5]);
 });
 
@@ -351,7 +352,7 @@ test('replacing a series asks first, counting every stored day it drops', async 
 	await form.getByRole('radio', { name: /^Replace the whole series/ }).check();
 	await form.getByRole('button', { name: 'Upload and replace' }).click();
 	const confirm = form.getByTestId('overwrite-confirm');
-	await expect(confirm).toContainText('This replaces all 2 days stored in “Rainfall — catchment” (2021-10-01 → 2021-10-03) with the file.');
+	await expect(confirm).toContainText('This replaces all 2 days stored in “Rainfall — catchment” (1 Oct 2021 → 3 Oct 2021) with the file.');
 	await expect(confirm.getByText('Show the changes')).toHaveCount(0);
 	await form.getByRole('button', { name: 'Replace 2 days' }).click();
 	await expect(uploadedNote(page)).toHaveText('Uploaded 1 day to “Rainfall — catchment”.');
@@ -367,7 +368,7 @@ test('the Add data dialog asks before it overwrites stored days too', async ({ p
 	const dialog = page.getByRole('dialog', { name: 'Add data' });
 	await dialog.getByLabel('CSV file').setInputFiles(csvFile('rain.csv', 'date,value\n2021-10-02,9\n2021-10-03,3\n'));
 	await dialog.getByRole('button', { name: 'Upload and merge' }).click();
-	await expect(dialog.getByTestId('overwrite-confirm')).toContainText('This changes 1 day already stored in “Rainfall — catchment”, between 2021-10-02 and 2021-10-02.');
+	await expect(dialog.getByTestId('overwrite-confirm')).toContainText('This changes 1 day already stored in “Rainfall — catchment”, between 2 Oct 2021 and 2 Oct 2021.');
 	await dialog.getByRole('button', { name: 'Overwrite 1 day' }).click();
 	await expect(dialog).toBeHidden();
 	expect(await storedValues(page, project.id)).toEqual([1, 9, 3]);
@@ -479,7 +480,7 @@ test('a DWS export loads with its missing-data codes and -999 as gaps, and the s
 	await form.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
 	await form.getByLabel('CSV file').setInputFiles(fileURLToPath(new URL('../../packages/engine/fixtures/dws-daily-export.txt', import.meta.url)));
 	const summary = form.getByRole('definition');
-	await expect(summary.nth(0)).toHaveText('2021-01-01 → 2021-01-11');
+	await expect(summary.nth(0)).toHaveText('1 Jan 2021 → 11 Jan 2021');
 	await expect(summary.nth(1)).toHaveText('11');
 	await expect(summary.nth(2)).toHaveText('7');
 	await expect(summary.nth(3)).toHaveText('4');
@@ -508,7 +509,7 @@ test('a semicolon file with decimal commas loads; one that mixes decimal points 
 	);
 	await form.getByLabel('CSV file').setInputFiles({ name: 'rain.csv', mimeType: 'text/csv', buffer: Buffer.from('datum;reën\n2021-10-01;12,5\n2021-10-02;"1 234,5"\n2021-10-03;0\n') });
 	const summary = form.getByRole('definition');
-	await expect(summary.nth(0)).toHaveText('2021-10-01 → 2021-10-03');
+	await expect(summary.nth(0)).toHaveText('1 Oct 2021 → 3 Oct 2021');
 	await expect(summary.nth(2)).toHaveText('3');
 	await form.getByRole('button', { name: 'Upload' }).click();
 	await expect(uploadedNote(page)).toContainText('Uploaded 3 days');

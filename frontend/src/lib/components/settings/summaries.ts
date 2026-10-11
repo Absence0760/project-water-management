@@ -2,7 +2,7 @@
 // set to now (issue #468), so the page reads as a list of current values and a
 // panel needn't be scanned field by field to know whether it matters. They
 // follow the unsaved form. Pure: SettingsTab passes the derived figures in.
-import { ALLOCATION_MODE_LABEL, defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
+import { defaultDataQualitySettings, zeroFlowMonthsText, type ProjectSettings } from '@water-management/engine';
 import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 import { fmtDay, fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 import type { SettingsSectionId } from './sections';
@@ -75,6 +75,8 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 			`A-pan ${fmtNum(apan)} mm a year`,
 			`effective rain ${fmtPct(s.effectiveRainFraction ?? 0, 0)}`,
 			`soil-water store ${fmtNum(s.effectiveRainStoreMm ?? 0)} mm`,
+			// Under GR4J the threshold only decides which rain days reduce irrigation demand (it moved here from Flow calibration, issue #521).
+			`rain threshold ${fmtNum(s.calibration?.rainThresholdMm ?? 0, 1, true)} mm`,
 			s.lakeEvapFactorMonthly ? 'dam evaporation by month' : `dam evaporation ${fmtNum(s.lakeEvapFactor ?? 0, 2, true)} × A-pan`
 		].join(' · '),
 		'set-share': share,
@@ -101,11 +103,11 @@ export function settingsSummaries(i: SummaryInput): Partial<Record<SettingsSecti
 		'set-ewr': [
 			i.ewrSource,
 			s.ewrDailySource && s.ewrDailySource.method !== 'pragmatic' ? null : `${fmtQty(i.ewrAnnualMm3, 3)} Mm³ a year`,
-			dateSpan(s.reportStart, s.reportEnd) ? `reporting ${dateSpan(s.reportStart, s.reportEnd)}` : null,
-			`registered volumes: ${ALLOCATION_MODE_LABEL[s.allocationMode ?? 'none'].toLowerCase()}`
 		]
 			.filter(Boolean)
 			.join(' · '),
+		// Moved out of EWR (issue #521): the window results average over, and when a water year counts as met.
+		'set-reporting': `${dateSpan(s.reportStart, s.reportEnd) ? `Reporting ${dateSpan(s.reportStart, s.reportEnd)}` : 'Reporting over the whole run'} · a water year is met at ${Math.round((s.assuranceAnnualThreshold ?? 0.9) * 1000) / 10} % of demand`,
 		'set-wr2012': s.wr2012?.reference
 			? `On: quaternary ${s.wr2012.reference.quaternary || '(unnamed)'}, MAR ${fmtQty(s.wr2012.reference.marMm3, 3)} Mm³`
 			: 'Off: runs aren’t compared with WR2012',

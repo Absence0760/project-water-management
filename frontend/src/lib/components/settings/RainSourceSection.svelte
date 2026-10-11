@@ -83,7 +83,11 @@
 
 <div class="rain-source" data-testid="rain-source">
 	<div class="head">
-		<h3 class="title">Rain source periods <HelpTip key="settings.rainSource" /></h3>
+		<!-- The list's add action in its head row, beside its name (ui-playbook.md § 2). -->
+		<div class="head-row">
+			<h4 class="title">Rain source periods <HelpTip key="settings.rainSource" /></h4>
+			{#if !readonly}<button type="button" class="btn btn-sm" onclick={add}>Add a rain-source period</button>{/if}
+		</div>
 		<span class="hint explain">
 			Over each period, catchment rain comes from the alternative catchment gauge × its month’s factor instead of the catchment series, which then stays out
 			of every factor fit. A day the gauge has no reading falls through to the fallback, then forecast rain.
@@ -250,9 +254,6 @@
 	{:else}
 		<p class="hint" data-testid="rain-source-none">None: the catchment series throughout.</p>
 	{/if}
-	{#if !readonly}
-		<div class="add"><button type="button" class="btn btn-sm" onclick={add}>Add a rain-source period</button></div>
-	{/if}
 	<!-- A problem with the list as a whole (too many periods), which no period carries. -->
 	{#if error && !problems.some(Boolean)}<p class="err">{error}.</p>{/if}
 </div>
@@ -261,7 +262,15 @@
 	.rain-source {
 		display: grid;
 		gap: 0.5rem;
-		margin-bottom: 0.75rem;
+		margin-top: 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
+	}
+	.head-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.75rem;
 	}
 	.head {
 		display: grid;
@@ -274,7 +283,7 @@
 		gap: 0.25rem;
 	}
 	.title {
-		font-size: 0.95rem;
+		font-size: 0.875rem;
 		margin: 0;
 	}
 	legend {
@@ -351,13 +360,7 @@
 		width: 4.2rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
 		font-size: 0.85rem;
-	}
-	.add {
-		margin-top: 0.25rem;
 	}
 	.err {
 		color: var(--danger);

@@ -266,15 +266,8 @@
 		margin-bottom: 0.4rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.5rem;
-		align-items: flex-start;
 		min-height: 24px;
 		margin: 0.3rem 0;
-	}
-	.check input {
-		margin-top: 0.2rem;
-		flex: none;
 	}
 	h3 {
 		margin: 0.75rem 0 0.4rem;

@@ -189,7 +189,7 @@
 		</div>
 	{/if}
 	<div class="tip-row">
-		<label class="toggle">
+		<label class="check">
 			<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
 			<span class="swatch" style:--qt={quaternaryColour(dark)} aria-hidden="true"></span>
 			Quaternary catchments
@@ -221,7 +221,7 @@
 		</div>
 	{/if}
 	<div class="tip-row">
-		<label class="toggle">
+		<label class="check">
 			<input type="checkbox" checked={rivers.on} onchange={(e) => toggle('rivers', e.currentTarget.checked)} data-testid="map-layer-rivers" />
 			<span class="swatch rn-swatch" style:--rn={riverNetworkColour(dark)} aria-hidden="true"></span>
 			River network
@@ -280,7 +280,7 @@
 		</div>
 	{/if}
 	{#if units}
-		<label class="toggle">
+		<label class="check">
 			<input type="checkbox" checked={units.on} onchange={(e) => toggle('units', e.currentTarget.checked)} data-testid="map-layer-units" />
 			<span class="swatch units-swatch" style:--un={overlayColours(dark).parcel} aria-hidden="true"></span>
 			Hydrological units
@@ -311,7 +311,7 @@
 		{/if}
 	{/if}
 	{#if mapGrid}
-		<label class="toggle">
+		<label class="check">
 			<input type="checkbox" checked={mapGrid.on} onchange={(e) => toggle('mapgrid', e.currentTarget.checked)} data-testid="map-layer-mapgrid" />
 			<span class="swatch ramp-swatch" style:--ramp={rampGradient} aria-hidden="true"></span>
 			MAP grid
@@ -350,7 +350,7 @@
 		{/if}
 	{/if}
 	{#if chirps}
-		<label class="toggle">
+		<label class="check">
 			<input type="checkbox" checked={chirps.on} onchange={(e) => toggle('chirps', e.currentTarget.checked)} data-testid="map-layer-chirps" />
 			<span class="swatch chirps-swatch" style:--ch={chirpsColour(dark)} aria-hidden="true"></span>
 			CHIRPS grid
@@ -368,7 +368,7 @@
 		{/if}
 	{/if}
 	{#if demGrid}
-		<label class="toggle">
+		<label class="check">
 			<input type="checkbox" checked={demGrid.on} onchange={(e) => toggle('demgrid', e.currentTarget.checked)} data-testid="map-layer-demgrid" />
 			<span class="swatch ramp-swatch" style:--ramp={demGradient} aria-hidden="true"></span>
 			DEM grid
@@ -396,7 +396,7 @@
 	{/if}
 	{#if relief}
 		<div class="tip-row">
-			<label class="toggle">
+			<label class="check">
 				<input type="checkbox" checked={relief.on} onchange={(e) => toggle('relief', e.currentTarget.checked)} data-testid="map-layer-relief" />
 				<span class="swatch relief-swatch" aria-hidden="true"></span>
 				Relief
@@ -420,10 +420,7 @@
 		margin: 0;
 		font-size: 0.95rem;
 	}
-	.toggle {
-		display: flex;
-		align-items: center;
-		gap: 0.45rem;
+	.check {
 		min-height: 24px;
 	}
 	/* The outline as the map draws it: a dashed line in the layer's colour (mapStyle.ts quaternaryColour). */

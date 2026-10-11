@@ -6,7 +6,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
+import { openFold, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
 
 /** One stored run series (the catchment's without `nodeId`). */
 async function runSeries(request: APIRequestContext, projectId: string, runId: string, key: string, nodeId?: string): Promise<number[]> {
@@ -90,6 +90,9 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	void owner;
 	const { id } = await seedRunnableProject(page.request, 'GR4J Kp helper');
 	await page.goto(`/projects/${id}?tab=settings`);
+	// The row's fill tools are folded under one line (issue #521), which names the source.
+	await expect(page.getByTestId('pan-tools-summary')).toHaveText('preset, FAO-56 helper, paste · source: not given');
+	await openFold(page, 'pan-tools');
 	await page.getByText('Suggest from FAO-56 Table 5 (humidity, wind, siting)').click();
 	await page.getByLabel('Windward fetch of green crop').selectOption('10');
 	const fill = page.getByRole('button', { name: 'Fill the pan-coefficient row' });
@@ -121,6 +124,10 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	await expect(saveChanges(page)).toBeEnabled();
 	await saveSettings(page);
 	await page.reload();
+	await expect(page.getByTestId('pan-tools-summary')).toHaveText(
+		'preset, FAO-56 helper, paste · source: FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means'
+	);
+	await openFold(page, 'pan-tools');
 	await expect(page.getByLabel('Pan coefficient source')).toHaveValue('FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means');
 	await expect(page.getByLabel('Pan coefficient, May')).toHaveValue('0.75');
 	// A preset replaces the row and names itself in the note.

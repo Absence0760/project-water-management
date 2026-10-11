@@ -32,9 +32,18 @@ describe('lineAuthors', () => {
 });
 
 describe('byline', () => {
-	it('names the author and the time, or a former member', () => {
-		expect(byline(rev('1', 'Ann'))).toMatch(/^Changed by Ann on 2026-09-2\d \d{2}:30$/);
-		expect(byline(rev('1', null))).toMatch(/^Changed by a former member on /);
+	it('names the author and the time, day first on the viewer’s clock, or a former member', () => {
+		const tz = process.env.TZ;
+		try {
+			// 12:30 UTC on 26 Sep is already the 27th at UTC+14, still the 26th at UTC−11.
+			process.env.TZ = 'Pacific/Kiritimati';
+			expect(byline(rev('1', 'Ann'))).toBe('Changed by Ann on 27 Sep 2026 02:30');
+			process.env.TZ = 'Pacific/Pago_Pago';
+			expect(byline(rev('1', 'Ann'))).toBe('Changed by Ann on 26 Sep 2026 01:30');
+			expect(byline(rev('1', null))).toBe('Changed by a former member on 26 Sep 2026 01:30');
+		} finally {
+			process.env.TZ = tz;
+		}
 	});
 });
 

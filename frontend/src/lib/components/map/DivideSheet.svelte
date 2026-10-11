@@ -308,7 +308,7 @@
 								<span class="muted small">from “{u.featureName}”</span>
 							</p>
 							{#if offer.add}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.add} data-testid="divide-tick-add" />
 									<span>Add it to the model as a gauge node{u.totalAreaM2 !== null ? `, measuring ${km2(u.totalAreaM2)} above it` : ''}</span>
 								</label>
@@ -322,7 +322,7 @@
 								<p class="hint">It measures {km2(u.totalAreaM2)} above it; a gauge owns no land of its own.</p>
 							{/if}
 							{#if offer.area}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.area} data-testid="divide-tick-area" />
 									<span
 										>Area <strong>{km2(u.areaM2)}</strong>, its own piece (whole catchment {km2(u.totalAreaM2)}), saved as its parcel. Now:
@@ -335,7 +335,7 @@
 								{/if}
 							{/if}
 							{#if offer.drainsInto}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.drainsInto} data-testid="divide-tick-drains" />
 									<span
 										>Drains into <strong>{divideDrainsIntoName(p, ticks, u)}</strong>. Now: {u.current ? (u.current.downstreamName ?? 'nothing') : 'the outflow'}{sameAsNow(p, u, 'drainsInto')
@@ -345,7 +345,7 @@
 								</label>
 							{/if}
 							{#if offer.runoffToDam}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="divide-tick-dam" />
 									<span
 										>{damShareLines(u.damShares, u.areaM2, t.area ? (t.areaBasis ?? 'gross') : 'gross', u.nonContributingM2)?.runoff ?? 'All of its own runoff reaches the dam (its piece ends at the wall).'} Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span
@@ -353,7 +353,7 @@
 								</label>
 							{/if}
 							{#if offer.upstreamToDam}
-								<label class="tick">
+								<label class="check">
 									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="divide-tick-upstream" />
 									<span
 										>{damShareLines(u.damShares, u.areaM2)?.upstream} Now: {u.current?.pctUpstreamToDam !== undefined ? pct(u.current.pctUpstreamToDam) : '–'}{sameAsNow(p, u, 'upstreamToDam')
@@ -496,14 +496,8 @@
 		display: grid;
 		gap: 0.25rem;
 	}
-	.tick {
-		display: flex;
-		gap: 0.5rem;
-		align-items: baseline;
+	.check {
 		min-height: 24px;
-	}
-	.tick input {
-		flex: none;
 	}
 	.hint {
 		font-size: 0.85rem;

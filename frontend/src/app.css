@@ -365,6 +365,28 @@ input[type='checkbox'] {
 	height: 1rem;
 	accent-color: var(--accent);
 }
+/* A box or a radio never gives up its width to its words: every input has `min-width: 0` (above),
+   so as a flex item in a `display: flex` label it shrank to a dot once the label wrapped
+   ("Validate: split-sample…", "Leave out a water year…"; ui-playbook.md § 4). */
+input[type='checkbox'],
+input[type='radio'] {
+	flex-shrink: 0;
+}
+/* A box with its words: `<label class="check"><input type="checkbox" /> words</label>`, one rule for
+   the app rather than one per component (issue #521). The box sits on the middle of the first line
+   (its block margins fill the line), so a label that wraps keeps it beside its first words, and a
+   label centred in a taller row (`align-items: center`, kept locally) still centres it. Never under
+   the browser's own 3 px, which keeps two stacked small labels' boxes 24 px apart (WCAG 2.5.8,
+   axe target-size: the members' Specialist and Acts-for-the-authority boxes). Components
+   keep only what differs (inline-flex, a min-height, a font size). */
+label.check {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.4rem;
+}
+label.check > input {
+	margin-block: max(3px, calc((1lh - 1rem) / 2));
+}
 input[type='number'] {
 	font-variant-numeric: tabular-nums;
 	text-align: right;
@@ -403,6 +425,86 @@ textarea {
 	gap: 0.75rem;
 	align-items: center;
 	margin: 0.75rem 0 0;
+}
+/* "Explain each setting under its field" (common/explain.svelte.ts, ExplainSwitch.svelte): a form that hides
+   its explanations marks its wrapper `explain-scope` with `class:explained={explainSwitch.on}`, and each
+   explanation is `.explain`. Hidden, it stays its field's description (aria-describedby reads hidden text).
+   One rule for Settings, a node's sheet and the scenario editor. */
+.explain-scope:not(.explained) .explain {
+	display: none;
+}
+/* Rarely changed settings folded into one line of their values (ui-playbook.md § 2, "Rarely changed
+   settings fold into their values"): common/Fold.svelte writes the markup, <details class="fold"><summary>
+   <span class="fold-name">Search:</span> <span>values</span><span class="fold-problem">needs fixing</span>
+   <span class="fold-change" aria-hidden="true">Change</span></summary><div class="fold-body">fields</div>
+   </details>. "needs fixing" shows while a field inside is aria-invalid, so a closed fold still says so. Every
+   fold's line starts with the same chevron, turned down while it is open (the one marker rule; a node sheet's
+   section card, a headed band, keeps its own triangle). */
+.fold {
+	border-block: 1px solid var(--border);
+}
+.fold > summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.15rem 0.4rem;
+	min-height: 36px;
+	padding: 0.25rem 0;
+	cursor: pointer;
+	list-style: none;
+	font-size: 0.85rem;
+	color: var(--text-2);
+}
+.fold > summary::-webkit-details-marker {
+	display: none;
+}
+.fold > summary::before {
+	content: '';
+	flex: none;
+	width: 0.4rem;
+	height: 0.4rem;
+	margin: 0 0.35rem 0 0.1rem;
+	border-right: 2px solid currentColor;
+	border-bottom: 2px solid currentColor;
+	transform: rotate(-45deg);
+}
+.fold[open] > summary::before {
+	transform: rotate(45deg);
+}
+.fold-name {
+	font-weight: 500;
+}
+.fold-problem {
+	display: none;
+	color: var(--danger);
+	font-weight: 500;
+}
+.fold:has([aria-invalid='true']) .fold-problem {
+	display: inline;
+}
+.fold-change {
+	margin-left: auto;
+	color: var(--accent);
+	font-weight: 500;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.fold > summary:hover .fold-change {
+	text-decoration-thickness: 2px;
+}
+.fold-body {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 0.25rem 1.25rem;
+	align-items: start;
+	padding: 0.25rem 0 0.4rem;
+}
+.fold-body .field {
+	margin-bottom: 0.25rem;
+}
+/* A fold whose body is a column of headed groups, cards or a form, not a grid of fields. */
+.fold-stack {
+	padding: 0.25rem 0 0.4rem;
 }
 :is(.form-row, .field, p, fieldset):has(+ .action-row),
 .form-row:has(+ .action-row) > .field {
@@ -494,7 +596,9 @@ table.data tfoot th {
 	font-weight: 600;
 	background: var(--surface-2);
 }
-table.data td input,
+/* Not a box: at 100 % a checkbox in a cell (the members' "Acts for the responsible authority")
+   took the cell's width, with its words pushed past the row's buttons. */
+table.data td input:where(:not([type='checkbox'], [type='radio'])),
 table.data td select {
 	width: 100%;
 	padding: 0.2rem 0.35rem;
@@ -574,11 +678,13 @@ table.data tr.flag {
 	color: var(--text-muted);
 	margin-bottom: 0.15rem;
 }
+/* Proportional figures: a tile's figure stands alone, not in a column, and
+   Inter's tabular figures set a hyphen a digit wide, so its lines read
+   "- 2.26", "2021 - 10 - 01" and "under - estimates" (ui-playbook § 4). */
 .stat dd {
 	margin: 0;
 	font-size: 1.2rem;
 	font-weight: 600;
-	font-variant-numeric: tabular-nums;
 }
 .stat dd small {
 	font-size: 0.75rem;

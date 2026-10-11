@@ -4,7 +4,9 @@
 // River & reserve's Water account, which links back), and the trace of one farm's day
 // with its working columns (docs/ui.md § Self-checks).
 import { createRun, seedRunnableProject } from '../support/api.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 test('a run shows its self-checks, its water balance and a traced day that closes', async ({ page, owner }) => {
 	void owner;
@@ -37,20 +39,20 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(balance.getByRole('rowheader')).toHaveText(['2021/22', 'Whole run']);
 	// No groundwater, users, storage resets or lost seepage here: the equation names only the columns shown.
 	await expect(balance).toContainText('Start storage + hydrological unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage.');
+	// Two pairs stack in one column each (rain over its runoff coefficient, the balance's residual over the
+	// runoff model's), so the table fits its column at 1440 (runs-page.spec.ts).
 	await expect(balance.getByRole('columnheader')).toHaveText([
 		'Water year',
-		'Rain (mm)',
-		'Runoff coeff.',
+		'Rain (mm) runoff coeff.',
 		'Start storage',
-		'Hydrological unit runoff',
+		'Unit runoff',
 		'Transfers',
 		'Rain on dams',
 		'Consumptive use',
 		'Dam evaporation',
 		'Outflow',
 		'End storage',
-		'Residual (m³)',
-		'Runoff-model residual (mm)'
+		'Residual (m³) runoff model (mm)'
 	]);
 
 	// The catchment's own account is on River & reserve: linked, for the same run, not copied here; Back returns.
@@ -71,26 +73,58 @@ test('a run shows its self-checks, its water balance and a traced day that close
 
 	const trace = page.getByRole('region', { name: /^Trace a day/ });
 	await trace.getByLabel('Hydrological unit, gauge or catchment').selectOption({ label: 'Upper farm' });
-	await trace.getByLabel('Day').fill('2021-11-15');
+	// The day is a day-first text field (a native date field shows the browser's own order, 12/30/2021 in a US browser):
+	// it starts on a run day, day first, and says the run's days under the form.
+	const dayField = trace.getByLabel('Day');
+	await expect(dayField).toHaveValue(/^\d{1,2} [A-Z][a-z]{2} 20\d{2}$/);
+	await expect(dayField).toHaveAccessibleDescription('Run days 1 Oct 2021 to 28 Jan 2022, day first.');
+	// Month first is never read, a day outside the run is refused, each saying so at the field, and nothing is traced.
+	for (const [typed, problem] of [
+		['11/15/2021', 'Type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15.'],
+		['15 Nov 2023', 'Pick a day of the run, from 1 Oct 2021 to 28 Jan 2022.']
+	] as const) {
+		await dayField.fill(typed);
+		await trace.getByRole('button', { name: 'Trace' }).click();
+		await expect(trace.getByRole('alert')).toHaveText(problem);
+		await expect(dayField).toHaveAttribute('aria-invalid', 'true');
+		await expect(dayField).toBeFocused();
+		await expect(trace.getByRole('table')).toHaveCount(0);
+	}
+	await expectNoViolations(page);
+	// The field and its line fit a phone, with the complaint showing (issue #521's 320 px rule).
+	const desktop = page.viewportSize()!;
+	for (const width of [390, 320]) {
+		await resizeTo(page, { width, height: 844 });
+		await expect(trace.getByRole('alert')).toBeVisible();
+		await expectNoSidewaysScroll(page);
+	}
+	await expectNoViolations(page);
+	await resizeTo(page, desktop);
+	// Typing clears the complaint; an ISO day is read and shown day first once the field is left.
+	await dayField.fill('2021-11-15');
+	await expect(trace.getByRole('alert')).toHaveCount(0);
+	await expect(dayField).not.toHaveAttribute('aria-invalid');
+	await dayField.blur();
+	await expect(dayField).toHaveValue('15 Nov 2021');
 	await trace.getByRole('button', { name: 'Trace' }).click();
-	const table = trace.getByRole('table', { name: 'Upper farm on 2021-11-15' });
+	const table = trace.getByRole('table', { name: 'Upper farm on 15 Nov 2021' });
 	await expect(table).toBeVisible();
 	for (const name of ['Dam storage at the end of the day before', 'Soil-water store at the end of the day before', 'Soil-water store at the end of the day', 'Upstream inflow into the dam', 'Irrigation return flow', 'Balance check (should be 0)']) {
 		await expect(table.getByRole('rowheader', { name, exact: true })).toBeVisible();
 	}
 	await expect(table.getByRole('row').filter({ hasText: 'Irrigation supplied' }).getByRole('cell').first()).toHaveText('G');
 	// The day closes from the numbers shown: in − used − stored − out is 0 or float noise.
-	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|[-−]?\d\.\d{2}e-\d+)$/);
 
 	// The catchment's day: how the runoff model (GR4J, the default) turned rain into natural flow.
 	await trace.getByLabel('Hydrological unit, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
 	await trace.getByRole('button', { name: 'Trace' }).click();
-	const runoff = trace.getByRole('table', { name: 'Catchment (GR4J) on 2021-11-15' });
+	const runoff = trace.getByRole('table', { name: 'Catchment (GR4J) on 15 Nov 2021' });
 	await expect(runoff).toBeVisible();
 	for (const name of ['All stores at the end of the day before', 'Production store (soil moisture), the day before', 'Production store (soil moisture)', 'Routing store', 'Actual evaporation', 'Natural flow']) {
 		await expect(runoff.getByRole('rowheader', { name, exact: true })).toBeVisible();
 	}
 	// The store balance closes from the numbers shown: before + P + F − AET − Q − after is 0 or float noise.
-	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|[-−]?\d\.\d{2}e-\d+)$/);
 	await expect(trace.locator('.closure')).toContainText('mm');
 });

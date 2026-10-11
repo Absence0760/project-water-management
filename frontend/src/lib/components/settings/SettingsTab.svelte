@@ -1,14 +1,17 @@
 <script module lang="ts">
-	// Settings → Calibration record's quality flags and flow gaps (issue #66): each its own chunk,
+	// Every lazy section below that draws on each visit shares one chunk, lazySections.ts (issue #521): they all
+	// load as the tab opens, so one request and one gzip stream instead of seven.
+	const loadSections = () => import('./lazySections');
+	// Settings → Calibration record's quality flags and flow gaps (issue #66): out of the tab's chunk,
 	// loaded when the section draws, so the Settings tab chunk stays under its size ceiling. The
 	// quality flags' Save blocker (`error`) is set once its fields load: nothing can be edited before.
-	const loadQualityFlags = () => import('./QualityFlagsFields.svelte');
-	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
+	const loadQualityFlags = () => loadSections().then((m) => ({ default: m.QualityFlagsFields }));
+	const loadFlowGapFill = () => loadSections().then((m) => ({ default: m.FlowGapFillFields }));
 	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
 	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
 	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
-	// Settings → Evidence, the declared uncertainty rule (issue #71): its own chunk, for the same reason.
-	const loadEvidenceRule = () => import('./EvidenceRuleFields.svelte');
+	// Settings → Evidence, the declared uncertainty rule (issue #71): out of the tab's chunk, for the same reason.
+	const loadEvidenceRule = () => loadSections().then((m) => ({ default: m.EvidenceRuleFields }));
 	// Settings → Drought restrictions (engine ≥ 1.54.0, WP-3.8): its own chunk, for the same reason.
 	const loadDroughtRestriction = () => import('./DroughtRestrictionFields.svelte');
 	// The daily EWR at the outlet (engine ≥ 1.77.0, issue #455): its own chunk, for the same reason.
@@ -17,15 +20,21 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
-	// Evaporation from the map (issue #326 B-evap): its own chunk, for the same reason as the panels above; it loads its proposal on mount.
-	const loadEvaporationProposal = () => import('./EvaporationProposal.svelte');
+	// Scheduled reports: out of the tab's chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
+	const loadReportSchedules = () => loadSections().then((m) => ({ default: m.ReportSchedulesPanel }));
+	// Evaporation from the map (issue #326 B-evap): out of the tab's chunk, for the same reason as the panels above; it loads its proposal on mount.
+	const loadEvaporationProposal = () => loadSections().then((m) => ({ default: m.EvaporationProposal }));
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
 	// project never draws it; its own chunk keeps the tab under its ceiling (the side index, issue #468, grew it).
 	const loadPanHelper = () => import('./PanCoefficientHelper.svelte');
-	// Rain for each unit (settings.unitRain, issue #482): its own chunk, for the same reason.
-	const loadUnitRain = () => import('./UnitRainFields.svelte');
+	// Rain for each unit (settings.unitRain, issue #482): out of the tab's chunk, for the same reason; its areal body its own.
+	const loadUnitRain = () => loadSections().then((m) => ({ default: m.UnitRainFields }));
+	const loadArealRain = () => import('./ArealRainBody.svelte');
 	// Each unit's MAP from the MAP grid (issue #482): editors only, while rain for each unit is on; its own chunk too.
 	const loadUnitMap = () => import('./UnitMapProposal.svelte');
+	// Rain gaps' two cards, CHIRPS gap filling and Flagged rain (issue #521), inside the fold that is one closed
+	// line at the defaults (most projects): out of the tab's chunk for the same reason, with its three sections.
+	const loadRainGaps = () => loadSections().then((m) => ({ default: m }));
 </script>
 
 <script lang="ts">
@@ -36,7 +45,6 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
 	import {
-		ALLOCATION_MODE_LABEL,
 		CALIBRATION_FLOW_KINDS,
 		calibrationSeriesKey,
 		calibrationSites,
@@ -73,6 +81,8 @@
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
+	import { qualityFlagsAtDefaults, qualityFlagsSummary } from './qualityFlagsLine';
+	import MarPenaltyFields from './MarPenaltyFields.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import type { FitSession } from '$lib/calibration/fitSession.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -92,8 +102,8 @@
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError } from '$lib/components/autorun/autoRun';
 	import { outcomesError } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError } from '$lib/components/outlook/settings';
-	import { CHIRPS_BIAS_OPTIONS, withChirpsQuantileMap } from './rain';
-	import { saveBlockers, settingsNavGroups } from './sections';
+	import { CHIRPS_BIAS_OPTIONS, rainGapsAtDefaults, rainGapsLine, withChirpsQuantileMap } from './rain';
+	import { saveBlockers, SETTINGS_ELSEWHERE, settingsNavGroups } from './sections';
 	import { settingsSummaries, type SummaryInput } from './summaries';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
@@ -103,13 +113,13 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import EwrHeadlineField from './EwrHeadlineField.svelte';
-	import ZeroRainSection from './ZeroRainSection.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
-	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
-	import RainSourceSection from './RainSourceSection.svelte';
+	import ExplainSwitch from '$lib/components/common/ExplainSwitch.svelte';
+	import { explainSwitch } from '$lib/components/common/explain.svelte';
+	import Fold from '$lib/components/common/Fold.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
 	import { annualGr4jPeMm, apanSourceNote, PE_KIND_OPTIONS, PE_MONTH_MAX_MM, peFormError, peOf, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
-	import { AREAL_METHOD_OPTIONS, arealRainFormError, flatFactor, storedArealRain, withArealRain, withFactorEveryMonth, type EditableArealRain } from './arealRain';
+	import { arealRainFormError, storedArealRain, withArealRain, type EditableArealRain } from './arealRain';
 	import { unitRainFormError } from './unitRain';
 	// These panels render on every visit of the tab (the pan-coefficient helper aside, above), so they are in its chunk rather than chunks of
 	// their own: split, they only added overhead (6 KB gzip, issue #17; tab chunks have their own
@@ -117,7 +127,6 @@
 	// reports save through their own APIs, never through the save bar (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 	import type { SettingsDraft } from './settingsDraft.svelte';
@@ -168,6 +177,11 @@
 	const s = $derived(draft.s);
 	// The preset pickers themselves are never saved: each only fills its row and source note, then resets.
 	let panPreset = $state('');
+	/** GR4J's default warm-up (days): the warm-up fold starts closed at it. */
+	const GR4J_WARMUP_DEFAULT = 365;
+	// The pan row's fill tools are a Fold, closed at first; the warm-up and the quality flags close while at their defaults.
+	// Automated calibration's panel: the rules card's head runs it (its start() and canRun()).
+	let autoFit = $state<{ start: () => void; canRun: () => boolean } | undefined>(undefined);
 	// The lake-factor preset picker (engine ≥ 1.49.0) fills lakeEvapFactorMonthly and its source note.
 	let lakePreset = $state('');
 	let lakePresetError = $state<string | null>(null);
@@ -188,7 +202,6 @@
 	// The areal rainfall correction on GR4J's rain (engine ≥ 1.13.0, §2.4g); the one switched off is kept until saved.
 	const areal = $derived((s.arealRain ?? null) as unknown as EditableArealRain | null);
 	const arealError = $derived(arealRainFormError(areal));
-	const arealFlat = $derived(areal ? flatFactor(areal) : null);
 	// Rain for each unit (settings.unitRain, issue #482): checked here, so Save is blocked before its chunk has loaded.
 	const unitRainError = $derived(unitRainFormError(s.unitRain));
 	function setArealOn(on: boolean) {
@@ -258,9 +271,9 @@
 			{ id: 'set-flow', message: unitRainError },
 			{ id: 'set-wr2012', message: errs.wr2012 },
 			{ id: 'set-ewr', message: errs.ewrSource },
-			{ id: 'set-ewr', message: reportError },
 			{ id: 'set-reserve', message: errs.reserve },
 			{ id: 'set-restrict', message: errs.restrict },
+			{ id: 'set-reporting', message: reportError },
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError },
 			{ id: 'set-outcomes', message: outError },
@@ -423,28 +436,11 @@
 		}))
 	);
 
-	// The explanations under the fields (issue #468): off by default, so the controls come first; remembered here.
-	const EXPLAIN_KEY = 'wm.settings.explain';
-	let explain = $state({ on: readExplain() });
-	function readExplain() {
-		try {
-			return localStorage.getItem(EXPLAIN_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
-	function setExplain(on: boolean) {
-		explain.on = on;
-		try {
-			localStorage.setItem(EXPLAIN_KEY, on ? '1' : '0');
-		} catch {
-			// Private mode: it holds for this visit.
-		}
-	}
-
 	// The section header (issue #17): where the parameters came from, and the way to the fit.
 	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
 	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
+	// Rain gaps at its defaults: one line that opens its two cards (rain.ts).
+	const rainAtDefaults = $derived(rainGapsAtDefaults(s));
 	// Each panel's line of what it is set to now (summaries.ts).
 	const summaries = $derived(
 		settingsSummaries({
@@ -486,10 +482,10 @@
      (one Automation & access link standing for the four panels that run or connect by themselves), and a
      sideways strip on a phone. It wraps the whole tab, so it stays beside (or above) the panels after the
      form too. -->
-<SectionNav groups={navGroups} label="Settings sections" find="Find a setting" railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
+<SectionNav groups={navGroups} label="Settings sections" find="Find a setting" elsewhere={SETTINGS_ELSEWHERE} railFrom={RAIL_FROM_REM} bind:layout={navLayout}>
 <!-- Not a <form>: the page's save bar saves it, and the notes' and the quaternary lookup's own forms
      inside the panels would otherwise be nested forms (invalid HTML) whose submit reached this one. -->
-<div class="settings-form" class:explained={explain.on}>
+<div class="settings-form explain-scope" class:explained={explainSwitch.on}>
 
 	<!-- Judge results by (issue #444): first, as the client asked; it reads results and changes none. Not in the
 	     section menu, which starts right above it; River & reserve's "Change" links here (#set-judge). -->
@@ -505,10 +501,7 @@
 
 	<!-- The explanations under the fields (issue #468): off, the controls come first; each field keeps its ⓘ tip,
 	     and the hidden text stays its description for screen readers. Remembered on this device. -->
-	<label class="check explain-switch">
-		<input type="checkbox" checked={explain.on} onchange={(e) => setExplain(e.currentTarget.checked)} />
-		Explain each setting under its field
-	</label>
+	<ExplainSwitch />
 
 	<!-- Period ------------------------------------------------------------------------>
 	<section class="panel" id="set-period" aria-labelledby="per-h">
@@ -560,66 +553,77 @@
 		</div>
 		<p class="summary" data-testid="summary-rain">{summaries['set-rain']}</p>
 		<p class="hint explain">Which days CHIRPS fills in the catchment rain, and how, and periods taken from another gauge.</p>
-		<h3 class="sub first">CHIRPS bias correction and quantile map</h3>
-		<div class="fields">
-			<div class="field">
-				<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
-				<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
-					{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-				</select>
-				<span class="hint explain" id="st-chirps-bias-h">{chirpsOption?.help}</span>
-			</div>
-		</div>
-		<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
-		<fieldset class="plain" data-testid="chirps-quantile-map">
-			<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
-			<label class="check">
-				<input
-					type="checkbox"
-					disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
-					checked={!!s.chirpsQuantileMap}
-					onchange={(e) => setGapMapOn(e.currentTarget.checked)}
-					aria-describedby="st-chirps-qm-h"
-				/>
-				Quantile-map the CHIRPS that fills gaps onto the catchment rain (each month’s total kept)
-			</label>
-			{#if s.chirpsQuantileMap}
-				{@const q = s.chirpsQuantileMap}
-				<div class="field">
-					<label for="st-chirps-qm-wet">Wet day from <span class="u">(mm)</span></label>
-					<NumberInput
-						id="st-chirps-qm-wet"
-						min={QM_WET_DAY_MM_MIN}
-						max={QM_WET_DAY_MM_MAX}
-						step={0.1}
-						disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
-						value={q.wetDayMm}
-						onchange={(v) => v !== null && (s.chirpsQuantileMap = { wetDayMm: v })}
-					/>
+		<!-- Two cards, CHIRPS gap filling and Flagged rain, each list with its add actions in its own head row; at the
+		     defaults (most projects) both are one line that opens them (ui-playbook.md § 2, "Settings at their defaults
+		     are one line"). Always mounted (once its chunk loads, loadRainGaps), like the other sections that feed the Save blocker: a list left invalid
+		     after turning bias correction off must stay in the page, where the fold's line says it needs fixing. -->
+		<Fold testid="rain-defaults" name={rainAtDefaults ? 'All defaults:' : 'Now:'} line={rainGapsLine(s)} atDefaults={rainAtDefaults} body="stack" spaced>
+			<Lazy load={loadRainGaps}>
+				{#snippet children(R)}
+			<R.ChirpsFitPeriodSection
+				bind:value={s.chirpsFitPeriod}
+				bind:error={draft.errors.fitPeriod}
+				{readonly}
+				inactive={s.chirpsBiasCorrection !== 'monthly'}
+				propose={() => proposeFitRanges(project.id, s.zeroRainRuns, s.dataQuality)}
+			>
+				<div class="fields">
+					<div class="field">
+						<span class="lbl"><label for="st-chirps-bias">CHIRPS bias correction</label><HelpTip key="settings.chirpsBiasCorrection" /></span>
+						<select id="st-chirps-bias" disabled={readonly} bind:value={s.chirpsBiasCorrection} aria-describedby="st-chirps-bias-h">
+							{#each CHIRPS_BIAS_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+						</select>
+						<span class="hint explain" id="st-chirps-bias-h">{chirpsOption?.help}</span>
+					</div>
 				</div>
-			{/if}
-			<span class="hint" class:explain={s.chirpsBiasCorrection === 'monthly'} id="st-chirps-qm-h">
-				{#if s.chirpsBiasCorrection !== 'monthly'}
-					Needs bias correction: the map reshapes bias-corrected CHIRPS.{#if s.chirpsQuantileMap}{' '}A run ignores it and says so.{/if}
-				{:else}
-					Off, gap days take CHIRPS × the monthly factor. On, CHIRPS is also fitted to the catchment rain month by month over the fit period: where it is wet more
-					often, its drizzle days go dry; its wet days take the catchment’s spread of falls; and each month is scaled back to its corrected total, so the volume
-					doesn’t change. A month with fewer than {QM_MIN_WET_DAYS} wet days uses its three-month season, else keeps the factor alone (the run warns).
-				{/if}
-			</span>
-			<FieldHistoryLine field="settings:chirpsQuantileMap" />
-		</fieldset>
-		<!-- Always mounted, like the other sections that feed the Save blocker: a list left invalid
-		     after turning bias correction off must stay visible, or Save is blocked with nothing to fix. -->
-		<ChirpsFitPeriodSection
-			bind:value={s.chirpsFitPeriod}
-			bind:error={draft.errors.fitPeriod}
-			{readonly}
-			inactive={s.chirpsBiasCorrection !== 'monthly'}
-			propose={() => proposeFitRanges(project.id, s.zeroRainRuns, s.dataQuality)}
-		/>
-		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
-		<RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
+				<!-- The CHIRPS gap map (settings.chirpsQuantileMap, engine ≥ 1.53.0, CR-23): maps bias-corrected CHIRPS, so it waits for bias correction. -->
+				<fieldset class="plain" data-testid="chirps-quantile-map">
+					<legend>CHIRPS quantile map <HelpTip key="settings.chirpsQuantileMap" /></legend>
+					<label class="check">
+						<input
+							type="checkbox"
+							disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+							checked={!!s.chirpsQuantileMap}
+							onchange={(e) => setGapMapOn(e.currentTarget.checked)}
+							aria-describedby="st-chirps-qm-h"
+						/>
+						Quantile-map the CHIRPS that fills gaps onto the catchment rain (each month’s total kept)
+					</label>
+					{#if s.chirpsQuantileMap}
+						{@const q = s.chirpsQuantileMap}
+						<div class="field">
+							<label for="st-chirps-qm-wet">Wet day from <span class="u">(mm)</span></label>
+							<NumberInput
+								id="st-chirps-qm-wet"
+								min={QM_WET_DAY_MM_MIN}
+								max={QM_WET_DAY_MM_MAX}
+								step={0.1}
+								disabled={readonly || s.chirpsBiasCorrection !== 'monthly'}
+								value={q.wetDayMm}
+								onchange={(v) => v !== null && (s.chirpsQuantileMap = { wetDayMm: v })}
+							/>
+						</div>
+					{/if}
+					<span class="hint" class:explain={s.chirpsBiasCorrection === 'monthly'} id="st-chirps-qm-h">
+						{#if s.chirpsBiasCorrection !== 'monthly'}
+							Needs bias correction: the map reshapes bias-corrected CHIRPS.{#if s.chirpsQuantileMap}{' '}A run ignores it and says so.{/if}
+						{:else}
+							Off, gap days take CHIRPS × the monthly factor. On, CHIRPS is also fitted to the catchment rain month by month over the fit period: where it is wet more
+							often, its drizzle days go dry; its wet days take the catchment’s spread of falls; and each month is scaled back to its corrected total, so the volume
+							doesn’t change. A month with fewer than {QM_MIN_WET_DAYS} wet days uses its three-month season, else keeps the factor alone (the run warns).
+						{/if}
+					</span>
+					<FieldHistoryLine field="settings:chirpsQuantileMap" />
+				</fieldset>
+			</R.ChirpsFitPeriodSection>
+			<div class="sub-card" data-testid="flagged-rain-card">
+				<h3 class="card-title">Flagged rain</h3>
+				<R.ZeroRainSection bind:value={s.zeroRainRuns} bind:error={draft.errors.zeroRain} {readonly} />
+				<R.RainSourceSection bind:value={s.rainSource} bind:error={draft.errors.rainSource} {readonly} />
+			</div>
+				{/snippet}
+			</Lazy>
+		</Fold>
 	</section>
 
 	<!-- Data quality (DataQualitySection: gauge vs logger, outliers, flat stretches, zero-rain runs, low vs CHIRPS) -->
@@ -714,6 +718,12 @@
 				<NumberInput id="st-ers" min={0} max={500} step={1} disabled={readonly} bind:value={s.effectiveRainStoreMm} aria-describedby="st-ers-h" />
 				<span class="hint explain" id="st-ers-h">Effective rain the crop can't use on the day is kept for the next days, up to this depth. 25 mm (FAO-56) by default; 0 carries nothing over, as the workbook does.</span>
 				<FieldHistoryLine field="settings:effectiveRainStoreMm" />
+			</div>
+			<div class="field">
+				<span class="lbl"><label for="cal-rainThresholdMm">Rain threshold for demand <span class="u">(mm)</span></label><HelpTip key="calibration.rainThresholdMm" /></span>
+				<NumberInput id="cal-rainThresholdMm" min={0} step={0.1} disabled={readonly} value={cal.rainThresholdMm} aria-describedby="cal-thr-h" onchange={(v) => { if (v !== null) s.calibration.rainThresholdMm = v; }} />
+				<span class="hint explain" id="cal-thr-h">Under GR4J this only decides which rain days reduce irrigation demand; the runoff model uses all rain.</span>
+				<FieldHistoryLine field="settings:calibration.rainThresholdMm" />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" label="About the evaporation factor of the dam" /></span>
@@ -836,6 +846,67 @@
 		<FieldHistoryLine field="settings:droughtRestriction" />
 	</section>
 
+	<!-- Reporting (issue #521): the window the curtailment targets and the assurance of supply average over, and
+	     when a water year counts as met. Moved here from EWR: they read the supply results, not the river. -->
+	<section class="panel" id="set-reporting" aria-labelledby="reporting-h">
+		<div class="panel-head">
+			<h2 id="reporting-h">Reporting</h2>
+			<NotesDrawer projectId={project.id} target={settingTarget('reporting')} />
+		</div>
+		<p class="summary" data-testid="summary-reporting">{summaries['set-reporting']}</p>
+		<div class="reporting">
+			<fieldset class="plain report">
+				<legend>Curtailment reporting window <HelpTip key="settings.reportStart" /></legend>
+				<div class="form-row">
+					<div class="field">
+						<label for="st-rep-start">From</label>
+						<input
+							id="st-rep-start"
+							type="date"
+							readonly={readonly}
+							value={s.reportStart ?? ''}
+							onchange={(e) => (s.reportStart = e.currentTarget.value || null)}
+							aria-invalid={reportError ? 'true' : undefined}
+							aria-describedby={reportError ? 'st-rep-err' : undefined}
+						/>
+					</div>
+					<div class="field">
+						<label for="st-rep-end">To</label>
+						<input
+							id="st-rep-end"
+							type="date"
+							readonly={readonly}
+							value={s.reportEnd ?? ''}
+							onchange={(e) => (s.reportEnd = e.currentTarget.value || null)}
+							aria-invalid={reportError ? 'true' : undefined}
+							aria-describedby={reportError ? 'st-rep-err' : undefined}
+						/>
+					</div>
+				</div>
+				<span class="hint explain">
+					Period the curtailment targets and the assurance of supply on Hydrological units average over, e.g. the last dry season. Leave blank for the whole run.
+				</span>
+				{#if reportError}<p class="err" id="st-rep-err">{reportError}</p>{/if}
+			</fieldset>
+			<!-- Its own field, after the window: screen readers announced it as part of the window's group. -->
+			<div class="field assurance">
+				<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
+				<NumberInput
+					id="st-aat"
+					min={1}
+					max={100}
+					scale={100}
+					disabled={readonly}
+					value={s.assuranceAnnualThreshold ?? 0.9}
+					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
+					aria-describedby="st-aat-h"
+				/>
+				<span class="hint explain" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
+			</div>
+		</div>
+	</section>
+
 	<!-- Flow generation ------------------------------------------------------------>
 	<section class="panel" id="set-flow" aria-labelledby="cal-h">
 		<div class="panel-head">
@@ -844,31 +915,6 @@
 		</div>
 		<p class="summary" data-testid="summary-flow">{summaries['set-flow']}</p>
 		<p class="hint explain">Rain → natural flow. Tune against observed flow; check NSE and PBIAS on Runs & results.</p>
-		<div class="fields">
-			<div class="field">
-				<span class="lbl">Runoff model <HelpTip key="settings.runoffModel" /></span>
-				<strong data-testid="runoff-model">{RUNOFF_MODEL_LABEL}</strong>
-				<span class="hint explain">{RUNOFF_MODEL_HELP}</span>
-			</div>
-			<div class="field">
-				<span class="lbl"><label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label><HelpTip key="calibration.catchmentAreaKm2" /></span>
-				<NumberInput
-					id="cal-catchmentAreaKm2"
-					min={0}
-					nullable
-					placeholder="{fmtNum(farmAreaKm2, 2)} (sum of hydrological units)"
-					disabled={readonly}
-					bind:value={s.calibration.catchmentAreaKm2}
-					aria-describedby="cal-area-h"
-				/>
-				<span class="hint" id="cal-area-h">
-					Area the rain falls on. Leave blank to use the sum of the hydrological unit areas —
-					<strong>{fmtNum(farmAreaKm2, 2)} km²</strong> now.{#if cal.catchmentAreaKm2 != null && Math.abs(cal.catchmentAreaKm2 - farmAreaKm2) > 0.005}
-						Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.{/if}
-				</span>
-				<FieldHistoryLine field="settings:calibration.catchmentAreaKm2" />
-			</div>
-		</div>
 		{#if petMissing}
 			<p class="alert alert-warning" role="status">
 				{#if pe.kind === 'monthly'}
@@ -880,96 +926,187 @@
 				{/if}
 			</p>
 		{/if}
-		<div class="fields">
-			{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
+		<!-- Three cards (issue #521): the parameters a fit writes, the rain GR4J runs on, and its potential evaporation;
+		     then Evaporation from the map, which saves straight away, as its own card. Rarely changed settings fold into
+		     one line of their values (ui-playbook.md § 2). -->
+		<div class="sub-card" data-testid="flow-gr4j-card">
+			<div class="card-head">
+				<h3 class="sub first">GR4J parameters</h3>
+				<a class="btn btn-sm" href="#set-fit" data-testid="flow-fit-link">Fit the parameters</a>
+			</div>
+			<div class="fields gr4j-fields">
+				{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
+					<div class="field">
+						<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" label="About GR4J, for {p.label}" /></span>
+						<!-- A fit writes nine decimals; three show (display only, as the fit record does). -->
+						<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} decimals={3} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
+						<span class="hint explain" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
+						<FieldHistoryLine field="settings:gr4j.{p.key}" />
+					</div>
+				{/each}
 				<div class="field">
-					<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" label="About GR4J, for {p.label}" /></span>
-					<!-- A fit writes nine decimals; three show (display only, as the fit record does). -->
-					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} decimals={3} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
-					<span class="hint explain" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
-					<FieldHistoryLine field="settings:gr4j.{p.key}" />
+					<span class="lbl"><label for="cal-catchmentAreaKm2">Catchment area <span class="u">(km²)</span></label><HelpTip key="calibration.catchmentAreaKm2" /></span>
+					<NumberInput
+						id="cal-catchmentAreaKm2"
+						min={0}
+						nullable
+						placeholder="{fmtNum(farmAreaKm2, 2)} (sum of hydrological units)"
+						disabled={readonly}
+						bind:value={s.calibration.catchmentAreaKm2}
+						aria-describedby="cal-area-h"
+					/>
+					<span class="hint" id="cal-area-h">
+						Area the rain falls on. Leave blank to use the sum of the hydrological unit areas —
+						<strong>{fmtNum(farmAreaKm2, 2)} km²</strong> now.{#if cal.catchmentAreaKm2 != null && Math.abs(cal.catchmentAreaKm2 - farmAreaKm2) > 0.005}
+							Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.{/if}
+					</span>
+					<FieldHistoryLine field="settings:calibration.catchmentAreaKm2" />
 				</div>
-			{/each}
-			<div class="field">
-				<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
-				<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
-				<span class="hint explain" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
-				<FieldHistoryLine field="settings:gr4j.warmupDays" />
+				<div class="field">
+					<span class="lbl">Runoff model <HelpTip key="settings.runoffModel" /></span>
+					<strong data-testid="runoff-model">{RUNOFF_MODEL_LABEL}</strong>
+					<span class="hint explain">{RUNOFF_MODEL_HELP}</span>
+				</div>
 			</div>
-			<div class="field">
-				<span class="lbl"><label for="cal-rainThresholdMm">Rain threshold for demand <span class="u">(mm)</span></label><HelpTip key="calibration.rainThresholdMm" /></span>
-				<NumberInput id="cal-rainThresholdMm" min={0} step={0.1} disabled={readonly} value={cal.rainThresholdMm} aria-describedby="cal-thr-h" onchange={(v) => { if (v !== null) s.calibration.rainThresholdMm = v; }} />
-				<span class="hint explain" id="cal-thr-h">Under GR4J this only decides which rain days reduce irrigation demand; the runoff model uses all rain.</span>
-				<FieldHistoryLine field="settings:calibration.rainThresholdMm" />
-			</div>
+			<fieldset class="plain x2" data-testid="gr4j-x2">
+				<legend>Groundwater exchange (X2) <HelpTip key="gr4j" label="About groundwater exchange (X2)" /></legend>
+				<label class="check">
+					<input type="checkbox" disabled={readonly} checked={draft.x2Open} onchange={(e) => setX2Open(e.currentTarget.checked)} />
+					Let the catchment gain or lose groundwater
+				</label>
+				{#if draft.x2Open}
+					<div class="field">
+						<label for="gr4j-x2">{x2.label} <span class="u">({x2.unit})</span></label>
+						<NumberInput id="gr4j-x2" min={x2.min} max={x2.max} step={x2.step} disabled={readonly} bind:value={s.gr4j.x2} aria-describedby="gr4j-x2-h" />
+					</div>
+				{/if}
+				<span class="hint explain" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
+				<FieldHistoryLine field="settings:gr4j.x2" />
+			</fieldset>
+			<Fold name="More:" line="warm-up {fmtNum(s.gr4j.warmupDays)} days" atDefaults={s.gr4j.warmupDays === GR4J_WARMUP_DEFAULT} spaced testid="flow-more" lineTestid="flow-more-summary">
+				<div class="field">
+					<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
+					<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
+					<span class="hint explain" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
+					<FieldHistoryLine field="settings:gr4j.warmupDays" />
+				</div>
+			</Fold>
 		</div>
-		<fieldset class="plain x2">
-			<legend>Groundwater exchange (X2) <HelpTip key="gr4j" label="About groundwater exchange (X2)" /></legend>
-			<label class="check">
-				<input type="checkbox" disabled={readonly} checked={draft.x2Open} onchange={(e) => setX2Open(e.currentTarget.checked)} />
-				Let the catchment gain or lose groundwater
-			</label>
-			{#if draft.x2Open}
-				<div class="field">
-					<label for="gr4j-x2">{x2.label} <span class="u">({x2.unit})</span></label>
-					<NumberInput id="gr4j-x2" min={x2.min} max={x2.max} step={x2.step} disabled={readonly} bind:value={s.gr4j.x2} aria-describedby="gr4j-x2-h" />
-				</div>
+		<div class="sub-card" data-testid="flow-rain-card">
+			<h3 class="sub first">Rain into GR4J</h3>
+			<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.13.0): GR4J's rain only;
+			     irrigation demand's effective rain and rain on the dams keep the recorded rain. -->
+			<fieldset class="plain areal" data-testid="areal-rain">
+				<!-- Each sub-group of a card is an h4 (in its legend) under the card’s h3, so heading navigation reaches it. -->
+				<legend><h4 class="sub">Areal rainfall correction <HelpTip key="settings.arealRain" /></h4></legend>
+				<label class="check">
+					<input type="checkbox" disabled={readonly} checked={!!areal} onchange={(e) => setArealOn(e.currentTarget.checked)} />
+					Scale the rain GR4J runs on to the catchment’s areal rain
+				</label>
+				<span class="hint explain" id="st-areal-h">
+					For a rain record that misses the catchment’s rain, such as a valley gauge or CHIRPS under a mountain range. A fixed input with its
+					source, never a calibrated parameter. Demand and the dams keep the recorded rain.
+				</span>
+				{#if s.unitRain?.mode === 'perUnit'}
+					<!-- A state line, not an explanation: it stays when the explanations are off. -->
+					<span class="hint" role="note" data-testid="areal-rain-unit-note">With rain for each unit on (below), it applies only to the units that fall back to the catchment rain.</span>
+				{/if}
+				{#if areal}
+					<!-- Its own chunk (issue #521): most projects leave the correction off. -->
+					<Lazy load={loadArealRain}>
+						{#snippet children(ArealRainBody)}<ArealRainBody bind:value={s.arealRain} {arealError} {readonly} />{/snippet}
+					</Lazy>
+				{/if}
+			</fieldset>
+			<!-- Rain for each unit (settings.unitRain, issue #482): GR4J per unit with land on its own rain; arealRain then applies only to units on the catchment rain. -->
+			<Lazy load={loadUnitRain}>
+				{#snippet children(UnitRainFields)}
+					<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} />
+				{/snippet}
+			</Lazy>
+			{#if !readonly && editor && s.unitRain?.mode === 'perUnit'}
+				<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
+				<Lazy load={loadUnitMap}>
+					{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
+				</Lazy>
 			{/if}
-			<span class="hint explain" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
-			<FieldHistoryLine field="settings:gr4j.x2" />
-		</fieldset>
-		<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.13.0): GR4J's rain only;
-		     irrigation demand's effective rain and rain on the dams keep the recorded rain. -->
-		<fieldset class="plain areal" data-testid="areal-rain">
-			<!-- Each sub-group of a long panel is an h3 (in its legend), so heading navigation reaches it. -->
-			<legend><h3 class="sub">Areal rainfall correction <HelpTip key="settings.arealRain" /></h3></legend>
-			<label class="check">
-				<input type="checkbox" disabled={readonly} checked={!!areal} onchange={(e) => setArealOn(e.currentTarget.checked)} />
-				Scale the rain GR4J runs on to the catchment’s areal rain
-			</label>
-			<span class="hint explain" id="st-areal-h">
-				For a rain record that misses the catchment’s rain, such as a valley gauge or CHIRPS under a mountain range. A fixed input with its
-				source, never a calibrated parameter. Demand and the dams keep the recorded rain.
-			</span>
-			{#if s.unitRain?.mode === 'perUnit'}
-				<!-- A state line, not an explanation: it stays when the explanations are off. -->
-				<span class="hint" role="note" data-testid="areal-rain-unit-note">With rain for each unit on (below), it applies only to the units that fall back to the catchment rain.</span>
-			{/if}
-			{#if areal}
-				<div class="fields">
-					<div class="field">
-						<span class="lbl"><label for="st-areal-all">Factor in every month <span class="u">(×)</span></label></span>
-						<NumberInput
-							id="st-areal-all"
-							min={0.25}
-							max={4}
-							step={0.01}
-							decimals={3}
-							disabled={readonly}
-							value={arealFlat}
-							aria-describedby="st-areal-all-h"
-							onchange={(v) => {
-								if (v !== null && s.arealRain) s.arealRain = storedArealRain(withFactorEveryMonth(areal, v));
-							}}
-						/>
-						<span class="hint" id="st-areal-all-h">An independent MAP ÷ the forcing’s mean annual rain gives one factor. {arealFlat === null ? 'The months differ now (below).' : ''}</span>
-					</div>
-					<div class="field">
-						<span class="lbl"><label for="st-areal-method">Derived from</label></span>
-						<select
-							id="st-areal-method"
-							disabled={readonly}
-							value={areal.method}
-							aria-describedby="st-areal-method-h"
-							onchange={(e) => {
-								if (s.arealRain) s.arealRain = storedArealRain({ ...areal, method: e.currentTarget.value as EditableArealRain['method'] });
-							}}
-						>
-							{#each AREAL_METHOD_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
-						</select>
-						<span class="hint explain" id="st-areal-method-h">{AREAL_METHOD_OPTIONS.find((o) => o.value === areal.method)?.hint}</span>
-					</div>
+		</div>
+		<div class="sub-card" data-testid="flow-pe-card">
+			<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
+			     demand and dam evaporation read the A-pan row whichever is chosen. -->
+			<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">
+				<legend><h3 class="sub">GR4J potential evaporation <HelpTip key="settings.pe" /></h3></legend>
+				{#each PE_KIND_OPTIONS as o (o.value)}
+					<label class="check">
+						<input type="radio" name="st-pe-kind" value={o.value} checked={pe.kind === o.value} disabled={readonly} onchange={() => setPeKind(o.value)} />
+						{o.label}
+					</label>
+				{/each}
+				<p class="pe-annual" id="st-pe-annual" data-testid="gr4j-pe-annual">
+					Annual GR4J PE: <strong>{fmtNum(peAnnual)} mm</strong>
+					<span class="muted">{pe.kind === 'monthly' ? '(the monthly PE row below)' : `(pan coefficient × A-pan; A-pan ${fmtNum(apanAnnual)} mm a year)`}</span>
+				</p>
+				<span class="hint explain" id="st-pe-h">
+					{#if pe.kind === 'monthly'}
+						GR4J runs on the monthly PE row below. Irrigation demand and dam evaporation still use the A-pan row (Demand, above), and GR4J
+						doesn’t use the pan coefficient.
+					{:else}
+						GR4J runs on pan coefficient × A-pan. The A-pan row (Demand, above) also drives irrigation demand and dam evaporation, so changing
+						it moves all three; to change GR4J’s PE alone, enter a monthly PE.
+					{/if}
+				</span>
+			</fieldset>
+			{#if pe.kind === 'monthly'}
+				<div class="table-wrap">
+					<table class="data compact monthly">
+						<thead>
+							<tr>
+								<th scope="col" class="sticky">Month</th>
+								{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+								<th scope="col" class="num">Year</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<th scope="row" class="sticky">Monthly PE <span class="u">mm</span> <HelpTip key="settings.pe" label="About the monthly PE row" /></th>
+								{#each WATER_YEAR_MONTHS as m, i (m)}
+									<td>
+										<NumberInput
+											label="Monthly PE, {m}, mm"
+											min={0}
+											max={PE_MONTH_MAX_MM}
+											disabled={readonly}
+											value={pe.mm[i] ?? 0}
+											onchange={(v) => {
+												if (v !== null && s.pe?.kind === 'monthly') s.pe.mm[i] = v;
+											}}
+										/>
+									</td>
+								{/each}
+								<td class="num muted">{fmtNum(peAnnual)}</td>
+							</tr>
+						</tbody>
+					</table>
 				</div>
+				<div class="field pe-source">
+					<span class="lbl"><label for="st-pe-source">Source</label></span>
+					<input
+						id="st-pe-source"
+						readonly={readonly}
+						required
+						value={pe.source}
+						placeholder="e.g. station FAO-56 ET₀ × 1.0, 2015–2020"
+						aria-invalid={peSourceBad || undefined}
+						class:invalid={peSourceBad}
+						aria-describedby={peError ? 'st-pe-source-h st-pe-err' : 'st-pe-source-h'}
+						oninput={(e) => {
+							if (s.pe?.kind === 'monthly') s.pe.source = e.currentTarget.value;
+						}}
+					/>
+					<span class="hint" id="st-pe-source-h">Required: where the values come from, e.g. the station, the method, any factor applied and the years.</span>
+					{#if peError}<span class="err" id="st-pe-err">{peError}</span>{/if}
+				</div>
+			{:else}
 				<div class="table-wrap">
 					<table class="data compact monthly">
 						<thead>
@@ -978,207 +1115,76 @@
 								{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
 							</tr>
 						</thead>
-						<tbody>
+						<tbody onpaste={readonly ? undefined : (e) => onMonthlyPaste(e, 'panCoefficient')}>
 							<tr>
-								<th scope="row" class="sticky">Areal factor <span class="u">×</span></th>
+								<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" label="About the monthly pan coefficients" /></th>
 								{#each WATER_YEAR_MONTHS as m, i (m)}
-									<td>
-										<NumberInput
-											label="Areal rainfall factor, {m}"
-											min={0.25}
-											max={4}
-											step={0.01}
-											decimals={3}
-											disabled={readonly}
-											value={areal.factors[i] ?? 1}
-											onchange={(v) => {
-												if (v !== null && s.arealRain) s.arealRain = storedArealRain({ ...areal, factors: areal.factors.map((f, j) => (j === i ? v : f)) });
-											}}
-										/>
-									</td>
+									<td data-paste-col={i}><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
 								{/each}
 							</tr>
 						</tbody>
 					</table>
 				</div>
-				<div class="field pe-source">
-					<span class="lbl"><label for="st-areal-source">Source</label></span>
-					<input
-						id="st-areal-source"
-						readonly={readonly}
-						required
-						value={areal.source}
-						placeholder="e.g. catchment MAP 560 mm (reference) ÷ CHIRPS mean 2001–2024"
-						aria-invalid={(!!arealError && !areal.source.trim()) || undefined}
-						aria-describedby={arealError ? 'st-areal-source-h st-areal-err' : 'st-areal-source-h'}
-						oninput={(e) => {
-							if (s.arealRain) s.arealRain = storedArealRain({ ...areal, source: e.currentTarget.value });
-						}}
-					/>
-					<span class="hint" id="st-areal-source-h">Required: the MAP or gauges and their reference, and the years compared. A fit records the factors, so changing them marks it “Forcing changed since fit”.</span>
-					{#if arealError}<span class="err" id="st-areal-err">{arealError}</span>{/if}
-				</div>
-				<FieldHistoryLine field="settings:arealRain" />
-			{/if}
-		</fieldset>
-		<!-- Rain for each unit (settings.unitRain, issue #482): GR4J per unit with land on its own rain; arealRain then applies only to units on the catchment rain. -->
-		<Lazy load={loadUnitRain}>
-			{#snippet children(UnitRainFields)}
-				<UnitRainFields bind:value={s.unitRain} bind:last={draft.kept.unitRain} {readonly} nodes={editor?.model.nodes ?? []} />
-			{/snippet}
-		</Lazy>
-		{#if !readonly && editor && s.unitRain?.mode === 'perUnit'}
-			<!-- Each unit's MAP from the MAP grid: saves straight to the model, then the workspace reloads it. -->
-			<Lazy load={loadUnitMap}>
-				{#snippet children(UnitMapProposal)}<UnitMapProposal projectId={project.id} modelDirty={editor.dirty} {onModelChanged} />{/snippet}
-			</Lazy>
-		{/if}
-		<!-- Where GR4J's potential evaporation comes from (settings.pe, issue #39). Irrigation
-		     demand and dam evaporation read the A-pan row whichever is chosen. -->
-		<fieldset class="plain pe" data-testid="gr4j-pe" aria-describedby="st-pe-annual st-pe-h">
-			<legend><h3 class="sub">GR4J potential evaporation <HelpTip key="settings.pe" /></h3></legend>
-			{#each PE_KIND_OPTIONS as o (o.value)}
-				<label class="check">
-					<input type="radio" name="st-pe-kind" value={o.value} checked={pe.kind === o.value} disabled={readonly} onchange={() => setPeKind(o.value)} />
-					{o.label}
-				</label>
-			{/each}
-			<p class="pe-annual" id="st-pe-annual" data-testid="gr4j-pe-annual">
-				Annual GR4J PE: <strong>{fmtNum(peAnnual)} mm</strong>
-				<span class="muted">{pe.kind === 'monthly' ? '(the monthly PE row below)' : `(pan coefficient × A-pan; A-pan ${fmtNum(apanAnnual)} mm a year)`}</span>
-			</p>
-			<span class="hint explain" id="st-pe-h">
-				{#if pe.kind === 'monthly'}
-					GR4J runs on the monthly PE row below. Irrigation demand and dam evaporation still use the A-pan row (Demand, above), and GR4J
-					doesn’t use the pan coefficient.
-				{:else}
-					GR4J runs on pan coefficient × A-pan. The A-pan row (Demand, above) also drives irrigation demand and dam evaporation, so changing
-					it moves all three; to change GR4J’s PE alone, enter a monthly PE.
+				<p class="hint muted explain">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
+				{#if panOutOfRange.length}
+					<p class="alert alert-warning small" role="status">
+						Pan coefficient is outside FAO-56's typical Class A pan range ({PAN_COEFFICIENT_TYPICAL_MIN}–{PAN_COEFFICIENT_TYPICAL_MAX}) in
+						{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
+					</p>
 				{/if}
-			</span>
-		</fieldset>
-		{#if pe.kind === 'monthly'}
-			<div class="table-wrap">
-				<table class="data compact monthly">
-					<thead>
-						<tr>
-							<th scope="col" class="sticky">Month</th>
-							{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-							<th scope="col" class="num">Year</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr>
-							<th scope="row" class="sticky">Monthly PE <span class="u">mm</span> <HelpTip key="settings.pe" label="About the monthly PE row" /></th>
-							{#each WATER_YEAR_MONTHS as m, i (m)}
-								<td>
-									<NumberInput
-										label="Monthly PE, {m}, mm"
-										min={0}
-										max={PE_MONTH_MAX_MM}
-										disabled={readonly}
-										value={pe.mm[i] ?? 0}
-										onchange={(v) => {
-											if (v !== null && s.pe?.kind === 'monthly') s.pe.mm[i] = v;
+				<Fold name="Fill or edit the row:" line="preset, FAO-56 helper, paste · source: {s.panCoefficientSource?.trim() || 'not given'}" body="none" testid="pan-tools" lineTestid="pan-tools-summary" lineClass="pan-tools-line">
+					<div class="fold-body stack">
+						<div class="field pan-preset">
+							<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label><HelpTip key="settings.panCoefficient" label="About the pan-coefficient presets" /></span>
+							<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => {
+									applyPanPreset(e.currentTarget.value);
+									// Back to "Choose a preset…": panPreset was '' already, so setting it again doesn't touch the DOM.
+									e.currentTarget.value = '';
+								}} aria-describedby="st-pan-preset-h">
+								<option value="">Choose a preset…</option>
+								{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
+							</select>
+							<span class="hint explain" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; the source note below records which preset. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
+						</div>
+						{#if !readonly}
+							<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; it is collapsed until opened. -->
+							<Lazy load={loadPanHelper}>
+								{#snippet children(PanCoefficientHelper)}
+									<PanCoefficientHelper
+										onapply={(v: number[], note: string) => {
+											s.panCoefficient = [...v] as typeof s.panCoefficient;
+											s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
 										}}
 									/>
-								</td>
-							{/each}
-							<td class="num muted">{fmtNum(peAnnual)}</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
-			<div class="field pe-source">
-				<span class="lbl"><label for="st-pe-source">Source</label></span>
-				<input
-					id="st-pe-source"
-					readonly={readonly}
-					required
-					value={pe.source}
-					placeholder="e.g. station FAO-56 ET₀ × 1.0, 2015–2020"
-					aria-invalid={peSourceBad || undefined}
-					class:invalid={peSourceBad}
-					aria-describedby={peError ? 'st-pe-source-h st-pe-err' : 'st-pe-source-h'}
-					oninput={(e) => {
-						if (s.pe?.kind === 'monthly') s.pe.source = e.currentTarget.value;
-					}}
-				/>
-				<span class="hint" id="st-pe-source-h">Required: where the values come from, e.g. the station, the method, any factor applied and the years.</span>
-				{#if peError}<span class="err" id="st-pe-err">{peError}</span>{/if}
-			</div>
-		{:else}
-			<div class="field pan-preset">
-				<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label><HelpTip key="settings.panCoefficient" label="About the pan-coefficient presets" /></span>
-				<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => {
-						applyPanPreset(e.currentTarget.value);
-						// Back to "Choose a preset…": panPreset was '' already, so setting it again doesn't touch the DOM.
-						e.currentTarget.value = '';
-					}} aria-describedby="st-pan-preset-h">
-					<option value="">Choose a preset…</option>
-					{#each PAN_COEFFICIENT_PRESETS as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-				</select>
-				<span class="hint explain" id="st-pan-preset-h">Fills the row below with these monthly values, which stay editable; the source note below records which preset. {PAN_COEFFICIENT_PRESET_SOURCE}.</span>
-			</div>
-			{#if !readonly}
-				<!-- The FAO-56 Table 5 helper (issue #39): only fills the row below; it is collapsed until opened. -->
-				<Lazy load={loadPanHelper}>
-					{#snippet children(PanCoefficientHelper)}
-						<PanCoefficientHelper
-							onapply={(v: number[], note: string) => {
-								s.panCoefficient = [...v] as typeof s.panCoefficient;
-								s.panCoefficientSource = note.slice(0, PE_SOURCE_MAX);
-							}}
-						/>
-					{/snippet}
-				</Lazy>
-				<div class="toolbar grid-actions" data-testid="grid-actions">
-					<button type="button" class="btn btn-sm" onclick={openMonthlyPaste}>Paste from a spreadsheet…</button>
-				</div>
+								{/snippet}
+							</Lazy>
+							<div class="toolbar grid-actions" data-testid="grid-actions">
+								<button type="button" class="btn btn-sm" onclick={openMonthlyPaste}>Paste from a spreadsheet…</button>
+							</div>
+						{/if}
+						<div class="field pan-source">
+							<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" label="About where the pan coefficient comes from" /></span>
+							<input
+								id="st-pan-source"
+								readonly={readonly}
+								maxlength={PE_SOURCE_MAX}
+								value={s.panCoefficientSource ?? ''}
+								placeholder="e.g. FAO-56 Table 5, Case A, 10 m fetch; RH and wind from a nearby station"
+								aria-describedby="st-pan-source-h"
+								oninput={(e) => (s.panCoefficientSource = e.currentTarget.value)}
+							/>
+							<span class="hint explain" id="st-pan-source-h">Optional: where the row comes from. A preset or the FAO-56 helper fills it; it is recorded with each fit and run, and changing it alone doesn't mark a fit's forcing as changed.</span>
+						</div>
+					</div>
+				</Fold>
 			{/if}
-			<div class="table-wrap">
-				<table class="data compact monthly">
-					<thead>
-						<tr>
-							<th scope="col" class="sticky">Month</th>
-							{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-						</tr>
-					</thead>
-					<tbody onpaste={readonly ? undefined : (e) => onMonthlyPaste(e, 'panCoefficient')}>
-						<tr>
-							<th scope="row" class="sticky">Pan coefficient <HelpTip key="settings.panCoefficient" label="About the monthly pan coefficients" /></th>
-							{#each WATER_YEAR_MONTHS as m, i (m)}
-								<td data-paste-col={i}><NumberInput label="Pan coefficient, {m}" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.panCoefficient[i]} /></td>
-							{/each}
-						</tr>
-					</tbody>
-				</table>
-			</div>
-			<p class="hint muted explain">Potential evaporation = pan coefficient × A-pan, per month. 0.7 is a common flat value.</p>
-			<div class="field pan-source">
-				<span class="lbl"><label for="st-pan-source">Pan coefficient source</label><HelpTip key="settings.panCoefficientSource" label="About where the pan coefficient comes from" /></span>
-				<input
-					id="st-pan-source"
-					readonly={readonly}
-					maxlength={PE_SOURCE_MAX}
-					value={s.panCoefficientSource ?? ''}
-					placeholder="e.g. FAO-56 Table 5, Case A, 10 m fetch; RH and wind from a nearby station"
-					aria-describedby="st-pan-source-h"
-					oninput={(e) => (s.panCoefficientSource = e.currentTarget.value)}
-				/>
-				<span class="hint explain" id="st-pan-source-h">Optional: where the row comes from. A preset or the FAO-56 helper fills it; it is recorded with each fit and run, and changing it alone doesn't mark a fit's forcing as changed.</span>
-			</div>
-			{#if panOutOfRange.length}
-				<p class="alert alert-warning small" role="status">
-					Pan coefficient is outside FAO-56's typical Class A pan range ({PAN_COEFFICIENT_TYPICAL_MIN}–{PAN_COEFFICIENT_TYPICAL_MAX}) in
-					{panOutOfRange.map((i) => WATER_YEAR_MONTHS[i]).join(', ')}: confirm against local humidity and wind.
-				</p>
-			{/if}
-		{/if}
-		<!-- Evaporation from the map (issue #326 B-evap): saves straight to the project, then the form reloads the saved settings. -->
-		<Lazy load={loadEvaporationProposal}>
-			{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}
-		</Lazy>
+		</div>
+		<div class="sub-card" data-testid="flow-evaporation-card">
+			<!-- Evaporation from the map (issue #326 B-evap): saves straight to the project, then the form reloads the saved settings. -->
+			<Lazy load={loadEvaporationProposal}>
+				{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}
+			</Lazy>
+		</div>
 	</section>
 
 	<section class="panel" id="set-record" aria-labelledby="rec-h">
@@ -1200,16 +1206,28 @@
 			dataHref={flowRecordId ? `?tab=series&series=${encodeURIComponent(flowRecordId)}#data-chart` : null}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={draft.errors.exclusions} {readonly} />
-		<Lazy load={loadQualityFlags}>
-			{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={draft.errors.qualityFlags} {readonly} {seriesKinds} />{/snippet}
-		</Lazy>
-		<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
-		{#if s.flowGapFill}
-			<!-- Its own chunk (issue #66): the Settings tab chunk sits at its size ceiling. -->
-			<Lazy load={loadFlowGapFill}>
-				{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} bind:last={draft.kept.flowGapFill} {readonly} {seriesKinds} />{/snippet}
+		<!-- Rarely changed: the gauged ranges, the day rules, the river-stop months and gap filling, folded into one line of
+		     their values (ui-playbook.md § 2, "Rarely changed settings fold into their values"). -->
+		<Fold
+			name="Quality flags:"
+			line={qualityFlagsSummary(s.qualityFlags, s.flowGapFill, seriesKinds)}
+			atDefaults={qualityFlagsAtDefaults(s.qualityFlags, s.flowGapFill)}
+			body="stack"
+			spaced
+			testid="record-flags"
+			lineTestid="record-flags-summary"
+		>
+			<Lazy load={loadQualityFlags}>
+				{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={draft.errors.qualityFlags} {readonly} {seriesKinds} />{/snippet}
 			</Lazy>
-		{/if}
+			<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
+			{#if s.flowGapFill}
+				<!-- Its own chunk (issue #66): the Settings tab chunk sits at its size ceiling. -->
+				<Lazy load={loadFlowGapFill}>
+					{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} bind:last={draft.kept.flowGapFill} {readonly} {seriesKinds} />{/snippet}
+				</Lazy>
+			{/if}
+		</Fold>
 	</section>
 
 	<section class="panel" id="set-fit" aria-labelledby="fit-h">
@@ -1218,6 +1236,10 @@
 		</div>
 		<p class="summary" data-testid="summary-fit">{summaries['set-fit']}</p>
 		<p class="hint explain">Fit automatically, the fit record of the parameters above, and automated calibration under declared rules.</p>
+		<!-- Two cards (2026-10-10): fit now with its record at its foot, and the declared rules with their run in the
+		     head beside the sign-off (issue #521). Each card's main action sits right under its deciding choices or in
+		     its head, never under the other's fields. -->
+		<div class="sub-card" data-testid="fit-now-card">
 		<FitPanel
 			projectId={project.id}
 			x2Open={draft.x2Open}
@@ -1229,7 +1251,11 @@
 			{readonly}
 			onApply={applyFit}
 			session={fit}
-		/>
+		>
+			<!-- The WR2012 MAR penalty: a saved setting (the save bar), beside the fit it changes (issue #521; it was in the WR2012 check). -->
+			{#snippet penaltyFields()}<MarPenaltyFields bind:value={s.wr2012} {readonly} />{/snippet}
+		</FitPanel>
+		<!-- The fit record of the parameters, at the foot of the card whose Apply writes it (issue #521). -->
 		{#if s.fitRecord}
 			<FitProvenance
 				record={s.fitRecord}
@@ -1242,14 +1268,24 @@
 				{nodeName}
 			/>
 		{/if}
+		</div>
 		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
 		{#if s.calibrationRules}
+			<div class="sub-card" data-testid="rules-card">
 			<Lazy load={loadCalibrationRules}>
-				{#snippet children(CalibrationRulesFields)}<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={draft.errors.rules} bind:lastShare={draft.kept.flaggedShare} {readonly} />{/snippet}
+				{#snippet children(CalibrationRulesFields)}
+					<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={draft.errors.rules} bind:lastShare={draft.kept.flaggedShare} {readonly}>
+						<!-- The card's main action in its head, beside the sign-off (issue #521); AutoFitPanel below runs it and shows the result. -->
+						{#snippet headAction()}
+							<button type="button" class="btn btn-primary" onclick={() => autoFit?.start()} disabled={!autoFit?.canRun()}>Run the calibration rules</button>
+						{/snippet}
+					</CalibrationRulesFields>
+				{/snippet}
 			</Lazy>
 			<Lazy load={loadAutoFit}>
 				{#snippet children(AutoFitPanel)}
 					<AutoFitPanel
+						bind:this={autoFit}
 						projectId={project.id}
 						{savedRules}
 						formRules={s.calibrationRules}
@@ -1261,6 +1297,7 @@
 					/>
 				{/snippet}
 			</Lazy>
+			</div>
 		{/if}
 	</section>
 
@@ -1324,86 +1361,8 @@
 				{fmtQty(ewrAnnual, 3)} Mm³/a in total · mean {fmtQty((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
 			</p>
 		</div>
-		<fieldset class="plain report">
-			<legend>Curtailment reporting window <HelpTip key="settings.reportStart" /></legend>
-			<div class="form-row">
-				<div class="field">
-					<label for="st-rep-start">From</label>
-					<input
-						id="st-rep-start"
-						type="date"
-						readonly={readonly}
-						value={s.reportStart ?? ''}
-						onchange={(e) => (s.reportStart = e.currentTarget.value || null)}
-						aria-invalid={reportError ? 'true' : undefined}
-						aria-describedby={reportError ? 'st-rep-err' : undefined}
-					/>
-				</div>
-				<div class="field">
-					<label for="st-rep-end">To</label>
-					<input
-						id="st-rep-end"
-						type="date"
-						readonly={readonly}
-						value={s.reportEnd ?? ''}
-						onchange={(e) => (s.reportEnd = e.currentTarget.value || null)}
-						aria-invalid={reportError ? 'true' : undefined}
-						aria-describedby={reportError ? 'st-rep-err' : undefined}
-					/>
-				</div>
-			</div>
-			<span class="hint explain">
-				Period the curtailment targets and the assurance of supply on Hydrological units average over, e.g. the last dry season. Leave blank for the whole run.
-			</span>
-			{#if reportError}<p class="err" id="st-rep-err">{reportError}</p>{/if}
-		</fieldset>
-		<!-- Its own field, after the window: screen readers announced it as part of the window's group. -->
-		<div class="field assurance">
-			<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
-			<NumberInput
-				id="st-aat"
-				min={1}
-				max={100}
-				scale={100}
-				disabled={readonly}
-				value={s.assuranceAnnualThreshold ?? 0.9}
-				onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
-				aria-describedby="st-aat-h"
-			/>
-			<span class="hint explain" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
-			<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
-		</div>
-		<fieldset class="plain" data-testid="settings-allocations">
-			<legend>Registered volumes <HelpTip key="settings.allocationMode" /></legend>
-			<div class="form-row">
-				<!-- Licence data never drives the baseline (issue #507): the project compares only; a cap or a full allocation is a scenario's. -->
-				<div class="field">
-					<span class="lbl"><span class="lbl-text">Allocation mode</span></span>
-					<span class="alloc-mode" data-testid="settings-allocation-mode">{ALLOCATION_MODE_LABEL.none}</span>
-				</div>
-				<div class="field">
-					<span class="lbl"><label for="st-alloc-tol">Comparison band <span class="u">(± %)</span></label><HelpTip key="settings.allocationTolerance" /></span>
-					<NumberInput
-						id="st-alloc-tol"
-						min={0}
-						max={99}
-						scale={100}
-						disabled={readonly}
-						value={s.allocationTolerance ?? 0.1}
-						onchange={(v) => (s.allocationTolerance = v ?? undefined)}
-						aria-describedby="st-alloc-tol-h"
-					/>
-					<FieldHistoryLine field="settings:allocationTolerance" />
-				</div>
-			</div>
-			<span class="hint explain" id="st-alloc-mode-h">
-				The baseline compares each unit’s modelled use with its registered volumes and changes nothing: licence data never drives the baseline, whose use comes from the
-				crops, demands, pumps and boreholes you enter. To cap use at the volumes, or to see “if every registered or licensed volume were taken in full”, make a scenario
-				that sets the allocation mode.
-			</span>
-			<span class="hint explain" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, a provisional default not yet confirmed by the catchment’s hydrologist.</span>
-			<FieldHistoryLine field="settings:allocationMode" />
-		</fieldset>
+		<!-- The registered-volumes band moved to Allocations, beside what it changes (issue #521). -->
+		<p class="hint muted" data-testid="ewr-band-moved">The registered-volumes comparison band is on <a href="?tab=allocations">Allocations</a>.</p>
 	</section>
 
 	<!-- Reserve rule tables (engine ≥ 0.21.0) -------------------------------------->
@@ -1487,6 +1446,8 @@
 		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with the save bar’s Save changes.
 	</p>
 {/if}
+<!-- The panels after the form follow the explain switch too (their field help is .explain, issue #521). -->
+<div class="settings-after explain-scope" class:explained={explainSwitch.on}>
 <!-- The id sits outside the lazy panel, so a #set-feeds link and the section menu find it while the chunk loads. -->
 <div id="set-feeds">
 	<Lazy load={loadDataFeeds}>
@@ -1500,7 +1461,13 @@
 	</Lazy>
 {/if}
 
-<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
+<!-- As #set-feeds: the id outside the lazy panel. -->
+<div id="set-report-schedules">
+	<Lazy load={loadReportSchedules}>
+		{#snippet children(ReportSchedulesPanel)}<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />{/snippet}
+	</Lazy>
+</div>
+</div>
 </SectionNav>
 
 <style>
@@ -1517,15 +1484,8 @@
 		font-size: 0.8rem;
 		max-width: 75ch;
 	}
-	/* The explanations (issue #468): shown by the switch at the top; hidden, they stay each field's
-	   description (aria-describedby reads hidden text). The panels in their own components mark theirs too. */
-	.settings-form:not(.explained) :global(.explain) {
-		display: none;
-	}
-	.explain-switch {
+	.settings-form > :global(.explain-switch) {
 		margin: 0 0 0.75rem;
-		font-size: 0.85rem;
-		color: var(--text-2);
 	}
 	/* Each panel's current values, the line under its heading (the panels in their own components too). */
 	.settings-form :global(.summary) {
@@ -1534,14 +1494,55 @@
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}
-	/* Fit automatically comes first in its panel: no separator between the panel's heading and its own. */
-	#set-fit > .panel-head + :global(.fit) {
-		border-top: 0;
-		padding-top: 0;
-		margin-top: 0;
+	/* Fit the parameters' two cards: Fit automatically, and the calibration rules with their run (ui-playbook.md § 2,
+	   "Two forms in one panel are two cards"). */
+	.settings-form :global(.sub-card) {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.75rem 0.9rem;
+		margin: 0.75rem 0;
+	}
+	/* Rain gaps' Flagged rain card (ChirpsFitPeriodSection's card titles itself the same way). */
+	.card-title {
+		font-size: 1rem;
+		margin: 0 0 0.75rem;
 	}
 	.panel > .hint {
 		margin: 0.5rem 0 0.75rem;
+	}
+	/* A card's heading with its action at the right (Flow calibration's GR4J parameters → Fit the parameters). */
+	.card-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.25rem 1rem;
+	}
+	/* Evaporation from the map as a card of its own: its heading at the card's top, not 1rem under it. */
+	.sub-card :global(.proposals.inline) {
+		margin-top: 0;
+	}
+	.sub-card > .sub.first,
+	.card-head .sub.first {
+		margin: 0 0 0.25rem;
+	}
+	/* A fold whose body is a column of blocks (a table helper, a toolbar), not a grid of fields. */
+	.fold-body.stack {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	/* "Changed 1× · last by …" under a parameter: one line, so a changed field's cell is as tall as its neighbours';
+	   the whole text is the link's name and its title, and History has it in full. */
+	.gr4j-fields :global(.field-history) {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	:global(.pan-tools-line) {
+		min-width: 0;
+		max-width: 60ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.fields {
 		display: grid;
@@ -1665,13 +1666,19 @@
 		color: var(--warning);
 		font-weight: 600;
 	}
+	/* Reporting (issue #521): the window and the threshold side by side, stacked when narrow. */
+	.reporting {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.5rem 2rem;
+	}
 	.report {
-		margin-top: 1rem;
 		display: grid;
 		gap: 0.25rem;
+		max-width: 75ch;
 	}
 	.assurance {
-		margin-top: 0.5rem;
 		max-width: 75ch;
 	}
 	/* A percentage: a field as wide as the others in the grid, not the whole text measure. */
@@ -1713,7 +1720,6 @@
 	.check {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
 		min-height: 36px;
 	}
 	.lbl {
@@ -1721,17 +1727,10 @@
 		align-items: center;
 		gap: 0.25rem;
 	}
-	.lbl label,
-	.lbl-text {
+	.lbl label {
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
-	}
-	/* The baseline's allocation mode, fixed at compare only (issue #507): read, not chosen. */
-	.alloc-mode {
-		display: flex;
-		align-items: center;
-		min-height: 36px;
 	}
 	legend :global(.helptip),
 	h2 :global(.helptip),
@@ -1740,9 +1739,6 @@
 	}
 	.sub {
 		margin: 1rem 0 0.35rem;
-	}
-	.sub.first {
-		margin-top: 0.25rem;
 	}
 	legend .sub {
 		margin: 0;

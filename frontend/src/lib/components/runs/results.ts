@@ -89,8 +89,11 @@ export function seriesGroups(
 }
 
 /** Convert m³/day values to m³/s (other units unchanged); NaN/null stay missing. */
+/** The unit a stored series shows in under the m³/s ↔ m³/day switch: daily volumes follow it, anything else keeps its own. */
+export const displayUnit = (unit: string, flowUnit: 'm³/s' | 'm³/day') => (unit === 'm³/day' ? flowUnit : unit);
+
 export function toDisplayUnit(values: readonly (number | null)[], unit: string, flowUnit: 'm³/s' | 'm³/day') {
-	if (unit !== 'm³/day' || flowUnit === 'm³/day') {
+	if (displayUnit(unit, flowUnit) === unit) {
 		return { unit, values: values.map((v) => (v == null || !Number.isFinite(v) ? null : v)) };
 	}
 	return { unit: 'm³/s', values: values.map((v) => (v == null || !Number.isFinite(v) ? null : v / SEC_PER_DAY)) };

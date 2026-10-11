@@ -11,8 +11,8 @@
 	//
 	// Wide, the three groups are one row of controls beside the title, or under
 	// it when they would squeeze the context line onto a second line. In a
-	// narrow header (a phone), in the same order: the pill on a line of its
-	// own; the tab's pickers, each a full row; then its buttons and the page's
+	// narrow header (a phone), in the same order: the pills on a line of their
+	// own (one row, the last one's words wrapping inside it); the tab's pickers, each a full row; then its buttons and the page's
 	// main box in full rows, every control growing to fill its row. The main
 	// box never splits, so it always ends the header.
 	import type { Snippet } from 'svelte';
@@ -134,7 +134,7 @@
 	.actions :global(.btn) {
 		min-height: 38px;
 	}
-	/* Narrow (a phone, 640 px at most): the pill on a line of its own, then the controls in full rows. */
+	/* Narrow (a phone, 640 px at most): the pills on a line of their own, then the controls in full rows. */
 	@container section-header (max-width: 640px) {
 		h1 {
 			font-size: 1.45rem;
@@ -142,11 +142,24 @@
 		.actions {
 			flex: 1 1 100%;
 		}
+		/* The pills share one row: the Summary's Setup complete (~130 px) and the
+		   rain pill (~250 px) need ~385 px on a 358 px phone row, so wrapping put
+		   each alone on a half-empty row. They keep their own width, and the last
+		   one gives: its words wrap inside it. A pill's list opens from this row's
+		   left edge (position: relative; the rain pill is positioned from here). */
 		.status {
 			display: flex;
 			flex: 1 1 100%;
-			flex-wrap: wrap;
+			align-items: stretch;
 			gap: 0.5rem;
+			position: relative;
+		}
+		.status > :global(*) {
+			flex: 0 0 auto;
+		}
+		.status > :global(*:last-child:not(:first-child)) {
+			flex: 0 1 auto;
+			min-width: 0;
 		}
 		/* Every control grows to fill its row, so no row ends in a ragged gap. */
 		.own > :global(*) {

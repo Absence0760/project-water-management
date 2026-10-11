@@ -20,7 +20,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { kindLabel } from '$lib/series/kinds';
-	import { fmtNum, fmtReading } from '$lib/format/number';
+	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
 	import type { Daily } from './coverage';
 	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag, type RainSource } from './preview';
 
@@ -146,7 +146,7 @@
 
 <Dialog bind:open title="Input time series — daily preview" full>
 	<p class="muted period" role="status" aria-live="polite">
-		{#if rows.length}{rows[0]!.date} → {rows[rows.length - 1]!.date} · {fmtNum(filtered.length)} of {fmtNum(rows.length)} days shown{/if}
+		{#if rows.length}{fmtDay(rows[0]!.date)} → {fmtDay(rows[rows.length - 1]!.date)} · {fmtNum(filtered.length)} of {fmtNum(rows.length)} days shown{/if}
 	</p>
 
 	{#if loading}
@@ -177,7 +177,7 @@
 					autofocus
 					{@attach focusSearch}
 					autocomplete="off"
-					placeholder="Date prefix (2015 or 2015-03-14) or value (&gt; 20, = 0)"
+					placeholder="Date (2015, Mar 2015 or 14 Mar 2015) or value (&gt; 20, = 0)"
 					bind:value={query}
 				/>
 			</div>
@@ -235,7 +235,7 @@
 					{#if topH > 0}<tr class="spacer" aria-hidden="true" style="height: {topH}px"><td colspan={colCount}></td></tr>{/if}
 					{#each visibleRows as row, i (row.date)}
 						<tr aria-rowindex={startIdx + i + 2}>
-							<td class="datecol">{row.date}</td>
+							<td class="datecol">{fmtDay(row.date)}</td>
 							{#each visibleColumns as col (col.id)}
 								{#if col.group === 'series'}
 									{@const cell = row.series[col.seriesId!]}

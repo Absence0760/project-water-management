@@ -277,6 +277,13 @@ section it belongs to, with the example that taught it.
   strict locators and axe. Measure the column (`bind:clientWidth`) and
   render one or the other; keep container queries for restyling the same
   markup.
+- **One empty state per page, not one per region.** Runs & results with no
+  runs showed the rail's "No runs yet" card and, beside it (under it on a
+  phone), a large centred "Results appear here after a run…" card: two boxes
+  saying one thing, the second a screen of dead space on a phone. The Runs
+  card is now the page's one empty state, across its width with no results
+  column, its first line the old message (specs and help quote it) and a
+  second line saying what a run's results hold.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
@@ -296,12 +303,38 @@ section it belongs to, with the example that taught it.
   1280 hid Priority, On and Remove off the right edge. Stacking From over To
   in one cell, letting the number headers wrap, and a short "On" header made
   every column fit; side by side only where the container is wide enough.
+  Wrapping headings is not always enough: the run's water balance (thirteen
+  columns of figures beside two rails at 1440) went from 1,230 px to 861 px
+  in a 695 px column once its headings wrapped, because the longest words
+  ("Consumptive", "evaporation") and its float-noise residuals ("1.75e-10")
+  set the widths. Two natural pairs then shared a column, one over the other
+  (each year's rain over its runoff coefficient, the balance's residual over
+  the runoff model's), the cells took a dense table's padding and the unit
+  column the wording rule's short "Unit runoff": it fits at 1440 and 1280. A
+  variant that can never fit (twenty-one columns with every optional term)
+  scrolls inside its box with the row header `position: sticky; left: 0`, so
+  every row stays named (`runs-page.spec.ts`).
   On a phone a wide edit grid becomes one card per row (the crop grids, the
   node table): restyle the same markup, so the inputs, names and tests stay
   one set, and give each field a visible label that names its group, since
   the group header row is gone ("Dam capacity", not "Capacity"). Let the
   cards scroll with the modal: `.table-wrap`'s 70vh cap made the node cards
   a scroll box inside a scroll box, with Add node out of reach below it.
+- **In a narrow column, a row's actions get their own line.** The team
+  page's Members panel (a 20–24rem side column) had Name · Role · actions,
+  and the third column clipped "Reset two-step" to "Reset two-" and
+  "Remove" to "Rem" at 1440, with the email breaking at "example." / "com"
+  (issue #520). Each row is now a grid of two lines (the name and email
+  beside a fixed-width role column, then the actions spanning both), the
+  table roles kept explicitly since the rows aren't `display: table-row`, the
+  actions' header visually hidden without a grid cell, and no actions line on
+  a row without actions. Widening the column only moves the clip to 1280 and
+  the phone. Pin it with the buttons' boxes inside the panel's
+  (`teams.spec.ts`). A long email in such a cell goes through `EmailText`
+  with `breakAfter`, whose name and domain are inline blocks: the browser
+  breaks after any hyphen on its own, and only inline blocks (or `nowrap`)
+  stop it, while an inline block still wraps inside itself when it alone is
+  wider than the line.
 - **A row that holds a form of its own is a card, not a table row.**
   Transfers stayed a table after that fix, and its Takes from cell grew a
   river off-take's six fields in one column: that row stood ~330 px tall with
@@ -396,6 +429,32 @@ section it belongs to, with the example that taught it.
   doesn't add its own `scroll-margin-top` on top (the notice's 72 px then
   doubled it). `farm-view.spec.ts` checks a link lands below the header at
   both widths.
+- **A frame with its own base size checks what it borrows.** The farm pages
+  set 16 px on their frame, but `rem` still means the app's 14 px root, so the
+  workspace's notes list inside them drew its help line, meta line and Add
+  note button at 0.85rem (11.9 px, the button 24 px tall on a desktop), and
+  the forecast and outlook kickers, written as 0.8125rem for "13 px", came
+  out at 11.4 px. Size in `px` inside such a frame, lift a borrowed piece in
+  the frame's own copy (`farm/FarmNotes.svelte`), and pin the floor by
+  walking the page's text (`farm-view.spec.ts` fails on any visible text
+  under 13 px).
+- **A frame's header lines up with its column.** The farm pages' header
+  spanned the window at 1440 (the title at the left edge, Menu at the right)
+  over a centred 560 px column, so the eye jumped 440 px between the title
+  and the farm's name, and Menu's list opened far from the cards. Pad the
+  bar's ends to the column's content edge (`max(16px, calc((100% - 560px) /
+  2 + 16px))`, less a control's own padding at the right) and keep its
+  background full width; a page in the same frame with a wider column (the
+  account pages) keeps the full-width bar (`farm-view.spec.ts` checks the
+  title and Menu against the heading and the cards at 1440, 1280 and 360).
+- **A back link goes where the reader came from, by a checked address.**
+  `/farm/words` always went back to `/farm`, so a farmer with several farms
+  landed on the list. Links into a shared page carry the page they're on as
+  `?from=`, and the shared page takes it only when it matches the one shape
+  it may be (a farm page's own path, `farm/load.ts` `farmReturn`), so it is
+  never an open redirect; the label follows the target ("Your hydrological
+  units" for the fallback). Pass `from` on from the page itself, or its own
+  Menu link drops it.
 - **Print is a layout too.** The report route feeds the server PDF, so the
   frame must never reach paper: the shell's `.app-header` was renamed when
   the sidebar came in, the report's print rule kept hiding the old name, and
@@ -507,11 +566,203 @@ section it belongs to, with the example that taught it.
   10,000 px, and every panel reachable in one click. Two rules from it: an
   explanation and a state line look alike, so mark only what explains
   (`.explain`) and leave warnings, "now" figures and required notes alone
-  ("With no rule declared…" was inside an explanation and had to move out);
+  ("With no rule declared…" was inside an explanation and had to move out;
+  a hint that is half format, half reasoning splits into two elements, both
+  in the field's `aria-describedby`, since a hidden child of a referenced
+  element drops out of the description: "The gauge code, e.g. A2H012." stays,
+  "Verified DWS data lags by months…" is `.explain`. The switch hides
+  `.explain` inside an `explain-scope` wrapper (`.settings-form` and
+  `.settings-after`, the panels after the form that save on their own, so a
+  panel outside both needs a wrapper);
   and measure the widest content beside a rail before choosing where it
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
   to 13rem; at 1280 it would scroll, so the bar stays there).
+- **Two forms in one panel are two cards; each card's action is where its
+  choices end.** Settings' Fit the parameters held Fit automatically (a
+  one-off fit) and the calibration rules (revisioned, signed off) as one run
+  of ~35 controls in a 4-column grid: bounds, model runs, starts and seed
+  appeared in both with nothing saying which action they fed, Fit
+  automatically sat mid-card and the rules' sign-off under ~25 fields, below
+  the fold at 1440 (operator, 2026-10-10). Now each form is a bordered card
+  (`SettingsTab.svelte` `.sub-card`), and inside each: the choices that decide
+  the result first, top-aligned in one row; the rarely changed ones folded
+  into one line of their values (below); the button straight under them in
+  an `.action-row`. `fit-panel-layout.spec.ts` checks the button is in the
+  window after the header's jump at 1440×900 and 1280×800, at the content
+  edge, within 24 px of the fold. Don't merge two controls that look alike
+  across the cards to tidy up: Fit automatically's search is a session
+  choice, the rules' is a revisioned rule, and they save differently.
+- **Rarely changed settings fold into their values.** A setting most people
+  never change (bounds, model runs, starts, seed) doesn't get the weight of
+  one that decides the result. Fold it into a `<details class="fold">`
+  (`app.css`): the summary is one line naming the group and its current
+  values ("Search: Wide bounds · 1 500 runs × 5 starts · seed 1", from a pure
+  helper such as `calibration/fit.ts` `searchSummary`, unit-tested), with
+  **Change** at its end (`aria-hidden`, since the summary already announces
+  expanded/collapsed; **Hide** while open), and the fields open in place. The
+  line shows **needs fixing** while any field inside is `aria-invalid`
+  (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
+  problem. A native `<details>` keeps its fields in the page, so Find a
+  setting still finds them and opens the fold (`SectionNav` `jump`), and
+  nothing is lost. Every fold is one component, `common/Fold.svelte` (`name`,
+  `line`, `change`, `open` or `bind:open`, `atDefaults`, `problem`, `body`:
+  'grid' for the field grid, 'stack' for headed groups, 'none' for a body the
+  caller lays out), on the one CSS in `app.css`: Fit automatically, the
+  rules' search budget, the pan row's fill tools, the node sheet's "More …
+  settings" and "Not used …" lines, the Reserve tables' Table settings, the
+  drought rule in words, the scenario editor's Application details and the
+  defaults groups (below). Rounds 1–3 wrote the markup out six times and the
+  copies had drifted (a marker in one card, "needs fixing" in some); round 4
+  folded them into the component (issue #521). `problem={false}` only where
+  nothing inside is checked (a statement, a rule in words, the proposer's
+  ticks). **One marker rule:** every fold's line starts with the same
+  chevron, pointing right while closed and down while open, and ends with
+  its named action; a node sheet's section card, a headed band rather than a
+  line, keeps its own triangle. `lib/uiPatterns.test.ts` refuses a
+  hand-written `<details class="fold">`, and `expectFoldsNamed`
+  (`e2e/support/settings.ts`) checks every fold on a screen has its line of
+  values, the chevron and its action (`settings-patterns.spec.ts` over every
+  Settings panel, `node-sheet-layout`, `scenario-editor-layout`).
+- **Settings at their defaults are one line.** Rain gaps, Data quality and
+  the WR2012 check's judging drew every field at full weight though nearly
+  every project leaves them at their defaults (Data quality: 609 px of 14
+  limits under a summary that already said "The default limits"; Rain gaps:
+  five sub-topics and 11 buttons, every choice "(default)"; issue #521).
+  Now each is `common/Fold.svelte` with `atDefaults` (it was
+  `DefaultsFold.svelte` until round 4): the `.fold` above, starting
+  closed only while everything inside is its default (`atDefaults`, from a
+  pure helper beside the form, `rainGapsAtDefaults`, `dataQualityAtDefaults`,
+  `wr2012JudgingAtDefaults`), its line naming the values ("Default limits:
+  gauge/logger 66.7–150 % · outliers × 5 / × 10 · …", unit-tested) and
+  ending in a named action (`change`: "Change the limits"; **Hide** while
+  open). A group with something set starts open, and `atDefaults` is read
+  once when it mounts, so a value put back to its default while the fold is
+  open never snaps it shut under the cursor. `body="stack"` lays out headed
+  groups or cards instead of the fold's field grid, and `spaced` gives a
+  fold that stands as its own group a little room. e2e opens one with `openFold`
+  (`e2e/support/settings.ts`), and `settings-defaults-layout.spec.ts`
+  checks the closed line, that it opens, and its actions on screen at
+  1440×900.
+- **A list's add actions sit in its own head row, each named for the
+  list.** Rain gaps had "Add a water year / Add a date range" twice, under
+  "Also treat as missing" and "Also spread", with nothing in the names to
+  tell them apart, and each pair sat under its list, away from the name
+  (issue #521). `common/PeriodList.svelte` now puts the list's name, its ⓘ
+  and its two buttons in one row (a `role="group"` named by that row's
+  name, since a `<legend>` can't share a row with buttons), and every
+  caller gives the buttons the list's words: "Add a missing water year",
+  "Spread a date range", "Exclude a water year". Pin it in e2e: no two
+  visible buttons in a panel share an accessible name
+  (`sharedButtonNames`, `e2e/support/settings.ts`;
+  `settings-patterns.spec.ts` checks every Settings panel with every fold
+  open, on the Showcase and on a new project).
+- **A panel that adds to a list puts its add action in its head, opening a
+  card above the list.** Settings' Data feeds had **Attach a feed** under the
+  list and two unlabelled buttons under it ("Use the catchment boundary",
+  "Rain for each unit") that belonged to no form; its attach form opened
+  mid-panel with its button ~880 px down; API keys' make form was always
+  open above "No API keys yet" (issue #521). Now each panel after the form
+  (`feeds/DataFeedsPanel`, `apiKeys/ApiKeysPanel`,
+  `report/ReportSchedulesPanel`) has one add action at the right of its
+  `.panel-head`, named for the list ("Attach a feed", "Make a key", "Add a
+  schedule"), which opens a bordered card above the list with its own
+  `.action-row` (submit and Cancel), focus going into the card and back to
+  the head's button. A shortcut that is another way to fill one of the
+  form's choices becomes an option of that choice, not a button beside it:
+  the two map proposals are choices of the attach card's **Area**, each
+  drawing its proposal and its own action row in place of the typed area
+  (and a role that may only read them, an editor, gets a head action of its
+  own, "Rain from the map", with only those choices). Picking a choice
+  never moves the focus (an arrow key through a closed select fires
+  `change`); a link that opens it (`?rain=boundary`) focuses the proposal's
+  heading. The intro paragraph under such a heading goes behind its ⓘ when
+  the glossary entry already says it. `settings-after-form-layout.spec.ts`
+  pins the actions in the window at 1440×900 and the open cards at 390 and
+  320 px.
+- **A long form of sections folds each section to a card of its values.**
+  The node sheet held 72 fields, 13 checkboxes and 48 always-on help
+  paragraphs in 13 sections: 5,768 px for one unit, 9 screens, with Save
+  pinned but the dam on screen four (issue #521). Each section is now a
+  `<details>` card whose header band is its title and one line of what it is
+  set to (`network/nodeSummary.ts`, unit-tested), so a closed card still
+  answers "what is this unit's dam?"; only the first (or the one the section
+  menu points at) opens, and the menu's jump folds the others. Inside, the
+  rarely changed fields fold (`.fold`, above), the fields the current method
+  doesn't use hide behind one "Not used with the area flow share: High-MAP,
+  Low-MAP." line instead of greyed-out cells (they open read-only, nothing
+  lost), and the help goes behind the explain switch. Three things keep it
+  honest: the header shows **needs fixing** while anything inside is
+  invalid or a problem shows; a link into the sheet can name its section
+  (`section=dam`), and with none a sheet whose node has a problem opens on
+  that section; and **Show every field** opens it all for a full review
+  (remembered on the device). Keep the open sections per tab, not per item,
+  so ‹ › through the units keeps the same section in view. Result: 1,142 px
+  folded, Save and the menu always in the window
+  (`node-sheet-layout.spec.ts`). The old specs that work on fields call
+  `openNodeForm`, which presses Show every field; the layout spec opens it
+  folded.
+- **A form's state and actions in its head, not a sticky bar.** The rules'
+  card opens with its badge, revision and fit count on the left and the
+  sign-off on the right (`settings/CalibrationRulesFields.svelte` `.head`),
+  and its fields in four named groups (What to try, Which fit to keep, When
+  data arrives, Search budget) so the whole editor fits a 1440×900 or
+  1280×800 window under its head. A sticky bar was the alternative and was
+  rejected: on a page it covers fields that scroll under it, so a field
+  tabbed to lands behind it (WCAG 2.4.11, focus not obscured) and axe fails
+  the covered targets (§ 4 "A sticky element inside a scroll container
+  covers controls"). Make the card short enough instead, and pin it in e2e
+  (the head's sign-off, the fit count and the last group's line all in the
+  window with the head at its top). Save stays the page's save bar.
+- **An action that saves at once, among fields that wait for the save bar,
+  sits in its card's heading row and says so.** Flow calibration's
+  Evaporation from the map had its **Use as GR4J's monthly PE** at the foot
+  of a 2,000 px panel whose every other field waited for the save bar, with
+  nothing marking the difference (issue #521). Now it is a card of its own,
+  the button in the heading's row (`proposals/ProposalPanel.svelte`
+  `actions`) beside a **Saves now** tag that is also the button's
+  description. The same for the rules' **Run the calibration rules**: the
+  card's main action goes in its head (`CalibrationRulesFields` `headAction`),
+  beside the count it acts on, not under the result list.
+- **An action that can't apply to this kind of item isn't offered; its
+  reason is.** On a scenario run the Evidence panel said "This run is not
+  nominated…" yet offered **Withdraw the nomination…** and showed the
+  project's nomination history, and Publication said the run "can't be
+  published" yet offered **Edit notice** (issue #521). Decide by the item's
+  kind from a pure helper (`runs/evidence.ts` `evidenceKindBlocker`,
+  `runs/publication.ts` `publishBlocker`), and for a kind that can never
+  take the action draw only the one-line reason, with a link to where the
+  action does apply (**Open the evidence run**). Nothing is lost: the
+  action and the history are on the items they are about. Pin it in e2e:
+  the panel has no buttons and no history on that kind
+  (`runs-record-layout.spec.ts`). The same pass split one card of four
+  actions (Run notes, Evidence, Reproduction, Changes since this run) into
+  a panel each, each one-click action in its panel's head, and kept the bar
+  to one link for the three with `covers`, so it still fits two rows.
+- **A long warning list on a first screen shows its first three.** The
+  run's "things to check" wall (8–9 items on a real catchment) pushed the
+  results below the fold. Show three and **Show all N things to check**
+  (one button whose name changes to "Show only the first 3 …", with
+  `aria-expanded`, so the focus stays on it); the printed report lists them
+  all (`RunSummaryView` `foldChecks`).
+- **One short line under a field; the rest behind ⓘ or the explain switch.**
+  Fit automatically's starts and seed hints were four-line paragraphs that
+  made every row of the grid a different height. A hint that states a value
+  or a problem ("Default 1 500.", "Enter a seed.") stays visible; one that
+  explains goes under the page's explain switch (`.explain`, as `class:explain`
+  when the same element turns into an error) or is already the ⓘ tip's text.
+  The switch is one piece and one remembered value (`common/ExplainSwitch.svelte`
+  + `common/explain.svelte.ts`, extracted at its third caller: Settings, the
+  node sheet, the scenario editor); a form marks its wrapper
+  `class="explain-scope" class:explained={explainSwitch.on}`, and app.css's
+  one rule hides `.explain` under it (each form had its own copy of that rule
+  until round 4; `lib/uiPatterns.test.ts` now refuses one, and a second
+  switch). Don't use the `explain` class for text that must stay visible on
+  a page with no switch (Applications' "Interaction" key is `interaction-note`). A hint
+  with an ⓘ inside it splits: the words go in a `.explain` span, the ⓘ stays
+  (the scenario editor's rebase line).
+  Give a field's label the height of a label with a tip (`min-height: 24px`),
+  or the inputs of a row without tips sit 6 px higher than their neighbours.
 - **An index names each panel as the page does, and a page beside a rail
   reads its width from its own column.** Runs & results, River & reserve,
   Hydrological units and Data kept the two-row bar after Settings got its
@@ -754,10 +1005,16 @@ section it belongs to, with the example that taught it.
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`). A grid that isn't the model's (no save row; the Map's features save one at a time) is a `TAB_GRIDS` entry its tab draws itself, same `grid=` parameter (`map/MapTab.svelte`) |
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide` 640 px, or `extraWide` 920 px for a long sectioned form such as the node sheet; body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
+| Hiding a form's explanations until asked | `common/ExplainSwitch.svelte` (the remembered "Explain each setting under its field", `common/explain.svelte.ts` `explainSwitch`, one value for every form) and `.explain` on each hint that only explains, hidden by app.css under a wrapper marked `explain-scope` with `class:explained` (§ 2 "One short line under a field") |
 | Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
+| Rarely changed settings, folded to one line of their values | `common/Fold.svelte` (`name`, `line`, `change`, `open`/`bind:open`, `problem`, `body`; the CSS in `app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` and checks a screen's folds with `expectFoldsNamed` (`e2e/support/settings.ts`) |
+| A group that usually stays at its defaults, as one line that opens | `common/Fold.svelte` with `atDefaults` (and `body="stack"`, `spaced`; § 2 "Settings at their defaults are one line"); the line and the at-defaults test from pure helpers beside the form; e2e `openFold` |
+| A paste dialog | `model/GridPasteDialog.svelte` for a grid of numbers (Now/Pasted preview); a list of rows uses its frame, `model/PasteDialogFrame.svelte`, with its own preview table (§ 4 "A paste box that replaces a whole table is the shared paste dialog") |
+| A typed date | a text field read by `parseDay`, shown back with `tidyDay` on blur (`format/number.ts`; § 2 "A typed date is day first too"), never `<input type="date">` |
+| Two forms in one panel | a bordered card each (`settings/SettingsTab.svelte` `.sub-card`), the state and actions in the card's head (§ 2) |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
 | Saying what a file or paste box takes | `common/FormatHelp.svelte` (`accepts`, the structure as its children, `example`, `exampleFile` or several `exampleFiles` to download, `context` to tell two on a page apart for a screen reader): one per box, beside its file picker, which comes before the fields a file fills, its words checked against the box's parser, its example fed back through it in a test (ui.md § Expected format) |
@@ -830,6 +1087,16 @@ Interaction details that bit:
   `--focus` ring was 1.67:1 on it in dark mode; its controls use the strip's
   text colour (16:1). Compute a ring's contrast against what it sits on, in
   both themes.
+- **Two pills on a phone share a row; the last one's words give.** The
+  Summary's Setup complete (~130 px) and the rain pill (~250 px) needed
+  ~385 px of a 358 px row, so the status row wrapped and each pill sat
+  alone on a half-empty line. The status row is `nowrap` now, the pills keep
+  their width and the last one shrinks, its words in one span wrapping
+  inside it (its date and its age each `nowrap`). A popover inside a pill
+  that no longer starts the row can't open from the pill's own left edge
+  without running off the screen: position it from the row (the row
+  `position: relative`, the pill `static`), as the rain pill's list does
+  (`overview.spec.ts`).
 - **A compact control in a header doesn't wrap.** The EN | AF pair wrapped
   at 320 px and doubled the sticky farm header to 93 px; the compact switch
   is `nowrap` now. Let a title or back link give instead.
@@ -855,7 +1122,82 @@ Interaction details that bit:
 - **Svelte drops the space at the edge of an element.** A narrow-layout
   label `<span class="cell-label"> change</span>` after a number read "1change"
   (and so did its accessible text) on the Applications phone cards. Write
-  the space as `{' '}` inside the span.
+  the space as `{' '}` inside the span. The same at the start of a block:
+  `Mm³/a{#if …} · {pct} of natural{/if}` read "0.83 Mm³/a· 63% of natural"
+  on the run summary, so start the block with `{' '}`. And a flex item's
+  edge spaces collapse too: the run header's `inline-flex` links read
+  "River & reserve→" until a `gap` put the space back. `runs-page.spec.ts`
+  checks the gaps with `innerText`-style regexes and a text range's box.
+- **Dates on a chart's axis are day-first.** uPlot labels daily ticks
+  "12/30" and "1/9", which a South African reader takes as 1 September.
+  `LineChart` passes `TIME_TICKS` (`charts/series.ts`: "30 Dec", the year
+  under each year's first tick); a new time chart uses `LineChart` or that
+  table, never uPlot's default.
+  The hover read-out under the chart ("Date: 1 Oct 2021") goes through
+  `fmtDay` too; it read "2021-10-01" under day-first ticks until issue #521.
+  `river-page.spec.ts` hovers the flow chart and pins the Date row day first.
+- **A table shown day first finds days as it shows them.** The Data page's
+  preview and Download → Preview searched by ISO prefix ("2015-03"), which
+  stopped matching what the rows said once they read "14 Mar 2015". Read the
+  box through `dayPrefix` (`format/number.ts`): a day, a month ("Mar 2015",
+  "03/2015") or a year, day first or year first, and anything else as typed
+  so a half-typed "2021-1" still narrows (never January). The file itself
+  keeps ISO dates; only the screen changes.
+- **A typed date is day first too, so not `<input type="date">`.** A native
+  date field shows the browser's own order: Trace a day read "12/30/2021"
+  in a US-locale browser (issue #521). Where a person types one day, use a
+  text field read by `parseDay` (`format/number.ts`: "15 Nov 2021",
+  "15/11/2021", "2021-11-15", never month first), show it back through
+  `fmtDay` once read, and say a day it can't read or that is out of range at
+  the field (`runs/SelfChecksPanel.svelte`, `self-checks.spec.ts`; the Data
+  page's Edit a day, `series/EditDay.svelte`, `series-hand-edit.spec.ts`).
+  The scenario editor's Add a change reads its dates the same way since
+  round 4 (**From (day first)**, a registered volume's **Valid from**, a date
+  setting; `tidyDay` shows "15 Nov 2021" once the field is left, and the
+  form refuses "From: type a day, day first: …"; `scenario-demand-scale.spec.ts`).
+  `lib/uiPatterns.test.ts` refuses a new native date field; the 30 written
+  before the rule are counted per file there and may only go down (they
+  need a shared day field that joins the save blocker's invalid fields, as
+  `NumberInput` does, before they convert).
+- **The printed evidence report keeps ISO dates, on purpose.** It is a
+  signed document whose lines match the manifest's hashed text (evidence
+  pack manifests, `docs/evidence-pack.md`), so its dates, the fit line
+  included ("GR4J fit of 2026-09-24 14:05 UTC"), stay YYYY-MM-DD:
+  unambiguous in any locale and reproducible byte for byte from the bundle.
+  Don't run them through `fmtDay`; the screens around it read day first
+  (issue #521 round 3, decided by the operator).
+- **A small chart's month letters keep their room at 320 px.** The farm
+  charts' "J F M A M …" nearly touched beside a "100 %" axis column on a
+  320 px phone (issue #521). Below 20 px a month (`chartGeometry.ts`
+  `MIN_MONTH_PX`), the axis labels move into the plot, each just above its
+  grid line, drawn after the bars or line with a halo in the card's colour
+  (`chart.ts` `axisPlacement`). Pin it by measuring the letters' gaps in the
+  rendered SVG (`farm-view.spec.ts`).
+- **Measure a one-line meta with the font's real figures.** Inter's
+  tabular figures set each hyphen a digit wide, so the runs rail's
+  "2026-10-11 01:01 · 2021–2022" missed its line by a few px and broke
+  after the dash, a third line on all twenty rows. Keep each part
+  `nowrap` and use proportional figures where nothing lines up in a column.
+- **A minus is U+2212, and only a column gets tabular figures.** The same
+  `tnum` widening (Inter's hyphen goes from 942 to 1,328 units, a digit's
+  width, with the dash centred) made the KPI tiles read "- 2.26", "2021 - 10 -
+  01" and, in a tile's prose line, "under - estimates": `.stat dd` set tabular
+  figures on every line of a tile. The tiles now use proportional figures, and
+  `fmtNum` writes negatives with U+2212, which Inter draws to fill that width
+  (the farm pages already did; a dozen workspace call sites had been patching
+  it by hand). A display-format change reaches everything that reads its
+  output: grep for `startsWith('-')` and `replace('-'` on formatted strings
+  (the curtailment table's red and green classes keyed on it), make the
+  parser read both signs (`parseNum`, `readNumber`: a grouped field shows
+  `fmtNum`'s text and reads it back), and keep text that is saved or exported
+  in plain decimals (the quaternary lookup's source note, coordinates a GIS
+  reads). Dates a person reads are day first through `fmtDay`, `fmtStamp`
+  and `fmtWhen`; Runs & results showed "2026-10-11 01:13" beside the
+  Summary's "1 Oct 2021". When the date sits in prose another layer writes (the engine's
+  "GR4J fit of 2026-09-24 14:05 UTC"), take the timestamp as data and format
+  it on the screen (`describeFitRecord(r, fittedAtText)`); don't change the
+  stored prose, which history revisions keep and evidence pack manifests
+  hash.
 - **Move a page's main actions to where they're seen.** Scenarios' Run sat
   under the changes, the form and a checkbox per node, off the first screen
   on a big network; it now sits in the scenario's head row. A section's
@@ -923,10 +1265,38 @@ Interaction details that bit:
   Model changed" stays the latest of all while the list is filtered to one
   unit (a small unfiltered read beside the filtered one), so a filter never
   makes the header claim something false.
+- **A checkbox in a flex label keeps its size.** `app.css` gives every
+  `input` `min-width: 0` (so a select never pushes a phone page sideways),
+  and a checkbox is `1rem` wide; as a flex item in a `display: flex` label it
+  then had `flex-shrink: 1` and nothing to stop it, so once the words wrapped
+  the box shrank to a dot ("Validate: split-sample…" 10.5 px, Settings'
+  CHIRPS quantile map 5.6 px; eight boxes on Settings alone, 2026-10-10).
+  `input[type='checkbox'], input[type='radio']` are `flex-shrink: 0` app-wide
+  now. `squashedChecks` (`e2e/support/reflow.ts`) lists any visible box drawn
+  under 12 px; `reflow.spec.ts` runs it on every tab at 320 px and 1024 px.
+  To line a box up with a wrapped label's first line, use `align-items:
+  flex-start` and `margin-top: calc((1lh - 1rem) / 2)` on the box, rather
+  than centring it on the whole label.
+- **A box with its words is `<label class="check">`, styled once.**
+  `app.css`'s `label.check` is the flex row (`gap: 0.4rem`, `align-items:
+  flex-start`) and gives the box block margins that fill one line
+  (`max(3px, calc((1lh - 1rem) / 2))`: never under the browser's own 3 px,
+  or two stacked small labels' boxes came closer than 24 px and axe's
+  target-size failed on the Members panel), so the box sits on the first line's middle when
+  the words wrap and still centres when a component keeps `align-items:
+  center` for a taller row (a `min-height` of 28 px or more). A component's
+  own `.check` rule keeps only what differs: `display: inline-flex`, a
+  min-height, a font size, margins. About forty components each wrote the
+  same three declarations (issue #521); don't add a fourth spelling (`.tick`,
+  `.toggle`, `.choice` were folded into it). A switch drawn over a hidden box
+  (`.switch`) and the month toggles are not this pattern.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
-  `input:not([type='checkbox'])`.
+  `input:not([type='checkbox'])`. `app.css`'s `table.data td input` did the
+  same in every table cell: the Members panel's "Acts for the responsible
+  authority" box took the cell's width and its words ran under the row's
+  Remove button (issue #521); it skips checkboxes and radios now.
 - **Keep a picked row in view when the list's box changes, not only when the
   pick does.** The Map's `node=` link picks a parcel far down a list that
   scrolls in its fitted card; on the first render the fit wasn't measured, the
@@ -971,6 +1341,22 @@ Interaction details that bit:
   the page still open, and a removed `<dialog>` restores nothing: the focus
   fell to `<body>`. `Dialog.svelte` now refocuses what opened it when it is
   unmounted open (`signoff.spec.ts` checks `toBeFocused()`).
+- **A sheet a link opens through the URL hands the focus back to the link.**
+  A plain link to `?settings=1`, `?grid=…` or `?new=1` navigates, and
+  SvelteKit puts the focus on `<body>` before the sheet opens, so closing it
+  left the focus at the top of the page (and inside the closed dialog for a
+  moment). `Dialog.svelte` remembers the last element that had the focus and
+  takes it as the opener when the focus is on `<body>` at opening; nothing
+  to add at the link (`focus-after-actions.spec.ts`).
+- **A delete puts the focus on what took the row's place.** The delete
+  button goes with its row, and the confirm dialog hands the focus back to
+  nothing. `focusAfterRemove(index, selector, fallback)`
+  (`lib/a11y/focusAfterRemove.ts`) focuses the same control on the row now
+  at that index (else the last row), or the fallback (the list's heading,
+  its add field) once it is empty. Runs, Data, the project list, the team's
+  and the project's members, the pending invitations and the farmers use it;
+  Crops' `removed()` and the Network's `remove()` did the same by hand, and
+  Scenarios focuses its list's heading (`focus-after-actions.spec.ts`).
 - **An add form above a long list, not under it.** The notes dialog put
   "Add a note" under the notes: with thirty it was 2,300 px down, and Close
   with it. It is now a side sheet with the form on top, the notes scrolling
@@ -983,6 +1369,57 @@ Interaction details that bit:
   its one-line intro and its first row; pin it with `expectAbove`
   (`e2e/support/reflow.ts`: above on screen and first in the focus order).
   Notes about what's in the table (totals, a CSV's unit) stay under it.
+- **A paste box that replaces a whole table is the shared paste dialog.**
+  The EWR's TAB flows and percentile tables and each Reserve rule table had
+  an always-open textarea under the grids with one "Fill …" button per grid
+  (issue #521). They open `model/GridPasteDialog.svelte` now, from a
+  **Paste…** beside the file load: `wholeTable` drops the start-cell and
+  blank-cell rules (the block replaces every cell, so the caller's layout
+  line says how it is read), a `target` snippet holds the choice of grid
+  (radios) when there is more than one, and the plan is the old parser's
+  result diffed against the grid (`settings/ewrPaste.ts`), so the values are
+  the same. The preview (Now and Pasted) is the check before values are
+  replaced: drop the confirm the Fill button asked, don't stack a second one.
+  A paste that fills a **list of rows** rather than a grid of numbers (the
+  Reserve tables' high flows: name, months, peak…) has no Now/Pasted cells to
+  diff, so it previews the rows the parser read, with a button that says
+  what it does ("Fill 2 high flows", "Replace with 2 high flows" over typed
+  rows): the same parser and result, opened from **Paste or load a CSV…**
+  above the list (`settings/EwrHighFlowsEditor.svelte`). Both dialogs share
+  one frame, `model/PasteDialogFrame.svelte`: the layout notes (`intro`), the
+  box and its label, **Load a CSV file** and a download, the **Preview**
+  status line (muted while empty, red on an error), `notes`, the `table`
+  while `showTable`, and Cancel and the apply action, which empties the box
+  and closes. A third paste dialog takes the frame; `lib/uiPatterns.test.ts`
+  refuses a box labelled "… copied from a spreadsheet" outside it.
+- **A setting that moves to another page stays findable.** Round 1 of issue
+  #521 moved the registered-volumes comparison band to Allocations, and Find
+  a setting, which reads the page, stopped finding it. SectionNav takes an
+  `elsewhere` list (`FindElsewhere`: the name, other words it may be searched
+  by, the link and the page; `settings/sections.ts` `SETTINGS_ELSEWHERE`),
+  listed after the matches as "Comparison band, on Allocations", and the
+  page it lands on scrolls to and focuses the card once drawn
+  (`AllocationsTab` on `#alloc-band`). Add an entry whenever a setting leaves
+  Settings.
+- **A head of named actions folds into one control on a phone, keeping the
+  names.** The project list's head was three full-width buttons (New
+  project, Import b023 workbook, Import project file) before any project on
+  a phone. The two imports stay named buttons where there is room (the
+  client looks for a named workbook import), and at 560 px they become one
+  **Import ▾** beside New project whose list names both; the one picked
+  opens the dialog with the focus on Import, so the dialog's Escape returns
+  there. A row's two buttons (Add data, ⋯) sit side by side at tap height,
+  not stacked two targets tall.
+- **Line up a table of fieldsets with fixed row heights, not subgrid.** The
+  drought levels became one table (a column per level, a row per part of
+  demand) while each level stays a `<fieldset>` named by its legend, so the
+  errors and tests that name a level keep working. `grid-template-rows:
+  subgrid` on a fieldset is unreliable (its grid is on an anonymous box), so
+  each column is a stack of cells of one fixed height (`2.6rem`, room for two
+  lines of a row name) beside one column of row names, switched on by a
+  container query; on a phone the same markup is a card per level with its
+  own row labels. A flex cell trims the leading space of a child's text, so
+  wrap a name and its " (floor kept)" in one inline span.
 - **Don't disable a control while its own change saves.** The alert emails
   page disabled each catchment's fieldset during a save, so an arrow key on
   a radio moved the choice and then threw the keyboard's focus to the page.
@@ -1158,6 +1595,48 @@ Interaction details that bit:
   reader's browser can refuse web fonts. Monospace is still the platform's
   (pinned to DejaVu Sans Mono in e2e on Linux; macOS Chromium ignores that
   pin).
+- **`toContainText` reads hidden text.** It matches `textContent`, so a
+  `display: none` span counts: the fold's hidden "needs fixing" made
+  `not.toContainText('needs fixing')` fail and `toContainText` pass whatever
+  the state. Assert a shown-or-hidden word with `getByText(…)` and
+  `toBeVisible()` / `toBeHidden()`.
+- **A `:has()` in a component's style doesn't see a child component's
+  elements.** Svelte scopes every selector inside `:has(…)` to the
+  component's own markup, so the node sheet's "needs fixing" never showed
+  for a `NumberInput`'s `aria-invalid` (the input is the child's). Wrap the
+  inner selector in `:global(…)`: `.sec:has(:global([aria-invalid='true'])) > summary .sec-problem`,
+  and pin it in e2e with a real invalid field.
+- **A closed `<details>` keeps its content out of the accessibility tree.**
+  `getByRole('group', { name })` on a fieldset inside it finds nothing until
+  it opens; `getByLabel` on its fields still resolves (and `fill` waits for
+  them to be visible, so open the fold first: `openFold`).
+- **A `grouped` `NumberInput` swaps its text on focus, so it must keep the
+  selection.** It shows "1 500" at rest and "1500" to edit. The swap used to
+  land on the next render, after Tab's (or Playwright's `fill`'s) select-all,
+  so typing appended: `fill('60')` gave "150060", which is over the field's
+  maximum, and every spec that set Fit automatically's model runs failed once
+  the field was grouped. It now swaps in place in its focus handler and
+  selects the text unless a press (pointer) gave the focus.
+- **A fold can hold another `<details>`.** The pan row's fill tools hold the
+  FAO-56 helper, so `fold.locator('summary')` matched two; `openFold` takes
+  the fold's own (`:scope > summary`).
+- **A `$bindable(false)` fallback throws when a caller binds an undefined
+  entry.** The Reserve rule tables bind each table's fold to `foldOpen[i]`,
+  which starts undefined; with `open = $bindable(false)` in `Fold.svelte`
+  Svelte refused the binding and the whole tables editor failed to mount
+  (`ewr-rules.spec.ts` caught it). A shared component's bindable flag takes
+  no fallback and reads undefined as false.
+- **Moving markup into a component moves it out of the caller's styles.**
+  Svelte scopes a caller's `.words .rule` to elements the caller writes, so
+  once the `<details class="words">` was `Fold`'s, the rule stopped matching.
+  Reach the child's element with `:global(.words) .rule` (and a class prop
+  on the component), and look at a screenshot after any extraction.
+- **A `NumberInput` that isn't `nullable` never reaches `null`.** Cleared or
+  given text it can't read, it keeps the last number and marks itself
+  `aria-invalid` with its own message, so a check written against `null`
+  (Fit automatically's "Enter a seed.") can't be reached from the page. Test
+  the state the field really shows (`aria-invalid`), and key any summary of
+  it on that.
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle
@@ -1170,6 +1649,15 @@ Interaction details that bit:
   always renders belongs in the tab's chunk: workspace tabs (the page's
   `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
   pages, routes and shared chunks.
+- Lazy panels that load together share one chunk: a module that re-exports
+  them, each loader picking its export
+  (`() => import('./lazySections').then((m) => ({ default: m.X }))`). Settings'
+  sections that draw on every visit (`settings/lazySections.ts`) and the Map
+  tab's tool sheets (`map/sheets.ts`) do this; seven chunks of their own had
+  cost ~6 KB of gzip overhead in the total (issue #521). Leave out a panel
+  another tab also loads lazily, or the chunk follows it there. A tool sheet
+  that opens a click after its tool starts is warmed (`prefetch`) when the
+  tool starts, so it never shows the loading state.
 - Every ceiling change gets a dated entry with the measured numbers and
   what grew. A raise of the total is a new entry file,
   `pnpm gen:bundle-budget <slug> <kb> "<why>"`, never an edit of

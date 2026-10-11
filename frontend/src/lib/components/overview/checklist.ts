@@ -3,7 +3,7 @@
 // already has (the model being edited, project settings, series + run lists).
 import type { ProjectModel, ProjectSettings, SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
-import { fmtNum } from '$lib/format/number';
+import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
 
 export type StepId = 'network' | 'crops' | 'series' | 'settings' | 'runs';
 /** `done`; `partial` = started or has a gap worth a look; `todo`; `unknown` = still loading. */
@@ -107,7 +107,8 @@ function runsStep(runs: RunMeta[] | null, updatedAt?: string): ChecklistStep {
 	if (runs === null) return { ...base, status: 'unknown', detail: 'Checking runs…' };
 	if (!runs.length) return { ...base, status: 'todo', detail: 'Run it to get hydrological unit supply & deficit, dam storage, spills and EWR shortfalls.' };
 	const last = runs.reduce((a, r) => (Date.parse(r.createdAt) > Date.parse(a.createdAt) ? r : a));
-	const when = last.createdAt.slice(0, 10);
+	// The viewer's calendar day, day first as the rest of the Summary: the timestamp's UTC date was a day off around midnight.
+	const when = fmtDay(localIsoDate(new Date(last.createdAt)));
 	if (updatedAt && Date.parse(updatedAt) > Date.parse(last.createdAt))
 		return { ...base, status: 'partial', detail: `Last run ${when}; the project has changed since. Run again to refresh the results.` };
 	return { ...base, status: 'done', detail: `${plural(runs.length, 'run')}, latest ${when}.` };

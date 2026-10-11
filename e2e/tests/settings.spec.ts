@@ -3,7 +3,7 @@ import { createProject, putSeries } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { anySaveBar, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
+import { anySaveBar, openFold, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
 
 test('monthly A-pan and EWR values are saved and survive a reload', async ({ page, owner }) => {
 	void owner;
@@ -143,6 +143,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Demand',
 		'Flow share',
 		'Drought restrictions',
+		'Reporting',
 		'Flow calibration',
 		'Calibration record',
 		'Fit the parameters',
@@ -220,6 +221,7 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 
 	// Each part of calibration is its own panel with its own heading.
 	const rain = page.getByRole('region', { name: 'Rain gaps', exact: true });
+	await openFold(rain, 'rain-defaults');
 	await expect(rain.getByLabel('CHIRPS bias correction', { exact: true })).toBeVisible();
 	await expect(rain.getByLabel('Flagged zero runs', { exact: true })).toBeVisible();
 	const record = page.getByRole('region', { name: 'Calibration record' });
@@ -249,6 +251,8 @@ test.describe('CHIRPS fit period', () => {
 		const mode = section.getByLabel('CHIRPS fit period', { exact: true });
 		await expect(mode).toHaveValue('all');
 
+		// At the defaults Rain gaps is one line that opens its two cards (ui-playbook.md § 2).
+		await openFold(page, 'rain-defaults');
 		await mode.selectOption('ranges');
 		// A new range has no reason yet: Save is blocked and the save bar says why, but the field isn't
 		// marked before it has been left.
@@ -298,6 +302,7 @@ test.describe('CHIRPS fit period', () => {
 		const project = await createProject(page.request, 'Settings fit period off');
 		await page.goto(`/projects/${project.id}?tab=settings`);
 		const section = fit(page);
+		await openFold(page, 'rain-defaults');
 		await section.getByLabel('CHIRPS fit period', { exact: true }).selectOption('ranges');
 		await section.getByLabel('Reason').focus();
 		await section.getByLabel('Reason').blur();
@@ -332,6 +337,7 @@ test.describe('CHIRPS fit period', () => {
 		await page.goto(`/projects/${project.id}?tab=settings`);
 		const section = fit(page);
 		const propose = section.getByRole('button', { name: 'Propose from the double-mass breaks' });
+		await openFold(page, 'rain-defaults');
 		await propose.click();
 		await expect(section.getByTestId('chirps-fit-proposal')).toContainText('Proposed 2 ranges from the double-mass breaks');
 		await expect(section.getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('ranges');
@@ -343,6 +349,7 @@ test.describe('CHIRPS fit period', () => {
 		// Nothing is stored until Save.
 		await page.reload();
 		await expect(section.getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('all');
+		await openFold(page, 'rain-defaults');
 		await propose.click();
 		await expect(section.getByLabel('From water year')).toHaveCount(2);
 		await saveSettings(page);
@@ -360,6 +367,7 @@ test.describe('CHIRPS fit period', () => {
 		void owner;
 		const project = await createProject(page.request, 'Settings fit no proposal');
 		await page.goto(`/projects/${project.id}?tab=settings`);
+		await openFold(page, 'rain-defaults');
 		await fit(page).getByRole('button', { name: 'Propose from the double-mass breaks' }).click();
 		await expect(fit(page).getByTestId('chirps-fit-proposal')).toHaveText(/needs a catchment rain series and a CHIRPS series/);
 		await expect(fit(page).getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('all');
@@ -373,6 +381,7 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const section = page.getByTestId('rain-source');
 	const problem = section.locator('.err');
+	await openFold(page, 'rain-defaults');
 	await expect(section.getByTestId('rain-source-none')).toBeVisible();
 
 	await section.getByRole('button', { name: 'Add a rain-source period' }).click();
@@ -448,6 +457,9 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	await answerConfirm(page, true);
 	await saveSettings(page);
 	await page.reload();
+	// Back at the defaults: Rain gaps is one line again.
+	await expect(page.getByTestId('rain-defaults')).not.toHaveAttribute('open');
+	await openFold(page, 'rain-defaults');
 	await expect(section.getByTestId('rain-source-none')).toBeVisible();
 });
 

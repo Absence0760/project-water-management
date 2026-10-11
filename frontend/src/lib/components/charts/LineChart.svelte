@@ -8,9 +8,9 @@
 	import uPlot from 'uplot';
 	import { onFontsLoaded } from '$lib/components/common/fontsLoaded';
 	import 'uplot/dist/uPlot.min.css';
-	import { fmtNum, fmtReading } from '$lib/format/number';
+	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -233,7 +233,7 @@
 			legend: { show: !print, live: true },
 			series: [
 				isTime
-					? { label: 'Date', value: (_u, v) => (v == null ? '–' : isoDay(v)) }
+					? { label: 'Date', value: (_u, v) => (v == null ? '–' : fmtDay(isoDay(v))) }
 					: { label: xLabel ?? 'x', value: (_u, v) => (v == null ? '–' : (xFormat?.(v) ?? fmtNum(v, 2))) },
 				...series.map(seriesOpts)
 			],
@@ -246,7 +246,7 @@
 					gap: 5 * k,
 					// Daily data: never tick more often than once a day (no "12am / 12pm").
 					...(isTime
-						? { space: Math.max(50, Math.ceil(w / Math.max(spanDays, 1))) * k, size: 50 * k }
+						? { space: Math.max(50, Math.ceil(w / Math.max(spanDays, 1))) * k, size: 50 * k, values: TIME_TICKS }
 						: { values: (_u, vals) => vals.map((v) => (v == null ? '' : (xFormat?.(v) ?? String(v)))), space: 50 * k, size: 50 * k }),
 					label: isTime ? undefined : xLabel,
 					labelFont: font,

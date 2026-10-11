@@ -21,7 +21,9 @@ export async function sidewaysOverflow(page: Page) {
 		const culprits = [...document.body.querySelectorAll('*')]
 			.filter((el) => {
 				const r = el.getBoundingClientRect();
-				return r.width > 0 && r.right > edge + 0.5 && !held(el);
+				// checkVisibility(): a closed <details>' content still has a box (content-visibility: hidden) but
+				// is never drawn and never widens the page, so it can't make the page scroll sideways.
+				return r.width > 0 && r.right > edge + 0.5 && !held(el) && el.checkVisibility();
 			})
 			.map((el) => {
 				const cls = typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).join('.')}` : '';
@@ -95,4 +97,29 @@ export async function expectAbove(upper: Locator, lower: Locator) {
 	expect(a.y + a.height, 'ends above the other starts').toBeLessThanOrEqual(b.y + 1);
 	const before = await upper.evaluate((el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING), await lower.elementHandle());
 	expect(before, 'comes first in the focus order').toBe(true);
+}
+
+/**
+ * Every visible checkbox and radio drawn smaller than a box (12 px either way), named by its label. Every
+ * input has `min-width: 0` (app.css), so a box in a `display: flex` label used to shrink to a dot once its
+ * words wrapped ("Validate: split-sample…" in Settings, 2026-10-10); app.css now keeps them
+ * `flex-shrink: 0`. Visually hidden inputs drawn by something else (a switch's track, a segment) are skipped:
+ * those are transparent, clipped or `appearance: none`.
+ */
+export async function squashedChecks(page: Page): Promise<string[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"], input[type="radio"]')]
+			.filter((el) => {
+				if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+				const cs = getComputedStyle(el);
+				if (cs.appearance === 'none' || cs.position === 'absolute' || cs.position === 'fixed') return false;
+				const r = el.getBoundingClientRect();
+				return r.width > 1 && r.height > 1 && (r.width < 12 || r.height < 12);
+			})
+			.map((el) => {
+				const r = el.getBoundingClientRect();
+				const name = (el.labels?.[0]?.textContent ?? el.getAttribute('aria-label') ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+				return `"${name}" ${Math.round(r.width * 10) / 10}×${Math.round(r.height * 10) / 10}`;
+			})
+	);
 }

@@ -188,9 +188,7 @@
 		font-weight: 500;
 	}
 	.check {
-		display: flex;
 		gap: 8px;
-		align-items: flex-start;
 	}
 	.check input {
 		margin-top: 4px;

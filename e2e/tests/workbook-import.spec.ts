@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { pickImport } from '../support/projects.ts';
 
 const FIXTURE = new URL('../../scripts/wbt-import/fixtures/synthetic_b023.xlsx', import.meta.url);
 const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
@@ -43,7 +44,8 @@ function hostileWorkbook(payload: string) {
 }
 
 async function openWorkbookImport(page: Page): Promise<Locator> {
-	await page.getByRole('button', { name: 'Import b023 workbook' }).click();
+	// The named button, or on a phone Import's list (issue #521).
+	await pickImport(page, 'Import b023 workbook');
 	const dialog = page.getByRole('dialog', { name: 'Import b023 workbook' });
 	await expect(dialog.getByLabel('b023 workbook (.xlsm or .xlsx)')).toBeVisible();
 	return dialog;

@@ -9,6 +9,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { untrack } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -77,6 +78,7 @@
 	let addError = $state<string | null>(null);
 	let added = $state<string | null>(null);
 	let emailInput: HTMLInputElement | undefined = $state();
+	let settingsLink: HTMLAnchorElement | undefined = $state();
 
 	const invitesApi = emailAuthApi(api).teamInvites;
 	let invites = $state<Invite[]>([]);
@@ -203,8 +205,11 @@
 		try {
 			await api.teams.removeMember(teamId, m.userId);
 			if (self) return void (await goto(`${base}/teams`));
+			const at = members.findIndex((x) => x.userId === m.userId);
 			members = members.filter((x) => x.userId !== m.userId);
 			if (team) team.memberCount -= 1;
+			// Its row, and the Remove button that had the focus, have gone: the member now in its place takes it, on their role.
+			await focusAfterRemove(at, 'tr[data-member] select', emailInput);
 		} catch (err) {
 			error = msg(err);
 		} finally {
@@ -252,6 +257,8 @@
 			danger: true
 		});
 		if (ok) await deleteTeam();
+		// Cancelled: the sheet that asked has closed, so the focus goes back to the button that opens it.
+		else settingsLink?.focus();
 	}
 
 	async function deleteTeam() {
@@ -333,7 +340,7 @@
 				</div>
 				<div class="head-actions">
 					<a class="btn" href="{base}/?owner=team:{team.id}&sort=status">Project list</a>
-					<a class="btn" href={settingsHref} data-sveltekit-noscroll>Team settings</a>
+					<a class="btn" href={settingsHref} data-sveltekit-noscroll bind:this={settingsLink}>Team settings</a>
 					{#if isAdmin}<button type="button" class="btn" onclick={focusAddMember}>Add member</button>{/if}
 					{#if canAddProjects}<a class="btn btn-primary" href="{base}/?owner=team:{team.id}&new=1">New project</a>{/if}
 				</div>
@@ -388,23 +395,27 @@
 							<h2 id="members-h"><span id="members-h-t">Members</span> <HelpTip key="team" label="About team roles" /></h2>
 							{#if !isAdmin}<span class="muted small">Only owners can manage members.</span>{/if}
 						</div>
+						<!-- Each member is one row of two lines (issue #520): the name with the email under it and the role, then
+						     the row's actions on a line of their own under both, so a narrow side column never clips Reset two-step
+						     or Remove. The rows are grids, so the table keeps its roles explicitly (Safari drops them otherwise). -->
 						<div class="table-wrap">
-							<table class="data">
-								<thead>
-									<tr>
-										<th scope="col">Name</th>
-										<th scope="col">Role</th>
-										<th scope="col"><span class="visually-hidden">Actions</span></th>
+							<!-- svelte-ignore a11y_no_redundant_roles -->
+							<table class="data member-rows" role="table" aria-labelledby="members-h-t">
+								<thead role="rowgroup">
+									<tr role="row">
+										<th scope="col" role="columnheader">Name</th>
+										<th scope="col" role="columnheader">Role</th>
+										{#if isAdmin}<th scope="col" role="columnheader" class="act-h"><span class="visually-hidden">Actions</span></th>{/if}
 									</tr>
 								</thead>
-								<tbody>
+								<tbody role="rowgroup">
 									{#each members as m (m.userId)}
-										<tr>
-											<th scope="row">
+										<tr role="row" data-member={m.userId}>
+											<th scope="row" role="rowheader">
 												{m.displayName}{#if m.userId === me}&nbsp;<span class="muted">(you)</span>{/if}
-												<span class="sub-email"><EmailText email={m.email} /></span>
+												<span class="sub-email"><EmailText email={m.email} breakAfter="." /></span>
 											</th>
-											<td>
+											<td role="cell">
 												{#if isAdmin}
 													<select
 														aria-label="Team role for {m.displayName}"
@@ -420,35 +431,37 @@
 													<span class="badge" class:badge-owner={m.role === 'admin'}>{roleLabel(m.role)}</span>
 												{/if}
 											</td>
-											<td class="act">
-{#if isAdmin && m.userId !== me}
-													<div class="act-btns">
-														<!-- Only for a member below admin: an admin's factor is never reset by another admin (2026-10-08). -->
-														{#if canResetMfa(m)}
+											{#if isAdmin}
+												<td role="cell" class="act" class:none={m.userId === me}>
+													{#if m.userId !== me}
+														<div class="act-btns">
+															<!-- Only for a member below admin: an admin's factor is never reset by another admin (2026-10-08). -->
+															{#if canResetMfa(m)}
+																<button
+																	type="button"
+																	class="btn btn-sm"
+																	disabled={busy === m.userId}
+																	onclick={() => resetMfa(m)}
+																	aria-label="Reset two-step sign-in for {m.displayName}"
+																	title="For a member who can’t get a code and lost their recovery codes"
+																	data-reset-mfa
+																>
+																	Reset two-step
+																</button>
+															{/if}
 															<button
 																type="button"
-																class="btn btn-sm"
+																class="btn btn-sm btn-danger"
 																disabled={busy === m.userId}
-																onclick={() => resetMfa(m)}
-																aria-label="Reset two-step sign-in for {m.displayName}"
-																title="For a member who can’t get a code and lost their recovery codes"
-																data-reset-mfa
+																onclick={() => remove(m)}
+																aria-label="Remove {m.displayName}"
 															>
-																Reset two-step
+																Remove
 															</button>
-														{/if}
-														<button
-															type="button"
-															class="btn btn-sm btn-danger"
-															disabled={busy === m.userId}
-															onclick={() => remove(m)}
-															aria-label="Remove {m.displayName}"
-														>
-															Remove
-														</button>
-													</div>
-												{/if}
-											</td>
+														</div>
+													{/if}
+												</td>
+											{/if}
 										</tr>
 									{/each}
 								</tbody>
@@ -671,27 +684,51 @@
 		padding-top: 0.6rem;
 		border-top: 1px solid var(--border);
 	}
-	/* Members: a narrow column, so the email sits under the name. */
+	/* Members (issue #520): each row a grid of two lines, the name (the email under it) beside the role, then the
+	   actions under both, so the side column's width never clips a button and the email has the name's room. */
 	.members .table-wrap {
 		max-height: none;
+	}
+	.member-rows tr {
+		display: grid;
+		/* A set role column, so the header's "Role" sits over the pickers (each row is its own grid). */
+		grid-template-columns: minmax(0, 1fr) 8rem;
+		align-items: center;
+		border-bottom: 1px solid var(--border);
+	}
+	.member-rows tbody tr:last-child {
+		border-bottom: 0;
+	}
+	.member-rows :is(th, td) {
+		border-bottom: 0;
+	}
+	/* The actions' header names the column for assistive tech only; it takes no grid line of its own. */
+	.member-rows .act-h {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 	.sub-email {
 		display: block;
 		font-weight: 400;
 		font-size: 0.8rem;
 		color: var(--text-muted);
-		overflow-wrap: anywhere;
 	}
 	.act {
-		text-align: right;
-		width: 1%;
-		white-space: nowrap;
+		grid-column: 1 / -1;
+		padding-top: 0;
 	}
-	/* Two actions on a narrow column: they stack rather than widen the table. */
+	/* Your own row has no actions: no empty line under it. */
+	.act.none {
+		display: none;
+	}
 	.act-btns {
 		display: flex;
 		flex-wrap: wrap;
-		justify-content: flex-end;
 		gap: 0.35rem;
 	}
 	.status-line {

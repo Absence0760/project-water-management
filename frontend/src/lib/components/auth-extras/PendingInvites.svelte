@@ -5,6 +5,7 @@
 	// in via `bind:invites`; this lists, re-sends and revokes them.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
+	import { focusAfterRemove } from '$lib/a11y/focusAfterRemove';
 	import type { Invite } from '$lib/api/types';
 	import { roleLabel } from '$lib/api/roleLabels';
 	import { fmtDate } from '$lib/format/number';
@@ -68,8 +69,14 @@
 		message = error = null;
 		try {
 			await revoke(inv);
+			const list = `[aria-labelledby="${idPrefix}-inv-h"]`;
+			// The last one takes the list with it: then the panel's add-by-email field.
+			const add = document.querySelector(list)?.closest('.panel')?.querySelector<HTMLElement>('input[type="email"]') ?? null;
+			const at = invites.findIndex((x) => x.id === inv.id);
 			invites = invites.filter((x) => x.id !== inv.id);
 			message = `Invitation to ${inv.email} revoked.`;
+			// Its row, and the Revoke that had the focus, have gone: the next invitation's Revoke takes it.
+			await focusAfterRemove(at, `${list} button[aria-label^="Revoke invitation to"]`, add);
 		} catch (e) {
 			error = msg(e);
 		} finally {

@@ -12,6 +12,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openDetails } from '../support/scenarios.ts';
 
 const NAME = 'Desktop Reserve at the outlet';
 const TABLE = 'Reserve rule table at the outlet (Outflow gauge): none → “Invented desktop estimate” (Desktop estimate, low confidence), total flow, 10 % points';
@@ -52,6 +53,7 @@ test('an editor sets the outlet’s Reserve rule table in a scenario, always a b
 
 	// Still a baseline assumption with every hydrological unit the proposer's: the Reserve is never the proposal.
 	// (The gauge isn't listed: a gauge proposes nothing.)
+	await openDetails(page, 'proposer-fold');
 	const proposer = page.getByRole('group', { name: "The proposer's hydrological units" });
 	await expect(proposer.getByLabel('Outflow gauge')).toHaveCount(0);
 	for (const n of ['Upper farm', 'Lower farm']) await proposer.getByLabel(n).check();

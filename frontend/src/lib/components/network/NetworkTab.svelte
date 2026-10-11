@@ -216,7 +216,16 @@
 	});
 	$effect(() => {
 		// Closed (Done, Esc, the ✕): drop `edit` in place, so Back goes to where it was opened from.
-		if (!sheetOpen && untrack(() => editParam)) void goto(withoutParam(page.url, 'edit'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!sheetOpen && untrack(() => editParam)) {
+			// The section a link opened it on (`section=`) goes with it, and the pick (`node=`) when that
+			// node has gone (removed from the sheet): one navigation, since a second one started beside
+			// this from the same URL put back what the other took out.
+			const url = new URL(page.url);
+			url.searchParams.delete('section');
+			const picked = url.searchParams.get('node');
+			if (picked && !untrack(() => nodes.some((n) => n.id === picked))) url.searchParams.delete('node');
+			void goto(withoutParam(url, 'edit'), { replaceState: true, noScroll: true, keepFocus: true });
+		}
 	});
 	$effect(() => {
 		if (editing) untrack(() => (selectedId = editing.id));
@@ -226,6 +235,7 @@
 		// The node edited is the one picked (node=), so closing the sheet leaves the map on it.
 		const q = new URLSearchParams(page.url.search);
 		q.set('edit', id);
+		q.delete('section');
 		if (!only) q.set('node', id);
 		return goto(`?${q}`, { replaceState: replace, noScroll: true, keepFocus: true });
 	}
@@ -317,7 +327,8 @@
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
 		if (editParam === id) sheetOpen = false;
-		if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replaceState: true, noScroll: true, keepFocus: true });
+		// From the sheet, closing it drops `node=` too (above).
+		else if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replaceState: true, noScroll: true, keepFocus: true });
 		// The button that was pressed has gone (the row's ✕, or the sheet with its Remove and the
 		// card's Edit it would hand the focus back to): put the focus somewhere that still is.
 		await tick();
@@ -507,11 +518,11 @@
 	// --- the node sheet's extras: its section menu, and where its crops and transfers are set ---
 	const sheetSections = $derived(editing ? nodeSections(editing, (editor.model.demandObjects ?? []).filter((o) => o.nodeId === editing.id).length) : []);
 	const sheetNav = $derived(editing && sheetSections.length > 1 ? nodeNavGroups(editing.id, sheetSections) : []);
-	/** Scrolls the sheet's form to a section and puts the focus on it (its fieldset, named by its legend). */
+	/** The sheet's form, for its section menu. */
+	let detail = $state<ReturnType<typeof NodeDetail> | undefined>();
+	/** Opens a section of the sheet's form (the others fold, issue #521), scrolls to it and puts the focus on its heading. */
 	function jumpTo(id: string) {
-		const el = document.getElementById(id);
-		el?.scrollIntoView({ block: 'start' });
-		el?.focus({ preventScroll: true });
+		void detail?.jump(id);
 	}
 	const editingTransfers = $derived.by(() => {
 		if (!editing) return null;
@@ -730,7 +741,7 @@
 										<td class="num by-month vol" data-testid="divert-by-month-{node.id}">
 											<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 											{#if projectId}
-												<a href="?tab=network&edit={encodeURIComponent(node.id)}" aria-label="{c.aria}: edit it in the hydrological unit’s form" title="Set by month: the one value isn’t used. Edit the months in the hydrological unit’s form.">{c.text}</a>
+												<a href="?tab=network&edit={encodeURIComponent(node.id)}&section=routing" aria-label="{c.aria}: edit it in the hydrological unit’s form" title="Set by month: the one value isn’t used. Edit the months in the hydrological unit’s form.">{c.text}</a>
 											{:else}
 												<span aria-hidden="true" title="Set by month: the one value isn’t used.">{c.text}</span><span class="visually-hidden">{c.aria}</span>
 											{/if}
@@ -942,7 +953,9 @@
 			<div class="sheet one-node">
 		{#key editing.id}
 				<NodeDetail
+					bind:this={detail}
 					node={editing}
+					section={page.url.searchParams.get('section')}
 					{nodes}
 					share={shareOf(editIndex)}
 					{readonly}

@@ -5,8 +5,9 @@
 	Model's TAB file (12 monthly flows) or its percentile tables (natural and
 	total Reserve flow, read at each day's natural flow), and how the tables are
 	scaled to the modelled catchment (by MAR or by area), with the factor. The
-	tables are typed, pasted, or loaded from the DRM's .tab / .rul files (the
-	file load sits above the tables, with its Expected format); a .tab's
+	tables are typed, pasted (Paste…, the shared paste dialog with its preview,
+	issue #521), or loaded from the DRM's .tab / .rul files (both on the source
+	picker's line, "Fill from", with the Expected format under it); a .tab's
 	converted flows are shown before they are used, and a file never changes
 	the method on its own. Bind `value`
 	(settings.ewrDailySource; null = the pragmatic EWR); `error` is set while it
@@ -26,11 +27,12 @@
 	import { fmtNum } from '$lib/format/number';
 	import DrmFormatHelp from './DrmFormatHelp.svelte';
 	import { parseDrmFile, percentileTablesFromRul, type TabFile } from './drmFiles';
-	import { parseGrid } from './ewrRules';
 	import { api } from '$lib/api';
 	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	import ScaledEwrTablesView from './ScaledEwrTablesView.svelte';
-	import { dailySourceError, knownScale, lastRunScale, parseMonthlyRow, rulLoad, scaledEwrTables, scaleFactor, type LastRunScale } from './ewrDailySource';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
+	import { dailyCsv, planDailyPaste, type DailyTable } from './ewrPaste';
+	import { dailySourceError, knownScale, lastRunScale, rulLoad, scaledEwrTables, scaleFactor, type LastRunScale } from './ewrDailySource';
 
 	let {
 		value = $bindable(),
@@ -89,14 +91,17 @@
 		value = { ...$state.snapshot(src), ...patch } as EwrDailySource;
 	}
 
-	// What the last file did, said beside the picker; what the last paste did, under the paste box.
+	// What the last file did and what the last paste did, said under the Fill from line.
 	let note = $state<{ ok: boolean; text: string } | null>(null);
 	let pasteNote = $state<{ ok: boolean; text: string } | null>(null);
 	// A .rul loaded under another method filled the percentile tables without switching to them: offer the switch.
 	let offerPercentile = $state(false);
 	let tabPreview = $state<{ file: string; tab: TabFile } | null>(null);
-	let pasteTab = $state('');
-	let pasteGrid = $state('');
+	// The paste dialog: its text, and which table it fills (the TAB flows, or one of the two percentile tables).
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteGridTarget = $state<'naturalPctM3s' | 'reservePctM3s'>('naturalPctM3s');
+	const pasteTarget = $derived<DailyTable>(method === 'tab' ? 'tabM3s' : pasteGridTarget);
 	const read = latestFileText();
 
 	async function loadFile(e: Event & { currentTarget: HTMLInputElement }) {
@@ -108,7 +113,7 @@
 		offerPercentile = false;
 		const drm = parseDrmFile(text);
 		if (drm === null) {
-			note = { ok: false, text: `${f.name} isn't a Desktop Reserve Model .tab or .rul file. Paste a CSV's rows into the paste box below the tables instead.` };
+			note = { ok: false, text: `${f.name} isn't a Desktop Reserve Model .tab or .rul file. Use Paste… to read a CSV's rows instead.` };
 			return;
 		}
 		if ('error' in drm) {
@@ -161,30 +166,17 @@
 		tabPreview = null;
 	}
 
-	function fillTab() {
-		const row = parseMonthlyRow(pasteTab);
-		if ('error' in row) {
-			pasteNote = { ok: false, text: row.error };
-			return;
-		}
-		edit({ tabM3s: row.values });
-		pasteNote = { ok: true, text: 'Filled the 12 TAB flows.' };
-		pasteTab = '';
+	function openPaste() {
+		pasteText = '';
+		pasteOpen = true;
 	}
 
-	function fillGrid(which: 'naturalPctM3s' | 'reservePctM3s') {
-		const g = parseGrid(pasteGrid);
-		if ('error' in g) {
-			pasteNote = { ok: false, text: g.error };
-			return;
-		}
-		if (g.rows[0]!.length !== EWR_PERCENTILE_POINTS.length) {
-			pasteNote = { ok: false, text: `The paste has ${g.rows[0]!.length} values a row; the table has ${EWR_PERCENTILE_POINTS.length}, one per point (10 % … 99 %).` };
-			return;
-		}
-		edit({ [which]: g.rows.map((r) => [...r]) });
-		pasteNote = { ok: true, text: [`Filled the ${which === 'naturalPctM3s' ? 'natural flow' : 'total Reserve flow'} table${g.monthLabels ? ' (rows matched by month name)' : ' (rows read as Oct … Sep)'}.`, ...g.notes].join(' ') };
-		pasteGrid = '';
+	/** The dialog's Apply: the same values the parsers give (./ewrPaste.ts), said under the actions. */
+	function applyPaste() {
+		const r = planDailyPaste(src, pasteTarget, pasteText);
+		if ('error' in r) return;
+		edit(r.patch);
+		pasteNote = { ok: true, text: r.message };
 	}
 
 	function setCell(which: 'naturalPctM3s' | 'reservePctM3s', r: number, c: number, v: number | null) {
@@ -204,52 +196,39 @@
 
 <fieldset class="plain daily" data-testid="ewr-daily-source">
 	<legend>The daily EWR at the outlet <HelpTip key="settings.ewrDailySource" /></legend>
-	<div class="fields">
-		<div class="field">
+	<!-- The source and where its values come from on one line (issue #521): "Fill from" a DRM file or a paste. -->
+	<div class="source-row">
+		<div class="field source">
 			<label for="{uid}-method">Daily EWR from</label>
 			<select id="{uid}-method" disabled={readonly} value={method} onchange={(e) => edit({ method: e.currentTarget.value as EwrDailySource['method'] })} aria-describedby="{uid}-method-h">
 				<option value="pragmatic">The pragmatic EWR (above)</option>
 				<option value="tab">The DRM TAB file (monthly total flows)</option>
 				<option value="percentile">The DRM percentile tables (read at each day’s natural flow)</option>
 			</select>
-			<span class="hint" id="{uid}-method-h">
-				The outlet’s daily EWR, which is split between the units and judged every day: shortfalls, the charge, curtailment and the compliance grid all follow it.
-				{#if method === 'tab'}Each month’s TAB flow × the scale factor, every day of the month.{:else if method === 'percentile'}Each day, the Reserve flow at the point the day’s natural flow at the outlet sits at in that month’s natural flows, interpolated between points, × the scale factor.{/if}
-			</span>
 		</div>
-		{#if method !== 'pragmatic'}
-			<div class="field">
-				<label for="{uid}-scaling">Scale the tables by</label>
-				<select id="{uid}-scaling" disabled={readonly} value={src.scaling} onchange={(e) => edit({ scaling: e.currentTarget.value as EwrDailySource['scaling'] })} aria-describedby="{uid}-s-h">
-					<option value="area">Area ratio: the modelled area ÷ the table’s (the default)</option>
-					<option value="mar">MAR ratio: the model’s natural MAR ÷ the table’s</option>
-				</select>
+		{#if method !== 'pragmatic' && !readonly}
+			<div class="fill" role="group" aria-label="Fill the tables from" data-testid="ewr-daily-fill">
+				<span class="fill-lbl" aria-hidden="true">Fill from:</span>
+				<label class="btn btn-sm file">
+					Load a DRM file (.rul / .tab)
+					<input type="file" accept=".tab,.rul,.txt,text/plain" onchange={loadFile} data-testid="ewr-daily-file" aria-describedby="{uid}-load-h" />
+				</label>
+				<span class="sep" aria-hidden="true">·</span>
+				<button type="button" class="btn btn-sm" onclick={openPaste} aria-haspopup="dialog">Paste…</button>
 			</div>
-			<div class="field">
-				<label for="{uid}-mar">Table MAR <span class="u">(Mm³/a)</span></label>
-				<NumberInput id="{uid}-mar" min={0} nullable disabled={readonly} value={src.tableMarMm3} onchange={(v) => edit({ tableMarMm3: v })} aria-describedby="{uid}-mar-h" />
-				<span class="hint" id="{uid}-mar-h">The natural MAR the tables were determined for, the TAB header’s “MAR =”.</span>
-			</div>
-			<div class="field">
-				<label for="{uid}-area">Table catchment area <span class="u">(km²)</span></label>
-				<NumberInput id="{uid}-area" min={0} nullable disabled={readonly} value={src.tableAreaKm2} onchange={(v) => edit({ tableAreaKm2: v })} aria-describedby="{uid}-area-h" />
-				<span class="hint" id="{uid}-area-h">Needed for the area ratio (the default). The modelled area is {fmtNum(modelAreaKm2, 1)} km², the area the natural flow is made on (the calibration catchment area when set, else the units’ areas).</span>
-			</div>
-			<p class="factor" id="{uid}-s-h" data-testid="ewr-scale-factor" aria-live="polite">{factor}</p>
 		{/if}
 	</div>
+	<p class="hint explain" id="{uid}-method-h">
+		The outlet’s daily EWR, which is split between the units and judged every day: shortfalls, the charge, curtailment and the compliance grid all follow it.
+		{#if method === 'tab'}Each month’s TAB flow × the scale factor, every day of the month.{:else if method === 'percentile'}Each day, the Reserve flow at the point the day’s natural flow at the outlet sits at in that month’s natural flows, interpolated between points, × the scale factor.{/if}
+	</p>
 
 	{#if method !== 'pragmatic'}
 		{#if !readonly}
 			<div class="load" data-testid="ewr-daily-load">
-				<div class="load-row">
-					<label class="btn btn-sm file">
-						Load a DRM file (.rul / .tab)
-						<input type="file" accept=".tab,.rul,.txt,text/plain" onchange={loadFile} data-testid="ewr-daily-file" aria-describedby="{uid}-load-h" />
-					</label>
-					<span class="hint" id="{uid}-load-h">A .tab gives the TAB flows and the table MAR, a .rul the two percentile tables. A file never changes the choice in Daily EWR from.</span>
-				</div>
+				<p class="hint explain" id="{uid}-load-h">A .tab gives the TAB flows and the table MAR, a .rul the two percentile tables. A file never changes the choice in Daily EWR from.</p>
 				<p class="small" class:err={note && !note.ok} role="status" aria-label="File result">{note?.text ?? ''}</p>
+				<p class="small" id="{uid}-paste-s" class:err={pasteNote && !pasteNote.ok} role="status" aria-label="Paste result">{pasteNote?.text ?? ''}</p>
 				{#if offerPercentile && method !== 'percentile'}
 					<div class="actions"><button type="button" class="btn btn-sm" onclick={usePercentile}>Use the percentile tables</button></div>
 				{/if}
@@ -288,7 +267,53 @@
 				{/if}
 				<DrmFormatHelp target="dailyEwr" context="of a file for the daily EWR at the outlet" />
 			</div>
+			<GridPasteDialog
+				bind:open={pasteOpen}
+				bind:text={pasteText}
+				title={method === 'tab' ? 'Paste the TAB flows' : 'Paste a percentile table'}
+				layout={method === 'tab'
+					? 'The 12 TAB flows in m³/s, Oct … Sep, in a row or a column; month names are skipped. With tabs or semicolons between them, 12,5 is a decimal comma.'
+					: 'A percentile table in m³/s: 12 month rows (Oct … Sep, or with month names in the first column) × the 10 points (10 % … 99 %), optionally under a heading row of points. It replaces the whole table.'}
+				wholeTable
+				plan={(t) => {
+					const r = planDailyPaste(src, pasteTarget, t);
+					return 'error' in r ? r : r.plan;
+				}}
+				onapply={applyPaste}
+				csv={() => dailyCsv(src, pasteTarget)}
+				csvName={method === 'tab' ? 'tab-flows.csv' : pasteTarget === 'naturalPctM3s' ? 'natural-flow-percentiles.csv' : 'total-reserve-percentiles.csv'}
+			>
+				{#snippet target()}
+					{#if method === 'percentile'}
+						<fieldset class="plain target">
+							<legend>Fill</legend>
+							<label class="check"><input type="radio" name="{uid}-pt" value="naturalPctM3s" bind:group={pasteGridTarget} /> The natural flow table</label>
+							<label class="check"><input type="radio" name="{uid}-pt" value="reservePctM3s" bind:group={pasteGridTarget} /> The total Reserve table</label>
+						</fieldset>
+					{/if}
+				{/snippet}
+			</GridPasteDialog>
 		{/if}
+		<div class="fields">
+			<div class="field">
+				<label for="{uid}-scaling">Scale the tables by</label>
+				<select id="{uid}-scaling" disabled={readonly} value={src.scaling} onchange={(e) => edit({ scaling: e.currentTarget.value as EwrDailySource['scaling'] })} aria-describedby="{uid}-s-h">
+					<option value="area">Area ratio: the modelled area ÷ the table’s (the default)</option>
+					<option value="mar">MAR ratio: the model’s natural MAR ÷ the table’s</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="{uid}-mar">Table MAR <span class="u">(Mm³/a)</span></label>
+				<NumberInput id="{uid}-mar" min={0} nullable disabled={readonly} value={src.tableMarMm3} onchange={(v) => edit({ tableMarMm3: v })} aria-describedby="{uid}-mar-h" />
+				<span class="hint explain" id="{uid}-mar-h">The natural MAR the tables were determined for, the TAB header’s “MAR =”.</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-area">Table catchment area <span class="u">(km²)</span></label>
+				<NumberInput id="{uid}-area" min={0} nullable disabled={readonly} value={src.tableAreaKm2} onchange={(v) => edit({ tableAreaKm2: v })} aria-describedby="{uid}-area-h {uid}-area-x" />
+				<span class="hint" id="{uid}-area-h">Modelled area {fmtNum(modelAreaKm2, 1)} km².<span class="explain" id="{uid}-area-x"> Needed for the area ratio (the default). The modelled area is the area the natural flow is made on (the calibration catchment area when set, else the units’ areas).</span></span>
+			</div>
+			<p class="factor" id="{uid}-s-h" data-testid="ewr-scale-factor" aria-live="polite">{factor}</p>
+		</div>
 
 		{#if method === 'tab'}
 			<div class="table-wrap">
@@ -347,23 +372,6 @@
 			{/if}
 		</details>
 
-		{#if !readonly}
-			<div class="paste">
-				{#if method === 'tab'}
-					<label for="{uid}-paste">Or paste the 12 flows (m³/s, Oct … Sep, in a row or a column)</label>
-					<textarea id="{uid}-paste" rows="2" value={pasteTab} oninput={(e) => (pasteTab = e.currentTarget.value)} aria-describedby="{uid}-paste-s"></textarea>
-					<div class="actions"><button type="button" class="btn btn-sm" onclick={fillTab}>Fill the TAB flows</button></div>
-				{:else}
-					<label for="{uid}-paste">Or paste a table (12 month rows × 10 points, m³/s)</label>
-					<textarea id="{uid}-paste" rows="3" value={pasteGrid} oninput={(e) => (pasteGrid = e.currentTarget.value)} aria-describedby="{uid}-paste-s"></textarea>
-					<div class="actions">
-						<button type="button" class="btn btn-sm" onclick={() => fillGrid('naturalPctM3s')}>Fill the natural flow table</button>
-						<button type="button" class="btn btn-sm" onclick={() => fillGrid('reservePctM3s')}>Fill the total Reserve table</button>
-					</div>
-				{/if}
-				<p class="small" id="{uid}-paste-s" class:err={pasteNote && !pasteNote.ok} role="status" aria-label="Paste result">{pasteNote?.text ?? ''}</p>
-			</div>
-		{/if}
 	{/if}
 	{#if error}<p class="err" role={announce ? 'alert' : undefined} data-testid="ewr-daily-error">{error}</p>{/if}
 </fieldset>
@@ -390,6 +398,50 @@
 	.field :global(input),
 	.field select {
 		width: 100%;
+	}
+	/* The source picker and "Fill from" on one line, the buttons level with the select; stacked when narrow. */
+	.source-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.5rem 1.25rem;
+	}
+	.source {
+		flex: 0 1 24rem;
+		min-width: min(100%, 16rem);
+		margin-bottom: 0;
+	}
+	.fill {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
+	}
+	.fill-lbl {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.sep {
+		color: var(--text-muted);
+	}
+	.target {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1rem;
+		margin: 0.25rem 0;
+	}
+	.target legend {
+		font-weight: 500;
+		font-size: 0.85rem;
+		padding: 0;
+	}
+	.target .check {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 32px;
 	}
 	.hint {
 		font-size: 0.8rem;
@@ -422,41 +474,39 @@
 		background: var(--surface-2);
 		z-index: 3;
 	}
-	.rulegrid td,
-	.monthly td {
+	.rulegrid td {
 		min-width: 78px;
 		padding-left: 0.3rem;
 		padding-right: 0.3rem;
 	}
+	/* As Settings' pragmatic EWR row: slim cells, so the twelve months fit beside the side index at 1440 px (issue #521). */
+	.monthly td {
+		width: calc(6.5ch + 0.7rem + 2px + 0.4rem);
+		padding-left: 0.1rem;
+		padding-right: 0.1rem;
+	}
+	table.data.monthly td :global(input) {
+		min-width: calc(6.5ch + 0.7rem + 2px);
+		width: 100%;
+	}
+	.monthly td :global(input[type='number']) {
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+	.monthly td :global(input[type='number']::-webkit-inner-spin-button),
+	.monthly td :global(input[type='number']::-webkit-outer-spin-button) {
+		-webkit-appearance: none;
+		margin: 0;
+	}
 	.load,
-	.paste,
 	.preview {
 		display: grid;
 		gap: 0.35rem;
-		margin-top: 0.75rem;
+		margin-top: 0.4rem;
 		max-width: 75ch;
 	}
-	.load-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.35rem 0.75rem;
-	}
-	.load p,
-	.paste p {
+	.load p {
 		margin: 0;
-	}
-	.paste label {
-		font-weight: 500;
-		font-size: 0.85rem;
-	}
-	.paste textarea {
-		width: 100%;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.8rem;
-	}
-	.file {
-		justify-self: start;
 	}
 	.actions {
 		display: flex;

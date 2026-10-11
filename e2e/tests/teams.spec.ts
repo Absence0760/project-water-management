@@ -9,6 +9,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeTeamSettings, openTeamSettings } from '../support/teams.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
 
 test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	void owner;
@@ -357,7 +358,7 @@ test('an admin sets the privacy contact; a member reads it; a farmer finds it fr
 	await expect(panel).toContainText('Only admins can change it.');
 	await expect(panel.getByRole('button', { name: 'Save contact' })).toHaveCount(0);
 
-	// A farmer of a team catchment: Menu → Who decides about your farm's information.
+	// A farmer of a team catchment: Menu → Who decides about your hydrological unit's information.
 	const made = await page.request.post(`${API_URL}/projects`, { data: { name: 'Contact catchment', teamId: team.id } });
 	expect(made.status(), await made.text()).toBe(201);
 	const project = ((await made.json()) as { project: { id: string } }).project;
@@ -370,10 +371,10 @@ test('an admin sets the privacy contact; a member reads it; a farmer finds it fr
 	await acceptInvites(farmer.user.email, project.id);
 	await farmer.page.goto(`/farm/${project.id}`);
 	await farmer.page.getByRole('button', { name: 'Menu' }).click();
-	await farmer.page.getByRole('link', { name: 'Who decides about your farm’s information' }).click();
+	await farmer.page.getByRole('link', { name: 'Who decides about your hydrological unit’s information' }).click();
 	await expect(farmer.page).toHaveURL(`/farm/${project.id}/who-decides`);
 	const card = farmer.page.getByRole('region', { name: 'Contact Board' });
-	await expect(card).toContainText('Contact Board decides what is done with your farm’s information in this catchment.');
+	await expect(card).toContainText('Contact Board decides what is done with your hydrological unit’s information in this catchment.');
 	await expect(card.getByRole('link', { name: 'io@contact-board.example' })).toHaveAttribute('href', 'mailto:io@contact-board.example');
 	await expect(card).toContainText('PO Box 7, Kloof 1234');
 	await expectNoViolations(farmer.page);
@@ -417,3 +418,74 @@ test('an admin renames and deletes the team from the settings sheet; a member le
 	await expect(page).toHaveURL(/\/teams$/);
 	await expect(page.getByText("You're not in any team yet.")).toBeVisible();
 });
+
+// Issue #520: the Members panel is a narrow side column, and a third column clipped "Reset two-step" to "Reset two-"
+// and "Remove" to "Rem" at 1440. The actions now take a line of their own under the name and role, and the email
+// wraps only before the @ or after a dot.
+for (const [colorScheme, viewport] of [
+	['light', { width: 1440, height: 900 }],
+	['dark', { width: 1440, height: 900 }],
+	['light', { width: 1280, height: 800 }],
+	['light', { width: 390, height: 844 }],
+	['dark', { width: 390, height: 844 }],
+	['light', { width: 320, height: 640 }]
+] as const) {
+	test.describe(`${colorScheme}, ${viewport.width} px`, () => {
+		test.use({ colorScheme, viewport });
+
+		test('a member row’s buttons sit whole inside the Members panel, on a line under the name and role (issue #520)', async ({ page, owner, signIn }) => {
+			void owner;
+			const team = (await (await page.request.post(`${API_URL}/teams`, { data: { name: `Members fit ${viewport.width}` } })).json()).team as { id: string };
+			const colleague = await signIn('Thandiwe Mokoena-Vermeulen');
+			expect((await page.request.post(`${API_URL}/teams/${team.id}/members`, { data: { email: colleague.user.email, role: 'member' } })).status()).toBe(201);
+			expect(await acceptInvites(colleague.user.email, team.id)).toBe(1);
+			await page.goto(`/teams/${team.id}`);
+			const members = page.getByRole('region', { name: 'Members' });
+			const row = members.getByRole('row').filter({ has: page.getByRole('rowheader', { name: /Thandiwe Mokoena-Vermeulen/ }) });
+			await expect(row).toBeVisible();
+			await layoutSettled(page);
+
+			const panel = (await members.boundingBox())!;
+			const wrap = (await members.locator('.table-wrap').boundingBox())!;
+			const role = (await row.getByRole('combobox', { name: /^Team role for/ }).boundingBox())!;
+			const name = (await row.getByRole('rowheader').boundingBox())!;
+			for (const label of [/^Reset two-step sign-in for /, /^Remove /]) {
+				const button = row.getByRole('button', { name: label });
+				await expect(button).toBeVisible();
+				const b = (await button.boundingBox())!;
+				// Whole inside the panel and its table's box: nothing clipped at either edge.
+				expect(b.x).toBeGreaterThanOrEqual(wrap.x);
+				expect(b.x + b.width).toBeLessThanOrEqual(wrap.x + wrap.width + 0.5);
+				expect(b.x + b.width).toBeLessThanOrEqual(panel.x + panel.width);
+				// On their own line, under the name and the role picker.
+				expect(b.y).toBeGreaterThanOrEqual(Math.max(name.y + name.height, role.y + role.height) - 0.5);
+				// The label is not cut inside the button either.
+				expect(await button.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+			}
+			expect(await members.locator('.table-wrap').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+			// The email wraps at its @ first, then only after a dot, never after a hyphen in its name, unless one part is
+			// wider than the whole line (a phone), which then wraps inside itself rather than run past the edge.
+			const email = await row.locator('.sub-email').evaluate((el) => {
+				const line = el.getBoundingClientRect().width;
+				const box = (u: Element) => {
+					const r = u.getBoundingClientRect();
+					const cs = getComputedStyle(u);
+					const h = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3;
+					return { text: u.textContent ?? '', wraps: r.height > h * 1.5, full: r.width >= line - 1 };
+				};
+				return { text: el.textContent ?? '', groups: [...el.querySelectorAll('.group')].map(box), parts: [...el.querySelectorAll('.part')].map(box) };
+			});
+			expect(email.text).toBe(colleague.user.email);
+			expect(email.groups.map((g) => g.text)).toEqual(colleague.user.email.split(/(?=@)/));
+			expect(email.parts.map((p) => p.text)).toEqual(colleague.user.email.split(/(?=@)|(?<=\.)/));
+			// The domain (@example.com) fits any of these widths, so it stays whole; a name or a part wraps inside
+			// itself only when it can't fit the line.
+			expect(email.groups.at(-1)!.wraps).toBe(false);
+			for (const u of [...email.groups, ...email.parts]) if (u.wraps) expect(u.full, `"${u.text}" wraps though it fits the line`).toBe(true);
+
+			await expectNoSidewaysScroll(page);
+			await expectNoViolations(page);
+		});
+	});
+}

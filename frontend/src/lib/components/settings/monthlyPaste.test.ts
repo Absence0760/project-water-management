@@ -30,7 +30,7 @@ describe('monthly evaporation paste (issue #477)', () => {
 	it('stops on a pan coefficient above 2 and a negative A-pan', () => {
 		const rows = monthlySettingRows(settings(), true);
 		expect(planSettingsPaste('Pan coefficient\t2.1', rows)).toEqual({ error: 'Pan coefficient, Oct: 2.1 is above 2.' });
-		expect(planSettingsPaste('A-pan evaporation\t-5', rows)).toEqual({ error: 'A-pan evaporation, Oct: -5 mm is below 0 mm.' });
+		expect(planSettingsPaste('A-pan evaporation\t-5', rows)).toEqual({ error: 'A-pan evaporation, Oct: −5 mm is below 0 mm.' });
 	});
 
 	it('a bare row pasted into a month fills from there', () => {

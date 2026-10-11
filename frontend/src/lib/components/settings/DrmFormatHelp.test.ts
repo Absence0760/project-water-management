@@ -54,7 +54,7 @@ describe('DrmFormatHelp builds on the shared Expected format', () => {
 		expect(daily).toContain('A CSV isn’t loaded here');
 		const rule = render(DrmFormatHelp, { props: { target: 'ruleTable', context: 'x' } }).body;
 		expect(rule).toContain('It fills the determination’s natural MAR and the REC.');
-		expect(rule).toContain('which goes into the paste box below the table');
+		expect(rule).toContain('which opens the paste dialog to pick the grid it fills');
 	});
 });
 
@@ -63,13 +63,16 @@ describe('the file load comes first', () => {
 
 	it('a rule table opens with its file load and Expected format, before the fields and grids; its CSV examples read back through the paste', () => {
 		const html = render(EwrRuleTablesEditor, { props: { value: [blankEwrRuleTable()], options } }).body;
-		const load = html.indexOf('Load a DRM file (.rul / .tab) or a CSV');
-		expect(load).toBeGreaterThan(html.indexOf('<legend>Rule table at Outlet (Gauge)</legend>'));
+		const load = html.indexOf('Load file…');
+		expect(load).toBeGreaterThan(html.indexOf('>Rule table at Outlet (Gauge)</h3>'));
 		expect(load).toBeLessThan(html.indexOf('>EWR site</label>'));
 		expect(html.indexOf('data-testid="format-help"')).toBeLessThan(html.indexOf('>EWR site</label>'));
 		expect(html.indexOf('aria-label="File result"')).toBeLessThan(html.indexOf('>EWR site</label>'));
-		// The paste box stays under the grid.
-		expect(html.indexOf('Paste from a spreadsheet')).toBeGreaterThan(html.indexOf('EWR at each % point'));
+		// Paste… sits in the card's head beside Load file… and opens the shared dialog (issue #521): no paste box in the page.
+		expect(html.indexOf('Paste…')).toBeGreaterThan(load);
+		expect(html.indexOf('Paste…')).toBeLessThan(html.indexOf('>EWR site</label>'));
+		expect(html).not.toMatch(/Paste from a spreadsheet|Or paste/);
+		expect(html).not.toContain('Fill the EWR values');
 		const csv = links(html).filter((l) => l.name.startsWith('ewr-'));
 		expect(csv.map((l) => l.name)).toEqual(['ewr-total-example.csv', 'ewr-low-flow-example.csv']);
 		for (const l of csv) {
@@ -84,7 +87,7 @@ describe('the file load comes first', () => {
 		expect(html).not.toContain('data-testid="format-help"');
 	});
 
-	it.each(['tab', 'percentile'] as const)('the daily EWR under %s: the file load and its Expected format sit above the tables, the paste box below', (method) => {
+	it.each(['tab', 'percentile'] as const)('the daily EWR under %s: the file load, Paste… and the Expected format sit above the tables, with no paste box', (method) => {
 		const html = render(EwrDailySourceFields, { props: { value: { ...blankEwrDailySource(), method }, modelAreaKm2: 10 } }).body;
 		const load = html.indexOf('Load a DRM file (.rul / .tab)');
 		const firstTable = html.indexOf('<caption');
@@ -92,7 +95,10 @@ describe('the file load comes first', () => {
 		expect(load).toBeLessThan(firstTable);
 		expect(html.indexOf('data-testid="format-help"')).toBeLessThan(firstTable);
 		expect(html.indexOf('aria-label="File result"')).toBeLessThan(firstTable);
-		expect(html.indexOf('aria-label="Paste result"')).toBeGreaterThan(html.lastIndexOf('</table>'));
+		expect(html.indexOf('Paste…')).toBeGreaterThan(load);
+		expect(html.indexOf('Paste…')).toBeLessThan(firstTable);
+		expect(html).not.toMatch(/Paste from a spreadsheet|Or paste/);
+		expect(html.indexOf('<textarea')).toBeGreaterThan(html.indexOf('<dialog'));
 		const csv = links(html).find((l) => l.name === 'ewr-example.csv')!;
 		const g = parseGrid(decoded(csv.href));
 		expect('error' in g ? g.error : [g.rows.length, g.rows[0]!.length]).toEqual([12, 10]);

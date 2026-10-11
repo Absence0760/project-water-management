@@ -1,6 +1,6 @@
 // CHIRPS fallback bias correction picker (settings.chirpsBiasCorrection,
 // engine ≥ 0.7.0; docs/model.md §2.4b).
-import { QM_WET_DAY_MM_DEFAULT, resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ChirpsQuantileMap, type ZeroRainMode, type ZeroRainSettings } from '@water-management/engine';
+import { QM_WET_DAY_MM_DEFAULT, resolveChirpsFitPeriod, type AccumulationMode, type ChirpsBiasMode, type ChirpsFitRange, type ChirpsQuantileMap, type ZeroRainMode, type RainSourcePeriod, type ZeroRainSettings, ZERO_RAIN_FILL_ABOVE_CHIRPS_MM } from '@water-management/engine';
 
 export const CHIRPS_BIAS_OPTIONS: { value: ChirpsBiasMode; label: string; help: string }[] = [
 	{
@@ -116,4 +116,48 @@ export function describeZeroRain(z: Partial<ZeroRainSettings> & Pick<ZeroRainSet
 	if (spread && z.keepReadings?.length) parts.push(count(z.keepReadings.length, 'reading kept as recorded'));
 	if (z.addAccumulations?.length) parts.push(count(z.addAccumulations.length, 'listed accumulation'));
 	return parts.join('; ');
+}
+
+/** What Settings → Rain gaps' folded line reads (ui-playbook.md § 2, "Settings at their defaults are one line"). */
+export interface RainGapSettings {
+	chirpsBiasCorrection?: ChirpsBiasMode;
+	chirpsQuantileMap?: ChirpsQuantileMap | null;
+	chirpsFitPeriod?: unknown;
+	zeroRainRuns?: Partial<ZeroRainSettings>;
+	rainSource?: RainSourcePeriod[] | null;
+}
+
+/** Every Rain gaps setting at its default: bias-corrected per month, no gap map, the whole record, zero runs missing above the default threshold, accumulations spread, nothing listed. */
+export function rainGapsAtDefaults(s: RainGapSettings): boolean {
+	const z = s.zeroRainRuns ?? {};
+	return (
+		(s.chirpsBiasCorrection ?? 'monthly') === 'monthly' &&
+		!s.chirpsQuantileMap &&
+		!Array.isArray(s.chirpsFitPeriod) &&
+		(z.mode ?? 'missing') === 'missing' &&
+		(z.fillAboveChirpsMm ?? ZERO_RAIN_FILL_ABOVE_CHIRPS_MM) === ZERO_RAIN_FILL_ABOVE_CHIRPS_MM &&
+		(z.accumulationMode ?? 'spread') === 'spread' &&
+		!z.keepDry?.length &&
+		!z.missing?.length &&
+		!z.keepReadings?.length &&
+		!z.addAccumulations?.length &&
+		!s.rainSource?.length
+	);
+}
+
+/** "bias-corrected per month, whole record, zero runs missing, accumulations spread", with whatever is listed. */
+export function rainGapsLine(s: RainGapSettings): string {
+	const z = s.zeroRainRuns ?? {};
+	const raw = s.chirpsBiasCorrection === 'none';
+	const listed = (z.keepDry?.length ?? 0) + (z.missing?.length ?? 0) + (z.keepReadings?.length ?? 0) + (z.addAccumulations?.length ?? 0);
+	return [
+		raw ? 'raw CHIRPS' : `bias-corrected per month${s.chirpsQuantileMap ? ', quantile-mapped' : ''}`,
+		raw ? null : Array.isArray(s.chirpsFitPeriod) ? count(s.chirpsFitPeriod.length, 'fit range') : 'whole record',
+		z.mode === 'asRecorded' ? 'zero runs as recorded' : 'zero runs missing',
+		z.accumulationMode === 'asRecorded' ? 'accumulations as recorded' : 'accumulations spread',
+		listed ? `${count(listed, 'period')} listed` : null,
+		s.rainSource?.length ? count(s.rainSource.length, 'rain-source period') : null
+	]
+		.filter(Boolean)
+		.join(', ');
 }

@@ -14,6 +14,7 @@
 		wuaName = null,
 		offline = false,
 		attempts = 1,
+		title = null,
 		retry
 	}: {
 		kind: 'no-publication' | 'removed' | 'error';
@@ -23,13 +24,15 @@
 		wuaName?: string | null;
 		offline?: boolean;
 		attempts?: number;
+		/** The error's title where the page isn't a farm's figures (who-decides); else "We couldn't load your hydrological unit". */
+		title?: string | null;
 		retry?: () => void;
 	} = $props();
 </script>
 
 {#if kind === 'error'}
 	<div class="error" role="alert">
-		<h1>{stateText('errorTitle')}</h1>
+		<h1>{title ?? stateText('errorTitle')}</h1>
 		<p>{stateText('errorText')}</p>
 		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>{t('Try again')}</button>{/if}
 		{#if attempts > 1}<p>{stillFailing(offline, wuaName)}</p>{/if}
