@@ -342,7 +342,10 @@ describe('buildOp', () => {
 		// Empty is open, as Scale rainfall's: the op leaves the dates out and scales every day.
 		expect(b({ demandPct: '85', from: '', to: '  ' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 0.85 } });
 		// Checked as series.scale's dates are.
-		expect(b({ demandPct: '130', from: '2016-02-30' })).toEqual({ ok: false, error: 'From: must be an ISO date (YYYY-MM-DD)' });
+		expect(b({ demandPct: '130', from: '2016-02-30' })).toEqual({ ok: false, error: 'From: type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15' });
+		// Typed day first, as Trace a day and Edit a day read them (never month first).
+		expect(b({ demandPct: '130', from: '1 Oct 2015', to: '30/09/2016' })).toEqual({ ok: true, op: { op: 'demand.scale', factor: 1.3, from: '2015-10-01', to: '2016-09-30' } });
+		expect(b({ demandPct: '130', to: '09/30/2016' })).toEqual({ ok: false, error: 'To: type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15' });
 		expect(b({ demandPct: '130', from: '2017-01-01', to: '2016-09-30' })).toEqual({ ok: false, error: expect.stringMatching(/from 2017-01-01 is after to 2016-09-30/) });
 		expect(describeOp({ op: 'demand.scale', factor: 1.3, from: '2015-10-01', to: '2016-09-30' }, base())).toBe(
 			"Irrigation demand of every hydrological unit: 130 % of what they'd take (× 1.3), 2015-10-01 to 2016-09-30"
@@ -517,7 +520,8 @@ describe('the later ops (engine ≥ 1.35.0): build, describe, apply', () => {
 		// Picking it starts the form from what it holds; a replacement keeps its id.
 		const a = withVolume.input.model.allocations![0]!;
 		const refill = allocationDraft(emptyDraft('allocation.set'), a);
-		expect(refill).toMatchObject({ nodeId: UP, alVolume: '120000', alFrom: '2020-10-01', months: [1, 2, 3], alRate: '0.05', alStorage: '' });
+		// The registered dates come back day first, as the field shows a typed day.
+		expect(refill).toMatchObject({ nodeId: UP, alVolume: '120000', alFrom: '1 Oct 2020', months: [1, 2, 3], alRate: '0.05', alStorage: '' });
 		const replace = (buildOp({ ...refill, allocationId: a.id, alVolume: '90000' }, withVolume.input.model, id) as { op: ScenarioOp }).op;
 		expect(replace).toEqual({ op: 'allocation.set', allocation: { ...a, volumeM3PerYear: 90_000 } });
 		expect(describeOp(replace, withVolume.input)).toBe('Upper farm: registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s → surface 90\u202f000 m³/a, valid 2020-10-01 to …, Jan, Feb, Mar only, at most 0.05 m³/s');

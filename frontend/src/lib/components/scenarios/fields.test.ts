@@ -211,6 +211,13 @@ describe('parseValue', () => {
 		expect(parseValue(pct, '12,5')).toEqual({ ok: true, value: 0.125 });
 		expect(parseValue({ t: 'number', unit: 'm³', scale: 1, nullable: false }, '180,000')).toEqual({ ok: true, value: 180_000 });
 	});
+	it('reads a typed date day first and gives it back day first', () => {
+		const date = { t: 'date', nullLabel: 'the whole run' } as const;
+		expect(parseValue(date, '1 Mar 2022')).toEqual({ ok: true, value: '2022-03-01' });
+		expect(parseValue(date, '01/03/2022')).toEqual({ ok: true, value: '2022-03-01' });
+		expect(parseValue(date, '2022-03-01')).toEqual({ ok: true, value: '2022-03-01' });
+		expect(valueText(date, '2022-03-01')).toBe('1 Mar 2022');
+	});
 	it('is null only where the field allows it', () => {
 		expect(parseValue(pct, '')).toEqual({ ok: false, error: 'enter a number' });
 		expect(parseValue({ t: 'number', unit: 'm²', scale: 1, nullable: true }, ' ')).toEqual({ ok: true, value: null });
@@ -219,7 +226,8 @@ describe('parseValue', () => {
 	it('refuses what isn’t a value of the field', () => {
 		expect(parseValue(pct, 'lots')).toEqual({ ok: false, error: '“lots” isn\'t a number' });
 		expect(parseValue({ t: 'number', unit: '', scale: 1, nullable: false, int: true }, '2.5')).toEqual({ ok: false, error: 'enter a whole number' });
-		expect(parseValue({ t: 'date', nullLabel: '' }, '2021-02-30')).toEqual({ ok: false, error: 'enter a date as YYYY-MM-DD' });
+		expect(parseValue({ t: 'date', nullLabel: '' }, '2021-02-30')).toEqual({ ok: false, error: 'type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15' });
+		expect(parseValue({ t: 'date', nullLabel: '' }, '11/15/2021')).toEqual({ ok: false, error: 'type a day, day first: 15 Nov 2021, 15/11/2021 or 2021-11-15' });
 		expect(parseValue({ t: 'enum', options: [{ value: 'a', label: 'A' }] }, 'b')).toEqual({ ok: false, error: 'pick one of the options' });
 		expect(parseValue({ t: 'text' }, '  ')).toEqual({ ok: false, error: 'enter a name' });
 	});

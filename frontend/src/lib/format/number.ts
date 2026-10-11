@@ -144,6 +144,19 @@ export function parseDay(input: string): string | null {
 	return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/** The words a typed day's field and its message use: what parseDay reads. */
+export const DAY_FIRST_EXAMPLES = '15 Nov 2021, 15/11/2021 or 2021-11-15';
+
+/**
+ * A typed day's text as the field shows it once read: "2021-11-15" or
+ * "15/11/2021" → "15 Nov 2021" (fmtDay); text parseDay can't read stays as
+ * typed, so the field can say what's wrong with it. For a field's blur.
+ */
+export function tidyDay(text: string): string {
+	const iso = parseDay(text);
+	return iso ? fmtDay(iso) : text;
+}
+
 /**
  * A date search box's query → the ISO prefix it names, so a table that shows
  * its days day first ("15 Nov 2021") finds them as they read. A whole day as

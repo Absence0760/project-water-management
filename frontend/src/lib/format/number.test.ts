@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, parseNum, zonedIsoDate } from './number';
+import { dayPrefix, fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, fmtStamp, fmtWhen, localIsoDate, parseDay, parseNum, tidyDay, zonedIsoDate } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -184,6 +184,15 @@ describe('zonedIsoDate', () => {
 		expect(zonedIsoDate(now, 'Africa/Johannesburg')).toBe('2024-01-06');
 		expect(zonedIsoDate(now, 'UTC')).toBe('2024-01-05');
 		expect(() => zonedIsoDate(now, 'Not/AZone')).toThrow(RangeError);
+	});
+});
+
+describe('tidyDay', () => {
+	it('shows a day it reads day first, and leaves anything else as typed', () => {
+		expect(tidyDay('2021-11-15')).toBe('15 Nov 2021');
+		expect(tidyDay(' 15/11/2021 ')).toBe('15 Nov 2021');
+		expect(tidyDay('11/15/2021')).toBe('11/15/2021');
+		expect(tidyDay('')).toBe('');
 	});
 });
 

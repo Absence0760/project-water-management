@@ -188,6 +188,11 @@ test('the flow chart keeps the Runs tab’s controls: m³/s ↔ m³/day, and Ear
 		return ungroup((await simulated.locator('.u-value').textContent())!);
 	};
 	const perSecond = await valueAt();
+	// The read-out's day is day first, as the axis ticks are (LineChart's Date row through fmtDay, issue #521): the
+	// chart opens on the last water year, so the hovered day is in October 2021 to September 2022.
+	const day = fig.locator('.u-legend tr.u-series').first();
+	await expect(day.locator('.u-label')).toHaveText('Date');
+	await expect(day.locator('.u-value')).toHaveText(/^(?:[1-9]|[12]\d|3[01]) (?:(?:Oct|Nov|Dec) 2021|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep) 2022)$/);
 	await units.getByRole('button', { name: 'm³/day' }).click();
 	await expect(units.getByRole('button', { name: 'm³/day' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(simulated.locator('.u-label')).toHaveText('Simulated outflow (m³/day)');

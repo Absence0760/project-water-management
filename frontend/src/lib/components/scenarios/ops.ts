@@ -41,7 +41,7 @@ import {
 } from '@water-management/engine';
 import type { DroughtRestrictionRule, EwrDailySource } from '@water-management/engine';
 import { newNode } from '$lib/model/editor.svelte';
-import { fmtNum, parseNum } from '$lib/format/number';
+import { DAY_FIRST_EXAMPLES, fmtDay, fmtNum, parseDay, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import {
 	CROP_FIELD_SPECS,
@@ -616,8 +616,8 @@ export function allocationDraft(d: OpDraft, a: AllocationEntry | undefined): OpD
 		alSource: a.waterSource,
 		alVolume: t(a.volumeM3PerYear),
 		alStorage: t(a.storageM3),
-		alFrom: a.validFrom ?? '',
-		alTo: a.validTo ?? '',
+		alFrom: a.validFrom ? fmtDay(a.validFrom) : '',
+		alTo: a.validTo ? fmtDay(a.validTo) : '',
 		alRate: t(a.maxRateM3s)
 	};
 }
@@ -678,6 +678,14 @@ function number(text: string, what: string, opts: { nullable?: boolean; scale?: 
 	if (n === null) throw new DraftError(`${what}: “${t}” isn't a number`);
 	if (opts.int && !Number.isInteger(n)) throw new DraftError(`${what} must be a whole number`);
 	return Math.round((n / (opts.scale ?? 1)) * 1e9) / 1e9;
+}
+/** A typed day, day first (parseDay, ui-playbook § 2 "A typed date is day first too") → YYYY-MM-DD; empty is none. */
+function day(text: string, what: string): string | null {
+	const t = text.trim();
+	if (t === '') return null;
+	const iso = parseDay(t);
+	if (!iso) throw new DraftError(`${what}: type a day, day first: ${DAY_FIRST_EXAMPLES}`);
+	return iso;
 }
 function parsed(spec: ValueSpec, input: string | number[] | PeDraft | DroughtRestrictionRule | EwrDailySource | null, what: string): unknown {
 	const p = parseValue(spec, input);
@@ -889,8 +897,10 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'series.scale': {
 				const pct = number(d.changePct, 'the change');
 				const s: Extract<ScenarioOp, { op: 'series.scale' }> = { op: 'series.scale', kind: d.seriesKind, factor: Math.round((1 + pct! / 100) * 1e9) / 1e9 };
-				if (d.from.trim()) s.from = d.from.trim();
-				if (d.to.trim()) s.to = d.to.trim();
+				const from = day(d.from, 'From');
+				const to = day(d.to, 'To');
+				if (from) s.from = from;
+				if (to) s.to = to;
 				op = s;
 				break;
 			}
@@ -904,8 +914,10 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				if (d.demandCategory === 'user') s.category = 'user';
 				else if (d.demandPart) s.part = d.demandPart;
 				// Dates (engine ≥ 1.82.0), the same From/To fields as series.scale's.
-				if (d.from.trim()) s.from = d.from.trim();
-				if (d.to.trim()) s.to = d.to.trim();
+				const from = day(d.from, 'From');
+				const to = day(d.to, 'To');
+				if (from) s.from = from;
+				if (to) s.to = to;
 				op = s;
 				break;
 			}
@@ -933,13 +945,8 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				};
 				const storage = number(d.alStorage, 'the storage', { nullable: true });
 				if (storage !== null) a.storageM3 = storage;
-				const date = (text: string, what: string) => {
-					const t = text.trim();
-					if (t && !/^\d{4}-\d{2}-\d{2}$/.test(t)) throw new DraftError(`${what}: enter a date as YYYY-MM-DD`);
-					return t || null;
-				};
-				const from = date(d.alFrom, 'Valid from');
-				const to = date(d.alTo, 'Valid to');
+				const from = day(d.alFrom, 'Valid from');
+				const to = day(d.alTo, 'Valid to');
 				if (from) a.validFrom = from;
 				if (to) a.validTo = to;
 				const months = [...new Set(d.months)].sort((x, y) => x - y);

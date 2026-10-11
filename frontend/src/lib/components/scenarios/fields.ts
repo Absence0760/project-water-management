@@ -33,7 +33,6 @@ import {
 	USER_PRIORITY_LABEL,
 	ZERO_RAIN_MODES,
 	damCurveProblem,
-	isIsoDate,
 	type DamCurvePoint,
 	type CropSetField,
 	type DemandObjectSetField,
@@ -48,7 +47,7 @@ import {
 import { describeDroughtRestriction, describeEwrDailySource, ewrDailySourceIssues, type DroughtRestrictionRule, type EwrDailySource } from '@water-management/engine';
 import { restrictionFormError } from '$lib/components/settings/droughtRestriction';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { fmtNum, parseNum } from '$lib/format/number';
+import { DAY_FIRST_EXAMPLES, fmtDay, fmtNum, parseDay, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
 import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
@@ -454,9 +453,12 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 		}
 		case 'bool':
 			return text === 'true' || text === 'false' ? { ok: true, value: text === 'true' } : { ok: false, error: 'pick yes or no' };
-		case 'date':
+		case 'date': {
 			if (text === '') return { ok: true, value: null };
-			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
+			// Typed day first (ui-playbook § 2 "A typed date is day first too"); stored as YYYY-MM-DD.
+			const iso = parseDay(text);
+			return iso ? { ok: true, value: iso } : { ok: false, error: `type a day, day first: ${DAY_FIRST_EXAMPLES}` };
+		}
 		case 'node':
 			return text ? { ok: true, value: text } : spec.nullLabel !== undefined ? { ok: true, value: null } : { ok: false, error: 'pick a hydrological unit' };
 		case 'system':
@@ -536,6 +538,8 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 			return peDraftOf(v, undefined).mm;
 		case 'curve':
 			return Array.isArray(v) ? curveText(v as DamCurvePoint[]) : '';
+		case 'date':
+			return typeof v === 'string' ? fmtDay(v) : '';
 		case 'reductions': {
 			const r = v as { mar?: unknown; lowFlow?: unknown };
 			return typeof r.mar === 'number' && typeof r.lowFlow === 'number' ? `${round(r.mar * 100)}; ${round(r.lowFlow * 100)}` : '';
