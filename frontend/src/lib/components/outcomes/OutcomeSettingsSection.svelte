@@ -100,7 +100,7 @@
 					</div>
 				</div>
 			{/if}
-			<p class="hint">{m.hint}</p>
+			<p class="hint explain">{m.hint}</p>
 		</fieldset>
 	{/each}
 	<p class="hint muted explain">
