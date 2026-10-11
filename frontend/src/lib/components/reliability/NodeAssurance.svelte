@@ -117,9 +117,6 @@
 		font-size: 0.95rem;
 		margin: 0 0 0.25rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.lead,
 	.facts,
 	.note,

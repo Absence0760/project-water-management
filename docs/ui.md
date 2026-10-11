@@ -1005,6 +1005,20 @@ first and says it reverts every unsaved model edit, not only the modal's,
 and **Save changes**, after which the row says "Changes saved." and the
 focus stays in it, on **Done**.
 
+**On a phone** (issue #521 round 5; both were three rows, about 144 px, even
+with nothing to save): a save row is one row of three equal buttons,
+**Discard**, **Done** and **Save** (their names stay "Discard model changes"
+and "Save changes", the rest of the words hidden but read); "No unsaved
+changes" is kept for screen readers only, and the status and the reason
+show once there are changes (`ModelSaveRow`'s own container query, 560 px).
+The page's save bar puts its status in the buttons' row as the dot and a
+word ("Unsaved", "2 problems"; the whole sentence stays the live region's
+text, and a failed save keeps its message on a row of its own), with the
+reason under it: two rows, about 110 px. The page's `scroll-padding-bottom`
+follows the bar's measured height, so a focused field is never under it
+(WCAG 2.4.11). `e2e/tests/phone-edit-controls.spec.ts` pins both at 390,
+360 and 320 px.
+
 **Run model with unsaved edits.** A run uses the saved model, so the
 header's **Run model** on every other tab (its form's **Run model** and
 **Run forecast**, `workspace/RunButton.svelte`, through the page's
@@ -1234,19 +1248,43 @@ role, freshness, Add data) and each tab's own header:
   header as it was. `section-header.spec.ts` pins at most 2 context lines at
   1440/1280/1024, and 1 whenever the controls are beside it.
 - **Phones (a header 640 px wide or less, a container query):** the same
-  header after the Sections button. The pills are a line of their own: the
-  Summary's **Setup complete** (or the Map's **Getting started**) and the
-  rain pill share it, the rain pill's words wrapping inside it (its date and
-  its age each whole) rather than each pill taking a half-empty row; a
-  pill's list opens rightwards from the row's left edge, on the screen
-  (`overview.spec.ts`); a picker (a run select) takes a full row;
-  the tab's buttons and the main box then fill full rows, every control
-  growing to fill its row, and Add data and Run model always end the
-  header (the main box never splits; Run model's form is nudged to stay on
-  the screen). Runs' run form is a row of its own under Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
-  on every section with a big catchment, plus the overlays' phone scans (node
-  sheet, node table, Allocations' sheets, New scenario, Add data, the
-  Sections menu).
+  header after the Sections button, laid out so the tab's content starts in
+  the first half of a 360 × 740 screen (issue #521 round 5: it started at
+  429–579 px, the header taking 48–78 % of the first screen). The
+  catchment's name and your role go in the app's phone bar in place of the
+  "Water Management" word mark (the logo stays, linking to the projects;
+  `layout/sidebar.svelte.ts` `fillPhoneTitle`), the name in at most two
+  lines with the whole name in its title. **How this page works** is a "?"
+  after the title (36 px, its target 44 px), named in words. The pills share
+  one row: the Summary's **Setup complete** (or the Map's **Getting
+  started**) and the rain pill, the last pill's words wrapping inside it (its
+  date and its age each whole); a pill's list opens rightwards from the
+  row's left edge, on the screen (`overview.spec.ts`). The tab's own
+  controls fold into one **⋯** button (**More actions**) at the end of that
+  row, its list under it naming every one: its pickers (each named over its
+  select there, the name only for screen readers on a wide screen), links,
+  buttons and menus (Tables ▾ opens in place inside the list). The same
+  elements as on a wide screen, so nothing is dropped: a pick closes the
+  list and leaves the focus on ⋯, so a sheet it opens hands the focus back
+  there; a control inside one of the list's own menus leaves it open;
+  Escape (after a menu inside it), a click elsewhere or leaving it closes
+  it. Without pills the ⋯ starts the main box's row. Add data and Run model
+  then share the last row (the main box never splits; Run model's form is
+  nudged to stay on the screen); on Runs & results the run label and its
+  field fill a row, then Add data, Run forecast and Run model share the next
+  in equal parts (the form draws no box of its own there). While new data is
+  waiting the header's button reads **Re-run model** and the notice line is
+  words only ("New data since the last run (…)."), since the two buttons did
+  the same thing 8 px apart; a wide screen keeps both. A viewer's **View
+  only** note is one line ("View only. Ask the owner to edit."; the role
+  badge in the bar says it too), the full sentence still read by screen
+  readers. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
+  on every section at 360, 390 and 320 px with a big catchment (the header's
+  foot at most 370 px down at 360 × 740, the ⋯ on the pills' row, the last
+  row filled, Re-run model), More actions' list (names, on the screen,
+  Escape, focus back from a sheet, a menu inside it), the viewer, plus the
+  overlays' phone scans (node sheet, node table, Allocations' sheets, New
+  scenario, Add data, the Sections menu).
 - **Compare runs** draws no title of its own in the workspace: it gives the
   header its context ("Baseline “…” against one what-if · …"); the
   standalone `/compare` page keeps its own `h1`.
@@ -1903,6 +1941,14 @@ it scrolls, and isn't fitted to the window.
   until 2026-09 (issue #176): each repeats the header line of the tab it
   links to, so the first row now answers what the project is and who has
   it.
+- **Members** on a phone (under 560 px; issue #521 round 5: Leave read
+  "Lea" and Remove "Remo" at 390 px, the role select 25 px tall): each
+  member is a row of two lines, as on the team page (issue #520), the name
+  with the email under it beside the role, the role taking the full width
+  when it has more under it (the applying party, the authority tick), then
+  **Leave** or **Remove** on a line of its own; the role picker and the
+  buttons are 44 px. The rows are grids there, so the table keeps its roles
+  explicitly.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
@@ -3943,16 +3989,25 @@ map" card) stays the schematic; this is the geography.
   from QGIS; its **Expected format** gives the shapes, the `kind` words and
   an example file, `map/example-features.geojson`, [Expected format](#expected-format))
   and **Review**, which reads it on the server
-  (`POST …/map/import/preview`). Then the sheet widens to the review: a line
-  with the file's name and its features counted by kind ("Check each kind
-  before you import; nothing is saved until then"), **Set every row’s
+  (`POST …/map/import/preview`). Under the file field one short line
+  ("WGS84 longitude and latitude; a file in a Lo zone or UTM is refused."),
+  the reprojection recipe and "a file may mix kinds" kept in its
+  description and its ⓘ. Then the sheet widens to the review: a line
+  with the file's name and its features counted by kind ("Kinds come from
+  the file’s properties, else from each shape" when some do, then "Check
+  each kind before you import; nothing is saved until then"), **Set every row’s
   kind** (a default for the Kind column: each row whose shape can be that
   kind takes it, and the line under it counts those that can't), and a
   table, one row per feature: #, Name (editable), Shape (point, line or
   polygon, with its area), Kind (only the kinds its shape can be, with
-  "from the file" or "from its shape" under it, and why a kind the file gave
-  wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
-  boundary or river) and Problems. While a row is marked as the boundary
+  "from its shape" under it when it was guessed, and why a kind the file gave
+  wasn't used; "from the file" is said once in the summary and stays each
+  row's description for a screen reader), Stands for (the nodes that kind
+  can stand for, or "–" for a boundary or river) and Problems, a column only
+  while some row has one (a column of "None" took the room the names need:
+  Name is at least 14rem). The column names stay at the top of the sheet's
+  scroll (the table's box doesn't scroll, so its head sticks to the sheet's
+  body); the cells are top-aligned. While a row is marked as the boundary
   and the project has one, a warning over the table says "Importing
   replaces the current catchment boundary “X”: it goes from the map." with
   a **Replace the current boundary** tick (off for every file); **Import**
@@ -3961,8 +4016,16 @@ map" card) stays the schematic; this is the geography.
   refused feature, or a file imported already (by SHA-256) show in an alert
   over the table and disable **Import n features**; **Choose another file**
   goes back. A refused file imports nothing; a taken one closes the sheet
-  and picks its first feature. On a phone each row is a card of labelled
-  fields (`importReview.ts` holds the rules, `importReview.test.ts`). Under
+  and picks its first feature. A file nothing in can be imported says
+  "Nothing in this file can be imported.", lists its problems once in the
+  alert (no table of dashes repeating them) and leaves **Choose another
+  file** as the one, main action. On a phone each row is a card of labelled
+  fields under 200 px (it was 352 px; issue #521 round 5): a head line with
+  the number and shape ("1 · Polygon, 0.35 ha"), the name, then Kind and
+  Stands for side by side where the card is 20rem or wider, no Problems line
+  on a row without one, labels at 0.85rem (`importReview.ts` holds the
+  rules, `importReview.test.ts`; `map-import-review.spec.ts` pins the
+  layout at 1440, 390, 360 and 320 px). Under
   it, **Imported files**: each file with its feature count, date, who
   imported it and its SHA-256 cut to 12 characters (the full hash in the
   tooltip) with **Copy**.
@@ -5681,11 +5744,11 @@ two.
   so ("fill it again, or update the note"). The Pan-coefficient preset
   picker goes back to "Choose a preset…" after a pick the same way (it used
   to keep showing the preset),
-  and, behind an **Advanced** disclosure (issue #174: 28.25 is kept for
-  workbook parity and rarely changed), days in February. The closed
-  disclosure's summary names the value ("Advanced: days in February,
-  28.25") and adds "(not the default 28.25)" in amber when it differs, so a
-  changed value is never hidden.
+  and, folded into its value (issue #174: 28.25 is kept for workbook parity
+  and rarely changed; the app's fold, `common/Fold.svelte`, since issue #521
+  round 5), days in February. The closed fold's line names the value
+  ("Advanced, days in February: 28.25") and adds "(not the default 28.25)"
+  when it differs, so a changed value is never hidden.
 - **Calibration is four panels**, each its own menu entry, rather than one
   long one: Flow calibration, Calibration record, Fit the parameters and the
   WR2012 check, in that order, after Rain gaps (under Data & rain).
@@ -5809,8 +5872,9 @@ two.
       indicative, from FAO-56 Table 5 climate classes, Allen et al. 1998;
       model.md §2.4a) fills the pan-coefficient row with a starting point;
       the row stays editable after, and the preset's name goes into the
-      **Pan coefficient source** note below the row. Below it, a collapsed **Suggest from
-      FAO-56 Table 5 (humidity, wind, siting)** helper
+      **Pan coefficient source** note below the row. Below it, a closed fold,
+      **Suggest from FAO-56 Table 5: humidity, wind, siting** (the app's fold
+      since issue #521 round 5), the helper
       (`settings/PanCoefficientHelper.svelte`, part of the Settings tab's
       chunk, hidden on a read-only view): the pan siting (Case A, green crop, or
       Case B, dry fallow) as radios, the windward fetch as a select (1, 10,
@@ -6179,7 +6243,11 @@ two.
     **Apply to form again**, and the unsaved settings take over the leave
     guard from the fit.
     At the card's foot (issue #521), **Fit record of these parameters**
-    (`calibration/FitProvenance.svelte`) shows the record: model and time (day first, in UTC: "GR4J fit of 24 Sep 2026 10:05 UTC"),
+    (`calibration/FitProvenance.svelte`), in a fold whose line is the
+    record's first ("Fit record: GR4J fit of 24 Sep 2026 10:05 UTC",
+    `provenance.ts fitRecordLine`; open from 1024 px, closed on a phone,
+    where its ~1,300 px stood between the two cards, issue #521 round 5;
+    Find a setting still opens it), shows the record: model and time (day first, in UTC: "GR4J fit of 24 Sep 2026 10:05 UTC"),
     objective, seed, model runs, engine version, the record and window fitted
     to, the pan coefficient and A-pan evaporation it ran under (month by
     month, or "not recorded" for a fit made before this was tracked) and the
@@ -6381,7 +6449,8 @@ two.
   Then the **TAB flows** row (12 inputs, m³/s, Oct … Sep) or the two
   **Natural flow** and **Total Reserve flow percentile tables** (12 rows × the
   ten points, m³/s), each before scaling, and under them **The tables scaled
-  to the model (each value × s)** (open; `settings/ScaledEwrTablesView.svelte`,
+  to the model: each value × s** (an open fold, its line saying "once the
+  tables and the scale factor are known" until then; `settings/ScaledEwrTablesView.svelte`,
   `ewrDailySource.ts scaledEwrTables`, issue #90 B1 gap a): the tables the
   method reads × s, read only, as soon as s is known (the area ratio at once,
   the MAR ratio from the last run, exact or estimated as the factor line
@@ -9238,9 +9307,12 @@ property, the registered user (editors), reference, and **Licence
 conditions** (issue #72): a short legend, with "Optional; a cap run keeps to
 the months and the rate." as the line under it and the fieldset's
 description (until issue #521 it sat in the legend, which wrapped at 390 px
-with the border running through it): the months
-water may be taken (twelve boxes in water-year order, none ticked = none
-stated, each a 24 px target), the maximum rate (m³/s) and the other
+with the border running through it): the months water may be taken (the
+app's month picker, `common/MonthPicker.svelte` since issue #521 round 5,
+which replaced its own 21 px boxes: twelve toggles in water-year order, at
+least 24 px and two rows of six at 44 px on a phone, with **All months** /
+**No months** and the months in words under them; none ticked = none
+stated), the maximum rate (m³/s) and the other
 conditions one a line; Save and Cancel pinned.
 
 **Phone and narrow windows**: one column (list, picked unit, volumes, every
@@ -11509,6 +11581,24 @@ data button or Run button.
   scroll them (WCAG 2.1.1). One watcher does this app-wide
   (`lib/a11y/scrollRegions.ts`, started by the root layout); a box names
   itself with `data-scroll-label`, or takes its table caption or section name.
+  Each box that scrolls sideways shows it (issue #521 round 5: a table cut at
+  a column edge looked finished): a soft shadow on the edge that has more,
+  drawn by CSS alone (`.table-wrap`'s background, app.css), and the watcher
+  marks it `data-scrolls-x`, so on a phone a first column that names the
+  rows (`th scope="row"`) stays at the left as it scrolls. A table restyled
+  as cards on a phone doesn't scroll, so it never gets that
+  (`phone-edit-controls.spec.ts`).
+- **Fields**: a field in a table cell is at least 24 px tall everywhere
+  (WCAG 2.5.8; some were 21–25 px), 44 px on a touch screen; a field that
+  stands alone on a phone (a picker beside its label, a filter, every field
+  of a card) is 44 px (issue #521 round 5).
+- **Small text on a phone**: the shared small text (badges, `.small` lines,
+  table column heads, tile labels) is at least 12 px under 640 px (0.85rem,
+  11.9 px, counts; app.css), where it was 10.5–11.2 px; a component's own
+  smaller size for those classes is held to it too
+  (`phone-edit-controls.spec.ts` walks them on nine tabs). Chart ticks keep
+  chart.ts's own rules, and a component's own classes (run tags, sparkline
+  letters) are not yet covered.
 - **Charts say what they show** ([ui-playbook](design/ui-playbook.md) § 3,
   "Label every chart"): a title or caption naming the quantity, its units,
   the time axis, a legend or direct labels, and a text equivalent. A line

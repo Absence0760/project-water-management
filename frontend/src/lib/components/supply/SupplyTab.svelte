@@ -704,9 +704,6 @@
 		align-items: center;
 		min-height: 24px;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.chart-col {
 		min-width: 0;
 		display: flex;

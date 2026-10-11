@@ -560,13 +560,23 @@ textarea {
    absolutely positioned bits inside its cells (visually-hidden labels), so
    they are clipped with the table instead of widening the page: on a phone
    they gave /compare and the report 185 px of sideways scroll. */
+/* A table wider than its box shows it (issue #521 round 5: a table cut at a column edge looked finished): a soft
+   shadow on the side that has more, drawn by CSS alone. Two covers in the surface's colour scroll with the
+   content (`local`) and sit on its two ends; two shadows stay on the box's edges (`scroll`). At an end, its cover
+   lies over that edge's shadow; with nothing to scroll, both covers hide both shadows. */
 .table-wrap {
+	--scroll-shade: color-mix(in srgb, var(--text) 22%, transparent);
 	position: relative;
 	overflow: auto;
 	max-height: 70vh;
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
-	background: var(--surface);
+	background:
+		linear-gradient(to right, var(--surface) 40%, transparent) left / 2.5rem 100% no-repeat local,
+		linear-gradient(to left, var(--surface) 40%, transparent) right / 2.5rem 100% no-repeat local,
+		radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) left / 0.9rem 100% no-repeat scroll,
+		radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) right / 0.9rem 100% no-repeat scroll,
+		var(--surface);
 }
 table.data {
 	width: 100%;
@@ -609,6 +619,27 @@ table.data tbody th {
 	text-align: left;
 	font-weight: 500;
 }
+/* On a phone a table's row names stay in view as it scrolls sideways (issue #521 round 5; the Settings tables
+   did it on their own): in a box that scrolls sideways (`data-scrolls-x`, set by lib/a11y/scrollRegions.ts), a
+   first column that names the rows (a th scope="row") is fixed at the left. A table restyled as cards on a
+   phone doesn't scroll, so it never gets it. */
+@media (max-width: 640px) {
+	.table-wrap[data-scrolls-x] table.data tbody th[scope='row']:first-child,
+	.table-wrap[data-scrolls-x] table.data:has(tbody th[scope='row']:first-child) thead tr:last-child th:first-child {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: var(--surface);
+		box-shadow: inset -1px 0 0 var(--border);
+	}
+	.table-wrap[data-scrolls-x] table.data:has(tbody th[scope='row']:first-child) thead tr:last-child th:first-child {
+		z-index: 2;
+		background: var(--surface-2);
+	}
+	.table-wrap[data-scrolls-x] table.data tbody tr.flag > th[scope='row']:first-child {
+		background: var(--row-flag);
+	}
+}
 table.data tfoot td,
 table.data tfoot th {
 	border-top: 2px solid var(--border-strong);
@@ -621,6 +652,14 @@ table.data td input:where(:not([type='checkbox'], [type='radio'])),
 table.data td select {
 	width: 100%;
 	padding: 0.2rem 0.35rem;
+	/* WCAG 2.5.8's 24 px everywhere, the tap size on a touch screen (issue #521 round 5: 21–25 px). */
+	min-height: 24px;
+}
+@media (pointer: coarse) {
+	table.data td input:where(:not([type='checkbox'], [type='radio'])),
+	table.data td select {
+		min-height: var(--tap);
+	}
 }
 table.data.compact td input[type='number'] {
 	min-width: 4.5rem;
@@ -751,6 +790,26 @@ table.data tr.flag {
 /* Secondary text: hints, captions, notes. Usually with .muted. */
 .small {
 	font-size: 0.8rem;
+}
+/* A phone's floor for the shared small text (issue #521 round 5): badges, .small lines, table column heads and
+   tile labels are at least 12 px under 640 px (10.5–11.2 px at the 14 px root), still in rem above it so a
+   larger root font scales them; on screen only (paper has its own sizes, even from a narrow window). A
+   component's own smaller size for these classes would win (its rule carries its hash), so
+   e2e/tests/phone-edit-controls.spec.ts walks them on the workspace's pages. */
+@media screen and (max-width: 640px) {
+	.badge {
+		font-size: max(0.75rem, 12px);
+	}
+	.small,
+	table.data thead th {
+		font-size: max(0.8rem, 12px);
+	}
+	.stat dt {
+		font-size: max(0.78rem, 12px);
+	}
+	.stat dd small {
+		font-size: max(0.75rem, 12px);
+	}
 }
 /* A unit beside a label or in a table head: "Area <span class="u">ha</span>". */
 .u {

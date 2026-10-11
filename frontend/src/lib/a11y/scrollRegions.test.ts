@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { overflows } from './scrollRegions';
+import { overflows, scrollsSideways } from './scrollRegions';
 
 const box = (scrollWidth: number, clientWidth: number, scrollHeight = 100, clientHeight = 100) => ({ scrollWidth, clientWidth, scrollHeight, clientHeight });
 
@@ -9,5 +9,13 @@ describe('overflows', () => {
 		// The Compare summary's calibration table on a phone (issue #162): 1 px still scrolls.
 		expect(overflows(box(309, 308))).toBe(true);
 		expect(overflows(box(300, 308, 101, 100))).toBe(true);
+	});
+});
+
+describe('scrollsSideways', () => {
+	it('is the width alone: a box that only scrolls down keeps its row names where they are', () => {
+		expect(scrollsSideways(box(308, 308))).toBe(false);
+		expect(scrollsSideways(box(309, 308))).toBe(true);
+		expect(scrollsSideways(box(300, 308, 900, 100))).toBe(false);
 	});
 });

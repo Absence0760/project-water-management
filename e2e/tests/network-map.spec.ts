@@ -11,11 +11,14 @@ import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeForm, openNodeSection, openNodeTable } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { expectAbove } from '../support/reflow.ts';
+import { showHeaderControls } from '../support/sectionHeader.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All hydrological units' });
 const card = (page: Page) => page.getByTestId('node-card');
 /** Opens the header's Tables menu (a disclosure) and returns one of its links. */
 async function gridLink(page: Page, name: string) {
+	// On a phone the menu is in the header's More actions list.
+	await showHeaderControls(page);
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
 	return page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name, exact: true });

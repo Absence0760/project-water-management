@@ -990,13 +990,20 @@
 		flex: 0 1 15rem;
 		min-height: 38px;
 	}
+	/* A phone: the label and its field fill the first row, then Run forecast and Run model share the next in equal
+	   halves (Run model alone fills it), so no row ends in a gap (issue #521 round 5). The field asks for the row's
+	   full width less the label's, so the buttons can't join that row. */
 	@media (max-width: 640px) {
 		.run-form {
 			justify-content: flex-start;
 		}
 		.run-form input {
-			flex: 1 1 10rem;
+			flex: 1 1 calc(100% - 6rem);
 			min-height: 44px;
+		}
+		.run-form .btn {
+			flex: 1 1 0;
+			justify-content: center;
 		}
 	}
 	/* The run form's status: one slim line above the page, with the progress bar under it while a run goes. */
@@ -1193,6 +1200,12 @@
 	.filter {
 		width: 100%;
 		margin-bottom: 0.4rem;
+	}
+	/* A field standing alone on a phone gets the tap size (issue #521 round 5: 32 px). */
+	@media (pointer: coarse), (max-width: 640px) {
+		.filter {
+			min-height: var(--tap);
+		}
 	}
 	.filter-count {
 		margin: 0 0 0.4rem;

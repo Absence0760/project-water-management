@@ -23,4 +23,10 @@
 		border: 1px solid var(--border-input);
 		border-radius: var(--radius-sm);
 	}
+	/* It stands alone beside its label on a phone ("Rates in"): the tap size there (issue #521 round 5: 24 px). */
+	@media (pointer: coarse), (max-width: 640px) {
+		.flow-unit {
+			min-height: var(--tap);
+		}
+	}
 </style>

@@ -1,7 +1,8 @@
 // The workspace's shared UI patterns stay one piece each (issue #521, ui-playbook.md § 2 and § 5): a static
 // scan of every component, so a screen that writes its own copy fails here rather than drifting in looks.
 // - A fold is common/Fold.svelte, never a hand-written <details class="fold">, so every fold has the line of
-//   its values (a required prop), the same chevron, named action and "needs fixing".
+//   its values (a required prop), the same chevron, named action and "needs fixing". In Settings & calibration's
+//   components every collapsible is one: no <details> of any class there (the last three moved in round 5).
 // - The explain switch is common/ExplainSwitch.svelte, and app.css holds the one rule that hides `.explain`.
 // - A paste dialog is model/PasteDialogFrame.svelte's frame.
 // - A typed date is common/DayInput.svelte (a text field read by parseDay), never <input type="date"> (the
@@ -31,6 +32,10 @@ const NATIVE_DATE = /\btype\s*=\s*(?:"date"|'date'|\{\s*['"]date['"]\s*\})/g;
 describe('shared UI patterns (issue #521)', () => {
 	it('every fold is common/Fold.svelte', () => {
 		expect(where(/<details[^>]*\bclass\s*=\s*["'{][^"'}]*\bfold\b/, ['lib/components/common/Fold.svelte'])).toEqual([]);
+	});
+
+	it('every collapsible in Settings & calibration is a Fold, whatever its class', () => {
+		expect(where(/<details\b/).filter((f) => f.startsWith('lib/components/settings/'))).toEqual([]);
 	});
 
 	it('the explain switch is one component, and app.css holds the one rule that hides the explanations', () => {

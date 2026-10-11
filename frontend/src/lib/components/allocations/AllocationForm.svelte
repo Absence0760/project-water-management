@@ -8,7 +8,8 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { parseNum } from '$lib/format/number';
-	import { AUTHORISATION_LABEL, conditionsFromText, monthShort, PURPOSE_LABEL, SOURCE_LABEL, WATER_USE_LABEL, WATER_YEAR_MONTHS } from './allocations';
+	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
+	import { AUTHORISATION_LABEL, conditionsFromText, monthsText, PURPOSE_LABEL, SOURCE_LABEL, WATER_USE_LABEL } from './allocations';
 
 	let {
 		projectId,
@@ -204,13 +205,12 @@
 			<!-- A short legend that never wraps: a two-line legend had the fieldset's border run through it (issue #521). -->
 			<legend>Licence conditions <HelpTip key="licence-conditions" /></legend>
 			<p class="muted small lead" id="af-conditions-lead">Optional; a cap run keeps to the months and the rate.</p>
-			<div class="field">
-				<span class="lbl" id="af-months-l">Months water may be taken</span>
-				<div class="months" role="group" aria-labelledby="af-months-l" data-testid="allocation-months">
-					{#each WATER_YEAR_MONTHS as m (m)}
-						<label class="check"><input type="checkbox" value={m} bind:group={draft.months} />{monthShort(m)}</label>
-					{/each}
-				</div>
+			<!-- The app's month picker (playbook § 4, "Picking months"): the same months in water-year order, at the tap
+			     size on a phone, with All months / No months (issue #521 round 5: its own 21 px boxes). Its fieldset's
+			     legend is the group's name; the line above shows it. -->
+			<div class="field" data-testid="allocation-months">
+				<span class="lbl" aria-hidden="true">Months water may be taken</span>
+				<MonthPicker bind:months={draft.months} label="Months water may be taken" summary={monthsText(draft.months) || undefined} />
 				<span class="hint">None ticked: no months stated (all year).</span>
 			</div>
 			<div class="field">
@@ -255,16 +255,5 @@
 	/* The line under the legend, close to it (the grid's gap would part them). */
 	.lead {
 		margin: -0.5rem 0 0;
-	}
-	/* Each month a 24 px row and well apart, so every box keeps a 24 px target (WCAG 2.2 2.5.8). */
-	.months {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
-	}
-	.check {
-		display: inline-flex;
-		min-height: 1.5rem;
-		font-weight: normal;
 	}
 </style>

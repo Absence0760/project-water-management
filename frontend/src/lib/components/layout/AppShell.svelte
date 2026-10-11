@@ -58,10 +58,10 @@
 	});
 </script>
 
-{#snippet brand()}
-	<a class="brand" href="{base}/" aria-label="Water Management — projects">
+{#snippet brand(mark = true)}
+	<a class="brand" class:mark-only={!mark} href="{base}/" aria-label="Water Management — projects">
 		<BrandMark size={28} />
-		<span class="wordmark" aria-hidden="true">Water Management</span>
+		{#if mark}<span class="wordmark" aria-hidden="true">Water Management</span>{/if}
 	</a>
 {/snippet}
 
@@ -88,8 +88,14 @@
 				<svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
 				<span class="visually-hidden">Menu</span>
 			</button>
-			{@render brand()}
-			<span class="spacer"></span>
+			<!-- A page's title (the workspace: its catchment and your role) takes the word mark's place; the logo stays. -->
+			{#if sidebarSlot.phoneTitle}
+				{@render brand(false)}
+				<div class="phone-title">{@render sidebarSlot.phoneTitle()}</div>
+			{:else}
+				{@render brand()}
+				<span class="spacer"></span>
+			{/if}
 			<AccountMenu compact />
 			<div id="app-menu" class="app-menu" hidden={!menuOpen}>{@render mainNav()}</div>
 		</header>
@@ -245,6 +251,14 @@
 	}
 	.spacer {
 		flex: 1;
+	}
+	.brand.mark-only {
+		flex: none;
+		padding: 0 0.25rem;
+	}
+	.phone-title {
+		flex: 1;
+		min-width: 0;
 	}
 	.app-menu {
 		position: absolute;

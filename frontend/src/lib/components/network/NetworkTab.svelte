@@ -1014,6 +1014,12 @@
 	.colour-by label {
 		font-weight: 600;
 	}
+	/* A picker standing alone on a phone gets the tap size (issue #521 round 5: 29 px). */
+	@media (pointer: coarse), (max-width: 640px) {
+		.colour-by select {
+			min-height: var(--tap);
+		}
+	}
 	.user-card {
 		border-top: 1px solid var(--border);
 		padding: 0.5rem 0;
@@ -1633,6 +1639,11 @@
 		}
 		.net td :global(input) {
 			text-align: left;
+		}
+		/* Each field in a card stands alone: the tap size (issue #521 round 5: the selects were 25 px). */
+		.net :is(td, th) :global(input:not([type='checkbox'], [type='radio'])),
+		.net td select {
+			min-height: var(--tap);
 		}
 		/* A tap target as tall as the inputs beside it. */
 		.net td.by-month a {

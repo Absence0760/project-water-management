@@ -241,9 +241,6 @@
 	.note {
 		margin: 0 0 0.6rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.sub-h {
 		margin: 0.9rem 0 0.4rem;
 		font-size: 1rem;

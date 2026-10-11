@@ -87,6 +87,7 @@
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import type { FitSession } from '$lib/calibration/fitSession.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
+	import { fitRecordLine } from '$lib/components/calibration/provenance';
 	import { api, type Project } from '$lib/api';
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -177,6 +178,8 @@
 	// The form edits the page's draft in place (settings/settingsDraft.svelte.ts), so a tab change keeps it.
 	const s = $derived(draft.s);
 	// The preset pickers themselves are never saved: each only fills its row and source note, then resets.
+	/** The fit record's fold: open where the page has room for it (1024 px and up), read once. */
+	const fitRecordOpen = typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
 	let panPreset = $state('');
 	/** GR4J's default warm-up (days): the warm-up fold starts closed at it. */
 	const GR4J_WARMUP_DEFAULT = 365;
@@ -775,17 +778,21 @@
 				The dam evaporation factors no longer match the “{lakePresetStale.label}” preset the source note names (a factor or the A-pan changed since it was filled): fill it again, or update the note.
 			</p>
 		{/if}
-		<details class="advanced" data-testid="feb-advanced">
-			<summary>
-				Advanced: days in February, {fmtNum(s.februaryDays, 2, true)}{#if febChanged}{' '}<span class="changed">(not the default {fmtNum(FEB_DEFAULT, 2)})</span>{/if}
-			</summary>
+		<!-- Rarely changed: folded into its value (common/Fold, issue #521 round 5; it was its own <details>). -->
+		<Fold
+			name="Advanced, days in February:"
+			line="{fmtNum(s.februaryDays, 2, true)}{febChanged ? ` (not the default ${fmtNum(FEB_DEFAULT, 2)})` : ''}"
+			spaced
+			testid="feb-advanced"
+			lineTestid="feb-line"
+		>
 			<div class="field">
 				<span class="lbl"><label for="st-feb">Days in February</label><HelpTip key="settings.februaryDays" /></span>
 				<NumberInput id="st-feb" min={28} max={29} step={0.01} disabled={readonly} bind:value={s.februaryDays} aria-describedby="st-feb-h" />
 				<span class="hint explain" id="st-feb-h">Converts monthly volumes to per-day figures. 28.25 averages leap years, as the workbook does.</span>
 				<FieldHistoryLine field="settings:februaryDays" />
 			</div>
-		</details>
+		</Fold>
 	</section>
 
 	<!-- Flow share ----------------------------------------------------------------->
@@ -1252,8 +1259,10 @@
 			<!-- The WR2012 MAR penalty: a saved setting (the save bar), beside the fit it changes (issue #521; it was in the WR2012 check). -->
 			{#snippet penaltyFields()}<MarPenaltyFields bind:value={s.wr2012} {readonly} />{/snippet}
 		</FitPanel>
-		<!-- The fit record of the parameters, at the foot of the card whose Apply writes it (issue #521). -->
+		<!-- The fit record of the parameters, at the foot of the card whose Apply writes it (issue #521), folded into its
+		     first line: open from 1024 px, closed on a phone, where its ~1,300 px stood between the two cards (round 5). -->
 		{#if s.fitRecord}
+			<Fold name="Fit record:" line={fitRecordLine(s.fitRecord)} change="Show" open={fitRecordOpen} problem={false} body="none" spaced testid="fit-record-fold">
 			<FitProvenance
 				record={s.fitRecord}
 				settings={s as unknown as ProjectSettings}
@@ -1264,6 +1273,7 @@
 				observedOrigin={observedOrigins ? (observedOrigins[calibrationSeriesKey(s.fitRecord.flowKind as CalibrationFlowKind, s.fitRecord.siteNodeId)] ?? null) : undefined}
 				{nodeName}
 			/>
+			</Fold>
 		{/if}
 		</div>
 		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
@@ -1646,22 +1656,6 @@
 	}
 	.ewr p {
 		margin: 0;
-	}
-	.advanced {
-		margin-top: 0.75rem;
-	}
-	.advanced summary {
-		cursor: pointer;
-		font-size: 0.875rem;
-		color: var(--text-2);
-	}
-	.advanced > .field {
-		margin-top: 0.5rem;
-		max-width: 75ch;
-	}
-	.changed {
-		color: var(--warning);
-		font-weight: 600;
 	}
 	/* Reporting (issue #521): the window and the threshold side by side, stacked when narrow. */
 	.reporting {

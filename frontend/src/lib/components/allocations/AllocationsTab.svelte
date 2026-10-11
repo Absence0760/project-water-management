@@ -838,9 +838,6 @@
 		margin: 0.75rem 0 0.4rem;
 		font-size: 1rem;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 	.panel-head .small {
 		overflow-wrap: anywhere;
 	}

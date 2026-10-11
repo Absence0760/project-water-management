@@ -1067,7 +1067,7 @@ section it belongs to, with the example that taught it.
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
 | Saying what a file or paste box takes | `common/FormatHelp.svelte` (`accepts`, the structure as its children, `example`, `exampleFile` or several `exampleFiles` to download, `context` to tell two on a page apart for a screen reader): one per box, beside its file picker, which comes before the fields a file fills, its words checked against the box's parser, its example fed back through it in a test (ui.md § Expected format) |
 | A number field | `common/NumberInput.svelte` (`min`/`max` in displayed units, `scale`, `nullable`, `grouped`, `invalidMessage`): reads a decimal comma everywhere, keeps invalid text with its message and counts it in `common/invalidFields.svelte.ts` (ui.md § Number fields); prefer it to a bare `<input type="number">`, which leaves a decimal comma to the browser |
-| Picking months | `common/MonthPicker.svelte` (twelve toggles in water-year order, 24 px or more, rows of six in a narrow column; *All months* / *No months*) |
+| Picking months | `common/MonthPicker.svelte` (twelve toggles in water-year order, 24 px or more, rows of six at 44 px in a narrow column or on a touch screen; *All months* / *No months*; Allocations' licence months since issue #521 round 5, which had forked it with 21 px boxes) |
 | Grids inside a modal | the existing component unchanged (`CropsTab sections` → `CropGrids`, `NetworkTab only="table"`), never a fork |
 | A small chart in a row or card (sparkline) | `charts/Sparkline.svelte` (the compact pattern, § 3 "Label every chart"; `caption` required) |
 | Time-series charts | `charts/LineChart.svelte` (`windows` for 30 days / 1 year / All; Earlier/Later; units switch where the old chart had one) |
@@ -1492,6 +1492,46 @@ Interaction details that bit:
   opens the dialog with the focus on Import, so the dialog's Escape returns
   there. A row's two buttons (Add data, ⋯) sit side by side at tap height,
   not stacked two targets tall.
+  The workspace's section header does the same for every tab (issue #521
+  round 5: it took 48–78 % of a phone's first screen, Network's Map, Tables,
+  + Add hydrological unit and + Add other user a full row each): under a
+  640 px header the tab's own controls sit in one **⋯ More actions** list at
+  the end of the pills' row, the same elements rendered once (pickers named
+  over their selects there, menus opening in place), and the main box's
+  Add data and Run model share the last row. A pick closes the list and
+  leaves the focus on ⋯, so a dialog it opens returns there; a control
+  inside one of the list's own menus leaves it open. The header measures
+  its own width (`bind:clientWidth`, matching its container query) to
+  decide, and counts what the tab drew so an empty list draws no ⋯. Pin it
+  as a budget: the header's foot within the first half of a 360 × 740 screen
+  on every tab (`workspace-phone.spec.ts`). A spec that clicks a tab's own
+  control at any width goes through `headerControl` (`e2e/support/sectionHeader.ts`),
+  which opens the list first on a phone.
+- **On a phone a footer of actions is one row, with nothing above it until
+  it has something to say.** The model-edit sheets' save row was three rows
+  (144 px of an 844 px screen) with nothing to save: "No unsaved changes",
+  then Discard model changes and Done, then Save changes alone. It is now
+  Discard, Done and Save in three equal columns (the long words hidden but
+  still the names), the clean status for screen readers only, and the
+  reason only once there are changes; the page's save bar puts its status
+  in the buttons' row as the dot and a word ("Unsaved"), the reason under it.
+  Leave a failed save's message whole, on a row of its own.
+- **A table that scrolls sideways says so, and keeps its rows named.** On a
+  308 px box a table cut at a column edge looks finished. `.table-wrap`
+  draws edge shadows with CSS alone (two `local` covers over two `scroll`
+  shadows), and `lib/a11y/scrollRegions.ts` marks a box that scrolls
+  sideways `data-scrolls-x`, so on a phone its `th scope="row"` first column
+  is sticky. Gate the sticky column on the attribute, not on the table: a
+  table restyled as cards on a phone (Upload GeoJSON, the node table) would
+  otherwise give its card head a background and a border.
+- **The shared small text has a phone floor of 12 px.** Badges, `.small`,
+  table column heads and tile labels were 10.5–11.2 px at the 14 px root;
+  under 640 px they are `max(<their rem>, 12px)`, so a larger root still
+  scales them. A component's scoped rule for those classes wins over app.css
+  (its hash), so a redundant scoped copy (`.small { font-size: 0.8rem }`, the
+  global value) is deleted rather than kept, and a deliberate smaller size
+  gets its own phone rule; `phone-edit-controls.spec.ts` walks the classes
+  on nine tabs.
 - **Line up a table of fieldsets with fixed row heights, not subgrid.** The
   drought levels became one table (a column per level, a row per part of
   demand) while each level stays a `<fieldset>` named by its legend, so the
@@ -1528,6 +1568,17 @@ Interaction details that bit:
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
   (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`,
   `scenarios.ts`, `allocations.ts`).
+- **Playwright counts a visually hidden box as visible.** `.visually-hidden`
+  leaves a 1 × 1 px box, which `toBeVisible()` passes and `toBeHidden()`
+  fails ("from the file" kept as a row's description in Upload GeoJSON):
+  check its box's width instead. The other way round, `getByRole` skips
+  `display: none` (a closed More actions list), so a control there needs
+  `includeHidden: true` to be found at all; `getByText` finds it anyway.
+- **A layout that measures itself settles after its first paint.** The
+  section header renders wide, measures its width, then folds the tab's
+  controls into ⋯; a check that reads boxes right after the title shows can
+  see the wide layout, and a control a tab adds late (Compare's export)
+  brings the ⋯ after it. Wait for the ⋯ itself before measuring.
 - **A closed `<details>` still lays out its content in Chromium.** Its
   children keep a `scrollHeight` (the panel is hidden with
   `content-visibility`), so a check for "nothing scrolls inside itself"
