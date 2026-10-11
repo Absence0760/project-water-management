@@ -390,8 +390,11 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 		const chirps = aligned('rain_chirps_mm');
 		const forecast = aligned('rain_forecast_mm');
 		finishSetAside(accumulation, start, (t) => chirps[t] ?? forecast[t] ?? null);
-		// Left as recorded while CHIRPS fills the zero run or the blank outage it ends: that rain may count twice.
-		const filled = (w: { start: string; end: string }) => {
+		// Left as recorded while CHIRPS fills the days before it: a detected window's blank days (engine ≥ 1.84.0,
+		// whose run is only blank days), a listed window's flagged zero-run days, or the blank outage it ends.
+		// That rain may count twice.
+		const filled = (w: { start: string; end: string; source: 'detected' | 'listed' }) => {
+			if (w.source === 'detected') return true;
 			if (!zeroRain) return false;
 			for (let d = Math.max(toEpochDay(w.start), start); d <= Math.min(toEpochDay(w.end), end); d++) if (zeroRain.mask[d - start]) return true;
 			return false;
