@@ -324,6 +324,12 @@
 	.badge.draft {
 		background: var(--warning-soft);
 	}
+	/* The phone floor for the shared small text (app.css, issue #521 round 5). */
+	@media screen and (max-width: 640px) {
+		.badge {
+			font-size: max(0.75rem, 12px);
+		}
+	}
 	.state-row {
 		display: flex;
 		flex-wrap: wrap;

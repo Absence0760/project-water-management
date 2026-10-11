@@ -112,7 +112,4 @@
 		color: var(--text-2);
 		white-space: nowrap;
 	}
-	.small {
-		font-size: 0.8rem;
-	}
 </style>
