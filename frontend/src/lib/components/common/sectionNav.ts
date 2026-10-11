@@ -171,6 +171,25 @@ export function matchesQuery(text: string, query: string): boolean {
 	return words.every((w) => hay.includes(w));
 }
 
+/**
+ * A setting that moved to another page (issue #521: Settings' registered-volumes comparison band went
+ * to Allocations): the find box still lists it, as a link to where it is now. `words` are other names
+ * a reader may search it by, matched with its name but never shown.
+ */
+export interface FindElsewhere {
+	text: string;
+	words?: string;
+	href: string;
+	/** The page it is on now ("Allocations"), shown after its name. */
+	page: string;
+}
+
+/** The moved settings whose name or other names match `query`, in their given order. */
+export function findElsewhere(list: readonly FindElsewhere[], query: string): FindElsewhere[] {
+	if (!foldText(query)) return [];
+	return list.filter((e) => matchesQuery(`${e.text} ${e.words ?? ''}`, query));
+}
+
 /** One thing the find box can list: a section, or a setting inside one. */
 export interface FindEntry {
 	/** The section it is in. */
