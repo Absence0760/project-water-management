@@ -864,7 +864,22 @@ Interaction details that bit:
 - **Svelte drops the space at the edge of an element.** A narrow-layout
   label `<span class="cell-label"> change</span>` after a number read "1change"
   (and so did its accessible text) on the Applications phone cards. Write
-  the space as `{' '}` inside the span.
+  the space as `{' '}` inside the span. The same at the start of a block:
+  `Mm³/a{#if …} · {pct} of natural{/if}` read "0.83 Mm³/a· 63% of natural"
+  on the run summary, so start the block with `{' '}`. And a flex item's
+  edge spaces collapse too: the run header's `inline-flex` links read
+  "River & reserve→" until a `gap` put the space back. `runs-page.spec.ts`
+  checks the gaps with `innerText`-style regexes and a text range's box.
+- **Dates on a chart's axis are day-first.** uPlot labels daily ticks
+  "12/30" and "1/9", which a South African reader takes as 1 September.
+  `LineChart` passes `TIME_TICKS` (`charts/series.ts`: "30 Dec", the year
+  under each year's first tick); a new time chart uses `LineChart` or that
+  table, never uPlot's default.
+- **Measure a one-line meta with the font's real figures.** Inter's
+  tabular figures set each hyphen a digit wide, so the runs rail's
+  "2026-10-11 01:01 · 2021–2022" missed its line by a few px and broke
+  after the dash, a third line on all twenty rows. Keep each part
+  `nowrap` and use proportional figures where nothing lines up in a column.
 - **Move a page's main actions to where they're seen.** Scenarios' Run sat
   under the changes, the form and a checkbox per node, off the first screen
   on a big network; it now sits in the scenario's head row. A section's

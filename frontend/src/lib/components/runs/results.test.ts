@@ -1,7 +1,7 @@
 import type { FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunSeriesRef } from '$lib/api/types';
-import { m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit, outletEwrLine } from './results';
+import { displayUnit, m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit, outletEwrLine } from './results';
 
 const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({
 	nodeId,
@@ -62,6 +62,13 @@ describe('units', () => {
 		expect(toDisplayUnit([86_400, null, Number.NaN], 'm³/day', 'm³/s')).toEqual({ unit: 'm³/s', values: [1, null, null] });
 		expect(toDisplayUnit([5], 'mm', 'm³/s')).toEqual({ unit: 'mm', values: [5] });
 		expect(toDisplayUnit([5], 'm³/day', 'm³/day')).toEqual({ unit: 'm³/day', values: [5] });
+	});
+
+	it('names the unit a series shows in, so the Series picker matches the chart under the m³/s switch', () => {
+		expect(displayUnit('m³/day', 'm³/s')).toBe('m³/s');
+		expect(displayUnit('m³/day', 'm³/day')).toBe('m³/day');
+		expect(displayUnit('mm', 'm³/s')).toBe('mm');
+		expect(displayUnit('%', 'm³/s')).toBe('%');
 	});
 
 	it('gives Mm³/a from a mean m³/day', () => {

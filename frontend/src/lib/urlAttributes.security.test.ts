@@ -101,6 +101,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	listHref: { why: 'ApplicationsTab: withoutParam(page.url, "view")', in: ['lib/components/scenarios/ApplicationsTab.svelte'] },
 	newHref: { why: 'ScenariosTab: withParam(page.url, "new", "1")', in: ['lib/components/scenarios/ScenariosTab.svelte'] },
 	panelHref: { why: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
+	firstPublishHref: { why: 'PublishedBaseline: runHref(newest run id) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
 	compareHref: { why: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"', in: ['lib/components/overview/PublishedBaseline.svelte', 'lib/components/scenarios/ScenarioCompare.svelte'] },
 	reserveHref: { why: 'RunSummaryView: riverHref(…)', in: ['lib/components/runs/RunSummaryView.svelte'] },
 	otherUsesHref: { why: 'RunSummaryView: supplyHref(run id, a fixed #res-… anchor from otherUsesLink), a `?tab=` query', in: ['lib/components/runs/RunSummaryView.svelte'] },

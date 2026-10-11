@@ -8,7 +8,7 @@
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cachedSeries } from './cache';
-	import { seriesGroups, toDisplayUnit } from './results';
+	import { displayUnit, seriesGroups, toDisplayUnit } from './results';
 
 	let {
 		projectId,
@@ -114,7 +114,7 @@
 		<div class="field">
 			<label for="rc-key">Series</label>
 			<select id="rc-key" value={ref?.key ?? ''} onchange={(e) => (key = e.currentTarget.value)}>
-				{#each group?.options ?? [] as r (r.key)}<option value={r.key}>{r.label} ({r.unit})</option>{/each}
+				{#each group?.options ?? [] as r (r.key)}<option value={r.key}>{r.label} ({displayUnit(r.unit, flowUnit)})</option>{/each}
 			</select>
 		</div>
 	</div>

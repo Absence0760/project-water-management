@@ -31,7 +31,21 @@ test('the Overview card: empty until a run is published, then the run, who, the 
 	// Nothing published yet: the card's empty state.
 	await page.goto(`/projects/${project.id}`);
 	const card = page.getByRole('region', { name: 'Published baseline' });
-	await expect(card).toContainText('No run is published yet. Stakeholders and farmers see nothing until you publish one (Runs tab).');
+	// Named as the sidebar names the page; with no run yet, the link opens the bare page.
+	await expect(card).toContainText('No run is published yet. Stakeholders and farmers see nothing until you publish one from its Publication panel in Runs & results.');
+	await expect(card.getByRole('link', { name: 'Runs & results' })).toHaveAttribute('href', '?tab=runs');
+	// A viewer isn't told to publish.
+	await viewer.page.goto(`/projects/${project.id}`);
+	await expect(viewer.page.getByRole('region', { name: 'Published baseline' })).toHaveText(
+		/^\s*Published baseline\s*No run is published yet\. Stakeholders and farmers see nothing until an editor publishes one\.\s*$/
+	);
+	// With a run, the link lands on the newest run's Publication panel.
+	const draft = await createRun(page.request, project.id, 'Draft');
+	await page.reload();
+	await card.getByRole('link', { name: 'Runs & results' }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]run=${draft}#res-publication$`));
+	await expect(page.getByRole('region', { name: /^Publication/ }).getByRole('button', { name: 'Publish this run' })).toBeVisible();
+	await page.goto(`/projects/${project.id}`);
 
 	const { baseline } = await publishedBaseline(page.request, project.id);
 
@@ -81,7 +95,7 @@ test('the Runs tab opens on the newest run for an editor and on the published ru
 
 	// The project list says when it was published.
 	await v.goto('/');
-	await expect(v.getByRole('row').filter({ has: v.getByRole('rowheader', { name: 'Published baseline' }) })).toContainText(/published \d/);
+	await expect(v.getByRole('row').filter({ has: v.getByRole('rowheader', { name: 'Published baseline' }) })).toContainText(/Published: \d/);
 });
 
 test('compare starts from the published run, offers it against an explicit pair, and the Runs tab links a run to it', async ({ page, owner }) => {

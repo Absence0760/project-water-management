@@ -1530,11 +1530,14 @@ put the results first; its first screen follows board A1 of the redesign
   the notice in each language the WUA wrote it in (named in its own
   language, the text marked with its `lang`), and the next expected update (a calendar
   day, `fmtDay`). It is read-only for everyone: editors get **Change the
-  notice or publish another run**, a link to the Runs tab on the published
-  run at its Publication panel (`?tab=runs&run=<id>#res-publication`), so
-  the notice has one editor, not two. With nothing published: "No run is
-  published yet. Stakeholders and farmers see nothing until you publish one
-  (Runs tab)." Its own `LoadState` (loading, an error with a retry).
+  notice or publish another run** (in Runs & results), a link to Runs &
+  results on the published run at its Publication panel
+  (`?tab=runs&run=<id>#res-publication`), so the notice has one editor, not
+  two. With nothing published, an editor reads "No run is published yet.
+  Stakeholders and farmers see nothing until you publish one from its
+  Publication panel in Runs & results.", the link going to the newest run's
+  Publication panel (the bare page while there is no run); a viewer reads
+  "… until an editor publishes one." (no link: they can't publish). Its own `LoadState` (loading, an error with a retry).
   **New auto run: publish?** (WP-2.11, editors): when the newest automatic
   run is newer than the published run (`autorun/autoRun.ts`
   `autoRunToPublish`), the card names it with **Compare with the published
@@ -2063,7 +2066,9 @@ dam (with the restriction), Last run and Alerts (a "2 alerts firing" badge,
 only when some are) into lines under the name at 1100 px or narrower (a
 1280 px window beside the app sidebar), and at 730 px every figure: the
 pill, units short, the freshness badge, the last run, the lowest dam and the
-alerts stack under the name, with Add data and ⋯ stacked on the right.
+alerts stack under the name. A folded line is labelled as its column was
+("Last run: 11 Oct 2026", "Published: 11 Oct 2026", "Not run yet", beside
+"Lowest dam: …"), with Add data and ⋯ stacked on the right.
 `portfolio.spec.ts` pins the team filter with thirty catchments at 1440×960
 (every column, the name column at least 200 px, no heading past its
 column) and 1280×800 (the folded lines). The rain
@@ -6936,7 +6941,13 @@ read it before.
   once scrolled, less the save bar): a long list scrolls inside its panel
   (at least 7.5rem tall), so nothing in the rail is clipped. Narrower, the
   rail stacks above the results and the list scrolls inside its panel past
-  20rem (about five rows), so the shown run starts near the top.
+  20rem (about five rows), so the shown run starts near the top. Each row is
+  the label (two lines at most) over one line of when it ran and the water
+  years it covers, each part unbroken (`runs-page.spec.ts` checks every row's
+  line at 1440 and 1280). With no runs the list says "No runs yet. Run the
+  model to see results." only while a run can start; while the status line
+  says what a run still needs, "No runs yet. A run can start once the note
+  above is dealt with."
 - **Outcomes for this run.** The run header has one line, "For this run:
   River & reserve → · Hydrological units →" (a navigation landmark, *Outcomes
   for this run*; the links are named "River & reserve for this run" and
@@ -7536,13 +7547,18 @@ read it before.
   by half a window (the non-drag route, and the only one on touch). Neither
   goes past the ends of the record, and the window survives the log scale
   and unit switches. The figure carries the visible range as
-  `data-view-start` / `data-view-end`. Every daily chart has the same moves
+  `data-view-start` / `data-view-end`. The time axis puts the day before the
+  month ("30 Dec", the year under each year's first tick; `charts/series.ts`
+  `TIME_TICKS`): uPlot's own "12/30" read as day/month here, so "1/9" passed
+  for 1 September. Every daily chart has the same moves
   (`LineChart`'s `pannable` prop is on by default; Earlier / Later appear once
   there is somewhere to move to): EWR vs outflow, farm storage and supply vs
   demand, Explore outputs, the model stores, the Data tab's series chart and
   the run comparison's daily series overlay. The m³/s ↔ m³/day switch sits on every flow chart
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
-  flow series is picked), and one click sets all of them; the run comparison's
+  flow series is picked), and one click sets all of them (Explore's **Series**
+  picker names each daily volume in the unit the switch shows, "Simulated
+  outflow (m³/s)", `results.ts` `displayUnit`); the run comparison's
   overlay has its own while a flow series is picked. The calibration panel (it opens with the same
   calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree;
   the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",

@@ -344,6 +344,9 @@ for (const viewport of [
 				const pr = row(page, `Pf published fit ${viewport.width}`);
 				await expect(pr.locator('.meta-mid')).toContainText('Restriction: Advisory · 15 %');
 				await expect(pr.locator('.meta-mid')).toContainText('1 alert firing');
+				// The folded Last run is labelled like Lowest dam beside it, not a lower-case "last run …" run-on.
+				await expect(pr.locator('.meta-mid .run').first()).toHaveText(/^Last run: \d{1,2} \w{3}/);
+				await expect(pr.locator('.meta-mid .run').nth(1)).toHaveText(/^Published: \d{1,2} \w{3}/);
 			}
 		});
 	});
