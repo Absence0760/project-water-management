@@ -119,6 +119,21 @@ describe('what an item says', () => {
 		expect(eventLine(ev('settings.allocation_mode_reset', { from: 'cap', to: 'none' }))).toBe(
 			'The baseline’s allocation mode “Cap use at the registered volume” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)'
 		);
+		// 216 (issue #523 B4): no actor either; each rule switched off is named.
+		expect(
+			eventLine(
+				ev('model.ewr_rules_reset', {
+					rules: [
+						{ kind: 'damPassInflow', id: 'a', name: 'Upper' },
+						{ kind: 'unitHandsOff', id: 'b', name: 'Lower' },
+						{ kind: 'offtakeHandsOff', id: 't', from: 'Upper', to: 'Lower' },
+						{ kind: 'restrictionEwrTrigger', siteNodeId: null, level: 2 }
+					]
+				})
+			)
+		).toBe(
+			'Switched off 4 rules keeping water for the EWR (Upper’s dam release passing the EWR; Lower’s hands-off flow leaving the EWR; the off-take Upper → Lower leaving the EWR; the drought restriction’s EWR trigger (level 2)): in the baseline the EWR is assessed and reported, never applied (a scenario keeps it)'
+		);
 		expect(eventLine(ev('signoff.created', { fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20' }))).toBe(
 			'Signed off a run as Dr A. Hydrologist (SACNASP 400999/20)'
 		);

@@ -22,6 +22,7 @@
 	import CropSupplyFields from './CropSupplyFields.svelte';
 	import { handsOffPreview, handsOffTicked, noDamSupplyHint, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 	import PumpCapacityField from './PumpCapacityField.svelte';
+	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from './ewrScenarioOnly';
 	import { supplyProblemFields, type SupplyField } from './problemFields';
 
 	let { node, nodes, readonly }: { node: NetworkNode; nodes: readonly NetworkNode[]; readonly: boolean } = $props();
@@ -134,11 +135,18 @@
 		<FieldHistoryLine field="node:{node.id}:handsOffM3Day" {unit} />
 		<div class="check-row">
 			<label class="check">
-				<input type="checkbox" disabled={readonly} checked={node.handsOffEwr === true} onchange={(e) => (node.handsOffEwr = e.currentTarget.checked)} />
+				<input
+					type="checkbox"
+					disabled={ewrSwitchDisabled(readonly, node.handsOffEwr === true)}
+					checked={node.handsOffEwr === true}
+					aria-describedby={id('ewr-h')}
+					onchange={(e) => (node.handsOffEwr = e.currentTarget.checked)}
+				/>
 				Also leave the EWR in the river
 			</label>
 			<HelpTip key="node.handsOffEwr" />
 		</div>
+		<p class="hint note" id={id('ewr-h')} data-testid="hands-off-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>
 		<FieldHistoryLine field="node:{node.id}:handsOffEwr" {unit} />
 		<p class="hint note" data-testid="hands-off-note">{handsOffPreview(node)}</p>
 	</div>

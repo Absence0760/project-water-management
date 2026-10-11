@@ -39,6 +39,7 @@
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
 	import { applyTransferPaste, planTransferPaste, transferRows, transfersCsv, TRANSFERS_FORMAT } from './transfersPaste';
 	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
+	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from '$lib/components/network/ewrScenarioOnly';
 
 	let {
 		editor,
@@ -341,11 +342,19 @@
 										<div class="checks">
 											<span class="check-row">
 												<label class="check">
-													<input type="checkbox" aria-label="Leaves the EWR in the river, {label}" disabled={readonly} checked={!!t.handsOffEwr} onchange={(e) => (t.handsOffEwr = e.currentTarget.checked)} />
+													<input
+														type="checkbox"
+														aria-label="Leaves the EWR in the river, {label}"
+														aria-describedby="tr-{t.id}-ewr-h"
+														disabled={ewrSwitchDisabled(readonly, !!t.handsOffEwr)}
+														checked={!!t.handsOffEwr}
+														onchange={(e) => (t.handsOffEwr = e.currentTarget.checked)}
+													/>
 													<span aria-hidden="true">Leaves the EWR in the river</span>
 												</label>
 												<HelpTip key="transfer.handsOffEwr" />
 											</span>
+											<p class="ewr-note" id="tr-{t.id}-ewr-h" data-testid="offtake-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>
 											<span class="check-row">
 												<label class="check">
 													<input type="checkbox" aria-label="Tops up the destination’s dam, {label}" disabled={readonly} checked={!!t.topUpDam} onchange={(e) => (t.topUpDam = e.currentTarget.checked)} />
@@ -683,6 +692,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0 1.25rem;
+	}
+	.ewr-note {
+		flex-basis: 100%;
+		order: 1;
+		margin: 0 0 0.25rem;
+		font-size: 0.8rem;
+		color: var(--text-muted);
 	}
 	.check-row {
 		display: inline-flex;

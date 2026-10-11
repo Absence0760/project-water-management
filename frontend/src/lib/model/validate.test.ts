@@ -332,10 +332,10 @@ describe('validateModel', () => {
 		const g = node('g', 'Gauge', null);
 		const farm = (over: Partial<NetworkNode>) => ({ ...node('a', 'A', 'g'), ...over });
 		const twelve = new Array(12).fill(100);
-		expect(messages(model([g, farm({ handsOffM3Day: twelve, handsOffEwr: true, divertMonthlyM3Day: twelve })]))).toEqual([]);
+		expect(messages(model([g, farm({ handsOffM3Day: twelve, divertMonthlyM3Day: twelve })]))).toEqual([]);
 		expect(messages(model([g, farm({ handsOffM3Day: [...twelve.slice(1), -1] })]))).toEqual(['"A": the hands-off flow needs 12 monthly values, none negative.']);
 		expect(messages(model([g, farm({ divertMonthlyM3Day: [1, 2] })]))).toEqual(['"A": River to dam by month needs 12 monthly values, none negative.']);
-		expect(messages(model([{ ...g, handsOffEwr: true }, farm({})]))).toEqual(['"Gauge": only a hydrological unit has a hands-off flow and River to dam by month; clear them.']);
+		expect(messages(model([{ ...g, handsOffM3Day: twelve }, farm({})]))).toEqual(['"Gauge": only a hydrological unit has a hands-off flow and River to dam by month; clear them.']);
 		// Exactly the backend's model rule on the kind (engine operatingKind).
 		for (const kind of ['farm', 'user', 'gauge'] as const)
 			for (const over of [{}, { handsOffM3Day: twelve }, { handsOffEwr: true }, { handsOffEwr: false }, { divertMonthlyM3Day: twelve }] as Partial<NetworkNode>[]) {
@@ -343,6 +343,27 @@ describe('validateModel', () => {
 				const backend = [...modelRuleIssues(model([g, n])).keys()].some((k) => k.startsWith('operatingKind'));
 				expect(operatingIssues(n).length > 0, JSON.stringify({ kind, over })).toBe(backend);
 			}
+	});
+
+	it('refuses the rules that keep the EWR, as the API does: they are a scenario’s (issue #523 B4)', () => {
+		const g = node('g', 'Gauge', null);
+		const b = node('b', 'B', 'g');
+		const a = { ...node('a', 'A', 'b'), damCapacityM3: 10_000 };
+		const offtake = { id: 't', fromNodeId: 'a', toNodeId: 'b', months: [1], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const, handsOffEwr: true };
+		const m = model([g, b, { ...a, damReleaseRule: 'passInflow', damReleaseM3Day: null }]);
+		m.nodes[1] = { ...b, handsOffEwr: true };
+		m.transfers = [offtake as never];
+		const issues = validateModel(m).filter((i) => /a scenario’s rule/.test(i.message));
+		expect(issues.map((i) => [i.area, i.itemId, i.message.split(':')[0]])).toEqual([
+			['network', 'b', '"B"'],
+			['network', 'a', '"A"'],
+			['transfers', 't', 'transfer "A → B"']
+		]);
+		expect(issues[1]!.message).toBe('"A": passing up to the EWR below the dam is a scenario’s rule: in the baseline the EWR is assessed and reported, never applied. Untick it, or make a scenario that keeps it.');
+		// Positive control: the set flows beside them are the baseline's.
+		const setFlows = model([g, { ...b, handsOffM3Day: new Array(12).fill(5) }, { ...a, damReleaseRule: 'passInflow', damReleaseM3Day: new Array(12).fill(5) }]);
+		setFlows.transfers = [{ ...offtake, handsOffEwr: false, handsOffM3Day: 10 } as never];
+		expect(validateModel(setFlows).filter((i) => /EWR/.test(i.message))).toEqual([]);
 	});
 
 	it('refuses the EWR site flag off the outlet or a hydrological unit, exactly as the backend does (engine 1.5.0)', () => {

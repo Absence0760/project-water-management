@@ -840,7 +840,7 @@
 		<p class="hint explain">Cut demand by level when the farm dams fall below a share of their capacity.</p>
 		<Lazy load={loadDroughtRestriction}>
 			{#snippet children(DroughtRestrictionFields)}
-				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={draft.errors.restrict} {readonly} nodes={editor?.model.nodes ?? []} projectId={project.id} />
+				<DroughtRestrictionFields bind:value={s.droughtRestriction} bind:error={draft.errors.restrict} {readonly} baseline nodes={editor?.model.nodes ?? []} projectId={project.id} />
 			{/snippet}
 		</Lazy>
 		<FieldHistoryLine field="settings:droughtRestriction" />

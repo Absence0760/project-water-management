@@ -640,7 +640,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'hands-off-flow',
 		term: 'Hands-off flow',
-		short: 'Flow a hydrological unit leaves in the river before its river pump or River to dam takes anything: an amount by month, and/or the EWR.',
+		short: 'Flow a unit leaves in the river before its river pump or River to dam takes anything: an amount by month, and/or (scenario only) the EWR.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['node.handsOffM3Day', 'node.handsOffEwr']
@@ -783,7 +783,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'dam-release',
 		term: 'Dam release (compensation flow)',
-		short: 'Water a dam lets through its outlet before irrigation: its inflow up to what the river below needs, or a fixed monthly amount.',
+		short: 'Water a dam lets out before irrigation: its inflow up to a set flow below it (the EWR: scenario only), or a fixed monthly amount.',
 		units: 'm³/day',
 		category: 'farm',
 		fields: ['node.damReleaseRule', 'node.damReleaseM3Day', 'node.damOutletCapacityM3Day', 'run.dam_release']

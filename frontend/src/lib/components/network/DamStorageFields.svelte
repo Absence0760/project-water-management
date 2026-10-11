@@ -15,6 +15,7 @@
 	import MonthFields from './MonthFields.svelte';
 	import { monthsOf } from './monthFields';
 	import { RULE_LABEL, releaseHint } from './damRelease';
+	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from './ewrScenarioOnly';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
@@ -77,8 +78,8 @@
 
 	function setRule(r: DamReleaseRule) {
 		node.damReleaseRule = r;
-		// A fixed release needs its amounts; pass inflow starts from the EWR.
-		if (r === 'fixed' && !node.damReleaseM3Day) node.damReleaseM3Day = monthsOf(0);
+		// A release needs its amounts: pass inflow up to the EWR is a scenario's (issue #523 B4), so the baseline's starts from a set flow.
+		if (r !== 'none' && !node.damReleaseM3Day) node.damReleaseM3Day = monthsOf(0);
 	}
 </script>
 
@@ -154,12 +155,14 @@
 		<label class="check">
 			<input
 				type="checkbox"
-				disabled={readonly}
+				disabled={ewrSwitchDisabled(readonly, useEwr)}
 				checked={useEwr}
+				aria-describedby={id('ewr-h')}
 				onchange={(e) => (node.damReleaseM3Day = e.currentTarget.checked ? null : monthsOf(0))}
 			/>
 			Pass up to the EWR required here (this hydrological unit's share and upstream shares)
 		</label>
+		<p class="hint" id={id('ewr-h')} data-testid="dam-release-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>
 	{/if}
 	{#if rule === 'fixed' || (rule === 'passInflow' && !useEwr)}
 		<MonthFields

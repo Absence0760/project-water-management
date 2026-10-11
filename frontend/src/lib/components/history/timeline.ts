@@ -74,6 +74,22 @@ const hereToo = (teamRole: unknown, projectRole: unknown): string =>
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
 
+/** One switched-off EWR rule of a model.ewr_rules_reset event (216), in words. */
+function ewrRuleWords(r: Record<string, unknown>): string {
+	switch (r.kind) {
+		case 'damPassInflow':
+			return `${str(r.name) || 'a unit'}’s dam release passing the EWR`;
+		case 'unitHandsOff':
+			return `${str(r.name) || 'a unit'}’s hands-off flow leaving the EWR`;
+		case 'offtakeHandsOff':
+			return `the off-take ${str(r.from) || '?'} → ${str(r.to) || '?'} leaving the EWR`;
+		case 'restrictionEwrTrigger':
+			return `the drought restriction’s EWR trigger${num(r.level) !== null ? ` (level ${num(r.level)})` : ''}`;
+		default:
+			return '';
+	}
+}
+
 const FEEDS: Record<string, string> = { chirps: 'CHIRPS', chirps_gefs: 'CHIRPS-GEFS forecast', dws: 'DWS' };
 const feedName = (s: unknown) => FEEDS[str(s)] ?? str(s);
 
@@ -323,6 +339,12 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'settings.allocation_mode_reset': {
 			const from = ALLOCATION_MODE_LABEL[str(s.from) as AllocationMode] ?? str(s.from);
 			return `The baseline’s allocation mode “${from}” was set to compare only: licence data never drives the baseline (a cap or a full allocation is a scenario)`;
+		}
+		// 216 (issue #523 B4): the EWR is assessed in the baseline, never applied, so the stored rules that kept it were switched off.
+		case 'model.ewr_rules_reset': {
+			const rules = Array.isArray(s.rules) ? (s.rules as Record<string, unknown>[]) : [];
+			const words = rules.map(ewrRuleWords).filter(Boolean);
+			return `Switched off ${plural(rules.length, 'rule')} keeping water for the EWR${words.length ? ` (${words.join('; ')})` : ''}: in the baseline the EWR is assessed and reported, never applied (a scenario keeps it)`;
 		}
 		case 'allocation.created':
 			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
