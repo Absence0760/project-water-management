@@ -274,8 +274,11 @@
 		position: absolute;
 		right: 0;
 		top: calc(100% + 4px);
+		/* Wide enough that "Who decides about your farm's information" (longer in
+		   Afrikaans) wraps once at most, never past the window. */
+		width: max-content;
 		min-width: 250px;
-		max-width: calc(100vw - 16px);
+		max-width: min(320px, calc(100vw - 16px));
 		margin: 0;
 		padding: 4px 0;
 		list-style: none;
@@ -284,10 +287,13 @@
 		border-radius: var(--radius);
 		box-shadow: var(--shadow);
 	}
+	/* A two-line item keeps its own padding, so it doesn't run into the next
+	   one ("…farm's information" sat on "Don't keep a copy…" as one block). */
 	.menu a,
 	.menu button {
 		width: 100%;
-		padding: 0 16px;
+		padding: 8px 16px;
+		line-height: 1.3;
 		text-align: left;
 		color: var(--text);
 	}
@@ -446,13 +452,38 @@
 		flex-shrink: 0;
 		margin-top: 2px;
 	}
+	/* A flex summary loses the browser's ▸ marker, so "Show the numbers" read
+	   as a link with nothing to say it opens in place. Every disclosure on the
+	   farm pages (these and RiverCard's "Who can see" button, .disclosure) draws
+	   one chevron that points down when closed and up when open. */
 	.farm-main :global(details > summary) {
 		min-height: var(--tap);
 		display: flex;
 		align-items: center;
+		gap: 10px;
 		color: var(--accent);
 		font-weight: 600;
 		cursor: pointer;
+		list-style: none;
+	}
+	.farm-main :global(details > summary::-webkit-details-marker) {
+		display: none;
+	}
+	.farm-main :global(details > summary::after),
+	.farm-main :global(.disclosure::after) {
+		content: '';
+		flex: none;
+		width: 7px;
+		height: 7px;
+		margin-top: -4px;
+		border-right: 2px solid currentColor;
+		border-bottom: 2px solid currentColor;
+		transform: rotate(45deg);
+	}
+	.farm-main :global(details[open] > summary::after),
+	.farm-main :global(.disclosure[aria-expanded='true']::after) {
+		margin-top: 4px;
+		transform: rotate(-135deg);
 	}
 	.farm-main :global(table.numbers) {
 		width: 100%;

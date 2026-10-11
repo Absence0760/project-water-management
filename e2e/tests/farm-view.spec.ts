@@ -219,6 +219,70 @@ test('no page scrolls sideways at 360 px or on a desktop, in light and dark', as
 	}
 });
 
+// The farm pages' floor (ui.md § Farmer view): nothing under 13 px, 44 px targets at every width, a
+// disclosure that says it opens, a menu whose two-line items stay apart, and the season comparison's
+// labels on one line beside their figures.
+test('the farm page keeps its 13 px text and 44 px targets, and its disclosures and menu read as such', async ({ page }) => {
+	await signIn(page, FARMER1);
+	const { projectId } = await farmOf(page.context());
+	await expect(page).toHaveURL(new RegExp(`/farm/${projectId}$`));
+	for (const size of [{ width: 390, height: 844 }, { width: 1440, height: 960 }]) {
+		await page.setViewportSize(size);
+		await page.goto(`/farm/${projectId}`);
+		const notes = page.getByRole('region', { name: 'Notes about your hydrological unit' });
+		await expect(notes.locator('[data-notes-ready="true"]')).toBeVisible();
+
+		// No text on the page under 13 px (the notes card's help line and button were 11.9 px, from the workspace's 14 px root).
+		const small = await page.getByRole('main').evaluate((main) => {
+			const out: string[] = [];
+			const walk = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+			for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+				const el = n.parentElement!;
+				if (!n.textContent!.trim() || !el.checkVisibility() || el.closest('.visually-hidden, svg')) continue;
+				const px = parseFloat(getComputedStyle(el).fontSize);
+				if (px < 13) out.push(`${px}px: ${n.textContent!.trim().slice(0, 40)}`);
+			}
+			return out;
+		});
+		expect(small, `${size.width}`).toEqual([]);
+		const add = (await notes.getByRole('button', { name: 'Add note' }).boundingBox())!;
+		expect(add.height, `${size.width}`).toBeGreaterThanOrEqual(44);
+
+		// "Show the numbers" and "Who can see" draw a chevron that turns over when they open.
+		const turn = (loc: ReturnType<Page['locator']>) => loc.evaluate((el) => getComputedStyle(el, '::after').transform);
+		const numbers = page.getByRole('region', { name: 'Last 12 months, in ML' }).locator('summary');
+		const who = page.getByRole('button', { name: 'Who can see my hydrological unit' });
+		for (const toggle of [numbers, who]) {
+			expect(await toggle.evaluate((el) => getComputedStyle(el, '::after').content)).not.toBe('none');
+			const closed = await turn(toggle);
+			await toggle.click();
+			await expect.poll(() => turn(toggle)).not.toBe(closed);
+		}
+
+		// Compared with last season: each label is one line, the height of the figures beside it.
+		for (const row of await page.getByRole('region', { name: 'Compared with last season' }).locator('tbody tr').all()) {
+			const label = (await row.locator('th').boundingBox())!;
+			const figure = (await row.locator('td').first().boundingBox())!;
+			expect(label.height, (await row.innerText()).replace(/\s+/g, ' ')).toBeLessThanOrEqual(figure.height + 1);
+		}
+
+		// The menu: a two-line item ("Who decides about your farm’s information") keeps clear of the next.
+		await page.getByRole('button', { name: 'Menu' }).click();
+		const items = page.locator('#farm-menu').locator('a, button');
+		const rects = await items.evaluateAll((els) =>
+			els.map((el) => {
+				const r = document.createRange();
+				r.selectNodeContents(el);
+				const b = r.getBoundingClientRect();
+				return { top: b.top, bottom: b.bottom, right: el.getBoundingClientRect().right };
+			})
+		);
+		for (let i = 1; i < rects.length; i++) expect(rects[i]!.top - rects[i - 1]!.bottom, `menu item ${i}`).toBeGreaterThanOrEqual(12);
+		for (const r of rects) expect(r.right).toBeLessThanOrEqual(size.width);
+		await page.keyboard.press('Escape');
+	}
+});
+
 test('the workspace URL sends a farmer to their farm view', async ({ page }) => {
 	await signIn(page, FARMER1);
 	const { projectId } = await farmOf(page.context());
@@ -449,6 +513,38 @@ test('a link into a farm page lands below the sticky farm header on a phone and 
 		await expect(notice).toBeInViewport();
 		await expect.poll(() => notice.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(await headerBottom(page));
 	}
+});
+
+// A card on the list says what its figures are doing: "Updating…" while they load, and the page's own
+// error title when neither the figures nor a saved copy can be had, never a blank line.
+test('a farm card on the list says when its figures are loading or could not be loaded', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER2);
+	await expect(page).toHaveURL(/\/farm$/);
+	const kareebos = page.getByRole('link', { name: /Kareebos/ });
+	await expect(kareebos).toContainText('% of water needed');
+	const { projects } = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; role: string }[] };
+	let nodeId = '';
+	for (const p of projects.filter((x) => x.role === 'farmer')) {
+		const ix = (await (await page.request.get(`${API_URL}/projects/${p.id}/farm`)).json()) as { farms: { nodeId: string; name: string }[] };
+		nodeId ||= ix.farms.find((f) => f.name === 'Kareebos')?.nodeId ?? '';
+	}
+	expect(nodeId).not.toBe('');
+
+	// Kareebos's figures (GET …/farm/:nodeId) are held, then fail; this phone has no saved copy of them.
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route(`${API_URL}/projects/*/farm/${nodeId}`, async (route) => {
+		await held;
+		await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) });
+	});
+	await page.reload();
+	await expect(kareebos).toContainText('Updating…');
+	await expect(page.getByRole('link', { name: /Rietspruit/ })).toContainText('% of water needed');
+	release();
+	await expect(kareebos).toContainText('We couldn’t load your hydrological unit');
+	await expect(kareebos).not.toContainText('Updating…');
+	await page.unrouteAll({ behavior: 'wait' });
 });
 
 test('a list of farms that fits the window doesn’t scroll', async ({ page }) => {

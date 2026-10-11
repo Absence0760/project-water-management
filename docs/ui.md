@@ -10060,8 +10060,10 @@ farm; `GET /projects/:id/farm` lists the farms and says whether anything is
 published.
 
 - **Routes.** `/farm` lists every farm linked to the user across projects
-  (notice level, received %, dam %, or "Not published yet"), and goes
-  straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
+  (notice level, received %, dam %, or "Not published yet"; while a card's
+  figures load it says "Updating…", and when neither they nor a saved copy
+  can be had, "We couldn’t load your hydrological unit", never a blank
+  line), and goes straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
   switcher when the farmer has several there: a row of links above the name
   for up to 4 farms; past that, folded under "Your hydrological units in this catchment
   (N farms)", so the name and the WUA's notice stay on the first screen,
@@ -10095,7 +10097,16 @@ published.
   FarmShell is loaded as its own chunk then). If that list or the chunk
   fails, the workspace frame is the fallback. A farmer who is also a
   member of a catchment keeps the workspace frame. One 560 px column, a 16 px base, 44 px targets,
-  nothing under 13 px, existing tokens only, light and dark. The header is
+  nothing under 13 px, existing tokens only, light and dark. Pieces it
+  borrows from the workspace are lifted to that floor in the farm's copy
+  (the notes card's help line, meta line and buttons, sized from the 14 px
+  root; MapLibre's 29 px zoom buttons). Every disclosure ("Show the
+  numbers", "Who can see my hydrological unit", the folded farm switcher)
+  draws a chevron that points down when closed and up when open, and the
+  Menu's items keep their own padding, so a two-line item doesn't run into
+  the next (`farm-view.spec.ts` pins all three). "Compared with last
+  season" gives its labels 40 % of the card and sets the figures right
+  under their season, so "Water received" stays one line on a phone. The header is
   sticky at every width, so while it's on the page it sets `--header-h` to
   its 56 px (the app shell's 0 from 900 px would leave in-page links, such
   as Why?'s "Read the notice" (`#notice`, landed once the farm has loaded)
