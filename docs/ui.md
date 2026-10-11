@@ -1980,7 +1980,15 @@ sets its wording and what the file picker offers, and the picked file's type
 decides how it's read, so a workbook picked from the JSON button still works.
 Two buttons rather than one "Import…": the client looks for a named workbook
 import, and the two sources explain themselves differently (a workbook's
-review has options and reports a `.json` file doesn't). The dialog downloads
+review has options and reports a `.json` file doesn't). On a phone (560 px
+and narrower) the head is one row, **Import ▾** beside **New project** (issue
+#521: the three full-width buttons took ~150 px before any project): Import
+opens a short list with the same two named imports (Escape, a click outside
+or leaving it closes the list), and the one picked opens the dialog with the
+focus kept on Import, so Escape from the dialog returns there. Each row's
+**Add data** and **⋯** sit side by side there, one tap high, instead of
+stacked; the owner filter and the sort share the filter row evenly
+(`projects.spec.ts`, the fifty-projects test). The dialog downloads
 on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
@@ -5440,7 +5448,12 @@ section header, which it fills (`fillHeader`) like the other sections.
   **Find a setting**: type part of a setting's name (`pan coef`,
   `february`) and the index narrows to the panels and settings that match;
   picking a setting opens what folds it (Advanced: days in February) and
-  focuses it. A panel with a Save blocker gets a red dot ("has a problem"),
+  focuses it. A setting that moved to another page is still found, by its
+  name or its other names, as a link there (`SETTINGS_ELSEWHERE` in
+  `settings/sections.ts`, SectionNav's `elsewhere`): "comparison band",
+  "registered volumes" or "tolerance" lists **Comparison band, on
+  Allocations**, which opens Allocations on that card (`#alloc-band`, its
+  heading focused once the volumes are in; issue #521). A panel with a Save blocker gets a red dot ("has a problem"),
   and on the bar's Automation link a problem on any panel it stands for.
   The menu marks the panel being read with `aria-current="location"` and,
   as a bar, raises the page's `scroll-padding-top` by its height (the rail
@@ -6420,10 +6433,20 @@ two.
   **daily-mean** peak m³/s (labelled so from engine 1.11.0: a gazette's peak
   is instantaneous and the hydrologist converts it; the hint says so and that
   the run warns when natural flow rarely reaches it), event
-  days from rise to recession, events per year; engine ≥ 1.9.0, model.md §2.9d) with **Add a high flow** and Remove, a **Paste high
-  flows** box with **Fill the high flows**, **Load a CSV file**, and a synthetic
-  example CSV. The two status lines are named *Paste result* and *High-flow
-  paste result*.
+  days from rise to recession, events per year; engine ≥ 1.9.0, model.md §2.9d) with **Add a high flow** and
+  **Paste or load a CSV…** in one row above the list, and Remove on each row.
+  The paste was an always-open box under the list with **Fill the high
+  flows**; since issue #521 it is a dialog (**Paste high flows at …**) in the
+  shared paste dialog's look but previewing rows, since this is a list, not a
+  grid: the layout line, **Rows copied from a spreadsheet**, **Load a CSV
+  file** and the synthetic example CSV, then a **Preview** whose status line
+  says how many components the rows make and what they replace ("2
+  high-flow components, replacing the 1 component listed."), or the parser's
+  error, over a table of the rows read (name, peaks in, peak, event days, per
+  year). **Fill 2 high flows** (or **Replace with 2 high flows** over typed
+  ones) puts them in; the preview is the check, so it asks no confirm. Same
+  parser (`ewrRules.ts` `parseHighFlows`) and result as the old Fill. The two
+  status lines are named *Paste result* and *High-flow paste result*.
   From engine 1.3.0 (issue #64, [model.md §2.9c–§2.9d](./model.md)), once
   there is a table, two choices sit under the tables, both pending the
   hydrologist and both defaulting to what earlier runs did: **EWR charge
@@ -6548,6 +6571,20 @@ Below the settings form (it saves on its own, never through the save bar) is
 part of the Settings tab's chunk; WP-2.10,
 [architecture.md § Data feeds](./architecture.md#data-feeds)).
 
+- **The head** (issue #521): the heading with its ⓘ (what a feed is; the
+  paragraph that was under the heading is the glossary's **Data feeds**
+  entry, behind the tip's link), the **Sample data** badge, and on the right
+  **Refresh status** and the add action: **Attach a feed** for an owner,
+  **Rain from the map** for an editor. It opens the add card above the list,
+  with its own action row; the button is hidden while the card is open and
+  takes the focus back when it closes. The field help in the card follows
+  the page's "Explain each setting under its field" switch (`.explain`; the
+  panels after the form sit in `.settings-after`, which follows the switch
+  like the form): a line that states the format or a value ("The gauge code,
+  e.g. A2H012.", "“south, west, north, east” in degrees.", the sample grid's
+  extent) stays, the reasoning behind it is hidden and still the field's
+  description.
+
 - **The list**, one card per feed: a state chip in words (**OK**, **Stale**,
   **Failing**, **Waiting**, **Off**; colour is never the only signal, and the
   card carries `data-state`), the source, the series it writes ("→ Rainfall —
@@ -6581,23 +6618,31 @@ part of the Settings tab's chunk; WP-2.10,
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
-- **Use the catchment boundary** (editors and owners; issue #326 B-rain,
-  `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
-  boundary](./maps.md#rain-from-the-boundary)): opens **Rain from the
-  catchment boundary** under the list with the proposal: the boundary (name,
+- **Area: The catchment boundary, from the map** (editors and owners; issue
+  #326 B-rain, `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)). Until issue #521 this and
+  the next were two unlabelled buttons under the list; now they are choices
+  of the card's **Area** for CHIRPS (an editor's card, **Rain from the
+  map**, has only these two, the boundary first). Picking one replaces the
+  series fields, the typed area and **Attach feed** with the proposal and its
+  own action row; the focus stays on the Area choice. It shows **Rain from the
+  catchment boundary** (a heading in the card) with the proposal: the boundary (name,
   area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
   in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
   source, what **Apply** does (attach a new feed, or give an empty feed the
   cells), and **The cells** (a disclosure with a table: latitude, longitude,
   share inside, weight). Owners get **Apply**; editors read "An owner of the
-  project applies it". The applied feed's card reads "14 cells of the
-  catchment boundary “…”, area weighted". The Map tab's link opens it at once
-  (`?rain=boundary`). Without a boundary the error says so, with a link to
-  the map.
-- **Rain for each unit** (editors see it, owners act; issue #482,
-  `feeds/UnitRain.svelte`, helpers in `feeds/unitRain.ts`, [maps.md § Rain
-  for each unit](./maps.md)): opens **Rain for each unit** under the list
-  with the server's proposal (`GET …/feeds/chirps/from-units`): a table of
+  project applies it"; **Close** closes the card. What Apply did, or the
+  error, sits above that row. The applied feed's card reads "14 cells of the
+  catchment boundary “…”, area weighted". The Map tab's link (`?rain=boundary`)
+  opens the card on it at once, its heading focused (`DataFeedsPanel` reads
+  the parameter, once per arrival, also when the link is followed on the
+  page; never for a viewer). Without a boundary the error says so, with a
+  link to the map.
+- **Area: Each unit’s parcel: a feed per unit** (editors see it, owners
+  act; issue #482, `feeds/UnitRain.svelte`, helpers in `feeds/unitRain.ts`,
+  [maps.md § Rain for each unit](./maps.md)): shows **Rain for each unit** in
+  the card with the server's proposal (`GET …/feeds/chirps/from-units`): a table of
   each unit with land and a parcel on the map (unit, area, "3 cells, 75 %
   of their area inside", and its feed's state chip and health sentence from
   the feeds list, or "No feed yet"; the units that need something first, no
@@ -6628,11 +6673,13 @@ part of the Settings tab's chunk; WP-2.10,
   History reads "Set up rain for each unit: CHIRPS rnl feeds for 4 units
   (Upper, Middle, Lower and 1 more), 3 created, 1 updated, from 1981-01-01"
   (`history/timeline.ts`). A unit's feed card reads "3 cells of a
-  unit's parcel (12.35 km²), area weighted" (`describePlace`). Opens at
-  once on `?rain=units`. Tested by `e2e/tests/unit-rain.spec.ts`, and
+  unit's parcel (12.35 km²), area weighted" (`describePlace`). The card
+  opens on it at once on `?rain=units` (Settings' Rain for each unit link),
+  its heading focused; **Close** closes the card. Tested by `e2e/tests/unit-rain.spec.ts`, and
   end to end (the unit feeds fetched offline, the units' MAPs, the switch, a
   run's Rain for each unit) by `e2e/tests/unit-rain-run.spec.ts`.
-- **Attach a feed** (owners): source, **Into series** (the kinds that source
+- **Attach a feed** (owners): source and **Area** in the first row, then
+  **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
@@ -6691,9 +6738,10 @@ part of the Settings tab's chunk; WP-2.10,
   attached with the replacement confirmed (`replaceSeries`), backfills the
   new record from the series' first day in a stage, and swaps it in whole
   when caught up.
-- **Keyboard and screen readers**: opening the form focuses **Source**, and
-  closing it (Cancel or a successful attach) returns focus to **Attach a
-  feed**; a bad cell or code marks its field `aria-invalid`, describes it by
+- **Keyboard and screen readers**: opening the card focuses **Source** (an
+  editor's, **Area**), and closing it (Cancel, a proposal's Close, or a
+  successful attach) returns focus to the head's **Attach a feed** (or **Rain
+  from the map**); the attach status line sits under the head; a bad cell or code marks its field `aria-invalid`, describes it by
   the message and focuses it (the bounding box too); busy buttons are `aria-disabled` so they keep
   focus; after **Remove**, focus goes to the section heading. Messages land
   in a live region that is always in the page. A failed action re-reads the
@@ -6704,7 +6752,11 @@ part of the Settings tab's chunk; WP-2.10,
   name the sample grid's extent (the box hint with a sample box inside it).
 - Viewers see the list and the health, with no buttons. Tested by
   `e2e/tests/data-feeds.spec.ts` (including axe on the panel with a failing
-  feed and the form open).
+  feed and the form open) and `e2e/tests/settings-after-form-layout.spec.ts`
+  (the head's actions, the card above the list with its action in a 1440×900
+  window, the Area's choices by source and role, the explain switch, an
+  editor's card, `?rain=boundary`, and the open cards at 390 and 320 px with
+  nothing scrolling sideways).
 
 ### API keys
 
@@ -6713,13 +6765,20 @@ Below Data feeds, for **owners only**, **API keys** (`#set-api-keys`;
 chunk; WP-2.9, [api.md § Ingest](./api.md#ingest)) makes keys a logger gateway
 or a script uses to push daily readings into the project's series.
 
-- **Make an API key**: a name, how long it works (until revoked, 90 days, 1
-  or 2 years) and what it may write: any series of the project, or only the
-  ticked ones (the project's current series).
+- **Make a key**, in the panel's head beside the heading and its ⓘ (what a
+  key may and may not do; the paragraph that was under the heading is the
+  glossary's **API key** entry): opens **Make an API key** as a card under
+  the head (issue #521: it was always open above the list), focused on
+  **Name**: a name, how long it works (until revoked, 90 days, 1 or 2 years)
+  and what it may write: any series of the project, or only the ticked ones
+  (the project's current series), with **Make key** and **Cancel** in its
+  action row. Cancel closes it and gives the focus back to **Make a key**;
+  making a key closes it and puts the focus on the new key, which selects
+  itself to copy.
 - **The new key** is shown once, in a highlighted box with **Copy** and the
   warning that it won't be shown again, above a copyable `curl` example that
   pushes one day with a `$WM_INGEST_KEY` placeholder (never the key itself).
-- **Expected format of a request**, under the panel's intro, before any key
+- **Expected format of a request**, under the panel's head, before any key
   exists: the body's fields, the units, that a `null` clears its day there
   (unlike an upload's Append / update), when a new series is refused (`409`)
   and the `400` `details`, with an example body ([Expected format](#expected-format)).
@@ -6749,13 +6808,22 @@ run's report to chosen members every week or month.
   goes to and who it sends as, and "Next: …" with, when the last due time sent
   nothing, why ("the project had no runs to report on"); a paused one says
   **Paused.**
+- **The head**: the heading with its ⓘ (report PDFs and schedules: the link
+  needs a sign-in, the PDF is kept 7 days, a schedule sends as the editor who
+  last saved it; the paragraph that was under the heading, issue #521) and,
+  for editors and owners, **Add a schedule**, which opens the form as a card
+  above the list (focused on **Every**), with **Add schedule** and **Cancel**
+  in its action row; either closes it and gives the focus back to **Add a
+  schedule**, and the result line sits under the head.
 - **Add a schedule** (editors and owners): every week (on a weekday) or month
   (on day 1–28), the hour, the time zone (an IANA name, the browser's own by
   default), and **Send to**: checkboxes of the project's members who can read
   the report (farmers are not offered; you are ticked if you are one).
   **Pause / Resume** and **Remove** (with a confirm) on each card.
 - Viewers see the list, with no buttons.
-- Tested by `e2e/tests/server-report.spec.ts`.
+- Tested by `e2e/tests/server-report.spec.ts` and
+  `e2e/tests/settings-after-form-layout.spec.ts` (the head's action and the
+  card's in a 1440×900 window, the phone).
 
 ## River & reserve
 
