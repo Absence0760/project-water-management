@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Issue #521 round 5, farmer pages and dates: the shared DayInput replacing 30 native date fields (parse, validity and save-blocker wiring), the regrouped two-step section, the not-linked unit state, the account pages' 320 px layout and the 11 new Afrikaans strings; measured 1968 KB against 1964 KB"
+}
