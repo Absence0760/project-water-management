@@ -36,13 +36,17 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await dam.getByRole('button', { name: 'Use these rows' }).click();
 	await expect(dam.getByText('Using the survey curve for the dam area; the area when full and exponent are not used.')).toBeVisible();
 
-	// Pass inflow with no amounts releases for the EWR, and says so (issue #507); with amounts it doesn't name the EWR.
+	// Pass inflow up to the EWR is a scenario's (issue #523 B4): the baseline's starts from a set flow, the EWR box
+	// disabled with the reason, and the hint doesn't name the EWR.
 	const ruleSelect = dam.getByLabel('Release rule');
 	await ruleSelect.selectOption('passInflow');
-	await expect(ruleSelect).toHaveAccessibleDescription(/^This releases water for the EWR/);
-	await dam.getByLabel(/Pass up to the EWR required here/).uncheck();
 	await expect(ruleSelect).toHaveAccessibleDescription(/^Before irrigation the dam passes its inflow below the wall, up to the month's flow to keep below the dam/);
 	await expect(ruleSelect).not.toHaveAccessibleDescription(/EWR/);
+	const passEwr = dam.getByLabel(/Pass up to the EWR required here/);
+	await expect(passEwr).not.toBeChecked();
+	await expect(passEwr).toBeDisabled();
+	await expect(passEwr).toHaveAccessibleDescription(/^Scenario only: in the baseline the EWR is assessed and reported, never applied\./);
+	await expect(dam.getByLabel('Dam release of Upper farm in Oct, m³/day')).toHaveValue('0');
 
 	await dam.getByLabel('Release rule').selectOption('fixed');
 	await dam.getByLabel('Dam release of Upper farm in Oct, m³/day').fill('120');

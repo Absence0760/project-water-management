@@ -114,7 +114,10 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await page.getByLabel('Losses seeping back of transfer 1, %', { exact: true }).fill('40');
 	await expect(rejoins).toHaveValue('');
 	await page.getByLabel('Takes, transfer 1', { exact: true }).selectOption('capacity');
-	await page.getByLabel('Leaves the EWR in the river, transfer 1', { exact: true }).check();
+	// Keeping the EWR is a scenario's (issue #523 B4): in the baseline the box is disabled, and says why.
+	const keepsEwr = page.getByLabel('Leaves the EWR in the river, transfer 1', { exact: true });
+	await expect(keepsEwr).toBeDisabled();
+	await expect(keepsEwr).toHaveAccessibleDescription(/^Scenario only: in the baseline the EWR is assessed and reported, never applied\./);
 	// The page has taken the save in (the bar goes once the editor holds what the server returned), so the
 	// reload leaves a saved page, not one still mid-save behind its unsaved-changes guard.
 	await saveModelChanges(page);
@@ -126,7 +129,7 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await expect(page.getByLabel('Losses seeping back of transfer 1, %', { exact: true })).toHaveValue('40');
 	await expect(page.getByLabel('Rejoins the river below, transfer 1', { exact: true })).toHaveValue('');
 	await expect(page.getByLabel('Takes, transfer 1', { exact: true })).toHaveValue('capacity');
-	await expect(page.getByLabel('Leaves the EWR in the river, transfer 1', { exact: true })).toBeChecked();
+	await expect(page.getByLabel('Leaves the EWR in the river, transfer 1', { exact: true })).not.toBeChecked();
 	await expect(page.getByLabel('Tops up the destination’s dam, transfer 1', { exact: true })).not.toBeChecked();
 	await expectNoSidewaysScroll(page);
 });

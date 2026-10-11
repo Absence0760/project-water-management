@@ -58,8 +58,8 @@ test('a scenario sets a restriction rule; the outlook’s triggers become the pr
 	await expect(change).toContainText('Drought restriction rule: off → reviewed 1 Oct, 1 Jan, lifted 1 May; Level 1 (below 60 %)');
 	await expect(change).toContainText('Baseline assumption');
 
-	// The WUA publishes a 25 % restriction notice; Settings starts a rule from it, reads each unit's own dam, and adds
-	// an EWR trigger at the outlet.
+	// The WUA publishes a 25 % restriction notice; Settings starts a rule from it and reads each unit's own dam. Its
+	// EWR trigger is a scenario's (issue #523 B4): disabled here, with the reason.
 	const pub = await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'restricted', pct: 25 } } });
 	expect(pub.status()).toBe(201);
 	await page.goto(`/projects/${project.id}?tab=settings`);
@@ -67,11 +67,14 @@ test('a scenario sets a restriction rule; the outlook’s triggers become the pr
 	await settings.getByRole('button', { name: 'Start from the published notice' }).click();
 	await expect(settings.getByTestId('restriction-words')).toContainText('Published notice (below 100 %): crops 25 %');
 	await settings.getByLabel('Storage the level reads').selectOption({ label: 'Each unit’s own dam' });
-	await settings.getByLabel('Also restrict when the EWR wasn’t met the day before a review').check();
-	await expect(settings.getByTestId('restriction-words')).toContainText("each unit's own dam; at least level 1 when the EWR at the outlet wasn't met the day before a review");
+	const ewrTrigger = settings.getByLabel('Also restrict when the EWR wasn’t met the day before a review');
+	await expect(ewrTrigger).toBeDisabled();
+	await expect(ewrTrigger).toHaveAccessibleDescription(/^Scenario only: in the baseline the EWR is assessed and reported, never applied\./);
+	await expect(settings.getByTestId('restriction-words')).toContainText("each unit's own dam");
 	await saveSettings(page);
 	const fromNotice = (await settingsOf(page.request, project.id)).droughtRestriction as { basis?: string; ewrTrigger?: unknown; levels: { belowPct: number }[] };
-	expect(fromNotice).toMatchObject({ basis: 'own', ewrTrigger: { siteNodeId: null, level: 1 }, levels: [{ belowPct: 1 }] });
+	expect(fromNotice).toMatchObject({ basis: 'own', levels: [{ belowPct: 1 }] });
+	expect(fromNotice.ewrTrigger).toBeUndefined();
 
 	// The outlook at 70 / 40 %, and its review triggers saved as the project's rule, replacing that one.
 	const made = await page.request.post(`${API_URL}/projects/${project.id}/outlooks`, {
