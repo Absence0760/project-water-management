@@ -3,7 +3,7 @@
 // refusal) is in allocations.db.test.ts.
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { comparisonTotals, redactRunAllocations, volumeTotals, withoutAllocationIdentifiers, type VolumeRow } from './viewerUnits.js';
+import { comparisonTotals, redactReportAllocations, redactRunAllocations, volumeTotals, withoutAllocationIdentifiers, type VolumeRow } from './viewerUnits.js';
 
 const row = (o: Partial<VolumeRow>): VolumeRow => ({
 	waterSource: 'surface',
@@ -74,6 +74,31 @@ describe('redactRunAllocations', () => {
 		// A run with none: its model gets an empty list, its summary stays as it was.
 		const plain = { model: { nodes: [] as unknown[], allocations: undefined }, summary: { farms: [] as unknown[], allocations: null } };
 		expect(redactRunAllocations(plain)).toEqual({ model: { nodes: [], allocations: [] }, summary: { farms: [], allocations: null } });
+	});
+});
+
+describe('redactReportAllocations (issue #523 G1)', () => {
+	it('leaves the volumes out of Appendix A.1’s model and both summaries, keeping § 5 and the rest; the original isn’t changed', () => {
+		const report = {
+			version: 'evidence-16',
+			allocations: { units: [{ nodeId: 'own', own: true }], othersLeftOut: 2 },
+			appendix: { baselineInputs: { settings: {}, model: { nodes: [{ id: 'n1' }], allocations: [{ id: 'a', volumeM3PerYear: 5 }] }, series: {} }, changes: [] },
+			summaries: {
+				baseline: { farms: [], allocations: { mode: 'none', tolerance: 0.1, used: 1, notMatched: 0, nodes: [{ nodeId: 'n1', name: 'Upper' }] } },
+				application: { farms: [], allocations: { mode: 'none', tolerance: 0.1, used: 1, notMatched: 0, nodes: [{ nodeId: 'n1', name: 'Upper' }] } }
+			}
+		};
+		const out = redactReportAllocations(report);
+		expect(out.appendix.baselineInputs.model.allocations).toEqual([]);
+		expect(out.appendix.baselineInputs.model.nodes).toEqual([{ id: 'n1' }]);
+		expect(out.summaries.baseline.allocations.nodes).toEqual([]);
+		expect(out.summaries.application.allocations).toMatchObject({ used: 1, nodes: [] });
+		expect(out.allocations).toBe(report.allocations);
+		expect(JSON.stringify(out)).not.toContain('Upper');
+		expect(report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+		expect(report.summaries.baseline.allocations.nodes).toHaveLength(1);
+		// Baseline evidence: no application summary.
+		expect(redactReportAllocations({ ...report, summaries: { ...report.summaries, application: null } }).summaries.application).toBeNull();
 	});
 });
 

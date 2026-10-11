@@ -2840,8 +2840,17 @@ database:
 
   With the switch off, a viewer's routes carry no copy of the volumes: the
   run's model and summary per unit, the compare route, the summary CSV, the
-  run's model input (refused for a cap or full-allocation run) and the farm
-  view's registered water ([api.md § Allocations](./api.md#allocations)).
+  run's model input (refused for a cap or full-allocation run), the farm
+  view's registered water ([api.md § Allocations](./api.md#allocations)),
+  and the evidence report's Appendix A.1 model and run summaries (left out
+  of the live report and of a pack's manifest, which then says
+  `volumesWithheld`). On a pack whose runs carry a volume, such a viewer
+  gets `403` `pack_volumes_withheld` for the reproduction bundle (its runs'
+  inputs and results; redacting it would break its hash) and for the
+  manifest and PDF of a pack drafted before `evidence-15`, whose § 5 names
+  every farm (issue #523 G1, `evidence/packs.ts` `packVolumesWithheld`;
+  `packs.db.test.ts` holds the refusals, with editors, owners and a viewer
+  allowed by the switch as positive controls).
   Left: a capped run's per-unit daily series still bound use by the volume
   ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
   extract must say how it was obtained (`allocation_source.reference`,

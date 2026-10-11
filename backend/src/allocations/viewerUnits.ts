@@ -157,6 +157,30 @@ export function redactRunAllocations<T extends RunLike>(run: T): T {
 	return out;
 }
 
+type ReportLike = {
+	appendix: { baselineInputs: { model?: { allocations?: unknown } | null } | null };
+	summaries: { baseline: { allocations?: { nodes?: unknown[] } | null } | null; application: { allocations?: { nodes?: unknown[] } | null } | null };
+};
+
+/**
+ * An evidence report as a viewer who can't read each registered volume gets
+ * it (issue #523 G1): Appendix A.1's baseline model without its allocation
+ * rows, and each run summary's allocations without the per-unit part, as
+ * redactRunAllocations leaves a run. § 5 stays: since `evidence-15` it lists
+ * only the applicant's own units, the rest as totals at 5 or more units. A
+ * frozen pack manifest redacted this way no longer hashes to its
+ * manifestSha256, so the caller says so (packs.ts `volumesWithheld`).
+ */
+export function redactReportAllocations<R extends ReportLike>(report: R): R {
+	const bi = report.appendix.baselineInputs;
+	const summary = <S extends ReportLike['summaries']['baseline']>(s: S): S => (s ? redactRunAllocations({ summary: s }).summary! : s);
+	return {
+		...report,
+		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
+		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) }
+	};
+}
+
 /** The allocation events' fields about the registered user's allocation, not about whoever made the change. */
 export const ALLOCATION_EVENT_IDENTIFIERS = ['registrationNo', 'volumeM3PerYear'] as const;
 

@@ -39,6 +39,7 @@ import {
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
+import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
 import { checkCombination } from '../assessments/store.js';
 import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -613,8 +614,10 @@ export const evidenceReportRoutes = new Hono<AuthEnv>().get('/:id/runs/:runId/ev
 	return withUser(
 		c.get('userId'),
 		async (db) => {
-			await requireRole(db, id, 'viewer');
-			return c.json({ report: await buildEvidenceReport(db, id, runId) });
+			const role = await requireRole(db, id, 'viewer');
+			const report = await buildEvidenceReport(db, id, runId);
+			// A viewer who can't read each registered volume (D3, issue #523 G1): not Appendix A.1's allocation rows, nor the summaries' per-unit comparison.
+			return c.json({ report: (await allocationUnitsHidden(db, id, role)) ? redactReportAllocations(report) : report });
 		},
 		{ readOnly: true }
 	);

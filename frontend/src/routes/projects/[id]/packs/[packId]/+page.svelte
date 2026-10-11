@@ -71,6 +71,8 @@
 	let signoffs = $state.raw<PackSignoffList | null>(null);
 	let status = $state<'loading' | 'loaded' | 'not-found' | 'forbidden' | 'error' | 'chunk-failed'>('loading');
 	let error = $state('');
+	/** The server's words when it keeps this pack from a viewer (403 pack_volumes_withheld: a pack from before evidence-15 names every farm). */
+	let forbiddenReason = $state<string | null>(null);
 
 	/** A quiet reload's failure (after a sign-off, issue or withdrawal): shown above the pack, which stays as it was. */
 	let reloadError = $state<string | null>(null);
@@ -109,7 +111,10 @@
 				return;
 			}
 			if (e instanceof ApiError && e.status === 404) status = 'not-found';
-			else if (e instanceof ApiError && e.status === 403) status = 'forbidden';
+			else if (e instanceof ApiError && e.status === 403) {
+				forbiddenReason = e.code === 'pack_volumes_withheld' ? e.message : null;
+				status = 'forbidden';
+			}
 			else {
 				error = e instanceof Error ? e.message : String(e);
 				status = 'error';
@@ -182,10 +187,15 @@
 	);
 
 	let manifestUrl = $state<string | null>(null);
+	/** Kept from each farm's registered volume (D3, #523 G1): no bundle, and a manifest that isn't the hashed one, so neither downloads. */
+	const withheld = $derived(detail?.volumesWithheld ?? false);
 	/** The bundle's download (the API redirects to a signed GET); an issued pack has one. */
-	const bundleUrl = $derived(pack?.bundleSha256 ? api.packs.bundleUrl(projectId, pack.id) : null);
+	const bundleUrl = $derived(pack?.bundleSha256 && !withheld ? api.packs.bundleUrl(projectId, pack.id) : null);
 	$effect(() => {
-		if (!detail) return;
+		if (!detail || detail.volumesWithheld) {
+			manifestUrl = null;
+			return;
+		}
 		const url = URL.createObjectURL(new Blob([manifestFileText(detail.manifest)], { type: 'application/json' }));
 		manifestUrl = url;
 		return () => URL.revokeObjectURL(url);
@@ -215,7 +225,9 @@
 	{#if status === 'not-found'}
 		<div class="alert alert-error" role="alert">This evidence pack doesn’t exist, or you don’t have access to it. <a href="{base}/">Back to projects</a></div>
 	{:else if status === 'forbidden'}
-		<div class="alert alert-error" role="alert">An evidence pack needs the viewer role or above on this project.</div>
+		<div class="alert alert-error" role="alert" data-testid="pack-forbidden">
+			{#if forbiddenReason}You can’t open this pack here: {forbiddenReason}.{:else}An evidence pack needs the viewer role or above on this project.{/if}
+		</div>
 	{:else if status === 'error'}
 		<div class="alert alert-error" role="alert">
 			The evidence pack could not be loaded: {error}
@@ -257,6 +269,13 @@
 				{#if pack.bundleSha256}Reproduction bundle SHA-256 <span class="mono hash" data-testid="pack-bundle-sha">{pack.bundleSha256}</span> (re-run it with
 					<span class="mono">pnpm reproduce:pack</span>). <HelpTip key="reproduction-bundle" label="About the reproduction bundle" />{/if}
 			</p>
+			{#if withheld}
+				<p class="alert alert-info small" role="note" data-testid="pack-volumes-withheld">
+					The manifest and the reproduction bundle hold each farm’s registered volume, which this project shows to its editors and owners only, so they don’t
+					download here, and Appendix A.1 and the run summaries below leave those volumes out. An editor or owner can give you both; the hashes above and the verify
+					page check them.
+				</p>
+			{/if}
 			{#if detail.errataFoundSince.length}
 				{@const since = errataFoundSinceNote(pack)}
 				<div class="alert alert-warning errata-alert" role="note" data-testid="pack-errata-since">

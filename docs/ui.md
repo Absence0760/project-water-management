@@ -10139,6 +10139,12 @@ their own application's in [their own view](#the-applicants-pack-view).
   verify page), **Download reproduction bundle** once issued (the API's
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
+  neither download for a viewer the project keeps from each farm's
+  registered volume on a pack whose runs carry one (`volumesWithheld`,
+  issue #523 G1): a note (`pack-volumes-withheld`) says why and that an
+  editor or owner can give them both; for a pack drafted before
+  `evidence-15` that viewer gets the server's reason instead of the pack
+  (`pack-forbidden`),
   **Verify page** once issued, **Share link…** (an editor, once it was
   issued), **Send to the authority…** (an editor, while it is issued:
   `PackSendDialog.svelte`, a side sheet saying why the full pack goes to

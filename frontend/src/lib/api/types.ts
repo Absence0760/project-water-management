@@ -1983,6 +1983,14 @@ export interface PackDetail {
 	manifest: PackManifest;
 	/** The stored manifest still hashes to its recorded SHA-256. */
 	manifestMatches: boolean;
+	/**
+	 * A viewer the project doesn't let read each farm's registered volume, on a
+	 * pack whose runs carry them (D3, issue #523 G1): `manifest` comes without
+	 * Appendix A.1's allocation rows and the summaries' per-unit part, so it no
+	 * longer hashes to `pack.manifestSha256`, and the reproduction bundle is
+	 * refused (403 `pack_volumes_withheld`).
+	 */
+	volumesWithheld: boolean;
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;

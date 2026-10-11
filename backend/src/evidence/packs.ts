@@ -10,7 +10,10 @@
 //
 // Who: viewers and up read (RLS hides an application pack from a viewer who
 // can't read its scenario); editors and owners draft, sign, issue, supersede,
-// withdraw and delete drafts. Contributors and farmers get 403.
+// withdraw and delete drafts. Contributors and farmers get 403. A viewer the
+// project doesn't let read each farm's registered volume (D3) gets no
+// reproduction bundle, and no manifest or PDF of a pack drafted before
+// evidence-15, of a pack whose runs carry volumes (packVolumesWithheld, #523 G1).
 import { createHash } from 'node:crypto';
 import {
 	ENGINE_VERSION,
@@ -33,7 +36,8 @@ import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
-import { rank, requireRole, UUID } from '../projects/access.js';
+import { rank, requireRole, UUID, type Role } from '../projects/access.js';
+import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
@@ -326,6 +330,47 @@ function publicChecks(c: Awaited<ReturnType<typeof issueChecks>>) {
 	return checks;
 }
 
+/**
+ * Whether a pack's report format names every unit in § 5: before
+ * `evidence-15` it listed each farm with its registered volume and use (and
+ * the page-1 flag named those above it). An unknown format counts as naming
+ * them.
+ */
+export function namesEveryUnit(reportVersion: string): boolean {
+	const m = /^evidence-(\d+)$/.exec(reportVersion);
+	return !m || Number(m[1]) < 15;
+}
+
+/**
+ * Whether the caller is kept from a pack's per-farm registered volumes (D3,
+ * issue #523 G1): a viewer the project doesn't let read each one
+ * (allocationUnitsHidden), on a pack whose runs carry any. The reproduction
+ * bundle holds both runs' inputs (`model.allocations`) and results (the
+ * per-unit `summary.allocations`), and every manifest the baseline's input
+ * and both summaries; redacting the bundle would break its hash, so it is
+ * refused, as a pre-`evidence-15` pack's manifest and PDF are. A run the
+ * caller can't read counts as carrying them.
+ */
+async function packVolumesWithheld(db: Db, projectId: string, pack: Pick<PackMeta, 'baselineRunId' | 'scenarioRunId'>, role: Role): Promise<boolean> {
+	if (!(await allocationUnitsHidden(db, projectId, role))) return false;
+	const ids = [pack.baselineRunId, ...(pack.scenarioRunId ? [pack.scenarioRunId] : [])];
+	const { rows } = await db.query<{ seen: number; volumes: boolean }>(
+		`SELECT count(*)::int AS seen,
+			coalesce(bool_or(CASE WHEN jsonb_typeof(inputs->'model'->'allocations') = 'array' THEN jsonb_array_length(inputs->'model'->'allocations') > 0 ELSE false END), false) AS volumes
+		 FROM model_run WHERE project_id = $1 AND id = ANY($2::uuid[])`,
+		[projectId, ids]
+	);
+	return rows[0]!.seen < ids.length || rows[0]!.volumes;
+}
+
+/** 403 for what packVolumesWithheld keeps from the caller: `what` is the file, worded. */
+const volumesWithheld = (what: string) =>
+	ApiError.coded(
+		403,
+		'pack_volumes_withheld',
+		`${what} holds each farm’s registered volume, which this project shows to its editors and owners only: ask one of them for it, or check the pack on its verify page`
+	);
+
 /** Issue refuses a draft whose manifest misses an erratum that applies to its runs now: it would be issued without it, for good. */
 const errataSinceDraft = (found: readonly PackErratum[]) =>
 	ApiError.coded(
@@ -417,13 +462,19 @@ export const packRoutes = new Hono<AuthEnv>()
 				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
 				const { manifest, matches } = await storedManifest(db, packId);
+				// A viewer kept from each farm's volume (D3, #523 G1): an older pack's § 5 and flags name every farm, so it is refused;
+				// a newer one is served without Appendix A.1's allocation rows and the summaries' per-unit part (no longer its hash's text).
+				const withheld = await packVolumesWithheld(db, id, pack, role);
+				if (withheld && namesEveryUnit(pack.reportVersion)) throw volumesWithheld('this pack, drafted before its § 5 listed only the applicant’s own units,');
 				const { rows: signoffs } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE project_id = $1 AND pack_id = $2 ORDER BY signed_at, id`, [id, packId]);
 				const errataFoundSince = await packErrataFoundSince(db, pack, manifest);
 				return c.json({
 					pack,
-					manifest,
+					manifest: withheld ? { ...manifest, report: redactReportAllocations(manifest.report) } : manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
+					// The manifest above is redacted (it no longer hashes to manifestSha256), and the bundle is refused (#523 G1).
+					volumesWithheld: withheld,
 					// Errata that apply to its runs now and that the manifest didn't record (132): shown beside the pack, never printed in it.
 					errataFoundSince,
 					signoffs,
@@ -597,8 +648,11 @@ export const packRoutes = new Hono<AuthEnv>()
 		const found = await withUser(
 			c.get('userId'),
 			async (db) => {
-				await requireRole(db, id, 'viewer');
+				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
+				// An older pack's PDF prints every farm with its volume in § 5 (#523 G1); a newer one, only the applicant's own.
+				if (namesEveryUnit(pack.reportVersion) && (await packVolumesWithheld(db, id, pack, role)))
+					throw volumesWithheld('this pack’s PDF, drafted before its § 5 listed only the applicant’s own units,');
 				const { rows } = await db.query<{ key: string | null; name: string }>(
 					`SELECT p.pdf_key AS key, pr.name FROM evidence_pack p JOIN project pr ON pr.id = p.project_id WHERE p.id = $1`,
 					[packId]
@@ -646,8 +700,10 @@ export const packRoutes = new Hono<AuthEnv>()
 		const found = await withUser(
 			c.get('userId'),
 			async (db) => {
-				await requireRole(db, id, 'viewer');
+				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
+				// Its runs' inputs and results, every farm's volume in them (#523 G1): redacting would break its hash, so refused.
+				if (await packVolumesWithheld(db, id, pack, role)) throw volumesWithheld('the reproduction bundle');
 				const { rows } = await db.query<{ key: string | null }>('SELECT bundle_key AS key FROM evidence_pack WHERE project_id = $1 AND id = $2', [id, packId]);
 				return { pack, key: rows[0]?.key ?? null };
 			},

@@ -707,7 +707,9 @@ running, retrying, or waiting for the production renderer's answer), `ready`,
 a WAF block or a crash is retried after 2, then 4 minutes, up to 3 renders;
 after that an editor asks again with `POST …/packs/:packId/pdf`.
 
-**The download** (`GET …/packs/:packId/pdf`, viewers of the pack) is a
+**The download** (`GET …/packs/:packId/pdf`, viewers of the pack; not a
+viewer kept from each farm's volume, for a pack drafted before
+`evidence-15`, [§ Reproduction](#reproduction)) is a
 `302` to a 60-second signed URL: a pre-signed MinIO GET locally, a
 CloudFront signed URL on the site's `/packs/*` in production, as a report's.
 The bytes downloaded are the ones hashed: `sha256sum` of the file equals
@@ -786,6 +788,26 @@ database, account or network, and gets the same results (roadmap WP-3.14
 item 11). The assessor gets it from the applicant (or downloads it from the
 pack, `GET …/packs/:packId/bundle`, [api.md § Evidence packs](./api.md#evidence-packs))
 and checks its SHA-256 against the `bundleSha256` the verify lookup returns.
+
+**Who downloads it.** Editors and owners; a viewer too, unless the project
+keeps each farm's registered volume from its viewers (decision D3,
+`project.allocations_viewer_units` off, the default:
+[allocations.md § Who sees what](./allocations.md#who-sees-what)) and the
+pack's runs carry a registered volume. The bundle holds both runs' stored
+inputs (`model.allocations`: each farm's volume, by unit) and results (the
+per-unit `summary.allocations`), and redacting it would break its hash, so
+such a viewer gets `403` `pack_volumes_withheld` (issue #523 G1;
+`packVolumesWithheld` in `backend/src/evidence/packs.ts`), and the pack page
+offers no bundle or manifest download, saying why. The same viewer reads
+the pack's manifest on `GET …/packs/:packId` without Appendix A.1's
+allocation rows and the run summaries' per-unit part (`volumesWithheld:
+true`; it no longer hashes to `manifestSha256`, which the server still
+checks against the stored manifest), and is refused (`403`, the same code)
+the manifest and the PDF of a pack drafted before `evidence-15`, whose § 5
+and page-1 flag name every farm with its volume. The live evidence report
+leaves the same parts out for them. Contributors and farmers get `403`, a
+non-member `404`, as for every pack route; share links, the verify page and
+the applicant's view never offer the bundle, the manifest or the PDF.
 
 **What it holds** (engine `packages/engine/src/evidence/bundle.ts`,
 `buildPackBundle`, layout `bundle-1`):

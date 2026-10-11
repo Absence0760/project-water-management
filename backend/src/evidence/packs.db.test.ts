@@ -19,6 +19,7 @@
 // an erratum can be "found" after a pack was issued (132, errataFoundSince);
 // only the backend's imports see it, never the engine's own.
 import {
+	buildPackManifest,
 	checkPackBundle,
 	declaredRuleRequest,
 	ENGINE_VERSION,
@@ -672,8 +673,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.manifestSha256).toBe(v1.manifestSha256);
 	});
 
-	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {
+	it('serves the bundle as a download whose bytes hash to bundleSha256 and reproduce the run: to an editor and the owner, and to a viewer since its runs carry no registered volume (#523 G1; the refusal is below)', async () => {
 		const want = (await viewer.call('GET', packPath(v1.id))).body.pack.bundleSha256 as string;
+		expect((await viewer.call('GET', packPath(v1.id))).body.volumesWithheld).toBe(false);
+		for (const u of [editor, owner]) expect(bytesSha256((await downloadBundle(u, v1.id)).bytes)).toBe(want);
 		const { bytes, disposition } = await downloadBundle(viewer, v1.id);
 		expect(bytesSha256(bytes)).toBe(want);
 		expect(disposition).toBe(`attachment; filename="pack-${v1.shortCode}.zip"`);
@@ -1443,5 +1446,139 @@ describe.skipIf(!minio)('deleting a project with packs', () => {
 		const res = await owner.call('DELETE', at());
 		expect(res.status).toBe(409);
 		expect(res.body.error).toMatch(/evidence pack/);
+	});
+});
+
+describe('a viewer kept from each farm’s registered volume (D3, issue #523 G1)', () => {
+	const HOLDER = 'G1 Holder Person';
+	const VOLUME = 123_457;
+	let allocationId: string;
+	let volumesRun: string;
+	/** Draft packs planted as the owner, citing the run that carries a registered volume, by report format. */
+	let current: string;
+	let older: string;
+
+	/** A draft pack of `volumesRun` as `reportVersion` froze it, planted past the route (the run isn't the nominated one). */
+	async function plant(reportVersion: string) {
+		const report = (await owner.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report;
+		const id = crypto.randomUUID();
+		const manifest = buildPackManifest({ pack: { id, version: 1, supersedes: null }, project: report.identity.project, report: { ...report, version: reportVersion }, engine: { version: ENGINE_VERSION, build: null } });
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8)`,
+			[id, projectId, volumesRun, JSON.stringify(manifest), sha256(packManifestText(manifest)), reportVersion, ENGINE_VERSION, editor.id]
+		);
+		return id;
+	}
+	const viewerUnits = async (on: boolean) => expect((await owner.call('PUT', `${at()}/allocations/viewer-units`, { on })).status).toBe(200);
+	const withheld = (res: { status: number; body: { code?: string; error?: string } }) => {
+		expect(res.status, JSON.stringify(res.body)).toBe(403);
+		expect(res.body.code).toBe('pack_volumes_withheld');
+		expect(res.body.error).toMatch(/registered volume, which this project shows to its editors and owners only/);
+	};
+
+	beforeAll(async () => {
+		const created = await owner.call('POST', `${at()}/allocations`, {
+			nodeId: farmId,
+			registrationNo: 'REG-G1-1',
+			authorisation: 'registration',
+			holder: HOLDER,
+			waterSource: 'surface',
+			volumeM3PerYear: VOLUME
+		});
+		expect(created.status, JSON.stringify(created.body)).toBe(201);
+		allocationId = created.body.allocation.id;
+		volumesRun = await newRun('With a registered volume');
+		current = await plant('evidence-16');
+		older = await plant('evidence-14');
+	}, 120_000);
+	afterAll(async () => {
+		await viewerUnits(false);
+		for (const id of [current, older]) expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		expect((await owner.call('DELETE', `${at()}/allocations/${allocationId}`)).status).toBe(204);
+	});
+
+	it('the run carries the volume in its input and its summary, which every report and manifest of it holds (the leak, as the owner reads it)', async () => {
+		const report = (await owner.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report;
+		expect(report.appendix.baselineInputs.model.allocations).toEqual([expect.objectContaining({ nodeId: farmId, volumeM3PerYear: VOLUME })]);
+		expect(report.summaries.baseline.allocations.nodes).toEqual([expect.objectContaining({ nodeId: farmId, name: 'Upper' })]);
+		const read = (await editor.call('GET', packPath(current))).body;
+		expect(read.volumesWithheld).toBe(false);
+		expect(read.manifestMatches).toBe(true);
+		expect(read.manifest.report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+		expect(sha256(packManifestText(read.manifest))).toBe(read.pack.manifestSha256);
+	});
+
+	it('refuses a viewer the bundle (403 pack_volumes_withheld); an editor and the owner pass the check (here to the draft’s 409), and a viewer once the owner lets viewers read each volume', async () => {
+		withheld(await viewer.call('GET', `${packPath(current)}/bundle`));
+		withheld(await viewer.call('GET', `${packPath(older)}/bundle`));
+		for (const u of [editor, owner]) {
+			const res = await u.call('GET', `${packPath(current)}/bundle`);
+			expect(res.status).toBe(409);
+			expect(res.body.error).toMatch(/draft pack has no reproduction bundle/);
+		}
+		await viewerUnits(true);
+		try {
+			expect((await viewer.call('GET', `${packPath(current)}/bundle`)).status).toBe(409);
+		} finally {
+			await viewerUnits(false);
+		}
+		// Outsiders: contributors and farmers 403 without the code, a stranger 404, no session 401.
+		for (const u of [contributor, farmer]) {
+			const res = await u.call('GET', `${packPath(current)}/bundle`);
+			expect(res.status).toBe(403);
+			expect(res.body.code).toBeUndefined();
+		}
+		expect((await stranger.call('GET', `${packPath(current)}/bundle`)).status).toBe(404);
+		expect((await anon('GET', `${packPath(current)}/bundle`)).status).toBe(401);
+	});
+
+	it('refuses a viewer a pre-evidence-15 pack’s manifest and PDF, which name every farm in § 5; an editor reads it (positive control), and a viewer once allowed', async () => {
+		withheld(await viewer.call('GET', packPath(older)));
+		withheld(await viewer.call('GET', `${packPath(older)}/pdf`));
+		const read = await editor.call('GET', packPath(older));
+		expect(read.status).toBe(200);
+		expect(read.body.manifest.report.version).toBe('evidence-14');
+		// Past the check, the PDF route says why there is none: a draft was never issued.
+		expect((await editor.call('GET', `${packPath(older)}/pdf`)).status).toBe(409);
+		await viewerUnits(true);
+		try {
+			const allowed = await viewer.call('GET', packPath(older));
+			expect(allowed.status).toBe(200);
+			expect(allowed.body.volumesWithheld).toBe(false);
+			expect(allowed.body.manifest.report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+			expect((await viewer.call('GET', `${packPath(older)}/pdf`)).status).toBe(409);
+		} finally {
+			await viewerUnits(false);
+		}
+	});
+
+	it('serves a viewer a newer pack without Appendix A.1’s allocation rows or the summaries’ per-unit part, saying so; the hash is still the stored manifest’s', async () => {
+		const res = await viewer.call('GET', packPath(current));
+		expect(res.status).toBe(200);
+		expect(res.body.volumesWithheld).toBe(true);
+		expect(res.body.manifestMatches).toBe(true);
+		const report = res.body.manifest.report;
+		expect(report.appendix.baselineInputs.model.allocations).toEqual([]);
+		expect(report.summaries.baseline.allocations.nodes).toEqual([]);
+		// The mode and counts stay; no volume, holder or registration number does.
+		expect(report.summaries.baseline.allocations.used).toBe(1);
+		const text = JSON.stringify(res.body);
+		for (const s of [String(VOLUME), HOLDER, 'REG-G1-1']) expect(text).not.toContain(s);
+		// Its PDF isn't refused: since evidence-15, § 5 prints only the applicant's own units (a draft has none: 409).
+		expect((await viewer.call('GET', `${packPath(current)}/pdf`)).status).toBe(409);
+	});
+
+	it('redacts the live evidence report for that viewer alike; the owner and an allowed viewer read it whole', async () => {
+		const live = (await viewer.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report;
+		expect(live.appendix.baselineInputs.model.allocations).toEqual([]);
+		expect(live.summaries.baseline.allocations.nodes).toEqual([]);
+		expect(JSON.stringify(live)).not.toContain(String(VOLUME));
+		await viewerUnits(true);
+		try {
+			expect((await viewer.call('GET', `${runPath(volumesRun)}/evidence-report`)).body.report.appendix.baselineInputs.model.allocations).toHaveLength(1);
+		} finally {
+			await viewerUnits(false);
+		}
 	});
 });
