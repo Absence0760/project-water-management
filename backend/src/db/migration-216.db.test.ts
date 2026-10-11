@@ -120,4 +120,17 @@ describe('migration 216: the baseline keeps no water for the EWR', () => {
 		expect(await nodeOf(PL_UP)).toMatchObject({ rule: 'fixed', release: new Array(12).fill(5) });
 		for (const pid of [SET_FLOWS, PLAIN]) expect(await eventsOf(pid)).toEqual([]);
 	});
+
+	it('is idempotent: a second run changes nothing and records no second event', async () => {
+		const state = async () => ({
+			nodes: (await db.query('SELECT id, dam_release_rule, dam_release_m3_day, hands_off_ewr, hands_off_m3_day FROM node ORDER BY id')).rows,
+			transfers: (await db.query('SELECT id, hands_off_ewr, hands_off_m3_day FROM transfer ORDER BY id')).rows,
+			settings: (await db.query('SELECT id, settings FROM project ORDER BY id')).rows,
+			events: (await db.query(`SELECT project_id, count(*)::int AS n FROM audit_event WHERE kind = 'model.ewr_rules_reset' GROUP BY project_id ORDER BY project_id`)).rows
+		});
+		const before = await state();
+		await db.query(await readFile(join(DIR, '216_baseline_ewr_rules_scenario_only.sql'), 'utf8'));
+		expect(await state()).toEqual(before);
+		expect(before.events).toEqual([{ project_id: KEEPS, n: 1 }]);
+	});
 });
