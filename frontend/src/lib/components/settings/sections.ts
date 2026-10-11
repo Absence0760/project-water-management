@@ -16,6 +16,8 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-share', label: 'Flow share', group: 'Demand & supply' },
 	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a model input, off by default.
 	{ id: 'set-restrict', label: 'Drought restrictions', group: 'Demand & supply' },
+	// The reporting window and the annual assurance threshold (issue #521, moved from EWR): how supply results are read.
+	{ id: 'set-reporting', label: 'Reporting', group: 'Demand & supply' },
 	// Runoff & calibration: rain to natural flow, and how its parameters are fitted and checked.
 	{ id: 'set-flow', label: 'Flow calibration', group: 'Runoff & calibration' },
 	{ id: 'set-record', label: 'Calibration record', group: 'Runoff & calibration' },

@@ -74,7 +74,7 @@
 		monthly compliance rate on Runs & results; the pragmatic EWR above sets the daily charge and curtailment unless you choose the rule
 		tables below. A total-flow table can
 		also carry the Desktop Reserve Model’s low-flow table (maintenance and drought low flows), to show whether a month failed its low flows or
-		only its high flows, and any site can list freshets and floods to check each water year. Paste from a spreadsheet or load a CSV file.
+		only its high flows, and any site can list freshets and floods to check each water year. Each table’s head has <strong>Load file…</strong> (a DRM file or a CSV) and <strong>Paste…</strong> (from a spreadsheet).
 	</p>
 
 	{#if value.length === 0}

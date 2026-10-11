@@ -53,10 +53,11 @@ export async function showExplanations(page: Page) {
 
 /**
  * Opens a fold of rarely changed settings (a `<details>` whose summary line shows their values, ui-playbook.md
- * § 2): Fit automatically's search (`fit-search`) or the calibration rules' search budget (`rules-search`).
- * Does nothing when it is already open.
+ * § 2): Fit automatically's search (`fit-search`), the calibration rules' search budget (`rules-search`), a
+ * Reserve rule table's settings (`rule-settings`) or the drought restriction rule's wording
+ * (`restriction-rule-fold`). Does nothing when it is already open.
  */
-export async function openFold(scope: Locator, testId: 'fit-search' | 'rules-search') {
+export async function openFold(scope: Locator, testId: 'fit-search' | 'rules-search' | 'rule-settings' | 'restriction-rule-fold') {
 	const fold = scope.getByTestId(testId);
 	await expect(fold.locator('summary')).toBeVisible();
 	if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click();

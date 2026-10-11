@@ -143,6 +143,7 @@ test('the side index stays in view, jumps to each panel beside it and marks the 
 		'Demand',
 		'Flow share',
 		'Drought restrictions',
+		'Reporting',
 		'Flow calibration',
 		'Calibration record',
 		'Fit the parameters',
