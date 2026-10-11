@@ -138,6 +138,13 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	const btn = (await panel.getByRole('button', { name: 'Run demand sweep' }).boundingBox())!;
 	expect(btn.y).toBeGreaterThan(box.y + box.height);
 	expect(Math.abs(btn.x - box.x)).toBeLessThan(2);
+	// The levels' hint is the box's placeholder and the ⓘ beside its label, not two lines under it (issue #521 § 14),
+	// so the button sits straight under the box; a screen reader still reads the whole hint.
+	expect(btn.y - (box.y + box.height)).toBeLessThan(45);
+	await expect(panel.getByRole('button', { name: 'Run demand sweep' })).toBeInViewport();
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveAttribute('placeholder', 'Up to 12, separated by commas');
+	await expect(panel.getByLabel(/^Demand levels/)).toHaveAccessibleDescription(/^Up to 12, separated by commas\. Each scales every hydrological unit’s irrigation demand; on a full-allocation run/);
+	await expect(panel.getByRole('button', { name: 'About Demand levels' })).toBeVisible();
 	await panel.getByRole('button', { name: 'Run demand sweep' }).click();
 	await expect(panel).toHaveAttribute('data-state', 'pending');
 	await expect(panel.getByTestId('sweep-status')).toHaveText('Queued: waiting for the background worker.');

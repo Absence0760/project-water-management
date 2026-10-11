@@ -690,16 +690,13 @@
 		gap: 0.3rem;
 	}
 	.check {
-		display: flex;
 		align-items: center;
-		gap: 0.45rem;
 		/* Each switch at least 24 px apart from the next (WCAG 2.5.8). */
 		min-height: 28px;
 		font-size: 0.85rem;
 		cursor: pointer;
 	}
 	.check input {
-		flex: none;
 		margin: 0;
 	}
 

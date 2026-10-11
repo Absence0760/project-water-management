@@ -325,9 +325,6 @@
 		margin-bottom: 0.25rem;
 	}
 	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
 		margin: 0.25rem 0 0.5rem;
 	}
 	/* The form on top, the notes under it with a rule between. */

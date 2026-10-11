@@ -322,3 +322,22 @@ export const filledCells = (grid: readonly (readonly (number | null)[])[] | null
 
 /** Whether a high-flow component holds anything typed (a Fill over the list asks first then). */
 export const highFlowTyped = (e: EwrHighFlowEvent): boolean => !!e.label.trim() || Number.isFinite(e.peakM3s);
+
+/**
+ * A rule table's rarely changed settings as one line, the summary of its
+ * "Table settings" fold (issue #521): unit, where the natural-flow percentile
+ * comes from, the scale, the % points and the determination's natural MAR
+ * when given ("Mm³/month · run's natural flow · × 1 · 10–99 % (10 points)").
+ */
+export function ruleSettingsSummary(t: Pick<EwrRuleTable, 'unit' | 'naturalSource' | 'scale' | 'points' | 'naturalMarMcm'>): string {
+	const pts = t.points.length ? `${t.points[0]}–${t.points.at(-1)} % (${t.points.length} point${t.points.length === 1 ? '' : 's'})` : 'no % points';
+	return [
+		t.unit === 'm3s' ? 'm³/s' : 'Mm³/month',
+		t.naturalSource === 'table' ? 'the table’s natural flows' : 'the run’s natural flow',
+		typeof t.scale === 'number' && Number.isFinite(t.scale) ? `× ${t.scale}` : 'no scale',
+		pts,
+		typeof t.naturalMarMcm === 'number' ? `natural MAR ${t.naturalMarMcm} Mm³/a` : null
+	]
+		.filter(Boolean)
+		.join(' · ');
+}

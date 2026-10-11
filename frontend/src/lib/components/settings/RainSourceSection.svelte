@@ -360,9 +360,6 @@
 		width: 4.2rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
-		align-items: center;
 		font-size: 0.85rem;
 	}
 	.err {

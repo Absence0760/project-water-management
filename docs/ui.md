@@ -319,7 +319,7 @@ anchor. `e2e/tests/planted-areas-import.spec.ts` checks the page.
 | Load crop factors, a hydrological-unit-based workbook | .xlsx/.xlsm with [Crop_Factors] | the table's shape (`NODE_FACTORS_EXAMPLE`) | each warning's cell |
 | Import a b023 workbook | .xlsm/.xlsx, 150 MB, a b02x build | – | the missing named ranges; sheet and cell |
 | Import a project file | .json, 5 MB | – (*Download project (JSON)* writes one) | the line and column where the JSON stops (`jsonErrorAt`) |
-| Settings, the daily EWR at the outlet and each Reserve rule table (`settings/DrmFormatHelp.svelte`) | a DRM .rul or .tab (plain text, either line ending); a rule table also a CSV, read into its paste box | `drm-example.rul` (m³/s), `drm-example-mcm.rul`, `drm-example.tab` (`drmFiles.ts drmExampleFiles`) and the CSV layouts (`ewr-example.csv`; `ewr-total-example.csv`, `ewr-low-flow-example.csv`) | the file's line (“line 13: the Jan row of the total Reserve block needs 10 numbers…”) |
+| Settings, the daily EWR at the outlet and each Reserve rule table (`settings/DrmFormatHelp.svelte`) | a DRM .rul or .tab (plain text, either line ending); a rule table also a CSV, which opens its paste dialog | `drm-example.rul` (m³/s), `drm-example-mcm.rul`, `drm-example.tab` (`drmFiles.ts drmExampleFiles`) and the CSV layouts (`ewr-example.csv`; `ewr-total-example.csv`, `ewr-low-flow-example.csv`) | the file's line (“line 13: the Jan row of the total Reserve block needs 10 numbers…”) |
 | Settings, API keys (**Expected format of a request**) | JSON to `/ingest/v1/series/merge` | the merge body (`INGEST_EXAMPLE_BODY`) | `details`, each problem's place in the body |
 | Crops & demand, Import plantings (`crops/plantingsImport.ts` `PLANTINGS_FORMAT`) | .csv (comma or semicolon), .tsv or .txt, 2 MB, 5 000 rows; or the rows pasted | `plantings-template.csv`, **Download the template** (`PLANTINGS_EXAMPLE`); **Download the current plantings** beside the file field | each row's line, in the preview |
 
@@ -1044,8 +1044,7 @@ fields: `transferIsBlank`), so a rule just added goes at once. On Settings,
 **Remove the rule table at …** always asks (**Remove the table**, naming its
 grids and high flows), a rain-source period asks once it has a reason or
 fixed factors (**Remove the period**), and a fill that would replace typed
-values asks, naming how many: **Fill the EWR values** (or low or natural
-flows) over a grid with values other than a new table's 0, **Fill the high
+values asks, naming how many: **Fill the high
 flows** over components with a name or a peak, and **Propose from the
 double-mass breaks** over listed ranges with reasons. Discarding unsaved
 edits always asks (the save bar's **Discard changes**, a save row's
@@ -1855,20 +1854,29 @@ it scrolls, and isn't fitted to the window.
   party has a **Specialist for this party** tick box for owners (167_signers;
   others see "Specialist for <party>"): the registered professional the
   applicant appointed, who signs the evidence packs of the party's
-  applications.
+  applications. The roles, invitations, applying parties, specialists and
+  acting for the authority are explained by the ⓘ tips (the heading's
+  *roles*, the email box's *invitation*, the party box's *applying party*,
+  the authority box's *responsible authority*) and their glossary entries;
+  an 8-line paragraph under **Add** repeated them until issue #521 § 13.
 - **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
   editors and owners): the host's checks of members' registrations against
   the public SACNASP or ECSA register, newest first (member, registration
   and the name on the register, found or not, checked when and by whom).
   An owner, or an editor acting for the responsible authority, gets
-  **Record a check** (member, register, category, number, name on the
-  register, found, the checking organisation, the date, a note; the
-  register's address to look it up), and the owner the tick box "Issuing an
+  **+ Record a check** in the panel's head row, which opens the form
+  (member, register, category, number, name on the register, found, the
+  checking organisation, the date, a note; the register's address to look it
+  up) with focus on Member; **Cancel**, or recording the check, closes it and
+  returns focus to the button. Closed at first since issue #521 § 13: a
+  check is recorded about once a year a signer. The owner the tick box "Issuing an
   evidence pack waits until each specialist signer has a check from the
   last year" (on by default). `registration-checks.spec.ts` pins it with
   axe.
 - **Responsible authority** (`project/AuthorityPanel.svelte`, 163): who
-  decides the project's licence applications, its name, kind (a catchment
+  decides the project's licence applications (explained by the heading's ⓘ
+  and its glossary entry; the 2-line paragraph that repeated it went in issue
+  #521 § 13), its name, kind (a catchment
   management agency or the Department of Water and Sanitation) and office,
   saved at once by an editor (`settings.responsibleAuthority`; empty clears
   it); read-only text for a viewer. The decision form and the evidence
@@ -4453,7 +4461,7 @@ user's demand could only be read one node form at a time.
   (s21a) in force today, surface and groundwater summed (a storage-only
   s21b row and lapsed or future ones are left out). Under the volume, in
   words, the comparison's status on that sum with the project's band
-  (Settings › Registered volumes, ±10 % unless set; engine
+  (the comparison band at the foot of the page, ±10 % unless set; engine
   `allocationStatus`): *Above registered*, *Within band*, *Below
   registered*, *No registered volume* (the first and last in bold red),
   with the node's demand total when it has several rows ("Above
@@ -5376,7 +5384,7 @@ section header, which it fills (`fillHeader`) like the other sections.
   gaps `#set-rain`, Data quality `#set-quality`: its zero-rain and
   low-vs-CHIRPS limits change results, issue #173), **Demand & supply**
   (Demand `#set-demand`, Flow share `#set-share`, Drought restrictions
-  `#set-restrict`), **Runoff & calibration** (Flow calibration `#set-flow`,
+  `#set-restrict`, Reporting `#set-reporting`), **Runoff & calibration** (Flow calibration `#set-flow`,
   Calibration record `#set-record`, Fit the parameters `#set-fit`, WR2012
   check `#set-wr2012`), **EWR & Reserve** (EWR `#set-ewr`, Reserve rule
   tables `#set-reserve`), **Reading results** (Outcome matrix
@@ -5411,8 +5419,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   1 730 mm a year · effective rain 65% · soil-water store 25 mm · dam
   evaporation 0.75 × A-pan"; GR4J's X1, X3, X4 (and X2), the catchment area
   and the PE a year; the calibration window, site and periods left out; the
-  header's fit line; where the daily EWR comes from, its volume and the
-  reporting window; WR2012 on with its quaternary and MAR, or off; the rule
+  header's fit line; where the daily EWR comes from and its volume; the
+  reporting window (or the whole run) and the annual assurance threshold
+  (Reporting); WR2012 on with its quaternary and MAR, or off; the rule
   tables and what the EWR charge follows (nothing when there is none: the
   panel's own line says so); how many data-quality limits differ from the
   defaults; the year classes; the outlook's season and planning share;
@@ -6197,20 +6206,20 @@ two.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,
-  issue #174), the
-  curtailment reporting window (also the assurance of supply's window), and
-  the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
-  default 90 %: a water year counts as met at that supply ratio; engine ≥
-  0.32.0), and **Registered volumes** (engine ≥ 1.18.0, issue #72): the
-  **allocation mode**, read only: always *Compare only* since issue #507
-  (licence data never drives the baseline; `settings-allocation-mode`, no
-  select, and the hint says a cap or a full allocation is a scenario's
-  Change a setting › Allocation mode, [model.md
-  §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72))
-  and the **comparison band** (± %, `settings.allocationTolerance`, default
-  10 %, the Allocations tab's "within band"), each with its help tip and
-  field history. The band is a model setting: saving it makes the latest
-  run out of date.
+  issue #174), and a line saying the registered-volumes comparison band is
+  on [Allocations](#allocations-taballocations) (`ewr-band-moved`). The
+  reporting window and the annual assurance threshold moved to **Reporting**,
+  and the band with the allocation mode to Allocations (issue #521, with the
+  operator's OK, 2026-10-11): they read supply and use, not the river.
+- **Reporting** (`#set-reporting`, after Drought restrictions, under Demand &
+  supply; issue #521): its line says the window ("Reporting 1 Nov 2021 – 31
+  Dec 2021", or "over the whole run") and the threshold ("a water year is met
+  at 90 % of demand"). The **curtailment reporting window** (also the
+  assurance of supply's window; a window that ends before it starts blocks
+  Save and the save bar links here) and, beside it, the **annual assurance
+  threshold** (%, `settings.assuranceAnnualThreshold`, default 90 %: a water
+  year counts as met at that supply ratio; engine ≥ 0.32.0), each with its
+  help tip; the same setting keys and the page's save bar.
 - **The daily EWR at the outlet** (inside `#set-ewr`, first, above the
   pragmatic EWR row, which then says it isn't used while the daily EWR comes
   from the DRM tables (kept for switching back), and the panel's head names
@@ -6236,10 +6245,15 @@ two.
   method reads × s, read only, as soon as s is known (the area ratio at once,
   the MAR ratio from the last run, exact or estimated as the factor line
   says), else a line saying they show once the tables and s are known.
-  **Load a DRM file (.rul / .tab)**
-  sits above those tables, under the fields, so it is seen without scrolling
-  past them, with a hint, its own **File result** status line and the
-  **Expected format** beside it; it reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
+  The TAB row's cells are as slim as the pragmatic row's, so all twelve
+  months fit at 1440 px beside the side index (issue #521).
+  **Fill from:** **Load a DRM file (.rul / .tab)** · **Paste…** sit on the
+  **Daily EWR from** line (issue #521), so they are seen without scrolling
+  past the tables, with the hint (behind the explain switch), the **File
+  result** and **Paste result** status lines and the **Expected format**
+  under it; the source's own explanation is behind the switch too, while
+  the table catchment area's hint keeps the modelled area visible. The file
+  load reads the DRM's own output: a `.tab` shows its last column, *Total Flows,
   Maint.*, in Mm³ and converted to m³/s (÷ the month's days × 86 400 s,
   February 28 days) in a preview with **Use these values** (which fills the TAB
   flows and the table MAR from its `MAR =` line; under the percentile tables
@@ -6251,11 +6265,15 @@ two.
   TAB file fills the percentile tables and says the daily EWR still comes
   from the DRM TAB file, with a **Use the percentile tables** button to switch
   on the person's say (`ewrDailySource.ts rulLoad`); a `.tab` under the
-  percentile tables offers its MAR only. The paste box, under the tables,
-  has its own **Paste result** line; its buttons are **Fill the natural flow table** /
-  **Fill the total Reserve table** (or **Fill the TAB flows**). A paste box takes the 12 TAB flows (a row or a
-  column) or a percentile table (as the rule tables' paste: 12 month rows,
-  optional % heading). The **Expected format** (`settings/DrmFormatHelp.svelte`,
+  percentile tables offers its MAR only. **Paste…** opens the shared paste
+  dialog (`model/GridPasteDialog.svelte` with `wholeTable`, which shows only
+  its layout line; `settings/ewrPaste.ts`): the 12 TAB flows (a row or a
+  column, read by `parseMonthlyRow` as before) or, under the percentile
+  tables, a choice of **The natural flow table** or **The total Reserve
+  table** and a percentile table (as the rule tables' paste: 12 month rows,
+  optional % heading). Its preview lists every value it changes, Now and
+  Pasted, before **Apply**; **Download the table as CSV** gives the table to
+  fill in, and that CSV pastes back unchanged. The **Expected format** (`settings/DrmFormatHelp.svelte`,
   the shared note, [Expected format](#expected-format); the same beside each
   rule table's file load) describes the `.rul` and `.tab` layouts,
   the unit handling and the paste, with synthetic example files to download
@@ -6297,13 +6315,18 @@ two.
   each gauge in network order; a farm can't be a site, and a table at a gauge
   unticked as an EWR site is skipped by the run with a warning); it is disabled once
   every site has one, with a hint to add a gauge on the Network tab. Each
-  table (a group headed "Rule table at …") has the **EWR site**, the
+  table is a card (issue #521; a group named by its heading "Rule table at
+  …"): its head carries **Load file…**, **Paste…** and **Remove** (each named
+  for the site to a screen reader); then the **EWR site**, the
   required **Source**, the **Kind of source** (not stated, gazetted Reserve,
   desktop estimate, other; engine ≥ 1.5.0, the Reserve panel's confidence
   line), the optional **Recommended ecological category (REC)** (ER9: A to
   F or a band like B/C, upper-cased as typed, blank = not given; a label for
-  the evidence report, no result depends on it), what **the table covers** (total flow, or low flows
-  only), the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
+  the evidence report, no result depends on it) and what **the table covers** (total flow, or low flows
+  only). The rarely changed settings fold into one line of their values,
+  **Table settings:** "Mm³/month · the run's natural flow · × 1 · 10–99 % (10
+  points)" (`ewrRules.ts ruleSettingsSummary`; the app's `.fold`, *needs
+  fixing* while a field inside is invalid): the **Unit** (Mm³ per month, or m³/s, the month's mean), where the
   **natural-flow percentile** comes from (the run's natural flow at the site,
   the default, or the table's natural flows), a **scale** (1 unless the table
   is for a different catchment size), the optional **Natural MAR in the
@@ -6312,34 +6335,41 @@ two.
   90, 99; changing them keeps each value under its point and leaves a new
   point blank). Then the **EWR** grid (Oct … Sep rows × one input per point,
   each labelled "EWR, Oct, 10 %, Mm³"), and the **Natural flow** grid when the
-  table is the natural source. **Paste from a spreadsheet** takes the 12 month
-  rows copied from a spreadsheet (tabs), a CSV or a PDF (spaces), with or
+  table is the natural source. The explanations under the fields are behind
+  the explain switch; a problem replaces its field's line and stays visible.
+  **Paste…** opens the shared paste dialog (`ewrPaste.ts
+  planRuleTablePaste`, the same `parseGrid` and `applyPaste` as the old paste
+  box, so the same values), with **Fill:** *The EWR values*, *The low flows*
+  or *The natural flows* when the table has more than one grid; it takes the
+  12 month rows copied from a spreadsheet (tabs), a CSV or a PDF (spaces), with or
   without the heading row of % points (a range heading such as 0–10 is read as
   its upper bound, and a note says so) and with or without month names in the
   first column (any order; without them the rows are Oct … Sep); a comma
   between digits in a tab- or semicolon-separated paste is a decimal comma.
-  **Fill the EWR values** / **Fill the natural flows** put it in the grid, and
-  a status line says what was read (or what is wrong: not 12 rows, a value
-  that isn't a number, a heading that doesn't match the rows). Plausibility
+  The preview lists every value it replaces (Now and Pasted; a heading row
+  that changes the % points says so and counts every cell) before **Apply**,
+  which puts it in the grid, and the table's **Paste result** line then says
+  what was read; what is wrong (not 12 rows, a value that isn't a number, a
+  heading that doesn't match the rows) shows in the dialog and Apply stays
+  off. The preview is the check before values are replaced, so Apply doesn't
+  ask again. Plausibility
   notes ("Check: the EWR rises with the % point in Jan …", an EWR above the
   natural flow) show under the table without blocking Save; a missing source,
   a bad point list or a blank cell, and two tables for one site, block Save
   and the save bar links here. **Add a rule table** is in the panel's head,
   above the tables. **Remove the rule table at …** asks first, then deletes
-  one; a Fill over a grid (or high flows) that already holds values asks
-  first, naming how many are replaced. A **Peaks in** that doesn't read as
+  one; a Fill of the high flows over typed components asks first. A **Peaks in** that doesn't read as
   months is said under its field, kept as typed, and blocks the save as an
   invalid number does.
   From engine 0.33.0 ([model.md §2.9d](./model.md)): a *total* table has
   **Also enter the low flows (maintenance and drought)**, which adds a blank
   **Low flows (maintenance to drought)** grid (blank cells block Save; switching
-  the table to *Low flows only* drops it) and a **Fill the low flows** button.
-  Each table opens, right under its heading and before the fields, with
-  **Load a DRM file (.rul / .tab) or a CSV** (issue #455), a hint saying what
-  each fills, its own **File result** status line and the **Expected
-  format**, since a .rul fills nearly every field below it; the paste box
-  stays under the grids. A CSV goes into the paste box (the status line says
-  so); a Desktop Reserve Model **.rul** fills the table at once (its unit, the
+  the table to *Low flows only* drops it), which the paste dialog then offers.
+  **Load file…** (issue #455; in the card's head since issue #521) reads a
+  DRM file or a CSV; under the head a hint saying what each fills (behind the
+  explain switch), its own **File result** status line and the **Expected
+  format**, since a .rul fills nearly every field below it. A CSV opens the
+  paste dialog with its text (the status line says so); a Desktop Reserve Model **.rul** fills the table at once (its unit, the
   % points, the total Reserve as the EWR, *Reserve Flows without High Flows*
   as the low flows, the *Natural Duration curves* as the natural flows, the
   REC, the kind *desktop estimate* and, when none is typed, a source naming
@@ -6672,8 +6702,10 @@ or a script uses to push daily readings into the project's series.
 ### Scheduled reports
 
 Below Data feeds (and API keys, for an owner), **Scheduled reports** (`#set-report-schedules`;
-`lib/components/report/ReportSchedulesPanel.svelte`, part of the Settings
-tab's chunk; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
+`lib/components/report/ReportSchedulesPanel.svelte`, its own chunk since
+issue #521, loaded when the Settings tab draws, as Data feeds is, so the tab's
+chunk keeps room under its ceiling; the anchor's id sits on a wrapper outside
+the lazy panel; WP-2.15 Phase B, [§ Report](#report)) emails a PDF of the latest
 run's report to chosen members every week or month.
 
 - **The list**, one card per schedule: "Every Monday at 07:00
@@ -6846,8 +6878,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   which counts its charged shortfall, doesn't), and the **Water account**
   (`#res-water-account`). Then, under an `h2` **How sure, and what if** (a
   region, named as the menu's group), the run-it-yourself tools: the
-  **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
-  under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
+  **Uncertainty bands** (`#res-uncertainty`), the **Sensitivity runs**
+  (`#res-sensitivity`, a card of its own since issue #521 § 14, so each
+  card's actions are its own; [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)) and the **Seasonal
   outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)). A
   tool that hasn't run is **one row** (`common/ToolRow.svelte`,
@@ -8080,9 +8113,10 @@ read it before.
 
 Calibration research CR-21 ([model.md §2.10g](./model.md#210g-sensitivity-runs-ewr-compliance-as-a-range-engine--1180-calibration-research-cr-21)):
 how far EWR compliance moves when one input the record can't settle is
-changed at a time. On [River & reserve](#river--reserve), under the
-uncertainty bands in the same panel (`#res-uncertainty`; the **Uncertainty**
-link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
+changed at a time. On [River & reserve](#river--reserve), in its own card
+after the uncertainty bands' (`#res-sensitivity`, the page menu's
+**Sensitivity runs**; it shared the bands' card, three actions in one, until
+issue #521 § 14), `uncertainty/SensitivityPanel.svelte`
 with its chart `uncertainty/TornadoChart.svelte` and helpers
 `uncertainty/sensitivity.ts`.
 
@@ -8132,7 +8166,10 @@ reserve's chunk, view model `outcomes/matrix.ts`).
   until **Run…** opens this form, [§ River & reserve](#river--reserve),
   issue #465): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
-  with its hint under the box, then **Run demand sweep** in the action
+  with its ⓘ beside the label and "Up to 12, separated by commas" as the
+  box's placeholder (the whole hint, with the full-allocation note, is the
+  box's description for a screen reader; it was two lines under the box
+  until issue #521 § 14), then **Run demand sweep** in the action
   row under them, queue a [sweep](./scenarios.md#sweeps) of the
   shown run: one member per level, each a single `demand.scale` op on every
   farm, named "85 %" (on a full-allocation run, 85 % of each unit's
@@ -8214,7 +8251,9 @@ confirmed farmers see the outlook, O5, issue #90).
   each one `demand.scale` op on every farm from the decision date. On a
   full-allocation project a level is that % of each unit's registered
   volume (engine ≥ 1.70.0, [model.md §2.12a](./model.md)), which the field's
-  hint says. **Add a
+  hint says (as the matrix's: the ⓘ beside the label, "Up to 6, separated by
+  commas" as the placeholder, the whole hint as the box's description for a
+  screen reader). **Add a
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and
@@ -8315,19 +8354,26 @@ see (WP-2.3); every place it shows says so.
   municipal 10 / 20 / 30 %; a starting point, pending the hydrologist, and
   a line under the rule says so until the first edit). The hint is one line:
   what it does, that it is a model rule, and that off, runs are as before.
-  **The rule** in words heads it. **Review dates** and **Lift dates**: a
-  month and a day each, **Add a … date** / **Remove**. One card per level
-  (mildest first; side by side where there is room, one under the other on
-  a phone, no sideways scroll): **Name**, **Starts below (% of capacity)**
-  and one **… cut (%)** per part of demand (crops, then each demand-object
-  category; blank = *Not cut*; domestic and municipal marked *floor kept*),
-  each input labelled "Level 2: cut on …, %" (", basic-needs floor kept" for
-  those two). **Add a deeper level** (the
-  last level's cuts, half its threshold) / **Remove the deepest level**;
+  **The rule:** heads it in one line ("3 levels, below 60 / 40 / 25 % ·
+  reviewed 1 Oct, 1 Jan · lifted 1 May", `droughtRestriction.ts
+  restrictionShortSummary`), a fold whose **In words** opens the full
+  wording (every level's cuts, the storage, units and EWR trigger;
+  `restriction-words`; issue #521). **Review dates** and **Lift dates**: a
+  chip each, its day and month and a **×** named "Remove review date 2, 1
+  Jan" (none on the last review date), then **+ Add a … date**. The levels,
+  mildest first, under **Levels, mildest first** with **+ Add a deeper
+  level** (the last level's cuts, half its threshold) / **Remove the deepest
+  level** above them: one table where the panel is 40rem or wider (a
+  column per level, its **Name** and **Starts below (% of capacity)** as the
+  header rows, one row per part of demand, the row names said once; a
+  container query), one card per level on a phone (one under the other, each
+  labelling its rows, no sideways scroll). Each level stays a group named by
+  its name, each input labelled "Level 2: cut on …, %" (", basic-needs floor
+  kept" for domestic and municipal); blank = *Not cut*;
   **Where the levels come from**. A rule the engine refuses (a date twice, a
   shallower deeper level, a deeper level cutting less) shows its first
-  problem in the group it is fixed in (the level's card, a date list, the
-  source; else under the cards), which names it (`aria-describedby`), and
+  problem in the group it is fixed in (the level's column or card, a date
+  list, the source; else under the levels), which names it (`aria-describedby`), and
   blocks Save (the save bar links here); switching off saves null, and the
   rule switched off comes back until saved. Field history under it. A viewer
   reads it: its names, days and source read-only (still focusable), its
@@ -8698,6 +8744,23 @@ source has 5 holders. No unit, number, name or Download CSV. Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every
 viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
+Beside it (side by side where there is room), the **Comparison band** card
+(`#alloc-band`, `allocation-band`; moved from Settings → EWR, issue #521):
+the **allocation mode**, read only, always *Compare only* since issue #507
+(licence data never drives the baseline; `settings-allocation-mode`, no
+select, and its note says a cap or a full allocation is a scenario's Change a
+setting › Allocation mode, [model.md
+§2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
+level with the **comparison band** (± %, `settings.allocationTolerance`,
+default 10 %, the page's "within band"), each with its help tip and field
+history. Editors change the band and press the card's own **Save**, which
+sends the same settings PATCH as the Settings save bar (`{ settings: {
+allocationTolerance } }`; the settings PATCH merges per key and has no
+revision check, as for every settings save), reloads the comparison and
+hands the project to the page (`onProjectChange`), whose settings draft
+rebases on it, so a later Settings save keeps the new band. A viewer reads
+it, read-only, with no Save. The band is a model setting: saving it makes
+the latest run out of date.
 The import sheet asks a WARMS extract **How you obtained this extract (the
 DWS or CMA letter or terms)**, required, and refuses the file until it is
 filled; a CSV's reference stays optional.

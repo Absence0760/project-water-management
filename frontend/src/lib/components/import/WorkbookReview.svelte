@@ -131,13 +131,7 @@
 		padding: 0 0.25rem;
 	}
 	.check {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.5rem;
 		font-weight: 500;
-	}
-	.check input {
-		margin-top: 0.2rem;
 	}
 	.scaling {
 		display: grid;

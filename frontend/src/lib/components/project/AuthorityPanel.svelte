@@ -58,10 +58,6 @@
 	<div class="panel-head">
 		<h2 id="authority-h"><span id="authority-h-t">Responsible authority</span> <HelpTip key="responsible-authority" label="About the responsible authority" /></h2>
 	</div>
-	<p class="muted small">
-		Who decides this project’s licence applications: the Department of Water and Sanitation, or the catchment management agency the power is
-		assigned or delegated to. Only members marked as acting for it (Members) record its decisions and endorse a published baseline.
-	</p>
 	{#if canEdit}
 		<form onsubmit={save}>
 			<div class="field">

@@ -13,7 +13,7 @@
 	// saying what it needs without a rule table), days below the EWR by month (with the EWR required vs
 	// met per site and water year under its grid) and the water account; then, under "How sure, and
 	// what if", the run-it-yourself tools, each one row until it has run (common/ToolRow): the
-	// uncertainty bands (with the sensitivity runs under them), the outcome matrix and the seasonal outlook.
+	// uncertainty bands, the sensitivity runs, the outcome matrix and the seasonal outlook.
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { goto } from '$app/navigation';
@@ -348,11 +348,16 @@
 		<section class="tools" aria-labelledby="river-tools-h">
 			<h2 id="river-tools-h">How sure, and what if</h2>
 			<div class="panels">
-				<!-- The uncertainty bands (issue #4 phase 9) qualify the EWR and Reserve findings above, and under
-				     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. -->
+				<!-- The uncertainty bands (issue #4 phase 9) qualify the EWR and Reserve findings above, and after
+				     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. A card
+				     each since issue #521 § 14, so each card's actions are its own. -->
 				<div class="panel" id="res-uncertainty">
 					{#key shownRun.id}
 						<UncertaintyPanel {projectId} runId={shownRun.id} runEngineVersion={shownRun.engineVersion} canEdit={canEdit} />
+					{/key}
+				</div>
+				<div class="panel" id="res-sensitivity">
+					{#key shownRun.id}
 						<SensitivityPanel {projectId} runId={shownRun.id} />
 					{/key}
 				</div>

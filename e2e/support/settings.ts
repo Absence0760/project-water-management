@@ -55,11 +55,22 @@ export async function showExplanations(page: Page) {
  * Opens a fold of rarely changed settings (a `<details>` whose summary line shows their values, ui-playbook.md
  * § 2): Fit automatically's search (`fit-search`), the calibration rules' search budget (`rules-search`), Flow
  * calibration's warm-up (`flow-more`) and the pan row's fill tools (`pan-tools`), the Calibration record's quality
- * flags (`record-flags`), or a group that starts closed while it is at its defaults (`common/DefaultsFold.svelte`):
- * Rain gaps' two cards (`rain-defaults`), Data quality's limits (`quality-limits`) and the WR2012 check's judging
- * (`wr2012-judging`). Does nothing when it is already open.
+ * flags (`record-flags`), a Reserve rule table's settings (`rule-settings`), the drought restriction rule's wording
+ * (`restriction-rule-fold`), or a group that starts closed while it is at its defaults
+ * (`common/DefaultsFold.svelte`): Rain gaps' two cards (`rain-defaults`), Data quality's limits
+ * (`quality-limits`) and the WR2012 check's judging (`wr2012-judging`). Does nothing when it is already open.
  */
-export type FoldId = 'fit-search' | 'rules-search' | 'flow-more' | 'pan-tools' | 'record-flags' | 'rain-defaults' | 'quality-limits' | 'wr2012-judging';
+export type FoldId =
+	| 'fit-search'
+	| 'rules-search'
+	| 'flow-more'
+	| 'pan-tools'
+	| 'record-flags'
+	| 'rule-settings'
+	| 'restriction-rule-fold'
+	| 'rain-defaults'
+	| 'quality-limits'
+	| 'wr2012-judging';
 export async function openFold(scope: Page | Locator, testId: FoldId) {
 	const fold = scope.getByTestId(testId);
 	// Its own summary: a fold can hold another <details> (the pan row's tools hold the FAO-56 helper).

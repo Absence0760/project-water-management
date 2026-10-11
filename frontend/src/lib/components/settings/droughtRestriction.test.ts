@@ -1,6 +1,6 @@
 import { droughtRestrictionIssues, RESTRICTION_DATES_MAX, RESTRICTION_LEVELS_MAX } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, restrictionShortSummary, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 describe('the drought restriction form (engine 1.54.0, WP-3.8)', () => {
 	it('starts from a rule the engine accepts: reviews on 1 October and 1 January, lifted 1 May, three deepening levels', () => {
@@ -63,5 +63,13 @@ describe('the published notice’s day (engine 1.54.0)', () => {
 		expect(noticeDay('2026-11-03T08:00:00Z', 'Africa/Johannesburg')).toBe('2026-11-03');
 		expect(noticeDay('2026-11-03T08:00:00Z', 'Pacific/Auckland')).toBe('2026-11-03');
 		expect(noticeDay('2026-11-03T12:00:00Z', 'Pacific/Auckland')).toBe('2026-11-04');
+	});
+});
+
+describe('the rule in one short line (issue #521)', () => {
+	it('counts the levels with their thresholds, and lists the review and lift dates', () => {
+		expect(restrictionShortSummary(startingRule())).toBe('3 levels, below 60 / 40 / 25 % · reviewed 1 Oct, 1 Jan · lifted 1 May');
+		const { liftDates: _l, ...noLift } = startingRule();
+		expect(restrictionShortSummary({ ...noLift, levels: [{ belowPct: 0.125, cuts: {} }] })).toBe('1 level, below 12.5 % · reviewed 1 Oct, 1 Jan');
 	});
 });

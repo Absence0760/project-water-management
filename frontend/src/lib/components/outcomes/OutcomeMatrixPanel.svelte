@@ -234,10 +234,19 @@
 			<form onsubmit={start} novalidate>
 				<!-- Fields and hint first, then the action row: the run button lines up with the other panels'. -->
 				<div class="field start">
-					<label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
-					<input id="outcome-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outcome-levels-h" aria-invalid={!!parsed.error} />
+					<span class="label"><label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label> <HelpTip key="demand-level" /></span>
+					<input
+						id="outcome-levels"
+						type="text"
+						bind:value={levelsText}
+						disabled={busy}
+						placeholder="Up to {SWEEP_MEMBERS_MAX}, separated by commas"
+						aria-describedby="outcome-levels-h"
+						aria-invalid={!!parsed.error}
+					/>
+					<!-- The hint is the placeholder and the ⓘ on screen (issue #521 § 14); read in full by a screen reader. -->
+					<span class="visually-hidden" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it).</span>
 				</div>
-				<p class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it). <HelpTip key="demand-level" /></p>
 				<div class="action-row">
 					<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
 				</div>

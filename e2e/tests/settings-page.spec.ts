@@ -18,7 +18,7 @@ import { anySaveBar, fitSummary, header, isProjectPatch, openFold, openSettings,
 /** The side index at 1440 px (issue #468): every panel's heading, under its task. */
 const SETTINGS_INDEX: [string, string[]][] = [
 	['Data & rain', ['Simulation period', 'Rain gaps', 'Data quality']],
-	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions']],
+	['Demand & supply', ['Demand', 'Flow share', 'Drought restrictions', 'Reporting']],
 	['Runoff & calibration', ['Flow calibration', 'Calibration record', 'Fit the parameters', 'WR2012 check']],
 	['EWR & Reserve', ['EWR', 'Reserve rule tables']],
 	['Reading results', ['Outcome matrix', 'Seasonal outlook', 'Evidence']],

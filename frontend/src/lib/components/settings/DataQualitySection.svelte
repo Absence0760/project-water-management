@@ -228,8 +228,6 @@
 		margin-top: 0.25rem;
 	}
 	.check {
-		display: flex;
-		gap: 0.4rem;
 		align-items: center;
 		min-height: 36px;
 		font-weight: 500;

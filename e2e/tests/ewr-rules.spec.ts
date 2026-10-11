@@ -9,10 +9,11 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { whatChanged } from '../support/compare.ts';
 import { answerConfirm } from '../support/confirm.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { openFold, saveChanges, saveSettings } from '../support/settings.ts';
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
+const pasteDialog = (page: import('@playwright/test').Page) => page.getByRole('dialog', { name: 'Paste into the rule table at Outlet (Outflow gauge)' });
 
 /** Three whole water years (Oct 2019 – Sep 2022) of the sample catchment: 36 complete months. */
 async function seedThreeYears(request: APIRequestContext, name: string): Promise<string> {
@@ -76,20 +77,31 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	const cal = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 	const row = (m: string) => POINTS.map((_, i) => ((12 - i) * (MONTHS.indexOf(m) + 1)) / 100).join('\t');
 	const tsv = ['Month\t' + POINTS.map((p) => `${p}%`).join('\t'), ...cal.map((m) => `${m}\t${row(m)}`)].join('\n');
-	await table.getByLabel('Paste from a spreadsheet').fill(tsv);
-	await table.getByRole('button', { name: 'Fill the EWR values' }).click();
+	// Paste… in the table's head opens the shared paste dialog (issue #521): a preview of every value, then Apply.
+	const paste = pasteDialog(page);
+	await table.getByRole('button', { name: 'Paste… into the rule table at Outlet (Outflow gauge)' }).click();
+	await paste.getByLabel('Cells copied from a spreadsheet').fill(tsv);
+	await expect(paste.getByTestId('paste-summary')).toHaveText('120 values change.');
+	await expectNoViolations(page, { include: '[role="dialog"]' });
+	await paste.getByRole('button', { name: 'Apply 120 changes' }).click();
+	await expect(paste).toBeHidden();
 	await expect(table.getByRole('status', { name: 'Paste result', exact: true })).toHaveText('Filled the EWR values: 12 months × 10 % points (rows matched by month name).');
 	// Jan is the 4th water-year month: at 50 % (the 5th point) 8 × 4 / 100.
 	await expect(table.getByLabel('EWR, Jan, 50 %, Mm³')).toHaveValue('0.32');
 	await expect(table.getByLabel('EWR, Oct, 10 %, Mm³')).toHaveValue('0.12');
 
 	// A paste that isn't 12 months says so and changes nothing.
-	await table.getByLabel('Paste from a spreadsheet').fill('1\t2\t3');
-	await table.getByRole('button', { name: 'Fill the EWR values' }).click();
-	await expect(table.getByRole('status', { name: 'Paste result', exact: true })).toHaveText('Expected 12 rows, one per month (Oct … Sep); the paste has 1.');
+	await table.getByRole('button', { name: 'Paste… into the rule table at Outlet (Outflow gauge)' }).click();
+	await paste.getByLabel('Cells copied from a spreadsheet').fill('1\t2\t3');
+	await expect(paste.getByTestId('paste-summary')).toHaveText('Expected 12 rows, one per month (Oct … Sep); the paste has 1.');
+	await expect(paste.getByRole('button', { name: /^Apply/ })).toBeDisabled();
+	await paste.getByRole('button', { name: 'Cancel' }).click();
+	await expect(paste).toBeHidden();
 	await expect(table.getByLabel('EWR, Jan, 50 %, Mm³')).toHaveValue('0.32');
 
-	// The natural flows from the table: a blank grid blocks Save until it is filled.
+	// The natural flows from the table (under the folded Table settings): a blank grid blocks Save until it is filled.
+	await expect(table.getByTestId('rule-settings-summary')).toHaveText('Mm³/month · the run’s natural flow · × 1 · 10–99 % (10 points)');
+	await openFold(table, 'rule-settings');
 	await table.getByLabel('Natural-flow percentile from').selectOption('table');
 	await expect(table.getByText('Natural flow values must be numbers from 0 to 1\u202f000\u202f000 (Oct has one that isn\'t).')).toBeVisible();
 	await expect(save).toBeDisabled();
@@ -171,8 +183,14 @@ test('low flows and a freshet are entered by paste, saved and reloaded (engine 0
 	await expect(table.getByText("Low-flow values must be numbers from 0 to 1\u202f000\u202f000 (Oct has one that isn't).")).toBeVisible();
 	await expect(save).toBeDisabled();
 	const csv = ['Month,' + POINTS.map((p) => `${p}%`).join(','), ...MONTHS.map((m) => `${m},${POINTS.map(() => '0').join(',')}`)].join('\n');
-	await table.getByLabel('Paste from a spreadsheet').fill(csv);
-	await table.getByRole('button', { name: 'Fill the low flows' }).click();
+	const paste = pasteDialog(page);
+	await table.getByRole('button', { name: 'Paste… into the rule table at Outlet (Outflow gauge)' }).click();
+	// With the low flows split out, the dialog asks which grid the paste fills.
+	await paste.getByRole('radio', { name: 'The low flows' }).check();
+	await paste.getByLabel('Cells copied from a spreadsheet').fill(csv);
+	await expect(paste.getByTestId('paste-summary')).toHaveText('120 values change.');
+	await paste.getByRole('button', { name: 'Apply 120 changes' }).click();
+	await expect(paste).toBeHidden();
 	await expect(table.getByRole('status', { name: 'Paste result', exact: true })).toHaveText('Filled the low-flow values: 12 months × 10 % points (rows matched by month name).');
 
 	// A freshet pasted as CSV, heading row and all.
@@ -252,7 +270,7 @@ test('run comparison compares Reserve compliance and lists the rule-table change
 	await expect(months.getByRole('row', { name: /^Jan 0% 100%/ })).toBeVisible();
 });
 
-test('Add a rule table sits above the tables; removing a table, or filling over typed values, asks first', async ({ page, owner }) => {
+test('Add a rule table sits above the tables; a paste over typed values shows them first, and removing a table or filling the high flows over typed ones asks first', async ({ page, owner }) => {
 	void owner;
 	const id = await seedThreeYears(page.request, 'Reserve rules asks');
 	await updateSettings(page.request, id, {
@@ -269,11 +287,15 @@ test('Add a rule table sits above the tables; removing a table, or filling over 
 	const caption = (await table.locator('caption', { hasText: 'High-flow components at' }).boundingBox())!;
 	expect(caption.width * caption.height).toBeLessThanOrEqual(1);
 
-	// Fill over a grid that holds values: asked, naming how many; Cancel keeps them.
+	// A paste over a grid that holds values: the preview lists each typed value it replaces (Now and Pasted); Cancel keeps them.
 	const csv = ['Month,' + POINTS.map((p) => `${p}%`).join(','), ...MONTHS.map((m) => `${m},${POINTS.map(() => '5').join(',')}`)].join('\n');
-	await table.getByLabel('Paste from a spreadsheet').fill(csv);
-	await table.getByRole('button', { name: 'Fill the EWR values' }).click();
-	await answerConfirm(page, false, 'The 10 values in the grid will be replaced by the pasted ones.');
+	const paste = pasteDialog(page);
+	await table.getByRole('button', { name: 'Paste… into the rule table at Outlet (Outflow gauge)' }).click();
+	await paste.getByLabel('Cells copied from a spreadsheet').fill(csv);
+	await expect(paste.getByTestId('paste-summary')).toHaveText('120 values change.');
+	await expect(paste.getByRole('row', { name: /^Jan 50 % Mm³ 2 5$/ })).toBeVisible();
+	await paste.getByRole('button', { name: 'Cancel' }).click();
+	await expect(paste).toBeHidden();
 	await expect(table.getByLabel('EWR, Jan, 50 %, Mm³')).toHaveValue('2');
 	// The same for the high flows.
 	const high = table.getByRole('group', { name: 'High flows: freshets and floods' });

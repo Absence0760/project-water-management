@@ -117,11 +117,6 @@
 		gap: 0.5rem 1rem;
 		margin-top: 0.5rem;
 	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
 	.hint {
 		display: block;
 		font-size: 0.8rem;

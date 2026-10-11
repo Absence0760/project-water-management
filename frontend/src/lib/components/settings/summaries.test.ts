@@ -44,7 +44,8 @@ describe('settingsSummaries', () => {
 		expect(s['set-reserve']).toBe('');
 		expect(s['set-evidence']).toBe('No uncertainty rule declared');
 		expect(s['set-auto']).toBe('Off: runs only when someone runs the model');
-		expect(s['set-ewr']).toBe('Pragmatic EWR at the outflow gauge · 12.598 Mm³ a year · registered volumes: compare only');
+		expect(s['set-ewr']).toBe('Pragmatic EWR at the outflow gauge · 12.598 Mm³ a year');
+		expect(s['set-reporting']).toBe('Reporting over the whole run · a water year is met at 90 % of demand');
 	});
 
 	it('reads the values that are set', () => {
@@ -78,5 +79,14 @@ describe('settingsSummaries', () => {
 		expect(settingsSummaries(base())['set-flow']).not.toContain('rain for each unit');
 		expect(settingsSummaries(base({ unitRain: { mode: 'catchment' } }))['set-flow']).not.toContain('rain for each unit');
 		expect(settingsSummaries(base({ unitRain: { mode: 'perUnit' } }))['set-flow']).toMatch(/ · rain for each unit$/);
+	});
+});
+
+describe('the Reporting panel’s line (issue #521)', () => {
+	it('names the window and the threshold that are set', () => {
+		const s = settingsSummaries(base({ reportStart: '2019-06-01', reportEnd: '2019-09-30', assuranceAnnualThreshold: 0.85 }));
+		expect(s['set-reporting']).toMatch(/^Reporting .+ · a water year is met at 85 % of demand$/);
+		expect(s['set-reporting']).not.toContain('whole run');
+		expect(s['set-ewr']).not.toContain('reporting');
 	});
 });

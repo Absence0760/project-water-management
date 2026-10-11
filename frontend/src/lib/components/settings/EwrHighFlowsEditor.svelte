@@ -116,7 +116,7 @@
 
 <fieldset class="plain" aria-describedby="{uid}-status">
 	<legend>High flows: freshets and floods</legend>
-	<p class="hint">
+	<p class="hint explain">
 		Each component is a flood that reaches its peak in one of its months and lasts its duration from rise to recession (counted as at least half the duration at or above half the peak), required that many times each water year. A
 		year is asked for no more events than the site’s natural flow had, so a dry year that would have had no flood is not failed for it. The peak is a
 		<strong>daily-mean</strong> flow: a gazetted Reserve gives an instantaneous peak, which daily flow rarely reaches, so enter the daily-mean peak the

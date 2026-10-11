@@ -17,6 +17,8 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
+	// Scheduled reports: their own chunk too, for the same reason (issue #521); the panel loads its list on mount anyway.
+	const loadReportSchedules = () => import('$lib/components/report/ReportSchedulesPanel.svelte');
 	// Evaporation from the map (issue #326 B-evap): its own chunk, for the same reason as the panels above; it loads its proposal on mount.
 	const loadEvaporationProposal = () => import('./EvaporationProposal.svelte');
 	// The FAO-56 pan-coefficient helper: editors only, under pan coefficient × A-pan, so a viewer or a monthly-PE
@@ -37,7 +39,6 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
 	import {
-		ALLOCATION_MODE_LABEL,
 		CALIBRATION_FLOW_KINDS,
 		calibrationSeriesKey,
 		calibrationSites,
@@ -121,7 +122,6 @@
 	// reports save through their own APIs, never through the save bar (docs/ui.md § Data feeds,
 	// § API keys, § Scheduled reports); the outcome matrix (issue #53 R4) and seasonal outlook
 	// (R5) settings are part of the form.
-	import ReportSchedulesPanel from '$lib/components/report/ReportSchedulesPanel.svelte';
 	import OutcomeSettingsSection from '$lib/components/outcomes/OutcomeSettingsSection.svelte';
 	import OutlookSettingsSection from '$lib/components/outlook/OutlookSettingsSection.svelte';
 	import type { SettingsDraft } from './settingsDraft.svelte';
@@ -268,9 +268,9 @@
 			{ id: 'set-flow', message: unitRainError },
 			{ id: 'set-wr2012', message: errs.wr2012 },
 			{ id: 'set-ewr', message: errs.ewrSource },
-			{ id: 'set-ewr', message: reportError },
 			{ id: 'set-reserve', message: errs.reserve },
 			{ id: 'set-restrict', message: errs.restrict },
+			{ id: 'set-reporting', message: reportError },
 			{ id: 'set-period', message: dateError },
 			{ id: 'set-quality', message: dqError },
 			{ id: 'set-outcomes', message: outError },
@@ -861,6 +861,66 @@
 		<FieldHistoryLine field="settings:droughtRestriction" />
 	</section>
 
+	<!-- Reporting (issue #521): the window the curtailment targets and the assurance of supply average over, and
+	     when a water year counts as met. Moved here from EWR: they read the supply results, not the river. -->
+	<section class="panel" id="set-reporting" aria-labelledby="reporting-h">
+		<div class="panel-head">
+			<h2 id="reporting-h">Reporting</h2>
+		</div>
+		<p class="summary" data-testid="summary-reporting">{summaries['set-reporting']}</p>
+		<div class="reporting">
+			<fieldset class="plain report">
+				<legend>Curtailment reporting window <HelpTip key="settings.reportStart" /></legend>
+				<div class="form-row">
+					<div class="field">
+						<label for="st-rep-start">From</label>
+						<input
+							id="st-rep-start"
+							type="date"
+							readonly={readonly}
+							value={s.reportStart ?? ''}
+							onchange={(e) => (s.reportStart = e.currentTarget.value || null)}
+							aria-invalid={reportError ? 'true' : undefined}
+							aria-describedby={reportError ? 'st-rep-err' : undefined}
+						/>
+					</div>
+					<div class="field">
+						<label for="st-rep-end">To</label>
+						<input
+							id="st-rep-end"
+							type="date"
+							readonly={readonly}
+							value={s.reportEnd ?? ''}
+							onchange={(e) => (s.reportEnd = e.currentTarget.value || null)}
+							aria-invalid={reportError ? 'true' : undefined}
+							aria-describedby={reportError ? 'st-rep-err' : undefined}
+						/>
+					</div>
+				</div>
+				<span class="hint explain">
+					Period the curtailment targets and the assurance of supply on Hydrological units average over, e.g. the last dry season. Leave blank for the whole run.
+				</span>
+				{#if reportError}<p class="err" id="st-rep-err">{reportError}</p>{/if}
+			</fieldset>
+			<!-- Its own field, after the window: screen readers announced it as part of the window's group. -->
+			<div class="field assurance">
+				<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
+				<NumberInput
+					id="st-aat"
+					min={1}
+					max={100}
+					scale={100}
+					disabled={readonly}
+					value={s.assuranceAnnualThreshold ?? 0.9}
+					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
+					aria-describedby="st-aat-h"
+				/>
+				<span class="hint explain" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
+			</div>
+		</div>
+	</section>
+
 	<!-- Flow generation ------------------------------------------------------------>
 	<section class="panel" id="set-flow" aria-labelledby="cal-h">
 		<div class="panel-head">
@@ -1320,86 +1380,8 @@
 				{fmtQty(ewrAnnual, 3)} Mm³/a in total · mean {fmtQty((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
 			</p>
 		</div>
-		<fieldset class="plain report">
-			<legend>Curtailment reporting window <HelpTip key="settings.reportStart" /></legend>
-			<div class="form-row">
-				<div class="field">
-					<label for="st-rep-start">From</label>
-					<input
-						id="st-rep-start"
-						type="date"
-						readonly={readonly}
-						value={s.reportStart ?? ''}
-						onchange={(e) => (s.reportStart = e.currentTarget.value || null)}
-						aria-invalid={reportError ? 'true' : undefined}
-						aria-describedby={reportError ? 'st-rep-err' : undefined}
-					/>
-				</div>
-				<div class="field">
-					<label for="st-rep-end">To</label>
-					<input
-						id="st-rep-end"
-						type="date"
-						readonly={readonly}
-						value={s.reportEnd ?? ''}
-						onchange={(e) => (s.reportEnd = e.currentTarget.value || null)}
-						aria-invalid={reportError ? 'true' : undefined}
-						aria-describedby={reportError ? 'st-rep-err' : undefined}
-					/>
-				</div>
-			</div>
-			<span class="hint explain">
-				Period the curtailment targets and the assurance of supply on Hydrological units average over, e.g. the last dry season. Leave blank for the whole run.
-			</span>
-			{#if reportError}<p class="err" id="st-rep-err">{reportError}</p>{/if}
-		</fieldset>
-		<!-- Its own field, after the window: screen readers announced it as part of the window's group. -->
-		<div class="field assurance">
-			<span class="lbl"><label for="st-aat">Annual assurance threshold <span class="u">(%)</span></label><HelpTip key="settings.assuranceAnnualThreshold" /></span>
-			<NumberInput
-				id="st-aat"
-				min={1}
-				max={100}
-				scale={100}
-				disabled={readonly}
-				value={s.assuranceAnnualThreshold ?? 0.9}
-				onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
-				aria-describedby="st-aat-h"
-			/>
-			<span class="hint explain" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
-			<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
-		</div>
-		<fieldset class="plain" data-testid="settings-allocations">
-			<legend>Registered volumes <HelpTip key="settings.allocationMode" /></legend>
-			<div class="form-row">
-				<!-- Licence data never drives the baseline (issue #507): the project compares only; a cap or a full allocation is a scenario's. -->
-				<div class="field">
-					<span class="lbl"><span class="lbl-text">Allocation mode</span></span>
-					<span class="alloc-mode" data-testid="settings-allocation-mode">{ALLOCATION_MODE_LABEL.none}</span>
-				</div>
-				<div class="field">
-					<span class="lbl"><label for="st-alloc-tol">Comparison band <span class="u">(± %)</span></label><HelpTip key="settings.allocationTolerance" /></span>
-					<NumberInput
-						id="st-alloc-tol"
-						min={0}
-						max={99}
-						scale={100}
-						disabled={readonly}
-						value={s.allocationTolerance ?? 0.1}
-						onchange={(v) => (s.allocationTolerance = v ?? undefined)}
-						aria-describedby="st-alloc-tol-h"
-					/>
-					<FieldHistoryLine field="settings:allocationTolerance" />
-				</div>
-			</div>
-			<span class="hint explain" id="st-alloc-mode-h">
-				The baseline compares each unit’s modelled use with its registered volumes and changes nothing: licence data never drives the baseline, whose use comes from the
-				crops, demands, pumps and boreholes you enter. To cap use at the volumes, or to see “if every registered or licensed volume were taken in full”, make a scenario
-				that sets the allocation mode.
-			</span>
-			<span class="hint explain" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, a provisional default not yet confirmed by the catchment’s hydrologist.</span>
-			<FieldHistoryLine field="settings:allocationMode" />
-		</fieldset>
+		<!-- The registered-volumes band moved to Allocations, beside what it changes (issue #521). -->
+		<p class="hint muted" data-testid="ewr-band-moved">The registered-volumes comparison band is on <a href="?tab=allocations">Allocations</a>.</p>
 	</section>
 
 	<!-- Reserve rule tables (engine ≥ 0.21.0) -------------------------------------->
@@ -1496,7 +1478,12 @@
 	</Lazy>
 {/if}
 
-<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
+<!-- As #set-feeds: the id outside the lazy panel. -->
+<div id="set-report-schedules">
+	<Lazy load={loadReportSchedules}>
+		{#snippet children(ReportSchedulesPanel)}<ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />{/snippet}
+	</Lazy>
+</div>
 </SectionNav>
 
 <style>
@@ -1702,13 +1689,19 @@
 		color: var(--warning);
 		font-weight: 600;
 	}
+	/* Reporting (issue #521): the window and the threshold side by side, stacked when narrow. */
+	.reporting {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0.5rem 2rem;
+	}
 	.report {
-		margin-top: 1rem;
 		display: grid;
 		gap: 0.25rem;
+		max-width: 75ch;
 	}
 	.assurance {
-		margin-top: 0.5rem;
 		max-width: 75ch;
 	}
 	/* A percentage: a field as wide as the others in the grid, not the whole text measure. */
@@ -1750,7 +1743,6 @@
 	.check {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
 		min-height: 36px;
 	}
 	.lbl {
@@ -1758,17 +1750,10 @@
 		align-items: center;
 		gap: 0.25rem;
 	}
-	.lbl label,
-	.lbl-text {
+	.lbl label {
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
-	}
-	/* The baseline's allocation mode, fixed at compare only (issue #507): read, not chosen. */
-	.alloc-mode {
-		display: flex;
-		align-items: center;
-		min-height: 36px;
 	}
 	legend :global(.helptip),
 	h2 :global(.helptip),

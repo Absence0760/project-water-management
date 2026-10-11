@@ -76,6 +76,18 @@ test('the page: one title, its context and Download in the header, the facts, de
 	const tops = new Set(await tiles.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top))));
 	expect(tops.size).toBe(4);
 
+	// Members and Responsible authority explain themselves in their headings' ⓘ (and the glossary behind them), not in
+	// paragraphs that repeated them (issue #521 § 13): the authority's form starts under its heading.
+	const membersRegion = region(page, 'Members');
+	await expect(membersRegion.getByRole('button', { name: 'About roles' })).toBeVisible();
+	await expect(membersRegion).not.toContainText('Anyone without an account gets an email invitation');
+	const authority = page.getByTestId('authority-panel');
+	await expect(authority.getByRole('button', { name: 'About the responsible authority' })).toBeVisible();
+	await expect(authority).not.toContainText('Who decides this project’s licence applications');
+	const authorityHeading = (await authority.getByRole('heading', { level: 2 }).boundingBox())!;
+	const authorityName = (await authority.getByLabel('Authority name').boundingBox())!;
+	expect(authorityName.y - (authorityHeading.y + authorityHeading.height)).toBeLessThan(60);
+
 	// The Summary keeps none of it.
 	await strip(page).getByRole('link', { name: 'Summary', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();

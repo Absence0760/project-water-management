@@ -250,7 +250,7 @@
 					</div>
 				</div>
 			</details>
-			<label class="tick">
+			<label class="check">
 				<input type="checkbox" bind:checked={background} data-testid="delineate-background" />
 				A large catchment, over about 100 km across: work it out in the background
 			</label>
@@ -299,7 +299,7 @@
 			</section>
 			{#if notice}<p class="hint notice">{notice}</p>{/if}
 			{#if boundary}
-				<label class="tick">
+				<label class="check">
 					<input type="checkbox" bind:checked={replace} data-testid="delineate-replace" />
 					Replace the current boundary{boundary.name ? ` “${boundary.name}”` : ''} if I accept this as the catchment boundary
 				</label>
@@ -352,16 +352,10 @@
 		margin-bottom: 0.25rem;
 	}
 	.radio,
-	.tick {
-		display: flex;
-		gap: 0.5rem;
-		align-items: baseline;
+	.check {
 		min-height: 24px;
 	}
 	.radio input,
-	.tick input {
-		flex: none;
-	}
 	.how summary {
 		cursor: pointer;
 		min-height: 24px;

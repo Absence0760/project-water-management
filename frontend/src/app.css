@@ -372,6 +372,21 @@ input[type='checkbox'],
 input[type='radio'] {
 	flex-shrink: 0;
 }
+/* A box with its words: `<label class="check"><input type="checkbox" /> words</label>`, one rule for
+   the app rather than one per component (issue #521). The box sits on the middle of the first line
+   (its block margins fill the line), so a label that wraps keeps it beside its first words, and a
+   label centred in a taller row (`align-items: center`, kept locally) still centres it. Never under
+   the browser's own 3 px, which keeps two stacked small labels' boxes 24 px apart (WCAG 2.5.8,
+   axe target-size: the members' Specialist and Acts-for-the-authority boxes). Components
+   keep only what differs (inline-flex, a min-height, a font size). */
+label.check {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.4rem;
+}
+label.check > input {
+	margin-block: max(3px, calc((1lh - 1rem) / 2));
+}
 input[type='number'] {
 	font-variant-numeric: tabular-nums;
 	text-align: right;
@@ -555,7 +570,9 @@ table.data tfoot th {
 	font-weight: 600;
 	background: var(--surface-2);
 }
-table.data td input,
+/* Not a box: at 100 % a checkbox in a cell (the members' "Acts for the responsible authority")
+   took the cell's width, with its words pushed past the row's buttons. */
+table.data td input:where(:not([type='checkbox'], [type='radio'])),
 table.data td select {
 	width: 100%;
 	padding: 0.2rem 0.35rem;

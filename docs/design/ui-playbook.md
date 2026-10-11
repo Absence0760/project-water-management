@@ -1114,10 +1114,26 @@ Interaction details that bit:
   To line a box up with a wrapped label's first line, use `align-items:
   flex-start` and `margin-top: calc((1lh - 1rem) / 2)` on the box, rather
   than centring it on the whole label.
+- **A box with its words is `<label class="check">`, styled once.**
+  `app.css`'s `label.check` is the flex row (`gap: 0.4rem`, `align-items:
+  flex-start`) and gives the box block margins that fill one line
+  (`max(3px, calc((1lh - 1rem) / 2))`: never under the browser's own 3 px,
+  or two stacked small labels' boxes came closer than 24 px and axe's
+  target-size failed on the Members panel), so the box sits on the first line's middle when
+  the words wrap and still centres when a component keeps `align-items:
+  center` for a taller row (a `min-height` of 28 px or more). A component's
+  own `.check` rule keeps only what differs: `display: inline-flex`, a
+  min-height, a font size, margins. About forty components each wrote the
+  same three declarations (issue #521); don't add a fourth spelling (`.tick`,
+  `.toggle`, `.choice` were folded into it). A switch drawn over a hidden box
+  (`.switch`) and the month toggles are not this pattern.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
-  `input:not([type='checkbox'])`.
+  `input:not([type='checkbox'])`. `app.css`'s `table.data td input` did the
+  same in every table cell: the Members panel's "Acts for the responsible
+  authority" box took the cell's width and its words ran under the row's
+  Remove button (issue #521); it skips checkboxes and radios now.
 - **Keep a picked row in view when the list's box changes, not only when the
   pick does.** The Map's `node=` link picks a parcel far down a list that
   scrolls in its fitted card; on the first render the fit wasn't measured, the
@@ -1174,6 +1190,27 @@ Interaction details that bit:
   its one-line intro and its first row; pin it with `expectAbove`
   (`e2e/support/reflow.ts`: above on screen and first in the focus order).
   Notes about what's in the table (totals, a CSV's unit) stay under it.
+- **A paste box that replaces a whole table is the shared paste dialog.**
+  The EWR's TAB flows and percentile tables and each Reserve rule table had
+  an always-open textarea under the grids with one "Fill …" button per grid
+  (issue #521). They open `model/GridPasteDialog.svelte` now, from a
+  **Paste…** beside the file load: `wholeTable` drops the start-cell and
+  blank-cell rules (the block replaces every cell, so the caller's layout
+  line says how it is read), a `target` snippet holds the choice of grid
+  (radios) when there is more than one, and the plan is the old parser's
+  result diffed against the grid (`settings/ewrPaste.ts`), so the values are
+  the same. The preview (Now and Pasted) is the check before values are
+  replaced: drop the confirm the Fill button asked, don't stack a second one.
+- **Line up a table of fieldsets with fixed row heights, not subgrid.** The
+  drought levels became one table (a column per level, a row per part of
+  demand) while each level stays a `<fieldset>` named by its legend, so the
+  errors and tests that name a level keep working. `grid-template-rows:
+  subgrid` on a fieldset is unreliable (its grid is on an anonymous box), so
+  each column is a stack of cells of one fixed height (`2.6rem`, room for two
+  lines of a row name) beside one column of row names, switched on by a
+  container query; on a phone the same markup is a card per level with its
+  own row labels. A flex cell trims the leading space of a child's text, so
+  wrap a name and its " (floor kept)" in one inline span.
 - **Don't disable a control while its own change saves.** The alert emails
   page disabled each catchment's fieldset during a save, so an arrow key on
   a radio moved the choice and then threw the keyboard's focus to the page.

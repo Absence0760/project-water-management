@@ -685,8 +685,8 @@ export const GUIDES: Guide[] = [
 							'Take the monthly Reserve flows for the river’s [[ecological-category]], usually from the [[desktop-reserve-model]] tables without high flows.',
 							'Pick one value per month (often a percentile) and convert it to m³/day.',
 							'On **Settings & calibration → EWR**, enter the 12 values, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
-							'Or take the daily EWR straight from the Desktop Reserve Model: set **Daily EWR from** to *The DRM TAB file* or *The DRM percentile tables* ([[ewr-daily-source|the daily EWR at the outlet]]), load the DRM’s .tab or .rul file (a .tab’s flows are shown in m³/s before you use them), and choose how the tables are scaled to the catchment, by MAR or by area, with the table’s MAR or area. Every run then says which EWR it was judged by and the scale factor.',
-							'Optionally set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
+							'Or take the daily EWR straight from the Desktop Reserve Model: set **Daily EWR from** to *The DRM TAB file* or *The DRM percentile tables* ([[ewr-daily-source|the daily EWR at the outlet]]), load the DRM’s .tab or .rul file or paste the values (**Fill from:** beside **Daily EWR from**; a .tab’s flows are shown in m³/s before you use them, a paste’s values in a preview before **Apply**), and choose how the tables are scaled to the catchment, by MAR or by area, with the table’s MAR or area. Every run then says which EWR it was judged by and the scale factor.',
+							'Optionally, on **Settings & calibration → Reporting**, set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
 							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination.',
 							'Save and run.',
 							'With a Reserve rule table too, choose which one the results are judged by in **Judge results by**, the first thing on **Settings & calibration**: automatic (the outlet’s rule table, else the first site’s, else the pragmatic EWR), the pragmatic EWR, or one site’s rule table. It changes no result, so no re-run is needed; River & reserve says at the top which one is in use.'
@@ -1833,6 +1833,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'The list puts first the units to look into: each unit and water source with its status over a mean water year. Pick one to see its water years, the [[allocation-band|band]] and its registered volumes.',
 							'Each water year reads above registered, within band, below registered, or no registered volume ([[registered-vs-modelled]]). A part year is compared with the volume prorated to its days and isn’t counted with the whole years.',
+							'The [[allocation-band|comparison band]] is set at the foot of the page, in the **Comparison band** card beside **What viewers see**: editors change it and press that card’s **Save**. It changes how the comparison reads, never a run’s water.',
 							'A dam’s registered storage (a [[s21-water-use|s21(b) row]]) is set against the dam’s modelled capacity, never against the year’s use ([[registered-storage]]).',
 							'After a cap run, the picked unit says on how many days the cap held use back, and why ([[cap-held-back]]).'
 						]
