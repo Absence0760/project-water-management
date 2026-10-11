@@ -5128,9 +5128,52 @@ assume, the questions for counsel); these are the actions, with triggers.
       public, static credits page (no API call), and no signed-in page lists
       the loaded datasets with their metadata, so the record is the
       operator's (the load log, or SQL as the owner).
+- [ ] **A WAF rate rule scoped to the elevation-model routes (access audit,
+      PR #368; operator decision 2026-10-11, issue #90: build in a later
+      round).** Delineation, Start from the map, Divide and the elevation and
+      water GETs read DEM or raster tiles on every call, so they cost more per
+      request than the rest of the API; today they share the API-wide WAF rate
+      limit. **Durable fix:** a WAF rate-based rule matching those paths with
+      a lower limit than the API's, in `infra/` (plan test in
+      `infra/tests/`). **Trigger:** the next infra round, or the elevation
+      routes showing in the WAF's request metrics or the API's cost.
+- [ ] **An idle-in-transaction timeout on RDS (access audit, PR #368;
+      operator decision 2026-10-11, issue #90: build in a later round).** A
+      connection left idle inside an open transaction holds its locks and a
+      pool slot until it is closed. **Durable fix:** set
+      `idle_in_transaction_session_timeout` in the RDS parameter group
+      (minutes, above the longest legitimate transaction: the 60-farm runs and
+      the reference loads), and check `withUser` surfaces the resulting
+      error as an ordinary 500. **Trigger:** the next infra round, or any
+      `idle in transaction` session seen in `pg_stat_activity` in
+      production.
 
 ## Housekeeping
 
+- [ ] **Three routes with no client call (round 4 reports; operator
+      decision 2026-10-11, issue #90).** `POST /projects/:id/jobs`, and the
+      farm `series` and `history` routes looked to have no caller in `frontend/src` (round 4 reports).
+      **Durable fix:** for each, find a caller (a script, e2e, a planned
+      screen) and say so where the route is defined, or remove it with its
+      tests, its line in docs/api.md and its row in the route-auth inventory
+      (`src/routes.test.ts`). **Trigger:** the next backend round; don't
+      leave them undecided past it.
+- [ ] **Update Vite to 8.3.4 or later (issue #90, 2026-10-11).** Vite 8.3.4
+      (#23662, fixing vitejs/vite#23652) makes every caller of the preload
+      helper wait for an in-flight stylesheet, which fixes the
+      CSS-before-render race in docs/upstream/sveltekit-css-before-render.md
+      at its source, so that report was not filed. **Trigger:** 2026-10-15,
+      when 8.3.4 passes `minimumReleaseAge` (or the Dependabot PR that
+      brings it). Then decide whether the root layout's `onNavigate(() =>
+      stylesheetsReady())` workaround stays (it is cheap and also guards a
+      slow link) or goes, and update the upstream doc either way.
+- [ ] **Two sources no one could check (from #259; moved from issue #90,
+      2026-10-11).** WR2012's own lake factors (the WR2012 resource centre
+      needs a login; used by #256) and Linsley, Kohler & Paulhus (1982)
+      "0.7–0.8 × Class-A pan" (not readable online; cited in #256,
+      docs/engine-audit.md, `packages/engine/src/project.ts` and the help
+      articles). **Trigger:** access to either original. Then check the
+      cited values against it and correct the citation or the value.
 - [x] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
       (found 2026-10-01, issue #326 round 3). "loads the committed env file and
       points both URLs at the checkout database" fails on any machine whose

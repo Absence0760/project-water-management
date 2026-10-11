@@ -1,5 +1,7 @@
 # Client navigation can render a route before its CSS has loaded (double loader call + Vite preload `seen` map)
 
+> **Status (2026-10-11): not filed.** Vite fixed the cause in 8.3.4 (vitejs/vite#23662, issue #23652: the preload helper now hands later callers the in-flight stylesheet promise). SvelteKit's double loader call is harmless once Vite waits. Follow-up: update Vite (docs/followups.md § Housekeeping).
+
 **Where to file:** `sveltejs/kit` (the double call is SvelteKit's). Cross-reference in `vitejs/vite`, because the preload helper's memo is what drops the wait.
 
 ## Versions

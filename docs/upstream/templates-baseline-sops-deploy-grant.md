@@ -1,5 +1,7 @@
 # project-baseline: make the deploy role's use of the sops key opt-in
 
+> **Status (2026-10-11): filed** as Absence0760/templates#4.
+
 **Where to file:** the `templates` repo (`Absence0760/templates`), module
 `infra/modules/project-baseline`. This repo doesn't edit it (base-owned,
 cross-project); the proposal is here so the change can be made there once
