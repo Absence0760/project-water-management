@@ -157,15 +157,16 @@
 	<span class="badge fresh" class:badge-warn={f.stale} title={f.detail}>{f.label}</span>
 {/snippet}
 
+<!-- The folded Last run column, labelled as its neighbour "Lowest dam: …" is, so the two don't read as one phrase. -->
 {#snippet lastRun(p: ProjectSummary)}
 	{#if p.lastRunAt}
-		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">last run {fmtDay(fmtDate(p.lastRunAt))}</span>
+		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">Last run: {fmtDay(fmtDate(p.lastRunAt))}</span>
 	{:else if hasRole(p.role, 'viewer')}
-		<!-- A farmer sees no runs (lastRunAt is null for them), so "not run yet" would be wrong. -->
-		<span class="run">not run yet</span>
+		<!-- A farmer sees no runs (lastRunAt is null for them), so "Not run yet" would be wrong. -->
+		<span class="run">Not run yet</span>
 	{/if}
 	{#if p.publishedAt}
-		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {fmtDay(fmtDate(p.publishedAt))}</span>
+		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">Published: {fmtDay(fmtDate(p.publishedAt))}</span>
 	{/if}
 {/snippet}
 
