@@ -746,9 +746,12 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | `security.yml` | CodeQL (JS/TS + Actions) |
 | `scorecard.yml`, `pr-mergeable.yml`, `pr-title-lint.yml`, `labeler.yml` | OpenSSF Scorecard (push to `main` only); "CI never ran on this conflicted PR"; PR title and labels (PRs only) |
 
-Docs-only **pull requests** (only `docs/`, `.claude/` or `*.md` files,
+Docs-only and draft **pull requests** (a draft by `github.event.pull_request.draft`; docs-only means only `docs/`, `.claude/` or `*.md` files,
 decided by the `changes` job) skip the heavy jobs, but `CI gate` still
-reports. A **push to `main`** always runs every job, whatever it changed: a
+reports. Marking a draft **Ready for review** fires `ready_for_review`, which
+runs the full suite on the same commit; the workflow guard's `draft-ready`
+rule refuses a draft skip without that trigger type, so a draft's skipped
+gate can never be what a merge rests on. A **push to `main`** always runs every job, whatever it changed: a
 release needs `CI gate` green on the exact commit it ships, and a docs-only
 commit on top of a failing code commit must not turn that gate green without
 the code having passed (the workflow guard's `push-full` rule holds the
