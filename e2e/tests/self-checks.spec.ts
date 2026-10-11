@@ -37,20 +37,20 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(balance.getByRole('rowheader')).toHaveText(['2021/22', 'Whole run']);
 	// No groundwater, users, storage resets or lost seepage here: the equation names only the columns shown.
 	await expect(balance).toContainText('Start storage + hydrological unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage.');
+	// Two pairs stack in one column each (rain over its runoff coefficient, the balance's residual over the
+	// runoff model's), so the table fits its column at 1440 (runs-page.spec.ts).
 	await expect(balance.getByRole('columnheader')).toHaveText([
 		'Water year',
-		'Rain (mm)',
-		'Runoff coeff.',
+		'Rain (mm) runoff coeff.',
 		'Start storage',
-		'Hydrological unit runoff',
+		'Unit runoff',
 		'Transfers',
 		'Rain on dams',
 		'Consumptive use',
 		'Dam evaporation',
 		'Outflow',
 		'End storage',
-		'Residual (m³)',
-		'Runoff-model residual (mm)'
+		'Residual (m³) runoff model (mm)'
 	]);
 
 	// The catchment's own account is on River & reserve: linked, for the same run, not copied here; Back returns.
@@ -80,7 +80,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	}
 	await expect(table.getByRole('row').filter({ hasText: 'Irrigation supplied' }).getByRole('cell').first()).toHaveText('G');
 	// The day closes from the numbers shown: in − used − stored − out is 0 or float noise.
-	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|[-−]?\d\.\d{2}e-\d+)$/);
 
 	// The catchment's day: how the runoff model (GR4J, the default) turned rain into natural flow.
 	await trace.getByLabel('Hydrological unit, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
@@ -91,6 +91,6 @@ test('a run shows its self-checks, its water balance and a traced day that close
 		await expect(runoff.getByRole('rowheader', { name, exact: true })).toBeVisible();
 	}
 	// The store balance closes from the numbers shown: before + P + F − AET − Q − after is 0 or float noise.
-	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure strong')).toHaveText(/^([-−]?0|[-−]?\d\.\d{2}e-\d+)$/);
 	await expect(trace.locator('.closure')).toContainText('mm');
 });

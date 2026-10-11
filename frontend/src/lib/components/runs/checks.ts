@@ -41,7 +41,8 @@ export const BALANCE_COLUMNS: BalanceColumn[] = [
 	{ key: 'rain', label: 'Rain (mm)', title: 'Catchment rain after gap-filling', value: (r) => r.rainMm },
 	{ key: 'runoffCoef', label: 'Runoff coeff.', title: 'Natural flow ÷ rain, both as depth over the catchment', value: (r) => r.runoffCoefficient },
 	{ key: 'opening', label: 'Start storage', title: 'Σ dam storage at the start (Mm³)', value: (r) => r.openingStorageM3 * MM3 },
-	{ key: 'runoff', label: 'Hydrological unit runoff', title: 'Σ hydrological unit runoff (I), Mm³', value: (r) => r.farmRunoffM3 * MM3 },
+	// "Unit runoff": the wording rule's short name (ui-playbook § 3), so the heading wraps to a column as narrow as its figures.
+	{ key: 'runoff', label: 'Unit runoff', title: 'Σ hydrological unit runoff (I), Mm³', value: (r) => r.farmRunoffM3 * MM3 },
 	{ key: 'transfers', label: 'Transfers', title: 'Net transfers across all hydrological units; 0 up to float noise (Mm³)', value: (r) => r.transfersM3 * MM3 },
 	{ key: 'groundwater', label: 'Groundwater pumped', title: 'Groundwater pumped into supply and the dams, a gain to the river network (Mm³)', value: (r) => opt(r.groundwaterM3), optional: true },
 	{ key: 'storageSet', label: 'Storage set', title: 'Storage set into (+) or out of (−) the dams by a storage reset (Mm³)', value: (r) => opt(r.storageSetM3), optional: true },

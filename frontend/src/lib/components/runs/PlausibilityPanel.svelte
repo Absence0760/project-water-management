@@ -12,7 +12,7 @@
 	import { api, type RunMeta } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
+	import { fmtNum, fmtPct, fmtStamp } from '$lib/format/number';
 	import { detailCache } from './cache';
 	import RecessionDiagnostics from './RecessionDiagnostics.svelte';
 	import ValidationSignatures from './ValidationSignatures.svelte';
@@ -61,7 +61,7 @@
 			want.map(async (m) => {
 				const d = detailCache.get(m.id) ?? (await api.runs.get(projectId, m.id));
 				detailCache.set(m.id, d);
-				return { runId: m.id, label: m.label || `run ${fmtDate(m.createdAt, true)}`, lowFlow: d.run.summary.plausibility?.lowFlow };
+				return { runId: m.id, label: m.label || `run ${fmtStamp(m.createdAt)}`, lowFlow: d.run.summary.plausibility?.lowFlow };
 			})
 		)
 			.then((o) => {

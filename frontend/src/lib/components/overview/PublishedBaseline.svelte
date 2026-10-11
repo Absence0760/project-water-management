@@ -16,7 +16,7 @@
 	import { api, type Publication, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { noticeLanguages, restrictionSummary } from '$lib/components/runs/publication';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { fmtDay, fmtStamp } from '$lib/format/number';
 	import { runHref } from './attention';
 	import { pickRuns } from './latestRun';
 
@@ -86,7 +86,7 @@
 					{#if run}<span class="muted">· {fmtDay(run.startDate)} – {fmtDay(run.endDate)}</span>{/if}
 				</dd>
 				<dt>Published</dt>
-				<dd>{fmtDate(current.publishedAt, true)}{current.publishedBy ? ` by ${current.publishedBy}` : ''}</dd>
+				<dd>{fmtStamp(current.publishedAt)}{current.publishedBy ? ` by ${current.publishedBy}` : ''}</dd>
 				<dt>Notice</dt>
 				<dd>{restrictionSummary(current.restriction)}</dd>
 				{#each noticeLanguages(current.restriction.notice) as n (n.code)}<dt>{n.name}</dt><dd class="text" lang={n.code}>{n.text}</dd>{/each}
