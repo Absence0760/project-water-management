@@ -62,7 +62,6 @@ day trace read.
 | O | `diverted_to_dam` | MIN(`divertCapacityM3Day` (the month's `divertMonthlyM3Day` when set, engine ≥ 1.32.0), L + N) — diverted back into the dam; cut for the priority users (§2.7c) and the hands-off flow (§2.7h) |
 | G | `supplied` | MIN(MAX(Qprev + rain on dam − evaporation − seepage + M + O + K + J − capacity × `damMinPct`, 0), D): only the storage above the minimum operating level (engine ≥ 0.16.0, audit Q5) |
 | – | `dam_area`, `rain_on_dam`, `dam_evaporation`, `dam_seepage` | the dam's surface, rain on it, evaporation and seepage before irrigation (engine ≥ 0.16.0, audit N2; docs/model.md §2.7a) |
-| – | `diverted_loss` | on a unit that can divert into its dam only (River to dam or a top-up off-take): the diverted share of yesterday's storage, fully mixed, × evaporation and the seepage that doesn't return; surface use in the allocation comparison and cap (engine ≥ 1.79.0, docs/model.md §2.12) |
 | P | `interim_storage` | Qprev + rain on dam − evaporation − seepage + M + O + K + J − G |
 | Q | `dam_storage` | MIN(P, capacity) |
 | R | `spill` | MAX(P − capacity, 0) |
@@ -74,6 +73,7 @@ day trace read.
 | Y | `ewr` | EWR × farm share |
 | Z | `ewr_cumulative` | Y + Σ upstream Z |
 | AA | `ewr_shortfall` | MIN(U − Z, 0) |
+| – | `intake_take`, `received_at_intake` | not simulated: worked out after the run from O, the top-up off-take, R and the river water used, for the allocation comparison only; on a dam beside the river (`pctUpstreamToDam` 0, River to dam or a top-up off-take) O + top-up − MIN(R, O + top-up) + the river water used directly + water from dams on the river, and on a unit given water by such a dam, that water (`../allocations/intake.ts`, engine ≥ 1.82.0, docs/model.md §2.12) |
 | AB | `ewr_shortfall_incremental` | MIN(AA − Σ upstream AA, 0) — the reach shortfall; a diagnostic from engine 0.17.0, when `attribution.ts` sets the EWR charge (`ewr_charge`, `ewr_charge_irrigation`) instead |
 
 Every MIN(…, 0) shortfall here (AA, AB, the gauge's and the outlet's) goes

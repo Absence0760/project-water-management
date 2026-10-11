@@ -299,7 +299,9 @@ export function planObjects(
 	factorFrom: number,
 	warnings: string[],
 	day0?: number,
-	scale?: ArrayLike<number>
+	scale?: ArrayLike<number>,
+	/** Each object's dated demand factor per run day (engine ≥ 1.82.0, demand.scale with from/to): the windows on its unit and category; null = none. */
+	dated?: (o: DemandObject) => Float64Array | null
 ): PlanObjects {
 	const demand: Float64Array[] = [];
 	const schedule: (Float64Array | null)[] = [];
@@ -318,23 +320,32 @@ export function planObjects(
 		const s = day0 === undefined ? null : scheduleFactors(o.schedule, day0, days, warnings, who);
 		// The object's own demand factor (engine ≥ 1.45.0): the unit's × its category's (demand.scale with a part), one path for the floor below.
 		const factor = typeof unitFactor === 'function' ? unitFactor(o) : unitFactor;
+		// × the dated factors on their days (engine ≥ 1.82.0), one factor per day for the floor below.
+		const dd = dated?.(o) ?? null;
+		/** The demand factor on day t (month m), or null when none applies. */
+		const factorOn = (t: number, m: number): number | null => {
+			if (t < factorFrom) return null;
+			if (!dd) return factor ? factor[m]! : null;
+			return factor ? factor[m]! * dd[t]! : dd[t]!;
+		};
 		const d = new Float64Array(days);
 		if (scale) {
 			// A full allocation (engine ≥ 1.70.0): the scaled demand is what the factor cuts and the floor holds.
 			for (let t = 0; t < days; t++) {
 				const m = wy[t]!;
 				const raw = (s ? monthly[m]! * s[t]! : monthly[m]!) * scale[t]!;
-				const cut = factor && t >= factorFrom;
-				d[t] = cut ? raw * factor[m]! : raw;
-				if (floor !== null && cut && factor[m]! < 1) d[t] = Math.max(d[t]!, dayFloor(floor, raw));
+				const k = factorOn(t, m);
+				d[t] = k !== null ? raw * k : raw;
+				if (floor !== null && k !== null && k < 1) d[t] = Math.max(d[t]!, dayFloor(floor, raw));
 			}
 		} else
 			for (let t = 0; t < days; t++) {
 				const m = wy[t]!;
-				const v = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
+				const k = factorOn(t, m);
+				const v = k !== null ? monthly[m]! * k : monthly[m]!;
 				d[t] = s ? v * s[t]! : v;
 				// A restriction never below the floor (engine ≥ 1.44.0); the schedule applies first, so a day off stays off.
-				if (floor !== null && factor && t >= factorFrom && factor[m]! < 1) d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
+				if (floor !== null && k !== null && k < 1) d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
 			}
 		demand.push(d);
 		schedule.push(s);

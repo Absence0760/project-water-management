@@ -51,7 +51,11 @@
 							{#if r.year.partial}<span class="part" title="The run covers {r.year.days} of the year's {r.year.yearDays} days; the registered volume is prorated to them.">part ({r.year.days} d)</span>{/if}
 						</td>
 						<td class="num" data-label="Registered (m³)">{fmtNum(r.year.registeredM3)}</td>
-						<td class="num" data-label="Modelled use (m³, not metered)">{fmtNum(r.year.modelledM3)}</td>
+						<td class="num" data-label="Modelled use (m³, not metered)"
+							>{fmtNum(r.year.modelledM3)}{#if r.atIntake}<span class="sub" data-testid="allocation-at-intake"
+									>taken at the intake{#if r.year.damDrawM3 !== undefined}; drawn from the dam {fmtNum(r.year.damDrawM3)}, not added{/if}</span
+								>{/if}</td
+						>
 						<td class="num" data-label="Modelled ÷ registered">{r.year.ratio === null ? '–' : `${fmtNum(r.year.ratio * 100, 0)} %`}</td>
 						<td data-label="Comparison"><span class="status status-{r.year.status}" title={statusSentence(r.year, tolerance)}>{STATUS_LABEL[r.year.status]}</span></td>
 					</tr>

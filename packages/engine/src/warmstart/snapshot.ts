@@ -62,8 +62,6 @@ export interface ModelNodeState {
 	boreholeUsedM3: number[] | null;
 	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.18.0); absent without a cap. */
 	allocationUsedM3?: [number, number];
-	/** The diverted share of the dam's storage the day before (engine ≥ 1.79.0); absent on a unit that can't divert into a dam. */
-	divertedShare?: number;
 	/** A full allocation's demand factor for the water year in progress (engine ≥ 1.18.0); absent without one. */
 	allocationFactor?: number;
 	/**
@@ -205,7 +203,8 @@ const NOT_HISTORY = new Set(['simulationStart', 'simulationEnd', 'reportStart', 
  * series: the model (demand factors apart), the settings but the window,
  * the reporting window and provenance, the rain-source periods clipped to
  * the days before `date`, the demand factors when they apply before `date`
- * (settings.demandFactorFrom unset or earlier), and a storage reset dated
+ * (settings.demandFactorFrom unset or earlier), the dated demand factors
+ * starting before `date` (engine ≥ 1.82.0), and a storage reset dated
  * before `date`. A factor or reset from `date` on only changes what follows,
  * so it may differ.
  */
@@ -228,8 +227,16 @@ export function modelStateFingerprint(input: ModelInput, date: string): string {
 	const factors = factorsBefore ? input.model.nodes.flatMap((n) => (n.demandFactor != null ? [[n.id, n.demandFactor]] : [])) : [];
 	const reset = input.settings?.damStorageReset as { date?: unknown } | null | undefined;
 	const resetBefore = reset && typeof reset === 'object' && isIso(reset.date) && toEpochDay(reset.date) < day ? reset : null;
-	const model = { ...input.model, nodes: input.model.nodes.map(({ demandFactor: _f, ...n }) => n) };
-	return hashText(stableStringify({ model, settings, factors, reset: resetBefore }), 'wm-model-state-1:');
+	// Dated factors (engine ≥ 1.82.0) shape the state only from their first day: one starting on or after `date` may differ.
+	const windows = factorsBefore
+		? input.model.nodes.flatMap((n) => {
+				const list = Array.isArray(n.demandFactorWindows) ? n.demandFactorWindows.filter((w) => !w || typeof w !== 'object' || !isIso(w.from) || toEpochDay(w.from) < day) : [];
+				return list.length ? [[n.id, list]] : [];
+			})
+		: [];
+	const model = { ...input.model, nodes: input.model.nodes.map(({ demandFactor: _f, demandFactorWindows: _w, ...n }) => n) };
+	// Only a run with dated factors carries the key, so every other run's fingerprint is the one before 1.82.0.
+	return hashText(stableStringify({ model, settings, factors, reset: resetBefore, ...(windows.length ? { windows } : {}) }), 'wm-model-state-1:');
 }
 
 /**

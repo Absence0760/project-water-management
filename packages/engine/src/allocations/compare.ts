@@ -3,9 +3,10 @@
 // docs/allocations.md).
 //
 // Pure and I/O-free like the rest of the engine: the backend feeds it a
-// stored run's daily `supplied`, `groundwater_used`, `groundwater_to_dam` and
-// `river_abstraction` series and the project's allocations, and the result is shown next to the run. It does not
-// change a run and is not part of runModel, so ENGINE_VERSION doesn't move.
+// stored run's daily `supplied`, `groundwater_used`, `groundwater_to_dam`,
+// `river_abstraction`, river-take and intake series (./intake.ts) and the
+// project's allocations, and the result is shown next to the run. It does not
+// change a run; runModel calls it only for RunSummary.allocations (§2.12a).
 //
 // The comparison is arithmetic, not a finding. "Over" means the model's
 // abstraction in that water year is more than the registered volume plus the
@@ -55,17 +56,6 @@ export interface AllocationEntry {
 	maxRateM3s?: number | null;
 }
 
-/**
- * The run series of a unit's diverted river water lost from its dam (engine ≥
- * 1.79.0, ../network/simulate.ts NodeResult.divertedLoss, docs/model.md §2.12):
- * surface use, on a unit that can divert into a dam.
- */
-export const DIVERTED_LOSS_SERIES = {
-	key: 'diverted_loss',
-	label: 'Diverted river water lost from the dam (evaporation, seepage not returned): counted as use',
-	unit: 'm³/day'
-} as const;
-
 /** A node's modelled use from a run. */
 export interface AllocationUseNode {
 	nodeId: string;
@@ -100,11 +90,21 @@ export interface AllocationUseNode {
 	 */
 	riverTakes?: readonly (ArrayLike<number | null> | null | undefined)[] | null;
 	/**
-	 * Diverted river water the dam lost (m³/day, engine ≥ 1.79.0): the run's
-	 * `diverted_loss` series; absent on a unit that can't divert into a dam,
-	 * or from an older engine. Surface use beside the draws (docs/model.md §2.12).
+	 * The surface take at the river intake (m³/day, engine ≥ 1.82.0, issue
+	 * #513): the run's `intake_take` series, on a unit whose dam is beside the
+	 * river (./intake.ts). When given, it is the unit's surface use, and its
+	 * draws from the dam are reported (`damDrawM3`), not counted. Absent on any
+	 * other unit, and on every unit of a run from an older engine, which then
+	 * reads by the draws.
 	 */
-	divertedLoss?: ArrayLike<number | null> | null;
+	intakeTake?: ArrayLike<number | null> | null;
+	/**
+	 * Water the unit got from a dam beside the river (m³/day, engine ≥ 1.82.0):
+	 * the run's `received_at_intake` series. Already counted at that dam's
+	 * intake, so like groundwater pumped into the dam it is netted against the
+	 * year's dam draw. Absent on a unit no such dam can give water to.
+	 */
+	receivedAtIntake?: ArrayLike<number | null> | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 }
@@ -138,6 +138,13 @@ export interface AllocationYear {
 	partial: boolean;
 	/** Modelled abstraction over the days covered, m³. */
 	modelledM3: number;
+	/**
+	 * Surface water drawn from dams over the days covered (m³, supplied less
+	 * groundwater and the river water in it), when the surface use is measured
+	 * at the intake (`measuredAt: 'intake'`): reported beside the take, never
+	 * added to it. Absent otherwise.
+	 */
+	damDrawM3?: number;
 	/** Registered volume in force over the days covered, m³ (prorated by day for partial years and validity dates). */
 	registeredM3: number;
 	/** modelled / registered; null when nothing is registered. */
@@ -147,6 +154,12 @@ export interface AllocationYear {
 
 export interface AllocationSourceComparison {
 	waterSource: AllocationWaterSource;
+	/**
+	 * Surface water of a unit whose dam is beside the river (engine ≥ 1.82.0,
+	 * issue #513): `'intake'`, its use measured at the river intake. Absent
+	 * everywhere else (the draws rule, and every groundwater side).
+	 */
+	measuredAt?: 'intake';
 	/** The allocations counted, in input order. */
 	allocationIds: string[];
 	years: AllocationYear[];
@@ -215,12 +228,15 @@ const waterYearStart = (wy: number) => toEpochDay(`${wy}-10-01`);
  * separately. Per water year y (docs/model.md §2.12):
  *
  *   groundwater(y) = Σ groundwater_used + Σ groundwater_to_dam
- *   surface(y)     = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam, Σ dam draw)
- *   dam draw       = MAX(supplied − groundwater_used − river_abstraction, 0), per day
+ *   surface(y)     = Σ intake_take                                       (a dam beside the river, engine ≥ 1.82.0)
+ *                  = Σ (supplied − groundwater_used) − MIN(Σ groundwater_to_dam + Σ received_at_intake, Σ dam draw)
+ *   dam draw       = MAX(supplied − groundwater_used − river side, 0), per day
  *
  * Groundwater pumped into the dam is counted once, as groundwater, when it is
  * pumped; the dam draw attributes to it first, up to what was pumped in that
- * water year, so re-drawing it is not a second, surface take.
+ * water year, so re-drawing it is not a second, surface take. Water from a
+ * dam beside the river was counted at that dam's intake, so it is netted the
+ * same way. A unit measured at the intake reports its dam draw beside the take.
  */
 export function compareAllocations(input: AllocationComparisonInput): AllocationComparison {
 	const tolerance = input.tolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
@@ -271,7 +287,8 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 		const gd = n.groundwaterToDam ?? null;
 		const ra = n.riverAbstraction ?? null;
 		const rivers = (n.riverTakes ?? []).filter((x): x is ArrayLike<number | null> => !!x);
-		const lossDiv = n.divertedLoss ?? null;
+		const take = n.intakeTake ?? null;
+		const rcv = n.receivedAtIntake ?? null;
 		const riverAt = (t: number) => {
 			let v = ra ? finite(ra[t]) : 0;
 			for (const x of rivers) v += finite(x[t]);
@@ -284,23 +301,27 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 				let modelled = 0;
 				let toDam = 0;
 				let damDraw = 0;
+				const atIntake = source === 'surface' && !!take;
 				for (let d = s.from; d <= s.to; d++) {
 					const t = d - start;
 					const g = gw ? finite(gw[t]) : 0;
 					const pumped = gd ? finite(gd[t]) : 0;
 					if (source === 'groundwater') modelled += g + pumped;
-					else {
+					else if (atIntake) {
+						// Measured at the intake (engine ≥ 1.82.0): the take is the use; the dam draw is reported only.
+						modelled += finite(take![t]);
+						damDraw += Math.max(finite(n.supplied[t]) - g - riverAt(t), 0);
+					} else {
 						const surface = finite(n.supplied[t]) - g;
 						modelled += surface;
-						if (lossDiv) modelled += finite(lossDiv[t]);
-						if (gd) {
-							toDam += pumped;
+						if (gd || rcv) {
+							toDam += pumped + (rcv ? finite(rcv[t]) : 0);
 							damDraw += Math.max(surface - riverAt(t), 0);
 						}
 					}
 				}
-				// Groundwater pumped into the dam and drawn back out that water year (§2.12).
-				if (source === 'surface') modelled -= Math.min(toDam, damDraw);
+				// Groundwater pumped into the dam, and water counted at another dam's intake, drawn that water year (§2.12).
+				if (source === 'surface' && !atIntake) modelled -= Math.min(toDam, damDraw);
 				const reg = registered(own, s.from, s.to, s.yearDays);
 				const covered = s.to - s.from + 1;
 				return {
@@ -309,6 +330,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 					yearDays: s.yearDays,
 					partial: covered < s.yearDays,
 					modelledM3: modelled,
+					...(atIntake ? { damDrawM3: damDraw } : {}),
 					registeredM3: reg,
 					ratio: reg > NOTHING_M3 ? modelled / reg : null,
 					status: allocationStatus(modelled, reg, tolerance)
@@ -318,6 +340,7 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 			const mean = (f: (y: AllocationYear) => number) => (whole.length ? whole.reduce((s, y) => s + f(y), 0) / whole.length : null);
 			return {
 				waterSource: source,
+				...(source === 'surface' && take ? { measuredAt: 'intake' as const } : {}),
 				allocationIds: own.map((a) => a.id),
 				years,
 				yearsOver: whole.filter((y) => y.status === 'over').length,

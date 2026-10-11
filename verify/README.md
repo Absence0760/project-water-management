@@ -131,7 +131,12 @@ the dense ones:
   sources, 1 in a year with none in force, probe `full-allocation-gap-year`,
   with a forecast tail, the floor held, the summary's `scaled` rows; k
   fitted on the demand before the demand factors, which then apply after
-  it, engine ≥ 1.70.0); compare-only runs.
+  it, engine ≥ 1.70.0); compare-only runs. The take at the river intake of a
+  dam beside the river and the water such a dam gives other units (§2.12,
+  engine ≥ 1.82.0: `intake_take`, `received_at_intake`, River to dam and the
+  top-up off-take less the same day's spill at most that diversion, the river
+  water used directly, dam rules and remote shares split by which side of
+  the rule is measured at the intake).
 - **Demand factors** (§2.3 item 4a) from `demandFactorFrom`.
 - **Demand objects** (§2.7f): monthly and per-unit sizing (losses, monthly
   factors), schedules (always, yearly, a date range, Easter-relative, by
@@ -243,7 +248,8 @@ docs/followups.md § Verification ("`verify/` phase 2b").
 - time-varying development (sediment, a dam in service from a date,
   abstraction from a date), §2.7g;
 - demand factors by part (`partDemandFactor`, the `demand.scale` scenario op
-  with a part), and drought restrictions once #258 merges;
+  with a part), dated demand factors (`demandFactorWindows`, the op with
+  `from`/`to`, engine ≥ 1.82.0), and drought restrictions once #258 merges;
 - rain-source periods (§2.4e), the areal rainfall correction (§2.4g), the
   daily A-pan series (§2.3a), CHIRPS fit ranges (§2.4b), the CHIRPS quantile
   map (CR-23), keep-dry periods and the keep-dry guard, listed and kept

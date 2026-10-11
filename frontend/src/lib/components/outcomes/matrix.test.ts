@@ -308,6 +308,7 @@ describe('demand levels', () => {
 		expect(demandLevelOf({ ops: [] })).toBeNull();
 		expect(demandLevelOf({ ops: [{ op: 'demand.scale', factor: 0.9, months: [1] }] })).toBeNull();
 		expect(demandLevelOf({ ops: [{ op: 'demand.scale', factor: 0.9, category: 'user' }] })).toBeNull();
+		expect(demandLevelOf({ ops: [{ op: 'demand.scale', factor: 0.9, from: '2015-10-01', to: '2016-09-30' }] })).toBeNull();
 		expect(demandLevelOf({ ops: [{ op: 'demand.scale', factor: 0.9, category: 'farm' }] })).toBe(90);
 	});
 

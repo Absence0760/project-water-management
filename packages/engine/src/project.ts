@@ -1465,6 +1465,15 @@ export interface NetworkNode {
 	 */
 	partDemandFactor?: Partial<Record<DemandPart, number[]>> | null;
 	/**
+	 * Dated demand factors (engine ≥ 1.82.0, issue #514): each a multiplier
+	 * per water-year month (Oct–Sep) on the days `from`–`to` (inclusive ISO
+	 * dates; each open when absent), on top of `demandFactor` and
+	 * `partDemandFactor`; with `part`, on that part of a unit's demand only.
+	 * Only the `demand.scale` scenario op with `from`/`to` sets it
+	 * (docs/scenarios.md § Demand scaling); null / absent = none.
+	 */
+	demandFactorWindows?: DemandFactorWindow[] | null;
+	/**
 	 * Boreholes (engine ≥ 0.23.0, WP-1.34, docs/model.md §2.7d), farms and other
 	 * users: the most that can be pumped per day, m³/day. null / absent / 0 = no
 	 * boreholes, and the other borehole fields are inert.
@@ -2251,6 +2260,19 @@ export type DemandObjectCategory = (typeof DEMAND_OBJECT_CATEGORIES)[number];
  */
 export const DEMAND_PARTS = ['crops', ...DEMAND_OBJECT_CATEGORIES] as const;
 export type DemandPart = (typeof DEMAND_PARTS)[number];
+
+/**
+ * One dated demand factor on a node (engine ≥ 1.82.0, issue #514,
+ * NetworkNode.demandFactorWindows): `factor` per water-year month (Oct–Sep,
+ * 12 values) on the days `from`–`to` (inclusive ISO dates; each open when
+ * absent); `part` limits it to that part of a unit's demand.
+ */
+export interface DemandFactorWindow {
+	from?: string;
+	to?: string;
+	factor: number[];
+	part?: DemandPart;
+}
 
 /**
  * One level of the drought restriction rule (engine ≥ 1.54.0, WP-3.8,
@@ -3520,6 +3542,8 @@ export interface RunAllocationNode {
 
 export interface RunAllocationSource {
 	waterSource: AllocationWaterSource;
+	/** Surface water of a dam beside the river, measured at the river intake (engine ≥ 1.82.0, docs/model.md §2.12); absent otherwise. */
+	measuredAt?: 'intake';
 	/** Whole water years compared, and how many of them modelled use was above the registered volume plus the tolerance. */
 	wholeYears: number;
 	yearsOver: number;

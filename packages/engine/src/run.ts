@@ -25,7 +25,7 @@ import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
-import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
+import { cropFactorAreaM2, datedDemandFactorOf, demandFactorOf, demandFactorStart, hasDatedDemandFactor, unitPartFactor, farmDailyDemand, grossFarmDemandM3PerDay, ownCropEfficiency, plantingEfficiencyResolver, unitIrrigationEfficiency, upgradeLegacyInput, type Crop, type PlantingEfficiency } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
 import { DEFAULT_ANNUAL_THRESHOLD, supplyAssurance } from './network/reliability';
@@ -47,7 +47,8 @@ import { hasReachLosses, REACH_LOSS_SERIES, reachGross, reachLossOf, routeNatura
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
-import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, DIVERTED_LOSS_SERIES, type AllocationEntry } from './allocations/compare';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
+import { INTAKE_SERIES, intakeTakes } from './allocations/intake';
 import { ALLOCATION_SERIES, inForceOver, limitBoundKind, matchAllocations, outsideMonths, planAllocations, registeredOver, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
@@ -100,7 +101,7 @@ import {
 	type UserSummary,
 	runReturnFlow
 } from './project';
-import type { AllocationLimitBound } from './project';
+import type { AllocationLimitBound, DemandPart } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
@@ -369,7 +370,6 @@ function runNetwork(
 			if (r.poolStorageM3 && p.river) p.initialPoolM3 = r.poolStorageM3;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
 			if (r.allocationUsedM3 && p.allocationCap) p.initialAllocationUsedM3 = r.allocationUsedM3;
-			if (r.divertedShare !== undefined) p.initialDivertedShare = r.divertedShare;
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
@@ -636,7 +636,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'divertedLoss' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'remoteIn' | 'remoteOut' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft' | 'reachLoss'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -680,6 +680,8 @@ function runNetwork(
 	// Each unit's basic-needs floor per day (engine ≥ 1.44.0, docs/model.md §2.7f); null without one.
 	const basicNeeds = plan.nodes.map((n) => (n.objects ? unitBasicNeeds(n.objects) : null));
 	for (const [nodeId, list] of demandObjectsByNode(upgradeLegacyModel(input.model), [])) objectNames.set(nodeId, list.map((o) => o.name));
+	// The surface take at the river intake of each dam beside the river (engine ≥ 1.82.0, ./allocations/intake.ts).
+	const intake = intakeTakes(plan, sim);
 	nodes.forEach((node, i) => {
 		const r = sim.nodes[i]!;
 		const withObjects = !!plan.nodes[i]!.objects;
@@ -733,8 +735,12 @@ function runNetwork(
 		// A crop supply table's remote share (engine ≥ 1.73.0): what the crops got from another unit's dam, and what a dam gave.
 		if (r.remoteIn) push(node.id, REMOTE_SERIES.in.key, REMOTE_SERIES.in.label, REMOTE_SERIES.in.unit, r.remoteIn);
 		if (r.remoteOut) push(node.id, REMOTE_SERIES.out.key, REMOTE_SERIES.out.label, REMOTE_SERIES.out.unit, r.remoteOut);
-		// Diverted river water lost from the dam (engine ≥ 1.79.0): surface use, on a unit that can divert into a dam.
-		if (r.divertedLoss) push(node.id, DIVERTED_LOSS_SERIES.key, DIVERTED_LOSS_SERIES.label, DIVERTED_LOSS_SERIES.unit, r.divertedLoss);
+		// The surface take at the river intake (engine ≥ 1.82.0, docs/model.md §2.12): on a dam beside the river; and on
+		// another unit, water it got from such a dam, already counted at that dam's intake. The comparison's input only.
+		const take = intake.take.get(i);
+		if (take) push(node.id, INTAKE_SERIES.take.key, INTAKE_SERIES.take.label, INTAKE_SERIES.take.unit, take);
+		const got = intake.received.get(i);
+		if (got) push(node.id, INTAKE_SERIES.received.key, INTAKE_SERIES.received.label, INTAKE_SERIES.received.unit, got);
 		// Canal seepage back to the river (engine ≥ 1.42.0): only on a farm an off-take returns seepage below.
 		if (r.offtakeReturn) push(node.id, OFFTAKE_SERIES.returned.key, OFFTAKE_SERIES.returned.label, 'm³/day', r.offtakeReturn);
 		// Demand objects (engine ≥ 1.7.0): each one's demand and supply, on its unit.
@@ -854,7 +860,7 @@ function runNetwork(
 	// Groundwater per node and water year (WP-3.9), for the caps, the GA context and the licensing comparisons.
 	const gwAnnual = groundwaterAnnualUse(nodes, plan, sim, start);
 	// Registered volumes against the run's use (engine ≥ 1.18.0).
-	const allocations = runAllocations(input.model.allocations, built.allocation, settings, nodes, plan, sim, startDate);
+	const allocations = runAllocations(input.model.allocations, built.allocation, settings, nodes, plan, sim, intake, startDate);
 
 	// Other water users (WP-1.33): whole-run means, like FarmSummary.
 	const users: UserSummary[] = [];
@@ -1141,7 +1147,6 @@ function runNetwork(
 				...(plan.nodes[i]!.river?.takes.some((x) => x.pool) ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
-				...(net.divertedShare[i] != null ? { divertedShare: net.divertedShare[i]! } : {}),
 				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {}),
 				...(built.allocation.scaled.get(i)?.before !== undefined ? { allocationFactorBefore: built.allocation.scaled.get(i)!.before! } : {})
 			})),
@@ -1481,6 +1486,9 @@ export function buildNetworkPlan(
 	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
 	const factorFrom = start === undefined ? 0 : demandFactorStart(settings.demandFactorFrom, start, days);
+	// Dated demand factors (engine ≥ 1.82.0, demand.scale with from/to) on one part of a node's demand, day by day; null = none.
+	if (start === undefined && input.model.nodes.some(hasDatedDemandFactor)) throw new Error('buildNetworkPlan: a dated demand factor needs the run start');
+	const datedOf: DatedFactorOf = (n, part, w) => (start === undefined || !hasDatedDemandFactor(n) ? null : datedDemandFactorOf(n, part, start, days, w));
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
 	const model = upgradeLegacyInput(input.model, input.settings?.apanMm);
 	const nodes = model.nodes;
@@ -1506,7 +1514,7 @@ export function buildNetworkPlan(
 	const ewrSource = resolveEwrDailySource(settings.ewrDailySource, []);
 	if (!ewrSource) for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
-	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom, warm);
+	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom, warm, datedOf);
 	// Development over the run (engine ≥ 1.30.0, ./network/development.ts): a unit takes nothing before
 	// its abstraction date, and a dam's capacity follows its sediment rate and in-service date.
 	const dated = nodes.some((n) => n.abstractionFrom != null || n.damInServiceFrom != null || (n.damSedimentPctPerYear ?? 0) > 0);
@@ -1624,10 +1632,21 @@ export function buildNetworkPlan(
 				? `bed losses are on: a Reserve rule table${ewrSource.method === 'percentile' ? ' and the daily EWR’s percentile tables read' : ' reads'} the natural flow net of them, but the daily EWR at the outlet is split between the units by flow share and passed down whole, so it asks the units for the losses above the outlet too (docs/model.md §2.6b)`
 				: 'bed losses are on: a Reserve rule table reads its site’s natural flow net of them, but the pragmatic EWR is a fixed flow at the outlet, split between the units by flow share and passed down whole, so set it knowing the losses above the outlet (docs/model.md §2.6b)'
 		);
-	const users = otherUsers(nodes, topo, shares.share, reaches, days, month, warnings, factorFrom, (i, d) => {
-		d.fill(0, 0, abstractFrom[i]!);
-		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
-	});
+	const users = otherUsers(
+		nodes,
+		topo,
+		shares.share,
+		reaches,
+		days,
+		month,
+		warnings,
+		factorFrom,
+		(i, d) => {
+			d.fill(0, 0, abstractFrom[i]!);
+			scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
+		},
+		datedOf
+	);
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	// The drought restriction rule (engine ≥ 1.54.0, ./network/restriction.ts): its review and lift days need the run start.
 	const restrictionRule = resolveDroughtRestriction(settings.droughtRestriction, warnings);
@@ -1656,7 +1675,7 @@ export function buildNetworkPlan(
 		// × their category's own (engine ≥ 1.45.0, demand.scale with a part), through planObjects' basic-needs floor.
 		// Warned about once, on the plan's own call.
 		const w = opts.factors === false || opts.scale ? [] : warnings;
-		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, opts.factors === false ? null : (o) => unitPartFactor(n, o.category, []), factorFrom, w, start, opts.scale) : undefined;
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, opts.factors === false ? null : (o) => unitPartFactor(n, o.category, []), factorFrom, w, start, opts.scale, opts.factors === false ? undefined : (o) => datedOf(n, o.category, [])) : undefined;
 		// None before the unit's abstraction date.
 		const s = abstractFrom[indexById.get(n.id)!]!;
 		if (po && s > 0) {
@@ -1738,7 +1757,7 @@ export function buildNetworkPlan(
 	};
 	// A full allocation fits its factor on the demand before the demand factors (engine ≥ 1.70.0, §2.12a): only a unit
 	// with a factor needs the hooks, so one without runs as before, to the bit.
-	const factored = (n: NetworkNode) => factorFrom < days && (n.demandFactor != null || n.partDemandFactor != null);
+	const factored = (n: NetworkNode) => factorFrom < days && (n.demandFactor != null || n.partDemandFactor != null || hasDatedDemandFactor(n));
 	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings, {
 		baseDemand: (i) => {
 			const n = nodes[i]!;
@@ -2133,6 +2152,9 @@ interface OtherUser {
 	pump?: number;
 }
 
+/** A node's dated demand factors on one part of its demand, day by day (engine ≥ 1.82.0, ./demand.ts datedDemandFactorOf); null = none. */
+type DatedFactorOf = (n: NetworkNode, part: DemandPart | undefined, warnings: string[]) => Float64Array | null;
+
 function otherUsers(
 	nodes: readonly NetworkNode[],
 	topo: ReturnType<typeof buildTopology>,
@@ -2143,7 +2165,8 @@ function otherUsers(
 	warnings: string[],
 	factorFrom: number,
 	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
-	scale?: (i: number, demand: Float64Array) => void
+	scale?: (i: number, demand: Float64Array) => void,
+	datedOf?: DatedFactorOf
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[]; reachClaims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
@@ -2175,6 +2198,9 @@ function otherUsers(
 		scale?.(i, demand);
 		const factor = demandFactorOf(n, warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
+		// Its dated factors after (engine ≥ 1.82.0, demand.scale with from/to), on their days.
+		const dated = datedOf?.(n, undefined, warnings);
+		if (dated) for (let t = factorFrom; t < days; t++) demand[t]! *= dated[t]!;
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -2252,6 +2278,7 @@ function runAllocations(
 	nodes: readonly NetworkNode[],
 	plan: NetworkPlan,
 	sim: ReturnType<typeof simulateNetwork>,
+	intake: ReturnType<typeof intakeTakes>,
 	startDate: string
 ): RunAllocations | null {
 	if (!raw?.length) return null;
@@ -2273,7 +2300,8 @@ function runAllocations(
 				groundwaterToDam: b?.units.some((u) => u.toDam) ? (r.groundwaterToDam) : null,
 				riverAbstraction: (r.riverAbstraction ?? null),
 				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])],
-				divertedLoss: r.divertedLoss ?? null
+				intakeTake: intake.take.get(i) ?? null,
+				receivedAtIntake: intake.received.get(i) ?? null
 			};
 		})
 	});
@@ -2287,6 +2315,7 @@ function runAllocations(
 			if (!side.allocationIds.length) continue;
 			const src: RunAllocationSource = {
 				waterSource: side.waterSource,
+				...(side.measuredAt ? { measuredAt: side.measuredAt } : {}),
 				wholeYears: side.wholeYears,
 				yearsOver: side.yearsOver,
 				meanModelledM3PerYear: side.meanModelledM3PerYear,
@@ -2357,8 +2386,6 @@ function capYears(
 		}
 		if (!(budget[t]! < Infinity)) continue;
 		b = budget[t]!;
-		// Diverted river water the dam lost (engine ≥ 1.79.0, docs/model.md §2.12a) counts before the day's draws, as the cap counted it.
-		if (source === 'surface' && r.divertedLoss) used += r.divertedLoss[t]!;
 		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
 		const kind = limitBoundKind(Math.max(0, b - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, b);
 		if (kind) {
@@ -2990,7 +3017,8 @@ function buildDemand(
 	aligned: (k: SeriesKind) => (number | null)[],
 	warnings: string[],
 	factorFrom: number,
-	warm: { captureAt?: number; soilStoreM3?: readonly number[] } = {}
+	warm: { captureAt?: number; soilStoreM3?: readonly number[] } = {},
+	datedOf?: DatedFactorOf
 ): { net: Float64Array; netBase?: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => {
@@ -3073,9 +3101,12 @@ function buildDemand(
 		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
 		// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
 		const factor = unitPartFactor(node, 'crops', warnings);
+		// × its dated factors on their days (engine ≥ 1.82.0, demand.scale with from/to), the unit's and the crops'.
+		const dated = datedOf?.(node, 'crops', warnings) ?? null;
 		// The requirement before the factor (engine ≥ 1.70.0): a full allocation fits its factor on it (§2.12a).
-		const netBase = factor && factorFrom < days ? Float64Array.from(f.net) : undefined;
+		const netBase = (factor || dated) && factorFrom < days ? Float64Array.from(f.net) : undefined;
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
+		if (dated) for (let t = factorFrom; t < days; t++) f.net[t]! *= dated[t]!;
 		// Plantings under their own irrigation system (engine ≥ 0.43.0 per crop, 1.72.0 per unit): weighted by their annual requirement at the monthly A-pan.
 		const efficiency = (e: number) => unitIrrigationEfficiency(e, crops, plantings, settings.apanMm);
 		return { net: f.net, ...(netBase ? { netBase } : {}), gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
