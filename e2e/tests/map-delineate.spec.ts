@@ -315,7 +315,7 @@ test('a point with no terrain channel within 150 m is refused with what to do, t
 	await openMap(page, project.id);
 	await delineateAt(page, FIXTURE_OFF_TERRAIN);
 	await expect(sheet(page).getByTestId('delineate-error')).toHaveText(
-		"No terrain channel runs within 150 m of that point. Zoom in until the terrain channels (the red lines) show, and click on one: they are the elevation model's rivers, which the outline follows."
+		"No terrain channel runs within 150 m of that point. Zoom in until the terrain channels show (they're in the map's key), and click on one: they are the elevation model's rivers, which the outline follows."
 	);
 	await expect(sheet(page).getByTestId('delineate-larger')).toHaveCount(0);
 	await expect(review(page)).toHaveCount(0);

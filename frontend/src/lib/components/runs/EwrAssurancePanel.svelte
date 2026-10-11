@@ -446,12 +446,6 @@
 			--rh-low-ink: #121312;
 		}
 	}
-	:global(:root[data-theme='dark']) .reserve-heat {
-		--rh-high: #256abf;
-		--rh-high-ink: #ffffff;
-		--rh-low: #86b6ef;
-		--rh-low-ink: #121312;
-	}
 	.heat td.cell {
 		min-width: 2.6rem;
 		text-align: center;

@@ -76,7 +76,7 @@
 	</table>
 </div>
 <p class="muted small after">
-	1 Mm³ = 1 million m³. Darker cells are months of higher demand. Annual catchment demand is
+	1 Mm³ = 1 million m³. The stronger a cell's shade, the higher that month's demand. Annual catchment demand is
 	{fmtQty(total.annual, 3)} Mm³/a ({fmtQty((total.annual * 1e6) / 86_400 / 365.25, 3)} m³/s on average).
 </p>
 

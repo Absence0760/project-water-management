@@ -94,6 +94,13 @@
 	--radius: 6px;
 	--radius-sm: 4px;
 	--shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.04);
+	/* Overlays (Dialog, popovers, menus): what sets them off the page. Dark
+	   needs a deeper backdrop, a stronger edge and a darker shadow, or a sheet
+	   reads as the page it covers (1.1:1, issue #521). */
+	--overlay-backdrop: rgb(0 0 0 / 0.35);
+	--overlay-border: var(--border);
+	--overlay-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+	--popover-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
 	--gutter: 16px;
 	/* The phone bar's height (AppShell); 0 from 900 px, where the sidebar replaces it. */
 	--header-h: 52px;
@@ -143,6 +150,10 @@
 		--chart-grid: #2c2f2c;
 		--chart-axis: #9a9e99;
 		--shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+		--overlay-backdrop: rgb(0 0 0 / 0.6);
+		--overlay-border: var(--border-strong);
+		--overlay-shadow: 0 10px 30px rgb(0 0 0 / 0.7);
+		--popover-shadow: 0 6px 20px rgb(0 0 0 / 0.6);
 	}
 }
 
@@ -271,6 +282,14 @@ p a:not(.btn),
 	background: var(--accent);
 	border-color: var(--accent);
 	color: var(--accent-contrast);
+}
+.btn-primary:disabled {
+	/* Plainly off in both themes: a faded accent read as a live secondary
+	   button on the dark page (issue #521). */
+	background: var(--surface-2);
+	border-color: var(--border-strong);
+	color: var(--text-muted);
+	opacity: 1;
 }
 .btn-primary:hover:not(:disabled) {
 	background: var(--accent-hover);
@@ -640,13 +659,18 @@ table.data tr.flag {
 .badge {
 	display: inline-block;
 	padding: 0.05rem 0.45rem;
-	border-radius: 999px;
+	/* Half a one-line badge's height: a pill on one line, a rounded box when a
+	   long one wraps in a narrow cell (999px turned that into a tall blob, issue #521). */
+	border-radius: 0.7rem;
 	font-size: 0.75rem;
 	font-weight: 600;
 	background: var(--surface-2);
 	border: 1px solid var(--border);
 	color: var(--text-2);
-	text-transform: capitalize;
+}
+/* A badge starts with a capital, never Every Word Capitalised. */
+.badge::first-letter {
+	text-transform: uppercase;
 }
 .badge-owner {
 	background: var(--accent-soft);

@@ -199,8 +199,10 @@
 			<label for="af-ref">Reference</label>
 			<input id="af-ref" type="text" maxlength="500" bind:value={draft.reference} />
 		</div>
-		<fieldset class="conditions">
-			<legend>Licence conditions <span class="muted">(optional; a cap run keeps to the months and the rate)</span> <HelpTip key="licence-conditions" /></legend>
+		<fieldset class="conditions" aria-describedby="af-conditions-lead">
+			<!-- A short legend that never wraps: a two-line legend had the fieldset's border run through it (issue #521). -->
+			<legend>Licence conditions <HelpTip key="licence-conditions" /></legend>
+			<p class="muted small lead" id="af-conditions-lead">Optional; a cap run keeps to the months and the rate.</p>
 			<div class="field">
 				<span class="lbl" id="af-months-l">Months water may be taken</span>
 				<div class="months" role="group" aria-labelledby="af-months-l" data-testid="allocation-months">
@@ -248,6 +250,10 @@
 		padding: 0.75rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
+	}
+	/* The line under the legend, close to it (the grid's gap would part them). */
+	.lead {
+		margin: -0.5rem 0 0;
 	}
 	/* Each month a 24 px row and well apart, so every box keeps a 24 px target (WCAG 2.2 2.5.8). */
 	.months {

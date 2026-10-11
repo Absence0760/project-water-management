@@ -10,7 +10,7 @@
 	import 'uplot/dist/uPlot.min.css';
 	import { fmtDay, fmtNum, fmtReading } from '$lib/format/number';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import { alignDaily, bandSpan, chartName, fmtCompact, isolatedIndices, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
+	import { alignDaily, bandSpan, chartName, decadeTicks, fmtCompact, isolatedIndices, logFloor, panWindow, printScale, TIME_TICKS, type ChartSeries } from './series';
 
 	let {
 		series,
@@ -145,7 +145,6 @@
 	}
 
 
-	const isDecade = (v: number) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
 	const utc = (ts: number) => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
 	const isoDay = (v: number) => new Date(v * 1000).toISOString().slice(0, 10);
 	const epochSec = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
@@ -228,7 +227,8 @@
 			},
 			scales: {
 				x: isTime ? { time: true } : { time: false },
-				y: log ? { distr: 3, log: 10 } : {}
+				// A log axis spans at most LOG_DECADES decades under its top (series.ts logFloor).
+				y: log ? { distr: 3, log: 10, range: (_u: uPlot, lo: number | null, hi: number | null) => (lo == null || hi == null ? [lo, hi] : uPlot.rangeLog(logFloor(lo, hi), hi, 10, true)) } : {}
 			},
 			legend: { show: !print, live: true },
 			series: [
@@ -262,8 +262,8 @@
 					space: 30 * k,
 					grid: { stroke: gridColor, width: k },
 					ticks: { stroke: gridColor, size: 4 * k, width: 2 * k },
-					// On a log scale keep only the decades, so the grid stays readable.
-					filter: log ? (_u, splits) => splits.map((v) => (isDecade(v) ? v : null)) : undefined,
+					// On a log scale keep only the decades, thinned to what fits one label per `space`, so the grid stays readable.
+					filter: log ? (u, splits) => decadeTicks(splits, u.bbox.height / (30 * k * uPlot.pxRatio)) : undefined,
 					values: (_u, vals) => vals.map((v) => (v == null ? '' : fmtCompact(v))),
 					label: unit || undefined,
 					labelFont: font,
@@ -591,11 +591,6 @@
 			--chart-obs: #e6e8e5;
 			--chart-ref: #f07a70;
 		}
-	}
-	:global(:root[data-theme='dark']) .chart {
-		--series-4: #a98be6;
-		--chart-obs: #e6e8e5;
-		--chart-ref: #f07a70;
 	}
 	.head {
 		display: flex;

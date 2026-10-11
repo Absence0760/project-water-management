@@ -132,7 +132,10 @@
 									height={Math.max(0, y(0) - y(v.below))}
 									rx={Math.min(2, barW / 2)}
 									fill={r.colour}
-									opacity={v.complete ? 1 : 0.45}
+									fill-opacity={v.complete ? 1 : 0.3}
+									stroke={v.complete ? undefined : r.colour}
+									stroke-width={v.complete ? undefined : 1.25}
+									data-part={v.complete ? undefined : ''}
 								><title>{waterYearLabel(wy)} · {r.name}: {v.below} day{v.below === 1 ? '' : 's'} below{v.complete ? '' : ` (part year, ${v.days} days run)`}</title></rect>
 							{/if}
 						{/each}
@@ -145,7 +148,7 @@
 			{/if}
 		</div>
 		<p class="muted small note">
-			Days in each water year (Oct–Sep) when the simulated outflow was below {dailyName} at the outlet{#if mixed}{` (${runs.filter((r) => r.daily).map((r) => `${r.name}: ${r.daily}`).join('; ')})`}{/if}.{#if anyPart}{' '}Faded bars are part years: the run covers only some of that year.{/if}{#if missingRuns.length}{' '}{missingRuns.join(' and ')} stored no shortfall series.{/if}
+			Days in each water year (Oct–Sep) when the simulated outflow was below {dailyName} at the outlet{#if mixed}{` (${runs.filter((r) => r.daily).map((r) => `${r.name}: ${r.daily}`).join('; ')})`}{/if}.{#if anyPart}{' '}Outlined bars, filled lightly, are part years: the run covers only some of that year.{/if}{#if missingRuns.length}{' '}{missingRuns.join(' and ')} stored no shortfall series.{/if}
 		</p>
 		<details class="as-table">
 			<summary>Show as a table</summary>

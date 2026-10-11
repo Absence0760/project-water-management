@@ -6,6 +6,7 @@
 // app's own origin, so CSP `worker-src 'self'` holds without blob:.
 import { AttributionControl, Map as MapLibreMap, Marker, NavigationControl, addProtocol, setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './maplibre-theme.css';
 import workerUrl from 'virtual:maplibre-worker-url';
 
 setWorkerUrl(workerUrl);
