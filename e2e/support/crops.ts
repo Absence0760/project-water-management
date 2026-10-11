@@ -4,6 +4,7 @@
 // open them the way a person does. Save and close with saveModelChanges /
 // closeModal from ./network.ts.
 import type { Page } from '@playwright/test';
+import { showHeaderControls } from './sectionHeader.ts';
 
 export type CropGrid = 'crop-factors' | 'planted-areas';
 const TITLE: Record<CropGrid, string> = {
@@ -20,6 +21,7 @@ export async function openCropGrid(page: Page, grid: CropGrid) {
 		await dialog.waitFor();
 		return dialog;
 	}
+	await showHeaderControls(page);
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
 	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: MENU[grid], exact: true }).click();

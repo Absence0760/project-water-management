@@ -2,6 +2,7 @@
 // the Tables menu (`grid=nodes`), a node's full form in a sheet from its card's
 // Edit (`edit=<id>`). These open them the way a person does.
 import { expect, type Locator, type Page } from '@playwright/test';
+import { showHeaderControls } from './sectionHeader.ts';
 
 /** Opens the node table (Tables → Node table) and returns the grid's dialog. */
 export async function openNodeTable(page: Page) {
@@ -11,6 +12,7 @@ export async function openNodeTable(page: Page) {
 		await open.waitFor();
 		return open;
 	}
+	await showHeaderControls(page);
 	const menu = page.locator('details.grids-menu');
 	if (!(await menu.evaluate((d: HTMLDetailsElement) => d.open))) await menu.locator('summary').click();
 	await page.getByRole('group', { name: 'Open as a table' }).getByRole('link', { name: 'Hydrological unit table', exact: true }).click();

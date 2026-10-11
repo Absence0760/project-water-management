@@ -1,14 +1,18 @@
 // The phone pass (issue #17, docs/ui.md § Section header, docs/design/ui-playbook.md § 2):
-// every workspace section at 390 × 844 on a big catchment (30 units with dams, two
-// runs, scenarios and registered volumes). The section header lays its actions out
-// in full rows under the rain pill, a picker a row of its own, with Add data
-// and Run model (on Runs & results the run form) always ending it; the pill's list opens on screen; Compare
-// runs has one title; and the sheets, dialogs and the Sections menu the per-page
-// specs don't scan on a phone are scanned here. Synthetic data only.
+// every workspace section at 360 × 740, 390 × 844 and 320 × 640 on a big catchment (30
+// units with dams, two runs, scenarios and registered volumes). The section header puts
+// the tab's own controls in one More actions list at the end of the pills' row, with Add
+// data and Run model (on Runs & results the run form) on the row that ends it, so the
+// tab's content starts in the first half of a 360 × 740 screen (issue #521 round 5); the
+// pill's list opens on screen; Compare runs has one title; and the sheets, dialogs and
+// the Sections menu the per-page specs don't scan on a phone are scanned here.
+// Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedManyAllocations } from '../support/allocations.ts';
-import { addMember, createRun, setAllocationViewerUnits, showAllSections } from '../support/api.ts';
+import { addMember, createRun, putSeries, setAllocationViewerUnits, showAllSections, syntheticRain } from '../support/api.ts';
+import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
+import { headerControl } from '../support/sectionHeader.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { createScenario } from '../support/scenarios.ts';
 
@@ -21,42 +25,6 @@ async function seedBig(page: Page, name: string) {
 	await createRun(page.request, p.id, 'Second run with a longer label');
 	for (let i = 1; i <= 3; i++) await createScenario(page.request, p.id, { name: `What-if ${i}: upper dam raised`, baseRunId: p.runId, ops: [] });
 	return p;
-}
-
-/**
- * The header's controls, row by row (grouped by top edge): the tab's own
- * (`header-own`, direct children) and the page's pair (`header-main`), with
- * the actions box they sit in.
- */
-async function headerRows(page: Page) {
-	return header(page).evaluate((h) => {
-		const box = (e: Element) => e.getBoundingClientRect();
-		const shown = (e: Element) => {
-			const s = getComputedStyle(e);
-			return box(e).width > 1 && s.position !== 'absolute' && s.position !== 'fixed';
-		};
-		const actions = box(h.querySelector('.actions')!);
-		const pick = (id: string) => [...(h.querySelector(`[data-testid="${id}"]`)?.children ?? [])].filter(shown);
-		const own = pick('header-own');
-		const main = pick('header-main');
-		const rows = new Map<number, { left: number; right: number; top: number; texts: string[] }[]>();
-		for (const e of [...own, ...main]) {
-			const r = box(e);
-			const top = Math.round(r.top / 8); // a row's controls may differ in height by a pixel or two
-			rows.set(top, [...(rows.get(top) ?? []), { left: r.left, right: r.right, top, texts: [(e.textContent ?? '').replace(/\s+/g, ' ').trim()] }]);
-		}
-		const status = h.querySelector('[data-testid="header-status"]');
-		return {
-			left: actions.left,
-			right: actions.right,
-			statusBottom: status ? box(status).bottom : null,
-			firstControlTop: Math.min(...[...own, ...main].map((e) => box(e).top)),
-			rows: [...rows.values()].sort((a, b) => a[0]!.top - b[0]!.top),
-			selects: [...h.querySelectorAll('[data-testid="header-own"] select')].map((s) => box(s).width),
-			// How far each picker's select sits below the top of its control: 0 unless a visible label takes a line above it.
-			pickerDrops: own.filter((e) => e.querySelector('select')).map((e) => box(e.querySelector('select')!).top - box(e).top)
-		};
-	});
 }
 
 // Each section and what shows in its header once it has loaded.
@@ -77,46 +45,152 @@ const SECTIONS: { tab: string; ready: string | RegExp }[] = [
 	{ tab: 'project', ready: /^Download/ }
 ];
 
+/** The header's boxes on a phone: the status row (pills, More actions), the main box's controls, the guide. */
+async function phoneHeader(page: Page) {
+	return header(page).evaluate((h) => {
+		const box = (e: Element | null | undefined) => (e ? e.getBoundingClientRect() : null);
+		const shown = (e: Element) => box(e)!.width > 1 && getComputedStyle(e).display !== 'none';
+		const actions = box(h.querySelector('.actions'));
+		const main = [...(h.querySelector('[data-testid="header-main"]')?.children ?? [])].flatMap((e) => (e.tagName === 'FORM' ? [...e.children] : [e])).filter(shown);
+		return {
+			bottom: box(h)!.bottom + scrollY,
+			left: actions?.left ?? 0,
+			right: actions?.right ?? 0,
+			status: box(h.querySelector('[data-testid="header-status"]')),
+			more: box(h.querySelector('[data-testid="header-more"]')),
+			guide: box(h.querySelector('[data-testid="section-guide"]')),
+			main: main.map((e) => ({ top: Math.round(box(e)!.top), left: box(e)!.left, right: box(e)!.right, text: (e as HTMLElement).innerText.trim() }))
+		};
+	});
+}
+
+// The phone sizes the header is checked at: the issue's 360 × 740 (the header ends in the screen's first half),
+// the usual 390 × 844 and the narrowest, 320 × 640.
+const PHONES = [
+	{ width: 360, height: 740 },
+	{ width: 390, height: 844 },
+	{ width: 320, height: 640 }
+];
+
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
-	test('every section: the pill, then the controls in full rows, pickers full width, Add data and Run model last', async ({ page, owner }) => {
-		test.setTimeout(120_000);
+	for (const size of PHONES)
+		test(`every section at ${size.width} px: the pills and More actions on one row, Add data and Run model last${size.width === 360 ? ', ending in the first half of the screen' : ''}`, async ({ page, owner }) => {
+			test.setTimeout(180_000);
+			void owner;
+			await page.setViewportSize(size);
+			const p = await seedBig(page, `Phone header ${size.width}`);
+			// Data since the last run: the notice line shows, the worst case for the header's height.
+			await putSeries(page.request, p.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2019-10-01', values: syntheticRain(3 * 365 + 30) });
+			for (const s of SECTIONS) {
+				await page.goto(`/projects/${p.id}?tab=${s.tab}`);
+				const h = header(page);
+				await expect(h.getByRole('heading', { level: 1 })).toBeVisible();
+				// In the closed More actions list on a phone, so attached rather than visible.
+				await expect((typeof s.ready === 'string' ? h.getByText(s.ready, { exact: true }) : h.getByRole('button', { name: s.ready, includeHidden: true })).first()).toBeAttached();
+				await layoutSettled(page);
+				const at = `on ${s.tab} at ${size.width}`;
+				// (A tab whose actions drew nothing yet, Compare with no report to export, has no ⋯; one that drew some
+				// has it once the header has seen them.)
+				const hasOwn = (await h.locator('[data-testid="header-own"] > .items > *').count()) > 0;
+				if (hasOwn) await expect(h.getByTestId('header-more')).toBeVisible();
+				await expectNoSidewaysScroll(page);
+				const m = await phoneHeader(page);
+				// Issue #521 round 5: the tab's content starts in the first half of a 360 × 740 screen (it was 429–579 px).
+				if (size.width === 360) expect(m.bottom, at).toBeLessThanOrEqual(370);
+				// How this page works: a "?" after the title, named in words, at least 36 px (its target 44).
+				await expect(h.getByRole('link', { name: 'How this page works' })).toBeVisible();
+				expect(m.guide!.height, at).toBeGreaterThanOrEqual(36);
+				// The tab's own controls: one ⋯ at the end of the pills' row.
+				if (hasOwn) {
+					expect(m.more, at).not.toBeNull();
+					expect(Math.abs(m.more!.top + m.more!.height / 2 - (m.status!.top + m.status!.height / 2)), at).toBeLessThan(4);
+					expect(Math.abs(m.more!.right - m.right), at).toBeLessThan(2);
+					expect(m.more!.width, at).toBeGreaterThanOrEqual(44);
+				}
+				// Add data, then Run model, end the header, on one row that fills it (Runs: under the run label's row).
+				const last = m.main.filter((c) => c.top === m.main.at(-1)!.top);
+				expect(last.length, `${at}: ${m.main.map((c) => c.text).join(' | ')}`).toBeGreaterThanOrEqual(2);
+				expect(Math.abs(last[0]!.left - m.left), at).toBeLessThan(2);
+				expect(Math.abs(last.at(-1)!.right - m.right), at).toBeLessThan(2);
+				expect(last[0]!.text, at).toBe('Add data');
+				if (s.tab === 'runs') {
+					expect(last.at(-1)!.text, at).toBe('Run model');
+					// The label and its name fill the row above.
+					const row = m.main.filter((c) => c.top < last[0]!.top);
+					expect(row.length, at).toBe(2);
+					expect(row[0]!.text, at).toMatch(/^Run label/);
+					expect(Math.abs(row.at(-1)!.right - m.right), at).toBeLessThan(2);
+				} else {
+					// With data since the last run the button says Re-run model, and the notice line has no button of its own.
+					expect(last.at(-1)!.text, at).toBe('Re-run model');
+					await expect(h.getByTestId('notice-line').getByRole('button', { name: 'Re-run model' })).toBeHidden();
+					await expect(h.getByTestId('notice-line')).toContainText('New data since the last run');
+					expect((await h.getByTestId('header-run').boundingBox())!.height, at).toBeGreaterThanOrEqual(44);
+				}
+			}
+		});
+
+	test('More actions lists the tab’s controls by name, on the screen; a pick closes it and a dialog hands the focus back to it', async ({ page, owner }) => {
+		test.setTimeout(90_000);
 		void owner;
-		const p = await seedBig(page, 'Phone header big catchment');
-		for (const s of SECTIONS) {
-			await page.goto(`/projects/${p.id}?tab=${s.tab}`);
-			const h = header(page);
-			await expect(h.getByRole('heading', { level: 1 })).toBeVisible();
-			await expect((typeof s.ready === 'string' ? h.getByText(s.ready, { exact: true }) : h.getByRole('button', { name: s.ready })).first()).toBeVisible();
-			const at = `on ${s.tab}`;
-			expect(await noSideScroll(page), at).toBe(true);
-			const m = await headerRows(page);
-			// The pill is a line of its own, above every control.
-			expect(m.statusBottom, at).not.toBeNull();
-			expect(m.firstControlTop, at).toBeGreaterThan(m.statusBottom!);
-			// Every row of controls fills the header's width: no ragged gap at its end.
-			for (const row of m.rows) {
-				expect(Math.abs(row[0]!.left - m.left), `${at}: ${row.map((c) => c.texts).join(' | ')}`).toBeLessThan(2);
-				expect(Math.abs(row.at(-1)!.right - m.right), `${at}: ${row.map((c) => c.texts).join(' | ')}`).toBeLessThan(2);
-			}
-			// A run picker is the full width.
-			for (const w of m.selects) expect(w, at).toBeGreaterThan(m.right - m.left - 2);
-			// ...with no "Run" line of its own above it (River & reserve's had one): the word is for screen readers.
-			for (const d of m.pickerDrops) expect(d, at).toBeLessThan(2);
-			// Add data, then Run model, end the header: on Runs the tab's run form, elsewhere the button that opens one.
-			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;
-			const last = m.rows.at(-1)!;
-			if (s.tab === 'runs') {
-				// Runs' run form (label, name, Run model) is the last row, under Add data.
-				const form = (await h.locator('form.run-form').boundingBox())!;
-				expect(form.y, at).toBeGreaterThan(add.y + add.height - 1);
-			} else {
-				// Add data beside Run model, which is last (its closed form adds no box): the main box never splits.
-				expect(last.slice(-2).map((c) => c.texts[0]!.split(' Run label')[0]), at).toEqual(['Add data', 'Run model']);
-				expect((await h.getByTestId('header-run').boundingBox())!.height, at).toBeGreaterThanOrEqual(44);
-			}
+		await page.setViewportSize({ width: 360, height: 740 });
+		const p = await seedBig(page, 'Phone more actions');
+		await page.goto(`/projects/${p.id}?tab=allocations`);
+		const h = header(page);
+		const more = h.getByRole('button', { name: 'More actions' });
+		await expect(more).toHaveAttribute('aria-expanded', 'false');
+		const list = h.getByRole('group', { name: 'Allocations: more actions' });
+		await expect(list).toBeHidden();
+		await more.click();
+		await expect(list).toBeVisible();
+		// Every control, named, a full-width row of at least 44 px, inside the window; the picker named over its select.
+		await expect(list.getByRole('combobox', { name: 'Run compared' })).toBeVisible();
+		for (const name of ['Download CSV', 'Import', '+ Add volume']) {
+			const b = (await list.getByRole('link', { name, exact: true }).boundingBox())!;
+			expect(b.height, name).toBeGreaterThanOrEqual(44);
 		}
+		const lb = (await list.boundingBox())!;
+		expect(lb.x).toBeGreaterThanOrEqual(0);
+		expect(lb.x + lb.width).toBeLessThanOrEqual(360);
+		await expect(list.getByText('Run compared', { exact: true })).toBeVisible();
+		await expectNoSidewaysScroll(page);
+		await expectNoViolations(page);
+		// Escape closes it and gives the focus back to More actions.
+		await page.keyboard.press('Escape');
+		await expect(list).toBeHidden();
+		await expect(more).toBeFocused();
+		// A pick that opens a sheet closes the list; the sheet's Escape returns to More actions.
+		await more.click();
+		await list.getByRole('link', { name: 'Import', exact: true }).click();
+		const sheet = page.getByRole('dialog', { name: 'Import registered volumes' });
+		await expect(sheet).toBeVisible();
+		await expect(list).toBeHidden();
+		await page.keyboard.press('Escape');
+		await expect(sheet).toBeHidden();
+		await expect(more).toBeFocused();
+		// A click elsewhere closes it.
+		await more.click();
+		await expect(list).toBeVisible();
+		await h.getByRole('heading', { level: 1 }).click();
+		await expect(list).toBeHidden();
+
+		// A menu inside the list (Network's Tables ▾) opens in place under its button; its Escape closes it first.
+		await page.goto(`/projects/${p.id}?tab=network`);
+		await h.getByRole('button', { name: 'More actions' }).click();
+		const netList = h.getByRole('group', { name: 'Network: more actions' });
+		await netList.locator('summary', { hasText: 'Tables' }).click();
+		const tables = netList.getByRole('group', { name: 'Open as a table' });
+		await expect(tables).toBeVisible();
+		const tb = (await tables.boundingBox())!;
+		const nb = (await netList.boundingBox())!;
+		expect(tb.y + tb.height).toBeLessThanOrEqual(nb.y + nb.height + 1);
+		await page.keyboard.press('Escape');
+		await expect(tables).toBeHidden();
+		await expect(netList).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(netList).toBeHidden();
 	});
 
 	test('Compare runs has one title, the section header’s, with the comparison’s context under it', async ({ page, owner }) => {
@@ -201,7 +275,7 @@ test.describe('phone', () => {
 		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 	});
 
-	test('a viewer: no Add data or Run model, the section’s own controls still fill their rows', async ({ page, owner, signIn }) => {
+	test('a viewer: no Add data or Run model, the section’s controls under More actions, View only on one line', async ({ page, owner, signIn }) => {
 		test.setTimeout(60_000);
 		void owner;
 		const p = await seedBig(page, 'Phone viewer header');
@@ -211,14 +285,25 @@ test.describe('phone', () => {
 		// section's full set of controls is there to lay out.
 		await setAllocationViewerUnits(page.request, p.id, true);
 		const v = viewer.page;
-		await v.setViewportSize({ width: 390, height: 844 });
-		await v.goto(`/projects/${p.id}?tab=allocations`);
-		await expect(header(v).getByRole('link', { name: 'Download CSV' })).toBeVisible();
-		await expect(header(v).getByTestId('header-main')).toHaveCount(0);
-		const m = await headerRows(v);
-		for (const row of m.rows) expect(Math.abs(row.at(-1)!.right - m.right)).toBeLessThan(2);
-		expect(await noSideScroll(v)).toBe(true);
-		await expectNoViolations(v);
+		for (const size of [{ width: 390, height: 844 }, { width: 320, height: 640 }]) {
+			await v.setViewportSize(size);
+			await v.goto(`/projects/${p.id}?tab=allocations`);
+			await expect(header(v).getByTestId('header-main')).toHaveCount(0);
+			await expect(await headerControl(v, 'link', 'Download CSV')).toBeVisible();
+			await v.keyboard.press('Escape');
+			// View only: one line on a phone (the role badge in the bar says it too); the full sentence is still read.
+			const note = header(v).getByRole('note');
+			await expect(note.getByText('View only.', { exact: true })).toBeVisible();
+			await expect(note.getByText('Ask the owner to edit.')).toBeVisible();
+			expect((await note.boundingBox())!.height, `${size.width} px`).toBeLessThan(32);
+			await expect(note).toContainText('You have view-only access to this project.');
+			await expectNoSidewaysScroll(v);
+			await expectNoViolations(v);
+		}
+		// A wide screen shows the whole sentence and no short one.
+		await v.setViewportSize({ width: 1440, height: 960 });
+		await expect(header(v).getByRole('note').getByText('You have view-only access to this project.', { exact: false })).toBeVisible();
+		await expect(header(v).getByRole('note').getByText('Ask the owner to edit.')).toBeHidden();
 	});
 });
 

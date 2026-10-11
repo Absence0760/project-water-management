@@ -59,9 +59,8 @@
 	{/if}
 {/snippet}
 {#snippet badge()}<span class="badge" data-testid="applicant-view">Applicant view</span>{/snippet}
-{#snippet actions()}
-	{#if publication}<a class="btn btn-primary" href={withParam(page.url, 'new', '1')}>New application</a>{/if}
-{/snippet}
+<!-- The page's main action, the header's main box (on a phone a row of its own, not in More actions). -->
+{#snippet newApplication()}<a class="btn btn-primary" href={withParam(page.url, 'new', '1')}>New application</a>{/snippet}
 {#snippet notices()}
 	<!-- Nothing published: the list says so ("Nothing is published yet…"). -->
 	{#if publication}
@@ -71,7 +70,7 @@
 	{/if}
 {/snippet}
 
-<SectionHeader title="Applications" guide="{base}/help/guides/applications-page" {badge} {context} {actions} {notices} />
+<SectionHeader title="Applications" guide="{base}/help/guides/applications-page" {badge} {context} main={publication ? newApplication : null} {notices} />
 
 <LoadState {loading} {error} retry={load}>
 	<ScenariosTab projectId={project.id} runs={null} canEdit={false} applicant publishedRunId={publication?.runId ?? null} onRunsChange={() => {}} reloadRuns={async () => {}} />

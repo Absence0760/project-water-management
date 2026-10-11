@@ -2,6 +2,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
+import { headerControl } from '../support/sectionHeader.ts';
 
 // The Data tab's "Preview all data" dialog: every input series' daily values
 // side by side, searchable/filterable, in the shared Dialog.svelte modal.
@@ -191,7 +192,8 @@ for (const size of [
 		await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2010-01-01', values: previewValues(days) });
 		await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2010-01-01', values: previewValues(days).map((v) => (v === null ? null : v / 10)) });
 		await page.goto(`/projects/${project.id}?tab=series`);
-		await page.getByRole('button', { name: 'Preview all data' }).click();
+		// On a phone the header's own controls are in its More actions list.
+		await (await headerControl(page, 'button', 'Preview all data')).click();
 		const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
 		await expect(dialog).toContainText(`${grouped(days)} of ${grouped(days)} days shown`);
 
