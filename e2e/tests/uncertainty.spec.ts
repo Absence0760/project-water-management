@@ -3,7 +3,7 @@
 // checks and stores it, the Runs tab shows the decision rule next to the
 // bands, and anyone can reproduce it. Then run comparison bands the difference
 // a bigger dam makes, member by member, over the baseline's kept sets. The
-// sensitivity runs (CR-21) sit under the bands: run in the worker, never stored.
+// sensitivity runs (CR-21) sit in a card after the bands: run in the worker, never stored.
 import { expectNoViolations } from '../support/a11y.ts';
 import { createRun, putModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -82,8 +82,12 @@ test('sensitivity runs: a verdict per EWR site, the tornado with its table, and 
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	const run = await createRun(page.request, project.id, 'Baseline');
 
+	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`/projects/${project.id}?tab=river&run=${run}`);
 	const panel = page.getByTestId('sensitivity-panel');
+	// A card of its own after the uncertainty bands' (issue #521 § 14), so each card's actions are its own.
+	await expect(page.locator('#res-sensitivity').getByTestId('sensitivity-panel')).toBeVisible();
+	await expect(page.locator('#res-uncertainty').getByTestId('sensitivity-panel')).toHaveCount(0);
 	// Not run, both tools are one row each, their buttons at the same right edge and the same size, so the
 	// runs line up down the page (issue #465); Sensitivity's runs at once, as it has no settings to choose.
 	const ens = (await page.getByTestId('uncertainty-panel').getByRole('button', { name: 'Run…' }).boundingBox())!;
@@ -101,6 +105,10 @@ test('sensitivity runs: a verdict per EWR site, the tornado with its table, and 
 	await expect(table.getByRole('columnheader')).toHaveText(['Factor', 'Low', 'Result', 'High', 'Result', 'Swing']);
 	await expect(table.getByRole('rowheader', { name: 'Rain', exact: true })).toBeVisible();
 	await expect(panel.getByRole('button', { name: 'Run again' })).toBeEnabled();
+	// Run again is the sensitivity card's, on screen under its heading; the bands' card holds none of its actions.
+	await panel.getByRole('heading', { level: 3, name: /^Sensitivity runs/ }).scrollIntoViewIfNeeded();
+	await expect(panel.getByRole('button', { name: 'Run again' })).toBeInViewport();
+	await expect(page.locator('#res-uncertainty').getByRole('button', { name: 'Run again' })).toHaveCount(0);
 
 	// Every run meets a 0 % threshold: re-judged at once, nothing re-run.
 	await panel.getByLabel('Threshold: days the EWR is met (%)').fill('0');

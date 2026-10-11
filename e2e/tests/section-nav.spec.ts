@@ -281,8 +281,8 @@ test('River & reserve has the menu: every panel by its heading, a jump that land
 	const menu = page.getByRole('navigation', { name: 'River sections' });
 	// On the bar: findings first, the water account straight after them, the run-it-yourself tools last; Reserve rules
 	// met is listed without a rule table too, as its panel then says what it needs (issue #465). Shorter names there.
-	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
-	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'Reserve rules met', 'Days below, by month', 'Water account', 'Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
+	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Sensitivity', 'Outcome matrix', 'Seasonal outlook']);
 	// Its group names would take it to another row, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
 	await expect(moreButton(menu)).toHaveCount(0);
@@ -295,7 +295,7 @@ test('River & reserve has the menu: every panel by its heading, a jump that land
 		[
 			['The reserve', ['Flow vs reserve', 'Days below the reserve, each water year', 'Reserve rules met, by month', 'Days below the EWR, by month']],
 			['Water balance', ['Water account']],
-			['How sure, and what if', ['Uncertainty bands', 'Outcome matrix', 'Seasonal outlook']]
+			['How sure, and what if', ['Uncertainty bands', 'Sensitivity runs', 'Outcome matrix', 'Seasonal outlook']]
 		],
 		page.getByRole('region', { name: 'Flow vs reserve' })
 	);
