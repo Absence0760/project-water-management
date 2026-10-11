@@ -180,7 +180,7 @@
 		font-weight: 500;
 	}
 	.meta {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.act {

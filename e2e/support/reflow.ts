@@ -127,20 +127,24 @@ export async function squashedChecks(page: Page): Promise<string[]> {
 /**
  * Visible text under `min` px in `root` (the main region by default), as "11.9px: Display name", for a frame
  * with a floor (the farm frame's 13 px, ui-playbook § 2 "A frame with its own base size checks what it
- * borrows"). Text in an svg or a visually hidden span doesn't count.
+ * borrows"). Text in an svg or a visually hidden span doesn't count, nor text inside `skip` (a selector for
+ * the decided exceptions, e.g. the workspace's aria-hidden glyphs and count bubbles).
  */
-export async function smallText(page: Page, min = 13, root: Locator = page.getByRole('main')): Promise<string[]> {
-	return root.evaluate((main, floor) => {
-		const out: string[] = [];
-		const walk = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
-		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-			const el = n.parentElement!;
-			if (!n.textContent!.trim() || !el.checkVisibility() || el.closest('.visually-hidden, svg')) continue;
-			const px = parseFloat(getComputedStyle(el).fontSize);
-			if (px < floor) out.push(`${px}px: ${n.textContent!.trim().slice(0, 40)}`);
-		}
-		return out;
-	}, min);
+export async function smallText(page: Page, min = 13, root: Locator = page.getByRole('main'), skip?: string): Promise<string[]> {
+	return root.evaluate(
+		(main, [floor, except]) => {
+			const out: string[] = [];
+			const walk = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+			for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+				const el = n.parentElement!;
+				if (!n.textContent!.trim() || !el.checkVisibility() || el.closest('.visually-hidden, svg') || (except && el.closest(except))) continue;
+				const px = parseFloat(getComputedStyle(el).fontSize);
+				if (px < floor) out.push(`${px}px: ${n.textContent!.trim().slice(0, 40)}`);
+			}
+			return out;
+		},
+		[min, skip ?? ''] as const
+	);
 }
 
 /**

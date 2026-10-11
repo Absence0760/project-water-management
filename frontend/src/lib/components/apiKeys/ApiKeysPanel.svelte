@@ -289,7 +289,7 @@
 		flex: 1 1 auto;
 		min-width: 0;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.example-h {
 		margin-top: 0.75rem !important;
@@ -298,7 +298,7 @@
 		margin: 0 0 0.5rem;
 		padding: 0.5rem;
 		overflow-x: auto;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
@@ -315,13 +315,13 @@
 		display: block;
 		font-weight: 400;
 		font-family: var(--font-mono, monospace);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 	}
 	.state {
 		display: block;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.state.live {

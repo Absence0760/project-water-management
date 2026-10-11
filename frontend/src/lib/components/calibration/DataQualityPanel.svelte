@@ -65,7 +65,7 @@
 	}
 	.gist {
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.tables {
 		display: flex;

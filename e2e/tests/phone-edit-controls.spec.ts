@@ -2,8 +2,8 @@
 // model-edit sheets' save row and the page's save bar are one row of buttons, the Project members are one row of
 // two lines each with nothing cut off, the fields in grids and forms are at least 24 px and 44 px where they stand
 // alone, a table that scrolls sideways keeps its row names at the left and shows that there is more, the fit record
-// folds into its line on a phone, and the shared small text is at least 12 px. Synthetic data only.
-import type { Locator, Page } from '@playwright/test';
+// folds into its line on a phone. The 12 px floor for small text is text-floor.spec.ts's (every tab). Synthetic data only.
+import type { Locator } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedManyAllocations } from '../support/allocations.ts';
 import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
@@ -239,28 +239,4 @@ test('the fit record folds into its line on a phone and stands open on a wide sc
 	await openFold(page, 'fit-record-fold');
 	await expect(page.getByRole('region', { name: /^Fit record of these parameters/ })).toBeVisible();
 	await expectNoSidewaysScroll(page);
-});
-
-/** Visible shared small text under the floor (12 px; 0.85rem, 11.9 px, counts): badges, .small lines, table heads, tile labels. */
-const smallText = (page: Page) =>
-	page.evaluate(() =>
-		[...document.querySelectorAll<HTMLElement>('main .badge, main .small, main table.data thead th, main .stat dt')]
-			.filter((e) => e.checkVisibility() && (e.textContent ?? '').trim() && e.getClientRects().length > 0)
-			.map((e) => ({ text: (e.textContent ?? '').trim().slice(0, 40), px: parseFloat(getComputedStyle(e).fontSize) }))
-			.filter((e) => e.px < 11.85)
-	);
-
-test('the shared small text is at least 12 px on a phone', async ({ page, owner }) => {
-	test.setTimeout(90_000);
-	void owner;
-	const p = await seedManyAllocations(page.request, 'Small text on a phone', { farms: 8 });
-	await page.setViewportSize({ width: 390, height: 844 });
-	for (const tab of ['overview', 'runs', 'supply', 'river', 'dams', 'allocations', 'settings', 'project', 'series']) {
-		await page.goto(`/projects/${p.id}?tab=${tab}`);
-		await expect(page.getByTestId('section-header').getByRole('heading', { level: 1 })).toBeVisible();
-		// Something of the tab's own has drawn (its chunk loads after the header).
-		await expect(page.locator('.tab-body :is(.badge, .small, table.data thead th, .stat dt)').filter({ visible: true }).first()).toBeVisible();
-		await layoutSettled(page);
-		expect(await smallText(page), tab).toEqual([]);
-	}
 });

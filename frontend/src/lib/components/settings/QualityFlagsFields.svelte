@@ -180,7 +180,7 @@
 		margin: 0;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		margin: 0 0 0.4rem;
 	}

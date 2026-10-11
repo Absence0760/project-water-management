@@ -89,7 +89,7 @@
 		padding: 0 0.3rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		cursor: pointer;
 		user-select: none;
@@ -141,11 +141,11 @@
 		}
 	}
 	.summary {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		margin: 0.2rem 0 0;
 	}
 	.all {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		min-height: 24px;
 		padding: 0 0.4rem;
 	}

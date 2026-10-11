@@ -643,7 +643,7 @@
 		padding-left: 1.2rem;
 	}
 	.hint {
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-muted);
 		margin: 0.25rem 0 0.5rem;
 	}

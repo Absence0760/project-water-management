@@ -297,7 +297,7 @@
 		max-width: 75ch;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.table-wrap {
 		overflow-x: auto;
@@ -311,7 +311,7 @@
 		vertical-align: top;
 	}
 	.state {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0.05rem 0.45rem;
 		border-radius: 999px;

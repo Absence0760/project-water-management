@@ -279,7 +279,7 @@
 	}
 	.detail {
 		margin-left: 1.2rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--danger);
 		overflow-wrap: anywhere;
 	}
@@ -300,7 +300,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.15rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	/* Wide enough for "30 Sep 2021" and the placeholder, as the native date field was. */
 	.trace-form .day {
@@ -323,12 +323,12 @@
 		white-space: nowrap;
 	}
 	.formula {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.u {
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	tr.residual th,
 	tr.residual td {

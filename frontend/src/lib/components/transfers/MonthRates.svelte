@@ -101,7 +101,7 @@
 		min-width: 0;
 	}
 	.m {
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		text-align: center;
 	}
@@ -143,11 +143,11 @@
 		min-height: 24px;
 	}
 	.summary {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		overflow-wrap: anywhere;
 	}
 	.all {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		min-height: 24px;
 		padding: 0 0.4rem;
 		white-space: nowrap;

@@ -156,7 +156,7 @@
 		flex-wrap: wrap;
 		gap: 0.25rem 0.9rem;
 		margin-top: 0.4rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.key {

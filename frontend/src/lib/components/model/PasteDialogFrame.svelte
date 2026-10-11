@@ -136,7 +136,7 @@
 	.paste textarea {
 		width: 100%;
 		font-family: var(--font-mono);
-		font-size: 0.8125rem;
+		font-size: 0.85rem;
 	}
 	.row {
 		display: flex;

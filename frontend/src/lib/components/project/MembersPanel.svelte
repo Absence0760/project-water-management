@@ -391,7 +391,7 @@
 	.sub-email {
 		display: none;
 		font-weight: 400;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	@media (max-width: 560px) {

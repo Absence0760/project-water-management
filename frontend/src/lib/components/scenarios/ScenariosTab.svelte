@@ -435,14 +435,14 @@
 		overflow: hidden;
 	}
 	.meta {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		overflow-wrap: anywhere;
 	}
 	/* The status in words, as a pill: submitted and decided in the accent (the editor's own pills). */
 	.status {
 		display: inline-block;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		padding: 0 0.45rem;
 		border-radius: 999px;
@@ -468,7 +468,7 @@
 	}
 	.hint {
 		display: block;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		color: var(--text-muted);
 		margin-top: 0.25rem;
 	}

@@ -114,7 +114,7 @@
 		border-radius: 999px;
 		background: var(--accent-soft);
 		color: var(--accent);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		text-align: center;
 	}

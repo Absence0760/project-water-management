@@ -223,7 +223,7 @@
 	.box textarea {
 		width: 100%;
 		font-family: var(--font-mono);
-		font-size: 0.8125rem;
+		font-size: 0.85rem;
 	}
 	.row {
 		display: flex;
@@ -258,12 +258,12 @@
 		border-radius: var(--radius-sm);
 		background: var(--warning-soft);
 		color: var(--text);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 	}
 	.tag {
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.check {
 		min-height: 24px;

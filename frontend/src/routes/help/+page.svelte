@@ -99,7 +99,7 @@
 	.eyebrow {
 		margin: 0;
 		color: var(--accent);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -196,7 +196,7 @@
 		border-radius: 50%;
 		background: var(--accent);
 		color: var(--accent-contrast);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 700;
 	}
 	.steps a {

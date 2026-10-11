@@ -133,7 +133,7 @@
 		gap: 2px;
 		padding: 0;
 		margin: 0.2rem 0;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		font-variant-numeric: tabular-nums;
 	}
 	.strip li {
@@ -160,7 +160,7 @@
 		gap: 0.15rem 0.7rem;
 		padding: 0;
 		margin: 0.2rem 0 0.25rem;
-		font-size: 0.72rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 	}
 	.legend li {

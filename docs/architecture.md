@@ -503,6 +503,13 @@ ties the scoped copies did. `e2e/tests/shared-css.spec.ts` pins their
 computed styles (light, dark, phone, desktop, the report in print, the
 override editor's three-button switch).
 
+Small text has two size tokens in `app.css`, `--font-xs` (0.75rem) and
+`--font-sm` (0.8rem), which a phone (under 640 px, on screen) lifts to
+12 px. Shared classes and components set small text through them, never a
+literal size under 0.85rem (`frontend/src/lib/uiPatterns.test.ts`; print
+styles and the listed svg, glyph and count-bubble exceptions aside), so the
+phone's floor holds app-wide (issue #521, ui-playbook § 3 "Type scale").
+
 A rule moves into `app.css` only when it is identical in three or more
 components *and* the move lowers the total: global CSS is on every page's
 first load, so a rule only a lazy tab uses costs every other page for

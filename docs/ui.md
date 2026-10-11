@@ -11618,13 +11618,19 @@ data button or Run button.
   (WCAG 2.5.8; some were 21–25 px), 44 px on a touch screen; a field that
   stands alone on a phone (a picker beside its label, a filter, every field
   of a card) is 44 px (issue #521 round 5).
-- **Small text on a phone**: the shared small text (badges, `.small` lines,
-  table column heads, tile labels) is at least 12 px under 640 px (0.85rem,
-  11.9 px, counts; app.css), where it was 10.5–11.2 px; a component's own
-  smaller size for those classes is held to it too
-  (`phone-edit-controls.spec.ts` walks them on nine tabs). Chart ticks keep
-  chart.ts's own rules, and a component's own classes (run tags, sparkline
-  letters) are not yet covered.
+- **Small text on a phone**: every piece of small text in the workspace
+  (badges, `.small` lines, hints, table column heads, tile labels, units,
+  tags, a table's card labels, the app frame's counts and kickers) is at
+  least 12 px under 640 px (0.85rem, 11.9 px, counts), where it was 8.4 to
+  11.2 px; on a desktop nothing is under 0.75rem (10.5 px). Small text takes
+  app.css's two size tokens, `--font-xs` (0.75rem) and `--font-sm` (0.8rem),
+  which a phone lifts to 12 px (issue #521 rounds 5 and 6).
+  `text-floor.spec.ts` measures every tab at 390 and 1440 px, and
+  `uiPatterns.test.ts` refuses a literal size under 0.85rem outside print
+  styles and the decided exceptions: text in an svg (charts and diagrams),
+  aria-hidden glyphs (▾, ▲▼) and count bubbles on icon buttons. On a phone
+  a sparkline's mark takes its own line under the two ends where 12 px
+  doesn't fit between them (the Crops list, the Dams cards).
 - **Charts say what they show** ([ui-playbook](design/ui-playbook.md) § 3,
   "Label every chart"): a title or caption naming the quantity, its units,
   the time axis, a legend or direct labels, and a text equivalent. A line

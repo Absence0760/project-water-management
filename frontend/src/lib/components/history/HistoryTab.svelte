@@ -742,7 +742,7 @@
 		border-left-color: var(--accent);
 	}
 	.row-meta {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}

@@ -304,7 +304,7 @@
 		border: 2px solid var(--text);
 		border-radius: 999px;
 		background: var(--sw);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;

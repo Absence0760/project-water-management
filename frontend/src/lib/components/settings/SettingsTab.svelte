@@ -1484,11 +1484,11 @@
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.hint {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.settings-form > :global(.explain-switch) {
@@ -1623,7 +1623,7 @@
 	.derived td,
 	.derived th {
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.plain {
 		border: 0;
@@ -1736,7 +1736,7 @@
 	}
 	.err {
 		color: var(--danger);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	input.invalid {
 		border-color: var(--danger);

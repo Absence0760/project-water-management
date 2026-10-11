@@ -657,7 +657,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.2rem 0.9rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 	}
 	.key i {
@@ -677,7 +677,7 @@
 	}
 	.shade-key {
 		margin: 0.25rem 0 0;
-		font-size: 0.8125rem;
+		font-size: 0.85rem;
 	}
 	.shade-key p {
 		margin: 0;
@@ -701,7 +701,7 @@
 	}
 	.lane-key {
 		margin: 0.25rem 0 0;
-		font-size: 0.8125rem;
+		font-size: 0.85rem;
 	}
 	.lane-key p {
 		margin: 0;
@@ -725,7 +725,7 @@
 	}
 	.band-key {
 		margin: 0.25rem 0 0;
-		font-size: 0.8125rem;
+		font-size: 0.85rem;
 		display: flex;
 		gap: 0.4rem;
 		align-items: baseline;
@@ -748,12 +748,12 @@
 		text-align: center;
 	}
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		margin: 0.25rem 0 0;
 	}
 	.plot :global(.u-legend) {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		text-align: left;
 	}

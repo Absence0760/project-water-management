@@ -771,7 +771,7 @@
 	}
 	.preview dt {
 		color: var(--text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.preview dd {
 		margin: 0;
@@ -826,7 +826,7 @@
 	.changes th {
 		color: var(--text-muted);
 		font-weight: 600;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 	}
 	.confirm-actions {
 		display: flex;

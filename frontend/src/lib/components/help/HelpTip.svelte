@@ -272,10 +272,10 @@
 	}
 	.units {
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.more {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		text-decoration: underline;
 	}
 </style>

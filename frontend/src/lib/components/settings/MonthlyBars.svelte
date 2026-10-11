@@ -114,7 +114,7 @@
 		margin: 0.4rem 0 0;
 		padding: 0;
 		list-style: none;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-2);
 		max-width: 420px;
 	}

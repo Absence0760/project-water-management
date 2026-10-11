@@ -185,7 +185,7 @@
 		margin: 0 0 0.75rem;
 	}
 	.window dt {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.window dd {
@@ -213,7 +213,7 @@
 		gap: 0.4rem;
 	}
 	.label {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.value {
@@ -222,13 +222,13 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.value small {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 400;
 		color: var(--text-muted);
 		margin-left: 0.2rem;
 	}
 	.help {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-2);
 		margin: 0.2rem 0 0;
 	}
@@ -239,6 +239,6 @@
 		margin-top: 1rem;
 	}
 	.note {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 </style>

@@ -775,7 +775,7 @@
 		font-weight: 600;
 	}
 	.count {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
@@ -847,7 +847,7 @@
 	}
 	.team-link {
 		margin-left: auto;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 500;
 	}
 	.team-link + .team-link {

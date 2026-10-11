@@ -71,7 +71,7 @@
 		font-size: 0.9em;
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		margin: 0 0 0.25rem;
 	}
 </style>

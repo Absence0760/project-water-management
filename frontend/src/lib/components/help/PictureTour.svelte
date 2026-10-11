@@ -162,7 +162,7 @@
 		background: #102a43;
 		box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
 		color: #fff;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 700;
 		cursor: pointer;
 		transition: transform 0.15s ease;
@@ -179,7 +179,7 @@
 		.marker {
 			width: 22px;
 			height: 22px;
-			font-size: 0.7rem;
+			font-size: var(--font-xs);
 		}
 	}
 	/* The stops, numbered like the markers. Two columns on wide screens,
@@ -229,7 +229,7 @@
 		border-radius: 50%;
 		background: var(--text);
 		color: var(--bg);
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		font-weight: 700;
 	}
 	.on .num {

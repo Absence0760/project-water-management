@@ -143,14 +143,14 @@
 		gap: 0.5rem;
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 		max-width: 75ch;
 	}
 	.u {
 		font-weight: 400;
 		color: var(--text-muted);
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	legend {
 		font-weight: 500;
@@ -199,7 +199,7 @@
 		border-collapse: collapse;
 	}
 	.months th {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 500;
 		color: var(--text-muted);
 		text-align: left;

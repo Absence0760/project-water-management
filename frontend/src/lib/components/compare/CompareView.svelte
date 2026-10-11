@@ -936,7 +936,7 @@
 	}
 	.outcomes-table .d {
 		display: block;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.key {
 		display: inline-block;
@@ -950,7 +950,7 @@
 		display: block;
 		color: var(--text-muted);
 		font-weight: 400;
-		font-size: 0.8em;
+		font-size: var(--font-sm);
 	}
 	.takeaways {
 		margin-top: auto;

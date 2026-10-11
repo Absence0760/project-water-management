@@ -277,7 +277,7 @@
 <style>
 	.period {
 		margin: -0.25rem 0 0.75rem;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		min-height: 1.2em;
 	}
 	.controls {
@@ -296,7 +296,7 @@
 	.toggles {
 		display: flex;
 		gap: 0.75rem;
-		font-size: 0.82rem;
+		font-size: 0.85rem;
 		white-space: nowrap;
 	}
 	.toggles label {
@@ -329,7 +329,7 @@
 		min-width: 160px;
 	}
 	.picker-panel legend {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		font-weight: 600;
 		color: var(--text-muted);
 		padding: 0;
@@ -339,7 +339,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		padding: 0.1rem 0;
 		white-space: nowrap;
 	}
@@ -393,7 +393,7 @@
 	}
 	/* Which check flagged a value, Rain used's source, an exclusion's reason: on screen, compact, the row still 28 px. */
 	.tag {
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		/* Its own small line box: at the cell's 27 px, the smaller text's baseline shift grew the line, and every row, by ~1 px. */
 		line-height: 1;
 		color: var(--text-2);

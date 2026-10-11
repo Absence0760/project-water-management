@@ -73,7 +73,7 @@ test('a crop row: the column’s caption, Oct and Sep at the ends, the highest f
 	await expect(read(spark)).toHaveText('max 0.80');
 });
 
-test('the crop list at phone width: the caption still over the column, every row’s ticks on one line', async ({ page, owner }) => {
+test('the crop list at phone width: the caption still over the column, every row’s mark whole on its own line under the ends', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Crop sparklines phone');
 	const m = project.model;
@@ -98,13 +98,18 @@ test('the crop list at phone width: the caption still over the column, every row
 			const r = el.getBoundingClientRect();
 			const t = el.querySelector('.ticks')!.getBoundingClientRect();
 			const read = el.querySelector('.read')!;
-			return { x: r.x, w: r.width, ticksH: t.height, fontPx: parseFloat(getComputedStyle(el.querySelector('.ticks')!).fontSize), cut: read.scrollWidth > read.clientWidth };
+			const end = el.querySelector('.end')!.getBoundingClientRect();
+			return { x: r.x, w: r.width, ticksH: t.height, fontPx: parseFloat(getComputedStyle(el.querySelector('.ticks')!).fontSize), cut: read.scrollWidth > read.clientWidth, under: read.getBoundingClientRect().top >= end.bottom - 0.5 };
 		})
 	);
 	for (const b of boxes) {
 		expect(Math.abs(b.x - caption.x)).toBeLessThanOrEqual(1);
 		expect(Math.abs(b.w - caption.width)).toBeLessThanOrEqual(1);
-		expect(b.ticksH).toBeLessThanOrEqual(b.fontPx * 1.3); // one line
+		// The 12 px floor (issue #521 round 6): "Oct max 1.10 Sep" no longer fits the column on one line, so the
+		// mark takes the line under the ends (Sparkline.svelte), two lines in all.
+		expect(b.fontPx).toBeGreaterThanOrEqual(12);
+		expect(b.under).toBe(true);
+		expect(b.ticksH).toBeLessThanOrEqual(b.fontPx * 1.2 * 2 + 1); // two lines
 		expect(b.cut).toBe(false); // "max 1.10" whole
 	}
 	const [scroll, inner] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
@@ -177,6 +182,9 @@ test('dam cards on a phone: the low takes its own line rather than being cut off
 			const b = (await end.boundingBox())!;
 			expect(b.x + b.width).toBeLessThanOrEqual(fig.x + fig.width + 0.5);
 		}
+		// The last day keeps to the right edge even when the 12 px dates take a line each (issue #521 round 6).
+		const last = (await spark.locator('.end').last().boundingBox())!;
+		expect(last.x + last.width).toBeGreaterThan(fig.x + fig.width - 1);
 	}
 	await expectNoViolations(page);
 });

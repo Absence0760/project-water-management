@@ -474,7 +474,7 @@
 		width: 100%;
 		min-width: 0;
 		margin-top: 0.2rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		padding: 0.1rem 0.2rem;
 		/* WCAG 2.5.8's 24 px target. */
 		min-height: 24px;
@@ -482,7 +482,7 @@
 	.areas .sys-text {
 		display: block;
 		margin-top: 0.15rem;
-		font-size: 0.75rem;
+		font-size: var(--font-xs);
 		color: var(--text-muted);
 		text-align: right;
 	}
@@ -600,7 +600,7 @@
 		}
 		.cell-label {
 			display: block;
-			font-size: 0.75rem;
+			font-size: var(--font-xs);
 			font-weight: 600;
 			color: var(--text-2);
 			margin-bottom: 0.15rem;

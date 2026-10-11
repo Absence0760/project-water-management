@@ -289,7 +289,7 @@
 		gap: 0.6rem 1rem;
 	}
 	.facts dt {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.facts dd {
@@ -304,7 +304,7 @@
 		gap: 0.3rem;
 	}
 	.ewr-h {
-		font-size: 0.78rem;
+		font-size: var(--font-sm);
 		color: var(--text-muted);
 	}
 	.since {

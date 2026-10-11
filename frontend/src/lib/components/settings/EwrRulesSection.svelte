@@ -118,7 +118,7 @@
 
 <style>
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		max-width: 75ch;
 	}
 	.panel > .hint {

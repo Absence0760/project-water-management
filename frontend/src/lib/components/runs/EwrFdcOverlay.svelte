@@ -111,7 +111,7 @@
 		list-style: none;
 		padding: 0;
 		margin: 0.4rem 0;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 	}
 	.key li {
 		display: flex;

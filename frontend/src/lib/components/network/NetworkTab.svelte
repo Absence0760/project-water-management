@@ -1463,7 +1463,7 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		font-size: 0.8rem;
+		font-size: var(--font-sm);
 		font-weight: 400;
 	}
 	.dot {
@@ -1653,7 +1653,7 @@
 		}
 		.cell-label {
 			display: block;
-			font-size: 0.75rem;
+			font-size: var(--font-xs);
 			font-weight: 600;
 			color: var(--text-2);
 			margin-bottom: 0.15rem;
