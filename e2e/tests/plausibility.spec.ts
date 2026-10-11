@@ -79,6 +79,8 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// store drains, so the low-flow FDC is outside its limit), which the check list and the run's warnings agree with.
 	await expect(panel.getByRole('status').filter({ hasText: 'A signature is outside its limit: see the run’s warnings.' })).toHaveCount(1);
 	await expect(results.getByRole('listitem').filter({ hasText: /^Validation signatures: / })).toHaveText('Validation signatures: see below');
+	// The run's things to check show the first 3 (issue #521): this one is further down the list.
+	await page.getByRole('button', { name: /^Show all \d+ things to check$/ }).click();
 	await expect(page.getByRole('listitem').filter({ hasText: /^Validation signatures \(.*\): on the 1096 scored days of the observed gauge record, / })).toHaveCount(1);
 	const sig = panel.getByRole('table', { name: /^Validation signatures/ });
 	await expect(sig.getByRole('columnheader', { name: 'Provisional limit' })).toBeVisible();

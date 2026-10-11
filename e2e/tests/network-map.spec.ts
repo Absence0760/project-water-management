@@ -281,7 +281,7 @@ test('a note’s link opens the map with its node picked', async ({ page, owner 
 	await page.goto(`/projects/${project.id}?tab=network&node=${project.model.nodes[1]!.id}`);
 	await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	// Its notes are on the card, as on the table row.
-	await expect(card(page).getByRole('button', { name: /note on Upper farm/ })).toBeVisible();
+	await expect(card(page).getByRole('button', { name: /^Notes on Upper farm/ })).toBeVisible();
 });
 
 test('the grids open in a modal from the map, edit the same model, save, and close back to the map', async ({ page, owner }) => {
