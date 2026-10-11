@@ -1578,6 +1578,15 @@ Interaction details that bit:
   always renders belongs in the tab's chunk: workspace tabs (the page's
   `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
   pages, routes and shared chunks.
+- Lazy panels that load together share one chunk: a module that re-exports
+  them, each loader picking its export
+  (`() => import('./lazySections').then((m) => ({ default: m.X }))`). Settings'
+  sections that draw on every visit (`settings/lazySections.ts`) and the Map
+  tab's tool sheets (`map/sheets.ts`) do this; nine chunks of their own had
+  cost ~6 KB of gzip overhead in the total (issue #521). Leave out a panel
+  another tab also loads lazily, or the chunk follows it there. A tool sheet
+  that opens a click after its tool starts is warmed (`prefetch`) when the
+  tool starts, so it never shows the loading state.
 - Every ceiling change gets a dated entry with the measured numbers and
   what grew. A raise of the total is a new entry file,
   `pnpm gen:bundle-budget <slug> <kb> "<why>"`, never an edit of
