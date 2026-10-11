@@ -259,11 +259,15 @@ of 0 counted too. So a ≥ 20 mm reading after zeros §2.4c trusts, spread up to
 before), and one after a flagged zero run of more than 7 days, which 1.83.0
 spread over the run's last 92 days, is now set aside and CHIRPS fills its
 day like the run's. Measured on the three example catchments (2026-10-11):
-Droëvlei and Sandspruit have no window before or after. Kleinberg had one
-window under 1.83.0 (2017-06-03 to 2017-06-26, a 24-day run with zeros in
-it), now none: its reading stays on its day, which moves rain used by about
-0.02 mm over the record; its flagged zero run (2019) ends in no large
-reading, so the flagged-run rule changes nothing there. The client catchment
+Droëvlei and Sandspruit have no window before or after. Kleinberg's
+built-in accumulation was three weeks entered as 0 then the total (one
+window under 1.83.0, 2017-06-03 to 2017-06-26, and none under the 1.84.0
+rule, its reading then staying on its day); the example now writes it as an
+unread gauge does, 6 blank days then the total, so it shows a 7-day window
+spread by CHIRPS (2017-06-20 to 2017-06-26), and its rain, natural flow and
+stored GR4J fit were regenerated (`pnpm gen:example`). Its flagged zero run
+(2019) ends in no large reading, so the flagged-run rule changes nothing
+there. The client catchment
 (a fresh extract, 2026-10-11): 26 spread windows under 1.83.0 → none.
 25 followed zeros §2.4c trusts, so their readings now stay on their day; 1
 ended a flagged zero run, and the outage rule now sets that reading aside
