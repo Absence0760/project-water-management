@@ -590,7 +590,6 @@
 	.flag {
 		display: inline-block;
 		margin-top: 0.25rem;
-		text-transform: none;
 	}
 	/* The numbers across the top of the projects. */
 	.kpis {

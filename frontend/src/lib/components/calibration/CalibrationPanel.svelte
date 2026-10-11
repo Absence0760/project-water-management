@@ -233,7 +233,6 @@
 		margin: 0.2rem 0 0;
 	}
 	.badge {
-		text-transform: none;
 		white-space: nowrap;
 	}
 	h4 {

@@ -317,7 +317,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		box-shadow: 0 8px 20px rgb(0 0 0 / 0.18);
+		box-shadow: var(--popover-shadow);
 		padding: 0.6rem 0.8rem;
 		max-height: 320px;
 		overflow-y: auto;

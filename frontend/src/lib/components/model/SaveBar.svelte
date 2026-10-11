@@ -177,7 +177,7 @@
 		z-index: 30;
 		background: var(--surface);
 		border-top: 1px solid var(--border-strong);
-		box-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);
+		box-shadow: var(--bar-shadow);
 	}
 	.inner {
 		max-width: 1480px;

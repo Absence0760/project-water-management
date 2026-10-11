@@ -111,7 +111,4 @@
 	.more {
 		margin-top: 0.5rem;
 	}
-	.badge {
-		text-transform: none;
-	}
 </style>

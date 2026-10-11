@@ -297,7 +297,6 @@
 	}
 	.badge {
 		margin-left: 0.35rem;
-		text-transform: none;
 	}
 	/* Room for the name and its badge, so "below its equitable share by 25.8 m³/day" takes two lines, not five. */
 	tbody th[scope='row'] {

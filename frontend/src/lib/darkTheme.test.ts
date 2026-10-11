@@ -4,7 +4,9 @@
 // - No dark block keyed on [data-theme='dark']: nothing sets it (the OS preference is the only switch; the
 //   print theme sets data-theme='light'), so such a block is dead code that suggests a toggle.
 // - Overlays take their shadow from the tokens (--overlay-shadow, --popover-shadow), which deepen in dark,
-//   not a literal 20 % black that vanishes on a near-black page.
+//   not a literal 20 % black that vanishes on a near-black page; the save bar's upward shadow is --bar-shadow.
+//   No workspace component writes a black shadow literal at all (round 6 found two popovers and the save bar
+//   the old pattern missed), the help pictures' markers aside: they sit on the picture, in fixed colours.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,10 +46,18 @@ describe('the dark theme (issue #521)', () => {
 	});
 
 	it('popovers and dialogs take their shadow from the overlay tokens', () => {
-		const literal = /box-shadow:[^;]*\b0 (?:6px 1[68]px|10px 30px) rgb\(0 0 0/;
-		// The landing page is its own design (a fixed dusk or daylight hero), not the workspace's overlays.
-		expect(svelte.filter((f) => !f.path.startsWith('lib/components/landing/') && literal.test(f.text)).map((f) => f.path)).toEqual([]);
+		const literal = /box-shadow:[^;]*rgba?\(\s*0[\s,]+0[\s,]+0\b/;
+		expect(literal.test('box-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);')).toBe(true);
+		expect(literal.test('box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);')).toBe(true);
+		expect(literal.test('box-shadow: var(--popover-shadow);')).toBe(false);
+		expect(literal.test('box-shadow: inset 0 -2px 0 var(--accent);')).toBe(false);
+		// The landing page is its own design (a fixed dusk or daylight hero), not the workspace's overlays. The help
+		// pictures' markers and rings sit on the picture, not the page: in those two files a rule drawn in fixed
+		// colours (a hex value) may keep its dark halo; their popovers, in the theme's tokens, can't.
+		const PICTURES = ['lib/components/help/PictureTour.svelte', 'lib/components/help/HelpTip.svelte'];
+		const text = (f: { path: string; text: string }) => (PICTURES.includes(f.path) ? f.text.replace(/\{[^{}]*#[0-9a-f]{3,6}\b[^{}]*\}/gi, '{}') : f.text);
+		expect(svelte.filter((f) => !f.path.startsWith('lib/components/landing/') && literal.test(text(f))).map((f) => f.path)).toEqual([]);
 		const css = readFileSync(join(ROOT, 'app.css'), 'utf8');
-		for (const token of ['--overlay-backdrop', '--overlay-border', '--overlay-shadow', '--popover-shadow']) expect(css.split(token).length - 1, token).toBe(2);
+		for (const token of ['--overlay-backdrop', '--overlay-border', '--overlay-shadow', '--popover-shadow', '--bar-shadow']) expect(css.split(token).length - 1, token).toBe(2);
 	});
 });

@@ -95,7 +95,6 @@
 		color: var(--text-muted);
 	}
 	.badge {
-		text-transform: none;
 		white-space: nowrap;
 	}
 </style>

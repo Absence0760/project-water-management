@@ -1201,7 +1201,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
-		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+		box-shadow: var(--popover-shadow);
 	}
 	/* In a narrow header the pills share a row that starts at the left (SectionHeader), the rain pill
 	   after the Summary's Setup complete: its words wrap inside it, and its list opens rightwards from

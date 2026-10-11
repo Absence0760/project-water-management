@@ -781,6 +781,19 @@ section it belongs to, with the example that taught it.
   (the scenario editor's rebase line).
   Give a field's label the height of a label with a tip (`min-height: 24px`),
   or the inputs of a row without tips sit 6 px higher than their neighbours.
+- **A field's error line grows its own field and moves nothing beside it.**
+  Rows align their fields to the bottom (`.form-row`, and many a screen's own
+  grid with `align-items: end`), so a label that wraps keeps the inputs in
+  line; a day or number field's error line then made its field the tallest
+  and pushed every neighbour down by the error's height (issue #521, round
+  6). app.css's rule after `.form-row` handles every row at once: while a
+  field in a row shows its `.num-err` (NumberInput's and DayInput's line),
+  the row's fields stretch to the row's height with label and input at the
+  top, and a `.form-row`'s buttons hold the inputs' line. It is `align-self:
+  stretch`, not `flex-start`, so a column of fields (where align-self is
+  horizontal) keeps its width. A field that draws its own error line under
+  its input names it `.num-err` to get the same. `day-input.spec.ts` and
+  `node-sheet-layout.spec.ts` pin a neighbour's input in place.
 - **An index names each panel as the page does, and a page beside a rail
   reads its width from its own column.** Runs & results, River & reserve,
   Hydrological units and Data kept the two-row bar after Settings got its
@@ -860,7 +873,10 @@ section it belongs to, with the example that taught it.
   1.1:1 against the page it covered, so on a phone the two read as one
   (issue #521). `::backdrop` only inherits custom properties in recent
   browsers, so give it the light value as the `var()` fallback.
-  `darkTheme.test.ts` refuses a literal popover shadow in a component.
+  A bar docked at the window's foot (the save bar) casts `--bar-shadow`
+  upward. `darkTheme.test.ts` refuses any black shadow literal in a
+  workspace component (the help pictures' fixed-colour markers aside): its
+  first pattern named two popover sizes and missed a third and the save bar.
 - **Hold non-text parts to 3:1.** A control's outline (or its fill, where it
   stands off the ground) and a chart's marks need 3:1 against the ground
   (WCAG 1.4.11), and axe checks neither: the flow unit picker's `--border`
@@ -1220,6 +1236,16 @@ Interaction details that bit:
   The value stored and sent never changes form; specs type day first or
   ISO and read the field back as "15 Nov 2021" (`day-input.spec.ts`).
   `lib/uiPatterns.test.ts` refuses any native date field.
+- **"Today" is the viewer's day, and a day that must have passed goes as a
+  moment.** `new Date().toISOString().slice(0, 10)` is the UTC day, a day
+  behind in South Africa until 02:00: Registration checks' latest allowed
+  day, the licence record's status, the API keys' example and two water-year
+  defaults used it until round 6 of issue #521. Use `localIsoDate()`
+  (`lib/format/number.ts`). A bare day reaches the server as UTC midnight,
+  still in the future just after local midnight, so a field the server holds
+  to "a date that has passed" sends today through `pastDayMoment(day)`, the
+  current moment (`registration-checks.spec.ts` runs in a zone on another
+  day than UTC).
 - **The printed evidence report keeps ISO dates, on purpose.** It is a
   signed document whose lines match the manifest's hashed text (evidence
   pack manifests, `docs/evidence-pack.md`), so its dates, the fit line
@@ -1428,8 +1454,9 @@ Interaction details that bit:
   filter or sort chosen from a control, pushes (`goto` without
   `replaceState`), so Back returns to the pick before. A search typed into a
   box is one step: its first change after the box takes the focus pushes,
-  the rest replace (the project list, Runs' label filter; History's search
-  only replaces). A default pick, a redirect from an old link and closing an
+  the rest replace (the project list, Runs' label filter, History's
+  Parameter filter, one `SearchStep` each from `lib/nav/searchStep.ts`:
+  `onfocus={step.focus}`, `replaceState: step.replace()`). A default pick, a redirect from an old link and closing an
   overlay replace. Every sort and filter is in the URL, so a reload keeps it
   (the Applications sort `sort=status`, Runs' `q=`).
 - **A failed load says what failed and offers Try again.** A panel that reads

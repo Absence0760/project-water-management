@@ -65,7 +65,6 @@
 	}
 	.badge {
 		margin-left: 0.4rem;
-		text-transform: none;
 		white-space: nowrap;
 	}
 </style>

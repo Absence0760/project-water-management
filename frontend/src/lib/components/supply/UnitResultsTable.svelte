@@ -226,7 +226,6 @@
 	}
 	.badge {
 		margin-left: 0.35rem;
-		text-transform: none;
 	}
 	.flag-key {
 		display: inline-block;

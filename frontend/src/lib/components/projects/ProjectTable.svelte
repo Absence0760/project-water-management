@@ -450,7 +450,6 @@
 	.flag {
 		max-width: 100%;
 		border-radius: var(--radius-sm);
-		text-transform: none;
 		font-weight: 500;
 		line-height: 1.35;
 	}
@@ -467,7 +466,6 @@
 		color: var(--danger);
 	}
 	.alerts-badge {
-		text-transform: none;
 		white-space: nowrap;
 	}
 	.actions {

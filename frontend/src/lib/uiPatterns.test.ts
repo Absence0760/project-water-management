@@ -7,6 +7,9 @@
 // - A paste dialog is model/PasteDialogFrame.svelte's frame.
 // - A typed date is common/DayInput.svelte (a text field read by parseDay), never <input type="date"> (the
 //   browser's own order: 12/30/2021 in a US browser). The 30 fields from before the rule were converted (issue #521).
+// - A badge's capital is app.css's `.badge::first-letter`: a component's `text-transform: none` on a badge does
+//   nothing (it doesn't reach the first letter), so none is written (13 removed in round 6).
+// - A field's error line never moves its row: app.css's rule for a row holding a .num-err (round 6).
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +27,14 @@ function svelteFiles(dir: string): string[] {
 }
 const files = svelteFiles(ROOT).map((path) => ({ path: relative(ROOT, path), text: readFileSync(path, 'utf8').replace(COMMENTS, '$1') }));
 const where = (re: RegExp, except: string[] = []) => files.filter((f) => !except.includes(f.path) && re.test(f.text)).map((f) => f.path);
+
+/** The rules in `text` that set text-transform: none on a badge: a selector naming .badge, or a class the markup gives a badge. */
+function badgeTransformRules(text: string): string[] {
+	const badgeClasses = new Set(['badge', ...[...text.matchAll(/class="([^"]*\bbadge\b[^"]*)"/g)].flatMap((m) => m[1].split(/\s+/))]);
+	return [...text.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+		.filter(([, selector, body]) => /text-transform\s*:\s*none/.test(body) && [...selector.matchAll(/\.([\w-]+)/g)].some((c) => badgeClasses.has(c[1])))
+		.map(([, selector]) => selector.replace(/^[\s\S]*(?:<style[^>]*>|\n)/, '').trim());
+}
 
 /** <input type="date">, in any quoting. */
 const NATIVE_DATE = /\btype\s*=\s*(?:"date"|'date'|\{\s*['"]date['"]\s*\})/g;
@@ -73,5 +84,26 @@ describe('shared UI patterns (issue #521)', () => {
 		expect(files.find((f) => f.path === 'lib/components/common/DayInput.svelte')!.text).toContain('type="text"');
 		expect(readFileSync(join(ROOT, 'lib/components/common/dayField.svelte.ts'), 'utf8')).toContain('parseDay(');
 		expect(where(/<DayInput\b/).length).toBeGreaterThanOrEqual(15);
+	});
+
+	it('the badge rule pattern finds a badge’s text-transform: none and passes other elements’', () => {
+		expect(badgeTransformRules('<style>.badge { margin-left: 0.35rem; text-transform: none; }</style>')).toEqual(['.badge']);
+		expect(badgeTransformRules('<span class="badge badge-warn flag">x</span><style>.flag { text-transform: none; }</style>')).toEqual(['.flag']);
+		expect(badgeTransformRules('<span class="bubble">x</span><style>.bubble { text-transform: none; }</style>')).toEqual([]);
+		expect(badgeTransformRules('<style>.badge { white-space: nowrap; }</style>')).toEqual([]);
+	});
+
+	it('no component undoes a badge’s capital: app.css’s ::first-letter is the one rule', () => {
+		expect(Object.fromEntries(files.map((f) => [f.path, badgeTransformRules(f.text)]).filter(([, rules]) => rules.length))).toEqual({});
+		expect(readFileSync(join(ROOT, 'app.css'), 'utf8')).toMatch(/\.badge::first-letter \{\s*text-transform: uppercase;/);
+	});
+
+	it('a field showing its error line never moves its row (app.css)', () => {
+		const css = readFileSync(join(ROOT, 'app.css'), 'utf8');
+		expect(css).toMatch(/:has\(> \.field \.num-err\) > \.field \{\s*align-self: stretch;/);
+		// The two fields that draw the line call it .num-err, so the rule reaches both.
+		for (const f of ['lib/components/common/NumberInput.svelte', 'lib/components/common/DayInput.svelte']) {
+			expect(files.find((x) => x.path === f)!.text, f).toContain('<span class="num-err"');
+		}
 	});
 });

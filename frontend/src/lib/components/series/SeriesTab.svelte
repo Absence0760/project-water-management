@@ -1211,7 +1211,6 @@
 		font-size: 0.85rem;
 	}
 	.checks .badge {
-		text-transform: none;
 		margin-right: 0.25rem;
 	}
 	/* A phone-width column: each series row becomes a card, so nothing hides behind a sideways scroll. */

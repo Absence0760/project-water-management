@@ -1141,7 +1141,7 @@ render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
 Dialogs, sheets and popovers take what sets them off the page from overlay
 tokens in `app.css` (`--overlay-backdrop`, `--overlay-border`,
-`--overlay-shadow`, `--popover-shadow`), deeper in dark mode (a 60 % backdrop,
+`--overlay-shadow`, `--popover-shadow`; the save bar's upward `--bar-shadow`), deeper in dark mode (a 60 % backdrop,
 the strong border, a 70 % shadow), where the old literals left a sheet at
 1.1:1 against the page it covered (issue #521). A disabled main button turns
 to the plain surface with muted text in both themes, where a faded accent read
@@ -1974,7 +1974,10 @@ it scrolls, and isn't fitted to the window.
   **+ Record a check** in the panel's head row, which opens the form
   (member, register, category, number, name on the register, found, the
   checking organisation, the date, a note; the register's address to look it
-  up) with focus on Member; **Cancel**, or recording the check, closes it and
+  up) with focus on Member. The date starts at, and stops at, the viewer's
+  own today (not the UTC day, a day behind until 02:00 in South Africa); a
+  check dated today is sent as the moment it was recorded, so the server,
+  which refuses a check in the future, takes it just after midnight too; **Cancel**, or recording the check, closes it and
   returns focus to the button. A list that fails to load says why with
   **Try again**. Closed at first since issue #521 § 13: a
   check is recorded about once a year a signer. The owner the tick box "Issuing an
@@ -9585,8 +9588,10 @@ the viewer's day, with a request's change set folded into one entry.
   live in the URL (`&unit=<nodeId>`, `&kind=revision|series|run|…`), pushed,
   so Back steps back through them and a link keeps them; an unknown kind, or
   a unit not in the model, is no filter. The parameter words narrow what's
-  loaded as you type, then go into the URL after a pause (`&q=`, replaced,
-  not pushed), where the server keeps only revisions with a matching line on
+  loaded as you type, then go into the URL after a pause (`&q=`; a typed
+  search is one step in history, as on Runs and the project list: its first
+  write after the box takes the focus pushes, the rest replace, so Back undoes
+  the whole search), where the server keeps only revisions with a matching line on
   every page, so an old match isn't lost behind 50 newer changes (events are
   still filtered in the page). A field's history line links here with all
   three ([§ Field history](#field-history)).
