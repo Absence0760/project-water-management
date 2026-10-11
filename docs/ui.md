@@ -1870,7 +1870,8 @@ it scrolls, and isn't fitted to the window.
   (member, register, category, number, name on the register, found, the
   checking organisation, the date, a note; the register's address to look it
   up) with focus on Member; **Cancel**, or recording the check, closes it and
-  returns focus to the button. Closed at first since issue #521 § 13: a
+  returns focus to the button. A list that fails to load says why with
+  **Try again**. Closed at first since issue #521 § 13: a
   check is recorded about once a year a signer. The owner the tick box "Issuing an
   evidence pack waits until each specialist signer has a check from the
   last year" (on by default). `registration-checks.spec.ts` pins it with
@@ -9544,7 +9545,8 @@ March") is kept against what it is about.
     Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes
-    button.
+    button. A failed load says "Couldn’t load the notes: …" with **Try
+    again**.
   One `GET /notes/counts` per project feeds every badge
   (`counts.svelte.ts`), refreshed after any change. Only the open project's
   counts are kept: opening another project drops them (coming back loads
