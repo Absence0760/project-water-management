@@ -8955,7 +8955,18 @@ run, *Of n whole water years, k within ±t % … and m outside*, or why it
 isn't judged (`allocation-totals-judgement-<source>`, `judgementSentence`). For a cap or full-allocation run it
 says the run's use would show the volumes, and shows no table
 (`allocation-totals-years-mode`).
-No unit, number, name or Download CSV. Owners get a
+No unit, number, name or Download CSV. On a cap or
+full-allocation scenario run such a viewer gets only the EWR verdicts and
+counts (issue #523 finding I, [api.md § Runs](./api.md#runs)): no charts,
+unit cards or tables, no use totals and no `.xlsx` sheets. The run's
+summary (Runs & results) and Hydrological units each say so in one line
+above the results, `WithheldUnitsNote.svelte` (`data-testid="verdicts-only"`,
+`runs/withheld.ts`); the evidence report says it under its first heading
+(`evidence-verdicts-only`), an outlook on such a base says its results are
+withheld (`outlook-withheld`), and the Yield panel says a yield on such a
+run is withheld (`yield-withheld`). On every report such a viewer reads,
+the licence-impact boards show each class's verdict without the waterfall
+(its empty state). Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every
 viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).

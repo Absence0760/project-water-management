@@ -372,6 +372,14 @@ the frontend catalogue (same contract: add, never rename):
   farm's registered volume (`project.allocations_viewer_units` off, D3) and
   the pack's runs carry one; the file would hand them every farm's volume
   (issue #523 G1, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- `allocation_series_withheld` (`403` from `GET …/runs/:runId/series`,
+  `…/series/bulk`, `…/day`, `…/export/daily.csv` and `…/export/farms.csv`):
+  such a viewer asked for a run series worked out from a registered volume
+  (an allocation series, or one a cap or full-allocation run doesn't give
+  them: below, [§ Runs](#runs)), or previewed a farm while such a run is
+  published.
+  The run pages don't ask: the run lists them in `withheldSeries`
+  (issue #523 finding I).
   An editor or owner can give it to them.
 - `job_collision` (`409` from a request that queues a job): the job met a
   pending one with the same dedupe key that the caller can't see under RLS,
@@ -1956,7 +1964,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | POST | `/projects/:id/runs` | `{ label?, forecast? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap (for a forecast run: the project's older forecast run). `forecast: true` makes a **forecast run** (below); `409` when there is no forecast rain after the last observed rain day. The engine runs with no database connection held; your role is checked again before the run is stored, so if you lose editor access meanwhile the answer is `403`/`404` and nothing is stored. The run records the inputs it was computed from, even if the project changes while it runs ([architecture.md § A model run](./architecture.md#a-model-run)) | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration). A forecast series comes whole: the fit cuts the forecast tail itself (`fitInput`, engine `withoutForecastTail`, issue #51), as a saved ordinary run does | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
-| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model, verified }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it); `verified`: its server stamp still matches its rows (security.md § Run stamps), false for a run written past the model run or changed since, which can't be signed off; `forecastRainSource`: a forecast run's rain source, `chirps_gefs` when a CHIRPS-GEFS feed wrote every forecast day (from the first to the forecast series' end), `other` otherwise (an uploaded forecast, or a day a person wrote), `null` for any other run and a forecast run stored before it was recorded; the report credits CHIRPS-GEFS only on `chirps_gefs` | viewer |
+| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model, verified }, series: { nodeId, key, label, unit }[], withheldSeries: { nodeId, key }[] }` (`withheldSeries`: what a viewer kept from each registered volume doesn't get, below; empty otherwise); `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it); `verified`: its server stamp still matches its rows (security.md § Run stamps), false for a run written past the model run or changed since, which can't be signed off; `forecastRainSource`: a forecast run's rain source, `chirps_gefs` when a CHIRPS-GEFS feed wrote every forecast day (from the first to the forecast series' end), `other` otherwise (an uploaded forecast, or a day a person wrote), `null` for any other run and a forecast run stored before it was recorded; the report credits CHIRPS-GEFS only on `chirps_gefs` | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day` (the day's month's value for a farm with River to dam by month, engine ≥ 1.32.0), `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `returnFlowFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r with all the losses returning, or 1 and 0 when r = 0; `returnFlowFraction` is the share of the water supplied the run returned: its r capped at 1 − e, or, for a run saved by engine 0.16.0–1.70.0, β × (1 − e) of its share of the losses β; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day: initial % × that day's capacity, engine ≥ 1.30.0; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
@@ -1968,6 +1976,51 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | POST | `/projects/:id/evidence/withdraw` | `{ reason }` | `201 { nomination, nominations }`: withdraws the current nomination (098): a history row with no run, stamped like a nomination, the reason required (as above). Nothing is the evidence until a run is nominated again; the withdrawn run shows as past evidence and stays kept, and the project stays undeletable. `409` when no run is nominated (nothing yet, or the last row is already a withdrawal) or at the limit of 50 rows (withdrawals count) | editor |
 | GET | `/projects/:id/runs/:runId/reproduce` | – | `200 Reproduction`: the run re-run on the server from its stored inputs (`loadRunInput`) with the current engine, its summary and every daily output compared with what was stored (WP-3.1). `{ status, identical, engineVersionThen, engineVersionNow, differences, truncated, message? }`: `status` is `identical`, `differs` (`differences` lists up to 50: `{ kind: 'summary', path }`, `{ kind: 'series', key, nodeId, label, days, firstDate, maxAbsDiff }`, `{ kind: 'series_missing' \| 'series_extra', key, nodeId, label }`; `truncated` counts the rest), `not_reproducible` (a run from before stored inputs, `message` says so), `inconsistent` (a stored input fails its check against the run's record: never presented as the run) or `failed` (today's engine refuses the stored input, `message` has its reason). `404` for a run not in this project | viewer |
 
+- **What a viewer kept from each registered volume gets of a run** (D3,
+  issue #523 finding I, `runs/withheldSeries.ts`,
+  `allocations/verdictsOnly.ts`). No allocation series on any run
+  (`allocation_room_*`, `allocation_left_*`, `allocation_demand_factor`).
+  Of a cap or full-allocation run (a scenario's, or a baseline from before
+  213) only its **verdicts and counts**, an allowlist, and **no series at
+  all**. The summary keeps `historyDays`; `catchment` with
+  `ewrDaysNotMet`, `ewrFractionDaysNotMet` and `noFlow` (`days`,
+  `longestRun`), its mean flows `null`; `ewrCompliance` (`waterYears`,
+  `days`, the outlet's `daysNotMet`; no `farms`, no shortfall); each
+  `ewrAssurance` site's months met, rates and longest run not met (no
+  flow, requirement, natural or FDC figure); `servedWhileEwrFails` site day
+  counts (no `units`); `forecast`'s days at risk (no `perFarm`).
+  `farms`, `users` and `warnings` are empty, `calibration` null,
+  `allocations` keeps the mode, band and counts with `verdictsOnly: true`,
+  and `withheld` names every field left out. This summary is what the run,
+  compare, History, the summary CSV, sweep members and the evidence report
+  serve such a viewer. `GET …/runs/:runId` gives `series: []` and lists
+  every series in `withheldSeries: { nodeId, key }[]` (empty for anyone
+  else). `…/series`, `…/series/bulk`, `…/day` (a unit's or the
+  catchment's), the daily and all-farms CSVs are `403
+  allocation_series_withheld`; the summary CSV names the fields left out.
+  A sweep member of such a run comes with `series: null` and
+  `withheld: ["series"]`; an uncertainty ensemble keeps each member's EWR
+  counts and rates (`ewrDaysNotMet`, by month, `reserveRate`, `noFlowDays`,
+  `ewrSiteDaysNotMet`) and the matching bands, no flow, shortfall or unit
+  figure; a yield computed on such a run or scenario is listed with
+  `points: null` and `withheld: ["points"]`. The evidence report on such a
+  run (either side) keeps only the sections it lists (an allowlist, so a
+  new one is withheld): page 1's count rows and the flags that name no
+  figure, the EWR sites as verdicts with their monthly delivered shares,
+  the month changes, the boards' verdicts, the ensembles' counts, the
+  cumulative counts, the identity, checks, ops, appendix (no warnings) and
+  the summaries as above; `users`, `questions`, § 5's units, `demandObjects`
+  and served-while-failing units are empty, and `withheld` names the rest;
+  a pack's PDF is refused (`pack_volumes_withheld`). On **every** report
+  and pack manifest such a viewer reads, each licence-impact board
+  (`licenceImpact`, `licenceImpactAuthorised`) gives each year class's
+  `classId`, `label`, years, `below` and `verdict`, with `waterfall`,
+  `lowerM3` and `upperM3` null and no warnings. An outlook on such a base
+  comes with `result` and `triggers` null and `withheld: ["result",
+  "triggers"]`; a farm preview while such a run is published is `403
+  allocation_series_withheld`, and its history leaves those publications
+  out (a linked farmer reads their own farm). A compare-only run gives
+  that viewer everything but the allocation series.
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
   with the engine's reason, and nothing is stored: no rainfall series, a
   simulation end before its start, (engine ≥ 0.11.1) a GR4J run with no
@@ -3098,7 +3151,7 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
-| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) a run too old to project (from before engine 0.17.0, which has no EWR charge series), or a scenario run (its scenario's changes on a base run, also once the scenario is deleted: farmers are shown the catchment as it is). Records `publication.published` in the season decision log (the notice, window, run identity and per-farm figures, issue #119; [data-model.md § Change history](./data-model.md)) | editor |
+| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) a run too old to project (from before engine 0.17.0, which has no EWR charge series), or a scenario run (its scenario's changes on a base run, also once the scenario is deleted: farmers are shown the catchment as it is), or a run that caps use at or scales demand to the registered volumes (only one from before 213 can be: licence data never drives the baseline, and its farm views would carry each farm's figures worked out from its volume, issue #523 finding I). Records `publication.published` in the season decision log (the notice, window, run identity and per-farm figures, issue #119; [data-model.md § Change history](./data-model.md)) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`, and records `publication.notice_changed` with the whole notice as it then stands (issue #119). `409` for a superseded publication | editor |
 | POST | `/projects/:id/publication/:pubId/endorse` | `{ note?: ≤ 2000 }` | `{ publication: PublicationMeta }` with its `endorsement`: the responsible authority endorses this published baseline (163_licensing_authority; s41(2): the authority decides what evidence it accepts). Once per publication, current or superseded (an application may rest on either); the database stamps `endorsedAt` and `endorsedBy` and never lets them change. Needs two-step sign-in; records `publication.endorsed`. `403` unless the caller acts for the authority; `404` for another project's publication; `409` once endorsed | editor acting for the authority |
 | GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
@@ -4042,7 +4095,7 @@ farmer view E3, migration 106).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued. `409` for a base run that caps use at, or scales demand to, the registered volumes (only one from before 213 can be; issue #523 finding I); publishing an older outlook on such a base is `409` too | editor |
 | GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` or `triggers` | viewer |
 | GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` and `triggers` (null while pending). `404` for one that isn't this project's | viewer |
 | POST | `/projects/:id/outlooks/:outlookId/publish` | `{ levelId }` | `201 { publication: OutlookPublication }`: that level published to farmers, ending the current publication. Audit `outlook.published` | editor |

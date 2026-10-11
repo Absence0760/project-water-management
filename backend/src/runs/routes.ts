@@ -12,6 +12,7 @@ import { allocationUnitsHidden, redactRunAllocations } from '../allocations/view
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
+import { allocationSeriesWithheld, keepVisible, seriesWithholding, type SeriesWithholding } from './withheldSeries.js';
 import { runVerified } from './stamp.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
 import { withErrata, type RunEngines } from '../errata/runs.js';
@@ -139,22 +140,28 @@ export const runRoutes = new Hono<AuthEnv>()
 			// Its server stamp still matches its rows (077, runs/stamp.ts): false for a
 			// run written past the model run, or changed since, which can't be signed off.
 			rows[0].verified = await runVerified(db, runId);
-			const { rows: series } = await db.query(
+			const { rows: listed } = await db.query<{ nodeId: string | null; key: string; label: string | null; unit: string | null }>(
 				`SELECT node_id AS "nodeId", key, meta->>'label' AS label, meta->>'unit' AS unit
 				 FROM run_series WHERE run_id = $1 ORDER BY node_id NULLS FIRST, key`,
 				[runId]
 			);
-			// A viewer who can't read each registered volume (162, D3) gets the run without its copy of them.
+			// A viewer who can't read each registered volume (162, D3) gets the run without its copy of them,
+			// and without the series worked out from them, listed as withheld (#523 I, withheldSeries.ts).
 			const run = (await allocationUnitsHidden(db, id, role)) ? redactRunAllocations(rows[0]) : rows[0];
-			return c.json({ run: withErrata(run as RunEngines), series });
+			const w = await seriesWithholding(db, id, role, runId);
+			const series = w ? listed.filter((s) => !w.withheld(s.nodeId, s.key)) : listed;
+			const withheldSeries = w ? listed.filter((s) => w.withheld(s.nodeId, s.key)).map(({ nodeId, key }) => ({ nodeId, key })) : [];
+			return c.json({ run: withErrata(run as RunEngines), series, withheldSeries });
 		});
 	})
 	.get('/:id/runs/:runId/series', async (c) => {
 		const { id, runId } = c.req.param();
 		const q = z.object({ key: z.string().min(1).max(100), nodeId: z.string().uuid().optional() }).parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
+			// Refused by name before it is looked up, so the answer doesn't say whether the unit has one (#523 I).
+			if ((await seriesWithholding(db, id, role, runId))?.withheld(q.nodeId ?? null, q.key)) throw allocationSeriesWithheld('this series');
 			const { rows } = await db.query<{ startDate: string; values: number[] }>(
 				`SELECT r.start_date AS "startDate", s."values"
 				 FROM run_series s JOIN model_run r ON r.id = s.run_id
@@ -176,7 +183,7 @@ export const runRoutes = new Hono<AuthEnv>()
 			.object({ nodeId: z.string().uuid().optional(), offset: z.coerce.number().int().min(0).max(1_000_000).default(0) })
 			.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 			const { rows } = await db.query<{ startDate: string; summary: RunSummary }>(
 				'SELECT start_date AS "startDate", summary FROM model_run WHERE project_id = $1 AND id = $2',
@@ -184,11 +191,13 @@ export const runRoutes = new Hono<AuthEnv>()
 			);
 			const run = rows[0];
 			if (!run) throw new ApiError(404, 'not found');
-			const scope = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
-			if (!scope) throw new ApiError(404, 'not found');
-			const page = bulkPage(scope, q.nodeId ?? null, run.startDate, q.offset);
+			const loaded = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
+			if (!loaded) throw new ApiError(404, 'not found');
+			// Without the series worked out from a registered volume, named in `withheld` (#523 I).
+			const { kept, withheld } = keepVisible(await seriesWithholding(db, id, role, runId), q.nodeId ?? null, loaded.series, "this unit's daily series");
+			const page = bulkPage({ ...loaded, series: kept }, q.nodeId ?? null, run.startDate, q.offset);
 			if (!page) throw new ApiError(400, 'offset is past the end of the run');
-			return c.json(page);
+			return c.json({ ...page, withheld });
 		});
 	})
 	// One node's every column on one day, with the day before's storage and the
@@ -208,9 +217,10 @@ export const runRoutes = new Hono<AuthEnv>()
 			})
 			.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			if (!q.nodeId) return c.json(await catchmentDay(db, id, runId, q.date));
+			// The catchment's day through the same withholding as a unit's (#523 I, round 5: no series of a cap or full-allocation run).
+			if (!q.nodeId) return c.json(await catchmentDay(db, id, runId, q.date, await seriesWithholding(db, id, role, runId)));
 			const { rows: run } = await db.query<{
 				index: number | null;
 				days: number;
@@ -237,6 +247,8 @@ export const runRoutes = new Hono<AuthEnv>()
 				[runId, q.nodeId, r.index]
 			);
 			if (!rows.length || !r.node) throw new ApiError(404, 'not found');
+			// Without the columns worked out from a registered volume, named in `withheld`; a unit's day of a cap or full-allocation run is refused (#523 I).
+			const { kept: columns, withheld } = keepVisible(await seriesWithholding(db, id, role, runId), q.nodeId, rows, "this unit's day");
 			const node = r.node as { name: string; kind: 'farm' | 'gauge'; damCapacityM3?: number; damInitialPct?: number };
 			const storage = rows.find((x) => x.key === 'dam_storage');
 			// Storage at the end of the day before: the run's initial storage on its first day, a share of
@@ -259,7 +271,8 @@ export const runRoutes = new Hono<AuthEnv>()
 				previousSoilWaterMm,
 				// A run saved before engine 0.16.0 reads as migration 006 stored its model (return flow % → efficiency).
 				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.node, r.crops ?? [], r.crop_areas ?? [], r.apan_mm, q.date, r.irrigation_systems),
-				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
+				columns: columns.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value })),
+				withheld
 			});
 		});
 	})
@@ -364,7 +377,7 @@ const RUNOFF_STORES = ['production_store', 'routing_store', 'uh_store'] as const
  * the run's summary. A legacy run has no stores (runoffModel 'legacy',
  * previousStorageMm null); the UI says so and lists the [Flow data] columns.
  */
-async function catchmentDay(db: Db, projectId: string, runId: string, date: string) {
+async function catchmentDay(db: Db, projectId: string, runId: string, date: string, w: SeriesWithholding | null) {
 	const { rows: run } = await db.query<{ index: number | null; days: number; runoff: RunoffBalance | null }>(
 		`SELECT ($3::date - r.start_date) AS index, (r.end_date - r.start_date + 1) AS days, r.summary->'runoff' AS runoff
 		 FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
@@ -380,6 +393,7 @@ async function catchmentDay(db: Db, projectId: string, runId: string, date: stri
 		[runId, r.index]
 	);
 	if (!rows.length) throw new ApiError(404, 'not found');
+	const { kept, withheld } = keepVisible(w, null, rows, "the catchment's day");
 	const b = r.runoff;
 	// A conceptual model's stores the day before. On the run's first day that
 	// is each store after the warm-up (engine ≥ 1.20.0, summary.runoff.storesStartMm);
@@ -411,7 +425,8 @@ async function catchmentDay(db: Db, projectId: string, runId: string, date: stri
 		params: b ? { ...b.params, warmupDays: b.warmupDays } : null,
 		previousStorageMm,
 		previousStores,
-		columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
+		columns: kept.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value })),
+		withheld
 	};
 }
 

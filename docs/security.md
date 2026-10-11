@@ -2979,12 +2979,66 @@ database:
   ([followups.md § Allocations](./followups.md#allocations-wp-310)). A storage-only (21b) row's warning no longer quotes
   its volume (engine; it reaches a run's summary and the evidence report's
   A.5 verbatim).
+  **Cap and full-allocation runs: verdicts and counts only** (issue #523
+  finding I, rounds 4 and 5; the operator's decisions, 2026-10-11). Such a
+  viewer gets no allocation series (`allocation_room_*`,
+  `allocation_left_*`, `allocation_demand_factor`) on any run: a cap's room
+  on a licence's first day of a water year *is* the unit's volume. A run
+  that caps use at or scales demand to the registered volumes rests on them
+  everywhere: each unit's use, every total of use (round 4: the water
+  balance less the units shown gave one unit's volume exactly) and every
+  flow below a unit (round 5: a gauge's inflow less a dam-less unit's share
+  of the natural flow gave its supply exactly, every day). So of such a run
+  that viewer reads an **allowlist of verdicts and counts**, nothing else
+  (`allocations/verdictsOnly.ts`): per EWR site the days and months its EWR
+  is not met, its assurance verdicts (months met, rates, the longest run not
+  met), the monthly delivered shares the evidence report already shows
+  coarsely, the no-flow day count and each licence-impact board's below,
+  verdict and class fields. **No series of any kind** (no natural flow,
+  outflow, gauge flow or EWR shortfall, the catchment day trace included),
+  no volume (no MAR, shortfall in m³, class bounds or EWR flow), no use
+  total, no unit's figure, no ensemble flow figure (members keep EWR counts
+  and rates only), no sweep member series. A field, series or report section
+  the engine adds later is withheld until it is listed (`verdictsSummary`
+  and `verdictsReport` pick keys). It holds on every route that serves runs:
+  the run and its series list (`withheldSeries`), `…/series`
+  (`403 allocation_series_withheld`), `…/series/bulk`, `…/day` (a unit's and
+  the catchment's), the daily, all-farms and summary CSVs and the `.xlsx`
+  workbook, the compare route, History, sweep members (`withheld:
+  ["series"]`), uncertainty ensembles, yields computed on such a run or
+  scenario (`points: null`, `withheld`), the evidence report live, in a
+  pack's served manifest (its PDF refused, `packWithheldPart`) and in a
+  report PDF printed without the volumes. The summary is marked
+  `allocations.verdictsOnly` with `withheld` naming the fields left out, the
+  report `withheld`, and the run pages, the report, the outlook and the
+  yield panel say so. Such a run can't be published, nor an outlook started
+  from it (only one from before 213 can be one); for one published or
+  outlooked before, a farm preview by that viewer is refused (`403`), its
+  farm history drops those publications, and the outlook is served without
+  its result (a linked farmer keeps their own farm). On **every** report
+  such a viewer reads, the licence-impact boards (the modelled one and the
+  authorised one, which runs at full allocation on every application) give
+  each year class's verdict and months or days below only, no waterfall
+  (existing use, the application's, storage change) and no class bounds
+  (`boardVerdicts`; round 5, finding 1). Nothing of such a run is served
+  as a flow, so no flow differencing is left to accept.
 
   **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
   route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)
-  is called as a viewer kept from the volumes, on the base run and on a
-  team scenario's run, with a registered volume, a 21b storage, a scenario
-  op's volume and a sweep member's volume planted, and a sweep, an
+  is called as a viewer kept from the volumes, on the base run, a team
+  scenario's run, and team scenario runs that cap and that fully allocate
+  (#523 finding I), with a registered volume (whose licence rate can't
+  deliver it, so the cap warns), a 21b storage, a scenario op's volume and a
+  sweep member's volume planted, and every per-unit series route (`…/series`
+  for each allocation key, `demand` and `supplied`, `…/series/bulk`, `…/day`,
+  the daily and all-farms CSVs) is asked for the canary unit's own on the
+  capped and full-allocation runs; on those runs no two numbers an answer
+  serves (the yield list and the evidence report included) may differ by the
+  volume either (a derived figure, as the water balance less the units shown
+  was), and the round-4 probe itself runs as a test (`allocations.db.test.ts`),
+  with the editor reading the volume as the positive control; the round-5
+  gauge and board probes run on the engine's invented catchment
+  (`allocations/verdictsOnly.test.ts`), and a sweep, an
   uncertainty ensemble, a (draft) evidence pack, an impact report, an
   assessment and a delineation request as fixtures; no answer may hold any
   of the numbers in m³ a year, megalitres, m³ a day or the run's partial
@@ -2994,8 +3048,12 @@ database:
   What it doesn't cover: routes outside `/projects/:id` (`/teams/:id/portfolio`,
   `/auth/me/export`), a pack PDF or bundle's bytes and a report PDF's
   (their routes are redirects; the refusals are tested in
-  `packs.db.test.ts` and above), a capped or full-allocation run (Left,
-  below), and a cross-project baseline (its own test, above). Its fixture
+  `packs.db.test.ts` and above), a completed uncertainty ensemble and a
+  sweep on a cap or full-allocation base (both unit-tested, with the engine's
+  own summaries of random networks in each mode:
+  `allocations/verdictsOnly.test.ts`), a farm preview, outlook or yield of a
+  cap run from before 213 (`allocations/verdictsOnly.db.test.ts`), and a
+  cross-project baseline (its own test, above). Its fixture
   has four more holders' rows in force only from 2040, so the source has 5
   holders while the canaries are the only volumes in force on any day or
   year: a total gated on the source's holders of every date would give a
@@ -3005,13 +3063,9 @@ database:
   `meanRegistered…` key: only `GET …/allocations`'s today's totals may
   carry one (#523 K/L/M, which give a volume by subtraction, not as
   digits). The tests beside it hold the review's repros for G, K, L, M, N
-  and O, each with an editor positive control. Left, tracked:
-  totals in successive pack versions, and the folded mix across boards or
-  packs, can be differenced; a full-allocation
-  scenario run scales each unit's demand to its volume, so its per-unit
-  figures give the volume as a capped run's do.
-  Left: a capped run's per-unit daily series still bound use by the volume
-  ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
+  and O, each with an editor positive control. Left, tracked: totals in
+  successive pack versions, and the folded mix across boards or packs, can
+  be differenced. A WARMS
   extract must say how it was obtained (`allocation_source.reference`,
   operator agreement 3A.1(d)); stricter terms from DWS or the CMA win.
 - Cells are stored as they came; the CSV export neutralises formula-looking

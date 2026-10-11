@@ -916,6 +916,17 @@ export interface RunSeriesRef {
 	unit: string;
 }
 
+/**
+ * A series GET …/runs/:runId leaves out of `series` for a viewer kept from
+ * each registered volume (issue #523 finding I): an allocation series, or any
+ * of a unit a cap or full-allocation run bound to its volume. Asked for by
+ * name it is 403 `allocation_series_withheld`.
+ */
+export interface WithheldSeriesRef {
+	nodeId: string | null;
+	key: string;
+}
+
 /** GET …/runs/:runId/day: one node's columns on one day, for the day trace. */
 export interface RunDay {
 	date: string;
@@ -945,6 +956,8 @@ export interface RunDay {
 		damSeepagePerDay: number | null;
 	};
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
+	/** Columns left out for a viewer kept from each registered volume (allocation series, #523 I); absent from an older API. */
+	withheld?: string[];
 }
 
 /** GET …/runs/:runId/day without a nodeId: the catchment's runoff-model day (docs/api.md). */
@@ -2578,6 +2591,8 @@ export interface Outlook {
 	result?: OutlookResult | null;
 	/** Likewise; null without a review date. */
 	triggers?: OutlookTriggers | null;
+	/** For a viewer kept from each registered volume, on an outlook whose base caps or fully allocates (#523 I): `result` and `triggers` withheld (null). */
+	withheld?: string[];
 }
 
 /** POST /projects/:id/outlooks. Season and share absent: the project's settings. */
@@ -2627,7 +2642,9 @@ export interface YieldResult {
 	jobId: string | null;
 	kind: 'firm' | 'curve';
 	params: YieldParams;
-	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean };
+	/** Null for a viewer kept from each registered volume, on a yield computed on a cap or full-allocation run (`withheld`, #523 I). */
+	points: { point: YieldPoint } | { baseCapacityM3: number; assurance: number; points: YieldPoint[]; monotone: boolean } | null;
+	withheld?: string[];
 	engineVersion: string;
 	createdBy: string | null;
 	createdAt: string;

@@ -23,6 +23,7 @@ import {
 	exportFilename,
 	forecastColumn,
 	MAX_JSON_EXPORT_BYTES,
+	provenanceValue,
 	withResultComments,
 	withRunComments,
 	type DailyColumn,
@@ -30,6 +31,7 @@ import {
 } from './csv.js';
 import { csvDownload, csvTooLarge } from './download.js';
 import { loadDailyScope } from './daily-columns.js';
+import { allocationSeriesWithheld, keepVisible, seriesWithholding } from '../runs/withheldSeries.js';
 import { RUN_CATCHMENT_KEYS, seriesExportColumns, type ExportSeries, type ReadingRun, type RunColumn } from './series-columns.js';
 import { loadFlowDuration } from './fdc.js';
 import { FARM_SERIES_KEYS, nodeColumnHeader, summaryCsvLines } from './run-tables.js';
@@ -159,6 +161,15 @@ function provenance(run: RunRow, damCapacityM3?: number | null): RunProvenance {
 /** Said under the provenance line when the series has changed since the run read it: the run's columns are what it read then. */
 export const SERIES_CHANGED_COMMENT = '# series_changed_since_run=true; the run columns show the values the run read, not the ones above';
 
+/** Said under the provenance line when columns were left out for a viewer kept from each registered volume (#523 I). */
+export const withheldComment = (names: readonly string[]) =>
+	`# withheld=${names.map(provenanceValue).join('|')}; worked out from a registered water volume that this project shows to its editors and owners only`;
+
+function* withWithheldNote(keys: readonly string[], lines: Iterable<string>): Generator<string> {
+	if (keys.length) yield withheldComment(keys);
+	yield* lines;
+}
+
 function* withChangedNote(changed: boolean, lines: Iterable<string>): Generator<string> {
 	if (changed) yield SERIES_CHANGED_COMMENT;
 	yield* lines;
@@ -227,11 +238,14 @@ export const exportRoutes = new Hono<AuthEnv>()
 		const { id, runId } = c.req.param();
 		const q = DailyQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
 			const { name, timeZone } = await projectInfo(db, id);
-			const daily = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
-			if (!daily) throw new ApiError(404, 'not found');
+			const loaded = await loadDailyScope(db, runId, q.nodeId ?? null, run.summary);
+			if (!loaded) throw new ApiError(404, 'not found');
+			// Without the series worked out from a registered volume (#523 I): said in a comment; a unit's file of a cap or full-allocation run is refused.
+			const { kept, withheld } = keepVisible(await seriesWithholding(db, id, role, runId), q.nodeId ?? null, loaded.series, "this unit's daily series");
+			const daily = { ...loaded, series: kept };
 			const scope = daily.name;
 			const flag = forecastColumn(run.startDate, run.summary.forecast);
 			const columns: DailyColumn[] = [...(flag ? [flag] : []), ...daily.series.map((s) => ({ header: s.header, values: s.values }))];
@@ -244,7 +258,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const parts = [run.label || 'run', scope, 'daily'];
 			return csvDownload(
 				c,
-				() => withRunComments(run.legacy, provenance(run, dam), dailyCsvLines(run.startDate, columns, range)),
+				() => withRunComments(run.legacy, provenance(run, dam), withWithheldNote(withheld, dailyCsvLines(run.startDate, columns, range))),
 				exportFilename(name, parts, 'csv', timeZone),
 				csvTooLarge(NARROW)
 			);
@@ -257,9 +271,12 @@ export const exportRoutes = new Hono<AuthEnv>()
 		const { id, runId } = c.req.param();
 		const q = FarmsQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			const run = await loadRun(db, id, runId);
 			const { name, timeZone } = await projectInfo(db, id);
+			// An allocation series is refused by name; a unit's column of a cap or full-allocation run is left out, and said (#523 I).
+			const w = await seriesWithholding(db, id, role, runId);
+			if (w?.withheld(null, q.key)) throw allocationSeriesWithheld('this series');
 			const { rows } = await db.query<{ nodeId: string; nodeName: string | null; unit: string | null; values: (number | null)[] }>(
 				`SELECT s.node_id AS "nodeId", n.name AS "nodeName", s.meta->>'unit' AS unit, s."values"
 				 FROM run_series s LEFT JOIN node n ON n.id = s.node_id
@@ -268,11 +285,14 @@ export const exportRoutes = new Hono<AuthEnv>()
 			);
 			// The run's farm order, not the table's; a farm with no such series (e.g. a dam column on a farm without a dam) is left out.
 			const byNode = new Map(rows.map((r) => [r.nodeId, r]));
-			const farms = run.summary.farms.flatMap((f) => {
+			const all = run.summary.farms.flatMap((f) => {
 				const r = byNode.get(f.nodeId);
 				return r ? [{ ...r, name: r.nodeName ?? f.name }] : [];
 			});
-			if (!farms.length) throw new ApiError(404, 'not found');
+			if (!all.length) throw new ApiError(404, 'not found');
+			const farms = w ? all.filter((f) => !w.withheld(f.nodeId, q.key)) : all;
+			if (!farms.length) throw allocationSeriesWithheld("every unit's column");
+			const withheld = all.filter((f) => !farms.includes(f)).map((f) => f.name);
 			const flag = forecastColumn(run.startDate, run.summary.forecast);
 			const columns: DailyColumn[] = [...(flag ? [flag] : []), ...farms.map((f) => ({ header: nodeColumnHeader(q.key, f.name, f.unit, 'farm'), values: f.values }))];
 			const length = Math.max(...farms.map((f) => f.values.length));
@@ -281,7 +301,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 
 			return csvDownload(
 				c,
-				() => withRunComments(run.legacy, provenance(run), dailyCsvLines(run.startDate, columns, range)),
+				() => withRunComments(run.legacy, provenance(run), withWithheldNote(withheld, dailyCsvLines(run.startDate, columns, range))),
 				exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv', timeZone),
 				csvTooLarge(NARROW)
 			);
@@ -317,8 +337,10 @@ export const exportRoutes = new Hono<AuthEnv>()
 				},
 				run.summary
 			);
+			// A cap or full-allocation run, for that viewer: its river outcomes only (#523 I), the parts left out named in a comment.
+			const left = (run.summary as { withheld?: string[] }).withheld ?? [];
 			// A few hundred lines: kept, since the download walks them twice (csvDownload).
-			const rows = [...withResultComments(run.legacy, lines)];
+			const rows = [...withResultComments(run.legacy, withWithheldNote(left, lines))];
 			return csvDownload(
 				c,
 				() => rows,

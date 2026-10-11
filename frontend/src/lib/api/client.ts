@@ -109,6 +109,7 @@ import type {
 	RunCatchmentDay,
 	RunDay,
 	RunSeriesRef,
+	WithheldSeriesRef,
 	Scenario,
 	ScenarioCheck,
 	ScenarioBase,
@@ -720,7 +721,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				})),
 			list: (id: string) => request<{ runs: RunMeta[] }>('GET', `${p(id)}/runs`).then((r) => r.runs),
 			get: (id: string, runId: string) =>
-				request<{ run: Run; series: RunSeriesRef[] }>('GET', `${p(id)}/runs/${enc(runId)}`),
+				request<{ run: Run; series: RunSeriesRef[]; withheldSeries?: WithheldSeriesRef[] }>('GET', `${p(id)}/runs/${enc(runId)}`),
 			series: (id: string, runId: string, key: string, nodeId: string | null) => {
 				const q = new URLSearchParams({ key });
 				if (nodeId) q.set('nodeId', nodeId);

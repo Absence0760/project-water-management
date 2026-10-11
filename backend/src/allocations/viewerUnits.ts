@@ -34,6 +34,7 @@ import {
 import { requestAuth } from '../auth/stepUp.js';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
+import { boardVerdicts, verdictsReport, verdictsSummary } from './verdictsOnly.js';
 
 /** A viewer on a project whose owners haven't let viewers read each registered volume. */
 export async function allocationUnitsHidden(db: Db, projectId: string, role: Role): Promise<boolean> {
@@ -261,7 +262,8 @@ export const withoutPositions = <T>(list: readonly T[], drop: ReadonlySet<number
  * A run as a viewer who can't read each registered volume gets it: no
  * allocation rows in its model (or inputs' model), its summary's
  * allocations without the per-unit part (the mode, band and counts stay),
- * and its recorded scenario without the ops that carry a volume
+ * a cap or full-allocation run's summary its verdicts and counts only
+ * (verdictsSummary, #523 I), and its recorded scenario without the ops that carry a volume
  * (withheldAllocationOps, with their classes).
  */
 export function redactRunAllocations<T extends RunLike>(run: T): T {
@@ -277,6 +279,8 @@ export function redactRunAllocations<T extends RunLike>(run: T): T {
 				scenario: { ...sc, ops: withoutPositions(sc.ops, drop), ...(sc.classified ? { classified: withoutPositions(sc.classified, drop) } : {}) }
 			};
 	}
+	// A cap or full-allocation run: its verdicts and counts only (#523 I, ./verdictsOnly.ts).
+	if (out.summary) out.summary = verdictsSummary(out.summary);
 	if (out.summary?.allocations) out.summary = { ...out.summary, allocations: { ...out.summary.allocations, nodes: [] } };
 	return out;
 }
@@ -371,7 +375,12 @@ function withoutOthersOver<F extends { id: string; text: string }>(flags: F[], a
  * mixShares; none for a board built before, #523 H/J). § 5 lists only the
  * applicant's own units (`evidence-15`; none of a team scenario's since
  * `evidence-17`), the rest as totals, whose registered m³ is left out
- * (withoutOthersRegistered, #523 K/L/M): their status and modelled use stay. A frozen pack manifest redacted this way no longer hashes to
+ * (withoutOthersRegistered, #523 K/L/M): their status and modelled use stay.
+ * A report on a cap or full-allocation run is then its verdicts and counts
+ * only (verdictsReport), and on every report the licence-impact boards give
+ * their verdicts without the waterfall's use totals (boardVerdicts; the
+ * authorised board runs at full allocation on every application, #523 I).
+ * A frozen pack manifest redacted this way no longer hashes to
  * its manifestSha256, so the caller says so (packs.ts `volumesWithheld`).
  * Appendix A.2's input diff is the caller's: the live report builds it
  * without other units' volumes (evidence/report.ts), and an issuable pack's
@@ -383,16 +392,19 @@ export function redactReportAllocations<R extends ReportLike>(report: R, own: re
 	const summary = <S extends ReportLike['summaries']['baseline']>(s: S): S => (s ? redactRunAllocations({ summary: s }).summary! : s);
 	const drop = report.ops ? withheldAllocationOps(report.ops.map((o) => o.op), own) : new Set<number>();
 	const lia = report.licenceImpactAuthorised;
-	return {
+	const out = {
 		...report,
 		...(report.ops ? { ops: withoutPositions(report.ops, drop) } : {}),
-		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one.
-		...(lia ? { licenceImpactAuthorised: (({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia) } : {}),
+		// The folded mix's shares in the full one's place (no m³: #523 H/J), or none: a board built before evidence-17 has no folded one; its verdicts without the waterfall (#523 I).
+		...(lia ? { licenceImpactAuthorised: boardVerdicts((({ mixFolded, ...rest }) => ({ ...rest, mix: mixFolded ? mixShares(mixFolded) : null }))(lia)) } : {}),
+		...('licenceImpact' in report ? { licenceImpact: boardVerdicts((report as { licenceImpact?: unknown }).licenceImpact) } : {}),
 		appendix: { ...report.appendix, baselineInputs: bi ? redactRunAllocations({ inputs: bi }).inputs! : bi },
 		summaries: { ...report.summaries, baseline: summary(report.summaries.baseline), application: summary(report.summaries.application) },
 		...(report.allocations ? { allocations: withoutOthersRegistered(report.allocations as EvidenceAllocations) } : {}),
 		...(report.flags ? { flags: withoutOthersOver(report.flags, report.allocations as EvidenceAllocations | undefined, report.mode === 'application') } : {})
 	};
+	// A report on a cap or full-allocation run: its verdicts and counts only (#523 I).
+	return verdictsReport(out as unknown as Parameters<typeof verdictsReport>[0]) as unknown as R;
 }
 
 /** The allocation events' fields about the registered user's allocation, not about whoever made the change. */

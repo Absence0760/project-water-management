@@ -3525,6 +3525,13 @@ export interface RunAllocations {
 	notMatched: number;
 	/** Per farm or water user with an allocation (node-id order), per water source it has one for. */
 	nodes: RunAllocationNode[];
+	/**
+	 * Never written by the engine: the API sets it on a cap or full-allocation
+	 * run read by a viewer kept from each registered volume, which reads that
+	 * run's EWR verdicts and counts only (issue #523 finding I, backend
+	 * allocations/verdictsOnly.ts); the summary's `withheld` names the rest.
+	 */
+	verdictsOnly?: true;
 }
 
 export interface RunAllocationNode {
@@ -3889,6 +3896,12 @@ export interface RunSummary {
 	supplyAssurance?: SupplyAssurance;
 	/** Non-fatal problems (flow shares not summing to 1, missing series, …). */
 	warnings: string[];
+	/**
+	 * Never written by the engine: the summary fields the API left out for a
+	 * viewer kept from each registered volume, on a cap or full-allocation run
+	 * (`allocations.riverOutcomesOnly`, issue #523 finding I).
+	 */
+	withheld?: string[];
 }
 
 export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations' | 'operatingRules' | 'droughtRestriction' | 'assurance';

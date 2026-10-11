@@ -137,6 +137,12 @@ export const ERROR_CODES = [
  *     the baseline the EWR is assessed and reported, never applied, so they
  *     run only in a scenario (issue #523 B4; projects/ewrRules.ts).
  *     `details` is one line per rule. The forms are English workspace pages.
+ *   allocation_series_withheld (403): such a viewer asked for a run's daily
+ *     series worked out from a registered volume: an allocation series (a
+ *     cap's room or what is left, a full allocation's factor), or any series,
+ *     day or file of a unit a cap or full-allocation run bound to its volume
+ *     (issue #523 finding I; runs/withheldSeries.ts). The run pages are
+ *     English workspace pages; they don't ask for these (`withheldSeries`).
  */
 export const MACHINE_ERROR_CODES = [
 	'render_token_refused',
@@ -146,7 +152,8 @@ export const MACHINE_ERROR_CODES = [
 	'role_conflict',
 	'job_collision',
 	'pack_volumes_withheld',
-	'ewr_rule_scenario_only'
+	'ewr_rule_scenario_only',
+	'allocation_series_withheld'
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 

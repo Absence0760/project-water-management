@@ -7,6 +7,7 @@
 // the route too), that it reads the application's base run as the baseline, cites the
 // ensemble and recomputes the paired Reserve share, lists every start, and
 // refuses what isn't evidence.
+import { boardVerdicts } from '../allocations/verdictsOnly.js';
 import {
 	COMBINED_CONFLICT,
 	declaredRuleRequest,
@@ -374,8 +375,11 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 				}
 			}
 		);
-		expect(r.licenceImpact).toEqual(expected);
+		// A viewer kept from each registered volume reads the board's verdicts without the waterfall (#523 I, round 5);
+		// the owner reads it whole (the positive control).
+		expect(r.licenceImpact).toEqual(boardVerdicts(expected));
 		expect(r.licenceImpact?.result.status).toBe('ok');
+		expect((await report(owner, appRun)).body.report.licenceImpact).toEqual(expected);
 	});
 
 	it('follows the project’s year-class method, and has no board for baseline evidence', async () => {
