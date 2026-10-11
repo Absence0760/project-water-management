@@ -1,6 +1,6 @@
 // The Settings & calibration page (?tab=settings, issue #17 option A): locators
 // the specs share. Invented data only.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 export const header = (page: Page) => page.getByTestId('section-header');
@@ -49,4 +49,16 @@ export async function showExplanations(page: Page) {
 	const sw = page.getByRole('checkbox', { name: 'Explain each setting under its field' });
 	await sw.check();
 	await expect(sw).toBeChecked();
+}
+
+/**
+ * Opens a fold of rarely changed settings (a `<details>` whose summary line shows their values, ui-playbook.md
+ * § 2): Fit automatically's search (`fit-search`) or the calibration rules' search budget (`rules-search`).
+ * Does nothing when it is already open.
+ */
+export async function openFold(scope: Locator, testId: 'fit-search' | 'rules-search') {
+	const fold = scope.getByTestId(testId);
+	await expect(fold.locator('summary')).toBeVisible();
+	if ((await fold.getAttribute('open')) === null) await fold.locator('summary').click();
+	await expect(fold).toHaveAttribute('open', '');
 }

@@ -1218,6 +1218,9 @@
 		</div>
 		<p class="summary" data-testid="summary-fit">{summaries['set-fit']}</p>
 		<p class="hint explain">Fit automatically, the fit record of the parameters above, and automated calibration under declared rules.</p>
+		<!-- Two cards (2026-10-10): fit now, and the declared rules with the run under them. Each card's main
+		     action sits right under its deciding choices or in its head, never under the other's fields. -->
+		<div class="sub-card" data-testid="fit-now-card">
 		<FitPanel
 			projectId={project.id}
 			x2Open={draft.x2Open}
@@ -1230,6 +1233,7 @@
 			onApply={applyFit}
 			session={fit}
 		/>
+		</div>
 		{#if s.fitRecord}
 			<FitProvenance
 				record={s.fitRecord}
@@ -1244,6 +1248,7 @@
 		{/if}
 		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
 		{#if s.calibrationRules}
+			<div class="sub-card" data-testid="rules-card">
 			<Lazy load={loadCalibrationRules}>
 				{#snippet children(CalibrationRulesFields)}<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={draft.errors.rules} bind:lastShare={draft.kept.flaggedShare} {readonly} />{/snippet}
 			</Lazy>
@@ -1261,6 +1266,7 @@
 					/>
 				{/snippet}
 			</Lazy>
+			</div>
 		{/if}
 	</section>
 
@@ -1534,11 +1540,13 @@
 		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}
-	/* Fit automatically comes first in its panel: no separator between the panel's heading and its own. */
-	#set-fit > .panel-head + :global(.fit) {
-		border-top: 0;
-		padding-top: 0;
-		margin-top: 0;
+	/* Fit the parameters' two cards: Fit automatically, and the calibration rules with their run (ui-playbook.md § 2,
+	   "Two forms in one panel are two cards"). */
+	.sub-card {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.75rem 0.9rem;
+		margin: 0.75rem 0;
 	}
 	.panel > .hint {
 		margin: 0.5rem 0 0.75rem;

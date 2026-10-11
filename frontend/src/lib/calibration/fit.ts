@@ -60,6 +60,19 @@ export const boundsHint = (b: CalibrationBounds): string =>
 		? 'A tighter, published range — helps a short or drought-heavy record land on plausible values, at the cost of the fit if the catchment truly falls outside it.'
 		: 'Each parameter’s full calibration range.';
 
+/**
+ * The search settings folded into one line (ui-playbook.md § 2, "Rarely changed settings fold into
+ * their values"): "Wide bounds · 1 500 runs × 5 starts · seed 1". Bounds are left out where the
+ * caller lists them elsewhere (the calibration rules try several); a missing number reads "–".
+ */
+export function searchSummary(s: { bounds?: CalibrationBounds; budget: number | null; starts: number | null; seed: number | null }): string {
+	const parts: string[] = [];
+	if (s.bounds) parts.push(`${BOUNDS_LABEL[s.bounds].replace(' (default)', '')} bounds`);
+	parts.push(`${fmtNum(s.budget)} runs × ${fmtNum(s.starts)} start${s.starts === 1 ? '' : 's'}`);
+	parts.push(`seed ${s.seed ?? '–'}`);
+	return parts.join(' · ');
+}
+
 export type WorkerMessage =
 	| { type: 'progress'; progress: CalibrationProgress }
 	| { type: 'done'; report: CalibrationReport }

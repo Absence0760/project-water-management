@@ -4,7 +4,7 @@
 // the fit record saying when the flag settings changed since.
 import { seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { saveChanges, saveSettings, openFold } from '../support/settings.ts';
 
 test('a gauged range needs its source, and saves with it', async ({ page, owner }) => {
 	void owner;
@@ -47,6 +47,7 @@ test('the fit censors days above the highest gauging, shows its data quality, an
 	});
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');
 	await fit.getByLabel('Starts').fill('1');
 	await fit.getByRole('checkbox', { name: /^Validate/ }).uncheck();

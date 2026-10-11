@@ -5467,9 +5467,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   Rain gaps the CHIRPS bias correction and quantile map, the CHIRPS fit
   period, zero-rain runs, multi-day accumulations and the rain source
   periods; under the Calibration record the quality flags and flow gaps.
-  Fit the parameters (`#set-fit`) is a panel with its own `h2` over Fit
-  automatically, the fit record, the calibration rules and automated
-  calibration. Each help tip has a name of its own (the three GR4J
+  Fit the parameters (`#set-fit`) is a panel with its own `h2` over two
+  cards: Fit automatically, then the fit record, then the calibration rules
+  with automated calibration under them (2026-10-10). Each help tip has a name of its own (the three GR4J
   parameters' "About GR4J, for …").
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
@@ -5844,7 +5844,17 @@ two.
   bounds by its field, so the section never blocks Save. The fit record
   below lists the fitted record's source and its gap filling.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
-  selected model's parameters in a Web Worker (`lib/calibration/`). It takes
+  selected model's parameters in a Web Worker (`lib/calibration/`). Its card
+  shows the choices that decide the fit in one row (**Objective**,
+  **Parameters to fit**, **Validation**), then one **Search:** line with the
+  bounds, model runs, starts and seed ("Wide bounds · 1 500 runs × 5 starts ·
+  seed 1", `lib/calibration/fit.ts` `searchSummary`; **Change** opens them in
+  place, a `<details>` with the `app.css` `.fold` style, and the line says
+  *needs fixing* while a field inside can't be taken), then **Fit
+  automatically** with "*n* runs in all." beside it, so the button is on the
+  first screen of the section at 1440×900 (`fit-panel-layout.spec.ts`). The
+  seed's, starts' and second record's explanations are under the page's
+  *Explain each setting* switch. It takes
   the objective, **Bounds** (a select: "Wide (default)" — each parameter's
   full calibration range — or "Typical (Perrin et al. 80 %)" — a tighter,
   published range, with a hint under it; model.md §2.10b), the model runs per
@@ -6017,8 +6027,18 @@ two.
   - **Calibration rules** and **Automated calibration** (engine ≥ 1.25.0,
     issue #153, [model.md §2.10j](./model.md)), under the fit record, each its
     own chunk. The rules (`settings/CalibrationRulesFields.svelte`, helpers in
-    `settings/calibrationRules.ts`) show their **revision** and a **Draft** or
-    **Signed off** badge, then: **Leave out a water year by its flagged days**
+    `settings/calibrationRules.ts`) open with a head row: the **Draft** or
+    **Signed off** badge and the **revision**, "*n* fits, each with the
+    split-sample and dry → wet tests (at most 8)", and on the right the
+    sign-off (below), so the card's actions are above its fields; Save is the
+    page's save bar. The fields follow in four named groups: **What to try**
+    (pan coefficients, bounds, objectives, side by side), **Which fit to
+    keep** (the score and held-out test, the filters, the flagged-year rule),
+    **When data arrives** (the trigger, the run after apply) and **Search
+    budget per fit**, folded into one line of its values like Fit
+    automatically's search. With the head at the top of a 1440×900 or
+    1280×800 window the whole editor is on screen. The fields:
+    **Leave out a water year by its flagged days**
     (on, 20 %), **Keep the fit with the best** (a score) **on the held-out
     test** (dry → wet, split-sample or the other record), the **pan
     coefficients to fit under** (the project's own, the presets), **Bounds**,

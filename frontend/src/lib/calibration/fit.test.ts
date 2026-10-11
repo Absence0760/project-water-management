@@ -1,6 +1,7 @@
 import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, rainCheckLimits, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { tipFor } from '$lib/help/tips';
+import { fmtNum } from '$lib/format/number';
 import {
 	applyReport,
 	benchmarkRows,
@@ -18,6 +19,7 @@ import {
 	SCORE_ROWS,
 	scoreCellText,
 	scoreColumns,
+	searchSummary,
 	SEED_MAX,
 	seedError,
 	STAGE_LABEL,
@@ -554,5 +556,15 @@ describe('fitInput leaves the forecast tail out (issue #51)', () => {
 		const input = fitInput(server('2020-07-25'), form);
 		expect(input.settings.simulationEnd).toBe('2020-07-24');
 		expect(input.settings.runoffModel).toBe('gr4j');
+	});
+});
+
+describe('searchSummary', () => {
+	it('folds the search settings into one line, bounds first when given', () => {
+		expect(searchSummary({ bounds: 'wide', budget: 1500, starts: 5, seed: 1 })).toBe(`Wide bounds · ${fmtNum(1500)} runs × 5 starts · seed 1`);
+		expect(searchSummary({ bounds: 'typical', budget: 50, starts: 1, seed: 0 })).toBe('Typical (Perrin et al. 80 %) bounds · 50 runs × 1 start · seed 0');
+	});
+	it('leaves bounds out for the rules, and reads a cleared field as a dash', () => {
+		expect(searchSummary({ budget: null, starts: null, seed: null })).toBe('– runs × – starts · seed –');
 	});
 });

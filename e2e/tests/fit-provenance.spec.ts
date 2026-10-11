@@ -5,7 +5,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveChanges, saveSettings } from '../support/settings.ts';
+import { saveChanges, saveSettings, openFold } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
 import { ungroup } from '../support/format.ts';
 
@@ -14,6 +14,7 @@ const definition = (scope: Locator, term: string) => scope.getByRole('term').fil
 
 async function fitAndApply(page: Page, { seed, validate, bounds }: { seed: string; validate: boolean; bounds?: 'wide' | 'typical' }) {
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Seed').fill(seed);
 	if (bounds) await fit.getByLabel(/^Bounds/).selectOption(bounds);
 	await fit.getByLabel('Model runs per fit').fill('50');

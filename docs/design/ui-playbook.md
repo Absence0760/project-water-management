@@ -556,6 +556,57 @@ section it belongs to, with the example that taught it.
   starts (the A-pan row with its year total overflowed by 23 px beside a
   13.5rem rail until the month cells' padding went to 0.1rem and the rail
   to 13rem; at 1280 it would scroll, so the bar stays there).
+- **Two forms in one panel are two cards; each card's action is where its
+  choices end.** Settings' Fit the parameters held Fit automatically (a
+  one-off fit) and the calibration rules (revisioned, signed off) as one run
+  of ~35 controls in a 4-column grid: bounds, model runs, starts and seed
+  appeared in both with nothing saying which action they fed, Fit
+  automatically sat mid-card and the rules' sign-off under ~25 fields, below
+  the fold at 1440 (operator, 2026-10-10). Now each form is a bordered card
+  (`SettingsTab.svelte` `.sub-card`), and inside each: the choices that decide
+  the result first, top-aligned in one row; the rarely changed ones folded
+  into one line of their values (below); the button straight under them in
+  an `.action-row`. `fit-panel-layout.spec.ts` checks the button is in the
+  window after the header's jump at 1440×900 and 1280×800, at the content
+  edge, within 24 px of the fold. Don't merge two controls that look alike
+  across the cards to tidy up: Fit automatically's search is a session
+  choice, the rules' is a revisioned rule, and they save differently.
+- **Rarely changed settings fold into their values.** A setting most people
+  never change (bounds, model runs, starts, seed) doesn't get the weight of
+  one that decides the result. Fold it into a `<details class="fold">`
+  (`app.css`): the summary is one line naming the group and its current
+  values ("Search: Wide bounds · 1 500 runs × 5 starts · seed 1", from a pure
+  helper such as `calibration/fit.ts` `searchSummary`, unit-tested), with
+  **Change** at its end (`aria-hidden`, since the summary already announces
+  expanded/collapsed; **Hide** while open), and the fields open in place. The
+  line shows **needs fixing** while any field inside is `aria-invalid`
+  (`.fold:has([aria-invalid='true'])`), so a closed fold never hides a
+  problem. A native `<details>` keeps its fields in the page, so Find a
+  setting still finds them and opens the fold (`SectionNav` `jump`), and
+  nothing is lost. Two callers so far (Fit automatically, the rules' search
+  budget): the CSS is shared in `app.css` (one copy, which also kept the
+  bundle under its ceiling); the markup is written out in each, until a
+  third caller earns a component.
+- **A form's state and actions in its head, not a sticky bar.** The rules'
+  card opens with its badge, revision and fit count on the left and the
+  sign-off on the right (`settings/CalibrationRulesFields.svelte` `.head`),
+  and its fields in four named groups (What to try, Which fit to keep, When
+  data arrives, Search budget) so the whole editor fits a 1440×900 or
+  1280×800 window under its head. A sticky bar was the alternative and was
+  rejected: on a page it covers fields that scroll under it, so a field
+  tabbed to lands behind it (WCAG 2.4.11, focus not obscured) and axe fails
+  the covered targets (§ 4 "A sticky element inside a scroll container
+  covers controls"). Make the card short enough instead, and pin it in e2e
+  (the head's sign-off, the fit count and the last group's line all in the
+  window with the head at its top). Save stays the page's save bar.
+- **One short line under a field; the rest behind ⓘ or the explain switch.**
+  Fit automatically's starts and seed hints were four-line paragraphs that
+  made every row of the grid a different height. A hint that states a value
+  or a problem ("Default 1 500.", "Enter a seed.") stays visible; one that
+  explains goes under the page's explain switch (`.explain`, as `class:explain`
+  when the same element turns into an error) or is already the ⓘ tip's text.
+  Give a field's label the height of a label with a tip (`min-height: 24px`),
+  or the inputs of a row without tips sit 6 px higher than their neighbours.
 - **An index names each panel as the page does, and a page beside a rail
   reads its width from its own column.** Runs & results, River & reserve,
   Hydrological units and Data kept the two-row bar after Settings got its
@@ -802,6 +853,8 @@ section it belongs to, with the example that taught it.
 | Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | A tool that hasn't run, as one row | `common/ToolRow.svelte` (§ 2 "Findings first") |
 | A form's buttons under its fields | `.action-row` (`app.css`; § 2 "A form's buttons go in one action row") |
+| Rarely changed settings, folded to one line of their values | `<details class="fold">` (`app.css`; § 2 "Rarely changed settings fold into their values"), the line from a pure helper (`calibration/fit.ts` `searchSummary`); e2e opens it with `openFold` (`e2e/support/settings.ts`) |
+| Two forms in one panel | a bordered card each (`settings/SettingsTab.svelte` `.sub-card`), the state and actions in the card's head (§ 2) |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Reading a picked or dropped file | `latestFileText()` (`lib/files/latest.ts`), one reader per file box: the picker stays live while a file is read, so a large file's read could land after a smaller one picked next, under its name (issue #384). A read followed by a request (a preview) checks the pick is still current after each await (`allocations/AllocationImport.svelte`'s `generation`, `map/UploadSheet.svelte`) |
 | Saying what a file or paste box takes | `common/FormatHelp.svelte` (`accepts`, the structure as its children, `example`, `exampleFile` or several `exampleFiles` to download, `context` to tell two on a page apart for a screen reader): one per box, beside its file picker, which comes before the fields a file fills, its words checked against the box's parser, its example fed back through it in a test (ui.md § Expected format) |
@@ -1008,6 +1061,18 @@ Interaction details that bit:
   Model changed" stays the latest of all while the list is filtered to one
   unit (a small unfiltered read beside the filtered one), so a filter never
   makes the header claim something false.
+- **A checkbox in a flex label keeps its size.** `app.css` gives every
+  `input` `min-width: 0` (so a select never pushes a phone page sideways),
+  and a checkbox is `1rem` wide; as a flex item in a `display: flex` label it
+  then had `flex-shrink: 1` and nothing to stop it, so once the words wrapped
+  the box shrank to a dot ("Validate: split-sample…" 10.5 px, Settings'
+  CHIRPS quantile map 5.6 px; eight boxes on Settings alone, 2026-10-10).
+  `input[type='checkbox'], input[type='radio']` are `flex-shrink: 0` app-wide
+  now. `squashedChecks` (`e2e/support/reflow.ts`) lists any visible box drawn
+  under 12 px; `reflow.spec.ts` runs it on every tab at 320 px and 1024 px.
+  To line a box up with a wrapped label's first line, use `align-items:
+  flex-start` and `margin-top: calc((1lh - 1rem) / 2)` on the box, rather
+  than centring it on the whole label.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
@@ -1243,6 +1308,21 @@ Interaction details that bit:
   reader's browser can refuse web fonts. Monospace is still the platform's
   (pinned to DejaVu Sans Mono in e2e on Linux; macOS Chromium ignores that
   pin).
+- **`toContainText` reads hidden text.** It matches `textContent`, so a
+  `display: none` span counts: the fold's hidden "needs fixing" made
+  `not.toContainText('needs fixing')` fail and `toContainText` pass whatever
+  the state. Assert a shown-or-hidden word with `getByText(…)` and
+  `toBeVisible()` / `toBeHidden()`.
+- **A closed `<details>` keeps its content out of the accessibility tree.**
+  `getByRole('group', { name })` on a fieldset inside it finds nothing until
+  it opens; `getByLabel` on its fields still resolves (and `fill` waits for
+  them to be visible, so open the fold first: `openFold`).
+- **A `NumberInput` that isn't `nullable` never reaches `null`.** Cleared or
+  given text it can't read, it keeps the last number and marks itself
+  `aria-invalid` with its own message, so a check written against `null`
+  (Fit automatically's "Enter a seed.") can't be reached from the page. Test
+  the state the field really shows (`aria-invalid`), and key any summary of
+  it on that.
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle

@@ -8,7 +8,7 @@ import { API_URL } from '../support/env.ts';
 import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { saveSettings } from '../support/settings.ts';
+import { saveSettings, openFold } from '../support/settings.ts';
 
 const DAYS = 120;
 
@@ -45,6 +45,7 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 
 	// A short fit: the outlet has no record, so only the site makes it possible.
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');
 	await fit.getByLabel('Starts').fill('1');
 	await fit.getByRole('checkbox', { name: /^Validate/ }).uncheck();

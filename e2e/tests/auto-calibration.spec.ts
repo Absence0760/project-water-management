@@ -3,7 +3,7 @@
 // result to the form and save it. A fit never saves anything by itself.
 import { addMember, putSeries, seedRunnableProject, syntheticFlow, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { anySaveBar, saveSettings, settingsBar } from '../support/settings.ts';
+import { anySaveBar, saveSettings, settingsBar, openFold } from '../support/settings.ts';
 import { ungroup } from '../support/format.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
@@ -15,6 +15,7 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
 	await expect(fit.getByLabel('Objective')).toHaveValue('kgePrime');
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('60');
 	// 5 starts of the whole record by default (CR-2), then the two validation fits.
 	await expect(fit.getByLabel('Starts')).toHaveValue('5');
@@ -85,6 +86,7 @@ test('a fit can be cancelled, leaving the form untouched', async ({ page, owner 
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j' });
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('10000');
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
 	await expect(fit.getByRole('progressbar', { name: 'Calibration progress' })).toBeVisible();
@@ -102,6 +104,7 @@ test('a fit keeps running, and its result waits, while another tab is open', asy
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const tabs = page.getByRole('navigation', { name: 'Project sections' });
 	const fit = page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('60');
 	await fit.getByLabel('Starts').fill('2');
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
@@ -139,6 +142,7 @@ test('a viewer can fit but not apply', async ({ page, owner, signIn }) => {
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.goto(`/projects/${project.id}?tab=settings`);
 	const fit = viewer.page.getByRole('region', { name: /^Fit automatically/ });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');
 	await fit.getByRole('checkbox', { name: /^Validate/ }).uncheck();
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();
@@ -161,6 +165,7 @@ test('with a gauge and a logger record, the fit can be validated against the oth
 	// The fit uses the gauge, so only the logger is offered.
 	await expect(record.getByRole('option')).toHaveText(['No other record', 'Logger flow']);
 	await record.selectOption({ label: 'Logger flow' });
+	await openFold(fit, 'fit-search');
 	await fit.getByLabel('Model runs per fit').fill('50');
 	await fit.getByRole('checkbox', { name: /^Validate/ }).uncheck();
 	await fit.getByRole('button', { name: 'Fit automatically', exact: true }).click();

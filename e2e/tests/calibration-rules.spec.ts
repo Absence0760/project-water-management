@@ -4,7 +4,7 @@
 // fit is the server's too, saved with a record of how the rules chose it.
 import { addMember, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { anySaveBar, saveSettings } from '../support/settings.ts';
+import { anySaveBar, saveSettings, openFold } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { projectDay } from '../support/dates.ts';
 
@@ -21,6 +21,7 @@ test('the saved rules pick the fit on the server: a rule change needs saving fir
 	const auto = page.getByRole('region', { name: /^Automated calibration/ });
 	await expect(auto.getByText('These rules are drafts until the hydrologist signs them off')).toBeVisible();
 	// The search is part of the rules: a smaller one is a rule change, saved first.
+	await openFold(rules, 'rules-search');
 	await rules.getByLabel('Model runs per fit').fill('50');
 	await rules.getByLabel('Starts per fit').fill('1');
 	await rules.getByLabel('After a kept fit is applied, run the model and the uncertainty ensemble around it').uncheck();

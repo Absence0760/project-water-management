@@ -4,7 +4,7 @@
 // where the sidebar and the runs rail leave a panel much less than the window.
 import { createProject, createRun, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { expectNoSidewaysScroll, squashedChecks } from '../support/reflow.ts';
 import { seedRiverProject } from '../support/river.ts';
 
 const NARROW = { width: 320, height: 640 };
@@ -21,6 +21,8 @@ test.describe('320 px reflow', () => {
 		await expectNoSidewaysScroll(page);
 		await expect(page.getByRole('region', { name: 'Data feeds' })).toBeVisible();
 		await expectNoSidewaysScroll(page);
+		// At 320 px nearly every checkbox's words wrap: none may shrink its box to fit them.
+		expect(await squashedChecks(page)).toEqual([]);
 
 		// The zero-rain period lists with a water-year row and a date-range row.
 		const zeroRain = page.getByTestId('zero-rain-settings');
@@ -38,6 +40,7 @@ test.describe('320 px reflow', () => {
 			await page.goto(`/projects/${project.id}?tab=${tab}`);
 			await expect(page.locator(`#tab-${tab}`)).toHaveAttribute('aria-current', 'page');
 			await expectNoSidewaysScroll(page);
+			expect(await squashedChecks(page)).toEqual([]);
 		});
 	}
 });
@@ -55,5 +58,6 @@ test('every tab fits a 1024 px window with a five-year run', async ({ page, owne
 		await expect(page.locator(`#tab-${tab}`)).toHaveAttribute('aria-current', 'page');
 		if (tab === 'runs') await expect(page.getByRole('region', { name: /^Runoff model: GR4J/ }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 		await expectNoSidewaysScroll(page);
+		expect(await squashedChecks(page), tab).toEqual([]);
 	}
 });

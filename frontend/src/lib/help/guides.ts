@@ -777,9 +777,8 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On **Settings & calibration → Calibration record**, set the calibration flow series, window and exclusions first. The fit uses the form as it stands.',
 							'Go to the **Fit automatically** panel and choose the **Objective** by what the fit will feed (see *Choosing an objective* below), before you see any score.',
-							'Choose **Bounds**: Wide, or Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down.',
-							'Leave **Model runs per fit** (1 500) and **Starts** (5) at their defaults unless you have a reason. Each start is a separate search from its own seed and the best is kept; the notes say when starts reach nearly the same score with scattered parameters.',
 							'Keep **Validate** (split-sample and dry → wet) ticked. With both a gauge and a logger, you can also score the fit against the record it doesn’t use (**Also validate against**).',
+							'The **Search** line above the button shows the bounds, model runs, starts and seed; **Change** opens them. Choose **Bounds** Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down, and leave **Model runs per fit** (1 500) and **Starts** (5) at their defaults unless you have a reason. Each start is a separate search from its own seed and the best is kept; the notes say when starts reach nearly the same score with scattered parameters.',
 							'Press **Fit automatically**. A progress bar shows the stage and the best score so far; **Cancel** stops it. You can open other tabs while it runs: the fit carries on, and its result waits on this page.',
 							'Read the result: the notes, current vs fitted parameters, and the scores table. The shaded validation columns are the honest measure.',
 							'Press **Apply to form**, then save the settings. Nothing is stored until you save.',
