@@ -1,6 +1,6 @@
 import { createMiddleware } from 'hono/factory';
 import { ApiError } from '../http/errors.js';
-import { scopeAllows } from '../reports/scope.js';
+import { isPackScope, scopeAllows } from '../reports/scope.js';
 import { readSessionClaims, type Amr } from './session.js';
 import { requestAuth } from './stepUp.js';
 
@@ -27,5 +27,7 @@ export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 	c.set('userId', session.userId);
 	c.set('renderSession', !!session.scope);
 	c.set('amr', session.amr);
-	await requestAuth.run({ userId: session.userId, amr: session.amr, otpAt: session.otpAt }, () => next());
+	// A report render queued without registered volumes prints without them, whatever the requester's role now (214).
+	const redactAllocations = !!session.scope && !isPackScope(session.scope) && session.scope.redact === true;
+	await requestAuth.run({ userId: session.userId, amr: session.amr, otpAt: session.otpAt, ...(redactAllocations ? { redactAllocations } : {}) }, () => next());
 });

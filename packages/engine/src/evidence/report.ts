@@ -446,7 +446,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 						ownerName: a.scenario.ownerName,
 						opsSha256: a.scenario.opsSha256,
 						proposals: classes.filter((c) => c === 'proposal').length,
-						assumptions: classes.filter((c) => c === 'baseline').length
+						assumptions: classes.filter((c) => c === 'baseline').length,
+						origin: a.scenario.origin ?? 'team'
 					}
 				: null
 		},
@@ -1423,7 +1424,8 @@ function countsOf(side: AllocationSourceComparison): EvidenceAllocationCounts {
 function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceAllocations {
 	const ca = b.allocations ?? null;
 	const cb = a ? (a.allocations ?? null) : null;
-	const owned = new Set(a?.scenario.ownedNodeIds ?? []);
+	// evidence-17: only an applicant's application has units of its own here; a team scenario's are an editor's choice (D3).
+	const owned = new Set(a?.scenario.origin === 'applicant' ? a.scenario.ownedNodeIds : []);
 	const unitsA = (ca?.nodes ?? []).filter(hasVolume);
 	const unitsB = (cb?.nodes ?? []).filter(hasVolume);
 	const total = Math.max(ca ? allocationCount(ca) : 0, cb ? allocationCount(cb) : 0);

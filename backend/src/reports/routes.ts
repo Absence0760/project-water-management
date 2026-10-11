@@ -19,6 +19,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 import { isValidTimeZone, nextFireAt } from './due.js';
 import { downloadUrl, REPORT_RETENTION_DAYS, reportFileName } from './storage.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
@@ -188,12 +189,12 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const jobId = c.req.param('jobId');
 		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
 		const view = await withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			const v = await reportByJob(db, id, jobId);
 			if (!v) throw new ApiError(404, 'not found');
-			return v;
+			return { ...v, volumesWithheld: v.withVolumes && v.requestedBy !== c.get('userId') && (await allocationUnitsHidden(db, id, role)) };
 		});
-		const { key: _key, ...report } = view;
+		const { key: _key, requestedBy: _by, ...report } = view;
 		return c.json({ report });
 	})
 	// The download: a fresh, one-minute signed GET per click, behind the
@@ -208,9 +209,16 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const jobId = c.req.param('jobId');
 		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
 		const { view, name, timeZone } = await withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			const v = await reportByJob(db, id, jobId);
 			if (!v) throw new ApiError(404, 'not found');
+			// Printed with each farm's registered volume for someone who reads them (214, #523 G1): not a viewer kept from them.
+			if (v.withVolumes && v.requestedBy !== c.get('userId') && (await allocationUnitsHidden(db, id, role)))
+				throw ApiError.coded(
+					403,
+					'pack_volumes_withheld',
+					'this PDF was printed with each farm’s registered volume, which this project shows to its editors and owners only: ask for your own PDF of the run'
+				);
 			const { rows } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			return { view: v, name: rows[0]?.name ?? '', timeZone: rows[0]?.timeZone ?? DEFAULT_TIME_ZONE };
 		});
@@ -342,6 +350,6 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 		);
 		if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this report');
 	});
-	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}) });
+	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}), ...(t.redact ? { redact: true as const } : {}) });
 	return c.json({ ok: true });
 });

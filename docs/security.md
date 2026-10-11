@@ -2840,8 +2840,68 @@ database:
 
   With the switch off, a viewer's routes carry no copy of the volumes: the
   run's model and summary per unit, the compare route, the summary CSV, the
-  run's model input (refused for a cap or full-allocation run) and the farm
-  view's registered water ([api.md § Allocations](./api.md#allocations)).
+  run's model input (refused for a cap or full-allocation run), the farm
+  view's registered water ([api.md § Allocations](./api.md#allocations)),
+  and the evidence report's Appendix A.1 model and run summaries (left out
+  of the live report and of a pack's manifest, which then says
+  `volumesWithheld`). On a pack whose runs carry a volume, such a viewer
+  gets `403` `pack_volumes_withheld` for the reproduction bundle (its runs'
+  inputs and results; redacting it would break its hash) and for the
+  manifest and PDF of a pack drafted before `evidence-15`, whose § 5 names
+  every farm (issue #523 G1, `evidence/packs.ts` `packVolumesWithheld`;
+  `packs.db.test.ts` holds the refusals, with editors, owners and a viewer
+  allowed by the switch as positive controls). Also (#523 G1, round 2): a
+  scenario's base (`GET …/scenarios/:sid/base`) comes without the
+  allocations; a scenario, its check, a run's recorded scenario and the
+  compare route come without the ops that set a volume on a unit that
+  isn't an applicant's own (every one of a team scenario's;
+  `scenarios/viewerOps.ts`, `withheldAllocationOps`), with `withheldOps`
+  saying how many; the live evidence report's Appendix A.2 is diffed
+  without other units' volumes; and a server report PDF printed for
+  someone who reads each volume (`report.with_volumes`, 214) is refused to
+  such a viewer (`403 pack_volumes_withheld`, unless they asked for it)
+  and its link isn't emailed to them: a scheduled report goes only to the
+  recipients who may read it, and a viewer prints their own. The render
+  prints at the visibility fixed when the report was queued: the job issues
+  its render token with `redact_allocations` (`NOT with_volumes`), and the
+  render session (the `x` claim) reads every project as a viewer kept from
+  the volumes (`allocationUnitsHidden`), so a requester promoted, or the
+  switch turned on, before the render prints nothing the flag doesn't
+  allow. An impact report against **another project's** baseline is
+  printed that way, without either project's volumes, and any reader of the
+  report's project may download it. A scenario sweep's members
+  (`GET …/sweeps`, `…/sweeps/:sweepId`) come without their summaries'
+  per-unit allocations and their `allocation.set` ops. Page 1's authorised
+  volume mix is frozen twice (evidence-17): the full one for editors,
+  owners, the authority and the PDF (refused to such a viewer), and a
+  folded one served in its place to such a viewer: no line, total or
+  difference between them and the per-source totals that viewer reads gives
+  fewer than 5 registered users' volume, and no count of them below 5 is
+  given (`foldedMix`). A storage-only (21b) row's warning no longer quotes
+  its volume (engine; it reaches a run's summary and the evidence report's
+  A.5 verbatim).
+
+  **The canary sweep** (`allocations.db.test.ts`): every `GET /projects/:id/…`
+  route in `app.routes` (and `/me/alerts/:projectId`, and two comparisons)
+  is called as a viewer kept from the volumes, on the base run and on a
+  team scenario's run, with a registered volume, a 21b storage, a scenario
+  op's volume and a sweep member's volume planted, and a sweep, an
+  uncertainty ensemble, a (draft) evidence pack, an impact report, an
+  assessment and a delineation request as fixtures; no answer may hold any
+  of the numbers in m³ a year, megalitres, m³ a day or the run's partial
+  water year's share. A route whose `:param` has no fixture fails the test,
+  and every answer must succeed or be one of its listed refusals (with the
+  reason). An editor reads each number where it is (positive control).
+  What it doesn't cover: routes outside `/projects/:id` (`/teams/:id/portfolio`,
+  `/auth/me/export`), a pack PDF or bundle's bytes and a report PDF's
+  (their routes are redirects; the refusals are tested in
+  `packs.db.test.ts` and above), a capped or full-allocation run (Left,
+  below), and a cross-project baseline (its own test, above). Left,
+  tracked: § 5's *Other registered users* total is gated at 5 units, not 5
+  holders (one holder with 5 units gets a total that is theirs), and
+  totals in successive pack versions can be differenced; a full-allocation
+  scenario run scales each unit's demand to its volume, so its per-unit
+  figures give the volume as a capped run's do.
   Left: a capped run's per-unit daily series still bound use by the volume
   ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
   extract must say how it was obtained (`allocation_source.reference`,

@@ -14,7 +14,26 @@ import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { CreateSweepBody, SWEEP_JOBS_PER_USER } from './schema.js';
-import { createSweep, getSweep, listSweeps, pendingSweepJobs } from './store.js';
+import { createSweep, getSweep, listSweeps, pendingSweepJobs, type SweepRow } from './store.js';
+import { allocationUnitsHidden, redactRunAllocations, withheldAllocationOps, withoutPositions } from '../allocations/viewerUnits.js';
+
+/**
+ * A sweep as a viewer the project keeps from each registered volume reads it
+ * (D3, issue #523 G1): each member's run summary without its per-unit
+ * allocations (redactRunAllocations), and without the ops that set a volume
+ * (a sweep's members are the team's: every allocation.set), with
+ * `withheldOps` saying how many.
+ */
+export function sweepForViewer(sweep: SweepRow): SweepRow {
+	return {
+		...sweep,
+		members: sweep.members.map((m) => {
+			const drop = withheldAllocationOps(m.ops);
+			const ops = drop.size ? { ops: withoutPositions(m.ops, drop), withheldOps: drop.size } : {};
+			return { ...m, ...ops, ...(m.summary ? { summary: redactRunAllocations({ summary: m.summary }).summary } : {}) };
+		})
+	};
+}
 
 const ListQuery = z.object({ baseRunId: z.string().uuid().optional() }).strict();
 const GetQuery = z.object({ series: z.enum(['true', 'false']).optional() }).strict();
@@ -35,8 +54,9 @@ export const sweepRoutes = new Hono<AuthEnv>()
 	.get('/:id/sweeps', async (c) => {
 		const q = ListQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, c.req.param('id'), 'viewer');
-			return c.json({ sweeps: await listSweeps(db, c.req.param('id'), q) });
+			const role = await requireRole(db, c.req.param('id'), 'viewer');
+			const sweeps = await listSweeps(db, c.req.param('id'), q);
+			return c.json({ sweeps: (await allocationUnitsHidden(db, c.req.param('id'), role)) ? sweeps.map(sweepForViewer) : sweeps });
 		});
 	})
 	.get('/:id/sweeps/:sweepId', async (c) => {
@@ -44,9 +64,9 @@ export const sweepRoutes = new Hono<AuthEnv>()
 		if (!UUID.test(sweepId)) throw new ApiError(404, 'not found');
 		const q = GetQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, c.req.param('id'), 'viewer');
+			const role = await requireRole(db, c.req.param('id'), 'viewer');
 			const sweep = await getSweep(db, c.req.param('id'), sweepId, q.series === 'true' ? 'series' : 'summary');
 			if (!sweep) throw new ApiError(404, 'not found');
-			return c.json({ sweep });
+			return c.json({ sweep: (await allocationUnitsHidden(db, c.req.param('id'), role)) ? sweepForViewer(sweep) : sweep });
 		});
 	});

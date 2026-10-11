@@ -6,27 +6,40 @@
 // water source at 5 or more units: baseline evidence (no applicant) with two
 // farms lists none and says so, while page 1's row still counts the
 // unit-years; an application on Upper farm lists Upper farm, never Lower
-// farm. Never a holder's name. The case without volumes ("Not assessed") is
-// in evidence-report.spec.ts. Synthetic catchment and invented volumes.
+// farm. Never a holder's name. Since evidence-17 (#523 G1) only an applicant's
+// application has units of its own there, so the application here is an
+// applicant's (a contributor linked to Upper farm), not the team's. The case
+// without volumes ("Not assessed") is in evidence-report.spec.ts. Synthetic
+// catchment and invented volumes.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createRun, nominateRun, putSeries, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
+import { addMember, createRun, nominateRun, putSeries, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
-/** An application owning Upper farm on the nominated baseline (a slightly smaller dam, and any `extra` ops), run: its run id. */
-async function application(page: Page, projectId: string, baseRunId: string, upper: string, extra: unknown[] = []): Promise<string> {
-	const res = await page.request.post(`${API_URL}/projects/${projectId}/scenarios`, {
-		data: { name: 'Upper farm application', baseRunId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 90_000 }, ...extra], ownedNodeIds: [upper] }
+type SignIn = Parameters<Parameters<typeof test>[2]>[0]['signIn'];
+
+/**
+ * An applicant's application on Upper farm, the farm they are linked to, on the published nominated baseline (a slightly
+ * smaller dam, and any `extra` ops), run and submitted, so the assessors read it: its run id.
+ */
+async function application(page: Page, signIn: SignIn, projectId: string, baseRunId: string, upper: string, extra: unknown[] = []): Promise<string> {
+	expect((await page.request.post(`${API_URL}/projects/${projectId}/publication`, { data: { runId: baseRunId } })).status()).toBe(201);
+	const applicant = await signIn('Evidence applicant');
+	await addMember(page.request, projectId, applicant.user.email, 'contributor');
+	expect((await page.request.put(`${API_URL}/projects/${projectId}/farmers/${applicant.user.id}`, { data: { nodeIds: [upper] } })).status()).toBe(200);
+	const res = await applicant.context.request.post(`${API_URL}/projects/${projectId}/scenarios`, {
+		data: { name: 'Upper farm application', baseRunId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 90_000 }, ...extra] }
 	});
-	expect(res.status()).toBe(201);
+	expect(res.status(), await res.text()).toBe(201);
 	const { scenario } = (await res.json()) as { scenario: { id: string } };
-	const ran = await page.request.post(`${API_URL}/projects/${projectId}/scenarios/${scenario.id}/runs`, { data: {} });
-	expect(ran.status()).toBe(201);
+	const ran = await applicant.context.request.post(`${API_URL}/projects/${projectId}/scenarios/${scenario.id}/runs`, { data: {} });
+	expect(ran.status(), await ran.text()).toBe(201);
+	expect((await applicant.context.request.post(`${API_URL}/projects/${projectId}/scenarios/${scenario.id}/submit`, { data: {} })).status()).toBe(200);
 	return ((await ran.json()) as { run: { id: string } }).run.id;
 }
 
-test('the evidence report compares modelled use with the registered volumes, listing only the applicant’s own units, never naming a holder', async ({ page, owner }) => {
+test('the evidence report compares modelled use with the registered volumes, listing only the applicant’s own units, never naming a holder', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Evidence allocations');
 	// Two whole water years (1 Oct 2019 – 30 Sep 2021), so each year is judged.
@@ -66,7 +79,7 @@ test('the evidence report compares modelled use with the registered volumes, lis
 	await expectNoViolations(page);
 
 	// An application on Upper farm: § 5 lists the applicant's unit, never Lower farm's.
-	const app = await application(page, project.id, run, upper);
+	const app = await application(page, signIn, project.id, run, upper);
 	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 	await expect(page.getByTestId('evidence-report')).toHaveAttribute('data-evidence-mode', 'application');
@@ -97,7 +110,7 @@ test('the evidence report compares modelled use with the registered volumes, lis
 
 // Licence data never drives the baseline (issue #507): the nominated baseline compares only, so a cap is the application's
 // what-if (a settings.set op); the baseline column says it wasn't capped.
-test('the evidence report cites a capped run’s cap: the years it used its volume up and the days each limit held use back (evidence-6)', async ({ page, owner }) => {
+test('the evidence report cites a capped run’s cap: the years it used its volume up and the days each limit held use back (evidence-6)', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Evidence allocation cap');
 	const days = 731;
@@ -113,7 +126,7 @@ test('the evidence report cites a capped run’s cap: the years it used its volu
 	const run = await createRun(page.request, project.id, 'Baseline');
 	await nominateRun(page.request, project.id, run, 'Baseline');
 	// The applicant's own unit is cited one by one (evidence-15); the application is the capped run.
-	const app = await application(page, project.id, run, nodes.find((n) => n.name === 'Upper farm')!.id, [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }]);
+	const app = await application(page, signIn, project.id, run, nodes.find((n) => n.name === 'Upper farm')!.id, [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }]);
 
 	await page.goto(`/projects/${project.id}/report?run=${app}&evidence`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
@@ -165,9 +178,11 @@ test('an application’s evidence report leads with the board against full autho
 	await page.getByTestId('evidence-authorised-run').getByRole('button', { name: 'Run at full authorised use' }).click();
 	await expect(authorised.getByTestId('evidence-impact-authorised-na')).toHaveCount(0);
 	const mix = authorised.getByTestId('evidence-authorised-mix');
+	// The owner reads the full mix (a viewer kept from each volume reads the folded one: evidence-17, #523 G1, unit- and DB-tested).
 	await expect(mix.getByRole('rowheader')).toHaveText(['Licence', 'Registration (WARMS)', /^All of it/]);
 	await expect(mix.getByRole('row', { name: /^Licence/ })).toContainText('Yes');
 	await expect(mix.getByRole('row', { name: /^Registration/ })).toContainText('No');
+	await expect(authorised.getByTestId('evidence-authorised-mix-left-out')).toHaveCount(0);
 	await expect(page.getByTestId('evidence-authorised-run')).toHaveCount(0);
 	await expectNoViolations(page);
 });

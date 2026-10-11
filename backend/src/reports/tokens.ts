@@ -15,11 +15,12 @@ import type { Db } from '../db/tx.js';
  * Commit before handing it out: the renderer consumes it on another
  * connection.
  */
-export async function issueRenderToken(db: Db, projectId: string, runId: string, againstRunId?: string): Promise<string> {
+export async function issueRenderToken(db: Db, projectId: string, runId: string, againstRunId?: string, o: { redact?: boolean } = {}): Promise<string> {
 	const { token, hash } = newToken();
+	// `redact`: the report was queued without registered volumes (214): its session prints without any.
 	await db.query(
-		'INSERT INTO render_token (token_hash, user_id, project_id, run_id, against_run_id, expires_at) VALUES ($1, app_current_user_id(), $2, $3, $4, now())',
-		[hash, projectId, runId, againstRunId ?? null]
+		'INSERT INTO render_token (token_hash, user_id, project_id, run_id, against_run_id, redact_allocations, expires_at) VALUES ($1, app_current_user_id(), $2, $3, $4, $5, now())',
+		[hash, projectId, runId, againstRunId ?? null, o.redact ?? false]
 	);
 	return token;
 }
@@ -62,6 +63,8 @@ export type ConsumedRenderToken =
 			runId: string;
 			/** An impact report's baseline; null for the plain report (or a baseline since deleted: the token went with it). */
 			against: { projectId: string; runId: string } | null;
+			/** Print without any registered volume (214). */
+			redact: boolean;
 	  }
 	| { kind: 'pack'; userId: string; projectId: string; packId: string }
 	/** An applicant's copy (165): the pack page of a party of its application. */
@@ -77,9 +80,10 @@ export async function consumeRenderToken(db: Db, hash: Buffer): Promise<Consumed
 		againstRunId: string | null;
 		packId: string | null;
 		purpose: string;
+		redact: boolean | null;
 	}>(
 		`SELECT user_id AS "userId", project_id AS "projectId", run_id AS "runId",
-			against_project_id AS "againstProjectId", against_run_id AS "againstRunId", pack_id AS "packId", purpose
+			against_project_id AS "againstProjectId", against_run_id AS "againstRunId", pack_id AS "packId", purpose, redact_allocations AS redact
 		 FROM app_consume_render_token($1)`,
 		[hash]
 	);
@@ -89,5 +93,5 @@ export async function consumeRenderToken(db: Db, hash: Buffer): Promise<Consumed
 	if (r.packId) return { kind: 'pack', userId: r.userId, projectId: r.projectId, packId: r.packId };
 	if (!r.runId) return null;
 	const against = r.againstRunId && r.againstProjectId ? { projectId: r.againstProjectId, runId: r.againstRunId } : null;
-	return { kind: 'report', userId: r.userId, projectId: r.projectId, runId: r.runId, against };
+	return { kind: 'report', userId: r.userId, projectId: r.projectId, runId: r.runId, against, redact: r.redact === true };
 }

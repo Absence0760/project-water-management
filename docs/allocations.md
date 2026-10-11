@@ -328,9 +328,21 @@ existing lawful use beside the application's numbers.
   registered volume, and the volume it held them to is printed by how it is
   held (`authorisation`: licence and verified existing lawful use as
   entitlements, the rest not), totals only: no holder, registration
-  number or unit is named, so a viewer reads nothing the Allocations tab
-  wouldn't show them. The mix reads the allocations' rows when an editor
-  runs the pair (a later change shows only when it is run again).
+  number or unit is named. Editors, owners, the authority and the PDF read
+  the full mix (engine `authorisedMix`). Since `evidence-17` (issue #523
+  G1) a folded mix is kept beside it (`mixFolded`, `foldedMix`) and served
+  to a viewer kept from each volume in its place: a water source held by
+  fewer than 5 registered users is left out whole (so the total is the sum
+  of the per-source totals that viewer already reads), a way of holding
+  held by 5 or more is a line, the others are pooled in one *Other ways of
+  holding* line when 5 or more hold them and otherwise merged into the
+  smallest line that isn't an entitlement (*…, with the ways of holding too
+  few hold to show*), so no difference gives them; how many users were left
+  out is said only at 5 or more, else only that some were (holders counted
+  as `app_allocation_volumes` counts them). A board built before has no
+  folded mix: such a viewer reads it without one. The mix reads the allocations'
+  rows when an editor runs the pair (a later change shows only when it is
+  run again).
 - **Each run's own volumes, not today's.** The backend
   (`backend/src/allocations/runUse.ts`, `runAllocationComparison`) runs
   `compareAllocations` over the run's stored series, the allocations stored
@@ -384,7 +396,10 @@ existing lawful use beside the application's numbers.
   users (n units)* total per water source and water year (the volumes and
   use summed, judged against the band as a whole), left out when fewer than
   5 units hold that source; the section says how many were left out. Baseline
-  evidence has no applicant, so every unit is in the totals. The page-1 row
+  evidence has no applicant, so every unit is in the totals, and since
+  `evidence-17` (issue #523 G1) so is every unit of a team scenario: its
+  own units are an editor's choice, not an applicant's farms
+  (`identity.application.origin`). The page-1 row
   still counts unit-years over the band unit by unit (`unitYears`, counts
   only), and the flag names the applicant's units or the total. The
   project's editors see every unit on the Allocations tab. The engine counts

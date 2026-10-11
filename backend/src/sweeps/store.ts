@@ -18,6 +18,8 @@ export interface SweepMemberRow {
 	position: number;
 	name: string;
 	ops: ScenarioOp[];
+	/** Ops left out for a viewer kept from each registered volume (routes.ts sweepForViewer); absent otherwise. */
+	withheldOps?: number;
 	opsSha256: string;
 	status: SweepMemberStatus;
 	/** Why it didn't run: each op that doesn't apply, or the engine's refusal. Empty when done. */

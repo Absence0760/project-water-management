@@ -223,7 +223,8 @@ function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 				] as never,
 				opsSha256: 'ops-sha',
 				ownedNodeIds: ['F2'],
-				classified: ['proposal', 'proposal']
+				classified: ['proposal', 'proposal'],
+				origin: 'applicant'
 			}
 		},
 		nominations: [{ withdrawn: false, runId: 'base', runLabel: 'base', runoffModel: 'gr4j', engineVersion: '1.30.0', reason: 'Calibrated baseline', nominatedAt: '2026-09-01T12:00:00.000Z', nominatedBy: 'Hydrologist' }],
@@ -331,7 +332,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-17');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -920,6 +921,22 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notMatchedA).toBe(0);
 	});
 
+	it('a team scenario’s own units are an editor’s choice, not an applicant’s farms: § 5 names none of them, and the identity says whose it is (evidence-17, #523 G1)', () => {
+		const team = withAllocations();
+		const t = evidenceReport({ ...team, application: { ...team.application!, scenario: { ...team.application!.scenario, origin: 'team' } } });
+		expect(t.identity.application?.origin).toBe('team');
+		expect(t.allocations.units).toEqual([]);
+		// Two units hold surface water: too few for a total, so both are left out.
+		expect(t.allocations.othersLeftOut).toBe(2);
+		expect(JSON.stringify(t.allocations)).not.toContain('Farm two');
+		// Absent reads as the team's.
+		const { origin: _o, ...noOrigin } = team.application!.scenario;
+		expect(evidenceReport({ ...team, application: { ...team.application!, scenario: noOrigin } }).allocations.units).toEqual([]);
+		// Positive control: the applicant's application lists their own unit.
+		expect(r.identity.application?.origin).toBe('applicant');
+		expect(r.allocations.units.map((u) => u.nodeId)).toEqual(['F2']);
+	});
+
 	it('says how the surface use was measured, per run: a dam on the river\'s losses beside the use, a dam beside the river\'s take at the intake with its draws (evidence-16, #516)', () => {
 		const s = r.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!;
 		const yb = comparisonOf(app, appOut, allocations).nodes.find((n) => n.nodeId === 'F2')!.surface.years;
@@ -1003,7 +1020,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-16');
+		expect(got.version).toBe('evidence-17');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1564,7 +1581,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-17');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1620,7 +1637,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-17');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],

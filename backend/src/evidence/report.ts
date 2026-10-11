@@ -39,6 +39,7 @@ import {
 import { Hono } from 'hono';
 import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
+import { allocationUnitsHidden, redactReportAllocations } from '../allocations/viewerUnits.js';
 import { checkCombination } from '../assessments/store.js';
 import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -477,7 +478,29 @@ async function loadMapFeatures(db: Db, projectId: string): Promise<EvidenceMapFe
 }
 
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
-export async function loadEvidenceInput(db: Db, projectId: string, runId: string): Promise<EvidenceInput> {
+/** How a report is built for its reader. */
+export interface EvidenceBuildOptions {
+	/**
+	 * A viewer who can't read each registered volume (D3, issue #523 G1): Appendix
+	 * A.2's input diff is made without the registered volumes of units that
+	 * aren't the application's own (an applicant's farms; none for a team
+	 * scenario), and the report is redacted as redactReportAllocations says.
+	 */
+	othersVolumesHidden?: boolean;
+}
+
+/** An input with only the registered volumes on `own` units: what a viewer kept from the rest may see diffed. */
+function onlyOwnAllocations<T extends { model?: { allocations?: { nodeId?: string | null }[] } | null }>(inputs: T, own: ReadonlySet<string>): T {
+	const list = inputs.model?.allocations;
+	if (!list) return inputs;
+	return { ...inputs, model: { ...inputs.model, allocations: list.filter((x) => !!x.nodeId && own.has(x.nodeId)) } };
+}
+
+/** The units an application run counts as its own for D3: an applicant's application's, none for a team scenario (evidence-17). */
+export const ownUnitsForD3 = (origin: ScenarioOrigin | null | undefined, ownedNodeIds: readonly string[] | null | undefined): string[] =>
+	origin === 'applicant' ? [...(ownedNodeIds ?? [])] : [];
+
+export async function loadEvidenceInput(db: Db, projectId: string, runId: string, opts: EvidenceBuildOptions = {}): Promise<EvidenceInput> {
 	const named = await loadRun(db, projectId, runId);
 	if (!named) throw new ApiError(404, 'not found');
 	const recorded = named.inputs.scenario;
@@ -522,11 +545,18 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 				ops: recorded.ops,
 				opsSha256: recorded.opsSha256,
 				ownedNodeIds: recorded.ownedNodeIds,
-				classified: recorded.classified
+				classified: recorded.classified,
+				// evidence-17: § 5 lists units one by one only for an applicant's application (D3). A deleted scenario reads as the team's.
+				origin: meta?.origin ?? 'team'
 			}
 		};
 		const kinds = differingKinds(baseline.inputs, application.inputs);
-		changes = diffInputs(baseline.inputs, application.inputs, { a: await storedValues(db, baseline.id, kinds), b: await storedValues(db, application.id, kinds) });
+		const own = new Set(ownUnitsForD3(meta?.origin, recorded.ownedNodeIds));
+		const forDiff = <T extends typeof baseline.inputs>(x: T): T => (opts.othersVolumesHidden ? onlyOwnAllocations(x, own) : x);
+		changes = diffInputs(forDiff(baseline.inputs), forDiff(application.inputs), {
+			a: await storedValues(db, baseline.id, kinds),
+			b: await storedValues(db, application.id, kinds)
+		});
 	}
 	{
 		const { rows } = await db.query<{ runId: string; label: string | null; scenarioName: string; createdAt: Date; createdBy: string | null }>(
@@ -604,8 +634,12 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /** The report for one run, as the engine builds it, with § 1's locality map's SVG hashed (the engine has no hash of its own). */
-export async function buildEvidenceReport(db: Db, projectId: string, runId: string): Promise<EvidenceReport> {
-	return withLocalitySvgHash(evidenceReport(await loadEvidenceInput(db, projectId, runId)), sha256);
+export async function buildEvidenceReport(db: Db, projectId: string, runId: string, opts: EvidenceBuildOptions = {}): Promise<EvidenceReport> {
+	const input = await loadEvidenceInput(db, projectId, runId, opts);
+	const report = await withLocalitySvgHash(evidenceReport(input), sha256);
+	if (!opts.othersVolumesHidden) return report;
+	const sc = input.application?.scenario;
+	return redactReportAllocations(report, ownUnitsForD3(sc?.origin, sc?.ownedNodeIds));
 }
 
 export const evidenceReportRoutes = new Hono<AuthEnv>().get('/:id/runs/:runId/evidence-report', async (c) => {
@@ -613,8 +647,9 @@ export const evidenceReportRoutes = new Hono<AuthEnv>().get('/:id/runs/:runId/ev
 	return withUser(
 		c.get('userId'),
 		async (db) => {
-			await requireRole(db, id, 'viewer');
-			return c.json({ report: await buildEvidenceReport(db, id, runId) });
+			const role = await requireRole(db, id, 'viewer');
+			// A viewer who can't read each registered volume (D3, issue #523 G1): built and redacted for them (EvidenceBuildOptions).
+			return c.json({ report: await buildEvidenceReport(db, id, runId, { othersVolumesHidden: await allocationUnitsHidden(db, id, role) }) });
 		},
 		{ readOnly: true }
 	);

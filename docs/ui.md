@@ -8702,7 +8702,10 @@ them scenarios).
   with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
   is kept while the scenario exists.
-- **Changes** (`OpList.svelte`): the ops in order, each in words against the
+- **Changes** (`OpList.svelte`): for a viewer the project keeps from each
+  registered volume, a line above (`scenario-withheld-ops`) says how many
+  changes set a farm's volume and aren't listed (`withheldOps`, issue #523
+  G1). The ops in order, each in words against the
   input it meets, so a second change to one value shows the first one's
   value as "was" (`ops.ts` `describeOp`, `stepInputs` over the base run's
   model and settings snapshot from `GET …/runs/:runId`). Each carries its
@@ -9871,7 +9874,10 @@ baseline card links to the published run's report (**Report**, beside
   was asked for (and "This page checks again every few seconds." while it's
   pending, polling every 2 s), **Download the PDF** once ready (the same
   API route, a fresh one-minute S3 link per click) beside "PDFs are kept for
-  7 days.", after a failure a line pointing back to the
+  7 days." (not for a PDF printed with each farm's registered volume that
+  the reader, a viewer the project keeps from them, may not download: a
+  line, `report-volumes-withheld`, says so and to make their own; issue
+  #523 G1), after a failure a line pointing back to the
   report, and **Open the report in the app** and **Go to the run** (**Go to
   Runs & results** for a scheduled PDF of the latest run). The card's
   `data-state` is the report's state. Anyone else, or a PDF past its 7
@@ -9948,7 +9954,13 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     `licenceImpactAuthorised`, and under it the authorised volumes' mix
     (held as licence, verified existing lawful use, registration, claimed
     existing lawful use, general authorisation or Schedule 1, the volume,
-    whether it is an entitlement, and the totals) and when and on which
+    whether it is an entitlement, and the totals; a viewer kept from each
+    registered volume reads the folded mix since `evidence-17`: the kinds
+    held by fewer than 5 are one *Other ways of holding* line or merged
+    into the smallest line (*…, with the ways of holding too few hold to
+    show*), the total row reads *All the lines above* and a note
+    (`evidence-authorised-mix-left-out`) says how many users were left out,
+    at 5 or more, else that some were) and when and on which
     engine it was run; without one, a fixed *Not assessed* row says why
     (not run for this application run, no registered volumes, or out of
     date); a pack drafted before `evidence-14` says it isn't part of it.
@@ -10140,6 +10152,12 @@ their own application's in [their own view](#the-applicants-pack-view).
   verify page), **Download reproduction bundle** once issued (the API's
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
+  neither download for a viewer the project keeps from each farm's
+  registered volume on a pack whose runs carry one (`volumesWithheld`,
+  issue #523 G1): a note (`pack-volumes-withheld`) says why and that an
+  editor or owner can give them both; for a pack drafted before
+  `evidence-15` that viewer gets the server's reason instead of the pack
+  (`pack-forbidden`),
   **Verify page** once issued, **Share link…** (an editor, once it was
   issued), **Send to the authority…** (an editor, while it is issued:
   `PackSendDialog.svelte`, a side sheet saying why the full pack goes to

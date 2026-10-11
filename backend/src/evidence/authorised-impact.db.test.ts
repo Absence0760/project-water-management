@@ -88,7 +88,7 @@ beforeAll(async () => {
 describe('the board against full authorised use', () => {
 	it('is a fixed row until an editor runs the pair, and none for baseline evidence', async () => {
 		const r = await report(viewer, appRun);
-		expect(r.version).toBe('evidence-16');
+		expect(r.version).toBe('evidence-17');
 		expect(r.licenceImpactAuthorised).toEqual({ status: 'notBuilt', detail: null, board: null, mix: null, builtAt: null, engineVersion: null });
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect((await report(viewer, base)).licenceImpactAuthorised).toBeNull();
@@ -121,14 +121,19 @@ describe('the board against full authorised use', () => {
 			entitlementM3PerYear: 150_000,
 			totalM3PerYear: 550_000
 		});
+		// Frozen beside it, folded for a viewer kept from each volume (evidence-17, #523 G1): two registered users
+		// hold the surface water, fewer than 5, so no line, and no count of them.
+		expect(a.mixFolded).toEqual({ rows: [], entitlementM3PerYear: 0, totalM3PerYear: 0, folded: true, someLeftOut: true });
 		// Existing use is authorised use now: not the use the baseline modelled.
 		const modelled = (await report(viewer, appRun)).licenceImpact!;
 		if (a.board?.result.status !== 'ok' || modelled.result.status !== 'ok') throw new Error('boards');
 		const existing = (b: typeof a.board) => (b!.result.status === 'ok' ? b!.result.impact.classes.map((c) => c.waterfall?.existingUseM3 ?? null) : []);
 		expect(existing(a.board)).not.toEqual(existing(modelled));
-		// The report carries it as the headline; a viewer reads it.
-		const r = await report(viewer, appRun);
-		expect(r.licenceImpactAuthorised).toEqual(a);
+		// The report carries it as the headline: the owner reads it as built; a viewer kept from each volume reads
+		// the folded mix in the full one's place.
+		expect((await report(owner, appRun)).licenceImpactAuthorised).toEqual(a);
+		const { mixFolded, ...rest } = a;
+		expect((await report(viewer, appRun)).licenceImpactAuthorised).toEqual({ ...rest, mix: mixFolded });
 	});
 
 	it('keeps one board per run: running it again replaces it', async () => {

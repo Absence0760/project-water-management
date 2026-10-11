@@ -481,6 +481,12 @@
 			     remembered switch (common/explain.svelte.ts). What states a value, a classification or a next step stays. -->
 			<span class="explain-at"><ExplainSwitch /></span>
 		</div>
+		{#if s.withheldOps}
+			<p class="muted small" data-testid="scenario-withheld-ops">
+				{s.withheldOps === 1 ? '1 change sets' : `${s.withheldOps} changes set`} a farm’s registered volume, which this project shows to its editors and owners only, so
+				{s.withheldOps === 1 ? 'it isn’t' : 'they aren’t'} listed here.
+			</p>
+		{/if}
 		{#if s.ops.length}
 			<OpList items={list.items} other={list.other} label="Changes in {s.name}" onremove={editable ? removeAt : undefined} disabled={busy} />
 		{:else}

@@ -19,6 +19,7 @@
 //  POST /projects/:id/runs/:runId/authorised-impact   editor
 import {
 	authorisedMix,
+	foldedMix,
 	authorisedUnavailable,
 	ENGINE_VERSION,
 	licenceImpactBoard,
@@ -103,14 +104,34 @@ export async function buildAuthorisedImpact(db: Db, projectId: string, runId: st
 	);
 	// How the volumes it held holders to are held (licence, verified ELU, registration, …), from the allocation rows as they are now.
 	const allocations = takes(full);
-	const { rows: held } = await db.query<{ id: string; authorisation: string }>('SELECT id::text, authorisation FROM allocation WHERE project_id = $1 AND id::text = ANY($2::text[])', [
-		projectId,
-		allocations.map((a) => a.id)
-	]);
-	const byId = new Map(held.map((h) => [h.id, h.authorisation]));
-	const mix = authorisedMix(allocations.map((a) => ({ volumeM3PerYear: a.volumeM3PerYear, waterUse: a.waterUse ?? null, authorisation: byId.get(a.id) ?? null })));
+	// Who holds each, counted as app_allocation_volumes counts holders (162): the holder's name, normalised; else another
+	// row's on the same unit; else the unit; else the row. The mix gives no fewer than 5 holders' volume (evidence-17, #523 G1).
+	const { rows: held } = await db.query<{ id: string; authorisation: string; holder: string }>(
+		`WITH named AS (
+			SELECT a.id, a.node_id, a.authorisation, nullif(lower(regexp_replace(btrim(h.user_display), '\\s+', ' ', 'g')), '') AS name
+			FROM allocation a LEFT JOIN allocation_holder h ON h.allocation_id = a.id
+			WHERE a.project_id = $1
+		)
+		SELECT x.id::text, x.authorisation, coalesce('h:' || x.name, 'h:' || (SELECT min(y.name) FROM named y WHERE y.node_id = x.node_id AND y.name IS NOT NULL),
+			'n:' || x.node_id::text, 'a:' || x.id::text) AS holder
+		FROM named x WHERE x.id::text = ANY($2::text[])`,
+		[projectId, allocations.map((a) => a.id)]
+	);
+	const byId = new Map(held.map((h) => [h.id, h]));
+	const entries = allocations.map((a) => ({
+			volumeM3PerYear: a.volumeM3PerYear,
+			waterUse: a.waterUse ?? null,
+			authorisation: byId.get(a.id)?.authorisation ?? null,
+			// A row gone since the run: the run's own unit, else the entry, holds it.
+			holder: byId.get(a.id)?.holder ?? (a.nodeId ? `n:${a.nodeId}` : `a:${a.id}`),
+			waterSource: a.waterSource
+		}));
+	// Both frozen (evidence-17): the full mix for editors, owners, the authority and the PDF; the folded one for a
+	// viewer kept from each registered volume (allocations/viewerUnits.ts redactReportAllocations).
+	const mix = authorisedMix(entries);
+	const mixFolded = foldedMix(entries);
 	const builtAt = new Date().toISOString();
-	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, builtAt, engineVersion: ENGINE_VERSION };
+	const result: EvidenceAuthorisedImpact = { status: 'ok', detail: null, board, mix, mixFolded, builtAt, engineVersion: ENGINE_VERSION };
 
 	// Newest wins: the run's older boards go (on any engine or settings), so one row per run is kept.
 	await db.query('DELETE FROM authorised_impact WHERE project_id = $1 AND application_run_id = $2', [projectId, runId]);
