@@ -97,8 +97,9 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await page.reload();
 	const supplyAgain = page.getByRole('region', { name: 'Water you received this season' });
 	await expect(supplyAgain.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
-	// The 12-month table follows the chosen unit too (issue #51); the chart's axis stays in ML.
+	// The 12-month chart follows the chosen unit too (issue #51, #521): its title, its axis and its table.
 	const months = page.getByRole('region', { name: 'Last 12 months, in ML' });
+	await expect(months.locator('svg text.value').first()).toHaveText(/^\d+(\.\d)?$/);
 	await months.getByText('Show the numbers', { exact: true }).click();
 	const monthsTable = months.getByRole('table');
 	await expect(monthsTable).toContainText(/\sML/);
@@ -110,8 +111,12 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await expect(months).toContainText('All or nearly all is 95 % or more of what you needed;');
 	// Back to m³, the seeded farmer's default, for the other specs.
 	await supplyAgain.getByRole('button', { name: 'm³' }).click();
-	await expect(monthsTable).toContainText(/\sm³/);
-	await expect(monthsTable).not.toContainText('ML');
+	const monthsM3 = page.getByRole('region', { name: 'Last 12 months, in m³' });
+	await expect(monthsM3).toBeVisible();
+	await expect(months).toHaveCount(0);
+	await expect(monthsM3.locator('svg text.value').first()).toHaveText(/^\d{1,3}(\s\d{3})+$/);
+	await expect(monthsM3.getByRole('table')).toContainText(/\sm³/);
+	await expect(monthsM3.getByRole('table')).not.toContainText('ML');
 	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
 
 	// The figures' CSV leads with the page's disclaimer line (docs/legal/disclaimer-review.md § 3), then the table:
@@ -250,7 +255,7 @@ test('the farm page keeps its 13 px text and 44 px targets, and its disclosures 
 
 		// "Show the numbers" and "Who can see" draw a chevron that turns over when they open.
 		const turn = (loc: ReturnType<Page['locator']>) => loc.evaluate((el) => getComputedStyle(el, '::after').transform);
-		const numbers = page.getByRole('region', { name: 'Last 12 months, in ML' }).locator('summary');
+		const numbers = page.getByRole('region', { name: 'Last 12 months, in m³' }).locator('summary');
 		const who = page.getByRole('button', { name: 'Who can see my hydrological unit' });
 		for (const toggle of [numbers, who]) {
 			expect(await toggle.evaluate((el) => getComputedStyle(el, '::after').content)).not.toBe('none');
@@ -266,7 +271,7 @@ test('the farm page keeps its 13 px text and 44 px targets, and its disclosures 
 			expect(label.height, (await row.innerText()).replace(/\s+/g, ' ')).toBeLessThanOrEqual(figure.height + 1);
 		}
 
-		// The menu: a two-line item ("Who decides about your farm’s information") keeps clear of the next.
+		// The menu: a two-line item ("Who decides about your hydrological unit’s information") keeps clear of the next.
 		await page.getByRole('button', { name: 'Menu' }).click();
 		const items = page.locator('#farm-menu').locator('a, button');
 		const rects = await items.evaluateAll((els) =>
@@ -696,13 +701,13 @@ test('who decides shows its card’s shape while loading, and a failed load offe
 	});
 	await page.goto(`/farm/${projectId}/who-decides`);
 	// Loading: the title, a skeleton card and a status line, not a bare title.
-	await expect(page.getByRole('heading', { level: 1, name: 'Who decides about your farm’s information' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Who decides about your hydrological unit’s information' })).toBeVisible();
 	await expect(page.locator('main[aria-busy="true"] .skeleton')).toHaveCount(1);
 	release();
-	// A failure: the farm pages' error state, with Try again, never the raw error.
+	// A failure: the farm pages' error state, with Try again, never the raw error; titled for this page, not a farm's figures.
 	const again = page.getByRole('button', { name: 'Try again' });
 	await expect(again).toBeVisible();
-	await expect(page.getByRole('alert')).toContainText('We couldn’t load your hydrological unit');
+	await expect(page.getByRole('alert').getByRole('heading', { level: 1 })).toHaveText('We couldn’t load this page');
 	await expect(page.getByText('Internal error')).toHaveCount(0);
 	fail = false;
 	held = Promise.resolve();
@@ -711,6 +716,114 @@ test('who decides shows its card’s shape while loading, and a failed load offe
 	await expect(page.getByRole('link', { name: 'Privacy notice' })).toBeVisible();
 	await expect(page.locator('main[aria-busy]')).toHaveCount(0);
 	await page.unrouteAll({ behavior: 'wait' });
+});
+
+test('the menu marks the page it is on, and who decides keeps the farm it was opened from', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await signIn(page, FARMER2);
+	const menu = page.locator('#farm-menu');
+	const openMenu = () => page.getByRole('button', { name: 'Menu' }).click();
+	// Two farms in two catchments: the list, whose menu item says it is the page shown (as Account does on its page).
+	await expect(page).toHaveURL(/\/farm$/);
+	await expect(page.getByRole('heading', { level: 1, name: 'Your hydrological units' })).toBeVisible();
+	await openMenu();
+	await expect(menu.getByRole('link', { name: 'Your hydrological units' })).toHaveAttribute('aria-current', 'page');
+	await expect(menu.locator('[aria-current]')).toHaveCount(1);
+	await page.keyboard.press('Escape');
+
+	// A farm page opened for one farm (?node=): Menu → Who decides carries it, so the back link returns to that farm.
+	const { projects } = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; name: string; role: string }[] };
+	const sandspruit = projects.find((p) => p.role === 'farmer' && /Sandspruit/.test(p.name))!;
+	const index = (await (await page.request.get(`${API_URL}/projects/${sandspruit.id}/farm`)).json()) as { farms: { nodeId: string; name: string }[] };
+	const rietspruit = index.farms.find((f) => f.name === 'Rietspruit')!;
+	const farmUrl = `/farm/${sandspruit.id}?node=${rietspruit.nodeId}`;
+	await page.goto(farmUrl);
+	await expect(page.getByRole('heading', { level: 1, name: /^Rietspruit/ })).toBeVisible();
+	await openMenu();
+	await expect(menu.locator('[aria-current]')).toHaveCount(0);
+	const who = menu.getByRole('link', { name: 'Who decides about your hydrological unit’s information' });
+	await expect(who).toHaveAttribute('href', `/farm/${sandspruit.id}/who-decides?node=${rietspruit.nodeId}`);
+	await who.click();
+	await expect(page).toHaveURL(`/farm/${sandspruit.id}/who-decides?node=${rietspruit.nodeId}`);
+	await expect(page.locator('section.card[data-ready="true"]')).toBeVisible();
+	await openMenu();
+	await expect(menu.getByRole('link', { name: 'Who decides about your hydrological unit’s information' })).toHaveAttribute('aria-current', 'page');
+	await page.keyboard.press('Escape');
+	const back = page.locator('.farm-header').getByRole('link', { name: 'My hydrological unit' });
+	await expect(back).toHaveAttribute('href', farmUrl);
+	await back.click();
+	await expect(page).toHaveURL(farmUrl);
+	await expect(page.getByRole('heading', { level: 1, name: /^Rietspruit/ })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(`/farm/${sandspruit.id}/who-decides?node=${rietspruit.nodeId}`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Who decides about your hydrological unit’s information' })).toBeVisible();
+	await expectNoViolations(page);
+});
+
+test('the charts’ month letters keep clear of each other on a 320 px phone, in either unit', async ({ page }) => {
+	await page.setViewportSize({ width: 320, height: 700 });
+	await signIn(page, FARMER1);
+	const { projectId } = await farmOf(page.context());
+	/** The gaps between the month letters along the chart's foot, and whether every axis label is inside the chart. */
+	const measure = (chart: Locator) =>
+		chart.locator('svg').evaluate((svg) => {
+			const box = svg.getBoundingClientRect();
+			const texts = [...svg.querySelectorAll('text.tick')].map((t) => t.getBoundingClientRect());
+			const foot = Math.max(...texts.map((r) => r.bottom));
+			const letters = texts.filter((r) => r.bottom === foot).sort((a, b) => a.left - b.left);
+			return { gaps: letters.slice(1).map((r, i) => r.left - letters[i]!.right), count: letters.length, inside: texts.every((r) => r.left >= box.left - 0.5 && r.right <= box.right + 0.5 && r.top >= box.top - 0.5) };
+		});
+	const check = async (chart: Locator, what: string) => {
+		const m = await measure(chart);
+		expect(m.count, what).toBe(12);
+		expect(Math.min(...m.gaps), what).toBeGreaterThanOrEqual(6);
+		expect(m.inside, what).toBe(true);
+	};
+	await page.goto(`/farm/${projectId}/dam`);
+	await check(page.getByRole('region', { name: 'Last 12 months' }), 'dam chart');
+	await expectNoSidewaysScroll(page);
+	await page.goto(`/farm/${projectId}`);
+	// m³ (the axis's widest labels, and the seeded farmer's unit), then ML; chosen on the page, whatever the account held.
+	const supply = page.getByRole('region', { name: 'Water you received this season' });
+	await supply.getByRole('button', { name: 'm³' }).click();
+	await check(page.getByRole('region', { name: 'Last 12 months, in m³' }), 'monthly chart, m³');
+	await supply.getByRole('button', { name: 'ML' }).click();
+	await check(page.getByRole('region', { name: 'Last 12 months, in ML' }), 'monthly chart, ML');
+	await supply.getByRole('button', { name: 'm³' }).click();
+	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
+	await expectNoSidewaysScroll(page);
+});
+
+test('a farm with no dam says so on the dam page, with no estimate line over it', async ({ page, owner, signIn: signInAs }) => {
+	void owner;
+	const req = page.context().request;
+	const project = await createProject(req, 'No dam catchment');
+	const model = sampleModel();
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
+	(upper as { damCapacityM3: number }).damCapacityM3 = 0;
+	await putModel(req, project.id, model);
+	await updateSettings(req, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: Array(12).fill(1000) });
+	await putSeries(req, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(120) });
+	await putSeries(req, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
+	const runId = await createRun(req, project.id, 'Baseline');
+	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'none' } } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const farmer = await signInAs('No-dam farmer');
+	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } });
+	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
+
+	const fp = farmer.page;
+	await fp.setViewportSize(PHONE);
+	await fp.goto(`/farm/${project.id}/dam`);
+	await expect(fp.getByRole('heading', { level: 1, name: 'Your dam' })).toBeVisible();
+	await expect(fp.getByText('Upper farm has no dam in the model.', { exact: true })).toBeVisible();
+	await expect(fp.getByRole('link', { name: 'Back to my hydrological unit' })).toBeVisible();
+	// No figures, so no estimate line (positive control: the farm page itself has it before its figures).
+	await expect(estimateNote(fp)).toHaveCount(0);
+	await fp.goto(`/farm/${project.id}`);
+	await expect(fp.getByRole('region', { name: 'Water you received this season' })).toBeVisible();
+	await expect(estimateNote(fp)).toHaveCount(1);
 });
 
 test('the words page goes back to the farm page it was opened from, and only to a farm page', async ({ page }) => {

@@ -357,7 +357,7 @@ test('an admin sets the privacy contact; a member reads it; a farmer finds it fr
 	await expect(panel).toContainText('Only admins can change it.');
 	await expect(panel.getByRole('button', { name: 'Save contact' })).toHaveCount(0);
 
-	// A farmer of a team catchment: Menu → Who decides about your farm's information.
+	// A farmer of a team catchment: Menu → Who decides about your hydrological unit's information.
 	const made = await page.request.post(`${API_URL}/projects`, { data: { name: 'Contact catchment', teamId: team.id } });
 	expect(made.status(), await made.text()).toBe(201);
 	const project = ((await made.json()) as { project: { id: string } }).project;
@@ -370,10 +370,10 @@ test('an admin sets the privacy contact; a member reads it; a farmer finds it fr
 	await acceptInvites(farmer.user.email, project.id);
 	await farmer.page.goto(`/farm/${project.id}`);
 	await farmer.page.getByRole('button', { name: 'Menu' }).click();
-	await farmer.page.getByRole('link', { name: 'Who decides about your farm’s information' }).click();
+	await farmer.page.getByRole('link', { name: 'Who decides about your hydrological unit’s information' }).click();
 	await expect(farmer.page).toHaveURL(`/farm/${project.id}/who-decides`);
 	const card = farmer.page.getByRole('region', { name: 'Contact Board' });
-	await expect(card).toContainText('Contact Board decides what is done with your farm’s information in this catchment.');
+	await expect(card).toContainText('Contact Board decides what is done with your hydrological unit’s information in this catchment.');
 	await expect(card.getByRole('link', { name: 'io@contact-board.example' })).toHaveAttribute('href', 'mailto:io@contact-board.example');
 	await expect(card).toContainText('PO Box 7, Kloof 1234');
 	await expectNoViolations(farmer.page);

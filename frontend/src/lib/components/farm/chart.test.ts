@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHART_TOP, CHART_TOP_INSIDE, MIN_MONTH_PX } from './chartGeometry';
 import { barChart, CHART_BASE, damChart, damRows, damSummary, monthLabels, niceMax, rangeCaption, supplyLevel, supplyLevelKey, supplyRows, supplySummary } from './chart';
 import { vaalbankFixture } from './fixture';
 
@@ -49,6 +50,30 @@ describe('the needed/received bars', () => {
 		expect(c.groups[11]!.label).toBe('J*');
 	});
 
+	it('draws the axis in m³ when the reader chose m³, the bars where they were', () => {
+		const ml = barChart(farm.monthly, farm.dataUntil, 496);
+		const m3 = barChart(farm.monthly, farm.dataUntil, 496, 'm3');
+		expect(m3.ticks.map((t) => sp(t.label))).toEqual(['120 000', '60 000', '0']);
+		expect(m3.groups[9]!.need.h).toBeCloseTo(ml.groups[9]!.need.h);
+	});
+
+	it('moves the axis labels into a narrow plot, so every month keeps its room', () => {
+		// A 320 px phone's card (256 px) with m³'s wide labels: a label column would leave each month under MIN_MONTH_PX.
+		const narrow = barChart(farm.monthly, farm.dataUntil, 256, 'm3');
+		expect(narrow.inside).toBe(true);
+		expect(narrow.axisLeft).toBe(0);
+		const step = narrow.groups[1]!.labelX - narrow.groups[0]!.labelX;
+		expect(step).toBeGreaterThanOrEqual(MIN_MONTH_PX);
+		// The plot's top drops to leave room for the top label above its line; the bars stay under it.
+		expect(narrow.ticks[0]!.y).toBe(CHART_TOP_INSIDE);
+		for (const g of narrow.groups) expect(g.need.y).toBeGreaterThanOrEqual(CHART_TOP_INSIDE - 1e-9);
+		// Room enough: the labels keep their own column.
+		const wide = barChart(farm.monthly, farm.dataUntil, 496, 'm3');
+		expect(wide.inside).toBe(false);
+		expect(wide.axisLeft).toBeGreaterThan(0);
+		expect(wide.ticks[0]!.y).toBe(CHART_TOP);
+	});
+
 	it('sums the chart up and lists all 12 months with years', () => {
 		expect(supplySummary(farm.monthly, farm.dataUntil)).toBe(
 			'Water you needed and received each month, February 2023 to 10 January 2024. You were short in February, March, November and December. The numbers are in the table below.'
@@ -97,6 +122,16 @@ describe('the dam line', () => {
 		expect(c.stopY).toBeCloseTo(CHART_BASE - 0.15 * 120);
 		expect(c.ticks.map((t) => sp(t.label))).toEqual(['100 %', '50 %', '0 %']);
 		expect(damChart(farm.monthly, farm.dataUntil, 296, 0).stopY).toBeNull();
+	});
+
+	it('moves the axis labels into the plot on a 320 px phone, so the month letters don’t crowd', () => {
+		const narrow = damChart(farm.monthly, farm.dataUntil, 256, farm.damMinPct);
+		expect(narrow.inside).toBe(true);
+		expect(narrow.axisLeft).toBe(0);
+		expect(narrow.labels[1]!.x - narrow.labels[0]!.x).toBeGreaterThanOrEqual(MIN_MONTH_PX);
+		const roomy = damChart(farm.monthly, farm.dataUntil, 296, farm.damMinPct);
+		expect(roomy.inside).toBe(false);
+		expect(roomy.labels[1]!.x - roomy.labels[0]!.x).toBeGreaterThanOrEqual(MIN_MONTH_PX);
 	});
 
 	it('sums the line up and tabulates it', () => {

@@ -15,11 +15,12 @@
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
-	import { wordsHref } from './load';
+	import { farmHref, wordsHref } from './load';
 	import { keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
 		projectId = null,
+		nodeId = null,
 		title = null,
 		back = null,
 		accountPage = false,
@@ -30,8 +31,10 @@
 		busy = false,
 		children
 	}: {
-		/** The catchment the page is in: the menu then offers "Who decides about your farm's information" (168). */
+		/** The catchment the page is in: the menu then offers "Who decides about your hydrological unit's information" (168). */
 		projectId?: string | null;
+		/** The farm a farm page shows, when its links carry it (?node=, load.ts farmHref): who-decides gets it too. Else the URL's own ?node=. */
+		nodeId?: string | null;
 		/** The header's title; "My farm" when not given. */
 		title?: string | null;
 		/** A back link instead of the title (the "Why?" and dam pages). */
@@ -54,6 +57,9 @@
 	} = $props();
 
 	let menuOpen = $state(false);
+	// The farm the page is about (?node=), carried to who-decides like the other farm links, so its back link returns to it.
+	const node = $derived(nodeId ?? page.url.searchParams.get('node'));
+	const path = $derived(base && page.url.pathname.startsWith(base) ? page.url.pathname.slice(base.length) : page.url.pathname);
 	let keep = $state(keepsCopy());
 	let menuRoot: HTMLDivElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
@@ -124,14 +130,14 @@
 				{t('Menu')}
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
-				<li><a href="{base}/farm">{t('Your hydrological units')}</a></li>
-				<li><a href={wordsHref(base, page.url)}>{t('What do these words mean?')}</a></li>
+				<li><a href="{base}/farm" aria-current={path === '/farm' ? 'page' : undefined}>{t('Your hydrological units')}</a></li>
+				<li><a href={wordsHref(base, page.url)} aria-current={path === '/farm/words' ? 'page' : undefined}>{t('What do these words mean?')}</a></li>
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
 				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
 				<!-- The catchment's organisation decides about the farm's information (POPIA s18(1)(b)): whom to ask. -->
 				{#if projectId}
-					<li><a href="{base}/farm/{encodeURIComponent(projectId)}/who-decides">{t('Who decides about your farm’s information')}</a></li>
+					<li><a href={farmHref(base, projectId, node, !!node, 'who-decides')} aria-current={path.endsWith('/who-decides') ? 'page' : undefined}>{t('Who decides about your hydrological unit’s information')}</a></li>
 				{/if}
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
@@ -289,7 +295,7 @@
 		position: absolute;
 		right: 0;
 		top: calc(100% + 4px);
-		/* Wide enough that "Who decides about your farm's information" (longer in
+		/* Wide enough that "Who decides about your hydrological unit's information" (longer in
 		   Afrikaans) wraps once at most, never past the window. */
 		width: max-content;
 		min-width: 250px;
@@ -303,7 +309,7 @@
 		box-shadow: var(--shadow);
 	}
 	/* A two-line item keeps its own padding, so it doesn't run into the next
-	   one ("…farm's information" sat on "Don't keep a copy…" as one block). */
+	   one ("…unit's information" sat on "Don't keep a copy…" as one block). */
 	.menu a,
 	.menu button {
 		width: 100%;

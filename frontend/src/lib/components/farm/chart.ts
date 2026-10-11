@@ -8,7 +8,7 @@ import { STRESS_THRESHOLDS, stressClassOf, type MonthTotals, type StressClass } 
 import { msg, plural, t, tn, type Msg } from '$lib/i18n/locale.svelte';
 import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd, type VolumeUnit } from './format';
 
-import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP as TOP, niceMax } from './chartGeometry';
+import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP, CHART_TOP_INSIDE, MIN_MONTH_PX, niceMax } from './chartGeometry';
 
 // i18n-section: farm.ordinal
 /** A day of the month as an ordinal: “10th”. */
@@ -54,30 +54,47 @@ export function rangeCaption(monthly: readonly MonthTotals[], dataUntil: string)
 
 const approxTextWidth = (s: string) => s.length * CHART_FONT_PX * 0.6;
 
+/**
+ * Where the axis labels go: in a column of their own left of the plot, or,
+ * when that column would leave a month less than MIN_MONTH_PX, over their
+ * grid lines inside the plot (axisLeft 0, each label just above its line,
+ * the plot's top lowered to make room for the top one), so the month
+ * letters never crowd.
+ */
+function axisPlacement(tickText: readonly string[], width: number, months: number): { axisLeft: number; inside: boolean; top: number } {
+	const column = Math.ceil(Math.max(...tickText.map(approxTextWidth))) + 6;
+	const inside = (width - column) / Math.max(months, 1) < MIN_MONTH_PX;
+	return { axisLeft: inside ? 0 : column, inside, top: inside ? CHART_TOP_INSIDE : CHART_TOP };
+}
+
 export interface BarChart {
 	width: number;
 	height: number;
 	ticks: { y: number; label: string }[];
 	axisLeft: number;
+	/** The axis labels sit over their grid lines inside the plot (a narrow chart: axisPlacement). */
+	inside: boolean;
 	groups: { need: { x: number; y: number; w: number; h: number }; got: { x: number; y: number; w: number; h: number }; labelX: number; label: string }[];
 }
 
-/** Needed (an outline) and received (a fill) per month, in ML. */
-export function barChart(monthly: readonly MonthTotals[], dataUntil: string, width: number): BarChart {
-	const ml = monthly.map((m) => ({ need: m.demandM3 / 1000, got: m.suppliedM3 / 1000 }));
+/** Needed (an outline) and received (a fill) per month, in the reader's unit (ML, or m³ as the supply card's switch sets it). */
+export function barChart(monthly: readonly MonthTotals[], dataUntil: string, width: number, unit: VolumeUnit = 'ML'): BarChart {
+	const per = unit === 'ML' ? 1000 : 1;
+	const ml = monthly.map((m) => ({ need: m.demandM3 / per, got: m.suppliedM3 / per }));
 	const top = niceMax(Math.max(0, ...ml.flatMap((m) => [m.need, m.got])));
 	const tickVals = [top, top / 2, 0];
-	const tickText = tickVals.map((v) => fmtNumber(v, 1, true));
-	const axisLeft = Math.ceil(Math.max(...tickText.map(approxTextWidth))) + 6;
+	const tickText = tickVals.map((v) => fmtNumber(v, unit === 'ML' ? 1 : 0, true));
+	const { axisLeft, inside, top: plotTop } = axisPlacement(tickText, width, ml.length);
 	const plotW = Math.max(width - axisLeft, 1);
 	const groupW = plotW / Math.max(ml.length, 1);
 	const barW = Math.max(2, Math.min(14, (groupW - 4) / 2));
-	const y = (v: number) => BASE - (Math.max(v, 0) / top) * (BASE - TOP);
+	const y = (v: number) => BASE - (Math.max(v, 0) / top) * (BASE - plotTop);
 	const labels = monthLabels(monthly, dataUntil);
 	return {
 		width,
 		height: CHART_HEIGHT,
 		axisLeft,
+		inside,
 		ticks: tickVals.map((v, i) => ({ y: y(v), label: tickText[i]! })),
 		groups: ml.map((m, i) => {
 			const cx = axisLeft + groupW * (i + 0.5);
@@ -148,6 +165,8 @@ export interface DamChart {
 	width: number;
 	height: number;
 	axisLeft: number;
+	/** The axis labels sit over their grid lines inside the plot (a narrow chart: axisPlacement). */
+	inside: boolean;
 	ticks: { y: number; label: string }[];
 	points: string;
 	/** The stop level's dashed line; null without one. */
@@ -158,10 +177,10 @@ export interface DamChart {
 export function damChart(monthly: readonly MonthTotals[], dataUntil: string, width: number, damMinPct: number): DamChart {
 	const ticks = [1, 0.5, 0];
 	const tickText = ticks.map((t) => fmtPct(t));
-	const axisLeft = Math.ceil(Math.max(...tickText.map(approxTextWidth))) + 6;
+	const { axisLeft, inside, top: plotTop } = axisPlacement(tickText, width, monthly.length);
 	const plotW = Math.max(width - axisLeft, 1);
 	const groupW = plotW / Math.max(monthly.length, 1);
-	const y = (f: number) => BASE - Math.min(Math.max(f, 0), 1) * (BASE - TOP);
+	const y = (f: number) => BASE - Math.min(Math.max(f, 0), 1) * (BASE - plotTop);
 	const labels = monthLabels(monthly, dataUntil);
 	const pts: string[] = [];
 	monthly.forEach((m, i) => {
@@ -172,6 +191,7 @@ export function damChart(monthly: readonly MonthTotals[], dataUntil: string, wid
 		width,
 		height: CHART_HEIGHT,
 		axisLeft,
+		inside,
 		ticks: ticks.map((t, i) => ({ y: y(t), label: tickText[i]! })),
 		points: pts.join(' '),
 		stopY: damMinPct > 0 ? y(damMinPct) : null,
