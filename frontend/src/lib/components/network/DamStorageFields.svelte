@@ -17,7 +17,8 @@
 	import { RULE_LABEL, releaseHint } from './damRelease';
 	import { EWR_SCENARIO_ONLY_NOTE, ewrSwitchDisabled } from './ewrScenarioOnly';
 
-	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
+	// `baseline`: the project's own model, whose EWR target is a scenario's (issue #523 B4); false in Override mode.
+	let { node, readonly, baseline = false }: { node: NetworkNode; readonly: boolean; baseline?: boolean } = $props();
 
 	const id = (k: string) => `dam-${k}-${node.id}`;
 	const label = $derived(node.name || 'this hydrological unit');
@@ -78,8 +79,8 @@
 
 	function setRule(r: DamReleaseRule) {
 		node.damReleaseRule = r;
-		// A release needs its amounts: pass inflow up to the EWR is a scenario's (issue #523 B4), so the baseline's starts from a set flow.
-		if (r !== 'none' && !node.damReleaseM3Day) node.damReleaseM3Day = monthsOf(0);
+		// A fixed release needs its amounts. Pass inflow up to the EWR is a scenario's (issue #523 B4), so the baseline's starts from a set flow.
+		if ((r === 'fixed' || (r === 'passInflow' && baseline)) && !node.damReleaseM3Day) node.damReleaseM3Day = monthsOf(0);
 	}
 </script>
 
@@ -155,14 +156,14 @@
 		<label class="check">
 			<input
 				type="checkbox"
-				disabled={ewrSwitchDisabled(readonly, useEwr)}
+				disabled={ewrSwitchDisabled(readonly, useEwr, baseline)}
 				checked={useEwr}
-				aria-describedby={id('ewr-h')}
+				aria-describedby={baseline ? id('ewr-h') : undefined}
 				onchange={(e) => (node.damReleaseM3Day = e.currentTarget.checked ? null : monthsOf(0))}
 			/>
 			Pass up to the EWR required here (this hydrological unit's share and upstream shares)
 		</label>
-		<p class="hint" id={id('ewr-h')} data-testid="dam-release-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>
+		{#if baseline}<p class="hint" id={id('ewr-h')} data-testid="dam-release-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>{/if}
 	{/if}
 	{#if rule === 'fixed' || (rule === 'passInflow' && !useEwr)}
 		<MonthFields

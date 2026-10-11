@@ -148,7 +148,8 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
-	const editor = new ModelEditor();
+	// The project's own model: the baseline, which never keeps water for the EWR (issue #523 B4).
+	const editor = new ModelEditor({ baseline: true });
 	// The project details being edited on the Project page (issue #162 item 12):
 	// held here, so they survive a tab change and share the model's save bar.
 	const details = new ProjectDetailsDraft();

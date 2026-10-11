@@ -353,7 +353,9 @@ describe('validateModel', () => {
 		const m = model([g, b, { ...a, damReleaseRule: 'passInflow', damReleaseM3Day: null }]);
 		m.nodes[1] = { ...b, handsOffEwr: true };
 		m.transfers = [offtake as never];
-		const issues = validateModel(m).filter((i) => /a scenario’s rule/.test(i.message));
+		const issues = validateModel(m, { baseline: true }).filter((i) => /a scenario’s rule/.test(i.message));
+		// A scenario's Override mode (not the baseline) keeps them without an issue.
+		expect(validateModel(m).filter((i) => /a scenario’s rule/.test(i.message))).toEqual([]);
 		expect(issues.map((i) => [i.area, i.itemId, i.message.split(':')[0]])).toEqual([
 			['network', 'b', '"B"'],
 			['network', 'a', '"A"'],
@@ -363,7 +365,7 @@ describe('validateModel', () => {
 		// Positive control: the set flows beside them are the baseline's.
 		const setFlows = model([g, { ...b, handsOffM3Day: new Array(12).fill(5) }, { ...a, damReleaseRule: 'passInflow', damReleaseM3Day: new Array(12).fill(5) }]);
 		setFlows.transfers = [{ ...offtake, handsOffEwr: false, handsOffM3Day: 10 } as never];
-		expect(validateModel(setFlows).filter((i) => /EWR/.test(i.message))).toEqual([]);
+		expect(validateModel(setFlows, { baseline: true }).filter((i) => /EWR/.test(i.message))).toEqual([]);
 	});
 
 	it('refuses the EWR site flag off the outlet or a hydrological unit, exactly as the backend does (engine 1.5.0)', () => {

@@ -65,6 +65,18 @@ export function nextFreeName(base: string, nodes: readonly { name: string }[], f
 }
 
 export class ModelEditor {
+	/**
+	 * The project's own model (the workspace), not a scenario's Override mode: only the baseline refuses the
+	 * rules that keep water for the EWR (issue #523 B4), so its forms disable those switches and validateModel
+	 * flags them. A scenario's editor leaves it false.
+	 */
+	readonly #baseline: boolean = false;
+	get baseline(): boolean {
+		return this.#baseline;
+	}
+	constructor(opts: { baseline?: boolean } = {}) {
+		this.#baseline = opts.baseline ?? false;
+	}
 	model = $state<ProjectModel>(emptyModel());
 	// Starts equal to the empty model: an editor that never loaded (the project
 	// failed to load or 404'd) has no unsaved changes to guard on navigation.
@@ -80,7 +92,7 @@ export class ModelEditor {
 	 * systems blended by their requirement at it (engine ≥ 1.72.0), which the unit form shows.
 	 */
 	apanMm = $state<readonly number[]>([]);
-	issues = $derived<ModelIssue[]>(validateModel(this.model));
+	issues = $derived<ModelIssue[]>(validateModel(this.model, { baseline: this.#baseline }));
 
 	load(m: ProjectModel) {
 		// Array order = display order (sortOrder) from here on; reordering keeps them in step.

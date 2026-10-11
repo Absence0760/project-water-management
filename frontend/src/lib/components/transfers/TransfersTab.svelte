@@ -345,8 +345,8 @@
 													<input
 														type="checkbox"
 														aria-label="Leaves the EWR in the river, {label}"
-														aria-describedby="tr-{t.id}-ewr-h"
-														disabled={ewrSwitchDisabled(readonly, !!t.handsOffEwr)}
+														aria-describedby={editor.baseline ? `tr-${t.id}-ewr-h` : undefined}
+														disabled={ewrSwitchDisabled(readonly, !!t.handsOffEwr, editor.baseline)}
 														checked={!!t.handsOffEwr}
 														onchange={(e) => (t.handsOffEwr = e.currentTarget.checked)}
 													/>
@@ -354,7 +354,7 @@
 												</label>
 												<HelpTip key="transfer.handsOffEwr" />
 											</span>
-											<p class="ewr-note" id="tr-{t.id}-ewr-h" data-testid="offtake-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>
+											{#if editor.baseline}<p class="ewr-note" id="tr-{t.id}-ewr-h" data-testid="offtake-ewr-scenario">{EWR_SCENARIO_ONLY_NOTE}</p>{/if}
 											<span class="check-row">
 												<label class="check">
 													<input type="checkbox" aria-label="Tops up the destination’s dam, {label}" disabled={readonly} checked={!!t.topUpDam} onchange={(e) => (t.topUpDam = e.currentTarget.checked)} />

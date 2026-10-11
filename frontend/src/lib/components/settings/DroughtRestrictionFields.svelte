@@ -323,7 +323,7 @@
 				<label class="check"
 					><input
 						type="checkbox"
-						disabled={baseline ? ewrSwitchDisabled(readonly, !!rule.ewrTrigger) : readonly}
+						disabled={ewrSwitchDisabled(readonly, !!rule.ewrTrigger, baseline)}
 						aria-describedby={baseline ? `${uid}-ewr-h` : undefined}
 						checked={!!rule.ewrTrigger}
 						onchange={(e) => setEwr(e.currentTarget.checked)}

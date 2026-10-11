@@ -955,6 +955,7 @@
 				<NodeDetail
 					bind:this={detail}
 					node={editing}
+					baseline={editor.baseline}
 					section={page.url.searchParams.get('section')}
 					{nodes}
 					share={shareOf(editIndex)}

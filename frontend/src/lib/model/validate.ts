@@ -159,7 +159,7 @@ export function withUnitMap(n: Pick<NetworkNode, 'mapMm' | 'mapSource'>, mm: num
  * screen, so the unit form warns and a run caps it, engine ≥ 1.72.0;
  * returnFlowHint in network/fields.ts.)
  */
-export function validateModel(model: ProjectModel): ModelIssue[] {
+export function validateModel(model: ProjectModel, opts: { baseline?: boolean } = {}): ModelIssue[] {
 	const issues: ModelIssue[] = [];
 	const { nodes, crops, cropAreas, transfers } = model;
 	const nodeIds = new Set(nodes.map((n) => n.id));
@@ -435,8 +435,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		}
 	});
 
-	// The rules that keep water for the EWR are a scenario's (issue #523 B4), as the API refuses them (400 ewr_rule_scenario_only).
-	for (const r of baselineEwrRules({ model: { nodes, transfers } })) {
+	// The rules that keep water for the EWR are a scenario's (issue #523 B4), as the API refuses them in the
+	// baseline (400 ewr_rule_scenario_only); a scenario's Override mode sets them.
+	for (const r of opts.baseline ? baselineEwrRules({ model: { nodes, transfers } }) : []) {
 		const what = r.kind === 'damPassInflow' ? 'passing up to the EWR below the dam' : 'leaving the EWR in the river';
 		issues.push({
 			area: r.kind === 'offtakeHandsOff' ? 'transfers' : 'network',
