@@ -14,10 +14,14 @@
 // when CHIRPS over the run before (the day before the reading left out, for
 // timing) reads at least ACC_RUN_SHARE of it. The window is the run plus
 // the reading day. Engine ≥ 1.84.0 (issue #523 A2): only blank days make a
-// run. A recorded 0 is a reading: it ends the run and is never part of a
-// window, so 0 mm days followed by 20 mm or more is real rain on its day (up
-// to 1.83, days of 0 counted like blanks). A blank run counts only up to
-// ACC_MAX_BLANK_DAYS (engine ≥ 1.70.0); a longer one is an outage (below).
+// run. A recorded 0 that §2.4c trusts is a reading: it ends the run and is
+// never part of a window, so 0 mm days followed by 20 mm or more is real rain
+// on its day (up to 1.83, days of 0 counted like blanks). A 0 that §2.4c
+// flags as a suspect zero run and sets aside as missing reads as blank
+// (flaggedZeroSpans; provisional, pending the hydrologist): the engine has
+// marked it missing, and kept as a reading the reading would stay whole beside
+// the run's CHIRPS fill, counting that rain twice. A blank run counts only up
+// to ACC_MAX_BLANK_DAYS (engine ≥ 1.70.0); a longer one is an outage (below).
 //
 // Treatment (settings.zeroRainRuns.accumulationMode 'spread', the default):
 // the window's recorded total is kept and spread over its days in proportion
@@ -41,10 +45,11 @@ import { fromEpochDay, toEpochDay } from './calendar';
 import { exclusionRanges, type ExclusionRange } from './calibrate/provenance';
 import type { AccumulationMode, ChirpsBiasMode, DailySeries, SeriesKind, ZeroRainSettings } from './project';
 import { chirpsBiasFactors, chirpsFactorOn, type ChirpsCorrection, type ChirpsFitOptions } from './rain';
+import { zeroRainRuns } from './quality';
 
 /** A reading must be at least this, mm, to be judged. */
 export const ACC_MIN_MM = 20;
-/** … after at least this many blank catchment rain days in a row (engine ≥ 1.84.0; up to 1.83, days of 0 or blank). */
+/** … after at least this many blank catchment rain days in a row (engine ≥ 1.84.0: blank, listed missing or a flagged zero run's; up to 1.83, days of 0 or blank). */
 export const ACC_MIN_RUN_DAYS = 3;
 /**
  * A stretch of blank days is a run only up to this many days (engine ≥
@@ -71,7 +76,7 @@ export const ACCUMULATION_CRITERIA = {
 	maxBlankDays: ACC_MAX_BLANK_DAYS,
 	readingDayShare: ACC_READING_DAY_SHARE,
 	runShare: ACC_RUN_SHARE,
-	/** Engine ≥ 1.84.0: only blank days make a run (a recorded 0 ends it); absent on a run saved before. */
+	/** Engine ≥ 1.84.0: only blank days make a run (a recorded 0 ends it unless §2.4c sets it aside as a flagged zero run); absent on a run saved before. */
 	blankOnly: true
 } as const;
 
@@ -87,7 +92,8 @@ export interface AccumulationCandidate {
 	readingMm: number;
 	/**
 	 * Blank days straight before the reading, back to the reading before (a
-	 * recorded 0 included, engine ≥ 1.84.0) or the record's start: 3 to 7 for
+	 * recorded 0 included, engine ≥ 1.84.0, unless rainAccumulations reads it
+	 * as blank as a flagged zero run's) or the record's start: 3 to 7 for
 	 * a window. For an outage reading, the outage's blank days.
 	 */
 	runDays: number;
@@ -109,6 +115,8 @@ export interface AccumulationCandidate {
  * Engine ≥ 1.84.0: the run is the blank days straight before the reading,
  * back to the reading before or the record's start; a recorded 0 is a
  * reading, so it ends the run (up to 1.83 days of 0 counted like blanks).
+ * rainAccumulations passes a view with listed-missing days and flagged zero
+ * runs' days (flaggedZeroSpans) blanked, so those count as blank here.
  * ACC_MIN_RUN_DAYS to ACC_MAX_BLANK_DAYS blank days make a window: the run
  * and the reading day. More than ACC_MAX_BLANK_DAYS is an outage (engine ≥
  * 1.70.0): a reading straight after one that passes the same tests over the
@@ -226,7 +234,9 @@ const overlaps = (xs: readonly Span[], a: number, b: number) => xs.some(([x, y])
  *   'missing', a keep-dry period (its zeros are confirmed readings). The
  *   detection reads days listed as missing as blank (engine ≥ 1.70.0), so a
  *   listed stretch longer than ACC_MAX_BLANK_DAYS is an outage: it ends a run,
- *   and a reading straight after it can be set aside.
+ *   and a reading straight after it can be set aside. Engine ≥ 1.84.0, it
+ *   reads a flagged zero run's days (flaggedZeroSpans) as blank too: 3 to 7
+ *   of them before a reading make a window, more an outage.
  * - A detection whose reading day is in a keep-reading period is 'kept'; in
  *   mode 'asRecorded' the rest are 'asRecorded'. In mode 'spread', a reading
  *   that ends a blank outage (its window is its own day) is 'setAside'.
@@ -301,10 +311,15 @@ export function rainAccumulations(
 		// so a listed stretch of more than ACC_MAX_BLANK_DAYS (alone or with blank days next to it) is an outage too.
 		// A rain-source period is not: its days have rain, from the period's series.
 		const listedMissing = exclusionRanges(zr.missing).map(spanOf);
+		// Engine ≥ 1.84.0 (issue #523 A2, provisional pending the hydrologist): a zero §2.4c flags as suspect and
+		// sets aside as missing reads as blank too, since the engine has marked it missing: 3 to 7 such days before
+		// a reading make a window, more make an outage. Kept as a reading, the reading would stay whole on its day
+		// beside the CHIRPS fill of the run (the double count audit B4 is about). Zeros §2.4c trusts still end a run.
+		const flagged = flaggedZeroSpans(sa, zr, fit, sb);
 		let view = sa;
-		if (listedMissing.length) {
+		if (listedMissing.length || flagged.length) {
 			const values = sa.values.slice();
-			for (const [a, b] of listedMissing) for (let d = Math.max(a, c0); d <= Math.min(b, c0 + values.length - 1); d++) values[d - c0] = null;
+			for (const [a, b] of [...listedMissing, ...flagged]) for (let d = Math.max(a, c0); d <= Math.min(b, c0 + values.length - 1); d++) values[d - c0] = null;
 			view = { startDate: sa.startDate, values };
 		}
 		for (const c of detectAccumulations(view, sb, factor)) {
@@ -333,6 +348,41 @@ export function rainAccumulations(
 	}
 	windows.sort((a, b) => a.from - b.from);
 	return { mode: zr.accumulationMode, windows, skipped, values: new Map() };
+}
+
+/**
+ * The days of the catchment rain record that §2.4c flags as a suspect zero
+ * run and sets aside as missing (engine ≥ 1.84.0, issue #523 A2): every day of
+ * each run zeroRainRuns flags, in zero-run mode 'missing' only (in mode
+ * 'asRecorded' every zero is kept, so it is a reading), except days in a
+ * keep-dry period (the hydrologist confirmed them) and days a rain-source
+ * period replaces. A flagged day whose CHIRPS reads at or below the fill
+ * threshold (§2.4c, engine ≥ 1.81.0) counts too: the threshold only sets that
+ * day's fill to the gauge's 0, it doesn't make the run a read gauge's (and the
+ * reading test needs CHIRPS dry around the reading, so those days are just
+ * the ones before it). Judged over the whole record without the windows, so
+ * it doesn't depend on detection. Pure.
+ */
+export function flaggedZeroSpans(catchment: DailySeries, zr: ZeroRainSettings, fit: ChirpsFitOptions = {}, chirps: DailySeries | null = null): Span[] {
+	if (zr.mode !== 'missing') return [];
+	const keepDry = exclusionRanges(zr.keepDry).map(spanOf);
+	const replaced = (fit.replaced ?? []).map((w): Span => [w.from, w.to]);
+	const keep = (d: number) => overlaps(keepDry, d, d) || overlaps(replaced, d, d);
+	const out: Span[] = [];
+	for (const run of zeroRainRuns(catchment, { ...(fit.dq ? { dq: fit.dq } : {}), chirps }).runs) {
+		const a = toEpochDay(run.startDate);
+		const b = toEpochDay(run.endDate);
+		let from: number | null = null;
+		for (let d = a; d <= b + 1; d++) {
+			if (d <= b && !keep(d)) {
+				if (from === null) from = d;
+			} else if (from !== null) {
+				out.push([from, d - 1]);
+				from = null;
+			}
+		}
+	}
+	return out;
 }
 
 /**
@@ -486,7 +536,7 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 	if (spread.length) {
 		out.push(
 			`Catchment rain accumulations spread over the days they cover: ${plural(spread.length, 'window')}, ${plural(a.spreadDays, 'run day')}: ` +
-				`${listed(spread.map(windowLabel))}. Each looks like several days' rain read on one day after days left blank ` +
+				`${listed(spread.map(windowLabel))}. Each looks like several days' rain read on one day after days left blank or set aside as a flagged zero run ` +
 				'(CHIRPS reads rain over the run and little on the reading day). Its recorded total is kept and spread in proportion to bias-corrected CHIRPS; ' +
 				'those days are not also filled from CHIRPS as gaps or a zero run, and they are left out of the CHIRPS factor fit. The stored series is unchanged. ' +
 				'Settings → Rain gaps and CHIRPS keeps a reading as recorded.'
@@ -504,7 +554,7 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 		out.push(
 			`${plural(aside.length, 'catchment reading')} after an outage set aside as missing: ` +
 				`${listed(aside.map((w) => `${w.end} (${mm(w.readingMm)} read after a ${w.outageDays ?? 0}-day outage; ${mm(w.usedMm)} used instead)`))}. ` +
-				`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} days blank or listed as missing, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
+				`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} days blank, listed as missing or set aside as a flagged zero run, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
 				"so it may hold the outage's rain (a gauge nobody read) rather than one day's. " +
 				'The run fills its day like the outage, from bias-corrected CHIRPS (then forecast rain), and leaves it out of the CHIRPS factor fit. The stored series is unchanged. ' +
 				'Settings → Rain gaps and CHIRPS keeps a reading as recorded (keep readings) or spreads it over days you list (add accumulations).'

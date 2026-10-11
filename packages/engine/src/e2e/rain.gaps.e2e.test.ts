@@ -215,7 +215,7 @@ describe('multi-day accumulations (§2.4d)', () => {
 		expect(a).toBeLessThan(s);
 	});
 
-	it('engine 1.84.0: a zero run ending in a large reading is real rain on its day; §2.4c fills the zero run alone', () => {
+	it('engine 1.84.0: a flagged zero run ending in a large reading is an outage: the reading is set aside, so the run is filled once', () => {
 		const ch = days.map(h);
 		const c: number[] = days.map((d) => ratio(monthOf(d)) * h(d));
 		const a = toEpochDay('2017-11-01');
@@ -224,15 +224,24 @@ describe('multi-day accumulations (§2.4d)', () => {
 		for (let d = a; d < r; d++) c[d - d0] = 0;
 		c[r - d0] = 150;
 		const out = runModel(catchment({ rain_catchment_mm: { startDate: fromEpochDay(d0), values: c }, rain_chirps_mm: { startDate: fromEpochDay(d0), values: ch } }));
-		expect(out.summary.rainAccumulation!.windows).toEqual([]);
+		// §2.4c flags the zero run and sets it aside, so its days read as blank for §2.4d (provisional, issue #523 A2): more than 7 is an outage.
+		expect(out.summary.rainAccumulation!.windows.map((w) => [w.end, w.status, w.outageDays])).toEqual([[fromEpochDay(r), 'setAside', r - a]]);
 		const used = col(out, 'rain_used')!;
-		expect(used[r - d0]).toBe(150);
+		expect(used[r - d0]).toBeLessThan(1);
 		const miss = col(out, 'rain_catchment_missing')!;
 		// Every zero day CHIRPS reads more than 2 mm on is set aside and filled (all but the dry day before the reading).
 		for (let d = a; d < r - 1; d++) expect(miss[d - d0]).toBe(1);
 		expect(miss[r - 1 - d0]).toBe(0);
 		expect(used[r - 1 - d0]).toBe(0);
 		expect(col(out, 'rain_catchment_spread') ?? []).not.toContain(1);
+		// Counted once: the run and the reading day hold the CHIRPS fill, not the fill and the 150 mm too.
+		let fill = 0;
+		for (let d = a; d <= r; d++) fill += used[d - d0]!;
+		let want = 0;
+		for (let d = a; d < r; d++) want += ratio(monthOf(d)) * h(d);
+		expect(fill).toBeLessThan(want * 1.1);
+		expect(fill + 150).toBeGreaterThan(want * 1.1); // the bound would catch the reading kept whole too
+		expect(out.summary.warnings.some((x) => x.includes('after an outage set aside as missing'))).toBe(true);
 	});
 });
 

@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 116 mutants)
+pnpm test:verify                                   # the guard: ~6 min locally (examples, probes, 12 random + 12 dense networks, 117 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -431,7 +431,11 @@ offered again twice: §2.6, engine 1.70.0, issue #90 Q25/Q26),
 `outage-reading-set-aside` (a 30 mm reading after 150 blank days is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
 and `short-blank-run-window` (7 blank days after 4 zeros are still a run, so the
 reading is spread over the 7 blanks only, engine 1.84.0, issue #523 A2; its mutants
-move the limit by one and count the zeros too), `unit-rain-forecast-warmup`
+move the limit by one and count the zeros too), `flagged-zero-run-outage` (a
+40 mm reading after a 200-day zero run §2.4c flags and fills: the flagged zeros
+read as blank, so it is an outage and the reading is set aside rather than
+kept beside the run's CHIRPS fill, engine 1.84.0, issue #523 A2, provisional;
+its mutant lets the flagged zeros end the run), `unit-rain-forecast-warmup`
 (each unit's warm-up cycles its historical days only, §2.4h, §2.4f) and `unit-rain-rules`
 (§2.4h: one farm per point of the forcing rule, with gaps that walk each
 chain to its end, a clamped MAP ratio, a negative catchment reading on a

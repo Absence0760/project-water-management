@@ -46,6 +46,11 @@ MUTANTS = [
         "while j >= 0 and (blank(j) or c.values[j] == 0):",
     ),
     (
+        "a flagged zero run set aside as missing ends an accumulation's run, so its CHIRPS fill and the reading both count (issue #523 A2)",
+        "missing_days | flagged_blank)",
+        "missing_days)",
+    ),
+    (
         "a flagged zero-rain day is filled whatever CHIRPS reads (before engine 1.81.0, B2)",
         'set_aside = ((flagged_days - kept_dry - chirps_dry) if mode == "missing" else set()) | missing_days',
         'set_aside = ((flagged_days - kept_dry) if mode == "missing" else set()) | missing_days',

@@ -8,7 +8,7 @@ import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
 import { zeroRainRuns } from './quality';
-import { ACC_MAX_BLANK_DAYS, ACC_MIN_MM } from './accumulation';
+import { ACC_MAX_BLANK_DAYS, ACC_MIN_MM, flaggedZeroSpans } from './accumulation';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
 import { checkTransferLimits } from './verify/checks';
@@ -2031,7 +2031,7 @@ describe.skipIf(!clientCatchmentFixture)(
 			expect(full.summary.verification!.checks.filter((c) => !c.passed).map((c) => c.label)).toEqual([]);
 		});
 
-		it('B4: spreads each detected accumulation (after blank days only, engine ≥ 1.84.0) over its window, keeping its total, and the zero-run fill leaves those days alone', () => {
+		it('B4: spreads each detected accumulation (after blank days or a flagged zero run only, engine ≥ 1.84.0) over its window, keeping its total, and the zero-run fill leaves those days alone', () => {
 			const recorded = prepareRun(modelInput);
 			const settings = { ...modelInput.settings } as Record<string, unknown>;
 			delete settings.zeroRainRuns; // the default: zero runs missing, accumulations spread
@@ -2040,16 +2040,34 @@ describe.skipIf(!clientCatchmentFixture)(
 			expect(acc.info.mode).toBe('spread');
 			const spread = acc.info.windows.filter((w) => w.status === 'spread');
 			expect(spread.every((w) => w.source === 'detected' && w.totalMm >= w.readingMm && w.readingMm >= ACC_MIN_MM)).toBe(true);
-			// Engine ≥ 1.84.0 (issue #523 A2): only blank days make a run, so every detected window's days before
-			// the reading are blank in the stored record, never a recorded 0. (The client record has no such window.)
+			// Engine ≥ 1.84.0 (issue #523 A2): only blank days make a run, and the days of a zero run §2.4c flags and
+			// sets aside (provisional), so every detected window's days before the reading are blank in the stored
+			// record or in a flagged zero run, never a zero §2.4c trusts.
 			const stored = modelInput.series.rain_catchment_mm!;
 			const s0 = toEpochDay(stored.startDate);
+			const flagged = flaggedZeroSpans(stored, run.settings.zeroRainRuns, { dq: run.settings.dataQuality }, modelInput.series.rain_chirps_mm ?? null);
+			const inFlagged = (day: number) => flagged.some(([x, y]) => day >= x && day <= y);
 			for (const w of acc.info.windows) {
 				if (w.source !== 'detected' || w.outageDays != null) continue;
 				for (let day = toEpochDay(w.start); day < toEpochDay(w.end); day++) {
 					const v = stored.values[day - s0];
-					expect(v == null || !Number.isFinite(v), w.start).toBe(true);
+					expect(v == null || !Number.isFinite(v) || inFlagged(day), w.start).toBe(true);
 				}
+			}
+			// The client outcome, pinned: no spread window (1.83 spread 26, all after zeros §2.4c now trusts) and one
+			// reading set aside by the outage rule, the reading that ends a flagged zero run.
+			expect(acc.info.windows.filter((w) => w.source === 'detected' && w.status === 'spread').length).toBe(0);
+			expect(acc.info.windows.filter((w) => w.status === 'setAside').length).toBe(1);
+			// No reading of ACC_MIN_MM or more straight after a flagged zero run (which CHIRPS fills) is also kept whole:
+			// each one in the run is a window §2.4d handles (spread, or set aside after an outage). A positive control: there is one.
+			const d0r = toEpochDay(run.startDate);
+			const after = flagged
+				.map(([, y]) => y + 1)
+				.filter((day) => day >= d0r && day < d0r + run.days && (stored.values[day - s0] ?? -1) >= ACC_MIN_MM);
+			expect(after.length).toBeGreaterThan(0);
+			for (const day of after) {
+				const w = acc.info.windows.find((x) => toEpochDay(x.end) === day);
+				expect(w && (w.status === 'spread' || w.status === 'setAside'), String(day - d0r)).toBe(true);
 			}
 			const d0 = toEpochDay(run.startDate);
 			const a = run.aligned('rain_catchment_mm');

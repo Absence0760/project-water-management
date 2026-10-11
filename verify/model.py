@@ -294,7 +294,8 @@ def corrected_chirps(h: Series, factors, o: int, apply: bool):
 
 def detect_accumulations(c: Series, h: Series, factors, blocked: set[int], missing: set[int]):
     """§2.4d: reading ≥ 20 mm after ≥ 3 blank days in a row (engine ≥ 1.84.0:
-    a recorded 0 is a reading and ends the run; before, days of 0 counted
+    a recorded 0 is a reading and ends the run, unless §2.4c sets it aside as
+    a flagged zero run, which `missing` then holds; before, days of 0 counted
     too); CHIRPS × the factors (raw where a month has none) little on the
     reading day ± 1 and a lot over the window's run days (the day before the
     reading left out). Engine ≥ 1.70.0: a day listed as missing reads as
@@ -385,7 +386,11 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     base_left_out = flagged_out | missing_days
     det_factors = fit_chirps_factors(c, h, base_left_out, low_years)
     blocked = missing_days | (keep_dry if mode == "missing" else set())
-    windows, outage_readings = detect_accumulations(c, h, det_factors, blocked, missing_days)
+    # §2.4d (engine ≥ 1.84.0, issue #523 A2, provisional): a flagged zero day
+    # set aside as missing (CHIRPS-dry ones included) reads as blank for the
+    # detection, as a listed missing day does; a zero §2.4c trusts ends a run.
+    flagged_blank = (flagged_days - kept_dry) if mode == "missing" else set()
+    windows, outage_readings = detect_accumulations(c, h, det_factors, blocked, missing_days | flagged_blank)
     window_days = {o for w in windows for o in w["days"]}
     # A reading after an outage is left out of the fit in either mode; in
     # 'spread' mode its day is set aside (CHIRPS, then forecast, fill it).

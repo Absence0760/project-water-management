@@ -430,6 +430,27 @@ def short_blank_run_window() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def flagged_zero_run_outage() -> dict:
+    """A 40 mm reading after a 200-day zero run that §2.4c flags (no
+    climatology in a 400-day record, so 180 days in any season) and fills
+    from CHIRPS (3 mm a day over the run, none on the reading day or either
+    side). Engine ≥ 1.84.0 (issue #523 A2, provisional): the flagged zeros
+    read as blank for §2.4d, so more than 7 of them are an outage and the
+    reading is set aside: CHIRPS fills its day (0 mm) like the run's. Kept as
+    a reading the zeros would end the run, and the 40 mm would stay on its
+    day beside the run's CHIRPS fill, counting that rain twice."""
+    days = 400
+    reading = 200
+    catch = [0.0] * reading + [40.0] + [1.0] * (days - reading - 1)
+    ch = [3.0] * (reading - 1) + [0.0] * 3 + [0.0] * (days - reading - 2)
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": catch},
+        "rain_chirps_mm": {"startDate": "2020-01-01", "values": ch},
+    }
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
 def offtake_release_keep_and_floor() -> dict:
     """Engine 1.70.0 (issue #90 Q26, Q27; §2.6a). (1) An off-take of up to
     20 000 m³/day from a farm whose dam (off the river, nothing flows into it)
@@ -707,6 +728,7 @@ PROBES = {
     "accumulation-window-run": accumulation_window_run(),
     "outage-reading-set-aside": outage_reading_set_aside(),
     "short-blank-run-window": short_blank_run_window(),
+    "flagged-zero-run-outage": flagged_zero_run_outage(),
     "low-vs-chirps-median": low_vs_chirps_median(),
     "negative-reading": negative_reading(),
     "zero-catchment-area": zero_catchment_area(),

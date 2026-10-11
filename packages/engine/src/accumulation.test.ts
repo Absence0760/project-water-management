@@ -9,7 +9,7 @@ import {
 	spreadAccumulations
 } from './accumulation';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
-import { defaultZeroRainSettings, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
+import { defaultDataQualitySettings, defaultZeroRainSettings, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
 import { zeroRainRuns } from './quality';
 import { runModel } from './run';
 import { checkInvariants } from './testing/invariants';
@@ -320,8 +320,10 @@ describe('a run with an accumulation after blank days', () => {
 		expect(rec.series.some((s) => s.key === ACCUMULATION_COLUMN.key)).toBe(false);
 	});
 
-	it('engine 1.84.0: the same days entered as 0 are real dry days, so the reading is real rain and stays on its day', () => {
+	it('engine 1.84.0: the same days entered as 0 are zeros §2.4c trusts (6 days is no flagged run), so the reading is real rain and stays on its day', () => {
 		const { input, r, total } = accumulationInput(6, 0);
+		// Positive control for the trust: no flagged zero run ends on the day before the reading.
+		expect(zeroRainRuns(input.series.rain_catchment_mm!).runs.some((x) => toEpochDay(x.endDate) === r0 + r - 1)).toBe(false);
 		const out = runModel(input);
 		expect(out.summary.rainAccumulation!.windows).toEqual([]);
 		expect(get(out, 'rain_final')[r]).toBe(total);
@@ -329,22 +331,64 @@ describe('a run with an accumulation after blank days', () => {
 		expect(out.summary.warnings.some((x) => x.includes('accumulation'))).toBe(false);
 	});
 
-	it('a long zero run ending in a large reading: no window; the reading stays on its day and §2.4c handles the zero run alone', () => {
+	// Engine 1.84.0 (issue #523 A2, provisional): zeros §2.4c flags and sets aside as missing read as blank for detection.
+	it('a long flagged zero run ending in a large reading: the outage rule sets the reading aside, so the rain is not counted twice', () => {
 		const { input, r, total } = accumulationInput(120, 0);
-		const run = prepareRun(input);
-		expect(run.accumulation!.info.windows).toEqual([]);
-		expect(run.chirpsCorrection!.accumulationDaysLeftOut ?? 0).toBe(0);
-		expect(run.aligned('rain_catchment_mm')[r]).toBe(total);
-		// The zero run is flagged and set aside on the days CHIRPS reads more than 2 mm (engine ≥ 1.81.0), as without the reading.
+		// The zero run is flagged by §2.4c.
 		const runs = zeroRainRuns(input.series.rain_catchment_mm!).runs;
-		expect(runs.some((x) => toEpochDay(x.endDate) === r0 + r - 1)).toBe(true);
+		const run120 = runs.find((x) => toEpochDay(x.endDate) === r0 + r - 1)!;
+		expect(run120).toBeDefined();
+		const outage = r0 + r - toEpochDay(run120.startDate);
+		expect(outage).toBeGreaterThan(ACC_MAX_BLANK_DAYS);
+		const run = prepareRun(input);
+		expect(run.accumulation!.info.windows.map((w) => [w.start, w.end, w.status, w.outageDays])).toEqual([
+			[fromEpochDay(r0 + r), fromEpochDay(r0 + r), 'setAside', outage]
+		]);
+		// The zero run is still set aside on the days CHIRPS reads more than 2 mm (engine ≥ 1.81.0), as without the reading.
 		const h = input.series.rain_chirps_mm!.values;
-		let want = 0;
-		for (let i = r - 120; i < r; i++) {
-			expect(run.zeroRain!.mask[i]).toBe(h[i]! > 2 ? 1 : 0);
-			want += h[i]! > 2 ? 1 : 0;
-		}
-		expect(want).toBeGreaterThan(0);
+		for (let i = r - 120; i < r; i++) expect(run.zeroRain!.mask[i]).toBe(h[i]! > 2 ? 1 : 0);
+
+		const out = runModel(input);
+		expect(checkInvariants(input, out)).toBeNull();
+		const used = get(out, 'rain_final');
+		// The reading's day is filled like the outage (CHIRPS reads 0 there), not kept whole.
+		expect(used[r]).toBe(0);
+		// No double count: the rain over the run and the reading day is the CHIRPS fill alone, at most about the recorded total.
+		const over = sumOver(used, r - 120, r);
+		expect(over).toBeGreaterThan(0.5 * total);
+		expect(over).toBeLessThanOrEqual(total * 1.05);
+		expect(out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'))).toContain(`${outage}-day outage`);
+
+		// Positive control: the same zeros listed keep-dry are confirmed readings, so the reading stays on its day.
+		const kept = runModel({ ...input, settings: { ...input.settings, zeroRainRuns: zr({ keepDry: [{ start: run120.startDate, end: run120.endDate, reason: 'confirmed dry' }] }) } });
+		expect(kept.summary.rainAccumulation!.windows).toEqual([]);
+		expect(get(kept, 'rain_final')[r]).toBe(total);
+	});
+
+	it('3 to 7 flagged zeros before a large reading make a spread window: the recorded total is spread once, and the zeros are not also filled', () => {
+		// A short flagged run: the project flags a zero run with 3 wet-season days.
+		const dataQuality = { ...defaultDataQualitySettings(), zeroRunMinWetDays: 3 };
+		const { input, r, total } = accumulationInput(5, 0, { dataQuality });
+		const c = input.series.rain_catchment_mm!.values;
+		let j = r - 1;
+		while (j >= 0 && c[j] === 0) j--;
+		const runDays = r - 1 - j;
+		expect(runDays).toBeGreaterThanOrEqual(3);
+		expect(runDays).toBeLessThanOrEqual(ACC_MAX_BLANK_DAYS);
+		expect(zeroRainRuns(input.series.rain_catchment_mm!, { dq: dataQuality }).runs.some((x) => toEpochDay(x.endDate) === r0 + r - 1)).toBe(true);
+		const acc = rainAccumulations(input.series, zr(), 'monthly', { dq: dataQuality })!;
+		const w = acc.windows.find((x) => x.to === r0 + r)!;
+		expect([w.start, w.status, w.runDays, w.totalMm]).toEqual([fromEpochDay(r0 + r - runDays), 'spread', runDays, total]);
+		const out = runModel(input);
+		expect(checkInvariants(input, out)).toBeNull();
+		expect(sumOver(get(out, 'rain_final'), r - runDays, r)).toBeCloseTo(total, 9);
+		const spread = get(out, ACCUMULATION_COLUMN.key);
+		for (let i = r - runDays; i <= r; i++) expect(spread[i]).toBe(1);
+		// Positive control: the defaults (60 wet-season days) don't flag these zeros, so they are trusted and the reading stays.
+		const trusted = rainAccumulations(input.series, zr(), 'monthly', { dq: defaultDataQualitySettings() })!;
+		expect(trusted.windows.filter((x) => x.to === r0 + r)).toEqual([]);
+		// Zero-run mode 'asRecorded' keeps every zero as a reading: no window either.
+		expect(rainAccumulations(input.series, zr({ mode: 'asRecorded' }), 'monthly', { dq: dataQuality })!.windows.filter((x) => x.to === r0 + r)).toEqual([]);
 	});
 
 	it('the stored series is never changed', () => {
