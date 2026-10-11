@@ -605,11 +605,12 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				forecastFrom: string | null;
 				nodes: { id: string; name: string; kind: string; damCapacityM3?: number }[] | null;
 				mode: string | null;
+				runTolerance: unknown;
 				settings: unknown;
 				summaryAllocations: RunAllocations | null;
 			}>(
 				`SELECT r.label, r.start_date AS "startDate", r.end_date AS "endDate", r.summary->'forecast'->>'from' AS "forecastFrom",
-					r.inputs->'model'->'nodes' AS nodes, r.inputs->'settings'->>'allocationMode' AS mode, p.settings,
+					r.inputs->'model'->'nodes' AS nodes, r.inputs->'settings'->>'allocationMode' AS mode, r.inputs->'settings'->'allocationTolerance' AS "runTolerance", p.settings,
 					r.summary->'allocations' AS "summaryAllocations"
 				 FROM model_run r JOIN project p ON p.id = r.project_id WHERE r.project_id = $1 AND r.id = $2`,
 				[id, runId]
@@ -622,8 +623,20 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const allocationMode = (ALLOCATION_MODES as readonly string[]).includes(r.mode ?? '') ? (r.mode as AllocationMode) : 'none';
 			const runOut = { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, forecastFrom: r.forecastFrom, allocationMode };
 			// A viewer who can't read each volume (162, D3): the use summed per water source and year, at 5 or more holders.
-			if (await allocationUnitsHidden(db, id, role))
-				return c.json({ run: runOut, comparison: null, capYears: [], totals: comparisonTotals({ startDate: r.startDate, nodes, tolerance, rows: await loadVolumes(db, id) }) });
+			if (await allocationUnitsHidden(db, id, role)) {
+				// A cap or full-allocation run holds use to the registered volume, so its modelled use is the volume (#523 R5-2).
+				if (allocationMode === 'cap' || allocationMode === 'fullAllocation')
+					return c.json({ run: runOut, comparison: null, capYears: [], totals: null, totalsWithheld: 'allocation_mode' });
+				// The run's own band, never the caller's: a status at a band they choose is an oracle for the volume (#523 R5-1).
+				const own = typeof r.runTolerance === 'number' && r.runTolerance >= 0 && r.runTolerance < 1 ? r.runTolerance : DEFAULT_ALLOCATION_TOLERANCE;
+				return c.json({
+					run: runOut,
+					comparison: null,
+					capYears: [],
+					totals: comparisonTotals({ startDate: r.startDate, nodes, tolerance: own, rows: await loadVolumes(db, id) }),
+					totalsWithheld: null
+				});
+			}
 			const allocations = await loadAllocations(db, id);
 			const comparison = compareAllocations({
 				startDate: r.startDate,

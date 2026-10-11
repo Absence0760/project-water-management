@@ -10,7 +10,13 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { SOURCE_LABEL, STATUS_LABEL, totalsSentence, waterYearLabel } from './allocations';
 
-	let { totals, years, runLabel, loading }: { totals: AllocationTotal[] | null; years: AllocationComparisonTotals | null; runLabel: string | null; loading: boolean } = $props();
+	let {
+		totals,
+		years,
+		yearsWithheld = false,
+		runLabel,
+		loading
+	}: { totals: AllocationTotal[] | null; years: AllocationComparisonTotals | null; yearsWithheld?: boolean; runLabel: string | null; loading: boolean } = $props();
 </script>
 
 <section class="panel" aria-labelledby="alloc-totals-h" data-testid="allocation-totals">
@@ -65,6 +71,10 @@
 			</div>
 		{/each}
 		<p class="hint muted">“Within band” is within ±{fmtNum(years.tolerance * 100, 0)} % of the registered volume.</p>
+	{:else if runLabel && yearsWithheld}
+		<p class="small muted" data-testid="allocation-totals-years-mode">
+			The run “{runLabel}” holds each unit’s use to its registered volume (capped or full allocation), so its modelled use would show the volumes: it isn’t shown here.
+		</p>
 	{:else if loading}
 		<p class="muted small">Loading the run’s totals…</p>
 	{/if}

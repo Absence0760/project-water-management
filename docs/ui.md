@@ -8941,7 +8941,9 @@ provisional), isn't given: the sentence says the volume (or storage) in
 force today "isn't shown". The run's table by water year has the modelled
 use and how it compares, no registered column (#523 K/L/M), and *Not
 judged* for a year whose rows fail the same rule, with a note
-(`allocation-totals-years-withheld`).
+(`allocation-totals-years-withheld`). For a cap or full-allocation run it
+says the run's use would show the volumes, and shows no table
+(`allocation-totals-years-mode`).
 No unit, number, name or Download CSV. Owners get a
 **What viewers see** card at the foot of the page, a checkbox *Viewers see
 each farm's registered volumes* with the note to switch it on only if every

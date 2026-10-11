@@ -14,6 +14,7 @@
 //  - the export guards formula-looking cells and hides names from viewers.
 import { compareAllocations } from '@water-management/engine';
 import { readFileSync } from 'node:fs';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // The report job's render request (REPORT_RENDERER=sqs in the render-claim test): captured, never sent.
@@ -686,6 +687,115 @@ describe('#523 K, L, M: no two figures a viewer reads at the same time differ by
 		expect(r.allocations.units.every((u: Section5['units'][number]) => u.sources.every((s) => s.meanRegisteredA === null))).toBe(true);
 		const text = JSON.stringify(r);
 		for (const v of [V[0]!, LATER, UNMATCHED, V.reduce((s, x) => s + x, 0), V.reduce((s, x) => s + x, 0) + LATER]) expect(holdsFigure(text, v), String(v)).toBe(false);
+	});
+});
+
+describe('#523 round 5: the band, cap and full-allocation runs, run visibility, erasure', () => {
+	const V = [51_234, 52_345, 53_456, 54_567, 55_678];
+	const LATER = 123_457;
+	let pid: string;
+	let base: string;
+	let fullRun: string;
+	let ids: string[];
+
+	beforeAll(async () => {
+		const p = await volumesProject('Round five', ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'], '2016-10-01', 3 * 365);
+		pid = p.pid;
+		ids = [];
+		for (let i = 0; i < 5; i++) ids.push(await p.add(p.units[i]!.id, `Round Five Holder ${i + 1}`, V[i]!));
+		ids.push(await p.add(p.units[5]!.id, 'Round Five Later', LATER, { validFrom: '2018-10-01' }));
+		base = await p.run('round five');
+		// An editor's team scenario that runs the baseline at full allocation: each unit's demand scaled to its volume.
+		const sc = await editor.call('POST', `/projects/${pid}/scenarios`, { name: 'At full allocation', baseRunId: base, ops: [{ op: 'settings.set', path: 'allocationMode', value: 'fullAllocation' }] });
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const ran = await editor.call('POST', `/projects/${pid}/scenarios/${sc.body.scenario.id}/runs`, {});
+		expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+		fullRun = ran.body.run.id;
+	}, 180_000);
+
+	it('R5-1: the viewer’s totals use the run’s own band, whatever ?tolerance= says; the editor’s comparison takes it (positive control)', async () => {
+		const plain = await viewer.call('GET', `/projects/${pid}/runs/${base}/allocations`);
+		expect(plain.status).toBe(200);
+		expect(plain.body.totals.tolerance).toBe(0.1);
+		for (const t of [0, 0.01, 0.37, 0.99]) expect((await viewer.call('GET', `/projects/${pid}/runs/${base}/allocations?tolerance=${t}`)).body, String(t)).toEqual(plain.body);
+		const ed = async (t: number) => (await editor.call('GET', `/projects/${pid}/runs/${base}/allocations?tolerance=${t}`)).body.comparison;
+		expect((await ed(0.37)).tolerance).toBe(0.37);
+		const statuses = async (t: number) => (await ed(t)).nodes.flatMap((n: { surface: { years: { status: string }[] } }) => n.surface.years.map((y) => y.status));
+		expect(await statuses(0)).not.toEqual(await statuses(0.99));
+	});
+
+	it('R5-2: a full-allocation run gives the viewer no totals by year, and § 5 no modelled use, so no two years differ by a holder’s volume; the editor reads them (positive control)', async () => {
+		const res = await viewer.call('GET', `/projects/${pid}/runs/${fullRun}/allocations`);
+		expect(res.status).toBe(200);
+		expect([res.body.totals, res.body.totalsWithheld, res.body.comparison]).toEqual([null, 'allocation_mode', null]);
+		const r = (await viewer.call('GET', `/projects/${pid}/runs/${fullRun}/evidence-report`)).body.report;
+		expect(r.allocations.othersUseWithheld).toBe(true);
+		const ys = others(r.allocations)!;
+		const total = r.allocations.units.find((u: { nodeId: string }) => u.nodeId === 'others:surface').sources[0];
+		expect([total.meanModelledB, total.countsB]).toEqual([null, null]);
+		// The subtraction itself: nothing of the application side to take one year from the next.
+		for (let i = 1; i < ys.length; i++) {
+			const [a, b] = [ys[i - 1] as unknown as { modelledB: number | null; statusB: string | null }, ys[i] as unknown as { modelledB: number | null; statusB: string | null }];
+			expect([a.modelledB, b.modelledB, a.statusB, b.statusB]).toEqual([null, null, null, null]);
+		}
+		// The baseline side (compare-only) keeps its modelled use and status.
+		expect(ys.some((y) => (y as unknown as { modelledA: number | null }).modelledA !== null)).toBe(true);
+		// Positive control: the editor reads the application side's modelled use for every year.
+		const ed = others((await editor.call('GET', `/projects/${pid}/runs/${fullRun}/evidence-report`)).body.report.allocations)! as unknown as { modelledB: number | null }[];
+		expect(ed.every((y) => typeof y.modelledB === 'number')).toBe(true);
+		expect((await editor.call('GET', `/projects/${pid}/runs/${fullRun}/allocations`)).body.comparison).not.toBeNull();
+	});
+
+	it('R5-3: app_run_allocation_holders answers only for a run the caller can read', async () => {
+		const call = (u: User, run: string) => rowsAs<{ allocation_id: string }>(u, 'SELECT allocation_id FROM app_run_allocation_holders($1, $2, $3::text[])', [pid, run, ids]);
+		expect(await call(viewer, base)).toHaveLength(6);
+		// A draft application of someone else's, with a copy of the base run as its run: the viewer can't read it.
+		// Planted as the schema owner, signed in as a contributor for the scenario's own trigger (a fresh session, then closed).
+		const applicant = await signUp('R5applicant');
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		expect((await owner.call('POST', `/projects/${pid}/publication`, { runId: base })).status).toBeLessThan(300);
+		const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await client.connect();
+		let sc: { id: string };
+		try {
+			await client.query(`SELECT set_config('app.current_user_id', $1, false)`, [applicant.id]);
+			sc = (
+				await client.query<{ id: string }>(
+					`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, origin, status, owner_user_id) VALUES ($1, 'Hidden draft', $2, repeat('0', 64), 'applicant', 'draft', $3) RETURNING id`,
+					[pid, base, applicant.id]
+				)
+			).rows[0]!;
+		} finally {
+			await client.end();
+		}
+		const [run] = await asOwner(
+			`INSERT INTO model_run (id, project_id, created_by, label, engine_version, start_date, end_date, inputs, summary, scenario_id, trigger)
+			 SELECT gen_random_uuid(), project_id, created_by, 'hidden', engine_version, start_date, end_date, inputs, summary, $2, trigger FROM model_run WHERE id = $1 RETURNING id`,
+			[base, sc.id]
+		);
+		expect(await rowsAs(viewer, 'SELECT id FROM model_run WHERE id = $1', [run!.id])).toEqual([]);
+		expect(await call(viewer, run!.id as string)).toEqual([]);
+		// Its keys were frozen all the same (positive control: the table holds them).
+		expect((await asOwner('SELECT count(*)::int AS n FROM run_allocation_holder WHERE run_id = $1', [run!.id]))[0]!.n).toBe(6);
+	});
+
+	it('erasure: when a holder’s name leaves the project, the runs’ frozen keys of it become the shared "gone"; a name still on another row is kept (positive control)', async () => {
+		const key = async (aid: string) => (await asOwner('SELECT holder FROM run_allocation_holder WHERE run_id = $1 AND allocation_id = $2', [base, aid]))[0]!.holder as string;
+		const before = await key(ids[0]!);
+		expect(before).not.toBe('gone');
+		// Holder 2's name goes on another row too, then off row 2: still in the project, so kept.
+		const extra = await editor.call('POST', `/projects/${pid}/allocations`, { nodeId: null, holder: 'round five holder 2', authorisation: 'licence', waterSource: 'groundwater', volumeM3PerYear: 1 });
+		expect(extra.status).toBe(201);
+		const k2 = await key(ids[1]!);
+		expect((await editor.call('PATCH', `/projects/${pid}/allocations/${ids[1]}`, { holder: '' })).status).toBe(200);
+		expect(await key(ids[1]!)).toBe(k2);
+		// Holder 1's only row: its name cleared, then the row deleted. Gone from every run that froze it.
+		expect((await editor.call('PATCH', `/projects/${pid}/allocations/${ids[0]}`, { holder: '' })).status).toBe(200);
+		expect(await key(ids[0]!)).toBe('gone');
+		expect((await asOwner('SELECT count(*)::int AS n FROM run_allocation_holder WHERE holder = $1', [before]))[0]!.n).toBe(0);
+		// The extra row deleted: holder 2's name leaves too.
+		expect((await editor.call('DELETE', `/projects/${pid}/allocations/${extra.body.allocation.id}`)).status).toBe(204);
+		expect(await key(ids[1]!)).toBe('gone');
 	});
 });
 

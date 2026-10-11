@@ -1642,8 +1642,15 @@ water-use volumes per farm or water user.
   `app_run_allocation_holders(project, run, ids)` (`SECURITY DEFINER`,
   viewer and up) returns the keys of the given rows of one run, no volume:
   the evidence report's § 5 gate and the authorised mix count holders by
-  them, the same for every reader (#523 N/P). All read
-  `app_allocation_holder_keys` (215, internal, not granted).
+  them, the same for every reader, and only for a run the caller can read
+  (`model_run_select`'s rule, #523 N/P). When a holder's name leaves the
+  project (its last `allocation_holder` row with that name deleted or
+  renamed), trigger `allocation_holder_erased` resets the runs' frozen keys
+  of it to `gone` (POPIA erasure). All read `app_allocation_holder_keys`
+  (215, internal, not granted; one window pass per project), and 215's
+  backfill computes each project's keys once and joins them to the runs, so
+  its cost is the runs' allocation rows plus the projects' rows (not runs ×
+  rows²).
 - **No personal identifiers.** No ID-number, phone or email column exists;
   the importer refuses files that carry them ([security.md](./security.md)).
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`

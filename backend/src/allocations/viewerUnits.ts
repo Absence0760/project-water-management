@@ -260,19 +260,28 @@ type ReportLike = {
 	allocations?: unknown;
 };
 
+/** A run mode that holds use to the registered volume: its modelled use is the volume wherever supply meets demand (#523 R5-2). */
+const holdsToVolume = (mode: string | null | undefined) => mode === 'cap' || mode === 'fullAllocation';
+
 /**
  * § 5 without the registered m³ of its totals of other units, per year, mean
  * or cap (#523 K/L/M): a viewer kept from each volume reads registered m³
  * only as today's per-source totals. Two sums over different rows read at
  * the same time (the baseline's and the application's year, two consecutive
  * years, a year and today's total) give the rows between them, often one
- * holder's. The status and modelled use stay; the applicant's own units stay.
+ * holder's. The status and modelled use stay, except on a side whose run is
+ * in cap or full-allocation mode (`modeA` / `modeB`): there the modelled use
+ * is the registered volume wherever supply met demand, so its modelled use,
+ * means, status and counts go too (#523 R5-2). The applicant's own units stay.
  */
 export function withoutOthersRegistered(al: EvidenceAllocations): EvidenceAllocations {
 	if (!Array.isArray(al.units) || !al.units.some((u) => u.aggregate !== undefined)) return al;
+	const hideA = holdsToVolume(al.modeA);
+	const hideB = holdsToVolume(al.modeB);
 	return {
 		...al,
 		othersRegisteredWithheld: true,
+		...(hideA || hideB ? { othersUseWithheld: true as const } : {}),
 		units: al.units.map((u) =>
 			u.aggregate === undefined
 				? u
@@ -284,7 +293,15 @@ export function withoutOthersRegistered(al: EvidenceAllocations): EvidenceAlloca
 							meanRegisteredB: null,
 							capA: null,
 							capB: null,
-							years: src.years.map((y) => ({ ...y, registeredA: null, registeredB: null }))
+							...(hideA ? { meanModelledA: null, countsA: null } : {}),
+							...(hideB ? { meanModelledB: null, countsB: null } : {}),
+							years: src.years.map((y) => ({
+								...y,
+								registeredA: null,
+								registeredB: null,
+								...(hideA ? { modelledA: null, statusA: null } : {}),
+								...(hideB ? { modelledB: null, statusB: null } : {})
+							}))
 						}))
 					}
 		)

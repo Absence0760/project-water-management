@@ -428,6 +428,9 @@ export function packWithheldPart(reportVersion: string, report: PackManifest['re
 	if (mix && !mix.folded && mix.rows.length) return 'pdf';
 	// The PDF prints § 5's totals of other units with their registered m³, which the redacted manifest leaves out (#523 K/L/M).
 	if (othersRegistered(report)) return 'pdf';
+	// …and, in a cap or full-allocation run, their modelled use, which is the registered volume where supply met demand (#523 R5-2).
+	const holds = (m: unknown) => m === 'cap' || m === 'fullAllocation';
+	if ((holds(report.allocations?.modeA) || holds(report.allocations?.modeB)) && (report.allocations?.units ?? []).some((u) => u.aggregate !== undefined)) return 'pdf';
 	return null;
 }
 

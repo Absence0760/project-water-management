@@ -187,6 +187,20 @@ describe('§ 5 for a viewer kept from each volume (#523 K/L/M)', () => {
 		expect(total.sources[0]!.years[0]!.registeredA).toBe(373_457);
 		expect(withoutOthersRegistered({ units: [own] } as never)).toEqual({ units: [own] });
 	});
+
+	it('#523 R5-2: on a side whose run caps or fully allocates, also leaves out the totals’ modelled use, means, status and counts', () => {
+		const y = { waterYear: 2021, registeredA: 10, modelledA: 9, statusA: 'within', registeredB: 10, modelledB: 10, statusB: 'within' };
+		const src = { waterSource: 'surface', years: [y], countsA: { wholeYears: 1 }, countsB: { wholeYears: 1 }, meanModelledA: 9, meanRegisteredA: 10, meanModelledB: 10, meanRegisteredB: 10 };
+		const al = { modeA: 'none', modeB: 'fullAllocation', units: [{ nodeId: 'others:surface', aggregate: 5, sources: [src] }] };
+		const out = withoutOthersRegistered(al as never) as unknown as typeof al & { othersUseWithheld?: true };
+		const s = out.units[0]!.sources[0]!;
+		expect(out.othersUseWithheld).toBe(true);
+		expect([s.meanModelledB, s.countsB, s.years[0]!.modelledB, s.years[0]!.statusB]).toEqual([null, null, null, null]);
+		// The compare-only side keeps them (control).
+		expect([s.meanModelledA, s.years[0]!.modelledA, s.years[0]!.statusA]).toEqual([9, 9, 'within']);
+		const cap = withoutOthersRegistered({ ...al, modeA: 'cap', modeB: null } as never) as unknown as typeof al;
+		expect([cap.units[0]!.sources[0]!.years[0]!.modelledA, cap.units[0]!.sources[0]!.years[0]!.modelledB]).toEqual([null, 10]);
+	});
 });
 
 describe('the ops a viewer kept from each volume doesn’t get (#523 G1)', () => {

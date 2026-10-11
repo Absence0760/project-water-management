@@ -953,6 +953,13 @@ export interface EvidenceAllocations {
 	 * status and modelled use. Never in a frozen document.
 	 */
 	othersRegisteredWithheld?: true;
+	/**
+	 * With it, when a run is in cap or full-allocation mode: that side's
+	 * modelled use, means, status and counts of the totals of other units are
+	 * left out too, since such a run's use is the registered volume wherever
+	 * supply met demand (#523 R5-2). Never in a frozen document.
+	 */
+	othersUseWithheld?: true;
 }
 
 /** Why the licence impact board couldn't be built; the page words it. */

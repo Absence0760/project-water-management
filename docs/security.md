@@ -2890,6 +2890,15 @@ database:
   no registered m³, per year, mean or cap, for the baseline or the
   application (`withoutOthersRegistered`, `othersRegisteredWithheld`);
   their status and modelled use stay, and so do an applicant's own units.
+  The status is at the run's own band (`inputs.settings.allocationTolerance`):
+  that viewer's `?tolerance=` is ignored, as a status at a band they choose
+  is an oracle for the volume (about 40 requests binary-search it, #523
+  round 5). A run in cap or full-allocation mode holds each unit's use to
+  its registered volume, so its modelled use is the volume wherever supply
+  met demand: such a viewer gets no totals by year for it (`totals: null`,
+  `totalsWithheld: 'allocation_mode'`), and § 5's totals of other units
+  leave out that side's modelled use, means, status and counts too
+  (`othersUseWithheld`).
   A pack PDF that prints such a total is refused to them (`403
   pack_volumes_withheld`; `packWithheldPart` `pdf`), as is the manifest
   and PDF of a pack drafted before `evidence-18` with one (its totals were
@@ -2908,12 +2917,17 @@ database:
   list of names has nothing to match the keys against (#523 P). A run
   freezes its rows' keys when it is stored (`run_allocation_holder`,
   owner-only, written by a trigger, read only through
-  `app_run_allocation_holders` for the given rows of one run), so rows
+  `app_run_allocation_holders` for the given rows of one run the caller can
+  read under `model_run_select`'s rule), so rows
   deleted later can't count as new holders (#523 N; a row no living
   holder had, one a scenario op adds, shares one key `gone`). A key is a
   pseudonym of the holder's name: it can't be turned back without the
-  salt, and goes with its run or project (a deleted allocation's key stays
-  with the runs that used it, as the run's own copy of the row does). § 5's totals
+  salt, but the schema owner, who holds the salt, could confirm a guessed
+  name against it. So when a name leaves the project (the last row
+  carrying it is deleted, its import undone, or its holder cleared or
+  renamed), `allocation_holder_erased` resets every run's frozen key of it
+  to `gone` (POPIA s24 erasure; `allocations.db.test.ts` "erasure"). Keys
+  otherwise go with their run or project. § 5's totals
   of other units are gated on registered users, not units, and per water
   year on the holders in force, with the dominance rule, for every reader
   (`evidence-18`).
@@ -2943,7 +2957,13 @@ database:
   the other holders' sum, a group of 4 or more, which the two-holder limb
   of the dominance rule keeps from being mostly one of them; where the
   mix's rows and the live totals are the same rows, a share times the
-  total estimates a line to within 1 % of the mix's total, and with
+  total estimates a line to within 1 % of the mix's total; a year's status
+  at the run's fixed band t (±10 % by default) puts that year's registered
+  volume within [M/(1+t), M/(1−t)] of its modelled use M, and status flips
+  across years with differing M narrow it towards the spacing of those M,
+  a bound of about ±t of the volume, never the figure (per-year `withheld`
+  flags and status changes also show when the holder set changed, not by
+  how much); and with
   outside knowledge of an empty source × kind cell (J's premise) can bound
   one holder's volume to that 1 %; and figures read at different times
   (today's total on two days, successive pack versions, a frozen mix
@@ -3334,6 +3354,7 @@ PDF someone else asked for kept the person as a recipient
 | Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql); D3: editors, owners and the linked farmer only) | Not linked to an account | Deleted |
+| A pseudonym of each registered user's name, frozen with each run to count holders (215, #523): `md5` of a per-project salt and the name | `run_allocation_holder`, `allocation_holder_salt` (owner-only) | With the run; reset to `gone` in every run once the name leaves the project (`allocation_holder_erased`) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
